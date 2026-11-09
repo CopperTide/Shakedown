@@ -3,6 +3,7 @@
 //! orders at risk and the approvals, as live state. Every part comes as its `inspect` docs, which
 //! arenad passes (`describe.view.docs`); nothing is read from the ERP, so a view is cheap.
 mod orders;
+pub use orders::unresolved_sales_orders;
 mod plant;
 mod systems;
 

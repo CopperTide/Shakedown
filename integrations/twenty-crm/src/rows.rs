@@ -86,6 +86,12 @@ pub async fn all(c: &Client) -> Result<BTreeMap<String, Value>> {
 }
 
 /// Empties a new workspace of the demo records Twenty puts in it.
+/// Names the workspace `name` (its display name: the app shows it top left), unless it has it.
+pub async fn name_workspace(c: &Client, name: &str) -> Result<u64> {
+    let sql = r#"UPDATE core.workspace SET "displayName" = $1 WHERE "displayName" IS DISTINCT FROM $1"#;
+    Ok(c.execute(sql, &[&name]).await?)
+}
+
 pub async fn purge_demo(c: &Client) -> Result<()> {
     let schema = schema(c).await?;
     let tables: Vec<String> = DEMO_TABLES

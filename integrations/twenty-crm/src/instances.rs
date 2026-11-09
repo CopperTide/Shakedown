@@ -139,6 +139,13 @@ impl TwentyCrm {
         let pg = &ready.stack.pg;
         pg.drop(&db).await.map_err(internal)?;
         pg.create_from(&db, &source).await.map_err(internal)?;
+        if let Some(name) = workspace_name(&p.config) {
+            let named = pg.with_db(&db, async |c| rows::name_workspace(c, &name).await).await;
+            if let Err(e) = named {
+                let _ = pg.drop(&db).await;
+                return Err(internal(e));
+            }
+        }
         let started = self.start_server(&ready.stack, &p.instance, &db).await;
         if started.is_err() {
             let _ = pg.drop(&db).await;
@@ -341,5 +348,29 @@ mod tests {
         assert_eq!(recorded_settings(&root).unwrap().project, "arena_twenty_x");
         assert_eq!(port_of(&root, "b").unwrap_err().code, -32002);
         std::fs::remove_dir_all(&root).unwrap();
+    }
+}
+
+/// The workspace name a part's config asks for (`workspace_name`, trimmed, not empty): an instance
+/// is given it before its server starts, so a benchmark's world (and so its base) shows its own
+/// company rather than the integration's default. Starting from a save that has it changes nothing.
+fn workspace_name(config: &Value) -> Option<String> {
+    let name = config.get("workspace_name")?.as_str()?.trim();
+    (!name.is_empty()).then(|| name.to_string())
+}
+
+#[cfg(test)]
+mod workspace_name_tests {
+    use super::workspace_name;
+    use serde_json::json;
+
+    #[test]
+    fn a_config_names_the_workspace_only_with_a_real_name() {
+        let got = workspace_name(&json!({"workspace_name": " Ridgeline Components "}));
+        assert_eq!(got.as_deref(), Some("Ridgeline Components"));
+        assert_eq!(workspace_name(&json!({})), None);
+        assert_eq!(workspace_name(&json!({"workspace_name": "  "})), None);
+        assert_eq!(workspace_name(&json!({"workspace_name": 3})), None);
+        assert_eq!(workspace_name(&serde_json::Value::Null), None);
     }
 }

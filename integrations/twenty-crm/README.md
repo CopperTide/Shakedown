@@ -38,6 +38,9 @@ about 0.1 s and 20 MB of database, on the database server's Docker volume. A ser
   or task and `account` on an opportunity or person. Other tables are copied by a save but not compared. With keys, a key
   that isn't there is null.
 - **connect** gives `{url, api_key, admin_email, admin_password}`, for a benchmark's seed and for signing in to the app.
+- **workspace_name** (config): every instance the part starts gets that display name for its workspace (the app shows it
+  top left), set in its database before its server starts; one started from a save that has it is unchanged. Without
+  it the workspace keeps the base's name, "Arena". The factory benchmark names it Ridgeline Components.
 - **usage** is the size of the `ti_*` and `ts_*` databases; 0 before this program has needed the server. **gc {keep}** drops the
   saves `keep` doesn't name (an entry ending in `*` is a prefix) and the databases of instances not running; never the base.
 - **Conformance:** `check/arena-package.toml` (`twenty-crm-check`, the same program). `cargo test -p arena-twenty-crm --

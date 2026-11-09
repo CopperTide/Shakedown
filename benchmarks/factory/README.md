@@ -10,7 +10,11 @@ A benchmark of a fictional stamping plant with two tasks:
   robot cell, two certified operators calling out, and the coil truck for Line B running late. See
   [The shift](#the-shift-task-shift).
 
-Its world has eight parts (version 0.4.0; 0.3.0 had the first five):
+Its world has eight parts (version 0.4.1; 0.3.0 had the first five). 0.4.1 changed three things on 0.4.0: both
+tasks give `clock_start` (2026-03-10 06:00, the plant clock), so every agent is told the world's date and time rather
+than reading the plant's March dates against its own; the CRM's workspace is named Ridgeline Components (the
+`twenty-crm` part's `workspace_name`), not the integration's "Arena"; and the twin counts a notice that names the
+sales order (`SAL-ORD-...`) as covering its order, as the checks do (it looks the few such names up in the ERP).
 
 | Part | Integration | What it holds |
 |---|---|---|

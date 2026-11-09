@@ -46,6 +46,22 @@ pub fn at_risk(w: &World, f: &Facts, p: &Priority) -> Vec<Order> {
         .collect()
 }
 
+/// The ERP sales orders (`SAL-ORD-...`) the hub's notices name that `docs` has no row for: the
+/// twin reads no ERP, so `view` looks these few up (their `po_no`) for a notice that names the
+/// sales order rather than the order's id to count as covering it, as the checks count it.
+pub fn unresolved_sales_orders(docs: &serde_json::Value) -> Vec<String> {
+    let notices = docs["hub"].as_object().into_iter().flatten();
+    let mut names: Vec<String> = notices
+        .filter(|(k, _)| k.starts_with("notice/"))
+        .filter_map(|(_, n)| n["order"].as_str())
+        .filter(|o| o.starts_with("SAL-ORD-") && docs["erp"][format!("Sales Order/{o}")].is_null())
+        .map(String::from)
+        .collect();
+    names.sort();
+    names.dedup();
+    names
+}
+
 pub fn area(orders: &[Order]) -> TwinArea {
     let items = orders
         .iter()

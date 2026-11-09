@@ -7,6 +7,8 @@ use serde_json::{json, Value};
 
 use crate::date::Day;
 
+/// The company's name: the ERP's company and the CRM's workspace.
+pub const NAME: &str = "Ridgeline Components";
 pub const ABBR: &str = "RC";
 const STAMPED: &str = "Stamped parts";
 const SPARES: &str = "MRO spares";

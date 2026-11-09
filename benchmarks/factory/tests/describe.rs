@@ -31,7 +31,7 @@ async fn it_describes_itself_without_the_factory_example() {
     assert_eq!(d.tasks[1].setup[0].tool, "plant_scenario");
     assert_eq!(d.links[0].to, "plant");
     assert_eq!(d.world[4].integration, "twenty-crm");
-    assert_eq!(d.version, "0.4.0");
+    assert_eq!(d.version, "0.4.1");
     assert_eq!(d.scenario_options.unwrap().disruptions.len(), 4);
     assert_eq!(d.view.unwrap().docs.len(), 6);
     assert_eq!(d.team.unwrap().id, "single");

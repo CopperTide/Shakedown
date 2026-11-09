@@ -33,7 +33,7 @@ pub use world::Backend;
 
 type R<T> = Result<T, PartError>;
 
-pub const VERSION: &str = "0.4.0";
+pub const VERSION: &str = "0.4.1";
 
 pub struct Factory {
     backend: Backend,
@@ -152,10 +152,22 @@ impl Benchmark for Factory {
         Ok(Score { checks })
     }
 
-    /// The digital twin, from the parts' docs alone.
+    /// The digital twin, from the parts' docs, and the `po_no` of any sales order a notice names
+    /// (looked up in the ERP; on failure the notice just doesn't count).
     async fn view(&self, p: ViewParams) -> R<ViewResult> {
         let priority = shift_checks::Priority::of(self.scaled()?);
-        let view = twin::draw(&json!(p.docs), &self.facts()?, &priority);
+        let mut docs = json!(p.docs);
+        let names = twin::unresolved_sales_orders(&docs);
+        if let (false, Some(erp)) = (names.is_empty(), p.connections.get("erp")) {
+            if let Ok(erp) = erp::Erp::connect(erp) {
+                for name in names {
+                    if let Ok(so) = erp.get("Sales Order", &name).await {
+                        docs["erp"][format!("Sales Order/{name}")] = json!({"po_no": so["po_no"]});
+                    }
+                }
+            }
+        }
+        let view = twin::draw(&docs, &self.facts()?, &priority);
         Ok(ViewResult { view })
     }
 }
