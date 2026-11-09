@@ -69,6 +69,11 @@ impl BranchClock {
         self.state.lock().unwrap().now_ms() as i64
     }
 
+    /// How many clock ms pass per real ms while the clock runs.
+    pub fn speed(&self) -> f64 {
+        self.state.lock().unwrap().speed
+    }
+
     /// Stops the clock until the matching `resume` (pauses nest).
     pub fn pause(&self) {
         let mut s = self.state.lock().unwrap();

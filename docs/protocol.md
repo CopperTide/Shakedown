@@ -109,7 +109,7 @@ A benchmark program speaks the same transport.
 
 | Method | Params | Result |
 |---|---|---|
-| `describe` | `{}` | `{name, version, protocol, world: [{part, integration, config}], tasks: [{id, reason, ticket, setup?: [{part, tool, args}]}], instructions, instructions_title?, team?, teams?, tools: [ToolSchema], links?: [Link], gates?: [Gate], scored?: bool, scenario_options?: ScenarioOptions, view?: {docs: [part]}}` |
+| `describe` | `{}` | `{name, version, protocol, world: [{part, integration, config}], tasks: [{id, reason, ticket, setup?: [{part, tool, args}], clock_start?}], instructions, instructions_title?, team?, teams?, tools: [ToolSchema], links?: [Link], gates?: [Gate], scored?: bool, scenario_options?: ScenarioOptions, view?: {docs: [part]}}` |
 | `seed` | `{connections: {part: info}}` | `{}` (loads the starting data into fresh instances) |
 | `call_tool` | `{name, args, connections}` | `{result?, error?, part, reads, writes}` |
 | `gold_actions` | `{task}` | `{actions: [{name, args}]}` |
@@ -174,6 +174,19 @@ start from the same base.
 - A tool a setup calls is the world's own: agents don't get it (as with links). A world is refused when a setup
   names a part it doesn't have or a tool that part doesn't list.
 - A task's gold save is made from the base with its setup calls first, then its gold actions.
+
+### A task's clock
+
+A task whose world keeps its own calendar (a plant dated March 2026 while the model's environment says it is November)
+names `clock_start`: the world's date and time at clock 0, `YYYY-MM-DDTHH:MM:SS` in the world's local time. arenad then
+opens every agent's first input with a "World clock" section (the world's date and time now, which is `clock_start`
+plus the branch clock, how fast that clock runs, and that it is not today's date), ends each later input of a dispatch
+run with the world time then, and gives `clock_start` in `GET /api/tasks` for external agents. It is the same for every
+team and setup. Without it, agents get no clock and read dates against their own environment's.
+
+```json
+{"id": "shift", "reason": "...", "ticket": "...", "clock_start": "2026-03-10T06:00:00"}
+```
 
 ### A run's scenario
 

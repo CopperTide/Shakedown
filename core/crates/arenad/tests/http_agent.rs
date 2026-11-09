@@ -118,9 +118,14 @@ struct Fx {
 }
 
 async fn setup(tag: &str) -> Fx {
-    let hub = TestHub::new(&[]);
+    setup_on(tag, &[], None).await
+}
+
+/// `setup` with extra package roots and a benchmark to run.
+async fn setup_on(tag: &str, extra: &[std::path::PathBuf], bench: Option<&str>) -> Fx {
+    let hub = TestHub::new(extra);
     let (store, clean) = app_support::meta_store("http", tag).await;
-    let (state, base) = app_support::idle_app(store, hub.hub.clone(), None, |c| {
+    let (state, base) = app_support::idle_app(store, hub.hub.clone(), bench, |c| {
         c.http_agent_timeout = Duration::from_secs(2);
     })
     .await;
@@ -151,11 +156,21 @@ impl Fx {
 
     /// Runs task 27 with `members` to its end; the branch and its events.
     async fn run_to_end(&self, members: Value, runner: &str) -> (Branch, Vec<Event>, Value) {
+        self.run_task_to_end("27", members, runner).await
+    }
+
+    /// Runs `task` with `members` to its end; the branch and its events.
+    async fn run_task_to_end(
+        &self,
+        task: &str,
+        members: Value,
+        runner: &str,
+    ) -> (Branch, Vec<Event>, Value) {
         let team = json!({"id": "t", "name": "T", "agents": members});
         let (st, v) = self
             .post(
                 "/api/runs",
-                json!({"task_id": "27", "team": team, "runner": runner}),
+                json!({"task_id": task, "team": team, "runner": runner}),
             )
             .await;
         assert_eq!(st, 200, "{v}");
@@ -211,6 +226,8 @@ fn an_http_agent_works_through_its_mcp_endpoint_and_every_call_is_recorded() {
             )
         };
         assert_run_body(&sent, &b);
+        // Retail's world keeps today's calendar: no world clock.
+        assert!(!sent["task"].as_str().unwrap().contains("# World clock"));
         assert_eq!(keys, [SECRET]);
         // The endpoint refused the call without the token; the call with it was recorded.
         assert_eq!(without_token, Some(401));
@@ -225,6 +242,36 @@ fn an_http_agent_works_through_its_mcp_endpoint_and_every_call_is_recorded() {
         let token = sent["token"].as_str();
         let (status, _) = mcp(sent["mcp_url"].as_str().unwrap(), token, list).await;
         assert_ne!(status, 200);
+    });
+}
+
+/// A task whose world keeps its own calendar (`clock_start`) tells the agent the world's date and
+/// time, before the ticket, and that it is not today's.
+#[test]
+fn an_agent_is_told_the_world_date_when_the_task_has_its_own_clock() {
+    run(async {
+        let root = packages::toy_world("clock", &[], &["--clock-start", "2026-03-10T06:00:00"]);
+        let fx = setup_on("clock", std::slice::from_ref(&root.0), Some("toybench")).await;
+        let (b, _, _) = fx
+            .run_task_to_end("t1", json!([fx.member("/ok")]), "chain")
+            .await;
+        assert_ne!(b.status, BranchStatus::InfraError, "{:?}", b.error);
+        let sent = fx.seen.lock().unwrap().bodies[0].clone();
+        let task = sent["task"].as_str().unwrap();
+        assert!(task.trim_start().starts_with("# World clock\n"), "{task}");
+        assert!(
+            task.contains("In this world it is now Tuesday, 2026-03-10 06:0"),
+            "{task}"
+        );
+        assert!(task.contains("not today's date"), "{task}");
+        let clock = task.find("# World clock").unwrap();
+        assert!(clock < task.find("# Ticket").unwrap(), "{task}");
+        let (st, tasks) = app_support::send(
+            reqwest::Client::new().get(format!("{}/api/tasks", fx.base)),
+        )
+        .await;
+        assert_eq!(st, 200);
+        assert_eq!(tasks[0]["clock_start"], "2026-03-10T06:00:00");
     });
 }
 

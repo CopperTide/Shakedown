@@ -14,6 +14,7 @@ use crate::{
     scenario::{self, Scenario},
     store::{BranchId, RunId},
     world::{self, Plan, World, WorldFrom},
+    world_clock::WorldClock,
 };
 
 /// Where a branch's work starts. `notes[j]` is the recorded handoff note of agent `j`
@@ -339,6 +340,8 @@ pub(crate) struct Brief {
     pub(crate) ticket: String,
     pub(crate) title: String,
     pub(crate) instructions: String,
+    /// The world's own clock, when the task's world keeps a calendar of its own.
+    pub(crate) clock: Option<WorldClock>,
 }
 
 async fn drive(state: &Arc<AppState>, ctx: &Arc<BranchCtx>, from: StartPoint) -> Result<Ending> {
@@ -364,16 +367,15 @@ async fn drive(state: &Arc<AppState>, ctx: &Arc<BranchCtx>, from: StartPoint) ->
     check(state, ctx).await
 }
 
-/// The task's ticket and the benchmark's instructions.
+/// The task's ticket, the benchmark's instructions and the world's clock.
 async fn brief_of(state: &AppState, ctx: &BranchCtx) -> Result<Brief> {
     let bench = state.hub.bench_describe(ctx.world.bench()).await?;
-    let task = bench.tasks.iter().find(|t| t.id == ctx.task_id);
-    let ticket = task
-        .map(|t| t.ticket.clone())
+    let task = (bench.tasks.iter().find(|t| t.id == ctx.task_id))
         .ok_or_else(|| anyhow!("unknown task {}", ctx.task_id))?;
     Ok(Brief {
-        ticket,
+        ticket: task.ticket.clone(),
         title: prompts::instructions_title(&bench).to_string(),
+        clock: WorldClock::of(task.clock_start.as_deref(), ctx.clock.speed()),
         instructions: bench.instructions,
     })
 }
@@ -450,8 +452,10 @@ async fn agent_input(
         ticket,
         title,
         instructions,
+        clock,
     } = brief;
-    let mut input = format!("{ticket}\n# {title}\n\n{instructions}\n");
+    let mut input = clock.map_or_else(String::new, |c| c.brief(ctx.clock.now_ms()));
+    input.push_str(&format!("{ticket}\n# {title}\n\n{instructions}\n"));
     let notes = match ctx.rules.handoff_required {
         true => legacy_note(ctx, idx)?.into_iter().collect(),
         false => notes_for(state, ctx, &ctx.team.agents[idx].id).await?,

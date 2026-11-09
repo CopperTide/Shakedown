@@ -315,6 +315,12 @@ pub struct TaskInfo {
     /// don't get them.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub setup: Vec<SetupCall>,
+    /// The world's date and time at clock 0 (`YYYY-MM-DDTHH:MM:SS`, the world's local time), for a
+    /// world whose clock is not today's: arenad then tells every agent the world's current date and
+    /// time (clock 0 plus the branch clock), so agents read the world's dates against its own clock
+    /// rather than the date their environment reports.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub clock_start: Option<String>,
 }
 
 /// One call of a task's setup: `tool` of the part `part`, with `args`.

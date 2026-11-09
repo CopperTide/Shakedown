@@ -19,6 +19,7 @@ pub fn tasks() -> Vec<TaskInfo> {
             .into(),
         ticket: team::TICKET.into(),
         setup: vec![],
+        clock_start: Some(crate::shift::plant_start().into()),
     };
     let shift = TaskInfo {
         id: SHIFT_TASK.into(),
@@ -33,6 +34,20 @@ pub fn tasks() -> Vec<TaskInfo> {
             tool: "plant_scenario".into(),
             args: json!({"name": "calm"}),
         }],
+        clock_start: Some(crate::shift::plant_start().into()),
     };
     vec![bearing, shift]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Both tasks' worlds keep the plant's calendar, so agents are told its date, not today's.
+    #[test]
+    fn every_task_runs_on_the_plant_clock() {
+        for t in tasks() {
+            assert_eq!(t.clock_start.as_deref(), Some("2026-03-10T06:00:00"), "{}", t.id);
+        }
+    }
 }

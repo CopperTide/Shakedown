@@ -280,7 +280,12 @@ impl Crew {
         let team = &self.ctx.team;
         let lead = self.board.lead_id();
         let mut input = String::new();
-        if !self.slots.contains_key(agent) {
+        let clock = self.brief.clock;
+        let first = !self.slots.contains_key(agent);
+        if first {
+            if let Some(c) = clock {
+                input.push_str(&c.brief(self.ctx.clock.now_ms()));
+            }
             input.push_str(&inputs::brief_text(&self.brief));
             input.push_str(&match agent == lead {
                 true => inputs::how_for_lead(team, lead),
@@ -297,6 +302,9 @@ impl Crew {
             Reason::Mail => inputs::mail_text(team, mail),
             Reason::Idle(n) => inputs::idle_text(team, lead, n, max, &self.board.statuses()),
         });
+        if let Some(c) = clock.filter(|_| !first) {
+            input.push_str(&c.now_line(self.ctx.clock.now_ms()));
+        }
         input
     }
 

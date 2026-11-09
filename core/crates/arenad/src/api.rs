@@ -392,13 +392,18 @@ async fn delete_run(
     .await
 }
 
-/// The benchmark's tasks: `[{id, reason, ticket, instructions}]`; an external design gives its
-/// agents the ticket and the instructions as arenad's own runners do.
+/// The benchmark's tasks: `[{id, reason, ticket, instructions, clock_start?}]`; an external design
+/// gives its agents the ticket, the instructions and the world's date (`clock_start` plus the
+/// branch clock) as arenad's own runners do.
 async fn tasks(State(state): State<Arc<AppState>>) -> ApiResult<Value> {
     let bench = state.bench().await?;
     let task = |t: &parts::proto::TaskInfo| {
-        json!({"id": t.id, "reason": t.reason, "ticket": t.ticket,
-               "instructions": bench.instructions})
+        let mut j = json!({"id": t.id, "reason": t.reason, "ticket": t.ticket,
+                           "instructions": bench.instructions});
+        if let Some(c) = &t.clock_start {
+            j["clock_start"] = json!(c);
+        }
+        j
     };
     Ok(Json(bench.tasks.iter().map(task).collect()))
 }
