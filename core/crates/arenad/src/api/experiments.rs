@@ -55,6 +55,9 @@ struct NewExperimentReq {
     #[serde(default = "default_runs")]
     runs: i32,
     setups: Vec<SetupReq>,
+    /// Each run's model-spend limit in USD (`crate::budget`).
+    #[serde(default)]
+    max_cost_usd: Option<f64>,
 }
 
 /// 400 unless arenad can run the setup itself: a built-in runner and a team it can run. The
@@ -95,6 +98,7 @@ fn validate(state: &AppState, req: &mut NewExperimentReq) -> Result<Vec<String>,
 async fn create(State(state): State<Arc<AppState>>, body: Bytes) -> ApiResult<Detail> {
     let mut req: NewExperimentReq = parse_body(&body)?;
     let names = validate(&state, &mut req)?;
+    let max_cost_usd = super::max_cost(req.max_cost_usd)?;
     super::suites::suite_tasks(&state, vec![req.task.clone()]).await?;
     let scenario = super::twin::scenario_of(&state, req.scenario.as_ref()).await?;
     check_disk(&state).await?;
@@ -112,6 +116,7 @@ async fn create(State(state): State<Arc<AppState>>, body: Bytes) -> ApiResult<De
         benchmark: &state.benchmark,
         scenario: &scenario,
         setups: &setups,
+        max_cost_usd,
     };
     let (stored, suites) = state.store.create_experiment(new).await?;
     experiment::spawn(&state, stored.id.clone(), suites);

@@ -84,6 +84,11 @@ pub(crate) async fn run(
             runner::check(state, ctx).await?;
             Some((BranchStatus::Failed, Some(why)))
         }
+        End::OverBudget(why) => {
+            runner::freeze(ctx).await;
+            runner::check(state, ctx).await?;
+            Some((BranchStatus::BudgetExceeded, Some(why)))
+        }
         End::Broken(why) => Some((BranchStatus::InfraError, Some(why))),
         End::Stopped => Some(runner::STOPPED_ENDING),
     })

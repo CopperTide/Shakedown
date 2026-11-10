@@ -60,6 +60,9 @@ pub struct Suite {
     /// The setup's place in its experiment, from 0.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub setup_ord: Option<i32>,
+    /// Each run's model-spend limit in USD (`crate::budget`); None: `ARENA_MAX_COST_USD`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_cost_usd: Option<f64>,
 }
 
 impl Suite {

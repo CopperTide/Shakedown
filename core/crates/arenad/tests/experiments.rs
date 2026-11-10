@@ -279,6 +279,7 @@ async fn stored_suite(store: &Store) -> String {
         benchmark: "toybench",
         scenario: &scenario,
         variants: &[],
+        max_cost_usd: None,
     };
     store.create_suite(suite).await.unwrap().id
 }
@@ -307,6 +308,7 @@ async fn stored(store: &Store) -> (String, String) {
         benchmark: "toybench",
         scenario: &scenario,
         setups: &setups,
+        max_cost_usd: None,
     };
     let (e, suites) = store.create_experiment(new).await.unwrap();
     assert_eq!(suites.len(), 2);

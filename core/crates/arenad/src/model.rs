@@ -127,13 +127,16 @@ impl Team {
     }
 }
 
-/// The rules a branch runs under, recorded in its run's `RunStart` (`runner`, `handoff`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// The rules a branch runs under, recorded in its run's `RunStart` (`runner`, `handoff`,
+/// `max_cost_usd`).
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Rules {
     pub runner: Runner,
     /// True for runs recorded before handoffs were optional: every agent but the last must hand
     /// off, the last may not, and an agent's input has only the previous agent's note.
     pub handoff_required: bool,
+    /// The run's model-spend limit in USD (`crate::budget`); None: no limit.
+    pub max_cost_usd: Option<f64>,
 }
 
 impl Rules {
@@ -142,7 +145,16 @@ impl Rules {
         Rules {
             runner,
             handoff_required: false,
+            max_cost_usd: crate::budget::env_default(),
         }
+    }
+
+    /// These rules with the spend limit `max` (`None` keeps the env default).
+    pub fn with_max_cost(mut self, max: Option<f64>) -> Rules {
+        if let Some(m) = max.and_then(crate::budget::positive) {
+            self.max_cost_usd = Some(m);
+        }
+        self
     }
 
     /// The rules of a run recorded before runners: a chain with a handoff required.
@@ -150,6 +162,7 @@ impl Rules {
         Rules {
             runner: Runner::Chain,
             handoff_required: true,
+            max_cost_usd: None,
         }
     }
 
@@ -159,6 +172,9 @@ impl Rules {
             Ok(runner) => Rules {
                 runner,
                 handoff_required: payload["handoff"] == "required",
+                max_cost_usd: payload["max_cost_usd"]
+                    .as_f64()
+                    .and_then(crate::budget::positive),
             },
             Err(_) => Rules::legacy(),
         }
@@ -183,6 +199,9 @@ pub enum BranchStatus {
     Interrupted,
     /// Someone stopped the run before it ended; it is not scored.
     Stopped,
+    /// The run's model-spend estimate passed its `max_cost_usd`: its agents were stopped and the
+    /// world scored as it stood (a failure).
+    BudgetExceeded,
 }
 
 /// `text` trimmed, `None` when that leaves nothing: what a blank provider or model means.
@@ -205,6 +224,7 @@ impl BranchStatus {
             BranchStatus::InfraError => "infra_error",
             BranchStatus::Interrupted => "interrupted",
             BranchStatus::Stopped => "stopped",
+            BranchStatus::BudgetExceeded => "budget_exceeded",
         }
     }
 
@@ -216,6 +236,7 @@ impl BranchStatus {
             "infra_error" => BranchStatus::InfraError,
             "interrupted" => BranchStatus::Interrupted,
             "stopped" => BranchStatus::Stopped,
+            "budget_exceeded" => BranchStatus::BudgetExceeded,
             _ => return None,
         })
     }

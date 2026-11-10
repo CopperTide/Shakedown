@@ -141,7 +141,8 @@ a time limit for the run (60 minutes by default, time paused left out), and an i
 waited with no mail for 20 seconds and the lead hasn't finished, the lead is woken with the state of the team
 (each agent's last words); after 3 such wakes the run ends `failed`, scored, with the reason. The time limit also
 ends it `failed`, scored. A lead whose turn fails ends the run (`failed` when it was the model's doing, else
-`infra_error`); an agent whose turn fails gets no more work, and the lead is told. Pause holds back new wakes as
+`infra_error`); an agent whose turn fails gets no more work, and the lead is told. Passing the run's spend limit
+ends it `budget_exceeded`, scored, whichever agent's call passed it (see [Spend limits](#spend-limits)). Pause holds back new wakes as
 well as calls, and stop drops every agent at once, as in the other runners.
 
 **Runs recorded before runners** (no `runner` in their `RunStart`) keep the rules they ran under, and so do their
@@ -255,6 +256,23 @@ paused doesn't count against its time limit. `pause` and `resume` are recorded a
 is counted as overhead (`pause`), so the estimate in production leaves it out. `stop` ends a live branch
 `stopped` without scoring it: the agents are dropped where they are and calls that wait are refused.
 
+## Spend limits
+
+A run may have a model-spend limit, `max_cost_usd` (on `POST /api/runs`, `/api/suites` and `/api/experiments`, for
+each of their runs; else `ARENA_MAX_COST_USD`, else none). It is recorded in `RunStart` and enforced while agents
+work, not after:
+- Each model call is priced as arenad sees it, at the list prices of `docs/prices.toml` (with their cache and
+  long-context rates): a Claude Code agent's calls from its stream-json `usage` (dispatch sessions), an API-mode
+  agent's calls through the gateway (the provider's own cost when it reports one). The sum is the run's running
+  estimate (`GET /api/branches/{id}`'s `budget.estimate_usd` while it runs). A turn's reported cost, when it comes,
+  replaces that agent's estimate.
+- Once the estimate passes the limit, the agent's turn is stopped at once (a CLI's process is killed), every other
+  agent is stopped, and the run ends `budget_exceeded`, scored as the world stood: a failure, counted in suites as a
+  scored run. An agent stopped mid-turn records its live estimate as its cost (label `list_price_estimate`, or
+  `api_equivalent_estimate+list_price_estimate` with its earlier turns'), so the run's cost is known.
+- Agents whose usage arenad sees only at a turn's end (`claude -p` in a chain or concurrent run, Codex, `http`
+  agents) are checked when that turn ends. A fork starts its own estimate from zero under the same limit.
+
 ## What the world says about itself
 
 An integration may say in `describe` what kind of system it is: `system: {kind, product, stands_in_for?,
@@ -350,6 +368,9 @@ citation against the record and stores the review. Details in [reference.md](ref
   provider reported one.
 - `api_equivalent_estimate`: Claude Code's own `total_cost_usd`. It is what the same tokens would cost at API
   prices, not what a subscription pays.
+- `list_price_estimate`: arenad's own estimate of an agent's calls at `docs/prices.toml` prices, for a turn stopped
+  before Claude Code reported its cost (a spend limit, a time limit); `api_equivalent_estimate+list_price_estimate`
+  when earlier turns had reported theirs. See [Spend limits](#spend-limits).
 - No label and no dollar figure: Codex reports tokens only.
 - Dollars are shown only when every agent in the branch has a dollar figure; otherwise only tokens are shown,
   and the UI writes the cost as `unknown` when an agent of the branch is on OpenAI or Anthropic (else `tokens

@@ -30,6 +30,19 @@ pub const MAX_RETRY_WAIT: Duration = Duration::from_secs(20);
 enum Fault {
     Model(String),
     Infra(String),
+    /// The run's spend estimate passed its limit (`crate::budget`).
+    Budget(String),
+}
+
+impl Fault {
+    /// The error and how the agent's failure counts (`None`: the harness's).
+    fn split(self) -> (String, Option<FailureKind>) {
+        match self {
+            Fault::Model(e) => (e, Some(FailureKind::Model)),
+            Fault::Budget(e) => (e, Some(FailureKind::Budget)),
+            Fault::Infra(e) => (e, None),
+        }
+    }
 }
 
 impl From<String> for Fault {
@@ -87,9 +100,7 @@ impl Driver for OpenDriver {
 
     fn session(&self, start: SessionStart) -> Result<Box<dyn Session>, String> {
         let state = self.state.upgrade().ok_or("server is shutting down")?;
-        let lp = Loop::new(state, start.branch, &start.spec).map_err(|f| match f {
-            Fault::Model(e) | Fault::Infra(e) => e,
-        })?;
+        let lp = Loop::new(state, start.branch, &start.spec).map_err(|f| f.split().0)?;
         let system = json!({"role": "system", "content": start.spec.prompt});
         Ok(Box::new(OpenSession {
             lp,
@@ -121,10 +132,9 @@ impl OpenSession {
             .until_done(&mut self.messages, &mut self.totals)
             .await;
         self.busy += since.elapsed();
-        let turn = match done {
+        let turn = match done.map_err(Fault::split) {
             Ok(text) => Turn::done(text),
-            Err(Fault::Model(e)) => Turn::failed(e, Some(FailureKind::Model)),
-            Err(Fault::Infra(e)) => Turn::failed(e, None),
+            Err((e, failure)) => Turn::failed(e, failure),
         };
         if !turn.ok {
             self.error = turn.error.clone();
@@ -323,6 +333,10 @@ impl Loop {
             let body = json!({"messages": messages, "tools": self.tools, "model": self.model});
             let v = model_call(&self.state.http, &self.url, &body, base).await?;
             totals.add(&self.provider, &v["usage"]);
+            // The gateway priced the call into the run's estimate: stop once it is over.
+            if let Some(why) = self.branch.budget.over() {
+                return Err(Fault::Budget(why));
+            }
             let msg = v["choices"][0]["message"].clone();
             if !msg.is_object() {
                 return Err("model response has no message".into());
@@ -348,10 +362,9 @@ impl OpenDriver {
         let start = Instant::now();
         let mut totals = Totals::new();
         let outcome = self.drive(&run, &mut totals).await;
-        let (error, failure) = match outcome {
+        let (error, failure) = match outcome.map_err(Fault::split) {
             Ok(()) => (None, None),
-            Err(Fault::Model(e)) => (Some(e), Some(FailureKind::Model)),
-            Err(Fault::Infra(e)) => (Some(e), None),
+            Err((e, failure)) => (Some(e), failure),
         };
         let [prompt, completion, total] = totals.tokens;
         AgentResult {

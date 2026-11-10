@@ -437,6 +437,7 @@ fn a_builtin_suite_left_running_is_stopped_when_arenad_starts_again() {
             benchmark: "b",
             scenario: &scenario,
             variants: &[],
+            max_cost_usd: None,
         };
         let builtin = store.create_suite(new(Runner::Chain)).await.unwrap();
         let external = store.create_suite(new(Runner::External)).await.unwrap();
@@ -473,6 +474,7 @@ fn a_suite_keeps_its_scenario() {
             benchmark: "b",
             scenario: &scenario,
             variants: &[],
+            max_cost_usd: None,
         };
         let id = store.create_suite(new).await.unwrap().id;
         let again = store.suite(&id).await.unwrap().unwrap();
@@ -508,6 +510,7 @@ fn a_suite_varies_its_runs_over_its_scenarios() {
             benchmark: "b",
             scenario: &scenario,
             variants: &variants,
+            max_cost_usd: None,
         };
         let suite = store.create_suite(new).await.unwrap();
         let slots = store.slots(&suite.id).await.unwrap();

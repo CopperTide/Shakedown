@@ -45,6 +45,8 @@ pub struct ClaudeSession {
     meter: UsageMeter,
     /// Claude Code's cost of the session so far (cumulative over turns).
     cost: Option<f64>,
+    /// Set when the run's spend estimate passed its limit during this turn (`crate::budget`).
+    over: Option<String>,
     error: Option<String>,
     busy: Duration,
 }
@@ -140,6 +142,7 @@ impl ClaudeSession {
             prompt: Some(s.spec.prompt),
             meter: UsageMeter::default(),
             cost: None,
+            over: None,
             error: None,
             busy: Duration::ZERO,
         })
@@ -176,7 +179,13 @@ impl ClaudeSession {
         }
     }
 
-    async fn record(&self, report: &UsageReport) {
+    /// Records one model call, and prices it into the run's spend estimate.
+    async fn record(&mut self, report: &UsageReport) {
+        if let Some(usd) = report.list_price("anthropic") {
+            if let Some(why) = self.branch.budget.add(&self.agent, usd) {
+                self.over.get_or_insert(why);
+            }
+        }
         let p = report.payload();
         let at = Some(self.agent.as_str());
         let appended = self.branch.append(&self.store, at, EventKind::ModelCall, p);
@@ -212,6 +221,11 @@ impl ClaudeSession {
                 return Some(self.ended_turn(&v).await);
             }
             self.on_line(&v).await;
+            // Over the run's spend limit: stop the turn now, not when it ends.
+            if let Some(why) = self.over.clone().or_else(|| self.branch.budget.over()) {
+                let _ = self.child.start_kill();
+                return Some(Turn::failed(why, Some(super::FailureKind::Budget)));
+            }
         }
         if !self.spoke && self.respawns < RESPAWNS {
             return None;
@@ -243,6 +257,12 @@ impl ClaudeSession {
             self.record(&r).await;
         }
         self.cost = result["total_cost_usd"].as_f64().or(self.cost);
+        if let Some(why) = self
+            .cost
+            .and_then(|c| self.branch.budget.settle(&self.agent, c))
+        {
+            self.over.get_or_insert(why);
+        }
         let text = result["result"].as_str().unwrap_or("").to_string();
         if !result["is_error"].as_bool().unwrap_or(false) {
             return Turn::done(text);
@@ -286,12 +306,22 @@ impl ClaudeSession {
         }
         let (p, c) = (self.meter.prompt_tokens, self.meter.completion_tokens);
         let error = end_error(self.error.take(), cut);
+        // A turn stopped before its end reported no cost: its calls' live estimate counts.
+        let live = self.branch.budget.live(&self.agent);
+        let (cost_usd, cost_source) = match (self.cost, live > 0.0) {
+            (c, false) => (c, c.map(|_| "api_equivalent_estimate")),
+            (Some(c), true) => (
+                Some(c + live),
+                Some("api_equivalent_estimate+list_price_estimate"),
+            ),
+            (None, true) => (Some(live), Some("list_price_estimate")),
+        };
         AgentResult {
             ok: error.is_none(),
             error,
             tokens: super::tokens_json(p, c, p + c),
-            cost_usd: self.cost,
-            cost_source: self.cost.map(|_| "api_equivalent_estimate".into()),
+            cost_usd,
+            cost_source: cost_source.map(str::to_string),
             seconds: self.busy.as_secs_f64(),
             failure: None,
         }

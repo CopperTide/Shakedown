@@ -175,7 +175,7 @@ fn list_price(
     prompt: i64,
     completion: i64,
 ) -> (Option<f64>, Option<String>) {
-    match prices::table().find(provider, model) {
+    match prices::table().find_flat(provider, model) {
         Some(p) => (
             Some(p.cost(prompt, completion)),
             Some("list-price estimate".into()),

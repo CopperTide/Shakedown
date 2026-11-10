@@ -262,6 +262,20 @@ fn the_leads_failure_ends_the_run_as_the_model_or_the_harness_failed() {
     ));
 }
 
+/// The spend limit is the run's: any agent's call that passes it ends the run over budget.
+#[test]
+fn a_budget_failure_of_any_agent_ends_the_run_over_budget() {
+    for who in ["lead", "qa"] {
+        let mut b = board();
+        b.start();
+        let a = b.step(failed(who, Some(FailureKind::Budget)), S);
+        assert!(
+            matches!(end(&a), Some(End::OverBudget(why)) if why == "boom"),
+            "{who}: {a:?}"
+        );
+    }
+}
+
 #[test]
 fn a_fork_restarts_who_was_working_and_delivers_what_was_waiting() {
     let mut b = board();

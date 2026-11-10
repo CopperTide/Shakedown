@@ -183,7 +183,10 @@ fn a_press_outage_puts_its_orders_at_risk_and_an_empty_world_draws() {
 fn a_notice_naming_the_sales_order_covers_its_order() {
     let mut docs = mid_shift();
     docs["hub"]["notice/1"]["order"] = json!("SAL-ORD-2026-00278");
-    assert_eq!(orders::unresolved_sales_orders(&docs), ["SAL-ORD-2026-00278"]);
+    assert_eq!(
+        orders::unresolved_sales_orders(&docs),
+        ["SAL-ORD-2026-00278"]
+    );
     let before = draw(&docs, &facts(), &priority());
     assert_eq!(kpi(&before, "orders_covered").0, "0 of 1");
     docs["erp"]["Sales Order/SAL-ORD-2026-00278"] = json!({"po_no": "B-1"});

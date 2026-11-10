@@ -55,6 +55,9 @@ struct NewSuiteReq {
     /// Several scenarios instead: each task × repeat runs once in each (`scenario` must be absent).
     #[serde(default)]
     scenarios: Vec<parts::proto::ScenarioRequest>,
+    /// Each run's model-spend limit in USD (`crate::budget`).
+    #[serde(default)]
+    max_cost_usd: Option<f64>,
 }
 
 /// The most scenarios a suite may vary its runs over.
@@ -132,11 +135,7 @@ async fn create(State(state): State<Arc<AppState>>, body: Bytes) -> ApiResult<Su
     if req.runner != Runner::External {
         check_disk(&state).await?;
     }
-    let name = req
-        .name
-        .as_deref()
-        .and_then(trimmed)
-        .unwrap_or(req.team.name.clone());
+    let name = (req.name.as_deref().and_then(trimmed)).unwrap_or(req.team.name.clone());
     let new = NewSuite {
         name: &name,
         team: &req.team,
@@ -146,6 +145,7 @@ async fn create(State(state): State<Arc<AppState>>, body: Bytes) -> ApiResult<Su
         benchmark: &state.benchmark,
         scenario: &scenario,
         variants: &variants,
+        max_cost_usd: super::max_cost(req.max_cost_usd)?,
     };
     let stored = state.store.create_suite(new).await?;
     if stored.runner != Runner::External {

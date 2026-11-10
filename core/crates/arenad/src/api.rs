@@ -445,6 +445,19 @@ struct NewRun {
     /// The world's seed (at most 2^53 - 1); random when absent.
     #[serde(default)]
     seed: Option<u64>,
+    /// The run's model-spend limit in USD (`crate::budget`); `ARENA_MAX_COST_USD` when absent.
+    #[serde(default)]
+    max_cost_usd: Option<f64>,
+}
+
+/// A request's spend limit: absent, or a positive number of dollars (else 400).
+pub(crate) fn max_cost(asked: Option<f64>) -> Result<Option<f64>, ApiError> {
+    match asked {
+        None => Ok(None),
+        Some(v) => crate::budget::positive(v)
+            .map(Some)
+            .ok_or_else(|| ApiError::bad("max_cost_usd must be a positive number of dollars")),
+    }
 }
 
 async fn create_run(State(state): State<Arc<AppState>>, body: Bytes) -> ApiResult<Value> {
@@ -460,11 +473,13 @@ async fn create_run(State(state): State<Arc<AppState>>, body: Bytes) -> ApiResul
         return external::create_run(state, cleanup, req.task_id, req.team, scenario).await;
     }
     validate_builtin_team(&state, &req.team, req.runner)?;
+    let max = max_cost(req.max_cost_usd)?;
     check_disk(&state).await?;
     let (run_id, branch_id) = detached(async move {
         let _cleanup = cleanup;
         let (task, team) = (&req.task_id, req.team);
-        Ok(runner::start_run_in(&state, task, team, req.runner, &scenario).await?)
+        let run = runner::start_run_capped(&state, task, team, req.runner, &scenario, max);
+        Ok(run.await?)
     })
     .await?;
     Ok(Json(json!({"run_id": run_id, "branch_id": branch_id})))
@@ -479,10 +494,21 @@ async fn get_branch(
     let now = chrono::Utc::now();
     let m = metrics::metrics(&branch, &events, prices::table(), now);
     let mut v = serde_json::to_value(branch).map_err(anyhow::Error::from)?;
+    v["budget"] = budget_of(&state, &id, &events);
     v["events"] = serde_json::to_value(events).map_err(anyhow::Error::from)?;
     v["metrics"] = serde_json::to_value(m).map_err(anyhow::Error::from)?;
     v["paused"] = json!(flow::is_paused(&state, &id));
     Ok(Json(v))
+}
+
+/// A branch's spend limit (from its `RunStart`) and, while it runs, its live estimate.
+fn budget_of(state: &AppState, id: &str, events: &[crate::model::Event]) -> Value {
+    let start = events
+        .iter()
+        .find(|e| e.kind == crate::model::EventKind::RunStart);
+    let max = start.and_then(|e| e.payload["max_cost_usd"].as_f64());
+    let live = state.live.read().unwrap().get(id).map(|c| c.budget.spent());
+    json!({"max_cost_usd": max, "estimate_usd": live})
 }
 
 fn exact() -> Mode {

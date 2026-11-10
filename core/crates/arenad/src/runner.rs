@@ -75,7 +75,19 @@ pub async fn start_run_in(
     runner: Runner,
     scenario: &Scenario,
 ) -> Result<(RunId, BranchId)> {
-    let rules = Rules::new(runner);
+    start_run_capped(state, task_id, team, runner, scenario, None).await
+}
+
+/// `start_run_in` with a model-spend limit (`None`: `ARENA_MAX_COST_USD`, else no limit).
+pub async fn start_run_capped(
+    state: &Arc<AppState>,
+    task_id: &str,
+    team: Team,
+    runner: Runner,
+    scenario: &Scenario,
+    max_cost_usd: Option<f64>,
+) -> Result<(RunId, BranchId)> {
+    let rules = Rules::new(runner).with_max_cost(max_cost_usd);
     let (run_id, ctx) = begin_run(state, task_id, team, rules, scenario).await?;
     let branch_id = ctx.branch_id.clone();
     spawn_branch(state, Arc::new(ctx), StartPoint::default());
@@ -225,6 +237,9 @@ fn run_start(bench: &BenchDescribe, world: &World, seed: u64, of: &RunStartOf<'_
     if !of.scenario.is_empty() {
         start["scenario"] = json!(of.scenario);
     }
+    if let Some(max) = of.rules.max_cost_usd {
+        start["max_cost_usd"] = json!(max);
+    }
     start
 }
 
@@ -361,6 +376,11 @@ async fn drive(state: &Arc<AppState>, ctx: &Arc<BranchCtx>, from: StartPoint) ->
         () = ctx.flow.stopped() => return Ok(STOPPED_ENDING),
     };
     if let Some(end) = ended {
+        // Over its spend limit, a run is scored as it stands (a failure).
+        if end.0 == BranchStatus::BudgetExceeded {
+            freeze(ctx).await;
+            check(state, ctx).await?;
+        }
         return Ok(end);
     }
     freeze(ctx).await;
@@ -583,15 +603,16 @@ fn agent_ending(ctx: &BranchCtx, agent: &str, result: AgentResult) -> Option<End
     if !result.ok {
         let e = result.error.unwrap_or_else(|| "agent failed".to_string());
         // The model's own behavior is a failed attempt, not a broken harness.
-        let failed = result.failure == Some(FailureKind::Model);
-        return Some((
-            if failed {
-                BranchStatus::Failed
-            } else {
-                BranchStatus::InfraError
-            },
-            Some(e),
-        ));
+        let status = match result.failure {
+            Some(FailureKind::Model) => BranchStatus::Failed,
+            Some(FailureKind::Budget) => BranchStatus::BudgetExceeded,
+            None => BranchStatus::InfraError,
+        };
+        return Some((status, Some(e)));
+    }
+    // An agent whose cost is known only at its end (`claude -p`, Codex): checked then.
+    if let Some(why) = result.cost_usd.and_then(|c| ctx.budget.settle(agent, c)) {
+        return Some((BranchStatus::BudgetExceeded, Some(why)));
     }
     let required = ctx.rules.handoff_required && !ctx.is_last(agent);
     if required && ctx.handoff_note(agent).is_none() {

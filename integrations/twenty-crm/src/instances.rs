@@ -140,7 +140,9 @@ impl TwentyCrm {
         pg.drop(&db).await.map_err(internal)?;
         pg.create_from(&db, &source).await.map_err(internal)?;
         if let Some(name) = workspace_name(&p.config) {
-            let named = pg.with_db(&db, async |c| rows::name_workspace(c, &name).await).await;
+            let named = pg
+                .with_db(&db, async |c| rows::name_workspace(c, &name).await)
+                .await;
             if let Err(e) = named {
                 let _ = pg.drop(&db).await;
                 return Err(internal(e));

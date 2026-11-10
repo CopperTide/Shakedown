@@ -130,6 +130,33 @@ fn model_call_payload(
     (status, payload)
 }
 
+/// Adds the call to the run's spend estimate; the loop that made the call checks the run's limit
+/// once it has the answer.
+fn charge(ctx: &BranchCtx, agent: &str, provider: &Result<Provider, String>, p: &ModelCallPayload) {
+    if let Some(usd) = call_cost(provider, p) {
+        let _ = ctx.budget.add(agent, usd);
+    }
+}
+
+/// What a call cost: the provider's figure, else its list price for the model it asked for
+/// (the OpenAI-shape usage, cached prompt tokens priced as cache hits).
+fn call_cost(provider: &Result<Provider, String>, p: &ModelCallPayload) -> Option<f64> {
+    if p.cost_usd.is_some() {
+        return p.cost_usd;
+    }
+    let n = |v: &Value| v.as_i64().unwrap_or(0);
+    let u = &p.usage;
+    let cached = n(&u["prompt_tokens_details"]["cached_tokens"]);
+    let t = crate::prices::CallTokens {
+        input: (n(&u["prompt_tokens"]) - cached).max(0),
+        cache_read: cached,
+        output: n(&u["completion_tokens"]),
+        ..Default::default()
+    };
+    let id = provider.as_ref().ok()?.id.as_str();
+    crate::budget::price(id, p.request["model"].as_str(), &t)
+}
+
 async fn record(
     ctx: &BranchCtx,
     store: &Store,
@@ -182,6 +209,7 @@ async fn handle(
     // The gateway's own handling: everything but the provider's answer (and the record's time,
     // which the store counts).
     overhead::add(&branch, Cat::Gateway, ms_since(since) - upstream_ms);
+    charge(&ctx, &agent, &provider, &payload);
     if let Err(e) = record(&ctx, &state.store, &agent, &payload).await {
         return error_response(
             StatusCode::INTERNAL_SERVER_ERROR,

@@ -47,7 +47,12 @@ mod tests {
     #[test]
     fn every_task_runs_on_the_plant_clock() {
         for t in tasks() {
-            assert_eq!(t.clock_start.as_deref(), Some("2026-03-10T06:00:00"), "{}", t.id);
+            assert_eq!(
+                t.clock_start.as_deref(),
+                Some("2026-03-10T06:00:00"),
+                "{}",
+                t.id
+            );
         }
     }
 }

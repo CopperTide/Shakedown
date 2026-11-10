@@ -203,7 +203,7 @@ fn cost_of(t: &Tally, u: &AgentUse, table: &Prices) -> Cost {
         .kind
         .and_then(|k| prices::provider_of(k, u.provider.as_deref()));
     let price = price.zip(u.model.as_deref());
-    let price = price.and_then(|(p, m)| table.find(&p, m));
+    let price = price.and_then(|(p, m)| table.find_flat(&p, m));
     match (price, t.prompt, t.completion) {
         (Some(p), Some(i), Some(o)) if t.tokens > 0 || i + o > 0 => Cost {
             usd: Some(p.cost(i, o)),

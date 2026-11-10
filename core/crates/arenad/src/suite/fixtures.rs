@@ -12,6 +12,7 @@ pub fn t0() -> DateTime<Utc> {
 
 pub fn suite(id: &str, tasks: &[&str], repeats: i32) -> Suite {
     Suite {
+        max_cost_usd: None,
         id: id.into(),
         name: id.into(),
         team: Team {

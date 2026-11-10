@@ -37,6 +37,8 @@ pub struct BranchCtx {
     ticker: tokio::sync::Mutex<Option<Ticker>>,
     /// The rules the branch runs under (from its run's `RunStart`).
     pub rules: Rules,
+    /// Its spend limit and running estimate (`rules.max_cost_usd`).
+    pub budget: crate::budget::Budget,
     /// Agents an external system registered while the branch runs (not in `team`).
     joined: std::sync::RwLock<Vec<AgentSpec>>,
     /// agent id -> its latest handoff note.
@@ -70,6 +72,7 @@ impl BranchCtx {
             clock: BranchClock::from_env(0),
             ticker: tokio::sync::Mutex::new(None),
             rules: Rules::legacy(),
+            budget: crate::budget::Budget::default(),
             joined: Default::default(),
             handoffs: Mutex::new(HashMap::new()),
             fatal: Mutex::new(None),
@@ -84,6 +87,7 @@ impl BranchCtx {
 
     /// The same branch under `rules`.
     pub fn with_rules(mut self, rules: Rules) -> BranchCtx {
+        self.budget = crate::budget::Budget::new(rules.max_cost_usd);
         self.rules = rules;
         self
     }

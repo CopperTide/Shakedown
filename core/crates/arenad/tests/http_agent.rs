@@ -266,10 +266,8 @@ fn an_agent_is_told_the_world_date_when_the_task_has_its_own_clock() {
         assert!(task.contains("not today's date"), "{task}");
         let clock = task.find("# World clock").unwrap();
         assert!(clock < task.find("# Ticket").unwrap(), "{task}");
-        let (st, tasks) = app_support::send(
-            reqwest::Client::new().get(format!("{}/api/tasks", fx.base)),
-        )
-        .await;
+        let (st, tasks) =
+            app_support::send(reqwest::Client::new().get(format!("{}/api/tasks", fx.base))).await;
         assert_eq!(st, 200);
         assert_eq!(tasks[0]["clock_start"], "2026-03-10T06:00:00");
     });

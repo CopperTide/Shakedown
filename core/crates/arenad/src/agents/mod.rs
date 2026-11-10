@@ -32,6 +32,9 @@ pub struct AgentRun {
 pub enum FailureKind {
     /// The model's own behavior (too many calls, output cut off): the branch is `failed`.
     Model,
+    /// The run's spend estimate passed its limit (`crate::budget`): the branch is
+    /// `budget_exceeded`, scored as it stands.
+    Budget,
 }
 
 #[derive(Debug, Clone, PartialEq)]

@@ -52,6 +52,8 @@ pub struct NewExperiment<'a> {
     pub benchmark: &'a str,
     pub scenario: &'a Scenario,
     pub setups: &'a [NewSetup<'a>],
+    /// Each run's model-spend limit in USD.
+    pub max_cost_usd: Option<f64>,
 }
 
 fn experiment_from(r: &Row) -> Experiment {
@@ -92,6 +94,7 @@ impl Store {
                 benchmark: new.benchmark,
                 scenario: new.scenario,
                 variants: &[],
+                max_cost_usd: new.max_cost_usd,
             };
             let of = SetupOf {
                 experiment: &id,

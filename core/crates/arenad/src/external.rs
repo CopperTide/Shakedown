@@ -227,6 +227,21 @@ impl UsageReport {
                "cache_read_input_tokens": self.cache_read_input_tokens})
     }
 
+    /// The call's tokens, for pricing it.
+    pub fn tokens(&self) -> crate::prices::CallTokens {
+        crate::prices::CallTokens {
+            input: self.input_tokens,
+            cache_write: self.cache_creation_input_tokens,
+            cache_read: self.cache_read_input_tokens,
+            output: self.output_tokens,
+        }
+    }
+
+    /// What the call costs at `provider`'s list price for its model, when the table has it.
+    pub fn list_price(&self, provider: &str) -> Option<f64> {
+        crate::budget::price(provider, self.model.as_deref(), &self.tokens())
+    }
+
     /// The `ModelCall` payload, with no request or response.
     pub fn payload(&self) -> Value {
         let usage = self.usage();

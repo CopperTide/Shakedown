@@ -93,6 +93,8 @@ pub enum End {
     Failed(String),
     /// The lead's agent broke (not the model's doing): an infrastructure error.
     Broken(String),
+    /// The run's spend estimate passed its limit: scored as it stands, `budget_exceeded`.
+    OverBudget(String),
     Stopped,
 }
 
@@ -385,11 +387,15 @@ impl Board {
         error: String,
         failure: Option<FailureKind>,
     ) -> Vec<Action> {
+        // The spend limit is the run's, whoever's call passed it.
+        if failure == Some(FailureKind::Budget) {
+            return vec![Action::End(End::OverBudget(error))];
+        }
         if id == self.lead_id() {
             let why = format!("the lead failed: {error}");
             let end = match failure {
                 Some(FailureKind::Model) => End::Failed(why),
-                None => End::Broken(why),
+                _ => End::Broken(why),
             };
             return vec![Action::End(end)];
         }

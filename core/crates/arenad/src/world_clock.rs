@@ -92,11 +92,16 @@ mod tests {
     fn the_brief_gives_the_world_date_and_says_it_is_not_today() {
         let b = clock(3.0).brief(125_000);
         assert!(b.starts_with("# World clock\n"));
-        assert!(b.contains("it is now Tuesday, 2026-03-10 06:02 (world time)"), "{b}");
+        assert!(
+            b.contains("it is now Tuesday, 2026-03-10 06:02 (world time)"),
+            "{b}"
+        );
         assert!(b.contains("not today's date"));
         assert!(b.contains("about 3 times real time"));
         assert!(b.contains("not against the date your own environment reports"));
-        assert!(clock(1.0).brief(0).contains("runs while you work, with real time"));
+        assert!(clock(1.0)
+            .brief(0)
+            .contains("runs while you work, with real time"));
         assert!(clock(0.25).brief(0).contains("about 0.25 times"));
     }
 

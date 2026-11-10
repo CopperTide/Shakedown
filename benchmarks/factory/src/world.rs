@@ -50,7 +50,11 @@ pub fn parts(backend: Backend, plant: Value) -> Vec<WorldPart> {
         part("hub", "ridgeline-hub", shift::hub()),
         part("plant", backend.integration(), shift::plant(&plant)),
         part("approvals", "sculptured", json!({})),
-        part("crm", "twenty-crm", json!({"workspace_name": crate::company::NAME})),
+        part(
+            "crm",
+            "twenty-crm",
+            json!({"workspace_name": crate::company::NAME}),
+        ),
         part("utility", "utility", shift::slice("utility")),
         part("network", "ot-network", shift::slice("ot_network")),
         part("roster", "shift-roster", shift::slice("roster")),
@@ -205,8 +209,13 @@ mod tests {
     /// The CRM's workspace carries the company's name (screens never show the integration's).
     #[test]
     fn the_crm_workspace_is_named_for_the_company() {
-        let crm = parts(Backend::Standin, json!({})).into_iter().find(|p| p.part == "crm");
-        assert_eq!(crm.unwrap().config["workspace_name"], "Ridgeline Components");
+        let crm = parts(Backend::Standin, json!({}))
+            .into_iter()
+            .find(|p| p.part == "crm");
+        assert_eq!(
+            crm.unwrap().config["workspace_name"],
+            "Ridgeline Components"
+        );
     }
 
     #[test]

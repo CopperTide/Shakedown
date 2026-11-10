@@ -1,6 +1,7 @@
 pub mod agents;
 pub mod api;
 pub mod app;
+pub mod budget;
 pub mod clock;
 pub mod compare;
 pub mod dispatch;
