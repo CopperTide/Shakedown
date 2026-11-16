@@ -135,7 +135,7 @@ export interface Team {
   id: string;
   name: string;
   agents: AgentSpec[];
-  /** A Sculptured design's board (groups, places, arrows), kept in this browser; never sent to arenad. */
+  /** A CopperTide design's board (groups, places, arrows), kept in this browser; never sent to arenad. */
   board?: Board;
   /** The runner a suggested team's prompts are written for (`GET /api/teams`); kept in this browser. */
   runner?: Runner;

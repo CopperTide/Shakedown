@@ -59,7 +59,7 @@ pub async fn decide(t: &Team<'_>, args: &Value) -> Result<Outcome> {
     let question = match question(t.api, t.name, t.aliases.current(&d.id)).await? {
         Ok(q) => q,
         Err(why) => {
-            let gone = format!("Sculptured can no longer decide {} ({why})", d.id);
+            let gone = format!("CopperTide can no longer decide {} ({why})", d.id);
             return Ok(Err(gone));
         }
     };

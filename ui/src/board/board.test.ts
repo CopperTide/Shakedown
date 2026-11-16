@@ -7,7 +7,7 @@ import { importTeam, workOrder } from './importTeam';
 const agent = (id: string, more: Partial<AgentSpec> = {}): AgentSpec => ({ id, name: id, kind: 'claude_code', model: null, prompt: '', ...more });
 const team = (n: number): Team => ({ id: 't', name: 'T', agents: Array.from({ length: n }, (_, i) => agent(`a${i}`)) });
 
-/** A Sculptured design shaped like `examples/teams/math-workbench.json`, cut down. */
+/** A CopperTide design shaped like `examples/teams/math-workbench.json`, cut down. */
 const design = {
   id: 'math-workbench', name: 'Math · interactive workbench', revision: 0,
   models: { claude: 'opus', codex: null },
@@ -55,7 +55,7 @@ describe('team board layout', () => {
     expect(b.links).toEqual([]);
   });
 
-  it("keeps a Sculptured board's places, moved to start at the corner", () => {
+  it("keeps a CopperTide board's places, moved to start at the corner", () => {
     const imported = importTeam(JSON.stringify(design));
     if ('error' in imported) throw new Error(imported.error);
     const b = layoutBoard(imported.team);
@@ -88,7 +88,7 @@ describe('team board layout', () => {
 });
 
 describe('import', () => {
-  it('maps a Sculptured design to real Claude Code and Codex agents, in work order', () => {
+  it('maps a CopperTide design to real Claude Code and Codex agents, in work order', () => {
     const r = importTeam(JSON.stringify(design));
     if ('error' in r) throw new Error(r.error);
     expect(r.from).toBe('Sculptured');

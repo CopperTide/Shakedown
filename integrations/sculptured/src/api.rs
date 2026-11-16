@@ -22,7 +22,7 @@ impl Reply {
         match self {
             Reply::Ok(v) => Ok(v),
             Reply::Refused { status, message } => {
-                bail!("Sculptured refused {what} (HTTP {status}): {message}")
+                bail!("CopperTide refused {what} (HTTP {status}): {message}")
             }
         }
     }
@@ -79,9 +79,9 @@ fn request_id() -> String {
 /// Sends `r`: a 2xx answer's JSON; an error Sculptured reported as `Refused`; an error when
 /// Sculptured can't be reached.
 async fn reply(r: RequestBuilder) -> Result<Reply> {
-    let resp = r.send().await.context("Sculptured can't be reached")?;
+    let resp = r.send().await.context("CopperTide can't be reached")?;
     let status = resp.status().as_u16();
-    let text = resp.text().await.context("reading Sculptured's answer")?;
+    let text = resp.text().await.context("reading CopperTide's answer")?;
     let body: Value = serde_json::from_str(&text).unwrap_or(Value::Null);
     if (200..300).contains(&status) {
         return Ok(Reply::Ok(body));

@@ -1,4 +1,4 @@
-// Import a team from a file: a Sculptured design (`TeamDraft`: groups, agents with a job and a
+// Import a team from a file: a CopperTide design (`TeamDraft`: groups, agents with a job and a
 // place on the board, "hands work to" connections), or an Arena team. Every agent stays a real
 // model: Claude agents become Claude Code, Codex agents Codex; a kind Arena can't run is refused
 // by name, never swapped for something else.
@@ -17,7 +17,7 @@ const KIND: Record<string, AgentKind> = { claude: 'claude_code', codex: 'codex' 
 const SCULPTURED_KIND_NAME: Record<string, string> = { opencode: 'OpenCode' };
 const ARENA_KINDS: AgentKind[] = ['claude_code', 'codex', 'open', 'external'];
 
-/** A Sculptured agent id as an Arena one (`^[a-z0-9_-]+$`), unique in `taken`. */
+/** A CopperTide agent id as an Arena one (`^[a-z0-9_-]+$`), unique in `taken`. */
 function arenaId(id: string, taken: Set<string>): string {
   const base = id.toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || 'agent';
   let out = base;
