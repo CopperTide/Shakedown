@@ -14,8 +14,8 @@ Thanks for helping. Bug reports, new integrations and benchmarks, docs fixes and
 You need [Rust](https://rustup.rs/) (stable), [Node.js](https://nodejs.org/) 24, Docker, Git and, for the Python kit and integrations, [uv](https://docs.astral.sh/uv/). Claude Code or Codex is only needed to run real CLI agents, and a model provider (a key such as `OPENROUTER_API_KEY`, or a local server in `ARENA_LOCAL_MODELS`) only for API agents; the tests call neither.
 
 ```bash
-git clone https://github.com/CopperTide/Arena.git
-cd Arena
+git clone https://github.com/CopperTide/Shakedown.git
+cd Shakedown
 docker compose -f deploy/compose.yml up -d     # Postgres on 127.0.0.1:5544, used by arenad and the tests
 cargo build --release                          # integrations and benchmarks, into core/target/release
 (cd core && cargo run -p arenad)               # API on http://127.0.0.1:4510

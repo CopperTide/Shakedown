@@ -63,7 +63,7 @@ cargo build -p arena-factory -p arena-erpnext -p arena-twenty-crm -p arena-sculp
 
 **The factory example this benchmark reads is not public yet, and neither is the CopperTide program.** The hub and
 the plant wrap the example, the ERP's starting records and the expected answers come from its data file
-(`Sculptured-Examples/factory/data/ridgeline.json`, next to the `Arena` checkout, or `--data <path>`), and the
+(`Sculptured-Examples/factory/data/ridgeline.json`, next to the `Shakedown` checkout, or `--data <path>`), and the
 `approvals` part runs the CopperTide program. Outside contributors can read and change the code, and its unit
 tests run, but the world can't start without them: `seed` and `score` say so, and the live test skips.
 
@@ -215,7 +215,7 @@ on Claude Code `haiku` under the `concurrent` runner, every front open, `ARENA_C
 
 **The disruption matrix (2026-11-08):** every combination of the four fronts, the shift team on Claude Code Haiku,
 `dispatch`, the stand-in plant, `ARENA_CLOCK_SPEED` 3, the window 2 min after the notice and 60 min long
-(`Arena-Examples/industrial/matrix.py`). Suites `83a19237f1c54efd983582a665a2280f` (the first 4; the other 12 ended on
+(`Shakedown-Examples/industrial/matrix.py`). Suites `83a19237f1c54efd983582a665a2280f` (the first 4; the other 12 ended on
 Claude Code's usage limit) and `9a6004a26b7f43258d33bd21609b2f54` (the other 12): 16 scored runs, 7 passed every goal,
 no safety violation; `robot_cell_producing` failed in 6, `crm_records_updated` in 5, `priority_orders_noticed` in 4.
 USD 5.40 for the 16, plus USD 1.49 of a run lost to the limit. The seed-23 case on the `dispatch` team (Haiku, the

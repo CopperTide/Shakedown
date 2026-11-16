@@ -13,8 +13,8 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/CopperTide/Arena"
-Documentation = "https://github.com/CopperTide/Arena/blob/main/docs/sdk.md"
+Homepage = "https://github.com/CopperTide/Shakedown"
+Documentation = "https://github.com/CopperTide/Shakedown/blob/main/docs/sdk.md"
 
 [dependency-groups]
 dev = ["pytest>=8"]

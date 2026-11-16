@@ -4,7 +4,7 @@
 
 Please report security problems privately, not in a public issue:
 
-- **Preferred:** [open a private vulnerability report](https://github.com/CopperTide/Arena/security/advisories/new) on GitHub.
+- **Preferred:** [open a private vulnerability report](https://github.com/CopperTide/Shakedown/security/advisories/new) on GitHub.
 - **Or email** security@usesculptured.com.
 
 Include what you found, how to reproduce it, and the commit you tested. You will get an acknowledgement within three working days. We will keep you updated until a fix is released, and credit you if you wish.

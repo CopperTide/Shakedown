@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/CopperTide/Arena/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/CopperTide/Arena/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/CopperTide/Shakedown/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/CopperTide/Shakedown/actions/workflows/ci.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="License: Apache 2.0" src="https://img.shields.io/badge/license-Apache%202.0-2f6f73"></a>
   <img alt="Rust stable" src="https://img.shields.io/badge/rust-stable-2f6f73?logo=rust">
   <img alt="Python 3.10 or newer" src="https://img.shields.io/badge/python-3.10%2B-2f6f73?logo=python&logoColor=white">
@@ -35,7 +35,7 @@ never by a model. arenad, the Shakedown service, records every step of every run
 step by step.
 
 Shakedown (code name `arena`): the service is still `arenad`, the Python package `arena` (`arena-sdk`), the protocol
-`arena-part/1`, the environment variables `ARENA_*` and this repo `CopperTide/Arena`. Those internal names are
+`arena-part/1` and the environment variables `ARENA_*`. Those internal names are
 renamed later, in one pass.
 
 ## Use Shakedown from code
@@ -184,7 +184,7 @@ CLIs on your PATH for CLI agents; for API agents, a key (`OPENROUTER_API_KEY`, `
 `ollama=http://127.0.0.1:11434/v1`); `uv` only for the Python integrations.
 
 ```bash
-git clone https://github.com/CopperTide/Arena.git && cd Arena
+git clone https://github.com/CopperTide/Shakedown.git && cd Shakedown
 docker compose -f deploy/compose.yml up -d     # Postgres on 127.0.0.1:5544 (loopback only)
 cargo build --release                          # the Rust integrations and benchmarks, into core/target/release
 (cd core && cargo run -p arenad)               # API on http://127.0.0.1:4510
@@ -323,4 +323,4 @@ see [data/retail/LICENSE](data/retail/LICENSE) and [NOTICE](NOTICE).
 ## Examples and demos
 
 Worlds, demos and showcases built on Shakedown (the factory showcase, the local pharma stack) live in the separate
-`Arena-Examples` repo, next to this one, so this repo stays the core.
+`Shakedown-Examples` repo, next to this one, so this repo stays the core.

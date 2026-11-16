@@ -256,7 +256,7 @@ the running one at `ARENA_SDK_URL`, and are skipped without either. They drive t
 The arenad they start runs the startup cleanup, so give them a Postgres no other test run uses at the time.
 
 The tests of `integrations/ridgeline-hub` and `integrations/isaac-sim` read the Ridgeline factory example from
-`Sculptured-Examples/factory` next to the `Arena` checkout (their READMEs say which folders). **That example is not
+`Sculptured-Examples/factory` next to the `Shakedown` checkout (their READMEs say which folders). **That example is not
 public yet**: without it every test of those two packages is skipped, and the packages can't start. The CopperTide
 program that `integrations/sculptured` runs is not published yet either; its live test is skipped without it.
 

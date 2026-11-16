@@ -9,7 +9,7 @@ package `isaac-sim-mirror` (see `integrations/isaac-sim-mirror/README.md`)
 only follows a live plant.
 
 **The factory example this package wraps is not public yet.** Its default `isaac_path` points into a private
-`Sculptured-Examples` checkout next to the `Arena` checkout; without one the package can't start and every test in
+`Sculptured-Examples` checkout next to the `Shakedown` checkout; without one the package can't start and every test in
 `tests/` is skipped (pytest says why). Outside contributors can read and change the code, but can't run it.
 
 The Ridgeline factory as an `arena-part/1` integration, on the Shakedown clock. In the factory demo
@@ -45,7 +45,7 @@ changes the fingerprint.
 
 | key | default |
 |---|---|
-| `isaac_path` | `Sculptured-Examples/factory/isaac`, next to the `Arena` checkout |
+| `isaac_path` | `Sculptured-Examples/factory/isaac`, next to the `Shakedown` checkout |
 | `data_path` | `<isaac_path>/../data/ridgeline.json`, passed to `press_model.load_data` |
 | `plant_start` | `2026-03-10T06:00:00`, the plant clock at Shakedown time 0 |
 | `physics_hz` | the factory's `press_model.PHYSICS_HZ` (360) |

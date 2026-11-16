@@ -1,7 +1,7 @@
 The files db.json, tasks.json and policy.md in this folder come from tau2-bench
 (https://github.com/sierra-research/tau2-bench) and are used under the MIT License
 below. demo_tasks.json, the list of task ids the retail example offers, is part of
-Arena and licensed under the Apache License 2.0 (see the LICENSE at the repository root).
+Shakedown and licensed under the Apache License 2.0 (see the LICENSE at the repository root).
 
 MIT License
 

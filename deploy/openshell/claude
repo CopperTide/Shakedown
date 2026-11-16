@@ -14,7 +14,7 @@ IMAGE=${ARENA_OPENSHELL_IMAGE:-openshell-arena-claude:latest}
 POLICY=${ARENA_OPENSHELL_POLICY:-$here/factory-01.yaml}
 NAME="ar-$$-$RANDOM"          # sandbox names are at most 19 characters
 
-# Arena's MCP URL names the branch and the agent: http://127.0.0.1:<port>/mcp/<branch>/<agent>.
+# Shakedown's MCP URL names the branch and the agent: http://127.0.0.1:<port>/mcp/<branch>/<agent>.
 mcp=$(printf '%s\n' "$@" | grep -o 'http://127\.0\.0\.1:[0-9]*/mcp/[a-z0-9_]*/[A-Za-z0-9_-]*' | head -1 || true)
 
 cleanup() {
