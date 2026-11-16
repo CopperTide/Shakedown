@@ -52,7 +52,7 @@ lists them; the team finds them in the ERP. Generated orders' ids look like cust
 | CRM | The customers as accounts (with domain, LinkedIn, revenue and address), their contacts, and an open opportunity per order, closing on its due date |
 
 **Build it:** `ARENA_BENCHMARK=factory cargo run -p arenad -- base` from `core/`, after building the packages, with the Postgres
-of `deploy/compose.yml` running, a current Sculptured on `PATH`, the images of the five parts present, and arenad stopped. It makes the base world unless it exists, and exits; a run makes it too if
+of `deploy/compose.yml` running, a current CopperTide on `PATH`, the images of the five parts present, and arenad stopped. It makes the base world unless it exists, and exits; a run makes it too if
 it is missing. The dates stay as they were when it was made: `factory`'s version names the base, so bump the version to
 build another. On a machine where the build and saves are elsewhere:
 ```bash
@@ -61,10 +61,10 @@ cargo build -p arena-factory -p arena-erpnext -p arena-twenty-crm -p arena-sculp
 (cd core && ARENA_BENCHMARK=factory cargo run -p arenad -- base)
 ```
 
-**The factory example this benchmark reads is not public yet, and neither is the Sculptured program.** The hub and
+**The factory example this benchmark reads is not public yet, and neither is the CopperTide program.** The hub and
 the plant wrap the example, the ERP's starting records and the expected answers come from its data file
 (`Sculptured-Examples/factory/data/ridgeline.json`, next to the `Arena` checkout, or `--data <path>`), and the
-`approvals` part runs the Sculptured program. Outside contributors can read and change the code, and its unit
+`approvals` part runs the CopperTide program. Outside contributors can read and change the code, and its unit
 tests run, but the world can't start without them: `seed` and `score` say so, and the live test skips.
 
 It is `opt_in`, so arenad's default stays the retail example; choose it with `ARENA_BENCHMARK=factory`.
@@ -180,7 +180,7 @@ view serves the bearing task.
 
 **Verified (2026-11-07):** `cargo test -p arena-factory` (49 unit tests, the shift's checks and twin among them, and 3
 describe tests); the three simulated parts', the hub's and the plant's pytest suites with `arena-part-check`. `arenad
-base` built the 0.4.0 base world (stand-in plant, `frappe/erpnext:v16.53.0`, `twentycrm/twenty:v2.51.0`, the Sculptured
+base` built the 0.4.0 base world (stand-in plant, `frappe/erpnext:v16.53.0`, `twentycrm/twenty:v2.51.0`, the CopperTide
 build with outside-system proposals). A run with no agents at all (the `external` runner, an empty team, finished at
 once) showed the setup, the four disruptions firing at the setup, the plant's load reaching the meter through the link,
 a view, and the checks of an untouched world (six failed, two of them safety). Two runs on a real model, the shift team
@@ -241,14 +241,14 @@ With `ARENA_RUN_ISAAC_SIM` the plant can run on a GPU machine over ssh (`integra
   is refused before its part, and that every named check is scored; it prints the checks and the metrics. Which end
   states pass which check (the right path, the wrong diagnosis and part) is `cargo test -p arena-factory`'s job. It
   starts an ERPNext stack and a Twenty server of its own and removes them after.
-  It needs a current Sculptured (`ARENA_SCULPTURED_BINARY`, a release build next to the checkout, or `PATH`); one too old
+  It needs a current CopperTide (`ARENA_SCULPTURED_BINARY`, a release build next to the checkout, or `PATH`); one too old
   to have the approvals API fails the base save with "no API route". With `CARGO_TARGET_DIR` set, set `ARENA_BIN_DIR` to match.
 
 The verifications below were made with a scripted team (each agent's part written as code, no model), which Shakedown
 no longer has; the live test with a real model has not been run on this world yet.
 
 **Verified:** that live test passed on Linux, in about 190 s, against `frappe/erpnext:v16.53.0`, a local release build
-of Sculptured and the stand-in plant, with the clock at 20 times real time. It covers one run of each path. That was
+of CopperTide and the stand-in plant, with the clock at 20 times real time. It covers one run of each path. That was
 with the earlier script, in which the lead made every change; the script with the work divided between the roles
 compiles but has not been run yet. **Not
 run:** real agents or models, a rerun or fork of this world, and `arena-part-check` on
@@ -256,7 +256,7 @@ run:** real agents or models, a rerun or fork of this world, and `arena-part-che
 site.
 
 **Verified at the plant's scale (version 0.3.0, 2026-11-05):** `arenad base` built the base world on Linux in about 9
-minutes (`frappe/erpnext:v16.53.0`, `twentycrm/twenty:v2.51.0`, a debug build of Sculptured); while it ran, the ERP held
+minutes (`frappe/erpnext:v16.53.0`, `twentycrm/twenty:v2.51.0`, a debug build of CopperTide); while it ran, the ERP held
 1,083 sales orders, work orders and job cards. Sales orders are written five at a time and work orders one at a time
 (they all update the coil's stock row); the CRM is written through Twenty's batch endpoint, since Twenty limits an API key
 to 100 requests a minute (agents' CRM calls meet the same limit). `cargo test -p arena-factory` passes. **Not run at this
@@ -264,7 +264,7 @@ scale:** the live test with the scripted team, which then found the affected ord
 verifications below are of version 0.2.0 (three customers, eight orders).
 
 **Verified with the company and the CRM (2026-11-04):** `live_factory_right_path_passes_and_wrong_path_fails` passed on
-Linux, in about 290 s, with the seed above, `frappe/erpnext:v16.53.0`, `twentycrm/twenty:v2.51.0`, a debug build of Sculptured,
+Linux, in about 290 s, with the seed above, `frappe/erpnext:v16.53.0`, `twentycrm/twenty:v2.51.0`, a debug build of CopperTide,
 the stand-in plant and the scripted team, including its new CRM step: the right path passed all eleven checks. Counted once in
 the ERP after seeding, without a run: 2 companies (`Arena Co`, from the integration's base, stays), 4 workstations, 5 BOMs, 8
 sales orders, 8 work orders, 8 job cards, 4 assets, 15 item prices, and no stock row for `SP-SPN-800`. `arenad base` took

@@ -128,7 +128,7 @@ experiment page.</sub>
 flowchart LR
   subgraph clients["Clients"]
     UI["Web UI<br/>ui/"]
-    SC["Sculptured<br/>Shakedown control"]
+    SC["CopperTide<br/>Shakedown control"]
   end
 
   subgraph team["Team of agents"]
@@ -170,7 +170,7 @@ instances, runs tool calls, saves an instance's state, starts from a save, shows
 states. A **benchmark** names the world it runs in (its **parts**) and brings the tasks, the tools, the data and
 the gold actions. When a branch ends, arenad diffs its world with the task's gold world; it passes when no key
 differs and at least one part could be checked. The core (arenad, the protocol, the kits) depends on no UI: the
-web UI is one client of arenad's HTTP API, and the Python SDK and Sculptured's Shakedown control workspace are others.
+web UI is one client of arenad's HTTP API, and the Python SDK and CopperTide's Shakedown control workspace are others.
 
 Read [docs/concepts.md](docs/concepts.md) for the full model: runs, branches, steps, saves, the restore table,
 teams and handoffs, forking rules and cost labels.
@@ -232,7 +232,7 @@ the prefix `live_` and needs Docker or a real server. Each folder's README has t
 | `mariadb` | A MariaDB database per instance (saves are binary-log positions) | save | no | no | Seven `live_mariadb_*` tests against MariaDB 11.8 in Docker, including `arena-part-check` |
 | `erpnext` | An ERPNext site per instance (saves are binary-log positions plus the site's files) | save | no | no | `live_erpnext_roundtrip` against ERPNext v16.53.0 in Docker, including `arena-part-check` |
 | `twenty-crm` | A Twenty CRM server per instance (saves are copies of its Postgres database) | save | no | no | `live_twenty_roundtrip` against Twenty v2.51.0 in Docker, including `arena-part-check` |
-| `sculptured` | A Sculptured server per instance, for approvals | save | no | no | `live_sculptured_roundtrip` against a real `sculptured` build; `arena-part-check` passed once by hand |
+| `sculptured` | A CopperTide server per instance, for approvals | save | no | no | `live_sculptured_roundtrip` against a real `sculptured` build; `arena-part-check` passed once by hand |
 | `ridgeline-hub` | A factory's simulated suppliers, carriers, insurer and customers | save | no | yes | Python tests against the real hub `market.py`, with `arena-part-check`. No services, no arenad run |
 | `isaac-sim` | A factory plant, on Isaac Sim physics or a stand-in | replay | yes | yes | **Stand-in only.** Python tests with `arena-part-check`. The `isaac` backend has never run on Isaac Sim |
 | `isaac-sim-mirror` | A read-only view of a running plant | none | no | yes | One Python test against a stub HTTP server. A world containing it can't be rerun |
@@ -244,7 +244,7 @@ the prefix `live_` and needs Docker or a real server. Each folder's README has t
 
 Only `postgres` (through the retail example) has been used in an arenad run with agents. The other
 integrations are checked on their own, not inside a team's run. Three of them need code that is not public yet:
-`sculptured` runs the Sculptured program, and `ridgeline-hub` and `isaac-sim` (with its mirror) wrap the Ridgeline
+`sculptured` runs the CopperTide program, and `ridgeline-hub` and `isaac-sim` (with its mirror) wrap the Ridgeline
 factory example. Without those, their tests are skipped.
 
 ## Extend Shakedown
@@ -295,7 +295,7 @@ other integration is checked on its own, and API mode has not been measured.
   (`docs/protocol.md`); tested with toy parts. `proposal_id` on the `ridgeline-hub` and `isaac-sim` tools binds
   only in a world whose benchmark puts a gate on them.
 - A world with real agents made of several integrations has not been run. `benchmarks/factory` builds one (ERPNext,
-  the hub, Sculptured and the plant) and reads a factory example that is not public yet; its live test now runs the
+  the hub, CopperTide and the plant) and reads a factory example that is not public yet; its live test now runs the
   benchmark's own team on a real model and has not been run yet (earlier runs used a scripted team, since removed).
 - Comparing a world made only of replay parts: there is no final save to compare, so compare answers 409 and
   the branch fails with "no part of this world can be checked against the task's expected result".

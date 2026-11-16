@@ -226,7 +226,7 @@ restore mode.
 
 ## External designs
 
-A design that lives in its own code (or in Sculptured) drives a run itself, and Shakedown records it:
+A design that lives in its own code (or in CopperTide) drives a run itself, and Shakedown records it:
 
 1. `POST /api/runs` with `runner: "external"` starts the world and records `RunStart`; the team may be empty.
 2. `POST /api/branches/{id}/agents` registers an agent, at any time during the run. The answer gives its MCP
@@ -285,7 +285,7 @@ entry: unknown, not guessed. Named checks keep their `safety` flag in the run's 
 Each tool call also records `duration_ms`, how long the tool ran in the world (gate checks and saves left out;
 absent for a call that reached no part, and in older runs).
 
-Shakedown's web UI shows a run in the same control form as Sculptured Control (`/control/{run}/{branch}`): the agents
+Shakedown's web UI shows a run in the same control form as CopperTide Control (`/control/{run}/{branch}`): the agents
 as units and the world's parts as equipment, labelled with their kind, product, what they stand in for and
 whether they are simulated, with the action flows between them; a timeline with a lane per agent, each tool call
 marked by system kind and read or write (writes solid, reads hollow, approvals and refusals as interlocks, errors

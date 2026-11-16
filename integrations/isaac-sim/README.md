@@ -348,7 +348,7 @@ export ARENA_RUN_ISAAC_SIM="exec ssh -p <port> -i <key> -o BatchMode=yes isaac@<
   - the image `nvcr.io/nvidia/isaac-sim:6.2.0`, whose `plant/sim.isaac_version` reads `6.2.0.rc.14.6`;
   - a 40 GB container disk and no volume.
 - Everything else ran on a Linux workstation: arenad (`live_factory_gold_path_report`), the factory benchmark with
-  `--backend isaac`, ERPNext (`frappe/erpnext:v16.53.0`), `ridgeline-hub` and Sculptured.
+  `--backend isaac`, ERPNext (`frappe/erpnext:v16.53.0`), `ridgeline-hub` and CopperTide.
 - arenad started the part over `ssh` (`ARENA_RUN_ISAAC_SIM`, `remote/sshd.py` on the pod), with
   `ARENA_CLOCK_SPEED=0.1` and `{"record": "factory-gold.mp4", "camera": "auto", "record_fps": 10}`.
 - The team was the scripted, no-model team, on the gold path. Shakedown no longer has that team: the factory's live

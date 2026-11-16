@@ -257,7 +257,7 @@ The arenad they start runs the startup cleanup, so give them a Postgres no other
 
 The tests of `integrations/ridgeline-hub` and `integrations/isaac-sim` read the Ridgeline factory example from
 `Sculptured-Examples/factory` next to the `Arena` checkout (their READMEs say which folders). **That example is not
-public yet**: without it every test of those two packages is skipped, and the packages can't start. The Sculptured
+public yet**: without it every test of those two packages is skipped, and the packages can't start. The CopperTide
 program that `integrations/sculptured` runs is not published yet either; its live test is skipped without it.
 
 Tests never call a real model unless they are `live_`, and no test uses a fake model server or a scripted
