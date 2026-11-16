@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="340" viewBox="0 0 1280 340" role="img" aria-labelledby="title desc">
-  <title id="title">Arena</title>
+  <title id="title">Shakedown by CopperTide</title>
   <desc id="desc">A rewindable arena for testing multi-agent systems. A run's steps on a line; from one step a branch forks off and is rerun.</desc>
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
@@ -18,7 +18,7 @@
     </style>
   </defs>
   <rect x="0.5" y="0.5" width="1279" height="339" rx="24" fill="url(#bg)" stroke="#2a3d45"/>
-  <text x="66" y="150" class="title">Arena</text>
+  <text x="66" y="150" class="title">Shakedown</text>
   <text x="72" y="208" class="tag">A rewindable arena for testing multi-agent systems</text>
   <rect x="72" y="252" width="180" height="36" rx="18" fill="#1c3038" stroke="#2c444c"/><text x="162.0" y="276" text-anchor="middle" class="chip">Record every step</text><rect x="264" y="252" width="189" height="36" rx="18" fill="#1c3038" stroke="#2c444c"/><text x="358.5" y="276" text-anchor="middle" class="chip">Fork from any step</text><rect x="465" y="252" width="276" height="36" rx="18" fill="#1c3038" stroke="#2c444c"/><text x="603.0" y="276" text-anchor="middle" class="chip">Exact or approximate restore</text><rect x="753" y="252" width="136" height="36" rx="18" fill="#1c3038" stroke="#2c444c"/><text x="821.0" y="276" text-anchor="middle" class="chip">Compare runs</text>
   <g fill="none" stroke-linecap="round">

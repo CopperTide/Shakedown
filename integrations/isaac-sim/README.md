@@ -8,11 +8,11 @@ Sim image or 16 GB GPU here). Its package `isaac-sim-mirror` (see `integrations/
 only follows a live plant.
 
 **The factory example this package wraps is not public yet.** Its default `isaac_path` points into a private
-`Sculptured-Examples` checkout next to the arena checkout; without one the package can't start and every test in
+`CopperTide-Examples` checkout next to the arena checkout; without one the package can't start and every test in
 `tests/` is skipped (pytest says why). Outside contributors can read and change the code, but can't run it.
 
 The Ridgeline factory as an `arena-part/1` integration, on the arena clock. In the factory demo
-(`Sculptured-Examples/factory`, branch `isaac-plant`), Isaac Sim 6.2 **is** the plant. This integration wraps
+(`CopperTide-Examples/factory`, branch `isaac-plant`), Isaac Sim 6.2 **is** the plant. This integration wraps
 that demo's `isaac/factory.py` class `Factory` without editing it. Factory is plain Python and reaches the
 simulation only through a `PlantIO`.
 
@@ -44,7 +44,7 @@ changes the fingerprint.
 
 | key | default |
 |---|---|
-| `isaac_path` | `Sculptured-Examples/factory/isaac`, next to the arena checkout |
+| `isaac_path` | `CopperTide-Examples/factory/isaac`, next to the arena checkout |
 | `data_path` | `<isaac_path>/../data/ridgeline.json`, passed to `press_model.load_data` |
 | `plant_start` | `2026-03-10T06:00:00`, the plant clock at arena time 0 |
 | `physics_hz` | the factory's `press_model.PHYSICS_HZ` (360) |
@@ -196,7 +196,7 @@ The factory's `isaac/spark/run.sh` shows how Isaac Sim 6.2 runs there: the `nvcr
 container, its cache mounts, `-u 1234:1234`, `--network=host`, and `LD_PRELOAD` of libgomp on aarch64. This
 integration needs the same container, with three changes:
 - `-i` instead of `-t`, because the protocol is stdin and stdout;
-- the `Sculptured` folder (holding both `arena/` and `Sculptured-Examples/`) mounted, for example at `/work`;
+- the `CopperTide` folder (holding both `arena/` and `CopperTide-Examples/`) mounted, for example at `/work`;
 - `ARENA_SAVES` passed and mounted read-write.
 
 Inside the container, the command is:

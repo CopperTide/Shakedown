@@ -1,15 +1,15 @@
 # sculptured integration
 
-Puts Sculptured's approvals in the world: one `sculptured serve` per instance, with changes proposed and decided
+Puts CopperTide's approvals in the world: one `sculptured serve` per instance, with changes proposed and decided
 through tools. Restore: exact from a save (SQLite backups plus a data folder); approximate: no. `uses_clock`:
-false. **The Sculptured program is not published yet**, so outside contributors cannot run this integration
+false. **The CopperTide program is not published yet**, so outside contributors cannot run this integration
 or its live test; the rest of the repository does not need it. Verified live: `live_sculptured_roundtrip` ran
 against a local build of `sculptured` on the maintainer's machine (propose, save, decide, restore, diff).
 `arena-part-check` passed on it once, run by hand (no test runs it). The test is skipped, and says so, when no
-Sculptured program is found. A save restores only with the same Sculptured build.
+CopperTide program is found. A save restores only with the same CopperTide build.
 
-Sculptured's approvals in the arena world: changes proposed to a business system and the decisions on
-them. Each instance is a `sculptured serve` of its own; the tools reach it only through Sculptured's HTTP
+CopperTide's approvals in the arena world: changes proposed to a business system and the decisions on
+them. Each instance is a `sculptured serve` of its own; the tools reach it only through CopperTide's HTTP
 API.
 
 - **Config:** `{binary?, team?}`. `binary` is the sculptured program (default: the
@@ -30,15 +30,15 @@ API.
   driver, no model), and `PUT /api/teams/{team}/settings` with `question_timeout_min: 1440`. Then `POST
   /api/teams/{team}/start`, and the start waits until every agent runs (`GET /api/rigs/{team}`). A
   restored server lost its agents' processes, so its start starts the team again. The team has no rules,
-  so every change waits for a person's decision. After a day (wall clock) unanswered, Sculptured records
+  so every change waits for a person's decision. After a day (wall clock) unanswered, CopperTide records
   the change not approved, by `nobody-in-time`.
-- **Where changes come from:** Sculptured has no HTTP route that proposes or decides a change. A change
+- **Where changes come from:** CopperTide has no HTTP route that proposes or decides a change. A change
   is made only by its agent tool `propose_change` (`crates/controld/src/seat_tools/propose.rs`). The tool
   records `ChangeProposed` and `ChangeChecked` on the team, then asks a person (an `approval` question
   whose waiter is the agent's call), and records `ChangeDecided` when the answer comes. So:
   - `propose_change {action, summary, payload, system?, reason?}` (write): finds an agent with no question
     open, sends it `propose_change:<args>` (`POST /api/seats/{seat}/send`, intent `instruct`), and reads its
-    events (`GET /api/seats/{seat}/events?after=<seq>`) until Sculptured asks about the change (the
+    events (`GET /api/seats/{seat}/events?after=<seq>`) until CopperTide asks about the change (the
     `question-raised` event gives the change's id) or refuses the arguments (the reply of the turn that
     took the message). It gives the change and writes `change/<id>`. While 8 changes wait, it refuses.
   - `list_changes {}` (read): `GET /api/teams/{team}/changes` (`crates/controld/src/changes.rs`), newest
@@ -50,9 +50,9 @@ API.
     `approved: false`. For a change proposed again after a restore (below), the question answered is its
   copy's.
   - A change is `{id, action, system, summary, payload, reason, decision}`. `decision` is `{approved, by,
-    note}` (`by` is `person`, `mandate` or `nobody-in-time`), or null while it waits. Sculptured's times and
+    note}` (`by` is `person`, `mandate` or `nobody-in-time`), or null while it waits. CopperTide's times and
     proposing agent are left out.
-  - Refusals are the tool's `error` and change nothing (`reads` and `writes` empty): bad arguments, Sculptured
+  - Refusals are the tool's `error` and change nothing (`reads` and `writes` empty): bad arguments, CopperTide
     refusing a proposal, an unknown change, a change already decided, a change that can no longer be
     decided, 8 changes already waiting. An unknown tool is -32602. A server that can't be reached fails the
     call.
@@ -67,13 +67,13 @@ API.
   differs from `config.binary`'s `--version`, or when more than 8 changes waited in it (they could not all
   be proposed again). Otherwise `data/` is copied into the new instance's data folder and the server starts
   as above. The seed is ignored.
-- **Re-raised changes:** a restored Sculptured withdraws the questions its predecessor asked ("Sculptured
+- **Re-raised changes:** a restored CopperTide withdraws the questions its predecessor asked ("CopperTide
   restarted while the agent waited for an answer"), so a change that waited at the save could not be
   decided any more. The start therefore proposes every such change again (oldest first, with the same
   action, summary, payload, system and reason) and records `original → copy` in
   `.live/<instance>/aliases.json`, which saves carry in `meta.json`, so restores of restores compose (the
   latest copy counts). `list_changes`, `inspect` and `diff` show the latest copy under the original id
-  and hide every copy, and `decide_change(original id)` answers the copy's question. **Sculptured's own UI
+  and hide every copy, and `decide_change(original id)` answers the copy's question. **CopperTide's own UI
   and API show the copy under its new id**, next to the withdrawn original, which waits forever.
 - **inspect / diff:** keys `change/<id>`. A live instance's changes come from its server, a save's from
   `changes.json`. `diff` lists the changes whose doc differs, decisions included.

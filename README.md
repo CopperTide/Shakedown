@@ -2,12 +2,12 @@
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset=".github/assets/banner-dark.svg">
     <source media="(prefers-color-scheme: light)" srcset=".github/assets/banner-light.svg">
-    <img alt="Arena: a rewindable arena for testing multi-agent systems" src=".github/assets/banner-light.svg" width="100%">
+    <img alt="Shakedown: a rewindable arena for testing multi-agent systems" src=".github/assets/banner-light.svg" width="100%">
   </picture>
 </p>
 
 <p align="center">
-  <a href="https://github.com/Sculptured/Arena/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Sculptured/Arena/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/CopperTide/Shakedown/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/CopperTide/Shakedown/actions/workflows/ci.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="License: Apache 2.0" src="https://img.shields.io/badge/license-Apache%202.0-2f6f73"></a>
   <img alt="Rust stable" src="https://img.shields.io/badge/rust-stable-2f6f73?logo=rust">
   <img alt="Python 3.10 or newer" src="https://img.shields.io/badge/python-3.10%2B-2f6f73?logo=python&logoColor=white">
@@ -23,13 +23,13 @@
   <a href="CONTRIBUTING.md">Contributing</a>
 </p>
 
-**Arena is a rewindable arena for testing multi-agent systems.** A team of AI agents works on a task in a world
+**Shakedown is a rewindable arena for testing multi-agent systems.** A team of AI agents works on a task in a world
 made of real systems: a database, a folder of files, a Docker Compose project, a simulator. arenad, the arena
 service, records every step and saves the world as it was at that step. Go back to any step, change an agent's
 prompt, model or harness, fork with an exact or approximate restore of the world, rerun from there, and compare
 the runs.
 
-## Why Arena
+## Why Shakedown
 
 - **Rewind the world, not just the transcript.** After each step that changes the world, arenad saves the parts
   that changed (a part that can only replay is replayed instead). A fork puts each part back as it was just
@@ -73,7 +73,7 @@ the runs.
   </tr>
 </table>
 
-<sub>Captured from Arena's web UI on a small test world (a toy part and the kit's counter, with agents on a fake model).</sub>
+<sub>Captured from Shakedown's web UI on a small test world (a toy part and the kit's counter, with agents on a fake model).</sub>
 
 ## How it works
 
@@ -81,7 +81,7 @@ the runs.
 flowchart LR
   subgraph clients["Clients"]
     UI["Web UI<br/>ui/"]
-    SC["Sculptured<br/>Arena control"]
+    SC["CopperTide<br/>Shakedown control"]
   end
 
   subgraph team["Team of agents"]
@@ -122,8 +122,8 @@ speak the `arena-part/1` protocol with arenad ([docs/protocol.md](docs/protocol.
 instances, runs tool calls, saves an instance's state, starts from a save, shows the state and compares two
 states. A **benchmark** names the world it runs in (its **parts**) and brings the tasks, the tools, the data and
 the gold actions. When a branch ends, arenad diffs its world with the task's gold world; it passes when no key
-differs and at least one part could be checked. The web UI is one client of arenad's HTTP API; Sculptured's
-Arena control workspace is another.
+differs and at least one part could be checked. The web UI is one client of arenad's HTTP API; CopperTide's
+Shakedown control workspace is another.
 
 Read [docs/concepts.md](docs/concepts.md) for the full model: runs, branches, steps, saves, the restore table,
 teams and handoffs, forking rules and cost labels.
@@ -137,7 +137,7 @@ CLIs on your PATH for CLI agents; for API agents, a key (`OPENROUTER_API_KEY`, `
 `ollama=http://127.0.0.1:11434/v1`); `uv` only for the Python integrations.
 
 ```bash
-git clone https://github.com/Sculptured/Arena.git && cd Arena
+git clone https://github.com/CopperTide/Shakedown.git && cd Shakedown
 docker compose -f deploy/compose.yml up -d     # Postgres on 127.0.0.1:5544 (loopback only)
 cargo build --release                          # the Rust integrations and benchmarks, into core/target/release
 (cd core && cargo run -p arenad)               # API on http://127.0.0.1:4510
@@ -184,7 +184,7 @@ the prefix `live_` and needs Docker or a real server. Each folder's README has t
 | `service` | Any Docker Compose project per instance | save | no | no | `live_service_roundtrip` against a real Redis 6.2 project in Docker. No `arena-part-check` run |
 | `mariadb` | A MariaDB database per instance (saves are binary-log positions) | save | no | no | Seven `live_mariadb_*` tests against MariaDB 11.8 in Docker, including `arena-part-check` |
 | `erpnext` | An ERPNext site per instance (saves are binary-log positions plus the site's files) | save | no | no | `live_erpnext_roundtrip` against ERPNext v16.53.0 in Docker, including `arena-part-check` |
-| `sculptured` | A Sculptured server per instance, for approvals | save | no | no | `live_sculptured_roundtrip` against a real `sculptured` build; `arena-part-check` passed once by hand |
+| `sculptured` | A CopperTide server per instance, for approvals | save | no | no | `live_sculptured_roundtrip` against a real `sculptured` build; `arena-part-check` passed once by hand |
 | `ridgeline-hub` | A factory's simulated suppliers, carriers, insurer and customers | save | no | yes | Python tests against the real hub `market.py`, with `arena-part-check`. No services, no arenad run |
 | `isaac-sim` | A factory plant, on Isaac Sim physics or a stand-in | replay | yes | yes | **Stand-in only.** Python tests with `arena-part-check`. The `isaac` backend has never run on Isaac Sim |
 | `isaac-sim-mirror` | A read-only view of a running plant | none | no | yes | One Python test against a stub HTTP server. A world containing it can't be rerun |
@@ -192,10 +192,10 @@ the prefix `live_` and needs Docker or a real server. Each folder's README has t
 
 Only `postgres` (through the retail example) has been used in an arenad run with agents. The other
 integrations are checked on their own, not inside a team's run. Three of them need code that is not public yet:
-`sculptured` runs the Sculptured program, and `ridgeline-hub` and `isaac-sim` (with its mirror) wrap the Ridgeline
+`sculptured` runs the CopperTide program, and `ridgeline-hub` and `isaac-sim` (with its mirror) wrap the Ridgeline
 factory example. Without those, their tests are skipped.
 
-## Extend Arena
+## Extend Shakedown
 
 - **Write an integration:** a folder with an `arena-package.toml` and a program that speaks the protocol. Start
   from the counter in [integrations/README.md](integrations/README.md), then check it with `arena-part-check`.
@@ -217,7 +217,7 @@ factory example. Without those, their tests are skipped.
 
 ## Project status
 
-Arena is early. Only `postgres` has been used in an arenad run with agents, through the retail example; every
+Shakedown is early. Only `postgres` has been used in an arenad run with agents, through the retail example; every
 other integration is checked on its own, and API mode has not been measured.
 
 <details>
@@ -231,7 +231,7 @@ other integration is checked on its own, and API mode has not been measured.
 - Isaac Sim on hardware: the `isaac` backend of `isaac-sim` has never run on Isaac Sim 6.2 (needs a 16 GB GPU).
 - Cross-part calls: protocol v1 has no calls between parts. `proposal_id` is accepted by the `ridgeline-hub`
   and `isaac-sim` tools and not checked.
-- A world with agents made of several integrations (for example ERPNext, the hub, Sculptured and the plant
+- A world with agents made of several integrations (for example ERPNext, the hub, CopperTide and the plant
   together) has not been built or run.
 - Comparing a world made only of replay parts: there is no final save to compare, so compare answers 409 and
   the branch fails with "no part of this world can be checked against the task's expected result".
@@ -252,7 +252,7 @@ security problems privately as described in [SECURITY.md](SECURITY.md).
 
 ## License
 
-Arena is licensed under the [Apache License 2.0](LICENSE).
+Shakedown is licensed under the [Apache License 2.0](LICENSE).
 
 The retail data in `data/retail/` (`db.json`, `tasks.json`, `policy.md`) comes from
 [tau2-bench](https://github.com/sierra-research/tau2-bench), MIT License, Copyright (c) 2025 Sierra Research;
