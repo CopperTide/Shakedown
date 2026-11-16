@@ -1,8 +1,8 @@
 //! `propose_change`: a free Practice agent of the team is told `propose_change:<args>`, and calls
-//! Sculptured's `propose_change` agent tool with them. Sculptured records the change and asks a
+//! CopperTide's `propose_change` agent tool with them. CopperTide records the change and asks a
 //! person, and the agent's call waits for the answer, so the tool returns once that question is
 //! asked. A team whose rules approve the change answers at once (the agent's reply names it);
-//! Sculptured refusing the arguments ends the agent's turn with its reason instead.
+//! CopperTide refusing the arguments ends the agent's turn with its reason instead.
 use anyhow::{bail, Context, Result};
 use reqwest::Method;
 use serde_json::{json, Value};
@@ -61,14 +61,14 @@ async fn last_seq(api: &Api, seat: &str) -> Result<i64> {
     Ok(events[0]["seq"].as_i64().unwrap_or(0))
 }
 
-/// What became of the message: Sculptured recorded change `id` (and asked about it, or decided
+/// What became of the message: CopperTide recorded change `id` (and asked about it, or decided
 /// it by the team's rules), or refused it.
 enum Asked {
     Recorded(String),
     Refused(String),
 }
 
-/// Reads the agent's events after `after` until Sculptured asks about the proposal or refuses it.
+/// Reads the agent's events after `after` until CopperTide asks about the proposal or refuses it.
 async fn asked(api: &Api, seat: &str, after: i64, message: &str) -> Result<Asked> {
     let query = [("after", after.to_string()), ("limit", "500".into())];
     poll::until("the proposal recorded", || async {
@@ -82,7 +82,7 @@ async fn asked(api: &Api, seat: &str, after: i64, message: &str) -> Result<Asked
 }
 
 /// What the agent's events since the message say. The agent had no question open, so the first
-/// approval question is about its proposal (Sculptured may record it before the turn, without a
+/// approval question is about its proposal (CopperTide may record it before the turn, without a
 /// turn id). Otherwise the reply of the turn that took `message` tells (an earlier turn may still
 /// be ending meanwhile).
 fn resolve(bodies: &[&Value], message: &str) -> Option<Asked> {

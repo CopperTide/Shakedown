@@ -1,6 +1,6 @@
-/* Copied from Sculptured (sculptured/web/src/tokens.css); the Arena UI shares its look. */
+/* Copied from CopperTide (web/src/tokens.css); the Shakedown UI shares its look. */
 /*
- * Sculptured design tokens. The only place raw colours, type sizes, radii, shadows and motion
+ * CopperTide design tokens. The only place raw colours, type sizes, radii, shadows and motion
  * values live; every component stylesheet reads these custom properties.
  *
  * Default look: Coastal (dark) — ink, chalk and quiet sea-glass.
@@ -161,7 +161,7 @@
   --status-failed: var(--red);
   --status-waiting: var(--amber);
   --status-done: var(--muted);        /* reported complete: the agent says so; grey, never green */
-  --status-verified: var(--green);    /* a check Sculptured ran passed: the only green status */
+  --status-verified: var(--green);    /* a check CopperTide ran passed: the only green status */
   --status-unknown: var(--violet);
   --status-idle: var(--muted);
 

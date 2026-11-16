@@ -1,4 +1,4 @@
-//! Sculptured's HTTP API on one instance's loopback port.
+//! CopperTide's HTTP API on one instance's loopback port.
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -9,7 +9,7 @@ use serde_json::Value;
 /// How long one request may take.
 const TIMEOUT: Duration = Duration::from_secs(30);
 
-/// What Sculptured answered: its JSON, or an error it reported (`{"error": {code, message}}`).
+/// What CopperTide answered: its JSON, or an error it reported (`{"error": {code, message}}`).
 #[derive(Debug, Clone, PartialEq)]
 pub enum Reply {
     Ok(Value),
@@ -22,7 +22,7 @@ impl Reply {
         match self {
             Reply::Ok(v) => Ok(v),
             Reply::Refused { status, message } => {
-                bail!("Sculptured refused {what} (HTTP {status}): {message}")
+                bail!("CopperTide refused {what} (HTTP {status}): {message}")
             }
         }
     }
@@ -57,7 +57,7 @@ impl Api {
         reply(self.client.get(self.url(segments)).query(query)).await
     }
 
-    /// `method /api/<segments>` with `body`, an object, plus a fresh `request_id` (Sculptured
+    /// `method /api/<segments>` with `body`, an object, plus a fresh `request_id` (CopperTide
     /// answers a repeated id with the first answer, and a restored store holds old ids).
     pub async fn send(&self, method: Method, segments: &[&str], body: Value) -> Result<Reply> {
         let mut body = body;
@@ -76,12 +76,12 @@ fn request_id() -> String {
     format!("arena-{}-{nanos}-{n}", std::process::id())
 }
 
-/// Sends `r`: a 2xx answer's JSON; an error Sculptured reported as `Refused`; an error when
-/// Sculptured can't be reached.
+/// Sends `r`: a 2xx answer's JSON; an error CopperTide reported as `Refused`; an error when
+/// CopperTide can't be reached.
 async fn reply(r: RequestBuilder) -> Result<Reply> {
-    let resp = r.send().await.context("Sculptured can't be reached")?;
+    let resp = r.send().await.context("CopperTide can't be reached")?;
     let status = resp.status().as_u16();
-    let text = resp.text().await.context("reading Sculptured's answer")?;
+    let text = resp.text().await.context("reading CopperTide's answer")?;
     let body: Value = serde_json::from_str(&text).unwrap_or(Value::Null);
     if (200..300).contains(&status) {
         return Ok(Reply::Ok(body));

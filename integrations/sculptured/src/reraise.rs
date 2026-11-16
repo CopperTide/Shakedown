@@ -1,6 +1,6 @@
 //! A start from a save proposes again every change that waited in it: the restored server
 //! withdrew their questions, so nothing could decide them otherwise. The copies get new ids in
-//! Sculptured; `aliases` shows them under the original ids.
+//! CopperTide; `aliases` shows them under the original ids.
 use anyhow::{anyhow, Context, Result};
 use serde_json::Value;
 

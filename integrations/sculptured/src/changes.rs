@@ -1,6 +1,6 @@
 //! A team's proposed changes as the tools, `inspect` and `diff` show them. Keys are
 //! `change/<id>`. A change is what was proposed and what became of it; the times and the agent
-//! Sculptured adds are left out, so a change and its restored copy are the same.
+//! CopperTide adds are left out, so a change and its restored copy are the same.
 use std::collections::BTreeMap;
 
 use anyhow::Result;

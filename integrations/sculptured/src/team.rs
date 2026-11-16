@@ -1,5 +1,5 @@
 //! The team whose changes the tools propose and decide. Changes come from Practice agents (no
-//! model): each proposes one change at a time through Sculptured's own `propose_change` tool,
+//! model): each proposes one change at a time through CopperTide's own `propose_change` tool,
 //! and its call waits there for the decision, so the team has `PROPOSERS` of them. The team has
 //! no rules, so every change waits for a person's decision (`decide_change`), for up to a day.
 use anyhow::{bail, Result};
@@ -12,7 +12,7 @@ use crate::poll;
 
 /// How many changes may wait for a decision at once: one per Practice agent.
 pub const PROPOSERS: usize = 8;
-/// How long a change waits for a decision before Sculptured records nobody answered in time
+/// How long a change waits for a decision before CopperTide records nobody answered in time
 /// (its longest question timeout: a day).
 const DECISION_WAIT_MIN: u32 = 1440;
 
@@ -63,7 +63,7 @@ async fn create(api: &Api, team: &str) -> Result<()> {
     let made = api.send(Method::POST, &["teams"], new).await?;
     let mut draft = made.expect("making the team")?["draft"].take();
     if draft["id"] != team {
-        bail!("Sculptured named team {team:?} {}", draft["id"]);
+        bail!("CopperTide named team {team:?} {}", draft["id"]);
     }
     draft["agents"] = proposers();
     let put = json!({"revision": draft["revision"], "draft": draft});

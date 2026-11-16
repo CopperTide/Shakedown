@@ -4,7 +4,7 @@ from ridgeline_hub_part.config import DEFAULT_HUB
 
 NOT_PUBLIC = (
     f"the Ridgeline factory example ({DEFAULT_HUB}) is not here; it is not public yet, so these tests "
-    "run only next to a private checkout of Sculptured-Examples"
+    "run only next to a private checkout of CopperTide-Examples"
 )
 
 

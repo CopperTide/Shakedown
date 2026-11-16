@@ -1,4 +1,4 @@
-# Arena — instructions for agents working in this repo
+# Shakedown — instructions for agents working in this repo
 
 The arena records multi-agent runs against a world made of integrations, saves the world at every
 step, and reruns from any step. The protocol between arenad and an integration or benchmark is

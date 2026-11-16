@@ -1,6 +1,6 @@
 //! Changes proposed again after a restore. A restored server withdraws the questions its
 //! predecessor asked, so a change that waited can no longer be decided; the start proposes it
-//! again (a new id in Sculptured) and records `original → raised` here. The tools, `inspect` and
+//! again (a new id in CopperTide) and records `original → raised` here. The tools, `inspect` and
 //! `diff` show the latest raised copy under the original id and hide every raised id. The map
 //! goes into saves, so restores of restores compose.
 use serde::{Deserialize, Serialize};
@@ -17,7 +17,7 @@ pub struct Alias {
 pub struct Aliases(pub Vec<Alias>);
 
 impl Aliases {
-    /// The id in Sculptured that change `original` lives on now.
+    /// The id in CopperTide that change `original` lives on now.
     pub fn current<'a>(&'a self, original: &'a str) -> &'a str {
         let latest = self.0.iter().rev().find(|a| a.original == original);
         latest.map_or(original, |a| a.raised.as_str())
@@ -34,7 +34,7 @@ impl Aliases {
         });
     }
 
-    /// The changes as the tools show them: Sculptured's list (`raw`, docs, newest first) with
+    /// The changes as the tools show them: CopperTide's list (`raw`, docs, newest first) with
     /// each original carrying its latest raised copy, and the raised ids left out.
     pub fn present(&self, raw: &[Value]) -> Vec<Value> {
         let id = |c: &Value| c["id"].as_str().unwrap_or_default().to_string();

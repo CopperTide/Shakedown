@@ -4,7 +4,7 @@ from isaac_part.config import DEFAULT_ISAAC
 
 NOT_PUBLIC = (
     f"the Ridgeline factory example ({DEFAULT_ISAAC}) is not here; it is not public yet, so these tests "
-    "run only next to a private checkout of Sculptured-Examples"
+    "run only next to a private checkout of CopperTide-Examples"
 )
 
 

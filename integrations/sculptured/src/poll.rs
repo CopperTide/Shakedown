@@ -1,4 +1,4 @@
-//! Waiting for Sculptured to get somewhere: a check run every 100 ms until it gives an answer.
+//! Waiting for CopperTide to get somewhere: a check run every 100 ms until it gives an answer.
 use std::future::Future;
 use std::time::Duration;
 

@@ -1,5 +1,5 @@
-//! `decide_change`: answers the question Sculptured asked about a change, as the person in Needs
-//! you would (`POST /api/questions/{id}/answer`); Sculptured then records the decision. A change
+//! `decide_change`: answers the question CopperTide asked about a change, as the person in Needs
+//! you would (`POST /api/questions/{id}/answer`); CopperTide then records the decision. A change
 //! proposed again after a restore (see `aliases`) is decided through its latest copy's question.
 use anyhow::Result;
 use reqwest::Method;
@@ -59,14 +59,14 @@ pub async fn decide(t: &Team<'_>, args: &Value) -> Result<Outcome> {
     let question = match question(t.api, t.name, t.aliases.current(&d.id)).await? {
         Ok(q) => q,
         Err(why) => {
-            let gone = format!("Sculptured can no longer decide {} ({why})", d.id);
+            let gone = format!("CopperTide can no longer decide {} ({why})", d.id);
             return Ok(Err(gone));
         }
     };
     answer(t, &question, &d).await
 }
 
-/// Answers `question` with decision `d` and waits until Sculptured shows it on the change.
+/// Answers `question` with decision `d` and waits until CopperTide shows it on the change.
 async fn answer(t: &Team<'_>, question: &str, d: &Decision) -> Result<Outcome> {
     let answer = json!({"answer": d.answer()});
     let segments = ["questions", question, "answer"];
@@ -94,7 +94,7 @@ fn said(decision: &Value) -> Option<String> {
     ))
 }
 
-/// The open question Sculptured asked about change `id` (its id in Sculptured), or why there is
+/// The open question CopperTide asked about change `id` (its id in CopperTide), or why there is
 /// none.
 async fn question(api: &Api, team: &str, id: &str) -> Result<Result<String, String>> {
     let all = api.get(&["teams", team, "questions"], &[]).await?;

@@ -79,7 +79,7 @@ fn part_text(part: &Value) -> String {
         Some(other) => other,
         None => "content",
     };
-    format!("[{kind} omitted: Arena sends text only]")
+    format!("[{kind} omitted: Shakedown sends text only]")
 }
 
 /// The system and developer messages, in order, as one prompt.
@@ -401,8 +401,8 @@ mod tests {
             {"role": "tool", "tool_call_id": "t1", "content": [{"type": "input_audio"}]},
         ])));
         let user = &req["messages"][0]["content"];
-        assert_eq!(user[1]["text"], "[image omitted: Arena sends text only]");
-        assert_eq!(user[2]["content"], "[audio omitted: Arena sends text only]");
+        assert_eq!(user[1]["text"], "[image omitted: Shakedown sends text only]");
+        assert_eq!(user[2]["content"], "[audio omitted: Shakedown sends text only]");
     }
 
     #[test]

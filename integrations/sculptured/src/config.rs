@@ -11,13 +11,13 @@ pub const DEFAULT_TEAM: &str = "arena";
 const DEFAULT_BINARY: &str = "coppertide";
 /// The name before the rename; an older install may still have only this one.
 const OLD_BINARY: &str = "sculptured";
-/// Team names Sculptured keeps for its own API paths.
+/// Team names CopperTide keeps for its own API paths.
 const RESERVED: [&str; 3] = ["import", "import-file", "check-file"];
 
 #[derive(Debug, Clone)]
 pub struct Config {
     pub binary: PathBuf,
-    /// The team's name, which is also its id in Sculptured.
+    /// The team's name, which is also its id in CopperTide.
     pub team: String,
 }
 
@@ -65,7 +65,7 @@ pub fn default_binary() -> Option<PathBuf> {
         .find_map(|name| dirs.iter().map(|d| d.join(name)).find(|f| f.is_file()))
 }
 
-/// A name that Sculptured keeps as the team's id: lowercase letters, digits and `-`.
+/// A name that CopperTide keeps as the team's id: lowercase letters, digits and `-`.
 fn valid_team(t: &str) -> bool {
     let ok = |b: u8| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-';
     (1..=40).contains(&t.len())

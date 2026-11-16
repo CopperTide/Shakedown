@@ -7,7 +7,7 @@ from pathlib import Path
 from arena_part import errors, params, sources
 
 PACKAGE_DIR = Path(__file__).resolve().parent.parent
-DEFAULT_HUB = (PACKAGE_DIR / ".." / ".." / ".." / "Sculptured-Examples" / "factory" / "hub").resolve()
+DEFAULT_HUB = (PACKAGE_DIR / ".." / ".." / ".." / "CopperTide-Examples" / "factory" / "hub").resolve()
 DEFAULT_PLANT_START = "2026-03-10T06:00:00"
 
 

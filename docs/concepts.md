@@ -1,6 +1,6 @@
 # Concepts
 
-How Arena models a run: the world it runs in, the team that works in it, and how a run is recorded, forked
+How Shakedown models a run: the world it runs in, the team that works in it, and how a run is recorded, forked
 and scored. The protocol each program speaks is in [protocol.md](protocol.md); routes, settings and disk use
 are in [reference.md](reference.md).
 

@@ -6,7 +6,7 @@ from pathlib import Path
 from arena_part import errors, params
 
 PACKAGE_DIR = Path(__file__).resolve().parent.parent
-DEFAULT_ISAAC = (PACKAGE_DIR / ".." / ".." / ".." / "Sculptured-Examples" / "factory" / "isaac").resolve()
+DEFAULT_ISAAC = (PACKAGE_DIR / ".." / ".." / ".." / "CopperTide-Examples" / "factory" / "isaac").resolve()
 DEFAULT_PLANT_START = "2026-03-10T06:00:00"
 
 

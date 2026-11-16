@@ -1,5 +1,5 @@
 //! What the tools take, as `describe` shows them. The arguments of `propose_change` are those of
-//! Sculptured's own `propose_change` agent tool.
+//! CopperTide's own `propose_change` agent tool.
 use arena_part::proto::{Effect, ToolSchema};
 use serde_json::{json, Value};
 

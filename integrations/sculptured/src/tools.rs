@@ -1,4 +1,4 @@
-//! The tools, through Sculptured's HTTP API. Sculptured refusing a call (bad arguments, an
+//! The tools, through CopperTide's HTTP API. CopperTide refusing a call (bad arguments, an
 //! unknown change, a change already decided) is the tool's error and changes nothing; only a
 //! server that can't be reached fails the call, and an unknown tool is -32602.
 use anyhow::Result;

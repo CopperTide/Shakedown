@@ -23,7 +23,7 @@ export default function App() {
   return (
     <div className="app">
       <div className="topbar">
-        <span className="wordmark">Arena</span>
+        <span className="wordmark">Shakedown</span>
         <nav className="nav">
           <NavLink to="/" end>Runs</NavLink>
           <NavLink to="/team">Team</NavLink>
