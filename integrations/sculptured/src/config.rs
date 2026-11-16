@@ -1,4 +1,4 @@
-//! The config of a `sculptured` instance: the program to run and the team the tools use.
+//! The config of a `coppertide` instance: the program to run and the team the tools use.
 use std::path::PathBuf;
 
 use arena_part::PartError;
@@ -8,7 +8,9 @@ use serde_json::Value;
 /// The team the tools use unless the config names another.
 pub const DEFAULT_TEAM: &str = "arena";
 /// The program looked up on `PATH` when the config names none.
-const DEFAULT_BINARY: &str = "sculptured";
+const DEFAULT_BINARY: &str = "coppertide";
+/// The name before the rename; an older install may still have only this one.
+const OLD_BINARY: &str = "sculptured";
 /// Team names Sculptured keeps for its own API paths.
 const RESERVED: [&str; 3] = ["import", "import-file", "check-file"];
 
@@ -36,7 +38,7 @@ impl Config {
                 .map_err(|e| PartError::invalid(format!("config: {e}")))?,
         };
         let binary = raw.binary.or_else(default_binary).ok_or_else(|| {
-            PartError::invalid("config: binary is required (no sculptured on PATH)")
+            PartError::invalid("config: binary is required (no coppertide on PATH)")
         })?;
         if !binary.is_file() {
             return Err(PartError::invalid(format!(
@@ -53,13 +55,14 @@ impl Config {
     }
 }
 
-/// The sculptured program a config without `binary` runs: the first `sculptured` file on `PATH`
-/// (None when there is none).
+/// The CopperTide program a config without `binary` runs: the first `coppertide` file on `PATH`,
+/// else the first `sculptured` (an older install). None when there is neither.
 pub fn default_binary() -> Option<PathBuf> {
     let path = std::env::var_os("PATH")?;
-    std::env::split_paths(&path)
-        .map(|d| d.join(DEFAULT_BINARY))
-        .find(|f| f.is_file())
+    let dirs: Vec<PathBuf> = std::env::split_paths(&path).collect();
+    [DEFAULT_BINARY, OLD_BINARY]
+        .iter()
+        .find_map(|name| dirs.iter().map(|d| d.join(name)).find(|f| f.is_file()))
 }
 
 /// A name that Sculptured keeps as the team's id: lowercase letters, digits and `-`.

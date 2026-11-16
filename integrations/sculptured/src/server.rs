@@ -1,7 +1,7 @@
-//! One `sculptured serve` per instance: started in a process group of its own on a loopback port
+//! One `coppertide serve` per instance: started in a process group of its own on a loopback port
 //! the system picks (`--port 0`, so never 4410), with the instance's data folder, home and
 //! scratch folder, and nothing else from this program's environment. serve starts its runner
-//! (`sculptured hostd`) in a session of its own, so both are recorded (`Pids`) and stopping kills
+//! (`coppertide hostd`) in a session of its own, so both are recorded (`Pids`) and stopping kills
 //! each, group and all, only while it is still the program with an argument naming the data
 //! folder: serve first (it would start another runner), then the runner.
 use std::fs::File;
@@ -57,7 +57,7 @@ pub struct Spawned {
     exited: Arc<AtomicBool>,
 }
 
-/// The `--version` of `binary` (`sculptured 0.1.0`): the build a save records.
+/// The `--version` of `binary` (`coppertide 0.1.0`): the build a save records.
 pub fn version(binary: &Path) -> Result<String> {
     let out = Command::new(binary).arg("--version").env_clear().output();
     let out = out.with_context(|| format!("running {binary:?} --version"))?;
@@ -128,7 +128,7 @@ pub async fn ready(f: &Folders, s: &Spawned) -> Result<Ready> {
     };
     let log = f.log();
     up.await
-        .map_err(|e| e.context(format!("sculptured serve: {}", log_tail(&log))))
+        .map_err(|e| e.context(format!("coppertide serve: {}", log_tail(&log))))
 }
 
 /// The pid the runner wrote to `host-local/hostd.pid`.
@@ -191,7 +191,7 @@ pub async fn kill(binary: PathBuf, data: PathBuf, pids: Pids) -> Result<()> {
         }
         std::io::Result::Ok(())
     };
-    blocking(task).await.context("stopping sculptured")
+    blocking(task).await.context("stopping coppertide")
 }
 
 fn log_tail(log: &Path) -> String {

@@ -1,5 +1,5 @@
 //! The `sculptured` integration: Sculptured's approvals (proposed changes and their decisions) in
-//! the arena world. Each instance is a `sculptured serve` of its own on a loopback port, with its
+//! the arena world. Each instance is a `coppertide serve` of its own on a loopback port, with its
 //! data folder under `.live/<instance>/`; its team's Practice agents propose the changes and the
 //! tools decide them, all through Sculptured's HTTP API. A save is an online backup of the
 //! server's SQLite stores plus a copy of the rest of its data folder; a restore starts a server on

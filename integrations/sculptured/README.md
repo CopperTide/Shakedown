@@ -1,25 +1,25 @@
 # sculptured integration
 
-Puts CopperTide's approvals in the world: one `sculptured serve` per instance, with changes proposed and decided
+Puts CopperTide's approvals in the world: one `coppertide serve` per instance, with changes proposed and decided
 through tools. Restore: exact from a save (SQLite backups plus a data folder); approximate: no. `uses_clock`:
 false. **The CopperTide program is not published yet**, so outside contributors cannot run this integration
 or its live test; the rest of the repository does not need it. Verified live: `live_sculptured_roundtrip` ran
-against a local build of `sculptured` on the maintainer's machine (propose, save, decide, restore, diff).
+against a local build of `coppertide` on the maintainer's machine (propose, save, decide, restore, diff).
 `arena-part-check` passed on it once, run by hand (no test runs it). The test is skipped, and says so, when no
 CopperTide program is found. A save restores only with the same CopperTide build.
 
 CopperTide's approvals in the arena world: changes proposed to a business system and the decisions on
-them. Each instance is a `sculptured serve` of its own; the tools reach it only through CopperTide's HTTP
+them. Each instance is a `coppertide serve` of its own; the tools reach it only through CopperTide's HTTP
 API.
 
-- **Config:** `{binary?, team?}`. `binary` is the sculptured program (default: the
-  first `sculptured` on `PATH`; it is run as it is, never built). `team`
+- **Config:** `{binary?, team?}`. `binary` is the CopperTide program (default: the
+  first `coppertide` on `PATH`, else `sculptured` from an older install; it is run as it is, never built). `team`
   (default `arena`; `a-z`, `0-9` and `-`) is the team whose changes the tools propose, list and decide.
 - **Instance** `<instance>`: `binary serve --port 0 --data-dir <saves>/sculptured/.live/<instance>/data`,
   in a process group of its own, with a cleared environment (`HOME` is the instance's `home/`, `TMPDIR` a
   short scratch folder `/tmp/arena-sc-<pid>-<n>` for the runner's socket, `RUST_LOG=warn`, `PATH`). The
   system picks the loopback port (never 4410); it is read from `data/host-local/controld.url`. The start
-  waits until serve's runner (`sculptured hostd`) is connected (`GET /api/hosts`), then makes sure the team
+  waits until serve's runner (`coppertide hostd`) is connected (`GET /api/hosts`), then makes sure the team
   exists and runs. `.live/<instance>/run.json` records the config, the absolute program path, its
   build (`--version`), the port, the scratch folder (a fresh `/tmp/arena-sc-<16 hex>`) and the processes:
   serve's pid and group, and the runner's pid from `host-local/hostd.pid`. A restarted program still
@@ -57,7 +57,7 @@ API.
     decided, 8 changes already waiting. An unknown tool is -32602. A server that can't be reached fails the
     call.
 - **Save** `$ARENA_SAVES/sculptured/<save>/` (tool calls on the instance wait meanwhile): `data/`,
-  `changes.json` and `meta.json` (`{build, aliases}`: the `sculptured --version` that wrote the store,
+  `changes.json` and `meta.json` (`{build, aliases}`: the `coppertide --version` that wrote the store,
   and the re-raised changes). `data/` holds an SQLite online backup of each store in the data folder (`controld.sqlite`
   and the runner's `host-local/hostd.sqlite`, through rusqlite with bundled SQLite) and the kit's folder copy
   of the rest (`host-token`). The copy leaves out the stores' `-wal`, `-shm` and `-journal`,
@@ -88,5 +88,5 @@ API.
 - Not `uses_clock`. Fingerprint `{"integration": "sculptured"}`.
 - Tests: `cargo test -p arena-sculptured` (unit tests, `gc` on a simulated leaked instance, and the restore
   refusals), `cargo test -p arena-sculptured -- --ignored live_` (runs real servers; skipped with a note when
-  the program is missing, or set `ARENA_SCULPTURED_BINARY`).
+  the program is missing, or set `ARENA_COPPERTIDE_BINARY`; `ARENA_SCULPTURED_BINARY` is still read).
   Conformance: `ARENA_BIN_DIR=core/target/debug core/target/debug/arena-part-check integrations/sculptured`.
