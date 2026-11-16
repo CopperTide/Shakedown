@@ -4,7 +4,7 @@ title: "Shakedown: a rewindable staging environment for multi-agent systems"
 type: software
 authors:
   - name: "CopperTide"
-repository-code: "https://github.com/Sculptured/Arena"
+repository-code: "https://github.com/CopperTide/Arena"
 license: Apache-2.0
 version: 0.1.0
 date-released: 2026-11-07

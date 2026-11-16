@@ -17,7 +17,7 @@ Code, Codex, or an API model does the work, and Shakedown records, restores and 
 
 ```bash
 cd sdk/python && uv sync          # or, from another project:
-uv add "arena-sdk @ git+https://github.com/Sculptured/Arena#subdirectory=sdk/python"
+uv add "arena-sdk @ git+https://github.com/CopperTide/Arena#subdirectory=sdk/python"
 ```
 
 Python 3.10 or newer; one dependency, `httpx`. You also need a core: a running arenad, or a build of this
@@ -258,7 +258,7 @@ If Shakedown helps your research, cite it (see [CITATION.cff](../CITATION.cff)):
   title  = {Shakedown: a rewindable staging environment for multi-agent systems},
   author = {{CopperTide}},
   year   = {2026},
-  url    = {https://github.com/Sculptured/Arena},
+  url    = {https://github.com/CopperTide/Arena},
   license = {Apache-2.0}
 }
 ```
