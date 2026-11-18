@@ -7,6 +7,8 @@ const capital = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 
 /** "6 agents · Claude Code · Sonnet": how many agents, where they run, on which models. */
 export function runLine(team: Team): string {
+  // A Code connection's team (or a stored one without agents): its driver registers them as it runs.
+  if (team.connection || !team.agents.length) return 'Your code · its driver registers the agents';
   const n = team.agents.length;
   const modes = [...new Set(team.agents.map(runsOn))];
   const models = [...new Set(team.agents.map(modelOf))];

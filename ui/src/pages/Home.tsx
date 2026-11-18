@@ -93,7 +93,7 @@ function useStart(s: Setup, open: (run: string, branch: string) => void, back: (
     if (!team || !s.task) return;
     setStarting(true); setError(null);
     try {
-      const r = await startRun(s.task.id, teamForRun(team, s.runner), s.runner, s.scenario.scenario);
+      const r = await startRun(s.task.id, teamForRun(team, s.runner), s.runner, s.scenario.scenario, team.connection);
       open(r.run_id, r.branch_id);
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); back(); }
     setStarting(false);
@@ -104,7 +104,7 @@ function useStart(s: Setup, open: (run: string, branch: string) => void, back: (
 /** What must be fixed before the team can run; an external system runs the agents itself, so nothing here has to be installed for it. */
 function missingOf(s: Setup, health: Health | null): string[] {
   const team = s.team.team;
-  if (!team || s.runner === 'external') return [];
+  if (!team || s.runner === 'external' || team.connection) return [];
   const runner = runnerProblem(team, s.runner);
   return [...missingFor(team, health), ...(runner ? [runner] : [])];
 }

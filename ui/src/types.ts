@@ -144,6 +144,8 @@ export interface Team {
   runner?: Runner;
   /** Picked from the benchmark's suggestions on purpose (kept in this browser): stays as it is. */
   picked?: boolean;
+  /** A Code connection's id: the team is that connection's driver (its agents register as it runs). */
+  connection?: string;
 }
 
 export interface Change {

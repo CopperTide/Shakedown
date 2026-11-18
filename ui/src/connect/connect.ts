@@ -4,8 +4,9 @@
 // the reference arenad answers with is ever kept or sent again.
 import { hostOf, isBedrock, modelOf } from '../providers';
 import type { AgentSpec, SecretRef, Team } from '../types';
+import { codeProblem } from './connections';
 
-export type ConnectKind = 'http' | 'bedrock';
+export type ConnectKind = 'http' | 'bedrock' | 'code';
 
 export interface ConnectForm {
   kind: ConnectKind;
@@ -14,11 +15,16 @@ export interface ConnectForm {
   headers: string;
   model: string;
   region: string;
+  /** A Code connection: its name, the command line that starts the driver, its folder, `NAME=value` lines. */
+  name: string;
+  command: string;
+  workdir: string;
+  env: string;
 }
 
 export const DEFAULT_REGION = 'us-east-1';
 
-export const emptyForm = (kind: ConnectKind = 'http'): ConnectForm => ({ kind, url: '', headers: '', model: '', region: DEFAULT_REGION });
+export const emptyForm = (kind: ConnectKind = 'http'): ConnectForm => ({ kind, url: '', headers: '', model: '', region: DEFAULT_REGION, name: '', command: '', workdir: '', env: '' });
 
 export type CheckBody =
   | { kind: 'http'; url: string; headers?: Record<string, string> }
@@ -50,6 +56,7 @@ export function parseHeaders(text: string): { headers: Record<string, string> } 
 
 /** Why the form can't be tested yet, or null. */
 export function formProblem(f: ConnectForm): string | null {
+  if (f.kind === 'code') return codeProblem(f);
   if (f.kind === 'bedrock') {
     if (!f.model.trim()) return 'Name a Bedrock model.';
     if (!/^[a-z]{2}(-[a-z]+)+-\d+$/.test(f.region.trim())) return 'Name an AWS region, like us-east-1.';
@@ -64,9 +71,9 @@ export function formProblem(f: ConnectForm): string | null {
   return 'error' in h ? h.error : null;
 }
 
-/** The check's body; null while the form has a problem. */
+/** The check's body; null while the form has a problem, and for a Code connection (saved, then tested: `codeBody`). */
 export function checkBody(f: ConnectForm): CheckBody | null {
-  if (formProblem(f)) return null;
+  if (f.kind === 'code' || formProblem(f)) return null;
   if (f.kind === 'bedrock') return { kind: 'bedrock', model_id: f.model.trim(), region: f.region.trim() };
   const h = parseHeaders(f.headers);
   const headers = 'headers' in h ? h.headers : {};

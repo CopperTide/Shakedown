@@ -11,18 +11,22 @@ import type { AgentSpec } from '../types';
 import {
   type ConnectForm, type ConnectFrom, type ConnectKind, type ConnectReturn, checkBody, connectedAgent, connectedTeam, emptyForm, formProblem, saveConnected,
 } from './connect';
+import { type Connection, type ConnectionTest, codeBody, codeTeam, createConnection, deleteConnection, testConnection, testLine } from './connections';
 
 /** Where the test stands: not run (or the form changed since), running, connected, or why not. */
 export type TestState =
   | { state: 'idle' }
   | { state: 'testing' }
   | { state: 'ok'; agent: AgentSpec; ms: number }
-  | { state: 'error'; error: string };
+  | { state: 'error'; error: string }
+  /** A Code connection, saved and tested: what its driver's agents did. */
+  | { state: 'code'; result: ConnectionTest; connection: Connection };
 
-const KINDS: { id: ConnectKind; label: string }[] = [{ id: 'http', label: 'HTTP' }, { id: 'bedrock', label: 'Bedrock' }];
+const KINDS: { id: ConnectKind; label: string }[] = [{ id: 'http', label: 'HTTP' }, { id: 'bedrock', label: 'Bedrock' }, { id: 'code', label: 'Code' }];
 
 /** A problem worth showing before a test: only once something is typed (an empty form just waits). */
-const shownProblem = (f: ConnectForm) => ((f.kind === 'http' ? f.url || f.headers : f.model) ? formProblem(f) : null);
+const typed = (f: ConnectForm) => ({ http: f.url || f.headers, bedrock: f.model, code: f.command || f.env })[f.kind];
+const shownProblem = (f: ConnectForm) => (typed(f) ? formProblem(f) : null);
 
 /** The one line under the form: testing, connected (name and round trip), or the plain reason in alarm ink. */
 function TestLine({ test, problem }: { test: TestState; problem: string | null }) {
@@ -36,23 +40,66 @@ function TestLine({ test, problem }: { test: TestState; problem: string | null }
       </p>
     );
   }
+  if (test.state === 'code') return <CodeTestLine t={test.result} />;
   const why = test.state === 'error' ? test.error : problem;
   return <p role="status" className={cn(base, 'font-medium break-words text-alarm')}>{why ? `⚠ ${why}` : ''}</p>;
 }
 
+/** A Code connection's test: what its agents did, or why it didn't work and the end of the driver's stderr. */
+function CodeTestLine({ t }: { t: ConnectionTest }) {
+  if (t.ok) return <p role="status" className="min-h-5 text-sm">✓ {testLine(t)}</p>;
+  return (
+    <div role="status" className="flex flex-col gap-1 text-sm">
+      <p className="font-medium break-words text-alarm">⚠ {t.error ?? 'The test run did not work.'} <span className="font-normal text-muted">· {testLine(t)}</span></p>
+      {t.stderr_tail.trim() && <pre className="max-h-40 overflow-auto rounded border border-line bg-sunken p-2 font-mono text-2xs whitespace-pre-wrap">{t.stderr_tail.trim().slice(-2000)}</pre>}
+    </div>
+  );
+}
+
+/** A Code connection's fields: its name, the command, the folder it runs in and its environment. */
+function CodeFields({ form, set, busy }: { form: ConnectForm; set: (p: Partial<ConnectForm>) => void; busy: boolean }) {
+  return (
+    <>
+      <p className="text-xs text-muted">Your driver runs on this computer: Shakedown starts this command for each run, with the run&apos;s ids in its environment, and your driver registers its agents and drives them.</p>
+      <Field label="Name">
+        <Input value={form.name} onChange={(e) => set({ name: e.target.value })} disabled={busy} autoComplete="off" placeholder="Our LangGraph team" className="h-8 text-sm" />
+      </Field>
+      <Field label="Command">
+        <Input value={form.command} onChange={(e) => set({ command: e.target.value })} disabled={busy} spellCheck={false} autoComplete="off" aria-label="Command"
+          placeholder="uv run python examples/drivers/langgraph_driver.py" className="h-8 font-mono text-xs" />
+      </Field>
+      <Field label={<span>Folder <span className="font-normal text-faint">· Optional</span></span>}>
+        <Input value={form.workdir} onChange={(e) => set({ workdir: e.target.value })} disabled={busy} spellCheck={false} autoComplete="off" placeholder="/path/to/your/agents" className="h-8 font-mono text-xs" />
+      </Field>
+      <SecretLines label="Environment" value={form.env} onChange={(env) => set({ env })} disabled={busy} placeholder="ARENA_MODEL=gpt-4.1-mini" aria="Environment, one NAME=value per line"
+        tip="Given to your driver. Model keys stay in Shakedown: the agents' gateway holds them." />
+    </>
+  );
+}
+
 /** The headers box: plain while it has focus, masked otherwise, so the values never sit on screen. */
-function HeadersField({ value, onChange, disabled }: { value: string; onChange: (v: string) => void; disabled: boolean }) {
+function SecretLines({ label, tip, value, onChange, disabled, placeholder, aria }: {
+  label: string; tip: string; value: string; onChange: (v: string) => void; disabled: boolean; placeholder: string; aria: string;
+}) {
   const [focused, setFocused] = useState(false);
   return (
-    <Field label={<span title="Sent with every call to your agent. Shakedown keeps them in memory only and never shows them again.">Headers <span className="font-normal text-faint">· Optional</span></span>}>
+    <Field label={<span title={tip}>{label} <span className="font-normal text-faint">· Optional</span></span>}>
       <Textarea rows={3} value={value} onChange={(e) => onChange(e.target.value)} disabled={disabled} spellCheck={false} autoComplete="off" autoCapitalize="off"
-        onFocus={() => setFocused(true)} onBlur={() => setFocused(false)} placeholder="Authorization: Bearer …" aria-label="Headers, one Name: value per line"
+        onFocus={() => setFocused(true)} onBlur={() => setFocused(false)} placeholder={placeholder} aria-label={aria}
         className={cn('resize-none', !focused && value && '[-webkit-text-security:disc]')} />
     </Field>
   );
 }
 
+function HeadersField({ value, onChange, disabled }: { value: string; onChange: (v: string) => void; disabled: boolean }) {
+  return (
+    <SecretLines label="Headers" value={value} onChange={onChange} disabled={disabled} placeholder="Authorization: Bearer …" aria="Headers, one Name: value per line"
+      tip="Sent with every call to your agent. Shakedown keeps them in memory only and never shows them again." />
+  );
+}
+
 function Fields({ form, set, busy }: { form: ConnectForm; set: (p: Partial<ConnectForm>) => void; busy: boolean }) {
+  if (form.kind === 'code') return <CodeFields form={form} set={set} busy={busy} />;
   if (form.kind === 'bedrock') {
     return (
       <div className="grid gap-4 sm:grid-cols-[1fr_9rem]">
@@ -85,7 +132,8 @@ export function ConnectView({ form, test, onChange, onSubmit, onCancel }: {
   const busy = test.state === 'testing';
   const set = (p: Partial<ConnectForm>) => onChange({ ...form, ...p });
   const submit = (e: FormEvent) => { e.preventDefault(); onSubmit(); };
-  const ready = test.state === 'ok';
+  const ready = test.state === 'ok' || (test.state === 'code' && test.result.ok);
+  const testable = form.kind === 'code' ? !!codeBody(form) : !!checkBody(form);
   return (
     <PageBody width="narrow" className="max-w-xl gap-6 pt-10">
       <h1 className="text-xl font-semibold tracking-tight">Connect your agent</h1>
@@ -94,8 +142,8 @@ export function ConnectView({ form, test, onChange, onSubmit, onCancel }: {
         <Fields form={form} set={set} busy={busy} />
         <TestLine test={test} problem={shownProblem(form)} />
         <div className="flex flex-wrap items-center gap-2">
-          <Button type="submit" variant="primary" className="h-9 min-w-40 px-5 text-sm" disabled={busy || (!ready && !checkBody(form))}>
-            {ready ? <><Check />Use this agent</> : <><PlugZap />{busy ? 'Testing…' : 'Test connection'}</>}
+          <Button type="submit" variant="primary" className="h-9 min-w-40 px-5 text-sm" disabled={busy || (!ready && !testable)}>
+            {ready ? <><Check />{form.kind === 'code' ? 'Use this connection' : 'Use this agent'}</> : <><PlugZap />{busy ? 'Testing…' : 'Test connection'}</>}
           </Button>
           <Button type="button" variant="ghost" className="h-9 text-muted" onClick={onCancel}>Cancel</Button>
         </div>
@@ -110,21 +158,35 @@ function useConnect() {
   const [test, setTest] = useState<TestState>({ state: 'idle' });
   const seq = useRef(0);
   const change = (f: ConnectForm) => { seq.current++; setForm(f); setTest({ state: 'idle' }); };
+  // A Code connection saved for a test the form has since changed from: dropped when another is saved.
+  const unused = useRef<string | null>(null);
+  const check = async (): Promise<TestState | null> => {
+    if (form.kind !== 'code') {
+      const body = checkBody(form);
+      if (!body) return null;
+      const a = await checkAgent(body);
+      return a.ok ? { state: 'ok', agent: connectedAgent(a), ms: a.ms } : { state: 'error', error: a.error };
+    }
+    const body = codeBody(form);
+    if (!body) return null;
+    if (unused.current) void deleteConnection(unused.current).catch(() => {});
+    const connection = await createConnection(body);
+    unused.current = connection.id;
+    return { state: 'code', connection, result: await testConnection(connection.id) };
+  };
   const run = async () => {
-    const body = checkBody(form);
-    if (!body) return;
     const mine = ++seq.current;
     setTest({ state: 'testing' });
-    let next: TestState;
+    let next: TestState | null;
     try {
-      const a = await checkAgent(body);
-      next = a.ok ? { state: 'ok', agent: connectedAgent(a), ms: a.ms } : { state: 'error', error: a.error };
+      next = await check();
     } catch (e) {
       next = { state: 'error', error: e instanceof Error ? e.message : String(e) };
     }
-    if (mine === seq.current) setTest(next);
+    if (mine === seq.current) setTest(next ?? { state: 'idle' });
   };
-  return { form, test, change, run };
+  const used = () => { unused.current = null; };
+  return { form, test, change, run, used };
 }
 
 /** Connect your agent (`/connect`): an HTTP endpoint or a Bedrock model, tested, then used where Connect was opened from. */
@@ -135,6 +197,11 @@ export default function ConnectPage() {
   const c = useConnect();
   const give = (r: ConnectReturn) => nav(back, { state: r });
   const submit = () => {
+    if (c.test.state === 'code' && c.test.result.ok) {
+      c.used();
+      give({ connected: codeTeam(c.test.connection), setup: from.setup, form: from.form });
+      return;
+    }
     if (c.test.state !== 'ok') { void c.run(); return; }
     saveConnected(c.test.agent);
     give({ connected: connectedTeam(c.test.agent), setup: from.setup, form: from.form });

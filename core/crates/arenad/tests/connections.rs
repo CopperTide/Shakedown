@@ -342,6 +342,37 @@ fn a_fork_of_a_code_run_relaunches_the_driver() {
     })
 }
 
+#[test]
+fn testing_a_connection_says_what_its_agents_did() {
+    run(async {
+        let fx = setup("test-route").await;
+        let id = fx.connection("fork_aware.py", json!({})).await;
+        let (status, t) = fx
+            .post(&format!("/api/connections/{id}/test"), json!({}))
+            .await;
+        assert_eq!(status, 200, "{t}");
+        assert_eq!(t["agents"], json!(["worker"]), "{t}");
+        assert_eq!(
+            (t["tool_calls"].as_u64(), t["exit"].as_str()),
+            (Some(0), Some("exit 0")),
+            "{t}"
+        );
+        assert_eq!(
+            (t["ok"].as_bool(), t["error"].as_str()),
+            (Some(false), Some("no agent called a tool")),
+            "{t}"
+        );
+        assert!(
+            t["stderr_tail"].as_str().unwrap().contains("fork of:"),
+            "{t}"
+        );
+        let runs = fx.state.store.runs().await.unwrap();
+        assert!(runs
+            .iter()
+            .any(|r| r.name.as_deref() == Some("Connection test · fork_aware.py")));
+    })
+}
+
 // ---------------------------------------------------------------- live: a real driver and model
 
 /// The SDK's folder, where the example drivers and their environment are.

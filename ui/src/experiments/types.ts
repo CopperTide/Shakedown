@@ -43,6 +43,8 @@ export interface NewSetup {
   name: string;
   team: Team;
   runner: Runner;
+  /** A Code connection whose driver runs the setup (its runner is then `external`). */
+  connection?: string;
 }
 
 export interface NewExperiment {

@@ -69,7 +69,7 @@ export async function loadTeam(): Promise<Team> {
  * every agent is `external` (the system that drives the run runs them, not arenad). The board,
  * the suggested runner and the picked mark stay in the browser.
  */
-export function teamForRun({ board: _board, runner: _runner, picked: _picked, ...team }: Team, runner: Runner = 'chain'): Team {
+export function teamForRun({ board: _board, runner: _runner, picked: _picked, connection: _connection, ...team }: Team, runner: Runner = 'chain'): Team {
   return {
     ...team,
     agents: team.agents.map(({ provider, ...a }) => {

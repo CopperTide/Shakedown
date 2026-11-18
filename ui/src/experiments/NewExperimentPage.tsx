@@ -3,6 +3,7 @@ import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import ImportDialog from '../board/ImportDialog';
 import { type ConnectFrom, type ConnectReturn, connectedLabel, connectedTeams } from '../connect/connect';
+import { setupFor, useCodeTeams } from '../connect/connections';
 import { useHealth } from '../components';
 import { Button } from '../components/ui/button';
 import { PageBody } from '../components/ui/page';
@@ -52,13 +53,15 @@ function useTeamChoices(returned: Team | undefined) {
   const yours = useTeam().team;
   const [imported, setImported] = useState<Team[]>([]);
   // The kept list, plus the agent just connected when this browser couldn't keep it.
-  const [connected] = useState(() => { const l = connectedTeams(); return returned && !l.some((t) => t.id === returned.id) ? [returned, ...l] : l; });
+  const [connected] = useState(() => { const l = connectedTeams(); return returned && !returned.connection && !l.some((t) => t.id === returned.id) ? [returned, ...l] : l; });
+  const code = useCodeTeams(returned?.connection ? returned : undefined);
   const choices: TeamChoices = useMemo(() => [
     ...suggested.map((t) => ({ key: `s:${t.id}`, label: t.name, team: t })),
     ...(yours && !suggested.some((t) => t.id === yours.id) ? [{ key: 'yours', label: `${yours.name} (yours)`, team: yours }] : []),
     ...connected.map((t) => ({ key: `c:${t.id}`, label: connectedLabel(t, connected), team: t })),
+    ...code.map((t) => ({ key: `k:${t.connection}`, label: `${t.name} (code)`, team: t })),
     ...imported.map((t, i) => ({ key: `i:${i}`, label: `${t.name} (imported)`, team: t })),
-  ], [suggested, yours, connected, imported]);
+  ], [suggested, yours, connected, code, imported]);
   const add = (t: Team) => { setImported((l) => [...l, t]); return `i:${imported.length}`; };
   return { choices, add };
 }
@@ -84,7 +87,7 @@ function useNewExperiment(health: Health | null) {
   const back = useReturned();
   const teams = useTeamChoices(back.connected);
   // A new setup starts on the benchmark's team (or yours), not on an agent connected earlier.
-  const drafts = useDrafts(teams.choices.find((c) => !/^[ci]:/.test(c.key))?.key, initialDrafts(back), teams.choices.map((c) => c.key));
+  const drafts = useDrafts(teams.choices.find((c) => !/^[cik]:/.test(c.key))?.key, initialDrafts(back), teams.choices.map((c) => c.key));
   const kept = back.kept ?? { name: '', taskId: '', runs: DEFAULT_RUNS };
   const [taskId, setTaskId] = useState(kept.taskId);
   const [name, setName] = useState(kept.name);
@@ -96,7 +99,7 @@ function useNewExperiment(health: Health | null) {
   const problem = setupsProblem(drafts.drafts) ?? scenario.problem ?? missing[0] ?? null;
   const body = (): NewExperiment | null => (task && built.every(Boolean) ? {
     name: name.trim() || undefined, task: task.id, scenario: scenario.scenario, runs,
-    setups: drafts.drafts.map((x, i) => { const t = built[i]!; const runner = t.runner ?? 'chain'; return { name: x.name.trim(), team: teamForRun(t, runner), runner }; }),
+    setups: drafts.drafts.map((x, i) => setupFor(x.name.trim(), built[i]!, teamForRun)),
   } : null);
   const keep = (): Kept => ({ name, taskId, runs, drafts: drafts.drafts });
   return { tasks, tasksError, teams, drafts, task, setTaskId, name, setName, runs, setRuns, scenario, built, problem, body, keep };
@@ -104,6 +107,7 @@ function useNewExperiment(health: Health | null) {
 
 /** What keeps a setup's team from running: a CLI or provider missing, or an HTTP agent under a dispatching lead. */
 function setupMissing(t: Team, health: Health | null): string[] {
+  if (t.connection) return [];
   const runner = runnerProblem(t, t.runner ?? 'chain');
   return runner ? [...missingFor(t, health), runner] : missingFor(t, health);
 }
@@ -113,7 +117,7 @@ function initialDrafts(back: ReturnType<typeof useReturned>): SetupDraft[] {
   const kept = back.kept?.drafts ?? [];
   const team = back.connected;
   if (!team) return kept;
-  const key = `c:${team.id}`;
+  const key = team.connection ? `k:${team.connection}` : `c:${team.id}`;
   if (!kept.length) return [{ ...newDraft(0, key), name: team.name }];
   return kept.map((d, i) => (i === (back.setup ?? 0) ? { ...d, teamId: key } : d));
 }

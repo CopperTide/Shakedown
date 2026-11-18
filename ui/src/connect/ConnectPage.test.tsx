@@ -40,4 +40,16 @@ describe('Connect your agent', () => {
     expect(html).toContain('value="us-east-1"');
     expect(html).toContain('placeholder="anthropic.claude-3-5-haiku-20241022-v1:0"');
   });
+  it('Code asks for the command that starts your driver, and a test says what its agents did', () => {
+    const html = draw(emptyForm('code'));
+    expect(html).toMatch(/aria-checked="true"[^>]*>Code</);
+    expect(html).toContain('aria-label="Command"');
+    expect(html).toContain('runs on this computer');
+    const done = draw({ ...emptyForm('code'), name: 'Team', command: 'python driver.py' }, {
+      state: 'code', result: { ok: true, branch_id: 'b', status: 'passed', agents: ['a', 'b'], tool_calls: 7, error: null, exit: 'exit 0', stderr_tail: '' },
+      connection: { id: 'c1', name: 'Team', kind: 'code', command: ['python', 'driver.py'], workdir: null, env: {}, created_at: '' },
+    });
+    expect(done).toContain('2 agents · 7 tool calls · passed');
+    expect(done).toContain('Use this connection');
+  });
 });

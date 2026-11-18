@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import ImportDialog from '../board/ImportDialog';
 import { type ConnectFrom, connectedTeams } from '../connect/connect';
+import { useCodeTeams } from '../connect/connections';
 import { agentModelLine } from '../providers';
 import TeamBoard from '../board/TeamBoard';
 import { Button } from '../components/ui/button';
@@ -51,9 +52,9 @@ function PickItem({ t, line, current, onPick }: { t: Team; line: string; current
 }
 
 /** The benchmark's suggested teams and your connected agents, one click away; picking one replaces the team (and its runner). */
-function TeamPicker({ teams, connected, current, onPick }: { teams: Team[]; connected: Team[]; current: Team | null; onPick: (t: Team) => void }) {
+function TeamPicker({ teams, connected, code, current, onPick }: { teams: Team[]; connected: Team[]; code: Team[]; current: Team | null; onPick: (t: Team) => void }) {
   const suggested = teams.length >= 2 ? teams : [];
-  if (!suggested.length && !connected.length) return null;
+  if (!suggested.length && !connected.length && !code.length) return null;
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild><Button size="sm"><Users />{suggested.length ? 'Suggested' : 'Connected'}<ChevronDown /></Button></DropdownMenuTrigger>
@@ -62,6 +63,8 @@ function TeamPicker({ teams, connected, current, onPick }: { teams: Team[]; conn
         {suggested.map((t) => <PickItem key={t.id} t={t} line={suggestionLine(t)} current={current} onPick={onPick} />)}
         {connected.length > 0 && <DropdownMenuLabel className={suggested.length ? 'mt-1 border-t border-line pt-2' : ''}>Your connected agents</DropdownMenuLabel>}
         {connected.map((t) => <PickItem key={t.id} t={t} line={agentModelLine(t.agents[0])} current={current} onPick={onPick} />)}
+        {code.length > 0 && <DropdownMenuLabel className={suggested.length || connected.length ? 'mt-1 border-t border-line pt-2' : ''}>Your code</DropdownMenuLabel>}
+        {code.map((t) => <PickItem key={t.id} t={t} line="Your driver, started by Shakedown on this computer" current={current} onPick={onPick} />)}
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -73,9 +76,10 @@ const FROM_RUN: ConnectFrom = { from: '/run' };
 export function TeamActions({ team, suggested = [], onImported }: { team: Team | null; suggested?: Team[]; onImported: (t: Team) => void }) {
   const [importing, setImporting] = useState(false);
   const [connected] = useState(connectedTeams);
+  const code = useCodeTeams();
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      <TeamPicker teams={suggested} connected={connected} current={team} onPick={onImported} />
+      <TeamPicker teams={suggested} connected={connected} code={code} current={team} onPick={onImported} />
       <Button size="sm" onClick={() => setImporting(true)}><FileUp />Import</Button>
       <Button size="sm" asChild><Link to="/connect" state={FROM_RUN}><PlugZap />Connect</Link></Button>
       <Button size="sm" asChild><Link to="/team"><Pencil />Edit</Link></Button>
