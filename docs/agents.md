@@ -13,6 +13,41 @@ Either can be one member of a team next to Claude Code or API-mode agents, under
 runner, in a single run or an experiment. In the web UI: **Connect your agent** in the team picker of New
 experiment and Run once, then **Test connection** and **Use this agent**.
 
+## Your own code: drivers and adapters
+
+An agent system written in LangGraph, CrewAI, the OpenAI Agents SDK or anything else comes in through a
+**driver**: a short program that registers each of your agents with Shakedown and hands your framework the
+agent's tools and model. Your agent code stays as it is. The adapters (`arena.adapters`, one extra each:
+`pip install 'arena-sdk[langgraph]'`, `[crewai]`, `[openai-agents]`) turn an agent's tools into the
+framework's own tool objects and its model gateway into the framework's chat model. Every tool call runs in
+the world as that agent and is recorded; a refused call reaches the agent as `error: …`, so it can react.
+
+```python
+from langgraph.graph import END, START, MessagesState, StateGraph
+from langgraph.prebuilt import create_react_agent
+from arena.adapters import langgraph as sd
+
+with sd.run() as run:
+    def member(id, prompt):
+        a = run.agent(id, provider="openai", model="gpt-4.1-mini")
+        return create_react_agent(sd.chat_model(a, "gpt-4.1-mini"), sd.tools(a), prompt=prompt)
+
+    graph = StateGraph(MessagesState)
+    graph.add_node("investigate", member("investigator", "Find out what the ticket needs. Only read."))
+    graph.add_node("resolve", member("resolver", "Resolve the ticket, using what the investigator found."))
+    graph.add_edge(START, "investigate"); graph.add_edge("investigate", "resolve"); graph.add_edge("resolve", END)
+    graph.compile().invoke({"messages": [("user", run.ticket)]})
+```
+
+Each of your framework's agents is one Shakedown agent (`run.agent("<id>")`), so the run shows who did what.
+The model's key stays in arenad: the gateway holds it and the framework's client sends a placeholder. The
+CrewAI adapter's `step_callback(agent)` records each step's thought; Shakedown also records reasoning from the
+model responses it passes on (reasoning and thinking content, and what the model says alongside its tool
+calls). The CrewAI adapter turns CrewAI's own telemetry off; the OpenAI Agents adapter turns the SDK's trace
+export off when there is no `OPENAI_API_KEY` to send it with. The same team in each framework is in
+`sdk/python/examples/drivers/`. Run one by hand (`ARENA_URL=… python langgraph_driver.py`) and it starts a
+run of its own; see [the SDK](sdk.md#drivers) for what `run` does at the end and when the driver raises.
+
 ## HTTP agents (`arena-agent/1`)
 
 **Run.** When the agent's turn starts, arenad sends one `POST` to its URL, with its headers:

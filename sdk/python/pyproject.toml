@@ -12,6 +12,11 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 
+[project.optional-dependencies]
+langgraph = ["langgraph>=0.2", "langchain-core>=0.3", "langchain-openai>=0.2"]
+crewai = ["crewai>=0.80"]
+openai-agents = ["openai-agents>=0.0.17"]
+
 [project.urls]
 Homepage = "https://github.com/Sculptured/Arena"
 Documentation = "https://github.com/Sculptured/Arena/blob/main/docs/sdk.md"

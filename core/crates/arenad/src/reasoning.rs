@@ -79,7 +79,8 @@ fn thinking(text: &str) -> Option<ReasoningItem> {
 
 /// The reasoning in a chat-completions response: each choice's `reasoning_content`, `reasoning`
 /// and `reasoning_details[]` (`text` or `summary`). When it has none, the `thinking` blocks of
-/// the provider's own (Anthropic-shape) response. Redacted thinking is never kept.
+/// the provider's own (Anthropic-shape) response. Redacted thinking is never kept. Then what the
+/// model says alongside its tool calls, as steps.
 pub fn from_chat_response(canonical: &Value, provider_raw: Option<&Value>) -> Vec<ReasoningItem> {
     let mut out = vec![];
     for choice in canonical["choices"].as_array().into_iter().flatten() {
@@ -98,6 +99,12 @@ pub fn from_chat_response(canonical: &Value, provider_raw: Option<&Value>) -> Ve
                 out.extend(b["thinking"].as_str().and_then(thinking));
             }
         }
+    }
+    for choice in canonical["choices"].as_array().into_iter().flatten() {
+        let m = &choice["message"];
+        let calls = m["tool_calls"].as_array().is_some_and(|c| !c.is_empty());
+        let said = m["content"].as_str().filter(|t| calls && !t.trim().is_empty());
+        out.extend(said.map(|t| ReasoningItem::new(t, ReasoningKind::Step)));
     }
     out
 }
@@ -174,6 +181,18 @@ mod tests {
         ]});
         let got = from_chat_response(&canonical, Some(&raw));
         assert_eq!(texts(&got), [("t", ReasoningKind::Thinking)]);
+    }
+
+    #[test]
+    fn words_alongside_tool_calls_are_a_step() {
+        let r = json!({"choices": [{"message": {
+            "content": "Checking stock first.",
+            "tool_calls": [{"id": "c1", "function": {"name": "get_stock", "arguments": "{}"}}],
+        }}]});
+        assert_eq!(
+            texts(&from_chat_response(&r, None)),
+            [("Checking stock first.", ReasoningKind::Step)]
+        );
     }
 
     #[test]
