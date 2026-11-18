@@ -15,6 +15,7 @@ use crate::{
     model::*,
     overhead::{self, ms_since, Cat},
     providers::{Provider, Upstream},
+    reasoning,
     store::Store,
 };
 
@@ -164,10 +165,14 @@ async fn record(
     payload: &ModelCallPayload,
 ) -> Result<(), String> {
     let v = serde_json::to_value(payload).map_err(|e| e.to_string())?;
-    ctx.append(store, Some(agent), EventKind::ModelCall, v)
+    let ev = ctx
+        .append(store, Some(agent), EventKind::ModelCall, v)
         .await
-        .map(|_| ())
-        .map_err(|e| format!("{e:#}"))
+        .map_err(|e| format!("{e:#}"))?;
+    let items =
+        reasoning::from_chat_response(&payload.response, payload.provider_response.as_ref());
+    reasoning::record(ctx, store, agent, items, reasoning::SOURCE_GATEWAY, Some(ev.seq)).await;
+    Ok(())
 }
 
 /// The live `branch` and the provider of its `agent` (`None`: the default one); `None` when the

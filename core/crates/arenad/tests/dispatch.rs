@@ -216,7 +216,26 @@ async fn a_lead_dispatches(live: Live) {
     assert_dispatched(&evs);
     assert_parallel(&evs);
     assert_finished_last(&evs);
+    if matches!(live, Live::Claude { .. }) {
+        assert_reasoning_from_the_stream(&evs);
+    }
     fork_restarts_everyone(&fx, &branch, &evs).await;
+}
+
+/// Claude Code's sessions: what the agents said between tool calls was recorded as their reasoning,
+/// each tied to a model call recorded before it.
+fn assert_reasoning_from_the_stream(evs: &[Event]) {
+    let said = of_kind(evs, EventKind::Reasoning);
+    let steps: Vec<_> = said
+        .iter()
+        .filter(|e| e.payload["source"] == "claude_code" && e.payload["kind"] == "step")
+        .collect();
+    assert!(!steps.is_empty(), "no reasoning from Claude Code's stream");
+    for e in steps {
+        let Some(seq) = e.payload["model_call_seq"].as_i64() else { continue };
+        let call = evs.iter().find(|c| c.seq == seq).unwrap();
+        assert_eq!((call.kind, &call.agent), (EventKind::ModelCall, &e.agent));
+    }
 }
 
 /// Each delegation woke its agent with it, and each agent that was given work reported to the
@@ -277,7 +296,7 @@ fn assert_parallel(evs: &[Event]) {
 }
 
 /// The lead's finish is the run's last word: after it only agents' ends (and turns ending),
-/// then the check; no tool call lands after it.
+/// then the check; no tool call lands after it (its closing model call and words may).
 fn assert_finished_last(evs: &[Event]) {
     let finish = of_kind(evs, EventKind::Finish);
     assert_eq!(finish.len(), 1, "the lead finished once");
@@ -286,7 +305,11 @@ fn assert_finished_last(evs: &[Event]) {
     for e in after {
         let ok = matches!(
             e.kind,
-            EventKind::AgentEnd | EventKind::Idle | EventKind::Check | EventKind::ModelCall
+            EventKind::AgentEnd
+                | EventKind::Idle
+                | EventKind::Check
+                | EventKind::ModelCall
+                | EventKind::Reasoning
         );
         assert!(ok, "{:?} after the finish: {}", e.kind, e.payload);
     }

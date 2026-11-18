@@ -47,6 +47,9 @@ pub struct ClaudeSession {
     cost: Option<f64>,
     /// Set when the run's spend estimate passed its limit during this turn (`crate::budget`).
     over: Option<String>,
+    /// The last assistant message's id and the seq of the `model_call` recorded for it: the
+    /// stream repeats a message once per content block, the call is recorded once.
+    last_call: Option<(String, i64)>,
     error: Option<String>,
     busy: Duration,
 }
@@ -143,6 +146,7 @@ impl ClaudeSession {
             meter: UsageMeter::default(),
             cost: None,
             over: None,
+            last_call: None,
             error: None,
             busy: Duration::ZERO,
         })
@@ -179,8 +183,8 @@ impl ClaudeSession {
         }
     }
 
-    /// Records one model call, and prices it into the run's spend estimate.
-    async fn record(&mut self, report: &UsageReport) {
+    /// Records one model call, and prices it into the run's spend estimate: its seq.
+    async fn record(&mut self, report: &UsageReport) -> Option<i64> {
         if let Some(usd) = report.list_price("anthropic") {
             if let Some(why) = self.branch.budget.add(&self.agent, usd) {
                 self.over.get_or_insert(why);
@@ -189,18 +193,40 @@ impl ClaudeSession {
         let p = report.payload();
         let at = Some(self.agent.as_str());
         let appended = self.branch.append(&self.store, at, EventKind::ModelCall, p);
-        if let Err(e) = appended.await {
-            eprintln!(
-                "branch {}: recording a model call: {e:#}",
-                self.branch.branch_id
-            );
+        match appended.await {
+            Ok(ev) => Some(ev.seq),
+            Err(e) => {
+                eprintln!(
+                    "branch {}: recording a model call: {e:#}",
+                    self.branch.branch_id
+                );
+                None
+            }
         }
+    }
+
+    /// Records an assistant message's model call (once per message) and its reasoning: its
+    /// thinking, and what it says between tool calls.
+    async fn on_assistant(&mut self, message: &Value) {
+        let id = message["id"].as_str().map(String::from);
+        if let Some(r) = self.meter.assistant(message) {
+            let seq = self.record(&r).await;
+            self.last_call = id.clone().zip(seq);
+        }
+        let seq = match (&self.last_call, &id) {
+            (Some((last, seq)), Some(id)) if last == id => Some(*seq),
+            _ => None,
+        };
+        let items = crate::reasoning::from_claude_message(message);
+        let source = crate::reasoning::SOURCE_CLAUDE_CODE;
+        let ctx = &self.branch;
+        crate::reasoning::record(ctx, &self.store, &self.agent, items, source, seq).await;
     }
 
     /// Records the model call an assistant message shows, or a compaction of the context.
     async fn on_line(&mut self, v: &Value) {
         let report = match v["type"].as_str() {
-            Some("assistant") => self.meter.assistant(&v["message"]),
+            Some("assistant") => return self.on_assistant(&v["message"]).await,
             Some("system") if v["subtype"] == "compact_boundary" => Some(UsageReport {
                 compaction: Some(v["compact_metadata"].clone()),
                 ..UsageReport::default()
