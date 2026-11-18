@@ -20,6 +20,7 @@ use crate::{
     exec::{tool_schemas, BranchCtx},
     external::{self, endpoints, AgentDone, Join, UsageReport},
     model::*,
+    reasoning::{self, ReasoningReport},
     runner,
 };
 
@@ -29,6 +30,7 @@ pub(super) fn router() -> Router<Arc<AppState>> {
         .route("/api/branches/{id}/agents", post(register))
         .route(&format!("{agent}/end"), post(end_agent))
         .route(&format!("{agent}/usage"), post(report_usage))
+        .route(&format!("{agent}/reasoning"), post(report_reasoning))
         .route("/api/branches/{id}/finish", post(finish))
 }
 
@@ -135,6 +137,37 @@ async fn report_usage(
         report.payload(),
     );
     Ok(Json(json!({"seq": ev.await?.seq})))
+}
+
+/// `POST /api/branches/{id}/agents/{agent}/reasoning`: records what the agent thought or said it
+/// would do, one `Reasoning` event per non-blank item, in order. Answers their `seqs`.
+async fn report_reasoning(
+    State(state): State<Arc<AppState>>,
+    Path((id, agent)): Path<(String, String)>,
+    body: Bytes,
+) -> ApiResult<Value> {
+    let report: ReasoningReport = parse_body(&body)?;
+    if report.items.is_empty() || report.items.len() > reasoning::MAX_ITEMS {
+        return Err(ApiError::bad(format!(
+            "a reasoning report carries 1 to {} items",
+            reasoning::MAX_ITEMS
+        )));
+    }
+    let ctx = external_branch(&state, &id)?;
+    if !ctx.has_agent(&agent) {
+        return Err(ApiError::not_found(format!(
+            "no agent \"{agent}\" on this branch"
+        )));
+    }
+    let mut seqs = Vec::new();
+    for item in &report.items {
+        let Some(p) = reasoning::payload(item, reasoning::SOURCE_AGENT) else {
+            continue;
+        };
+        let ev = ctx.append(&state.store, Some(&agent), EventKind::Reasoning, p);
+        seqs.push(ev.await?.seq);
+    }
+    Ok(Json(json!({"seqs": seqs})))
 }
 
 /// `POST /api/branches/{id}/finish`: the run is over. arenad freezes and scores the world, stops

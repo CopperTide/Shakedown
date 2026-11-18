@@ -137,6 +137,63 @@ fn only_external_runs_take_registrations() {
     })
 }
 
+#[test]
+fn an_agent_reports_its_reasoning() {
+    run(async {
+        let fx = setup("reasoning").await;
+        let branch = start(&fx).await;
+        register(&fx, &branch, json!({"id": "a"})).await;
+        let long = "x".repeat(40_000);
+        let body = json!({"items": [
+            {"text": "Check stock first.", "kind": "plan"},
+            {"text": "   "},
+            {"text": long},
+        ]});
+        let (status, v) = fx.on(&branch, "agents/a/reasoning", body).await;
+        assert_eq!(status, 200, "{v}");
+        assert_eq!(v["seqs"].as_array().unwrap().len(), 2, "{v}");
+        let evs = fx.events(&branch).await;
+        let said: Vec<&Value> = evs
+            .iter()
+            .filter(|e| e.kind == EventKind::Reasoning && e.agent.as_deref() == Some("a"))
+            .map(|e| &e.payload)
+            .collect();
+        assert_eq!(said.len(), 2);
+        let first = &said[0];
+        assert_eq!(
+            (&first["text"], &first["kind"], &first["source"]),
+            (&json!("Check stock first."), &json!("plan"), &json!("agent"))
+        );
+        assert!(first.get("truncated").is_none() && first.get("model_call_seq").is_none());
+        assert_eq!(said[1]["truncated"], json!(true));
+        assert_eq!(said[1]["text"].as_str().unwrap().chars().count(), 32_768);
+        assert_eq!(said[1]["kind"], json!("thinking"));
+        assert_eq!(fx.finish(&branch).await.0, 200);
+    })
+}
+
+#[test]
+fn reasoning_reports_are_checked() {
+    run(async {
+        let fx = setup("reasoning-bad").await;
+        let branch = start(&fx).await;
+        register(&fx, &branch, json!({"id": "a"})).await;
+        let many: Vec<Value> = (0..101).map(|i| json!({"text": format!("t{i}")})).collect();
+        for bad in [
+            json!({"items": []}),
+            json!({"items": many}),
+            json!({"items": [{"text": "t", "kind": "musing"}]}),
+        ] {
+            let (status, v) = fx.on(&branch, "agents/a/reasoning", bad).await;
+            assert_eq!(status, 400, "{v}");
+        }
+        let ok = json!({"items": [{"text": "t"}]});
+        let (status, v) = fx.on(&branch, "agents/nobody/reasoning", ok).await;
+        assert_eq!(status, 404, "{v}");
+        assert_eq!(fx.finish(&branch).await.0, 200);
+    })
+}
+
 // ---------------------------------------------------------------- Claude Code as the agent
 
 /// The ticket of task 27.

@@ -20,6 +20,7 @@ pub mod pg;
 pub mod prices;
 pub mod prompts;
 pub mod providers;
+pub mod reasoning;
 pub mod recorded;
 pub mod replay;
 pub mod restore;

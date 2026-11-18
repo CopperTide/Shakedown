@@ -59,6 +59,7 @@ Payloads by `kind`:
 - `world_event`: `{part, kind, text, data, clock_ms}`: something a part reported as its clock advanced
   (a disruption, a delivery, an alarm).
 - `world_view`: `{seq_of, view}`: the benchmark's view of the world (the digital twin) after step `seq_of`.
+- `reasoning`: `{text, kind: "thinking"|"step"|"plan", source: "agent"|"gateway"|"claude_code", model_call_seq?, truncated?}`: what the agent thought or said it would do; `text` is cut at 32 768 characters (`truncated: true`).
 - `check`: `{passed, gold_db, differing_rows, checks?, final_saves, unchecked}`: how the branch was scored.
 - `pause`, `resume` (newer cores): a pause of the branch; `resume` carries `paused_ms`.
 

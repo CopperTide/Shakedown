@@ -270,6 +270,9 @@ pub enum EventKind {
     Idle,
     /// The lead of a dispatch run ends it (`{summary}`).
     Finish,
+    /// What an agent thought or said it would do (`{text, kind, source, model_call_seq?,
+    /// truncated?}`), reported by its driver or pulled from a recorded model response.
+    Reasoning,
 }
 
 impl EventKind {
@@ -292,6 +295,7 @@ impl EventKind {
             EventKind::Wake => "wake",
             EventKind::Idle => "idle",
             EventKind::Finish => "finish",
+            EventKind::Reasoning => "reasoning",
         }
     }
 
@@ -314,6 +318,7 @@ impl EventKind {
             "wake" => EventKind::Wake,
             "idle" => EventKind::Idle,
             "finish" => EventKind::Finish,
+            "reasoning" => EventKind::Reasoning,
             _ => return None,
         })
     }

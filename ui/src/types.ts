@@ -64,7 +64,10 @@ export type EventKind =
   /** An agent of a dispatch run ended its turn and waits (`payload: {ok, error?, text}`). */
   | 'idle'
   /** The lead of a dispatch run ends it (`payload: {summary}`). */
-  | 'finish';
+  | 'finish'
+  /** What an agent thought or said it would do (`payload: {text, kind: 'thinking'|'step'|'plan', source:
+   *  'agent'|'gateway'|'claude_code', model_call_seq?, truncated?}`); not a step of its own. */
+  | 'reasoning';
 
 export type RestoreMode = 'exact' | 'approximate';
 /** How one part of a rerun's world is (or was) restored (`model.rs` `RestoredHow`). */

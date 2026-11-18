@@ -236,7 +236,10 @@ A design that lives in its own code (or in Sculptured) drives a run itself, and 
    message is recorded as in arenad's own runners. A CLI agent's model calls don't pass through the gateway, so
    the design reports each one its client saw (`POST .../agents/{agent}/usage`: the call's tokens, cache tokens
    included, and the model's context window; or a compaction of its context), and Shakedown records it as a
-   `model_call` without request or response. `POST .../agents/{agent}/end` records that an agent is done, with
+   `model_call` without request or response. `POST .../agents/{agent}/reasoning` records what an agent thought
+   or said it would do (`{"items": [{"text", "kind": "thinking"|"step"|"plan", "model_call_seq"?}]}`, up to
+   100 items, each cut at 32 768 characters); Shakedown also pulls reasoning out of the model responses it
+   records itself. `POST .../agents/{agent}/end` records that an agent is done, with
    the tokens and cost the design reports for it. `GET /api/tasks` gives the ticket and the instructions to give
    the agents.
 4. `POST /api/branches/{id}/finish` freezes, scores and stops the world.
