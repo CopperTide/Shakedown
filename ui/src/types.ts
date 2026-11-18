@@ -313,6 +313,8 @@ export interface ForkResponse {
   start_seq: number;
   moved_from: number | null;
   reason: string | null;
+  /** A run a Code connection drove: Shakedown started its driver again for the rerun, or couldn't. */
+  driver?: 'relaunched' | 'failed';
 }
 
 export interface Health {

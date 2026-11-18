@@ -265,6 +265,83 @@ fn an_experiment_setup_launches_its_driver_for_each_run() {
     })
 }
 
+/// The `driver` exit event of `branch`, waiting for it (it is recorded just after the run ends).
+async fn driver_exit(fx: &Fx, branch: &str) -> Event {
+    for _ in 0..100 {
+        let evs = fx.state.store.events(branch).await.unwrap();
+        let exit = evs.into_iter().rev().find(|e| {
+            e.kind == EventKind::WorldEvent
+                && e.payload["part"] == "driver"
+                && e.branch_id == branch
+        });
+        if let Some(e) = exit {
+            return e;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    panic!("no driver exit on {branch}");
+}
+
+impl Fx {
+    /// Forks `branch` at `at`, expecting its driver relaunched: the new branch.
+    async fn fork_relaunched(&self, branch: &str, at: i64) -> (String, i64) {
+        let path = format!("/api/branches/{branch}/fork");
+        let (status, forked) = self.post(&path, json!({"at_seq": at})).await;
+        assert_eq!(
+            (status, forked["driver"].as_str()),
+            (200, Some("relaunched")),
+            "{forked}"
+        );
+        let child = forked["branch_id"].as_str().unwrap().to_string();
+        (child, forked["start_seq"].as_i64().unwrap())
+    }
+
+    /// Saves a connection that runs the SDK's OpenAI Agents example driver on gpt-4.1-mini.
+    async fn example_connection(&self) -> String {
+        let driver = sdk_dir().join("examples/drivers/openai_agents_driver.py");
+        let command = json!(["uv", "run", "--extra", "openai-agents", "python", driver]);
+        let env = json!({"ARENA_PROVIDER": "openai", "ARENA_MODEL": "gpt-4.1-mini"});
+        let body = json!({"name": "OpenAI Agents team", "command": command, "workdir": sdk_dir(), "env": env});
+        let (status, conn) = self.post("/api/connections", body).await;
+        assert_eq!(status, 200, "{conn}");
+        conn["id"].as_str().unwrap().to_string()
+    }
+}
+
+#[test]
+fn a_fork_of_a_code_run_relaunches_the_driver() {
+    run(async {
+        let fx = setup("fork").await;
+        let id = fx.connection("fork_aware.py", json!({})).await;
+        let parent = fx.start(&id).await;
+        fx.ended(&parent).await;
+        let first = driver_exit(&fx, &parent).await;
+        assert!(first.payload["data"]["stderr_tail"]
+            .as_str()
+            .unwrap()
+            .contains("fork of: \n"));
+        let evs = fx.state.store.events(&parent).await.unwrap();
+        let at = evs
+            .iter()
+            .find(|e| e.kind == EventKind::AgentStart)
+            .unwrap()
+            .seq;
+        let (child, _) = fx.fork_relaunched(&parent, at).await;
+        let child = child.as_str();
+        let ended = fx.ended(child).await;
+        assert_ne!(ended.status, BranchStatus::Running);
+        let again = driver_exit(&fx, child).await;
+        let said = again.payload["data"]["stderr_tail"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        assert!(said.contains(&format!("fork of: {parent}")), "{said}");
+        let child_evs = fx.state.store.events(child).await.unwrap();
+        let scored = |e: &Event| e.kind == EventKind::Check && e.branch_id == child;
+        assert!(child_evs.iter().any(scored));
+    })
+}
+
 // ---------------------------------------------------------------- live: a real driver and model
 
 /// The SDK's folder, where the example drivers and their environment are.
@@ -304,16 +381,8 @@ fn live_an_experiment_setup_runs_a_code_connection() {
     }
     run(async {
         let fx = live_setup().await;
-        let driver = sdk_dir().join("examples/drivers/openai_agents_driver.py");
-        let body = json!({
-            "name": "OpenAI Agents team",
-            "command": ["uv", "run", "--extra", "openai-agents", "python", driver],
-            "workdir": sdk_dir(),
-            "env": {"ARENA_PROVIDER": "openai", "ARENA_MODEL": "gpt-4.1-mini"},
-        });
-        let (status, conn) = fx.post("/api/connections", body).await;
-        assert_eq!(status, 200, "{conn}");
-        let id = conn["id"].as_str().unwrap();
+        let id = fx.example_connection().await;
+        let id = id.as_str();
         let task = fx.get("/api/tasks").await.1[0]["id"].clone();
         let exp =
             json!({"task": task, "runs": 2, "setups": [{"connection": id}], "max_cost_usd": 1.0});
@@ -342,4 +411,36 @@ async fn live_setup() -> Fx {
         base,
         http: reqwest::Client::new(),
     }
+}
+
+#[test]
+#[ignore = "live: runs a real model through the gateway"]
+fn live_a_fork_of_a_code_run_relaunches_the_driver() {
+    if let Some(why) = live_missing() {
+        eprintln!("skipped: {why}");
+        return;
+    }
+    run(async {
+        let fx = live_setup().await;
+        let parent = fx.start(&fx.example_connection().await).await;
+        fx.ended(&parent).await;
+        let evs = fx.state.store.events(&parent).await.unwrap();
+        let calls: Vec<i64> = (evs.iter().filter(|e| e.kind == EventKind::ToolCall))
+            .map(|e| e.seq)
+            .collect();
+        let at = *calls
+            .get(1)
+            .or(calls.first())
+            .expect("the team called a tool");
+        let (child, start) = fx.fork_relaunched(&parent, at).await;
+        fx.ended(&child).await;
+        driver_exit(&fx, &child).await;
+        let mine = fx.state.store.events(&child).await.unwrap();
+        let has = |k: EventKind, from: i64| mine.iter().any(|e| e.kind == k && e.seq >= from);
+        assert!(
+            has(EventKind::ToolCall, start),
+            "the team worked after the fork point"
+        );
+        assert!(has(EventKind::Check, start));
+    })
 }

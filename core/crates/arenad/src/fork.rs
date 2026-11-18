@@ -133,6 +133,11 @@ pub struct ForkResponse {
     /// and its endpoints on the new branch, which is live and waits for the system to resume it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agents: Option<Vec<external::Resumable>>,
+    /// For a run a Code connection drives: `relaunched` when arenad started its driver again for
+    /// the new branch (with `ARENA_FORK_OF`), `failed` when it couldn't (the branch then ended
+    /// `failed`, saying why).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub driver: Option<&'static str>,
 }
 
 /// True when `c` changes the agent's mode (a kind equal to the current one is no change).
@@ -569,13 +574,55 @@ pub async fn fork_with(
     let team = new_team(&parent.team, &events, &req)?;
     let new_id = create_child(state, &parent, &rerun, &team, &req).await?;
     let world = start_child_world(state, &events, &parent.id, &new_id, &mut rerun).await?;
-    let ctx = BranchCtx::new(new_id, Arc::new(world), team, task_id)
+    let ctx = BranchCtx::new(new_id, Arc::new(world), team, task_id.clone())
         .with_rules(recorded::rules(&events))
         .with_clock(BranchClock::from_env(rerun.clock_ms));
     if ctx.rules.runner == Runner::External {
-        return Ok(live_child(state, ctx, rerun.plan, &events).await);
+        let conn = ctx.rules.connection.clone();
+        let mut res = live_child(state, ctx, rerun.plan, &events).await;
+        if let Some(conn) = conn {
+            let ids = (parent.run_id.as_str(), parent.id.as_str(), task_id.as_str());
+            res.driver = Some(relaunch(state, &conn, ids, &res.branch_id).await);
+        }
+        return Ok(res);
     }
     Ok(spawn_child(state, ctx, rerun.plan))
+}
+
+/// Starts the Code connection `conn_id`'s driver again for the new branch `branch_id` of a fork
+/// of `(run, parent, task)`: `relaunched`, or `failed` (the branch ended `failed`, saying why).
+async fn relaunch(
+    state: &Arc<AppState>,
+    conn_id: &str,
+    (run_id, parent, task_id): (&str, &str, &str),
+    branch_id: &str,
+) -> &'static str {
+    let found = state.store.connection(conn_id).await;
+    let found = found.map_err(|e| format!("reading the Code connection: {e:#}"));
+    let gone = || format!("the Code connection {conn_id} was deleted");
+    let conn = match found.and_then(|c| c.ok_or_else(gone)) {
+        Ok(c) => c,
+        Err(why) => return driver_gone(state, branch_id, why).await,
+    };
+    let ids = crate::driver::RunIds {
+        run_id,
+        branch_id,
+        task_id,
+        fork_of: Some(parent),
+    };
+    match crate::driver::launch_or_fail(state, &conn, ids).await {
+        Some(_) => "relaunched",
+        None => "failed",
+    }
+}
+
+/// Ends the new branch `failed` (scored) because its driver can't be started: `failed`.
+async fn driver_gone(state: &Arc<AppState>, branch_id: &str, why: String) -> &'static str {
+    let ctx = state.live.read().unwrap().get(branch_id).cloned();
+    if let Some(ctx) = ctx {
+        runner::finish_failed(state, &ctx, why).await;
+    }
+    "failed"
 }
 
 /// The new branch's team: the one the request gives (a run an external system drives only, and
@@ -610,6 +657,7 @@ async fn live_child(
         moved_from: plan.moved_from,
         reason: plan.reason,
         agents: Some(agents),
+        driver: None,
     }
 }
 
@@ -664,6 +712,7 @@ fn spawn_child(state: &Arc<AppState>, ctx: BranchCtx, plan: ForkPlan) -> ForkRes
         moved_from,
         reason,
         agents: None,
+        driver: None,
     }
 }
 

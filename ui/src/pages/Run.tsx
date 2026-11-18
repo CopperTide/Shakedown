@@ -33,6 +33,7 @@ import { studyOf } from '../run/candidates';
 import { RunReview } from '../review/RunReview';
 import RunMenu from '../run/RunMenu';
 import type { Branch, BranchDetail, Event, RunStartPayload } from '../types';
+import { forkNotice } from '../run/forkNotice';
 
 /** How the run's agents ran, from its `run_start` (old runs: a chain with a handoff required). */
 export function runnerLine(events: Event[]): string {
@@ -106,7 +107,7 @@ function Side({ runId, detail, event, forking, setForking, autoRows, choice }: {
       {forking && event && (
         <div className="border-b border-line bg-raised">
           <ForkPanel key={`${detail.id}:${event.seq}`} branch={detail} seq={event.seq} choice={choice} onClose={() => setForking(false)}
-            onForked={(r) => nav(`/runs/${runId}/${r.branch_id}`, { state: { notice: r.moved_from != null ? `Restarted from step ${r.start_seq} instead of ${r.moved_from}: ${r.reason ?? ''}` : null } })} />
+            onForked={(r) => nav(`/runs/${runId}/${r.branch_id}`, { state: { notice: forkNotice(r) } })} />
         </div>
       )}
       <Inspector branchId={detail.id} event={event} team={detail.team} autoRows={autoRows} events={detail.events} />

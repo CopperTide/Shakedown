@@ -245,7 +245,9 @@ A design that lives in its own code (or in Sculptured) drives a run itself, and 
 4. `POST /api/branches/{id}/finish` freezes, scores and stops the world.
 
 A fork of an external run starts at the step asked for, restores the world as it was just before it, and leaves
-the new branch live. Its answer gives each agent's recorded history before the fork point and its endpoints on the
+the new branch live. When a Code connection drove the run, Shakedown starts its driver again for the new
+branch, with `ARENA_FORK_OF` set to the branch it came from (the answer says `driver: "relaunched"`); the
+driver's agents restart from the fork point, and `run.history(agent_id)` gives what each did before it. Its answer gives each agent's recorded history before the fork point and its endpoints on the
 new branch, so the design resumes its agents its own way. A branch whose design never calls `finish` stays running
 until arenad restarts (it is then `interrupted`).
 

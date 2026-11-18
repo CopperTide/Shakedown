@@ -573,14 +573,30 @@ async fn forkable(state: &AppState, id: &str) -> Result<Branch, ApiError> {
     }
 }
 
+/// A fork of a run a Code connection drove starts its driver again: 415/403 for a request a web
+/// page could make (`connections::guard_launch`).
+async fn guard_code_fork(
+    state: &AppState,
+    headers: &axum::http::HeaderMap,
+    id: &str,
+) -> Result<(), ApiError> {
+    let events = state.store.events(id).await?;
+    match crate::recorded::rules(&events).connection {
+        Some(_) => connections::guard_launch(state, headers),
+        None => Ok(()),
+    }
+}
+
 async fn fork_branch(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
+    headers: axum::http::HeaderMap,
     body: Bytes,
 ) -> ApiResult<fork::ForkResponse> {
     let cleanup = not_cleaning(&state)?;
     let mut req: ForkReq = parse_body(&body)?;
     let parent = forkable(&state, &id).await?;
+    guard_code_fork(&state, &headers, &id).await?;
     fork::settle_changes(&parent.team, &mut req.changes, &state.config.providers);
     check_fork_team(&state, &parent.team, &req.changes)?;
     if let Some(team) = &mut req.team {
