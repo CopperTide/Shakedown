@@ -41,4 +41,12 @@ describe('lanes', () => {
       ev(3, 2, 'quality', 'tool_call', { name: 'hold_batch', snapshot: 's3' }), ev(4, 3, 'quality', 'tool_call', { name: 'get_result' })], team);
     expect(saved[1].marks.map((m) => [m.seq, m.saved])).toEqual([[2, true], [3, true], [4, false]]);
   });
+
+  it('puts_each_reasoning_step_on_its_agents_lane_as_a_message_mark', () => {
+    const said = ev(90, 5, team.agents[0].id, 'reasoning', { text: 'Check stock first.', kind: 'plan', source: 'agent' });
+    const rows = buildLanes([runStart, said], team);
+    const marks = rows.find((r) => r.id === team.agents[0].id)!.marks;
+    expect(marks).toHaveLength(1);
+    expect(marks[0]).toMatchObject({ seq: 90, kind: 'message', label: 'Plan', detail: 'Check stock first.' });
+  });
 });

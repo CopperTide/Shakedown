@@ -81,6 +81,11 @@ function dispatchMark(e: Event, p: Payload, base: Base): Mark {
   return { ...base, kind: 'message', label: `${word} → ${to ?? 'lead'}`, detail: String(p.text ?? ''), to };
 }
 
+/** "Reasoning", "Plan" or "Step": what kind of reasoning an event records. */
+export function reasoningWord(kind: unknown): string {
+  return kind === 'plan' ? 'Plan' : kind === 'step' ? 'Step' : 'Reasoning';
+}
+
 /** Why a dispatch run woke an agent, in a few words. */
 export function wakeWord(p: Payload): string {
   switch (p.reason) {
@@ -107,6 +112,7 @@ const MARKS: Partial<Record<Event['kind'], (e: Event, p: Payload, base: Base) =>
   wake: (_e, p, base) => ({ ...base, kind: 'start', label: wakeWord(p), detail: '' }),
   finish: (_e, p, base) => ({ ...base, kind: 'end', label: 'Finished the run', detail: String(p.summary ?? '') }),
   model_call: (_e, _p, base) => ({ ...base, kind: 'model', label: 'Model call', detail: '' }),
+  reasoning: (_e, p, base) => ({ ...base, kind: 'message', label: reasoningWord(p.kind), detail: String(p.text ?? '') }),
   agent_start: (_e, _p, base) => ({ ...base, kind: 'start', label: 'Start', detail: '' }),
   agent_end: (_e, p, base) => endMark(p, base),
   check: (_e, p, base) => ({ ...base, kind: 'check', label: p.passed ? 'Check passed' : 'Check failed', detail: '', outcome: p.passed ? 'ok' : 'error' }),

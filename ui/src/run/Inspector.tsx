@@ -4,7 +4,7 @@ import { Button } from '../components/ui/button';
 import { StatusMark, Tag } from '../components/ui/status';
 import { EmptyState, ErrorState } from '../components/ui/state';
 import { actionWord, classify, systemLine, worldInfo } from '../control/actions';
-import { wakeWord } from '../control/lanes';
+import { reasoningWord, wakeWord } from '../control/lanes';
 import { missingPermit, permitOf } from '../control/permit';
 import { notComparedLine, savedLine } from '../restore';
 import { costIsUnknown, providerId, providerName, providerOf } from '../providers';
@@ -212,6 +212,20 @@ const DISPATCH: Partial<Record<Event['kind'], (p: Payload) => ReactElement>> = {
   finish: (p) => <Block title="Finished the run (only the lead can): every agent stopped and the world was scored" value={p.summary} />,
 };
 
+const SOURCE: Record<string, string> = { agent: 'reported by its code', gateway: "from the model's answer", claude_code: "from Claude Code's stream" };
+
+/** An agent's reasoning in full, where it came from, and the model call it belongs to. */
+function Reasoning({ p }: { p: Payload }) {
+  const call = typeof p.model_call_seq === 'number' ? `, model call at step ${p.model_call_seq}` : '';
+  const from = SOURCE[String(p.source)] ?? String(p.source ?? '');
+  return (
+    <Section title={`${reasoningWord(p.kind)} (${from}${call})`}>
+      <p className="whitespace-pre-wrap break-words text-sm">{String(p.text ?? '')}</p>
+      {p.truncated === true && <p className="mt-1 text-xs text-muted">Cut at 32,768 characters.</p>}
+    </Section>
+  );
+}
+
 export interface InspectorProps {
   branchId: string;
   event: Event | null;
@@ -229,6 +243,7 @@ function Body({ branchId, event, team, autoRows, events = [] }: InspectorProps &
     case 'handoff': return <Block title={p.to ? `Handoff note for ${String(p.to)}` : 'Handoff note'} value={p.note} />;
     case 'message': return <Block title={`Message to ${p.to === '*' ? 'everyone' : String(p.to)}`} value={p.text} />;
     case 'check': return <Check p={p} />;
+    case 'reasoning': return <Reasoning p={p} />;
     case 'agent_end': return <AgentEnd p={p} team={team} agent={event.agent} />;
     default: return DISPATCH[event.kind]?.(p) ?? <Block title="Payload" value={p} />;
   }

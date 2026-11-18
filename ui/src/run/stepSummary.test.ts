@@ -25,4 +25,16 @@ describe('step summary', () => {
     expect(s(ev(9, 'resume', { paused_ms: 12_400 }, null))).toBe('The run went on after 12 s paused.');
     expect(s(ev(10, 'model_call', { model: 'claude-haiku', input_tokens: 1200, output_tokens: 80 }))).toBe('Quality assurance asked its model (claude-haiku). 1,200 tokens in, 80 out.');
   });
+
+  it("shows an agent's reasoning, cut to 160 characters", () => {
+    const s = (p: unknown) => stepSummary(ev(11, 'reasoning', p), [start], team);
+    expect(s({ text: 'Check stock first.', kind: 'thinking', source: 'gateway' })).toEqual({ title: 'Quality assurance · Reasoning', text: 'Check stock first.', abnormal: false });
+    expect(s({ text: 'Reserve, then order.', kind: 'plan', source: 'agent' }).title).toBe('Quality assurance · Plan');
+    expect(s({ text: 'Reserving now.', kind: 'step', source: 'claude_code' }).title).toBe('Quality assurance · Step');
+    const long = s({ text: 'x'.repeat(400), kind: 'thinking', source: 'agent' }).text;
+    expect(long).toHaveLength(160);
+    expect(long.endsWith('…')).toBe(true);
+    const cut = s({ text: 'y'.repeat(50), kind: 'thinking', source: 'agent', truncated: true }).text;
+    expect(cut.endsWith('(cut at 32,768 characters)')).toBe(true);
+  });
 });

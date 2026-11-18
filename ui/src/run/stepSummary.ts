@@ -1,7 +1,7 @@
 // A step in one or two plain sentences, for the step drawer: who did what, on which system, and
 // how it went (refused or failed, and why). The raw record stays behind "Details".
 import { type Action, actionWord, classify, kindWord, worldInfo } from '../control/actions';
-import { formatDuration, isWorldActor } from '../control/lanes';
+import { formatDuration, isWorldActor, reasoningWord } from '../control/lanes';
 import type { Event, Team } from '../types';
 import { clockText } from './flow';
 
@@ -74,6 +74,13 @@ function wakeStep(p: Payload, who: string): StepSummary {
   return { title: `${who} · Woken`, text: why, abnormal: false };
 }
 
+/** An agent's reasoning: its first 160 characters, and a note when Shakedown cut the record. */
+function reasoningStep(p: Payload, who: string): StepSummary {
+  const text = clip(String(p.text ?? '').replace(/\s+/g, ' ').trim(), 160);
+  const cut = p.truncated ? ' (cut at 32,768 characters)' : '';
+  return { title: `${who} · ${reasoningWord(p.kind)}`, text: text + cut, abnormal: false };
+}
+
 const WORDS: Partial<Record<Event['kind'], Words>> = {
   delegation: (p, who, to) => ({ title: `${who} · Delegate`, text: `${who} gave ${to(p.to)} work: ${quote(p.task)}`, abnormal: false }),
   report: (p, who, to) => ({
@@ -96,6 +103,7 @@ const WORDS: Partial<Record<Event['kind'], Words>> = {
   world_event: (p) => ({ title: `World · ${String(p.kind ?? 'event')}`, text: String(p.text ?? 'Something happened in the world.'), abnormal: false }),
   pause: () => ({ title: 'Paused', text: 'The run was paused: no agent could act until it resumed.', abnormal: false }),
   resume: (p) => ({ title: 'Resumed', text: `The run went on after ${clockText(Number(p.paused_ms ?? 0) / 1000)} paused.`, abnormal: false }),
+  reasoning: reasoningStep,
   run_start: () => ({ title: 'Start', text: 'The run started and the task was set up in the world.', abnormal: false }),
 };
 
