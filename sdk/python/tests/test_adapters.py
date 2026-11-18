@@ -197,3 +197,32 @@ def test_each_adapter_offers_the_driver():
     for name in ("langgraph", "crewai", "openai_agents"):
         mod = pytest.importorskip(f"arena.adapters.{name}")
         assert mod.run is driver.run
+
+
+# ---------------------------------------------------------------- review fixes
+
+ODD = Tool("odd", "Odd property names.", {
+    "type": "object",
+    "properties": {"order-id": {"type": "string"}, "json": {"type": "boolean"}, "from": {"type": "string"}},
+    "required": ["order-id"]})
+
+
+def test_openai_agents_arguments_that_are_not_an_object_are_text():
+    pytest.importorskip("agents", reason="needs the openai-agents extra")
+    from arena.adapters import openai_agents
+
+    t = by_name(openai_agents.tools(FakeEndpoint()), "get_stock")
+    for args in ("[1]", "null", '"sku"'):
+        out = asyncio.run(t.on_invoke_tool(None, args))
+        assert out.startswith("error: "), (args, out)
+
+
+def test_crewai_odd_property_names_reach_the_endpoint_as_named():
+    pytest.importorskip("crewai", reason="needs the crewai extra")
+    from arena.adapters import crewai
+
+    ep = FakeEndpoint()
+    ep.tools = [ODD]
+    tool = crewai.tools(ep)[0]
+    tool.run(**{"order-id": "o1", "json": True, "from": "x"})
+    assert ep.calls == [("odd", {"order-id": "o1", "json": True, "from": "x"})]

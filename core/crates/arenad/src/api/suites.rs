@@ -186,7 +186,7 @@ async fn get_one(
 /// `{done: true}` when every run is claimed.
 async fn claim(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> ApiResult<Value> {
     let s = find(&state, &id).await?;
-    if s.runner != Runner::External {
+    if s.runner != Runner::External || s.connection.is_some() {
         return Err(ApiError::conflict("arenad runs this suite's runs itself"));
     }
     let cleanup = not_cleaning(&state)?;

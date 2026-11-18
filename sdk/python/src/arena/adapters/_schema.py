@@ -53,7 +53,10 @@ def result_text(r: ToolResult) -> str:
 
 
 def call_text(agent: Any, name: str, args: dict[str, Any]) -> str:
-    """Calls ``name`` as ``agent`` with ``args`` (``None`` values dropped), as text."""
+    """Calls ``name`` as ``agent`` with ``args`` (``None`` values dropped), as text. Arguments
+    that aren't an object come back as an error the agent can read."""
+    if not isinstance(args, dict):
+        return f"error: the arguments must be a JSON object, not {type(args).__name__}"
     clean = {k: v for k, v in args.items() if v is not None}
     try:
         return result_text(agent.call(name, clean))

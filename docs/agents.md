@@ -71,7 +71,9 @@ end of its stderr. If it is still running 30 s after its run ended, it is killed
 Its exit is recorded as a `driver` world event. `POST /api/connections/{id}/test` runs the benchmark's first
 task with it (spend limit $0.50) and says whether its agents worked. Shakedown starts drivers only because it
 listens on 127.0.0.1 alone, and the routes that start one refuse requests a web page could make (anything not
-JSON, or from another origin).
+JSON, or from another origin). Any program on this computer can still reach it, so run Shakedown with Code
+connections only on a computer whose other accounts you trust. A driver that drives its run longer than
+`ARENA_CODE_RUN_SECS` (default 900) has its run ended `failed`, scored.
 
 ## HTTP agents (`arena-agent/1`)
 

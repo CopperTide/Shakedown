@@ -98,21 +98,25 @@ pub fn from_chat_response(canonical: &Value, provider_raw: Option<&Value>) -> Ve
     out
 }
 
-/// A chat-completions message's thinking: `reasoning_content`, `reasoning`, `reasoning_details`.
+/// A chat-completions message's thinking: `reasoning_content`, else `reasoning`, else each of
+/// `reasoning_details`.
 fn choice_thinking(m: &Value) -> Vec<ReasoningItem> {
-    let mut out = vec![];
-    for key in ["reasoning_content", "reasoning"] {
-        out.extend(m[key].as_str().and_then(thinking));
+    // The same thought often comes in more than one of these: the first that has it is kept.
+    let first = ["reasoning_content", "reasoning"]
+        .iter()
+        .find_map(|k| m[*k].as_str().and_then(thinking));
+    if let Some(item) = first {
+        return vec![item];
     }
-    for d in m["reasoning_details"].as_array().into_iter().flatten() {
-        out.extend(
+    let details = m["reasoning_details"].as_array().into_iter().flatten();
+    details
+        .filter_map(|d| {
             d["text"]
                 .as_str()
                 .or(d["summary"].as_str())
-                .and_then(thinking),
-        );
-    }
-    out
+                .and_then(thinking)
+        })
+        .collect()
 }
 
 /// What a message says alongside its tool calls, as a step.
@@ -184,15 +188,24 @@ mod tests {
 
     #[test]
     fn openrouter_reasoning_string_and_details() {
-        let r = json!({"choices": [{"message": {
-            "reasoning": "a",
-            "reasoning_details": [{"type": "reasoning.text", "text": "b"}, {"summary": "c"}],
-        }}]});
-        let got: Vec<_> = from_chat_response(&r, None)
-            .into_iter()
-            .map(|i| i.text)
-            .collect();
-        assert_eq!(got, ["a", "b", "c"]);
+        let texts = |m: Value| -> Vec<String> {
+            let r = json!({"choices": [{"message": m}]});
+            from_chat_response(&r, None)
+                .into_iter()
+                .map(|i| i.text)
+                .collect()
+        };
+        // OpenRouter sends the same thought as `reasoning` and in `reasoning_details`: once.
+        let both = json!({"reasoning": "a", "reasoning_details": [{"type": "reasoning.text", "text": "a"}]});
+        assert_eq!(texts(both), ["a"]);
+        // vLLM may send `reasoning_content` and `reasoning`: the first is kept.
+        assert_eq!(
+            texts(json!({"reasoning_content": "r", "reasoning": "r"})),
+            ["r"]
+        );
+        // Details alone: each one.
+        let details = json!({"reasoning_details": [{"text": "b"}, {"summary": "c"}]});
+        assert_eq!(texts(details), ["b", "c"]);
     }
 
     #[test]

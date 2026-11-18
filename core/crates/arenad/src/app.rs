@@ -41,6 +41,9 @@ pub struct Config {
     pub http_agent_timeout: Duration,
     /// How long a Code connection's driver may run on after its run ended before arenad kills it.
     pub driver_grace: Duration,
+    /// How long a Code connection's driver may drive its run before arenad ends the run
+    /// `failed` (scored) for it (time paused counted too).
+    pub code_run_limit: Duration,
 }
 
 pub const DEFAULT_DRIVER_GRACE: Duration = Duration::from_secs(30);
@@ -72,6 +75,12 @@ impl Config {
             agent_base: std::env::var("ARENA_AGENT_BASE").unwrap_or_default(),
             http_agent_timeout: Duration::from_secs(crate::agents::CLI_TIMEOUT_SECS),
             driver_grace: DEFAULT_DRIVER_GRACE,
+            code_run_limit: Duration::from_secs(
+                std::env::var("ARENA_CODE_RUN_SECS")
+                    .ok()
+                    .and_then(|v| v.trim().parse().ok())
+                    .unwrap_or(crate::agents::CLI_TIMEOUT_SECS),
+            ),
         }
     }
 

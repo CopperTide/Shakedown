@@ -33,18 +33,24 @@ class ShakedownTool(BaseTool):
 
     endpoint: Any = None
     tool_name: str = ""
+    #: Field name -> the tool's own property name, for properties pydantic can't name a field.
+    aliases: dict = {}
 
     def _run(self, **kwargs: Any) -> str:
-        return call_text(self.endpoint, self.tool_name, kwargs)
+        named = {self.aliases.get(k, k): v for k, v in kwargs.items()}
+        return call_text(self.endpoint, self.tool_name, named)
 
 
 def _tool(agent: Any, t: Any) -> BaseTool:
+    model = model_from_schema(t.name, t.input_schema)
+    aliases = {n: f.alias for n, f in model.model_fields.items() if f.alias}
     return ShakedownTool(
         name=t.name,
         description=t.description or t.name,
-        args_schema=model_from_schema(t.name, t.input_schema),
+        args_schema=model,
         endpoint=agent,
         tool_name=t.name,
+        aliases=aliases,
     )
 
 

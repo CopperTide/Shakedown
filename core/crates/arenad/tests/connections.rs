@@ -33,7 +33,10 @@ struct Fx {
 async fn setup(tag: &str) -> Fx {
     let hub = TestHub::new(&[]);
     let (store, clean) = app_support::meta_store("connections", tag).await;
-    let tweak = |c: &mut arenad::app::Config| c.driver_grace = Duration::from_secs(2);
+    let tweak = |c: &mut arenad::app::Config| {
+        c.driver_grace = Duration::from_secs(2);
+        c.code_run_limit = Duration::from_secs(4);
+    };
     let (state, base) = app_support::idle_app(store, hub.hub.clone(), None, tweak).await;
     Fx {
         state,
@@ -370,6 +373,85 @@ fn testing_a_connection_says_what_its_agents_did() {
         assert!(runs
             .iter()
             .any(|r| r.name.as_deref() == Some("Connection test · fork_aware.py")));
+    })
+}
+
+#[test]
+fn a_driver_that_never_finishes_is_cut_off_and_its_run_scored() {
+    run(async {
+        let fx = setup("hang").await;
+        let id = fx.connection("hang.py", json!({})).await;
+        let branch = fx.start(&id).await;
+        let b = fx.ended(&branch).await;
+        assert_eq!(b.status, BranchStatus::Failed);
+        let error = b.error.unwrap_or_default();
+        assert!(error.contains("still running after"), "{error}");
+        let evs = fx.state.store.events(&branch).await.unwrap();
+        assert!(evs.iter().any(|e| e.kind == EventKind::Check));
+        driver_exit(&fx, &branch).await;
+    })
+}
+
+#[test]
+fn a_code_setups_runs_cannot_be_claimed() {
+    run(async {
+        let fx = setup("claim").await;
+        let id = fx.connection("exit_early.py", json!({})).await;
+        let exp = json!({"task": "27", "runs": 1, "setups": [{"connection": id}]});
+        let (status, made) = fx.post("/api/experiments", exp).await;
+        assert_eq!(status, 200, "{made}");
+        let suites = (fx.state.store)
+            .experiment_suites(made["id"].as_str().unwrap())
+            .await
+            .unwrap();
+        let path = format!("/api/suites/{}/claim", suites[0].id);
+        assert_eq!(fx.post(&path, json!({})).await.0, 409);
+    })
+}
+
+/// Each route that can start a driver, with a body it would take: the connection `id`, a
+/// finished Code run `parent`.
+fn launch_routes(id: &str, parent: &str) -> Vec<(String, Value)> {
+    let team = json!({"id": "own", "name": "Own", "agents": []});
+    let setups = json!([{"connection": id}]);
+    vec![
+        (
+            "/api/connections".into(),
+            json!({"name": "x", "command": ["python3"]}),
+        ),
+        (format!("/api/connections/{id}/test"), json!({})),
+        (
+            "/api/runs".into(),
+            json!({"task_id": "27", "team": team, "connection": id}),
+        ),
+        (
+            "/api/experiments".into(),
+            json!({"task": "27", "runs": 1, "setups": setups}),
+        ),
+        (format!("/api/branches/{parent}/fork"), json!({"at_seq": 2})),
+    ]
+}
+
+#[test]
+fn every_route_that_starts_a_driver_refuses_a_web_page() {
+    run(async {
+        let fx = setup("guard").await;
+        let id = fx.connection("fork_aware.py", json!({})).await;
+        let parent = fx.start(&id).await;
+        fx.ended(&parent).await;
+        let routes = launch_routes(&id, &parent);
+        for (path, body) in routes {
+            let url = format!("{}{path}", fx.base);
+            let foreign = fx
+                .http
+                .post(&url)
+                .header("origin", "http://evil.test")
+                .json(&body);
+            assert_eq!(send(foreign).await.0, 403, "{path}");
+            let plain =
+                (fx.http.post(&url).header("content-type", "text/plain")).body(body.to_string());
+            assert_eq!(send(plain).await.0, 415, "{path}");
+        }
     })
 }
 

@@ -6,7 +6,9 @@
 //! killed. Its exit is recorded as a `driver` world event.
 //!
 //! arenad binds 127.0.0.1 only (`main.rs`), and the routes that launch a driver refuse requests a
-//! web page could make (`guard_launch`), so only programs on this machine can start one.
+//! web page could make (`guard_launch`), so only programs on this machine can start one. Any
+//! local program can, though: a Code connection runs as arenad's user, so this assumes a machine
+//! whose accounts trust each other (`docs/agents.md`).
 
 use std::{
     collections::VecDeque,
@@ -170,16 +172,33 @@ where
     })
 }
 
-/// Waits for the driver to exit; kills it (and whatever it started) once its run has been over
-/// for the grace period. `None` when its status couldn't be read.
+/// Ends the run `failed` (scored) when its driver has driven it for longer than the limit.
+async fn cut_off(state: &AppState, branch: &str, since: Instant) {
+    let limit = state.config.code_run_limit;
+    if since.elapsed() < limit {
+        return;
+    }
+    let ctx = state.live.read().unwrap().get(branch).cloned();
+    if let Some(ctx) = ctx {
+        let mins = (limit.as_secs_f64() / 60.0).max(0.1);
+        let why =
+            format!("the driver was still running after {mins:.1} min, so Shakedown ended the run");
+        runner::finish_failed(state, &ctx, why).await;
+    }
+}
+
+/// Waits for the driver to exit; ends its run when the driver drove it past the limit
+/// (`cut_off`), and kills the driver (and whatever it started) once its run has been over for
+/// the grace period. `None` when its status couldn't be read.
 async fn watch(state: &AppState, branch: &str, child: &mut Child) -> Option<ExitStatus> {
-    let grace = state.config.driver_grace;
+    let (grace, started) = (state.config.driver_grace, Instant::now());
     let mut over_since: Option<Instant> = None;
     loop {
         tokio::select! {
             status = child.wait() => return status.ok(),
             _ = tokio::time::sleep(POLL) => {
                 if state.live.read().unwrap().contains_key(branch) {
+                    cut_off(state, branch, started).await;
                     continue;
                 }
                 if over_since.get_or_insert_with(Instant::now).elapsed() >= grace {
@@ -259,25 +278,37 @@ pub fn rules_for(conn_id: &str, max_cost_usd: Option<f64>) -> Rules {
         .with_connection(Some(conn_id.to_string()))
 }
 
-/// Starts the external run of a Code setup's `slot`; when it can't start, the slot records why.
+/// Starts the external run of a Code setup's `slot` (waiting out a cleanup, as built-in runs
+/// do): `None` when it couldn't start (recorded on the slot). Saves over the limit stop the
+/// experiment, as they stop a built-in suite.
 async fn start_run(
     state: &AppState,
     suite: &Suite,
     slot: &Slot,
     conn_id: &str,
-) -> Result<external::Started> {
+) -> Result<Option<external::Started>> {
+    let _cleanup = state.cleanup.clone().read_owned().await;
+    if state.saves_over_limit().await? {
+        let why = crate::api::SAVES_FULL;
+        state.store.slot_failed(&suite.id, slot.ord, why).await?;
+        anyhow::bail!(why);
+    }
     let rules = rules_for(conn_id, suite.max_cost_usd);
     let scenario = suite.scenario_of(slot);
     let started = external::start(state, &slot.task_id, suite.team.clone(), scenario, rules).await;
-    if let Err(e) = &started {
-        let why = format!("{e:#}");
-        state.store.slot_failed(&suite.id, slot.ord, &why).await?;
+    match started {
+        Ok(s) => Ok(Some(s)),
+        Err(e) => {
+            let why = format!("{e:#}");
+            state.store.slot_failed(&suite.id, slot.ord, &why).await?;
+            Ok(None)
+        }
     }
-    started
 }
 
 /// Starts the run of a suite's claimed `slot` whose setup is a Code connection, and launches
-/// the driver for it: the branch id. `None` (the slot marked failed) when the connection is gone.
+/// the driver for it: the branch id. `None` (the slot marked failed) when the connection is gone
+/// or the run couldn't start.
 pub async fn start_slot(
     state: &Arc<AppState>,
     suite: &Suite,
@@ -292,7 +323,9 @@ pub async fn start_slot(
         state.store.slot_failed(&suite.id, slot.ord, &why).await?;
         return Ok(None);
     };
-    let started = start_run(state, suite, slot, id).await?;
+    let Some(started) = start_run(state, suite, slot, id).await? else {
+        return Ok(None);
+    };
     let (run, branch) = (&started.run_id, &started.branch_id);
     state
         .store
