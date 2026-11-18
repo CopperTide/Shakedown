@@ -183,3 +183,66 @@ def test_external_suite_claim_and_export(arena, cleanup, tmp_path):
     out = suite.export(str(tmp_path / "suite"))
     assert json.load(open(os.path.join(out, "suite.json")))["id"] == suite.id
     assert len(read_jsonl(os.path.join(out, "branches.jsonl"))) == 1
+
+
+def _live_model(arena):
+    """A real model to drive an agent with: a provider arenad's gateway can reach, else Claude Code
+    signed in on this machine. Skips, saying why, with neither."""
+    from arena import claude_code
+
+    models = {"openai": "gpt-4.1-mini", "anthropic": "claude-haiku-4-5",
+              "openrouter": "anthropic/claude-haiku-4.5"}
+    for p in arena.providers():
+        if p.get("available") and p["id"] in models:
+            return p["id"], models[p["id"]]
+    if claude_code.available():
+        return "claude-code", "haiku"
+    pytest.skip("no model: no provider key in arenad's environment and no `claude` on PATH")
+
+
+def test_driver_round_trip(arena, monkeypatch):
+    """A driver starts a run, a real model works the ticket as one agent, and the run is scored."""
+    from arena import claude_code, driver
+
+    via, model = _live_model(arena)
+    for k in ("ARENA_BRANCH", "ARENA_RUN", "ARENA_TASK", "ARENA_FORK_OF"):
+        monkeypatch.delenv(k, raising=False)
+    with driver.run(task=arena.tasks()[0].id, url=arena.url) as run:
+        if via == "claude-code":
+            agent = run.agent("agent", model=model)
+            res = claude_code.run(agent, run.ticket, model=model, max_turns=8)
+            assert res.ok, res
+        else:
+            agent = run.agent("agent", provider=via, model=model)
+            with httpx.Client(base_url=agent.gateway_url, timeout=300) as llm:
+                msgs = [{"role": "user", "content": run.ticket}]
+                r = llm.post("/chat/completions", json={"model": model, "messages": msgs})
+                r.raise_for_status()
+        branch = run.branch
+    try:
+        rec = arena.branch(branch.id).record()
+        assert rec.status in ("passed", "failed"), rec.status
+        assert any(e.kind == "check" for e in rec.events)
+        assert any(e.kind == "agent_end" and e.agent == "agent" for e in rec.events)
+        calls = [e for e in rec.events if e.kind == "model_call" and e.agent == "agent"]
+        assert calls, [e.summary() for e in rec.events]
+    finally:
+        arena.delete_run(branch.run_id)
+
+
+def test_driver_that_raises_ends_the_run_failed_and_scored(arena, monkeypatch):
+    from arena import driver
+
+    for k in ("ARENA_BRANCH", "ARENA_RUN", "ARENA_TASK", "ARENA_FORK_OF"):
+        monkeypatch.delenv(k, raising=False)
+    with pytest.raises(RuntimeError):
+        with driver.run(task=arena.tasks()[0].id, url=arena.url) as run:
+            run.agent("agent")
+            branch = run.branch
+            raise RuntimeError("the graph broke")
+    try:
+        rec = arena.branch(branch.id).record()
+        assert (rec.status, rec.error) == ("failed", "driver raised RuntimeError: the graph broke")
+        assert any(e.kind == "check" for e in rec.events)
+    finally:
+        arena.delete_run(branch.run_id)

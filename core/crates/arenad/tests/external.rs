@@ -74,6 +74,10 @@ impl Fx {
         self.on(branch, "finish", json!({})).await
     }
 
+    async fn finish_with(&self, branch: &str, body: Value) -> (u16, Value) {
+        self.on(branch, "finish", body).await
+    }
+
     async fn events(&self, branch: &str) -> Vec<Event> {
         self.state.store.events(branch).await.unwrap()
     }
@@ -191,6 +195,23 @@ fn reasoning_reports_are_checked() {
         let (status, v) = fx.on(&branch, "agents/nobody/reasoning", ok).await;
         assert_eq!(status, 404, "{v}");
         assert_eq!(fx.finish(&branch).await.0, 200);
+    })
+}
+
+#[test]
+fn finish_with_an_error_ends_failed_and_scored() {
+    run(async {
+        let fx = setup("finish-error").await;
+        let branch = start(&fx).await;
+        register(&fx, &branch, json!({"id": "a"})).await;
+        let (status, v) = fx.finish_with(&branch, json!({"error": "driver raised X"})).await;
+        assert_eq!(status, 200, "{v}");
+        assert_eq!((v["status"].as_str(), v["error"].as_str()), (Some("failed"), Some("driver raised X")));
+        let url = format!("{}/api/branches/{branch}", fx.base);
+        let (_, b) = send(fx.http.get(url)).await;
+        assert_eq!(b["status"], "failed", "{b}");
+        assert_eq!(b["error"], "driver raised X", "{b}");
+        assert!(kinds(&fx.events(&branch).await).contains(&EventKind::Check));
     })
 }
 

@@ -170,12 +170,31 @@ async fn report_reasoning(
     Ok(Json(json!({"seqs": seqs})))
 }
 
+/// What a system that drove a run says when it finishes: the error that ended it, if one did.
+#[derive(Debug, Default, serde::Deserialize)]
+struct FinishReq {
+    #[serde(default)]
+    error: Option<String>,
+}
+
 /// `POST /api/branches/{id}/finish`: the run is over. arenad freezes and scores the world, stops
-/// it and answers how the branch ended.
-async fn finish(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> ApiResult<Value> {
+/// it and answers how the branch ended. With `{"error"}` the run went wrong on the system's side:
+/// it is still scored, and ends `failed` with that error.
+async fn finish(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    body: Bytes,
+) -> ApiResult<Value> {
+    let req: FinishReq = match body.is_empty() {
+        true => FinishReq::default(),
+        false => parse_body(&body)?,
+    };
     let ctx = external_branch(&state, &id)?;
     detached(async move {
-        let ended = runner::finish(&state, &ctx).await;
+        let ended = match req.error.filter(|e| !e.trim().is_empty()) {
+            Some(why) => runner::finish_failed(&state, &ctx, why).await,
+            None => runner::finish(&state, &ctx).await,
+        };
         let (status, error) =
             ended.ok_or_else(|| ApiError::conflict("the branch is ending already"))?;
         Ok(Json(json!({"status": status, "error": error})))

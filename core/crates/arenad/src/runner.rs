@@ -290,6 +290,22 @@ pub async fn finish(state: &AppState, ctx: &BranchCtx) -> Option<Ending> {
     Some(conclude(state, ctx, outcome).await)
 }
 
+/// Ends a live branch an external system drove that went wrong (its driver raised, or exited
+/// without finishing): its world is frozen and scored like `finish`'s, so the check is recorded,
+/// but the branch ends `failed` with `why`. An infra error stays one. `None` when the branch is
+/// ending already.
+pub async fn finish_failed(state: &AppState, ctx: &BranchCtx, why: String) -> Option<Ending> {
+    if !ctx.claim_end() {
+        return None;
+    }
+    freeze(ctx).await;
+    let outcome = check(state, ctx).await.map(|(status, error)| match status {
+        BranchStatus::InfraError => (status, error),
+        _ => (BranchStatus::Failed, Some(why)),
+    });
+    Some(conclude(state, ctx, outcome).await)
+}
+
 /// How a branch someone stopped ends: unscored.
 pub(crate) const STOPPED_ENDING: Ending = (BranchStatus::Stopped, None);
 

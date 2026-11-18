@@ -22,6 +22,7 @@ from .errors import (
     NotFound,
     NotSupported,
 )
+from . import driver
 from .mcp import Tool, ToolResult
 from .models import (
     ENDED,
@@ -48,5 +49,5 @@ __all__ = [
     "BranchRecord", "CheckResult", "NamedCheck", "RunSummary", "ForkInfo", "ENDED",
     "Tool", "ToolResult",
     "ArenaError", "ApiError", "BadRequest", "NotFound", "Conflict", "DiskFull",
-    "ConnectionFailed", "NotSupported",
+    "ConnectionFailed", "NotSupported", "driver",
 ]

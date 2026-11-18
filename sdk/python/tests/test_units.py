@@ -137,3 +137,93 @@ def test_wait_review_follows_a_running_review_to_its_end():
     assert wait_review(lambda: None, {"status": "done"}, 60, 1, slept.append) == {"status": "done"}
     with pytest.raises(TimeoutError):
         wait_review(lambda: {"status": "running"}, {"status": "running"}, -1, 0, lambda _: None)
+
+
+# ---------------------------------------------------------------- drivers
+
+def _fake_arenad(monkeypatch, calls: list):
+    """An arenad that answers a driver's calls and keeps them in ``calls`` as (method, path, body)."""
+    import httpx
+
+    import arena.driver as driver
+    from arena import Arena
+
+    def handle(req: httpx.Request) -> httpx.Response:
+        body = json.loads(req.content) if req.content else None
+        calls.append((req.method, req.url.path, body))
+        p = req.url.path
+        if p == "/api/tasks":
+            return httpx.Response(200, json=[{"id": "t1", "ticket": "Fix it.", "instructions": "Be brief."}])
+        if p.endswith("/agents"):
+            a = body["id"]
+            return httpx.Response(200, json={"agent": a, "mcp_url": f"http://x/mcp/b1/{a}",
+                                             "gateway_url": f"http://x/gateway/b1/{a}/v1", "tools": []})
+        if p.endswith("/reasoning"):
+            return httpx.Response(200, json={"seqs": list(range(len(body["items"])))})
+        if p.endswith("/end"):
+            return httpx.Response(200, json={"seq": 9})
+        if p.endswith("/finish"):
+            return httpx.Response(200, json={"status": "failed" if body.get("error") else "passed",
+                                             "error": body.get("error")})
+        return httpx.Response(404, json={"error": f"no such route {p}"})
+
+    def fake(url):
+        a = Arena(url)
+        a._http = httpx.Client(base_url=a.url, transport=httpx.MockTransport(handle))
+        return a
+
+    monkeypatch.setattr(driver, "Arena", fake)
+    for k, v in {"ARENA_URL": "http://127.0.0.1:1", "ARENA_RUN": "r1", "ARENA_BRANCH": "b1",
+                 "ARENA_TASK": "t1"}.items():
+        monkeypatch.setenv(k, v)
+    monkeypatch.delenv("ARENA_FORK_OF", raising=False)
+    return driver
+
+
+def test_driver_joins_the_branch_arenad_launched(monkeypatch):
+    calls: list = []
+    driver = _fake_arenad(monkeypatch, calls)
+    with driver.run() as run:
+        assert run.branch.id == "b1" and run.task.id == "t1" and not run.is_fork
+        assert run.ticket == "Fix it.\n\nBe brief."
+        a = run.agent("a")
+        assert run.agent("a") is a
+        assert run.history("a") == []
+    paths = [(m, p) for m, p, _ in calls if m == "POST"]
+    assert ("POST", "/api/runs") not in paths
+    assert paths == [("POST", "/api/branches/b1/agents"), ("POST", "/api/branches/b1/agents/a/end"),
+                     ("POST", "/api/branches/b1/finish")]
+    assert calls[-1][2] == {}
+
+
+def test_driver_failure_finishes_with_the_error(monkeypatch):
+    calls: list = []
+    driver = _fake_arenad(monkeypatch, calls)
+    with pytest.raises(ValueError, match="boom"):
+        with driver.run() as run:
+            run.agent("a")
+            raise ValueError("boom")
+    end = [b for m, p, b in calls if p.endswith("/agents/a/end")]
+    assert end and end[0]["ok"] is False and "boom" in end[0]["error"]
+    assert calls[-1][1] == "/api/branches/b1/finish"
+    assert calls[-1][2] == {"error": "driver raised ValueError: boom"}
+
+
+def test_driver_leaves_agents_it_ended_alone(monkeypatch):
+    calls: list = []
+    driver = _fake_arenad(monkeypatch, calls)
+    with driver.run() as run:
+        run.agent("a").end(ok=True)
+    assert len([p for _, p, _ in calls if p.endswith("/end")]) == 1
+
+
+def test_report_reasoning_posts_items(monkeypatch):
+    calls: list = []
+    driver = _fake_arenad(monkeypatch, calls)
+    with driver.run() as run:
+        a = run.agent("a")
+        assert a.report_reasoning("Check stock first.", kind="plan") == [0]
+        assert a.report_reasoning(items=[{"text": "x"}, {"text": "y", "kind": "step"}]) == [0, 1]
+    bodies = [b for _, p, b in calls if p.endswith("/reasoning")]
+    assert bodies == [{"items": [{"text": "Check stock first.", "kind": "plan"}]},
+                      {"items": [{"text": "x"}, {"text": "y", "kind": "step"}]}]

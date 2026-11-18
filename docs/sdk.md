@@ -109,6 +109,29 @@ answers each request with JSON; checked with Claude Code and the SDK's own clien
 tools), records each model call it reports and the agent's end. Agents can join at any time
 (`branch.register(...)`). See `examples/bring_your_own_agent.py`.
 
+## Drivers
+
+A driver is the few lines that put your own agent code (LangGraph, CrewAI, the OpenAI Agents SDK, or
+anything else) in a run. `driver.run()` joins the run Shakedown started it for, or starts one of its own
+when you run it by hand. When the block ends it ends the agents you registered and finishes the run, so
+Shakedown scores the world.
+
+```python
+from arena import driver
+
+with driver.run() as run:                        # or driver.run(task="27", url="http://127.0.0.1:4510")
+    planner = run.agent("planner", provider="openai", model="gpt-4.1-mini")   # registered once
+    run.ticket                                   # the task's ticket and the benchmark's instructions
+    planner.report_reasoning("Check stock before reserving.", kind="plan")    # thinking | step | plan
+    ...                                          # your code, with the agent's tools and gateway
+```
+
+If the block raises, the run is still scored, but it ends `failed` with `driver raised <Type>: <message>`
+(`branch.finish(error=...)` does the same from your own code). When Shakedown starts a driver it sets
+`ARENA_URL`, `ARENA_RUN`, `ARENA_BRANCH`, `ARENA_TASK` and, on a fork, `ARENA_FORK_OF`; on a fork
+`run.history(agent_id)` gives what that agent did before the fork point. The adapters in `arena.adapters`
+turn an agent's tools and gateway into your framework's own objects (see [agents](agents.md)).
+
 ## Observe
 
 ```python

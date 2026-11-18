@@ -545,9 +545,11 @@ class Branch:
     def agent(self, agent_id: str) -> "AgentEndpoint":
         return self.agents[agent_id]
 
-    def finish(self) -> dict[str, Any]:
-        """External runs: freeze, score and stop the world. Returns ``{status, error}``."""
-        ans = self.arena.post(f"/api/branches/{self.id}/finish")
+    def finish(self, error: Optional[str] = None) -> dict[str, Any]:
+        """External runs: freeze, score and stop the world. Returns ``{status, error}``. With
+        ``error`` your system went wrong: the world is still scored, and the run ends ``failed``
+        with that error."""
+        ans = self.arena.post(f"/api/branches/{self.id}/finish", {"error": error} if error else {})
         self.final = ans
         return ans
 
@@ -619,6 +621,8 @@ class AgentEndpoint:
         #: The agent's recorded events before a fork point (forks of external runs).
         self.history = history or []
         self._tools = tools
+        #: Set once :meth:`end` recorded the agent done.
+        self.ended = False
         self.mcp = McpClient(mcp_url, branch.arena._http)
 
     @classmethod
@@ -659,9 +663,31 @@ class AgentEndpoint:
         """Records that the agent is done; ``totals``: ``prompt_tokens``, ``completion_tokens``,
         ``cost_usd``, ``cost_source``, ``seconds``."""
         body = {"ok": ok, **({"error": error} if error else {}), **totals}
-        return self.branch.arena.post(
+        seq = self.branch.arena.post(
             f"/api/branches/{self.branch.id}/agents/{self.id}/end", body
         )["seq"]
+        self.ended = True
+        return seq
+
+    def report_reasoning(
+        self,
+        text: Optional[str] = None,
+        kind: str = "thinking",
+        model_call_seq: Optional[int] = None,
+        items: Optional[list[dict[str, Any]]] = None,
+    ) -> list[int]:
+        """Records what the agent thought or said it would do: one ``text`` of ``kind``
+        (``thinking``, ``step`` or ``plan``), or several ``items`` (``{text, kind?,
+        model_call_seq?}``, up to 100). Blank text is skipped; text over 32 768 characters is cut.
+        Returns the events' seqs."""
+        if items is None:
+            item: dict[str, Any] = {"text": text or "", "kind": kind}
+            if model_call_seq is not None:
+                item["model_call_seq"] = model_call_seq
+            items = [item]
+        return self.branch.arena.post(
+            f"/api/branches/{self.branch.id}/agents/{self.id}/reasoning", {"items": items}
+        )["seqs"]
 
     def mcp_config(self, name: str = "arena") -> dict[str, Any]:
         """An ``mcpServers`` config for Claude Code (``--mcp-config``) and other MCP hosts."""
