@@ -47,6 +47,10 @@ framework adapters integrated; bringing a system in takes "a few lines … not h
 - **G8 LLM judge.** Named criteria ("verified reservations before reserving stock") judged by a real model that
   reads the ticket, instructions, every step, the reasoning, the world's change from start to end and the
   expectation results; each verdict cites steps, and the citations are verified against the record.
+- **G9 See the work.** The run timeline shows when each agent is working, clickable, with time split into model,
+  tools, waiting and Shakedown, colour coded on demand, opening the agent's process and reasoning.
+- **G10 Their observability tools.** OpenTelemetry out (runs appear in Datadog, Langfuse, Phoenix and the like) and
+  in (the agent system's own traces appear in the run).
 
 ## Non-goals (for this project)
 
@@ -251,12 +255,50 @@ Expectations live with a task (a file in the benchmark, e.g. `data/expect/<task>
 - Re-judging an old run with new criteria is allowed and recorded as a new judgement; the run's score never
   changes.
 
+### 5. Run timeline and observability (G9, G10; added by the user 2026-11-17)
+
+User's words: when the agents are working that should be on the timeline and clickable; the time of waiting, agent
+and tools broken down and colour coded on selection; view the agents' process and their reasoning traces; agent
+observability tools integrated.
+
+Today the run page's timeline (`ui/src/run/ActionTimeline.tsx`, lanes from `ui/src/control/lanes.ts`) draws one lane
+per agent with point marks (tool calls, messages, model calls, starts, ends) and a per-turn trace waterfall
+(`ui/src/run/Waterfall.tsx`). It does not draw when an agent is working.
+
+- **G9 Working bars.** Each agent lane draws a bar for every stretch the agent is working (agent start or wake to
+  idle or end; for chain runs, its whole turn). The existing marks sit on top. Clicking a bar selects that turn.
+- **Time breakdown.** A "Break down time" toggle above the timeline colours each bar by what the time went to:
+  **model** (waiting on the model: thinking and generating), **tools** (world tool calls and `shell` commands
+  running), **waiting** (idle with no mail, waiting for another agent, an approval, a pause or the step lock), and
+  **Shakedown** (save, restore, recording: the overhead already timed per step). A legend gives each category's
+  total per agent and for the run; clicking a category highlights only it across every lane. Off by default so the
+  timeline stays simple.
+- **Timing source.** Every model call and tool call records its start and duration (tool calls and gateway model
+  calls already can be timed in arenad; adapters and CLI streams report theirs). Where only an end time is known (a
+  CLI's reported model call), the segment is drawn as estimated (hatched) and its legend total says "estimated".
+- **Agent process panel.** Selecting a bar opens the turn in the inspector: what the agent was given, its reasoning
+  (`reasoning` steps), each model call (request and response where recorded), each tool call with arguments,
+  result and timing, messages sent and received, and the turn's waterfall. Previous/next turn buttons step through
+  the agent's work.
+- **G10 Observability tools.** OpenTelemetry both ways, using its GenAI conventions (run → agent turn → model call /
+  tool call spans):
+  - *Out:* a setting sends every run's spans to an OTLP endpoint, so Datadog, Grafana, Honeycomb, Langfuse, Arize
+    Phoenix and LangSmith (all accept OTLP) show Shakedown runs next to production traces. Each span carries the run
+    and branch ids and a link back to the run page.
+  - *In:* a per-branch OTLP endpoint (`/api/branches/{id}/otlp/v1/traces`) takes the agent system's own spans; a
+    driver sets one env var and a team's existing instrumentation (OpenTelemetry, Langfuse, OpenLLMetry,
+    OpenInference) keeps working unchanged. Shakedown stores them, draws them inside the agent's lane as that
+    agent's own spans, and feeds GenAI reasoning content in them into `reasoning` steps.
+  - Verified live against Langfuse and Arize Phoenix (both self-hostable, open source); other OTLP receivers by
+    spec only, said so in the docs.
+
 ### Order of work
 
 1. Reasoning events + drivers/adapters + Code connection.
-2. Sandboxes and the `shell` tool (OpenShell per-agent, Docker, sandbox protocol).
-3. Expected end state, then drafting.
-4. Judge.
+2. Timeline: working bars, time breakdown, agent process panel; then OpenTelemetry out and in.
+3. Sandboxes and the `shell` tool (OpenShell per-agent, Docker, sandbox protocol).
+4. Expected end state, then drafting.
+5. Judge.
 
 Each lands with live tests on a real model against an existing benchmark world (factory-01 for end state and
 judge), and docs updated in `docs/concepts.md`, `docs/agents.md`, `docs/protocol.md`.
