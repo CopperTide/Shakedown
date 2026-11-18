@@ -5,6 +5,7 @@ pub mod budget;
 pub mod clock;
 pub mod compare;
 pub mod dispatch;
+pub mod driver;
 pub mod exec;
 pub mod experiment;
 pub mod external;

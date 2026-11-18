@@ -118,7 +118,7 @@ pub async fn begin_run(
         branch_id: &branch_id,
         task_id,
         team: &team,
-        rules,
+        rules: rules.clone(),
         scenario,
     };
     let started = start_world(state, &bench, planned, start).await;
@@ -239,6 +239,9 @@ fn run_start(bench: &BenchDescribe, world: &World, seed: u64, of: &RunStartOf<'_
     }
     if let Some(max) = of.rules.max_cost_usd {
         start["max_cost_usd"] = json!(max);
+    }
+    if let Some(c) = &of.rules.connection {
+        start["connection"] = json!(c);
     }
     start
 }

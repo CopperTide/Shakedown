@@ -48,7 +48,8 @@ pub(super) async fn create_run(
     check_disk(&state).await?;
     detached(async move {
         let _cleanup = cleanup;
-        let started = external::start(&state, &task_id, team, &scenario).await?;
+        let rules = Rules::new(Runner::External);
+        let started = external::start(&state, &task_id, team, &scenario, rules).await?;
         Ok(Json(
             serde_json::to_value(started).map_err(anyhow::Error::from)?,
         ))

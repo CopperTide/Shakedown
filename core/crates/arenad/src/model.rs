@@ -128,8 +128,8 @@ impl Team {
 }
 
 /// The rules a branch runs under, recorded in its run's `RunStart` (`runner`, `handoff`,
-/// `max_cost_usd`).
-#[derive(Debug, Clone, Copy, PartialEq)]
+/// `max_cost_usd`, `connection`).
+#[derive(Debug, Clone, PartialEq)]
 pub struct Rules {
     pub runner: Runner,
     /// True for runs recorded before handoffs were optional: every agent but the last must hand
@@ -137,6 +137,8 @@ pub struct Rules {
     pub handoff_required: bool,
     /// The run's model-spend limit in USD (`crate::budget`); None: no limit.
     pub max_cost_usd: Option<f64>,
+    /// The Code connection whose driver Shakedown launched for the run (`crate::driver`).
+    pub connection: Option<String>,
 }
 
 impl Rules {
@@ -146,6 +148,7 @@ impl Rules {
             runner,
             handoff_required: false,
             max_cost_usd: crate::budget::env_default(),
+            connection: None,
         }
     }
 
@@ -163,6 +166,7 @@ impl Rules {
             runner: Runner::Chain,
             handoff_required: true,
             max_cost_usd: None,
+            connection: None,
         }
     }
 
@@ -175,13 +179,20 @@ impl Rules {
                 max_cost_usd: payload["max_cost_usd"]
                     .as_f64()
                     .and_then(crate::budget::positive),
+                connection: payload["connection"].as_str().map(String::from),
             },
             Err(_) => Rules::legacy(),
         }
     }
 
+    /// These rules with the Code connection `id` (`None` keeps none).
+    pub fn with_connection(mut self, id: Option<String>) -> Rules {
+        self.connection = id;
+        self
+    }
+
     /// How `RunStart` writes `handoff_required` (its field `handoff`).
-    pub fn handoff_word(self) -> &'static str {
+    pub fn handoff_word(&self) -> &'static str {
         match self.handoff_required {
             true => "required",
             false => "optional",

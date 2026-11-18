@@ -232,7 +232,9 @@ fn assert_reasoning_from_the_stream(evs: &[Event]) {
         .collect();
     assert!(!steps.is_empty(), "no reasoning from Claude Code's stream");
     for e in steps {
-        let Some(seq) = e.payload["model_call_seq"].as_i64() else { continue };
+        let Some(seq) = e.payload["model_call_seq"].as_i64() else {
+            continue;
+        };
         let call = evs.iter().find(|c| c.seq == seq).unwrap();
         assert_eq!((call.kind, &call.agent), (EventKind::ModelCall, &e.agent));
     }

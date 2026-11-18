@@ -426,8 +426,7 @@ fn a_builtin_suite_left_running_is_stopped_when_arenad_starts_again() {
         let (name, _clean) = fresh_db();
         let store = Store::open_named(&pg::admin(), &name).await.unwrap();
         let team: Team = serde_json::from_value(team_data()).unwrap();
-        let tasks = vec!["t1".to_string()];
-        let scenario = Default::default();
+        let (tasks, scenario) = (vec!["t1".to_string()], Default::default());
         let new = |runner| NewSuite {
             name: "s",
             team: &team,
@@ -438,6 +437,7 @@ fn a_builtin_suite_left_running_is_stopped_when_arenad_starts_again() {
             scenario: &scenario,
             variants: &[],
             max_cost_usd: None,
+            connection: None,
         };
         let builtin = store.create_suite(new(Runner::Chain)).await.unwrap();
         let external = store.create_suite(new(Runner::External)).await.unwrap();
@@ -475,6 +475,7 @@ fn a_suite_keeps_its_scenario() {
             scenario: &scenario,
             variants: &[],
             max_cost_usd: None,
+            connection: None,
         };
         let id = store.create_suite(new).await.unwrap().id;
         let again = store.suite(&id).await.unwrap().unwrap();
@@ -511,6 +512,7 @@ fn a_suite_varies_its_runs_over_its_scenarios() {
             scenario: &scenario,
             variants: &variants,
             max_cost_usd: None,
+            connection: None,
         };
         let suite = store.create_suite(new).await.unwrap();
         let slots = store.slots(&suite.id).await.unwrap();

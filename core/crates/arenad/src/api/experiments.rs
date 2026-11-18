@@ -33,14 +33,27 @@ fn default_runs() -> i32 {
     DEFAULT_RUNS
 }
 
-/// One agent setup: its name (`Setup A`, … when absent), team and runner (`chain` by default).
+/// One agent setup: its name (`Setup A`, … when absent), team and runner (`chain` by default),
+/// or a Code connection whose driver runs the team (its runner is then `external`).
 #[derive(Deserialize)]
 struct SetupReq {
     #[serde(default)]
     name: Option<String>,
+    #[serde(default = "code_team")]
     team: Team,
     #[serde(default)]
     runner: Runner,
+    #[serde(default)]
+    connection: Option<String>,
+}
+
+/// The team of a Code setup that names none: its driver registers the agents.
+fn code_team() -> Team {
+    Team {
+        id: "code".into(),
+        name: "Code".into(),
+        agents: vec![],
+    }
 }
 
 /// A new experiment: the task, the disruptions every run adds to it, the runs per setup, and
@@ -62,10 +75,20 @@ struct NewExperimentReq {
 
 /// 400 unless arenad can run the setup itself: a built-in runner and a team it can run. The
 /// error names the setup.
-fn validate_setup(state: &AppState, name: &str, setup: &SetupReq) -> Result<(), ApiError> {
+fn validate_setup(state: &AppState, name: &str, setup: &mut SetupReq) -> Result<(), ApiError> {
+    if setup.connection.is_some() {
+        if !matches!(setup.runner, Runner::Chain | Runner::External) {
+            return Err(ApiError::bad(format!(
+                "{name}: a Code connection's driver runs the setup"
+            )));
+        }
+        setup.runner = Runner::External;
+        return super::validate_agents(state, &setup.team.agents)
+            .map_err(|ApiError(code, msg)| ApiError(code, format!("{name}: {msg}")));
+    }
     if setup.runner == Runner::External {
         return Err(ApiError::bad(format!(
-            "{name}: an experiment's setups run on arenad's runners"
+            "{name}: an experiment's setups run on arenad's runners, or a Code connection's driver"
         )));
     }
     validate_builtin_team(state, &setup.team, setup.runner)
@@ -93,11 +116,37 @@ fn validate(state: &AppState, req: &mut NewExperimentReq) -> Result<Vec<String>,
     Ok(names)
 }
 
+/// The Code setups' connections exist (404, naming the setup), and the request may start their
+/// drivers (`guard_launch`).
+async fn check_connections(
+    state: &AppState,
+    headers: &axum::http::HeaderMap,
+    names: &[String],
+    setups: &[SetupReq],
+) -> Result<(), ApiError> {
+    if setups.iter().any(|s| s.connection.is_some()) {
+        super::connections::guard_launch(state, headers)?;
+    }
+    for (name, s) in names.iter().zip(setups) {
+        if let Some(id) = &s.connection {
+            super::connections::connection_or_404(state, id)
+                .await
+                .map_err(|ApiError(code, msg)| ApiError(code, format!("{name}: {msg}")))?;
+        }
+    }
+    Ok(())
+}
+
 /// `POST /api/experiments`: stores the experiment (a suite per setup) and starts running it.
 /// Answers its detail.
-async fn create(State(state): State<Arc<AppState>>, body: Bytes) -> ApiResult<Detail> {
+async fn create(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    body: Bytes,
+) -> ApiResult<Detail> {
     let mut req: NewExperimentReq = parse_body(&body)?;
     let names = validate(&state, &mut req)?;
+    check_connections(&state, &headers, &names, &req.setups).await?;
     let max_cost_usd = super::max_cost(req.max_cost_usd)?;
     super::suites::suite_tasks(&state, vec![req.task.clone()]).await?;
     let scenario = super::twin::scenario_of(&state, req.scenario.as_ref()).await?;
@@ -107,6 +156,7 @@ async fn create(State(state): State<Arc<AppState>>, body: Bytes) -> ApiResult<De
             name,
             team: &s.team,
             runner: s.runner,
+            connection: s.connection.as_deref(),
         })
         .collect();
     let new = NewExperiment {
@@ -131,7 +181,7 @@ async fn list(State(state): State<Arc<AppState>>) -> ApiResult<Vec<Listed>> {
 /// What an id names: an experiment, or a suite made on its own (a legacy one-setup experiment).
 enum Found {
     Experiment(experiment::Experiment),
-    Legacy(crate::suite::Suite),
+    Legacy(Box<crate::suite::Suite>),
 }
 
 async fn find(state: &AppState, id: &str) -> Result<Found, ApiError> {
@@ -139,7 +189,7 @@ async fn find(state: &AppState, id: &str) -> Result<Found, ApiError> {
         return Ok(Found::Experiment(e));
     }
     match state.store.suite(id).await? {
-        Some(s) if s.experiment_id.is_none() => Ok(Found::Legacy(s)),
+        Some(s) if s.experiment_id.is_none() => Ok(Found::Legacy(Box::new(s))),
         _ => Err(ApiError::not_found(format!(
             "there is no experiment \"{id}\""
         ))),
@@ -149,7 +199,7 @@ async fn find(state: &AppState, id: &str) -> Result<Found, ApiError> {
 async fn detail_of(state: &AppState, found: Found) -> ApiResult<Detail> {
     let d = match found {
         Found::Experiment(e) => experiment::detail(&state.store, &e).await?,
-        Found::Legacy(s) => experiment::legacy_detail(&state.store, s).await?,
+        Found::Legacy(s) => experiment::legacy_detail(&state.store, *s).await?,
     };
     Ok(Json(d))
 }

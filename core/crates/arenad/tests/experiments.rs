@@ -280,6 +280,7 @@ async fn stored_suite(store: &Store) -> String {
         scenario: &scenario,
         variants: &[],
         max_cost_usd: None,
+        connection: None,
     };
     store.create_suite(suite).await.unwrap().id
 }
@@ -294,11 +295,13 @@ async fn stored(store: &Store) -> (String, String) {
             name: "A",
             team: &a,
             runner: Runner::Chain,
+            connection: None,
         },
         NewSetup {
             name: "B",
             team: &b,
             runner: Runner::Concurrent,
+            connection: None,
         },
     ];
     let new = NewExperiment {

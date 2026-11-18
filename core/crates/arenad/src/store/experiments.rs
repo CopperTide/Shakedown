@@ -41,6 +41,8 @@ pub struct NewSetup<'a> {
     pub name: &'a str,
     pub team: &'a Team,
     pub runner: Runner,
+    /// A Code connection: arenad launches its driver for each of the setup's runs.
+    pub connection: Option<&'a str>,
 }
 
 /// What a new experiment is: its task and scenario, how many runs each setup gets, and the
@@ -69,6 +71,22 @@ fn experiment_from(r: &Row) -> Experiment {
     }
 }
 
+/// The suite of one setup of `new`.
+fn suite_of<'a>(new: &NewExperiment<'a>, s: &NewSetup<'a>, tasks: &'a [String]) -> NewSuite<'a> {
+    NewSuite {
+        name: s.name,
+        team: s.team,
+        tasks,
+        repeats: new.runs,
+        runner: s.runner,
+        benchmark: new.benchmark,
+        scenario: new.scenario,
+        variants: &[],
+        max_cost_usd: new.max_cost_usd,
+        connection: s.connection,
+    }
+}
+
 impl Store {
     /// Stores a new experiment and one suite per setup (the task `runs` times in the scenario):
     /// the experiment and its suites in setup order.
@@ -85,17 +103,7 @@ impl Store {
         let tasks = [new.task.to_string()];
         let mut suites = vec![];
         for (ord, s) in (0..).zip(new.setups) {
-            let suite = NewSuite {
-                name: s.name,
-                team: s.team,
-                tasks: &tasks,
-                repeats: new.runs,
-                runner: s.runner,
-                benchmark: new.benchmark,
-                scenario: new.scenario,
-                variants: &[],
-                max_cost_usd: new.max_cost_usd,
-            };
+            let suite = suite_of(&new, s, &tasks);
             let of = SetupOf {
                 experiment: &id,
                 ord,

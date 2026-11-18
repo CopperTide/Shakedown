@@ -12,7 +12,7 @@ use super::{Slot, Suite};
 use crate::{
     app::AppState,
     external::{self, Started},
-    model::BranchStatus,
+    model::{BranchStatus, Rules, Runner},
     runner,
 };
 
@@ -116,7 +116,8 @@ pub async fn claim_external(state: &AppState, suite: &Suite) -> Result<Option<Ex
         return Ok(None);
     };
     let scenario = suite.scenario_of(&slot);
-    match external::start(state, &slot.task_id, suite.team.clone(), scenario).await {
+    let rules = Rules::new(Runner::External);
+    match external::start(state, &slot.task_id, suite.team.clone(), scenario, rules).await {
         Ok(started) => {
             let (run, branch) = (&started.run_id, &started.branch_id);
             state

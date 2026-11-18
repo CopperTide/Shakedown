@@ -82,31 +82,46 @@ fn thinking(text: &str) -> Option<ReasoningItem> {
 /// the provider's own (Anthropic-shape) response. Redacted thinking is never kept. Then what the
 /// model says alongside its tool calls, as steps.
 pub fn from_chat_response(canonical: &Value, provider_raw: Option<&Value>) -> Vec<ReasoningItem> {
-    let mut out = vec![];
-    for choice in canonical["choices"].as_array().into_iter().flatten() {
-        let m = &choice["message"];
-        for key in ["reasoning_content", "reasoning"] {
-            out.extend(m[key].as_str().and_then(thinking));
-        }
-        for d in m["reasoning_details"].as_array().into_iter().flatten() {
-            out.extend(d["text"].as_str().or(d["summary"].as_str()).and_then(thinking));
-        }
-    }
+    let choices = || canonical["choices"].as_array().into_iter().flatten();
+    let mut out: Vec<ReasoningItem> = choices()
+        .flat_map(|c| choice_thinking(&c["message"]))
+        .collect();
     if out.is_empty() {
         let blocks = provider_raw.and_then(|r| r["content"].as_array());
-        for b in blocks.into_iter().flatten() {
-            if b["type"] == "thinking" {
-                out.extend(b["thinking"].as_str().and_then(thinking));
-            }
-        }
+        let thought = blocks
+            .into_iter()
+            .flatten()
+            .filter(|b| b["type"] == "thinking");
+        out.extend(thought.filter_map(|b| b["thinking"].as_str().and_then(thinking)));
     }
-    for choice in canonical["choices"].as_array().into_iter().flatten() {
-        let m = &choice["message"];
-        let calls = m["tool_calls"].as_array().is_some_and(|c| !c.is_empty());
-        let said = m["content"].as_str().filter(|t| calls && !t.trim().is_empty());
-        out.extend(said.map(|t| ReasoningItem::new(t, ReasoningKind::Step)));
+    out.extend(choices().filter_map(|c| words_with_calls(&c["message"])));
+    out
+}
+
+/// A chat-completions message's thinking: `reasoning_content`, `reasoning`, `reasoning_details`.
+fn choice_thinking(m: &Value) -> Vec<ReasoningItem> {
+    let mut out = vec![];
+    for key in ["reasoning_content", "reasoning"] {
+        out.extend(m[key].as_str().and_then(thinking));
+    }
+    for d in m["reasoning_details"].as_array().into_iter().flatten() {
+        out.extend(
+            d["text"]
+                .as_str()
+                .or(d["summary"].as_str())
+                .and_then(thinking),
+        );
     }
     out
+}
+
+/// What a message says alongside its tool calls, as a step.
+fn words_with_calls(m: &Value) -> Option<ReasoningItem> {
+    let calls = m["tool_calls"].as_array().is_some_and(|c| !c.is_empty());
+    let said = m["content"]
+        .as_str()
+        .filter(|t| calls && !t.trim().is_empty());
+    said.map(|t| ReasoningItem::new(t, ReasoningKind::Step))
 }
 
 /// The reasoning in one of Claude Code's assistant messages: its `thinking` blocks, and its `text`
@@ -141,7 +156,10 @@ pub async fn record(
         let Some(p) = payload(&item, source) else {
             continue;
         };
-        if let Err(e) = ctx.append(store, Some(agent), EventKind::Reasoning, p).await {
+        if let Err(e) = ctx
+            .append(store, Some(agent), EventKind::Reasoning, p)
+            .await
+        {
             eprintln!("branch {}: recording reasoning: {e:#}", ctx.branch_id);
         }
     }
@@ -158,7 +176,10 @@ mod tests {
     #[test]
     fn deepseek_style_reasoning_content_is_thinking() {
         let r = json!({"choices": [{"message": {"content": "hi", "reasoning_content": "r"}}]});
-        assert_eq!(texts(&from_chat_response(&r, None)), [("r", ReasoningKind::Thinking)]);
+        assert_eq!(
+            texts(&from_chat_response(&r, None)),
+            [("r", ReasoningKind::Thinking)]
+        );
     }
 
     #[test]
@@ -167,7 +188,10 @@ mod tests {
             "reasoning": "a",
             "reasoning_details": [{"type": "reasoning.text", "text": "b"}, {"summary": "c"}],
         }}]});
-        let got: Vec<_> = from_chat_response(&r, None).into_iter().map(|i| i.text).collect();
+        let got: Vec<_> = from_chat_response(&r, None)
+            .into_iter()
+            .map(|i| i.text)
+            .collect();
         assert_eq!(got, ["a", "b", "c"]);
     }
 
@@ -210,13 +234,19 @@ mod tests {
         ]});
         assert_eq!(
             texts(&from_claude_message(&m)),
-            [("plan", ReasoningKind::Thinking), ("Reserving now.", ReasoningKind::Step)]
+            [
+                ("plan", ReasoningKind::Thinking),
+                ("Reserving now.", ReasoningKind::Step)
+            ]
         );
     }
 
     #[test]
     fn blank_items_have_no_payload() {
-        assert_eq!(payload(&ReasoningItem::new(" \n", ReasoningKind::Step), "agent"), None);
+        assert_eq!(
+            payload(&ReasoningItem::new(" \n", ReasoningKind::Step), "agent"),
+            None
+        );
     }
 
     #[test]

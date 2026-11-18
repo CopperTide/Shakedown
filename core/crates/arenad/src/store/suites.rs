@@ -42,23 +42,24 @@ ALTER TABLE suite_runs ADD COLUMN IF NOT EXISTS variant integer NOT NULL DEFAULT
 ALTER TABLE suites ADD COLUMN IF NOT EXISTS experiment_id text;
 ALTER TABLE suites ADD COLUMN IF NOT EXISTS setup_ord integer;
 ALTER TABLE suites ADD COLUMN IF NOT EXISTS max_cost_usd double precision;
+ALTER TABLE suites ADD COLUMN IF NOT EXISTS connection text;
 "#;
 
 /// Built-in suites arenad was driving when it stopped get no more runs.
 pub(super) const INTERRUPT: &str = "UPDATE suites SET ended_at = now(), \
      error = 'arenad stopped before the suite finished' \
-     WHERE runner <> 'external' AND ended_at IS NULL";
+     WHERE (runner <> 'external' OR connection IS NOT NULL) AND ended_at IS NULL";
 
 pub(super) const SUITE_COLS: &str =
     "id, name, team, tasks, repeats, runner, benchmark, created_at, ended_at, error, scenario, variants, \
-     experiment_id, setup_ord, max_cost_usd";
+     experiment_id, setup_ord, max_cost_usd, connection";
 /// Inserts a suite (`$1`..`$7`, `$11` the scenario, `$12` the variants, `$14` its experiment,
-/// `$15` its place there and `$16` its runs' spend limit) and its slots (`$8`..`$10` and `$13`,
+/// `$15` its place there, `$16` its runs' spend limit and `$17` its Code connection) and its slots (`$8`..`$10` and `$13`,
 /// in arrays).
 const INSERT_SUITE: &str =
     "WITH s AS (INSERT INTO suites (id, name, team, tasks, repeats, runner, benchmark, scenario, variants,
-                                   experiment_id, setup_ord, max_cost_usd)
-                       VALUES ($1, $2, $3, $4, $5, $6, $7, $11, $12, $14, $15, $16) RETURNING id)
+                                   experiment_id, setup_ord, max_cost_usd, connection)
+                       VALUES ($1, $2, $3, $4, $5, $6, $7, $11, $12, $14, $15, $16, $17) RETURNING id)
            INSERT INTO suite_runs (suite_id, ord, task_id, repeat, variant)
            SELECT s.id, u.o, u.t, u.r, u.v
            FROM s, unnest($8::int[], $9::text[], $10::int[], $13::int[]) AS u(o, t, r, v)";
@@ -75,6 +76,8 @@ pub struct NewSuite<'a> {
     pub scenario: &'a Scenario,
     pub variants: &'a [Scenario],
     pub max_cost_usd: Option<f64>,
+    /// The Code connection whose driver runs each of the suite's runs.
+    pub connection: Option<&'a str>,
 }
 
 /// Where an experiment's setup sits: the experiment, and the setup's place in it (from 0).
@@ -132,6 +135,7 @@ pub(super) fn suite_from(r: &Row) -> Result<Suite> {
         experiment_id: r.get("experiment_id"),
         setup_ord: r.get("setup_ord"),
         max_cost_usd: r.get("max_cost_usd"),
+        connection: r.get("connection"),
     })
 }
 
@@ -163,10 +167,8 @@ impl Store {
         let id = new_id();
         let slots = slots_of(new.tasks, variant_count(new.variants), new.repeats);
         let cols = SlotColumns::of(&slots);
-        let scenario = serde_json::to_value(new.scenario)?;
-        let scenarios = serde_json::to_value(new.variants)?;
         let (experiment, ord) = (of.map(|o| o.experiment), of.map(|o| o.ord));
-        let params: [&(dyn tokio_postgres::types::ToSql + Sync); 16] = [
+        let params: [&(dyn tokio_postgres::types::ToSql + Sync); 17] = [
             &id,
             &new.name,
             &serde_json::to_value(new.team)?,
@@ -177,12 +179,13 @@ impl Store {
             &cols.ords,
             &cols.tasks,
             &cols.repeats,
-            &scenario,
-            &scenarios,
+            &serde_json::to_value(new.scenario)?,
+            &serde_json::to_value(new.variants)?,
             &cols.variants,
             &experiment,
             &ord,
             &new.max_cost_usd,
+            &new.connection,
         ];
         self.client.execute(INSERT_SUITE, &params).await?;
         self.suite(&id)

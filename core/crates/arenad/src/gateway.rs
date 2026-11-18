@@ -171,7 +171,15 @@ async fn record(
         .map_err(|e| format!("{e:#}"))?;
     let items =
         reasoning::from_chat_response(&payload.response, payload.provider_response.as_ref());
-    reasoning::record(ctx, store, agent, items, reasoning::SOURCE_GATEWAY, Some(ev.seq)).await;
+    reasoning::record(
+        ctx,
+        store,
+        agent,
+        items,
+        reasoning::SOURCE_GATEWAY,
+        Some(ev.seq),
+    )
+    .await;
     Ok(())
 }
 

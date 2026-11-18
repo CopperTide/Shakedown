@@ -146,6 +146,7 @@ async fn create(State(state): State<Arc<AppState>>, body: Bytes) -> ApiResult<Su
         scenario: &scenario,
         variants: &variants,
         max_cost_usd: super::max_cost(req.max_cost_usd)?,
+        connection: None,
     };
     let stored = state.store.create_suite(new).await?;
     if stored.runner != Runner::External {

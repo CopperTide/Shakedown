@@ -39,8 +39,11 @@ pub struct Config {
     pub agent_base: String,
     /// How long arenad waits for an `http` agent to answer a run (time paused left out).
     pub http_agent_timeout: Duration,
+    /// How long a Code connection's driver may run on after its run ended before arenad kills it.
+    pub driver_grace: Duration,
 }
 
+pub const DEFAULT_DRIVER_GRACE: Duration = Duration::from_secs(30);
 pub const DEFAULT_MAX_DB_BYTES: u64 = 5 * 1024 * 1024 * 1024;
 pub const DEFAULT_RETRY_BASE: Duration = Duration::from_secs(1);
 
@@ -68,6 +71,7 @@ impl Config {
             ),
             agent_base: std::env::var("ARENA_AGENT_BASE").unwrap_or_default(),
             http_agent_timeout: Duration::from_secs(crate::agents::CLI_TIMEOUT_SECS),
+            driver_grace: DEFAULT_DRIVER_GRACE,
         }
     }
 

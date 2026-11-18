@@ -27,6 +27,7 @@ use crate::{
 
 mod compare;
 mod connect;
+mod connections;
 mod experiments;
 mod external;
 mod flow;
@@ -64,6 +65,7 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/api/gc", post(world::gc))
         .merge(external::router())
         .merge(connect::router())
+        .merge(connections::router())
         .merge(flow::router())
         .merge(suites::router())
         .merge(experiments::router())
@@ -448,6 +450,10 @@ struct NewRun {
     /// The run's model-spend limit in USD (`crate::budget`); `ARENA_MAX_COST_USD` when absent.
     #[serde(default)]
     max_cost_usd: Option<f64>,
+    /// A Code connection: arenad launches its driver, which drives the run (`runner` is then
+    /// `external`; `chain`, the default, is taken as that).
+    #[serde(default)]
+    connection: Option<String>,
 }
 
 /// A request's spend limit: absent, or a positive number of dollars (else 400).
@@ -460,7 +466,31 @@ pub(crate) fn max_cost(asked: Option<f64>) -> Result<Option<f64>, ApiError> {
     }
 }
 
-async fn create_run(State(state): State<Arc<AppState>>, body: Bytes) -> ApiResult<Value> {
+/// `POST /api/runs` with `connection` (see `connections::create_run`).
+async fn create_code_run(
+    state: Arc<AppState>,
+    cleanup: OwnedRwLockReadGuard<()>,
+    headers: &axum::http::HeaderMap,
+    req: NewRun,
+    scenario: crate::scenario::Scenario,
+) -> ApiResult<Value> {
+    let max_cost_usd = max_cost(req.max_cost_usd)?;
+    let (task_id, team) = (req.task_id, req.team);
+    let run = connections::CodeRun {
+        task_id,
+        team,
+        scenario,
+        max_cost_usd,
+    };
+    let id = req.connection.unwrap_or_default();
+    connections::create_run(state, cleanup, headers, (&id, req.runner), run).await
+}
+
+async fn create_run(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    body: Bytes,
+) -> ApiResult<Value> {
     let cleanup = not_cleaning(&state)?;
     let mut req: NewRun = parse_body(&body)?;
     settle_providers(&mut req.team);
@@ -469,6 +499,9 @@ async fn create_run(State(state): State<Arc<AppState>>, body: Bytes) -> ApiResul
         return Err(ApiError::bad("seed must be at most 2^53 - 1"));
     }
     scenario.seed = req.seed;
+    if req.connection.is_some() {
+        return create_code_run(state, cleanup, &headers, req, scenario).await;
+    }
     if req.runner == Runner::External {
         return external::create_run(state, cleanup, req.task_id, req.team, scenario).await;
     }

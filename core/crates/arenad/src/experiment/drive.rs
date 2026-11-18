@@ -53,7 +53,11 @@ async fn next_run(state: &Arc<AppState>, id: &str, suite: &Suite) -> Result<()> 
     let Some(slot) = state.store.claim_slot(&suite.id).await? else {
         return Ok(());
     };
-    let Some(branch) = suite::start_builtin(state, suite, &slot).await? else {
+    let started = match suite.connection {
+        Some(_) => crate::driver::start_slot(state, suite, &slot).await?,
+        None => suite::start_builtin(state, suite, &slot).await?,
+    };
+    let Some(branch) = started else {
         return Ok(());
     };
     if state.store.experiment_ended(id).await? {

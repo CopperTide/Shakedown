@@ -141,6 +141,12 @@ fn only_external_runs_take_registrations() {
     })
 }
 
+/// The payloads of `agent`'s reasoning events.
+fn reasoning_of<'a>(evs: &'a [Event], agent: &str) -> Vec<&'a Value> {
+    let mine = |e: &&Event| e.kind == EventKind::Reasoning && e.agent.as_deref() == Some(agent);
+    evs.iter().filter(mine).map(|e| &e.payload).collect()
+}
+
 #[test]
 fn an_agent_reports_its_reasoning() {
     run(async {
@@ -157,17 +163,12 @@ fn an_agent_reports_its_reasoning() {
         assert_eq!(status, 200, "{v}");
         assert_eq!(v["seqs"].as_array().unwrap().len(), 2, "{v}");
         let evs = fx.events(&branch).await;
-        let said: Vec<&Value> = evs
-            .iter()
-            .filter(|e| e.kind == EventKind::Reasoning && e.agent.as_deref() == Some("a"))
-            .map(|e| &e.payload)
-            .collect();
+        let said = reasoning_of(&evs, "a");
         assert_eq!(said.len(), 2);
         let first = &said[0];
-        assert_eq!(
-            (&first["text"], &first["kind"], &first["source"]),
-            (&json!("Check stock first."), &json!("plan"), &json!("agent"))
-        );
+        let got = (&first["text"], &first["kind"], &first["source"]);
+        let (text, kind, source) = (json!("Check stock first."), json!("plan"), json!("agent"));
+        assert_eq!(got, (&text, &kind, &source));
         assert!(first.get("truncated").is_none() && first.get("model_call_seq").is_none());
         assert_eq!(said[1]["truncated"], json!(true));
         assert_eq!(said[1]["text"].as_str().unwrap().chars().count(), 32_768);
@@ -204,9 +205,14 @@ fn finish_with_an_error_ends_failed_and_scored() {
         let fx = setup("finish-error").await;
         let branch = start(&fx).await;
         register(&fx, &branch, json!({"id": "a"})).await;
-        let (status, v) = fx.finish_with(&branch, json!({"error": "driver raised X"})).await;
+        let (status, v) = fx
+            .finish_with(&branch, json!({"error": "driver raised X"}))
+            .await;
         assert_eq!(status, 200, "{v}");
-        assert_eq!((v["status"].as_str(), v["error"].as_str()), (Some("failed"), Some("driver raised X")));
+        assert_eq!(
+            (v["status"].as_str(), v["error"].as_str()),
+            (Some("failed"), Some("driver raised X"))
+        );
         let url = format!("{}/api/branches/{branch}", fx.base);
         let (_, b) = send(fx.http.get(url)).await;
         assert_eq!(b["status"], "failed", "{b}");

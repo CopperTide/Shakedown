@@ -474,7 +474,7 @@ pub fn plan_fork_with(
         at,
     };
     let rules = recorded::rules(events);
-    let mut start = planner.start_under(rules, changes, &changed)?;
+    let mut start = planner.start_under(rules.clone(), changes, &changed)?;
     let a = start.agent;
     if start.seq == planner.first_start(a).unwrap_or(i64::MIN) {
         start.resume = None;

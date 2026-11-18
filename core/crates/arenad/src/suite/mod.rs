@@ -63,6 +63,10 @@ pub struct Suite {
     /// Each run's model-spend limit in USD (`crate::budget`); None: `ARENA_MAX_COST_USD`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_cost_usd: Option<f64>,
+    /// The Code connection whose driver arenad launches for each run (`crate::driver`); the
+    /// suite's runner is then `external`, driven by arenad.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub connection: Option<String>,
 }
 
 impl Suite {

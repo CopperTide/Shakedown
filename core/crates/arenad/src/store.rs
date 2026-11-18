@@ -12,9 +12,11 @@ use crate::{
 };
 use parts::proto::Mode;
 
+mod connections;
 mod experiments;
 mod reviews;
 mod suites;
+pub use connections::{is_secret, Connection, NewConnection, REDACTED};
 pub use experiments::{NewExperiment, NewSetup};
 pub use reviews::{ReviewDone, StoredReview};
 pub use suites::NewSuite;
@@ -69,6 +71,7 @@ async fn migrate(client: &Client) -> Result<()> {
     client.batch_execute(suites::SCHEMA).await?;
     client.batch_execute(experiments::SCHEMA).await?;
     client.batch_execute(reviews::SCHEMA).await?;
+    client.batch_execute(connections::SCHEMA).await?;
     client
         .execute(
             "UPDATE branches SET status = 'interrupted', ended_at = now() WHERE status = 'running'",

@@ -48,6 +48,31 @@ export off when there is no `OPENAI_API_KEY` to send it with. The same team in e
 `sdk/python/examples/drivers/`. Run one by hand (`ARENA_URL=… python langgraph_driver.py`) and it starts a
 run of its own; see [the SDK](sdk.md#drivers) for what `run` does at the end and when the driver raises.
 
+### Code connections: Shakedown starts the driver
+
+Save the command that starts your driver once, as a **Code connection**, and Shakedown launches it for every
+run that uses it: a single run (`POST /api/runs` with `connection`), each run of an experiment setup, or a
+connection test.
+
+```bash
+curl -s localhost:4510/api/connections -H 'content-type: application/json' -d '{
+  "name": "Our LangGraph team",
+  "command": ["uv", "run", "--extra", "langgraph", "python", "examples/drivers/langgraph_driver.py"],
+  "workdir": "/path/to/sdk/python",
+  "env": {"ARENA_PROVIDER": "openai", "ARENA_MODEL": "gpt-4.1-mini"}
+}'
+```
+
+The driver gets the run's ids (`ARENA_URL`, `ARENA_RUN`, `ARENA_BRANCH`, `ARENA_TASK`, `ARENA_CONNECTION`), the
+connection's `env`, and only `PATH`, `HOME`, `USER`, `LANG`, `LC_ALL`, `TMPDIR`, `UV_CACHE_DIR`,
+`XDG_CACHE_HOME` and `RUST_LOG` of arenad's own environment: model keys stay in arenad, behind the gateway.
+If the driver exits before it finishes the run, the run is scored and ends `failed` with the exit code and the
+end of its stderr. If it is still running 30 s after its run ended, it is killed with whatever it started.
+Its exit is recorded as a `driver` world event. `POST /api/connections/{id}/test` runs the benchmark's first
+task with it (spend limit $0.50) and says whether its agents worked. Shakedown starts drivers only because it
+listens on 127.0.0.1 alone, and the routes that start one refuse requests a web page could make (anything not
+JSON, or from another origin).
+
 ## HTTP agents (`arena-agent/1`)
 
 **Run.** When the agent's turn starts, arenad sends one `POST` to its URL, with its headers:
