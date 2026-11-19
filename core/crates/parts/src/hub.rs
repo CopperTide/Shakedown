@@ -1,10 +1,10 @@
 //! Lazily started part programs, one per package, shared by every branch.
 use crate::client::Client;
 use crate::manifest::Registry;
+use crate::request;
 use anyhow::{anyhow, Result};
 use arena_part::helpers::remove_tree_or_log;
 use arena_part::proto::{valid_id, BenchDescribe, Describe};
-use serde_json::json;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -77,7 +77,7 @@ impl Hub {
         if let Some(d) = self.cached(name, &client, |s| s.describe.clone()).await {
             return Ok(d);
         }
-        let d: Describe = client.call("describe", json!({})).await?;
+        let d: Describe = client.request(&request::Describe {}).await?;
         self.store(name, &client, |s| s.describe = Some(d.clone()))
             .await;
         Ok(d)
@@ -89,7 +89,7 @@ impl Hub {
         if let Some(d) = self.cached(name, &client, |s| s.bench.clone()).await {
             return Ok(d);
         }
-        let d: BenchDescribe = client.call("describe", json!({})).await?;
+        let d: BenchDescribe = client.request(&request::Describe {}).await?;
         self.store(name, &client, |s| s.bench = Some(d.clone()))
             .await;
         Ok(d)

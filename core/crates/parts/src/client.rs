@@ -1,5 +1,6 @@
 //! A running part program and its JSON-RPC calls.
 use crate::manifest::{Manifest, Run};
+use crate::request::Request;
 use crate::run_override;
 use anyhow::{Context, Result};
 use serde::de::DeserializeOwned;
@@ -359,6 +360,19 @@ impl Client {
         self.call_within(method, params, None).await
     }
 
+    /// `request`'s method with its params; the answer read as `T`.
+    pub async fn request<T: DeserializeOwned>(&self, r: &impl Request) -> Result<T, CallError> {
+        self.call(method_of(r), params_of(r)).await
+    }
+
+    /// `request` without a deadline (see [`Client::call_until_done`]).
+    pub async fn request_until_done<T: DeserializeOwned>(
+        &self,
+        r: &impl Request,
+    ) -> Result<T, CallError> {
+        self.call_until_done(method_of(r), params_of(r)).await
+    }
+
     async fn call_within<T: DeserializeOwned>(
         &self,
         method: &str,
@@ -386,6 +400,15 @@ impl Client {
     pub fn pending_len(&self) -> usize {
         self.state.lock().unwrap().pending.len()
     }
+}
+
+fn method_of<R: Request>(_: &R) -> &'static str {
+    R::METHOD
+}
+
+/// A request's params as JSON: the same object, keys in the same order, as an untyped call sends.
+fn params_of(r: &impl Request) -> Value {
+    serde_json::to_value(r).expect("protocol params are plain data: strings, numbers and JSON")
 }
 
 /// The reply on `rx`, waiting at most `limit` (None: until the program answers or exits).
