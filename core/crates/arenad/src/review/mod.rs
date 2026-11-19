@@ -15,7 +15,6 @@ pub mod prompt;
 pub mod reviewer;
 pub mod settings;
 pub mod suites;
-mod text;
 
 use std::sync::Arc;
 

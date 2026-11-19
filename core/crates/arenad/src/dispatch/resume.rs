@@ -8,7 +8,7 @@ use std::collections::{HashMap, HashSet};
 use serde_json::Value;
 
 use super::board::{Mail, MailKind};
-use crate::{exec::said_text, model::*};
+use crate::{exec::said_text, model::*, text::cut_chars};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Resumed {
@@ -27,13 +27,6 @@ pub struct Resumed {
 
 /// The most of a tool's result or error a history quotes.
 const RESULT_CHARS: usize = 1200;
-
-fn cut(text: &str) -> String {
-    match text.char_indices().nth(RESULT_CHARS) {
-        Some((i, _)) => format!("{}… (cut)", &text[..i]),
-        None => text.to_string(),
-    }
-}
 
 fn str_of<'a>(e: &'a Event, key: &str) -> &'a str {
     e.payload.get(key).and_then(Value::as_str).unwrap_or("")
@@ -161,7 +154,11 @@ fn call_line(e: &Event) -> String {
         None => p.get("result").map_or(String::new(), Value::to_string),
     };
     let name = str_of(e, "name");
-    format!("- You called `{name}` {} → {}", p["args"], cut(&out))
+    format!(
+        "- You called `{name}` {} → {}",
+        p["args"],
+        cut_chars(&out, RESULT_CHARS)
+    )
 }
 
 /// One line of `agent`'s history for event `e`, if `e` is its own.

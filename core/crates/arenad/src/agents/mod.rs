@@ -69,14 +69,7 @@ const STDERR_TAIL: usize = 2048;
 
 /// Last `STDERR_TAIL` bytes of `s`, cut on a char boundary.
 pub(crate) fn tail(s: &str) -> &str {
-    if s.len() <= STDERR_TAIL {
-        return s;
-    }
-    let mut i = s.len() - STDERR_TAIL;
-    while !s.is_char_boundary(i) {
-        i += 1;
-    }
-    &s[i..]
+    crate::text::last_bytes(s, STDERR_TAIL)
 }
 
 fn failed(error: String, seconds: f64) -> AgentResult {

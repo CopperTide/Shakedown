@@ -226,15 +226,6 @@ fn exit_words(status: Option<ExitStatus>) -> String {
     }
 }
 
-/// The last `n` characters of `s`.
-fn last_chars(s: &str, n: usize) -> &str {
-    let count = s.chars().count();
-    match count.checked_sub(n) {
-        Some(skip) if skip > 0 => &s[s.char_indices().nth(skip).map_or(0, |(i, _)| i)..],
-        _ => s,
-    }
-}
-
 /// Records the driver's exit, and ends its run `failed` (scored) when it exited before finishing.
 async fn exited(state: &Arc<AppState>, branch: &str, status: Option<ExitStatus>, l: &Launched) {
     let words = exit_words(status);
@@ -257,7 +248,7 @@ async fn exited(state: &Arc<AppState>, branch: &str, status: Option<ExitStatus>,
         Some(c) => format!("exited with code {c}"),
         None => words.replace("exit", "exited"),
     };
-    let tail = last_chars(stderr.trim(), ERROR_TAIL_CHARS);
+    let tail = crate::text::last_chars(stderr.trim(), ERROR_TAIL_CHARS);
     let why = match tail.is_empty() {
         true => format!("the driver {how} before finishing"),
         false => format!("the driver {how} before finishing: {tail}"),
@@ -365,12 +356,5 @@ mod tests {
         let text = t.text();
         assert_eq!(text.len(), TAIL_BYTES);
         assert!(text.ends_with("aend"));
-    }
-
-    #[test]
-    fn last_chars_cuts_on_a_char_boundary() {
-        assert_eq!(last_chars("héllo", 3), "llo");
-        assert_eq!(last_chars("hi", 5), "hi");
-        assert_eq!(last_chars("ééé", 2), "éé");
     }
 }

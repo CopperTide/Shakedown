@@ -6,8 +6,8 @@ use std::collections::BTreeSet;
 
 use serde::Serialize;
 
-use super::text::one_line;
 use crate::suite::{CheckDelta, Comparison, Delta, RunRow, SuiteReport, Verdict};
+use crate::text::one_line;
 
 /// Example runs per check and outcome.
 const EXAMPLES: usize = 3;

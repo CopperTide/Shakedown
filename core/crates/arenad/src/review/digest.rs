@@ -9,7 +9,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::Serialize;
 use serde_json::Value;
 
-use super::text::{cut, cut_json, one_line};
+use crate::text::{cut, cut_json, one_line};
 use crate::{
     metrics::{metrics, Metrics},
     model::*,

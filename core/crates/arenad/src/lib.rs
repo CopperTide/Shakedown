@@ -33,6 +33,7 @@ pub mod scenario;
 pub mod secrets;
 pub mod store;
 pub mod suite;
+pub mod text;
 #[cfg(test)]
 pub(crate) mod testkit;
 pub mod ticker;

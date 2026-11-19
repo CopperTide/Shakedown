@@ -97,7 +97,7 @@ pub fn parse_claude(stdout: &str) -> Result<Answer> {
         .map_err(|_| anyhow!("unparseable claude output: {}", crate::agents::tail(stdout)))?;
     let text = v["result"].as_str().unwrap_or("");
     if v["is_error"].as_bool().unwrap_or(false) {
-        bail!("claude reported an error: {}", super::text::cut(text, 500));
+        bail!("claude reported an error: {}", crate::text::cut(text, 500));
     }
     let value = match &v["structured_output"] {
         Value::Object(_) => v["structured_output"].clone(),
@@ -146,7 +146,7 @@ async fn provider_call(
         .map_err(|e| anyhow!("{provider}: {e}"))?;
     if !(200..300).contains(&up.status) {
         let msg = up.response["error"]["message"].as_str();
-        let msg = super::text::cut(msg.unwrap_or("no message"), 300);
+        let msg = crate::text::cut(msg.unwrap_or("no message"), 300);
         bail!("{provider} answered {}: {msg}", up.status);
     }
     let text = up.response["choices"][0]["message"]["content"].as_str();

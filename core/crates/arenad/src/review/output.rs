@@ -139,7 +139,7 @@ fn object(v: Value) -> Result<Value> {
 
 fn text(v: &Value, key: &str) -> Option<String> {
     let s = v.get(key)?.as_str()?.trim();
-    (!s.is_empty()).then(|| super::text::cut(s, MAX_TEXT))
+    (!s.is_empty()).then(|| crate::text::cut(s, MAX_TEXT))
 }
 
 fn required(v: &Value, key: &str) -> Result<String> {
@@ -249,7 +249,7 @@ fn suggestion(v: &Value, c: &Citable, issues: &mut Issues) -> Option<Suggestion>
 fn texts(v: &Value, key: &str, cap: usize) -> Vec<String> {
     let s = list(v, key).iter().filter_map(Value::as_str).map(str::trim);
     let s = s.filter(|s| !s.is_empty()).take(cap);
-    s.map(|s| super::text::cut(s, MAX_TEXT)).collect()
+    s.map(|s| crate::text::cut(s, MAX_TEXT)).collect()
 }
 
 /// A run review, checked against what the branch has.

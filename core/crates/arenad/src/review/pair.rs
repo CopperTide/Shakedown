@@ -7,10 +7,8 @@ use std::collections::BTreeMap;
 use serde::Serialize;
 use serde_json::Value;
 
-use super::{
-    digest::{digest, Capped, Digest, RunRecord},
-    text::cut_json,
-};
+use super::digest::{digest, Capped, Digest, RunRecord};
+use crate::text::cut_json;
 
 /// The bound on each side's digest in a comparison.
 pub const SIDE_BYTES: usize = 26_000;
