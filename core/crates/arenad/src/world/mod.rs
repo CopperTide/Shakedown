@@ -90,20 +90,13 @@ pub enum WorldFrom {
 
 /// A failed world call. `fatal` when a program has stopped: the branch can't go on. `code` is
 /// the part's own error code when it refused the call.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, thiserror::Error)]
+#[error("{message}")]
 pub struct WorldError {
     pub message: String,
     pub fatal: bool,
     pub code: Option<i64>,
 }
-
-impl std::fmt::Display for WorldError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.message)
-    }
-}
-
-impl std::error::Error for WorldError {}
 
 impl WorldError {
     fn other(message: String) -> WorldError {
@@ -116,14 +109,9 @@ impl WorldError {
 }
 
 /// The context of a part's failed `start`: which part it was.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, thiserror::Error)]
+#[error("starting the part {0}")]
 pub struct StartingPart(pub String);
-
-impl std::fmt::Display for StartingPart {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "starting the part {}", self.0)
-    }
-}
 
 /// What a tool call gave back, and which part it ran on (None for an unknown tool).
 #[derive(Debug, Clone)]

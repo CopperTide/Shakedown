@@ -50,7 +50,7 @@ pub async fn start(
     team: Team,
     scenario: &crate::scenario::Scenario,
     rules: Rules,
-) -> anyhow::Result<Started> {
+) -> Result<Started, runner::RunError> {
     let (run_id, ctx) = runner::begin_run(state, task_id, team, rules, scenario).await?;
     let ctx = Arc::new(ctx);
     runner::go_live(state, ctx.clone()).await;

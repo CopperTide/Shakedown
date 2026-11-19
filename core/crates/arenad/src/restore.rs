@@ -35,19 +35,12 @@ impl How {
 }
 
 /// A part that can't be restored in the mode asked for.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("{reason}")]
 pub struct Refused {
     pub part: String,
     pub reason: String,
 }
-
-impl std::fmt::Display for Refused {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.reason)
-    }
-}
-
-impl std::error::Error for Refused {}
 
 /// True when the part keeps saves (exact ones, or approximate ones); a part with only replay
 /// (or nothing) is never saved.

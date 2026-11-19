@@ -98,11 +98,22 @@ impl ApiError {
 
 impl From<anyhow::Error> for ApiError {
     fn from(e: anyhow::Error) -> ApiError {
-        let status = match e.downcast_ref::<runner::UnknownTask>() {
-            Some(_) => StatusCode::NOT_FOUND,
-            None => StatusCode::INTERNAL_SERVER_ERROR,
-        };
-        ApiError(status, format!("{e:#}"))
+        ApiError(StatusCode::INTERNAL_SERVER_ERROR, format!("{e:#}"))
+    }
+}
+
+impl From<runner::RunError> for ApiError {
+    fn from(e: runner::RunError) -> ApiError {
+        match e {
+            runner::RunError::UnknownTask(_) => ApiError::not_found(e.to_string()),
+            runner::RunError::Other(e) => e.into(),
+        }
+    }
+}
+
+impl From<serde_json::Error> for ApiError {
+    fn from(e: serde_json::Error) -> ApiError {
+        anyhow::Error::from(e).into()
     }
 }
 
@@ -525,10 +536,10 @@ async fn get_branch(
     let events = state.store.events(&id).await?;
     let now = chrono::Utc::now();
     let m = metrics::metrics(&branch, &events, prices::table(), now);
-    let mut v = serde_json::to_value(branch).map_err(anyhow::Error::from)?;
+    let mut v = serde_json::to_value(branch)?;
     v["budget"] = budget_of(&state, &id, &events);
-    v["events"] = serde_json::to_value(events).map_err(anyhow::Error::from)?;
-    v["metrics"] = serde_json::to_value(m).map_err(anyhow::Error::from)?;
+    v["events"] = serde_json::to_value(events)?;
+    v["metrics"] = serde_json::to_value(m)?;
     v["paused"] = json!(flow::is_paused(&state, &id));
     Ok(Json(v))
 }

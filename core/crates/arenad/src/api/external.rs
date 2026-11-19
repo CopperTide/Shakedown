@@ -50,9 +50,7 @@ pub(super) async fn create_run(
         let _cleanup = cleanup;
         let rules = Rules::new(Runner::External);
         let started = external::start(&state, &task_id, team, &scenario, rules).await?;
-        Ok(Json(
-            serde_json::to_value(started).map_err(anyhow::Error::from)?,
-        ))
+        Ok(Json(serde_json::to_value(started)?))
     })
     .await
 }
@@ -86,10 +84,9 @@ async fn register(
         validate_agents(&state, &[join.spec()])?;
     }
     let spec = external::register(&state.store, &ctx, &join).await?;
-    let mut v = serde_json::to_value(endpoints(&state.config.self_base, &id, &spec.id))
-        .map_err(anyhow::Error::from)?;
+    let mut v = serde_json::to_value(endpoints(&state.config.self_base, &id, &spec.id))?;
     v["tools"] = json!(tool_schemas(&ctx, &spec.id));
-    v["spec"] = serde_json::to_value(&spec).map_err(anyhow::Error::from)?;
+    v["spec"] = serde_json::to_value(&spec)?;
     Ok(Json(v))
 }
 
@@ -114,7 +111,7 @@ async fn end_agent(
             "no agent \"{agent}\" on this branch"
         )));
     }
-    let end = serde_json::to_value(done.payload()).map_err(anyhow::Error::from)?;
+    let end = serde_json::to_value(done.payload())?;
     let ev = ctx.append(&state.store, Some(&agent), EventKind::AgentEnd, end);
     Ok(Json(json!({"seq": ev.await?.seq})))
 }

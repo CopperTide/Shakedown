@@ -336,3 +336,24 @@ fn a_suite_or_experiment_is_refused_in_this_order() {
         assert!(fx.state.store.suites().await.unwrap().is_empty());
     })
 }
+
+/// With room on the disk, a run of a task the benchmark lacks is 404 once it starts, built-in or
+/// external.
+#[test]
+fn an_unknown_task_is_404_once_the_run_starts() {
+    run(async {
+        let fx = AppFx::idle("precedence", "task").start().await;
+        let one = team(json!([claude()]));
+        let none = team(json!([]));
+        let external = json!({"task_id": "nope", "team": none, "runner": "external"});
+        let rows = vec![
+            (
+                json!({"task_id": "nope", "team": one}),
+                404,
+                "unknown task nope",
+            ),
+            (external, 404, "unknown task nope"),
+        ];
+        assert_cases(&fx, on("/api/runs", rows)).await;
+    })
+}

@@ -6,7 +6,6 @@ use anyhow::{Context, Result};
 use serde::de::DeserializeOwned;
 use serde_json::{json, Value};
 use std::collections::{HashMap, VecDeque};
-use std::fmt;
 use std::path::Path;
 use std::process::Stdio;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -19,29 +18,17 @@ use tokio::sync::{mpsc, oneshot};
 const STDERR_LINES: usize = 20;
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(600);
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum CallError {
     /// The part answered with a JSON-RPC error.
-    Part {
-        code: i64,
-        message: String,
-    },
+    #[error("{message} ({code})")]
+    Part { code: i64, message: String },
     /// The program is gone; carries the last 20 stderr lines.
+    #[error("stopped: {0}")]
     Stopped(String),
+    #[error("timed out")]
     Timeout,
 }
-
-impl fmt::Display for CallError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            CallError::Part { code, message } => write!(f, "{message} ({code})"),
-            CallError::Stopped(tail) => write!(f, "stopped: {tail}"),
-            CallError::Timeout => write!(f, "timed out"),
-        }
-    }
-}
-
-impl std::error::Error for CallError {}
 
 type Reply = Result<Value, CallError>;
 

@@ -122,9 +122,7 @@ fn validate(req: &NewConnectionReq) -> Result<(), ApiError> {
 async fn list(State(state): State<Arc<AppState>>) -> ApiResult<Value> {
     let all = state.store.connections().await?;
     let shown: Vec<Connection> = all.iter().map(Connection::redacted).collect();
-    Ok(Json(
-        serde_json::to_value(shown).map_err(anyhow::Error::from)?,
-    ))
+    Ok(Json(serde_json::to_value(shown)?))
 }
 
 /// `POST /api/connections`: saves a Code connection; answers it, secrets redacted.
@@ -143,9 +141,7 @@ async fn create(
         env: &req.env,
     };
     let made = state.store.create_connection(new).await?;
-    Ok(Json(
-        serde_json::to_value(made.redacted()).map_err(anyhow::Error::from)?,
-    ))
+    Ok(Json(serde_json::to_value(made.redacted())?))
 }
 
 /// `DELETE /api/connections/{id}`: 404 when there is none. Runs that used it keep its id.
@@ -211,7 +207,7 @@ pub(super) async fn start_code_run(
             fork_of: None,
         };
         let launched = driver::launch_or_fail(&state, &conn, ids).await;
-        let mut v = serde_json::to_value(&started).map_err(anyhow::Error::from)?;
+        let mut v = serde_json::to_value(&started)?;
         v["connection"] = json!(conn.id);
         v["driver"] = json!(match launched {
             Some(_) => "launched",

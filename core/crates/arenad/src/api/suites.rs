@@ -196,7 +196,7 @@ async fn claim(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> Ap
         let Some(claimed) = suite::claim_external(&state, &s).await? else {
             return Ok(Json(json!({"done": true})));
         };
-        let mut v = serde_json::to_value(claimed).map_err(anyhow::Error::from)?;
+        let mut v = serde_json::to_value(claimed)?;
         v["done"] = json!(false);
         Ok(Json(v))
     })

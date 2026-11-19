@@ -111,7 +111,10 @@ pub struct ExternalClaim {
 
 /// Claims the external suite's next slot and starts its run: None when every slot is claimed. A
 /// run that could not start is recorded on its slot, and the error returned.
-pub async fn claim_external(state: &AppState, suite: &Suite) -> Result<Option<ExternalClaim>> {
+pub async fn claim_external(
+    state: &AppState,
+    suite: &Suite,
+) -> Result<Option<ExternalClaim>, runner::RunError> {
     let Some(slot) = state.store.claim_slot(&suite.id).await? else {
         return Ok(None);
     };

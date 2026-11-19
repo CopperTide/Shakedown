@@ -26,17 +26,14 @@ fn new_seed() -> u64 {
     (uuid::Uuid::new_v4().as_u128() as u64) & ((1 << 53) - 1)
 }
 
-/// The benchmark has no task with this id.
-#[derive(Debug)]
-pub struct UnknownTask(pub String);
-
-impl std::fmt::Display for UnknownTask {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "unknown task {}", self.0)
-    }
+/// Why a run did not start: the benchmark has no such task, or something failed on the way.
+#[derive(Debug, thiserror::Error)]
+pub enum RunError {
+    #[error("unknown task {0}")]
+    UnknownTask(String),
+    #[error(transparent)]
+    Other(#[from] anyhow::Error),
 }
-
-impl std::error::Error for UnknownTask {}
 
 /// Creates a run and its first branch (its world started from the benchmark's base save),
 /// records `RunStart`, and runs the team on a spawned task, one agent after another. A world
@@ -45,7 +42,7 @@ pub async fn start_run(
     state: &Arc<AppState>,
     task_id: &str,
     team: Team,
-) -> Result<(RunId, BranchId)> {
+) -> Result<(RunId, BranchId), RunError> {
     start_run_with(state, task_id, team, Runner::Chain).await
 }
 
@@ -55,7 +52,7 @@ pub async fn start_run_with(
     task_id: &str,
     team: Team,
     runner: Runner,
-) -> Result<(RunId, BranchId)> {
+) -> Result<(RunId, BranchId), RunError> {
     start_run_in(state, task_id, team, runner, &Scenario::default()).await
 }
 
@@ -66,7 +63,7 @@ pub async fn start_run_in(
     team: Team,
     runner: Runner,
     scenario: &Scenario,
-) -> Result<(RunId, BranchId)> {
+) -> Result<(RunId, BranchId), RunError> {
     start_run_capped(state, task_id, team, runner, scenario, None).await
 }
 
@@ -78,7 +75,7 @@ pub async fn start_run_capped(
     runner: Runner,
     scenario: &Scenario,
     max_cost_usd: Option<f64>,
-) -> Result<(RunId, BranchId)> {
+) -> Result<(RunId, BranchId), RunError> {
     let rules = Rules::new(runner).with_max_cost(max_cost_usd);
     let (run_id, ctx) = begin_run(state, task_id, team, rules, scenario).await?;
     let branch_id = ctx.branch_id.clone();
@@ -95,10 +92,10 @@ pub async fn begin_run(
     team: Team,
     rules: Rules,
     scenario: &Scenario,
-) -> Result<(RunId, BranchCtx)> {
+) -> Result<(RunId, BranchCtx), RunError> {
     let bench = state.bench().await?;
     if !bench.tasks.iter().any(|t| t.id == task_id) {
-        return Err(UnknownTask(task_id.to_string()).into());
+        return Err(RunError::UnknownTask(task_id.to_string()));
     }
     let planned = world::plan(&state.hub, &bench).await?;
     let run_id = state.store.create_run(task_id, &team).await?;
