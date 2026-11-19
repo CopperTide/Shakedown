@@ -1,27 +1,27 @@
 import { Suspense, lazy, useCallback, useEffect, useState } from 'react';
 import { Navigate, Route, Routes, useParams } from 'react-router-dom';
+import ExperimentsPage from '@/features/experiments/ExperimentsPage';
 import CommandPalette, { usePaletteShortcut } from './app/CommandPalette';
 import { type Mode, PALETTE_EVENT } from './app/palette';
 import StatusBar from './app/StatusBar';
 import TopBar from './app/TopBar';
+import { PageBody, PageHeader } from './components/ui/page';
 import { EmptyState } from './components/ui/state';
 import { Toaster } from './components/ui/toaster';
 import { TooltipProvider } from './components/ui/tooltip';
-import { PageBody, PageHeader } from './components/ui/page';
-import ExperimentsPage from './experiments/ExperimentsPage';
 
 // Pages other than Experiments load on first visit (React Flow and uPlot stay out of the first load).
-const ExperimentPage = lazy(() => import('./experiments/ExperimentPage'));
-const ExperimentsCompare = lazy(() => import('./experiments/ExperimentPage').then((m) => ({ default: m.ComparePage })));
-const NewExperimentPage = lazy(() => import('./experiments/NewExperimentPage'));
-const Home = lazy(() => import('./pages/Home'));
-const ProcessPage = lazy(() => import('./control/ProcessPage'));
-const Compare = lazy(() => import('./pages/Compare'));
-const ConnectPage = lazy(() => import('./connect/ConnectPage'));
-const Run = lazy(() => import('./pages/Run'));
-const Runs = lazy(() => import('./pages/Runs'));
-const Team = lazy(() => import('./pages/Team'));
-const World = lazy(() => import('./pages/World'));
+const ExperimentPage = lazy(() => import('@/features/experiments/ExperimentPage'));
+const ExperimentsCompare = lazy(() => import('@/features/experiments/ExperimentPage').then((m) => ({ default: m.ComparePage })));
+const NewExperimentPage = lazy(() => import('@/features/experiments/NewExperimentPage'));
+const Home = lazy(() => import('@/features/start/StartPage'));
+const ProcessPage = lazy(() => import('@/features/process/ProcessPage'));
+const Compare = lazy(() => import('@/features/compare/ComparePage'));
+const ConnectPage = lazy(() => import('@/features/connect/ConnectPage'));
+const Run = lazy(() => import('@/features/run/RunPage'));
+const Runs = lazy(() => import('@/features/runs/RunsPage'));
+const Team = lazy(() => import('@/features/team/TeamPage'));
+const World = lazy(() => import('@/features/world/WorldPage'));
 
 function NotFound() {
   return (

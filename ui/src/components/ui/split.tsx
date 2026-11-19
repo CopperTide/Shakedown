@@ -1,6 +1,6 @@
 import { type KeyboardEvent, type PointerEvent, type ReactNode, useRef, useState } from 'react';
-import { type Limits, clampWidth, nudge, readWidth, storeWidth } from '@/lib/split';
 import { cn } from '@/lib/cn';
+import { type Limits, clampWidth, nudge, readWidth, storeWidth } from '@/lib/split';
 
 /** The side panel's width and the handlers of the drag handle. */
 function useSideWidth(storageKey: string, initial: number, limits: Limits) {

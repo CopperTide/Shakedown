@@ -1,0 +1,31 @@
+import { useEffect, useRef } from 'react';
+import { recording } from '@/api/branches';
+import { Panel } from '@/components/ui/panel';
+import { useQuery } from '@/hooks/useQuery';
+import type { Event } from '@/model/types';
+import { arenaSecondAt, clockText } from './recording';
+
+/** "Plant (Isaac Sim)": the branch's recorded plant, held at the arena second of the step on screen. Nothing when the
+ *  branch has no recording. Its own controls play on from there. */
+export default function PlantVideo({ branchId, events, step }: { branchId: string; events: Event[]; step: number | null }) {
+  const { data: rec } = useQuery(branchId, () => recording(branchId), { keepPrevious: true });
+  const ref = useRef<HTMLVideoElement>(null);
+  const t = arenaSecondAt(events, step);
+  useEffect(() => {
+    const v = ref.current;
+    if (!v || t == null) return;
+    const seek = () => { v.pause(); v.currentTime = Math.min(t, Number.isFinite(v.duration) ? v.duration : t); };
+    if (v.readyState >= 1) seek(); else v.addEventListener('loadedmetadata', seek, { once: true });
+  }, [t, rec]);
+  if (!rec?.video) return null;
+  const inherited = rec.of && rec.of !== branchId ? ' (recorded on the branch it was forked from)' : '';
+  return (
+    <Panel className="p-2.5" aria-label="Plant (Isaac Sim)">
+      <div className="mb-1.5 flex items-baseline justify-between text-xs text-muted-foreground">
+        <span className="font-medium text-foreground">Plant (Isaac Sim)</span>
+        <span>{t == null ? 'Shakedown time unknown' : `Shakedown ${clockText(t)}`}{inherited}</span>
+      </div>
+      <video ref={ref} src={rec.video} controls muted playsInline preload="metadata" className="mx-auto block max-h-[46vh] w-auto max-w-full rounded bg-black" />
+    </Panel>
+  );
+}

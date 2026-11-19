@@ -1,14 +1,15 @@
 // The command palette's model: what it lists in each mode and what picking an item does.
-import { branchTree } from '../runs/tree';
-import type { ListedExperiment } from '../experiments/types';
-import type { BranchStatus, RunSummary } from '../types';
+import { branchTree } from '@/features/runs/tree';
+import { path } from '@/lib/url';
+import type { ListedExperiment } from '@/model/experiment';
+import type { BranchStatus, RunSummary } from '@/model/types';
 
 export type Mode =
   | { kind: 'root' }
   | { kind: 'compare-runs'; first: string | null }
   | { kind: 'world' };
 
-export type Action = { go: string } | { mode: Mode } | { theme: true };
+export type PaletteAction = { go: string } | { mode: Mode } | { theme: true };
 
 export interface Item {
   id: string;
@@ -17,7 +18,7 @@ export interface Item {
   hint?: string;
   /** Extra words the filter matches (ids, task, status). */
   keywords: string[];
-  action: Action;
+  action: PaletteAction;
 }
 
 const FINISHED: BranchStatus[] = ['passed', 'failed'];
@@ -41,7 +42,7 @@ function actions(): Item[] {
 }
 
 /** Every branch of every run, newest run first, each opening its run page. */
-export function runItems(runs: RunSummary[], group = 'Runs', pick?: (branchId: string, runId: string) => Action, only?: BranchStatus[]): Item[] {
+export function runItems(runs: RunSummary[], group = 'Runs', pick?: (branchId: string, runId: string) => PaletteAction, only?: BranchStatus[]): Item[] {
   return runs.flatMap((r) => branchTree(r.branches)
     .filter(({ branch: b }) => !only || only.includes(b.status))
     .map(({ branch: b, depth }) => ({
@@ -76,7 +77,7 @@ export function hereOf(pathname: string, search = ''): Here {
 /** The deeper views of the run on screen: its world view, all its details (event log, trace, deployment estimate), its process view. */
 export function hereItems(here: Here): Item[] {
   if (!here) return [];
-  const at = `${encodeURIComponent(here.runId)}/${encodeURIComponent(here.branchId)}`;
+  const at = path`${here.runId}/${here.branchId}`;
   const item = (page: string, label: string, keywords: string[]): Item[] => (here.page === page ? [] : [{
     id: `${page}-here`, group: 'This run', label, keywords, action: { go: `/${page}/${at}` },
   }]);
@@ -92,7 +93,7 @@ export function itemsFor(mode: Mode, runs: RunSummary[], experiments: ListedExpe
   if (mode.kind === 'root') return [...hereItems(here), ...pages(), ...actions(), ...experimentItems(experiments), ...runItems(runs)];
   if (mode.kind === 'world') return runItems(runs, 'World view of', (id, run) => ({ go: `/world/${run}/${id}` }));
   const first = mode.first;
-  const pick = (id: string): Action => (first ? { go: `/compare/${first}/${id}` } : { mode: { kind: 'compare-runs', first: id } });
+  const pick = (id: string): PaletteAction => (first ? { go: `/compare/${first}/${id}` } : { mode: { kind: 'compare-runs', first: id } });
   return runItems(runs, first ? 'Compare with' : 'First run', pick, FINISHED).filter((i) => i.id !== `branch-${first}`);
 }
 

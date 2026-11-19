@@ -1,0 +1,128 @@
+// Mirrors arenad's suite/ (report.rs, outcome.rs) and world/systems.rs (serde snake_case).
+import type { RecordedScenario } from './scenario';
+import type { BranchStatus, NamedCheck, Runner, Team } from './types';
+
+/** What kind of system a part is (`describe.system`); absent when its integration does not say. */
+export interface SystemInfo {
+  kind: string;
+  product: string;
+  stands_in_for?: string;
+  simulated?: boolean;
+}
+
+export type Effect = 'read' | 'write';
+
+/** A tool of the world as `run_start.tools` records it; a benchmark's own tool has no fixed part. */
+export interface ToolInfo {
+  effect: Effect;
+  part?: string;
+}
+
+export interface RunOutcome {
+  status: BranchStatus;
+  error: string | null;
+  checks: NamedCheck[];
+  scored: boolean;
+  checks_passed: number;
+  checks_total: number;
+  safety_violations: number;
+  /** Tool calls the world refused or denied (a limit, a gate, a decision right). */
+  denials: number;
+  /** Flags raised for a human: approval requests and escalations. */
+  flags: number;
+  measured_s: number;
+  estimated_s: number | null;
+  tokens: number;
+  cost_usd: number | null;
+  peak_context: number | null;
+}
+
+/** `pending`, `starting`, `error` (could not start), `missing` (run deleted), or the branch's status. */
+export type RunRowStatus = BranchStatus | 'pending' | 'starting' | 'error' | 'missing';
+
+export interface RunRow {
+  task_id: string;
+  /** Which of the suite's scenarios (`variants`) the run started in; 0 without them. */
+  variant?: number;
+  repeat: number;
+  run_id: string | null;
+  branch_id: string | null;
+  status: RunRowStatus;
+  error: string | null;
+  outcome: RunOutcome | null;
+}
+
+export interface CheckRate {
+  task_id: string;
+  name: string;
+  safety: boolean;
+  passed: number;
+  runs: number;
+  pass_rate: number;
+}
+
+export interface Spread {
+  n: number;
+  unknown: number;
+  min: number | null;
+  max: number | null;
+  mean: number | null;
+}
+
+export interface Figures {
+  checks_passed: Spread;
+  measured_s: Spread;
+  estimated_s: Spread;
+  tokens: Spread;
+  cost_usd: Spread;
+  peak_context: Spread;
+}
+
+export interface Summary extends Figures {
+  runs: number;
+  ended: number;
+  scored: number;
+  unscored: number;
+  passed: number;
+  pass_rate: number | null;
+  score: number | null;
+  safety_violations: number;
+  runs_with_violation: number;
+  denials: number;
+  flags: number;
+  runs_with_denial: number;
+  runs_with_flag: number;
+}
+
+export interface TaskSpread extends Figures {
+  task_id: string;
+  runs: number;
+}
+
+export type ExperimentStatus = 'running' | 'finished' | 'stopped';
+
+/** One setup of an experiment as arenad stores it (a suite: `suite/`): its team, tasks and runs per task. */
+export interface StoredSetup {
+  id: string;
+  name: string;
+  team: Team;
+  tasks: string[];
+  repeats: number;
+  runner: Runner;
+  benchmark: string;
+  created_at: string;
+  ended_at: string | null;
+  error: string | null;
+  /** The disruptions every run starts with, as arenad expanded them. */
+  scenario?: RecordedScenario;
+}
+
+/** A setup's report (arenad's suite report): its runs, check rates and figures. */
+export interface SetupReport extends StoredSetup {
+  status: ExperimentStatus;
+  finished_s: number | null;
+  runs: RunRow[];
+  checks: CheckRate[];
+  summary: Summary;
+  spread: TaskSpread[];
+}

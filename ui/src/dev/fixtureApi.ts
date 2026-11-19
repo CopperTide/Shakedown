@@ -1,9 +1,9 @@
 // Dev only: answers /api with the pharma fixtures, so the real pages (world view, run page,
 // compare, Run once and New experiment) render without arenad. Bundled only when the build
 // sets VITE_ARENA_FIXTURES=1 (see main.tsx); never in a normal build.
-import { scenarioOptions } from '../scenario/fixtures';
-import type { Health } from '../types';
-import { comparison, runs, team, v1Detail, v2Detail, views } from '../world/fixtures';
+import { scenarioOptions } from '@/features/scenario/fixtures';
+import { comparison, runs, team, v1Detail, v2Detail, views } from '@/features/world/fixtures';
+import type { Health } from '@/model/types';
 
 const branches = { [v1Detail.id]: v1Detail, [v2Detail.id]: v2Detail };
 
