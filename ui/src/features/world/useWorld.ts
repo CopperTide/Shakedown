@@ -1,8 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { views as fetchViews } from '@/api/branches';
-import { errorMessage } from '@/lib/errors';
+import { useQuery } from '@/hooks/useQuery';
 import { hasModifier, isTyping, navOf } from '@/lib/keys';
-import type { BranchView } from '@/model/twin';
 import type { BranchDetail } from '@/model/types';
 import { moveStop, snapStop } from './scrub';
 import { normalizeViews, viewsFromEvents } from './twin';
@@ -12,16 +11,9 @@ import { normalizeViews, viewsFromEvents } from './twin';
  * live run records steps; the views in its own events when the endpoint fails or is missing.
  */
 export function useViews(branchId: string, detail: BranchDetail | null) {
-  const [raw, setRaw] = useState<BranchView[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const count = detail?.events.length ?? 0;
-  useEffect(() => {
-    let alive = true;
-    fetchViews(branchId)
-      .then((v) => { if (alive) { setRaw(v); setError(null); } })
-      .catch((e) => { if (alive) { setRaw(null); setError(errorMessage(e)); } });
-    return () => { alive = false; };
-  }, [branchId, count]);
+  // Each new step reads the views again; the last ones stay on screen meanwhile.
+  const { data: raw, error } = useQuery(`${branchId}@${count}`, () => fetchViews(branchId), { keepPrevious: true });
   const views = useMemo(() => {
     if (!detail) return [];
     return raw ? normalizeViews(raw) : viewsFromEvents(detail.events);
