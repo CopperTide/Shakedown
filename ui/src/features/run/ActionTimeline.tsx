@@ -1,9 +1,9 @@
 import { Minus, MoreHorizontal, Plus, Radio } from 'lucide-react';
 import { type CSSProperties, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { CHECK_LANE, type LaneRow, type Span, type TimelineMark, WORLD_LANE } from '@/model/lanes';
-import { Button } from '../components/ui/button';
-import { Checkbox } from '../components/ui/input';
-import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/input';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/cn';
 import { agentModelLine } from '@/model/providers';
 import type { Team } from '@/model/types';

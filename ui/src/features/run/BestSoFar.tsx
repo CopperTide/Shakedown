@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Panel, PanelHeader } from '../components/ui/panel';
+import { Panel, PanelHeader } from '@/components/ui/panel';
 import { type Candidate, type Study, objectiveText, ticks } from './candidates';
 
 const H = 184;

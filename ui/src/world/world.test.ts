@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { parseStep, withStep } from '../run/useStepParam';
+import { parseStep, withStep } from '@/features/run/useStepParam';
 import { drivenLine, stepHeadline, worldState } from './page';
-import { swapChanges, forkChoiceOf, singleTeam, teamSwapProblem, ARCHITECTURES } from '../run/architecture';
+import { swapChanges, forkChoiceOf, singleTeam, teamSwapProblem, ARCHITECTURES } from '@/features/run/architecture';
 import { withRules } from '@/model/team';
 import type { Event } from '@/model/types';
 import { FORK_SEQ, V1, baseView, team, v1Detail, v2Detail, views } from './fixtures';

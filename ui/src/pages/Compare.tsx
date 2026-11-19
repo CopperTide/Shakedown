@@ -19,8 +19,8 @@ import { StepLabel } from '../components/ui/step-label';
 import { cn } from '@/lib/cn';
 import { agentModelLine, costIsUnknown, teamProviders } from '@/model/providers';
 import { APPROXIMATE_NOTE, isApproximate, notComparedLine } from '@/model/restore';
-import { pretty } from '../run/Inspector';
-import { diffCounts, formatCost, jsonDiff } from '../run/timeline';
+import { pretty } from '@/features/run/Inspector';
+import { diffCounts, formatCost, jsonDiff } from '@/features/run/timeline';
 import type { BranchDetail, CompareResponse, CompareSide, Event, RowDiff, Team } from '@/model/types';
 import { errorMessage } from '@/lib/errors';
 

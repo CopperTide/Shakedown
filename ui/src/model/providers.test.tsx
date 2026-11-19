@@ -6,8 +6,8 @@ import { ProviderSelect, ProviderStatusLine } from '@/ProviderFields';
 import { agentModelLine, modelProblem, providerOptions, providerSummary } from './providers';
 import { bestProviders, checkProviders, resetProviders } from '@/hooks/useProviders';
 import { AgentFields } from '@/pages/Team';
-import { AgentEdit, applied, forkProblem } from '@/run/ForkPanel';
-import { changedFields, formatCost } from '@/run/timeline';
+import { AgentEdit, applied, forkProblem } from '@/features/run/ForkPanel';
+import { changedFields, formatCost } from '@/features/run/timeline';
 import { teamForRun } from './team';
 import type { AgentSpec, ProviderStatus } from './types';
 

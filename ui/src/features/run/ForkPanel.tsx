@@ -4,10 +4,10 @@ import { ARCHITECTURES, type ForkChoice, architectureOf, singleTeam, swapChanges
 import { fork } from '@/api';
 import { changedFields } from './timeline';
 import { RestoreChoice, blockedReason, useRestorePlan } from './RestoreChoice';
-import { ModelHint, ModelInput, ProviderSelect } from '../ProviderFields';
-import { Button } from '../components/ui/button';
-import { Field, NativeSelect, Textarea } from '../components/ui/input';
-import { ErrorState } from '../components/ui/state';
+import { ModelHint, ModelInput, ProviderSelect } from '@/ProviderFields';
+import { Button } from '@/components/ui/button';
+import { Field, NativeSelect, Textarea } from '@/components/ui/input';
+import { ErrorState } from '@/components/ui/state';
 import { MODE_LABEL, modelProblem, providerId, providerOf } from '@/model/providers';
 import { useProviderList } from '@/hooks/useProviders';
 import type { AgentKind, AgentSpec, BranchDetail, Change, ForkResponse, ProviderStatus, RestoreMode, Team } from '@/model/types';

@@ -1,10 +1,10 @@
 import { type ReactElement, useEffect, useState } from 'react';
 import { rows } from '@/api';
-import { Button } from '../components/ui/button';
-import { CodeBlock } from '../components/ui/code-block';
-import { StatusMark, Tag } from '../components/ui/status';
-import { EmptyState, ErrorState } from '../components/ui/state';
-import { StepLabel } from '../components/ui/step-label';
+import { Button } from '@/components/ui/button';
+import { CodeBlock } from '@/components/ui/code-block';
+import { StatusMark, Tag } from '@/components/ui/status';
+import { EmptyState, ErrorState } from '@/components/ui/state';
+import { StepLabel } from '@/components/ui/step-label';
 import { actionWord, classify, systemLine, worldInfo } from '@/model/actions';
 import { reasoningWord, wakeWord } from '@/model/lanes';
 import { missingPermit, permitOf } from '@/model/permit';

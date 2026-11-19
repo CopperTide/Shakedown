@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from 'react';
 import { Panel } from '../components/ui/panel';
-import { useStepParam } from '../run/useStepParam';
+import { useStepParam } from '@/features/run/useStepParam';
 import type { BranchDetail } from '@/model/types';
 import KpiStrip from './KpiStrip';
 import PlantVideo from './PlantVideo';
