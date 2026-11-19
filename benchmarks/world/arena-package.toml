@@ -2,5 +2,5 @@ kind = "builder"
 name = "world-builder"
 version = "0.1.0"
 protocol = 1
-run = { command = ["uv", "run", "--project", ".", "python", "-m", "worldbench.builder"] }
+run = { command = ["uv", "run", "--project", ".", "python", "-m", "worldbench.builder", "--templates", "library"] }
 needs = { gpu_vram_gb = 0, services = [] }

@@ -115,3 +115,15 @@ def test_the_program_answers_templates_over_the_line_protocol(fixtures, tmp_path
                           text=True, input='{"jsonrpc":"2.0","id":1,"method":"templates"}\n', timeout=30)
     ids = [t["id"] for t in json.loads(proc.stdout.splitlines()[0])["result"]]
     assert ids == ["bad-include", "bad-placeholder", "shop"]
+
+
+def test_the_program_adds_the_template_roots_its_command_names(fixtures, tmp_path):
+    import os
+    import subprocess
+    import sys
+    env = {k: v for k, v in os.environ.items() if k != "ARENA_TEMPLATES"}
+    proc = subprocess.run([sys.executable, "-m", "worldbench.builder", "--templates", str(fixtures)], cwd=tmp_path,
+                          env=env, capture_output=True, text=True,
+                          input='{"jsonrpc":"2.0","id":1,"method":"templates"}\n', timeout=30)
+    ids = [t["id"] for t in json.loads(proc.stdout.splitlines()[0])["result"]]
+    assert ids == ["bad-include", "bad-placeholder", "shop"]

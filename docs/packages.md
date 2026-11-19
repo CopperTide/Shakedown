@@ -82,8 +82,9 @@ copies under `files/`. Its program is the same Python package run as `python -m 
 which serves the world and scores each task by its checks (`arena_part.expect`).
 
 - `kind = "builder"`: the package arenad asks for templates, previews and builds.
-- `ARENA_TEMPLATES`: `:`-separated folders of more templates (each `<id>/template.yaml`), beside the builder's own
-  `templates/`.
+- Templates: the ones shipped with the builder are in `benchmarks/world/library/` (its manifest passes
+  `--templates library`; `small-manufacturer`, see its README), beside its own `templates/` (none yet).
+- `ARENA_TEMPLATES`: `:`-separated folders of more templates (each `<id>/template.yaml`).
 - `ARENA_WORLDS`: where built worlds are written (default `<arena>/core/worlds`, git-ignored), scanned at start like
   `ARENA_PACKAGES`. A built world's command names `${ARENA_DIR}`, the arena folder.
 

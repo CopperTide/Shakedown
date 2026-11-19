@@ -1,6 +1,8 @@
 """The world builder program: `templates`, `template`, `preview` and `generate` over the line protocol
-(docs/protocol.md, "Builder calls"). Templates come from the package's own `templates/` and the `:`-separated
-`ARENA_TEMPLATES` roots."""
+(docs/protocol.md, "Builder calls"). Templates come from the package's own `templates/`, the roots its command
+names (`--templates DIR`, repeatable; the manifest names `library`, the templates shipped with it) and the
+`:`-separated `ARENA_TEMPLATES` roots."""
+import argparse
 import os
 from pathlib import Path
 
@@ -22,9 +24,9 @@ class Builder:
         self.roots = list(roots)
 
     @classmethod
-    def from_env(cls) -> "Builder":
+    def from_env(cls, named: tuple = ()) -> "Builder":
         extra = [Path(p) for p in os.environ.get("ARENA_TEMPLATES", "").split(":") if p]
-        return cls([PACKAGE_TEMPLATES, *extra])
+        return cls([PACKAGE_TEMPLATES, *map(Path, named), *extra])
 
     def find(self, id: str) -> Template:
         found = next((t for t in list_templates(self.roots) if t.id == id), None)
@@ -72,7 +74,9 @@ def dispatch(builder: Builder, method: str, params):
 
 
 def main() -> None:
-    serve(Builder.from_env(), dispatch_fn=dispatch)
+    args = argparse.ArgumentParser(prog="worldbench.builder")
+    args.add_argument("--templates", action="append", default=[], help="a folder of templates (repeatable)")
+    serve(Builder.from_env(tuple(args.parse_args().templates)), dispatch_fn=dispatch)
 
 
 if __name__ == "__main__":

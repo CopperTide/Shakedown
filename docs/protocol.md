@@ -355,8 +355,8 @@ tools, so a benchmark that wants them counted follows this convention:
 ## Builder calls
 
 A world builder (a package of `kind = "builder"`, `benchmarks/world`) speaks the same transport and answers four
-calls over its templates (its own `templates/` and the `:`-separated `ARENA_TEMPLATES` roots, read again on every
-call). `choices` is what the builder's UI sends, every field optional: `{seed, company: {name}, size, systems,
+calls over its templates (its own `templates/`, the folders its command names with `--templates`, and the
+`:`-separated `ARENA_TEMPLATES` roots, read again on every call). `choices` is what the builder's UI sends, every field optional: `{seed, company: {name}, size, systems,
 options: {system: {name: value}}, people: {counts: {role: n}, edits: {id: {name}}, added: [{name, role}], removed:
 [id]}, events: {id: {on, params}}}`. A problem is `{path, message}`.
 
