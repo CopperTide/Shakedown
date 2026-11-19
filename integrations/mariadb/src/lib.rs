@@ -11,11 +11,10 @@ mod settings;
 mod sql;
 mod views;
 
-use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Mutex;
 
 use arena_part::helpers::busy::BusySet;
+use arena_part::helpers::instances::Registry;
 use arena_part::helpers::mariadb::{percent_encode, Dumps, DEFAULT_REROOT_AFTER, IMAGE};
 use arena_part::helpers::save_dirs::SaveDirs;
 use arena_part::proto::*;
@@ -34,7 +33,7 @@ pub struct Mariadb {
     /// `arena-mariadb --sql-tools`: list and serve `sql_query` and `sql_execute`.
     sql_tools: bool,
     servers: Servers,
-    live: Mutex<HashMap<String, Instance>>,
+    live: Registry<Instance>,
     /// Databases being built (starts) or read (saves for `inspect` and `diff`).
     busy: BusySet,
     /// Dumps, and the gate held while a dump is made and while unused dumps are removed.
@@ -61,7 +60,7 @@ impl Mariadb {
             dirs,
             sql_tools: false,
             servers: Servers::default(),
-            live: Mutex::new(HashMap::new()),
+            live: Registry::default(),
             busy: BusySet::default(),
             reroot_after: DEFAULT_REROOT_AFTER,
         }

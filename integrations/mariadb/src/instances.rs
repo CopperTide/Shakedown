@@ -61,8 +61,7 @@ impl Built {
 
 impl Mariadb {
     pub(crate) fn instance(&self, id: &str) -> Result<Instance, PartError> {
-        let live = self.live.lock().expect("instances lock");
-        let found = live.get(id).cloned();
+        let found = self.live.get(id);
         found.ok_or_else(|| PartError::unknown_instance(id))
     }
 
@@ -82,10 +81,7 @@ impl Mariadb {
             }
         };
         let inst = built.into_instance(server, server_ref, db, settings.dump_after_bytes);
-        self.live
-            .lock()
-            .expect("instances lock")
-            .insert(p.instance, inst);
+        self.live.insert(p.instance, inst);
         Ok(())
     }
 
@@ -113,7 +109,7 @@ impl Mariadb {
     }
 
     pub(crate) async fn stop_instance(&self, id: &str) -> Result<(), PartError> {
-        let inst = self.live.lock().expect("instances lock").remove(id);
+        let inst = self.live.remove(id);
         let Some(i) = inst else {
             return Ok(());
         };

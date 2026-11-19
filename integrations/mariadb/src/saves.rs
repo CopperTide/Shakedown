@@ -47,9 +47,7 @@ impl Mariadb {
 
     /// Applies `f` to the live instance's tracking (nothing when it has stopped since).
     fn update_tracked(&self, id: &str, f: impl FnOnce(&mut Tracked)) {
-        if let Some(live) = self.live.lock().expect("instances lock").get_mut(id) {
-            f(&mut live.tracked);
-        }
+        self.live.update(id, |live| f(&mut live.tracked));
     }
 
     /// Removes dumps no save and no live instance needs; returns the bytes freed.
@@ -57,7 +55,7 @@ impl Mariadb {
         self.dumps
             .remove_unused(|| {
                 let saves = self.manifests()?;
-                let live = self.live.lock().expect("instances lock");
+                let live = self.live.lock();
                 Ok(used_roots(&saves, live.values().map(|i| &i.tracked.base)))
             })
             .await

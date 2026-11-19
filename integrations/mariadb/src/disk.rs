@@ -121,7 +121,7 @@ impl Mariadb {
     /// accounts of either.
     fn busy_dbs(&self) -> HashSet<String> {
         let mut busy = self.busy.snapshot();
-        let live = self.live.lock().expect("instances lock");
+        let live = self.live.lock();
         busy.extend(live.values().map(|i| i.tracked.db.clone()));
         busy
     }
@@ -152,7 +152,7 @@ impl Mariadb {
 
     /// The binlog positions on the server `here` that a save or a live instance still needs.
     fn needed(&self, here: &ServerRef, saves: &[(String, Manifest)]) -> Vec<Position> {
-        let live = self.live.lock().expect("instances lock");
+        let live = self.live.lock();
         let on_here = live.values().filter(|i| &i.server_ref == here);
         needed_positions(here, saves, on_here.map(|i| &i.tracked))
     }
