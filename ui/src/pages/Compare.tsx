@@ -7,7 +7,7 @@ import { ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import WhatMatters from '../review/WhatMatters';
 import { stepHref } from '../review/present';
-import { normalizeViews } from '../world/twin';
+import { normalizeViews } from '@/features/world/twin';
 import type { BranchView, TwinView } from '@/model/twin';
 import { ApproximateMark, StatusChip } from '@/components/marks';
 import { PageBody, PageHeader } from '../components/ui/page';

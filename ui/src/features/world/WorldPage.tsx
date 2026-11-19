@@ -1,16 +1,16 @@
 import { useParams } from 'react-router-dom';
 import { StatusChip } from '@/components/marks';
-import { PageBody, PageHeader } from '../components/ui/page';
-import { Panel } from '../components/ui/panel';
+import { PageBody, PageHeader } from '@/components/ui/page';
+import { Panel } from '@/components/ui/panel';
 import RunMenu from '@/features/run/RunMenu';
-import { EmptyState, ErrorState, LoadingState } from '../components/ui/state';
+import { EmptyState, ErrorState, LoadingState } from '@/components/ui/state';
 import { useBranch } from '@/features/run/useBranch';
-import { recordedLine } from '../scenario/scenario';
+import { recordedLine } from '@/scenario/scenario';
 import type { BranchDetail, RunStartPayload } from '@/model/types';
-import { drivenLine } from '../world/page';
-import TwinView, { useWorldView } from '../world/TwinView';
+import { drivenLine } from './page';
+import TwinView, { useWorldView } from './TwinView';
 import type { BranchView } from '@/model/twin';
-import { useViews } from '../world/useWorld';
+import { useViews } from './useWorld';
 import { taskOf } from '@/features/run/runStats';
 
 /** The twin's title and the run's status; the task, the disruption and the rest are its tooltip, the run's other views under ⋯. */

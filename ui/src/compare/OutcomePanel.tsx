@@ -3,7 +3,7 @@ import { StatusChip } from '@/components/marks';
 import { Panel } from '../components/ui/panel';
 import { cn } from '@/lib/cn';
 import type { BranchDetail } from '@/model/types';
-import type { TrackMark } from '../world/scrub';
+import type { TrackMark } from '@/features/world/scrub';
 import type { Strip } from './divergence';
 import { type Figure, type OutcomeRow, type SideInput, outcomeRows, verdict } from './outcomes';
 

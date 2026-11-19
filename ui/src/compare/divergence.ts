@@ -1,8 +1,8 @@
 // The divergence strip: both branches on one step axis, where they first diverge, where each
 // one's disruptions fired and its calls were refused.
 import type { Event } from '@/model/types';
-import { type TrackMark, trackMarks } from '../world/scrub';
-import { isViewEvent } from '../world/twin';
+import { type TrackMark, trackMarks } from '@/features/world/scrub';
+import { isViewEvent } from '@/features/world/twin';
 
 export interface StripRow {
   side: 'A' | 'B';

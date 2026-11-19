@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react';
-import { StatusMark } from '../components/ui/status';
+import { StatusMark } from '@/components/ui/status';
 import { cn } from '@/lib/cn';
 import { isIdLike, itemFactParts, itemFacts, statusMark } from './twin';
 import type { AreaKind, TwinItem } from '@/model/twin';

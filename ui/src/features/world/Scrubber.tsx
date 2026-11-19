@@ -1,6 +1,6 @@
 import { ChevronLeft, ChevronRight, Pause, Play } from 'lucide-react';
 import { type PointerEvent, useRef } from 'react';
-import { Button } from '../components/ui/button';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/cn';
 import { type Happening, type Track, type TrackMark, nearestStop, trackAt } from './scrub';
 import type { ItemChange } from './twin';

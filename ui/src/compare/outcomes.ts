@@ -3,7 +3,7 @@
 import { actionsOf } from '@/model/actions';
 import { costLabel } from '@/features/run/timeline';
 import type { BranchDetail, CompareSide, Event, NamedCheck } from '@/model/types';
-import { viewsFromEvents } from '../world/twin';
+import { viewsFromEvents } from '@/features/world/twin';
 import type { TwinView } from '@/model/twin';
 import { asRecord } from '@/lib/record';
 

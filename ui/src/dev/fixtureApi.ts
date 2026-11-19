@@ -3,7 +3,7 @@
 // sets VITE_ARENA_FIXTURES=1 (see main.tsx); never in a normal build.
 import { scenarioOptions } from '../scenario/fixtures';
 import type { Health } from '@/model/types';
-import { comparison, runs, team, v1Detail, v2Detail, views } from '../world/fixtures';
+import { comparison, runs, team, v1Detail, v2Detail, views } from '@/features/world/fixtures';
 
 const branches = { [v1Detail.id]: v1Detail, [v2Detail.id]: v2Detail };
 

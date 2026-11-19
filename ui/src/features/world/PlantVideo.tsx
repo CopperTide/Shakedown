@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Panel } from '../components/ui/panel';
+import { Panel } from '@/components/ui/panel';
 import type { Event } from '@/model/types';
 import { type Recording, arenaSecondAt, clockText, recording } from './recording';
 

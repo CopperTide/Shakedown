@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { StatusMark } from '../components/ui/status';
+import { StatusMark } from '@/components/ui/status';
 import { cn } from '@/lib/cn';
 import { type TwinLayout, type ZoneBox, fitsSideBySide, splitAreas, stableHeight, twinLayout } from './layout';
 import { TwinTile, ZoneGlyph } from './TwinTile';

@@ -4,8 +4,8 @@ import { describe, expect, it } from 'vitest';
 import ScenarioBuilder, { type ScenarioState } from '../scenario/ScenarioBuilder';
 import { scenarioOptions } from '../scenario/fixtures';
 import { initialSelection } from '../scenario/scenario';
-import { FORK_SEQ, comparison, v1Detail, v2Detail } from '../world/fixtures';
-import { TwinTile } from '../world/TwinTile';
+import { FORK_SEQ, comparison, v1Detail, v2Detail } from '@/features/world/fixtures';
+import { TwinTile } from '@/features/world/TwinTile';
 import OutcomePanel, { DivergenceStrip } from './OutcomePanel';
 import { divergenceStrip } from './divergence';
 
