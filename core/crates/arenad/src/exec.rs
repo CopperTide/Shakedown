@@ -274,8 +274,7 @@ impl BranchCtx {
             return Ok(false);
         }
         self.clock.pause();
-        self.append(store, None, EventKind::Pause, json!({}))
-            .await?;
+        self.record(store, None, &PausePayload {}).await?;
         Ok(true)
     }
 
@@ -289,8 +288,10 @@ impl BranchCtx {
         let ms = lasted.as_secs_f64() * 1000.0;
         overhead::add(&self.branch_id, Cat::Pause, ms);
         self.clock.resume();
-        let payload = json!({"paused_ms": ms.round() as i64});
-        self.append(store, None, EventKind::Resume, payload).await?;
+        let resumed = ResumePayload {
+            paused_ms: ms.round() as i64,
+        };
+        self.record(store, None, &resumed).await?;
         Ok(true)
     }
 
