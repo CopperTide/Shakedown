@@ -3,7 +3,7 @@
 //! `.tar` archives in it.
 
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use anyhow::{Context, Result};
 use arena_part::helpers::compose::Project;
@@ -29,12 +29,20 @@ pub struct Manifest {
         skip_serializing_if = "Option::is_none"
     )]
     pub helper_image: Option<String>,
-    /// The compose file and environment of the instance that made the save: how to run the
-    /// helper that reads or removes its trees once that instance is gone.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub compose_file: Option<PathBuf>,
+    /// The variables of the instance's config that steer the `docker` CLI (`PATH` and
+    /// `DOCKER_*`; see `docker_env`): how to run the helper that reads or removes its trees once
+    /// that instance is gone. No other variable (a compose file's secrets) is kept.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub env: BTreeMap<String, String>,
+}
+
+/// The variables of `env` the helper's `docker` needs: `PATH` (which `docker`) and `DOCKER_*`
+/// (which daemon).
+pub fn docker_env(env: &BTreeMap<String, String>) -> BTreeMap<String, String> {
+    let keep = |k: &String| k == "PATH" || k.starts_with("DOCKER_");
+    (env.iter().filter(|(k, _)| keep(k)))
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect()
 }
 
 impl Manifest {
@@ -54,15 +62,13 @@ impl Manifest {
         (self.volumes.iter()).any(|v| v.name == volume && v.save == SaveHow::Hardlink)
     }
 
-    /// A project to run the trees' helper with (never brought up); None when the save has no
-    /// trees.
+    /// A project to run the trees' helper with (helpers only); None when the save has no trees.
     pub fn tree_helper(&self) -> Result<Option<Project>> {
-        let (Some(image), Some(file)) = (self.tree_image(), &self.compose_file) else {
+        let Some(image) = self.tree_image() else {
             return Ok(None);
         };
-        Ok(Some(
-            Project::new("arena_saves", file, &self.env)?.with_helper(image)?,
-        ))
+        let project = Project::helpers_only("arena_saves", &self.env)?;
+        Ok(Some(project.with_helper(image)?))
     }
 
     /// The image that handles its trees, when it has any.

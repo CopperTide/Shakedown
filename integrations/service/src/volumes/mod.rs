@@ -23,8 +23,7 @@ pub struct Instance {
     pub project: Project,
     pub volumes: Vec<VolumeSpec>,
     pub helper_image: String,
-    /// The manifest fields that let a helper reach the save's trees later.
-    pub compose_file: std::path::PathBuf,
+    /// The config's environment (the manifest keeps what the helper needs of it).
     pub env: std::collections::BTreeMap<String, String>,
 }
 
@@ -59,8 +58,7 @@ impl Instance {
         Manifest {
             volumes,
             helper_image: Some(self.helper_image.clone()),
-            compose_file: Some(self.compose_file.clone()),
-            env: self.env.clone(),
+            env: manifest::docker_env(&self.env),
         }
     }
 }

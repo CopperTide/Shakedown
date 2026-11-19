@@ -7,15 +7,16 @@ use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 
-/// The fake: logs its arguments (one line a call), and fails where the environment says so. `port` answers the
+/// The fake: logs its arguments (one line a call) to `log` beside its `bin`, and fails where the environment says so. `port` answers the
 /// n-th of `FAKE_PORTS` after the n-th `up` or `start` (a restarted service gets a new port).
 const FAKE: &str = r#"#!/bin/sh
-{ printf '%s' "$*" | tr '\n' ' '; echo; } >> "$FAKE_LOG"
+LOG="$(dirname "$0")/../log"
+{ printf '%s' "$*" | tr '\n' ' '; echo; } >> "$LOG"
 case "$*" in
   *" stop") [ -n "$FAKE_STOP_FAIL" ] && { echo no stop >&2; exit 1; } ;;
   *" up "*) [ -n "$FAKE_UP_FAIL" ] && { echo no up >&2; exit 1; } ;;
   *-cpf*) case "$*" in *_bad:/v*) echo no export >&2; exit 1 ;; *) printf tar ;; esac ;;
-  *" port "*) n=$(grep -cE ' (start|up)( |$)' "$FAKE_LOG")
+  *" port "*) n=$(grep -cE ' (start|up)( |$)' "$LOG")
              echo "127.0.0.1:$(echo "${FAKE_PORTS:-49153}" | awk -v n="$n" '{print $(n < NF ? n : NF)}')" ;;
   *pg_dump*) printf -- '-- dumped at some time\nCREATE TABLE t (n int);\n' ;;
 esac
@@ -48,15 +49,11 @@ impl Fake {
             self.0.join("bin").display(),
             std::env::var("PATH").unwrap()
         );
-        let mut env = json!({"PATH": path, "FAKE_LOG": self.log_path()});
+        let mut env = json!({"PATH": path});
         env.as_object_mut()
             .unwrap()
             .extend(extra.as_object().unwrap().clone());
         json!({"compose_file": self.0.join("compose.yml"), "volumes": volumes, "env": env})
-    }
-
-    fn log_path(&self) -> String {
-        self.0.join("log").to_string_lossy().into()
     }
 
     fn log(&self) -> String {
@@ -476,6 +473,28 @@ async fn after_a_save_restarts_it_the_service_is_served_at_its_new_port_once_it_
         "the routes came back before the service listened"
     );
     late.join().unwrap();
+}
+
+#[tokio::test]
+async fn a_save_records_no_compose_secret_and_no_compose_path() {
+    let f = Fake::new("manifest");
+    let p = f.part();
+    let mut config = f.config(
+        &[],
+        json!({"APP_SECRET": "s3cret", "DOCKER_CONTEXT": "ctx"}),
+    );
+    config["volumes"] = json!([{"name": "files", "save": "hardlink"}]);
+    p.start(start("a", config)).await.unwrap();
+    p.save(save_as(&f, "a", "s1")).await.unwrap();
+    let text = fs::read_to_string(f.0.join("saves/service/s1/save.json")).unwrap();
+    let m: Value = serde_json::from_str(&text).unwrap();
+    assert!(
+        !text.contains("s3cret") && m.get("compose_file").is_none(),
+        "{text}"
+    );
+    assert_eq!(m["env"]["DOCKER_CONTEXT"], "ctx", "{text}");
+    p.drop_save(SaveId { save: "s1".into() }).await.unwrap();
+    assert!(f.log().contains("rm -rf /saves/s1"), "{}", f.log());
 }
 
 #[tokio::test]

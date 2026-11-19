@@ -85,6 +85,12 @@ impl Project {
         })
     }
 
+    /// A project `name` that only runs helper containers (it has no compose file, so its compose
+    /// commands fail), with `env` added to `docker`'s environment.
+    pub fn helpers_only(name: &str, env: &BTreeMap<String, String>) -> Result<Project> {
+        Project::new(name, Path::new(""), env)
+    }
+
     /// Moves volumes through `image` instead of the default helper.
     pub fn with_helper(mut self, image: &str) -> Result<Project> {
         if !valid_image(image) {

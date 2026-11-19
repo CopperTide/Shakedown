@@ -45,7 +45,8 @@ is `{name, save: "tar"}` and saves exactly as above). `save` is one of:
   `tar -c` as a live volume) and removed (`rm -rf`) through that image too.
 - `skip`: not saved; a start from a save creates it empty (a cache).
 
-Each save has `save.json` (`{volumes: [{name, save}], helper_image?, compose_file?, env?}`). The last save of each
+Each save has `save.json` (`{volumes: [{name, save}], helper_image?, env?}`; `env` keeps only `PATH` and `DOCKER_*` of the config's
+`env`, what the helper's `docker` needs once the instance is gone — never the compose file's other variables). The last save of each
 instance is kept in `.last/<instance>.json`. `describe.save_at` is `points`: arenad saves the part at save points
 (before a model call, on request, at run end), not after every request. `http: [{host, service, port, env?,
 reads?}]` makes `http_routes` answer each host with the port Docker published for `service` (`docker compose port`),

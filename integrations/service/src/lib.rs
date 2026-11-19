@@ -112,7 +112,6 @@ fn new_instance(id: &str, config: &Config) -> Result<Instance, PartError> {
         project,
         volumes: config.volumes.clone(),
         helper_image: config.helper().to_string(),
-        compose_file: config.compose_file.clone(),
         env: config.env.clone(),
     })
 }
