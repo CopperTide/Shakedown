@@ -2,6 +2,7 @@
 pub mod args;
 pub mod bench;
 pub mod busy;
+pub mod clock;
 #[cfg(feature = "compose")]
 pub mod compose;
 pub mod docker_name;
