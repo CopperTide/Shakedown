@@ -1,7 +1,7 @@
 """The simulated supply chain director: decides every proposed change whose action the config does not
 leave to another desk (`defer`), by fixed rules over this part's records and scenario, and gives a `decided`
 event that a benchmark's link hands to the approvals system."""
-from arena_part.jsonstate import Done, event
+from arena_part.people import Desk
 
 from . import network
 
@@ -75,17 +75,13 @@ def _decision(config, state, action, payload):
     return False, f"Rejected: this desk decides {REALLOCATION} and {SHIPMENT}; QA decides {deferred}."
 
 
-def review(config, state, args) -> Done:
-    """Decides the change `args` describes unless its action is another desk's."""
-    change_id, action = args["id"], args["action"]
-    key = f"review/{change_id}"
-    if action in config.get("defer", []):
-        return Done({"decided": False}, reads=[key])
-    payload = args["payload"] if args["payload"] is not None else {}
-    approved, note = _decision(config, state, action, payload)
-    state["reviews"][change_id] = {"id": change_id, "action": action, "payload": payload,
-                                   "approved": approved, "note": note, "by": "Supply chain director (simulated)"}
-    verdict = "approved" if approved else "rejected"
-    decided = event("decided", f"Supply chain director {verdict} {change_id} ({action})",
-                    {"id": change_id, "approved": approved, "note": note})
-    return Done({"decided": True, "approved": approved, "note": note}, writes=[key], events=[decided])
+def _mine(config, action) -> bool:
+    return action not in config.get("defer", [])
+
+
+def _payload(payload):
+    return payload if payload is not None else {}
+
+
+DESK = Desk("Supply chain director", _decision, _mine, _payload)
+review = DESK.review  # decides the change `args` describes unless its action is another desk's
