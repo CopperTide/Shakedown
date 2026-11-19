@@ -1,14 +1,11 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback } from 'react';
 import { tasks as fetchTasks } from '@/api/benchmark';
-import { errorMessage } from '@/lib/errors';
 import { taskName } from '@/model/summary';
-import type { Task } from '@/model/types';
+import { useQuery } from './useQuery';
 
-/** The benchmark's tasks, with their tickets. */
+/** The benchmark's tasks, with their tickets: read once for the whole page. */
 export function useTasks() {
-  const [tasks, setTasks] = useState<Task[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  useEffect(() => { fetchTasks().then(setTasks).catch((e) => setError(errorMessage(e))); }, []);
+  const { data: tasks, error } = useQuery('tasks', fetchTasks, { shared: true });
   return { tasks, error };
 }
 
