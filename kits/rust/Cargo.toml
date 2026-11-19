@@ -10,12 +10,14 @@ folder = ["dep:sha2"]
 compose = ["folder"]
 postgres = ["dep:tokio-postgres"]
 mariadb = ["folder", "dep:mysql_async", "dep:flate2"]
+http = ["dep:reqwest"]
 
 [dependencies]
 tokio-postgres = { workspace = true, optional = true }
 sha2 = { workspace = true, optional = true }
 mysql_async = { workspace = true, optional = true }
 flate2 = { workspace = true, optional = true }
+reqwest = { version = "0.12", default-features = false, features = ["json"], optional = true }
 tokio.workspace = true
 serde.workspace = true
 serde_json.workspace = true
