@@ -1,4 +1,4 @@
-// Figures as text: seconds, tokens, dollars and plain counts, one way everywhere.
+// Values as text: seconds, tokens, dollars and plain counts, one way everywhere; anything else as JSON.
 
 export type Unit = 's' | 'tok' | 'usd' | 'n';
 
@@ -16,3 +16,6 @@ export function duration(s: number | null): string {
   if (s == null) return '–';
   return s < 90 ? `${Math.round(s)} s` : `${(s / 60).toFixed(1)} min`;
 }
+
+/** A string as it is; anything else as indented JSON (`null` for nothing). */
+export const pretty = (v: unknown) => (typeof v === 'string' ? v : JSON.stringify(v ?? null, null, 2));

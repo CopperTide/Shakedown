@@ -7,6 +7,7 @@ import { StatusMark, Tag } from '@/components/ui/status';
 import { StepLabel } from '@/components/ui/step-label';
 import { cn } from '@/lib/cn';
 import { errorMessage } from '@/lib/errors';
+import { pretty } from '@/lib/format';
 import { MARK, alarmMark, mark, passMark } from '@/lib/mark';
 import { asRecord } from '@/lib/record';
 import { actionWord, classify, systemLine, worldInfo } from '@/model/actions';
@@ -16,8 +17,6 @@ import { costIsUnknown, providerId, providerName, providerOf } from '@/model/pro
 import { notComparedLine, savedLine } from '@/model/restore';
 import type { Event, Team } from '@/model/types';
 import { formatCost, rowKeys } from './timeline';
-
-export const pretty = (v: unknown) => (typeof v === 'string' ? v : JSON.stringify(v ?? null, null, 2));
 
 type Payload = Record<string, unknown>;
 
