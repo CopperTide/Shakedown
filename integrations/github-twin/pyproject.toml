@@ -6,6 +6,7 @@ requires-python = ">=3.10"
 dependencies = [
     "arena-part",
     "graphql-core>=3.3,<3.4",
+    "pyyaml>=6.0,<7",
 ]
 
 [dependency-groups]
