@@ -24,6 +24,8 @@
   <a href="CONTRIBUTING.md">Contributing</a>
 </p>
 
+<p align="center">Shakedown by <a href="https://coppertide.ai">CopperTide</a> · <a href="https://coppertide.ai/shakedown">coppertide.ai/shakedown</a></p>
+
 **Shakedown tests agent systems in a simulated copy of the world they will be deployed in.** An *environment* is the
 systems the agents work with (an ERP, a database, suppliers, a plant), made of real software or simulators. A
 *scenario* is what happens to it: a task and the disruptions along the way. An *agent setup* is a model, a team
