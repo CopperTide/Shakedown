@@ -256,8 +256,8 @@ pub fn spawn_branch(state: &Arc<AppState>, ctx: Arc<BranchCtx>, from: StartPoint
         let inner = tokio::spawn(run_branch(state.clone(), ctx.clone(), from));
         if let Err(e) = inner.await {
             leave_live(&state, &ctx).await;
-            let error = Some(format!("runner crashed: {e}"));
-            record_ending(&state, &branch_id, (BranchStatus::InfraError, error)).await;
+            let ending = Ending::infra(format!("runner crashed: {e}"));
+            record_ending(&state, &branch_id, ending).await;
         }
     });
 }
@@ -297,15 +297,12 @@ pub async fn finish_failed(state: &AppState, ctx: &BranchCtx, why: String) -> Op
         return None;
     }
     freeze(ctx).await;
-    let outcome = check(state, ctx).await.map(|(status, error)| match status {
-        BranchStatus::InfraError => (status, error),
-        _ => (BranchStatus::Failed, Some(why)),
+    let outcome = check(state, ctx).await.map(|ending| match ending.status {
+        BranchStatus::InfraError => ending,
+        _ => Ending::failed(why),
     });
     Some(conclude(state, ctx, outcome).await)
 }
-
-/// How a branch someone stopped ends: unscored.
-pub(crate) const STOPPED_ENDING: Ending = (BranchStatus::Stopped, None);
 
 /// Stops a live branch: its agents are dropped where they are, calls that wait are refused, and
 /// it ends `stopped` without being scored. A branch an external system drives ends here; arenad's
@@ -318,7 +315,7 @@ pub async fn stop(state: &AppState, ctx: &BranchCtx) -> bool {
         if !ctx.claim_end() {
             return false;
         }
-        conclude(state, ctx, Ok(STOPPED_ENDING)).await;
+        conclude(state, ctx, Ok(Ending::STOPPED)).await;
     }
     true
 }
@@ -328,9 +325,9 @@ pub async fn stop(state: &AppState, ctx: &BranchCtx) -> bool {
 async fn conclude(state: &AppState, ctx: &BranchCtx, outcome: Result<Ending>) -> Ending {
     leave_live(state, ctx).await;
     let ending = match (ctx.fatal(), outcome) {
-        (Some(f), _) => (BranchStatus::InfraError, Some(f)),
+        (Some(f), _) => Ending::infra(f),
         (None, Ok(v)) => v,
-        (None, Err(e)) => (BranchStatus::InfraError, Some(format!("{e:#}"))),
+        (None, Err(e)) => Ending::infra(format!("{e:#}")),
     };
     record_ending(state, &ctx.branch_id, ending.clone()).await;
     ending
@@ -345,11 +342,43 @@ async fn leave_live(state: &AppState, ctx: &BranchCtx) {
 }
 
 /// How a branch ended: its status and error.
-pub type Ending = (BranchStatus, Option<String>);
+#[derive(Debug, Clone, PartialEq)]
+pub struct Ending {
+    pub status: BranchStatus,
+    pub error: Option<String>,
+}
+
+impl Ending {
+    /// How a branch someone stopped ends: unscored.
+    pub const STOPPED: Ending = Ending::new(BranchStatus::Stopped, None);
+
+    pub const fn new(status: BranchStatus, error: Option<String>) -> Ending {
+        Ending { status, error }
+    }
+
+    /// An end with `status`, saying why.
+    pub fn because(status: BranchStatus, why: impl Into<String>) -> Ending {
+        Ending::new(status, Some(why.into()))
+    }
+
+    /// An infrastructure problem ended the branch: `infra_error`, saying why.
+    pub fn infra(why: impl Into<String>) -> Ending {
+        Ending::because(BranchStatus::InfraError, why)
+    }
+
+    /// The branch ended `failed`, saying why.
+    pub fn failed(why: impl Into<String>) -> Ending {
+        Ending::because(BranchStatus::Failed, why)
+    }
+
+    pub fn is_infra(&self) -> bool {
+        self.status == BranchStatus::InfraError
+    }
+}
 
 /// Records how a branch ended, trying once more when the store fails; a failure is logged (the
 /// branch then stays `running` in the store).
-async fn record_ending(state: &AppState, branch_id: &str, (status, error): Ending) {
+async fn record_ending(state: &AppState, branch_id: &str, Ending { status, error }: Ending) {
     for attempt in 1..=2 {
         let set = state.store.set_status(branch_id, status, error.clone());
         match set.await {
@@ -387,11 +416,11 @@ async fn drive(state: &Arc<AppState>, ctx: &Arc<BranchCtx>, from: StartPoint) ->
     // Stopping drops the agents where they are (a CLI agent's process is killed with it).
     let ended = tokio::select! {
         ended = agents => ended?,
-        () = ctx.flow.stopped() => return Ok(STOPPED_ENDING),
+        () = ctx.flow.stopped() => return Ok(Ending::STOPPED),
     };
     if let Some(end) = ended {
         // Over its spend limit, a run is scored as it stands (a failure).
-        if end.0 == BranchStatus::BudgetExceeded {
+        if end.status == BranchStatus::BudgetExceeded {
             freeze(ctx).await;
             check(state, ctx).await?;
         }
@@ -448,7 +477,7 @@ async fn run_concurrent(
 
 /// The worse of two endings: an infrastructure error before a failure, the first of equals.
 fn worse(a: Option<Ending>, b: Option<Ending>) -> Option<Ending> {
-    let infra = |e: &Option<Ending>| matches!(e, Some((BranchStatus::InfraError, _)));
+    let infra = |e: &Option<Ending>| e.as_ref().is_some_and(Ending::is_infra);
     if infra(&a) || b.is_none() {
         return a;
     }
@@ -612,7 +641,7 @@ pub(crate) fn agent_end(result: &AgentResult) -> AgentEndPayload {
 /// (in a legacy run) a missing handoff.
 fn agent_ending(ctx: &BranchCtx, agent: &str, result: AgentResult) -> Option<Ending> {
     if let Some(f) = ctx.fatal() {
-        return Some((BranchStatus::InfraError, Some(f)));
+        return Some(Ending::infra(f));
     }
     if !result.ok {
         let e = result.error.unwrap_or_else(|| "agent failed".to_string());
@@ -622,15 +651,15 @@ fn agent_ending(ctx: &BranchCtx, agent: &str, result: AgentResult) -> Option<End
             Some(FailureKind::Budget) => BranchStatus::BudgetExceeded,
             None => BranchStatus::InfraError,
         };
-        return Some((status, Some(e)));
+        return Some(Ending::because(status, e));
     }
     // An agent whose cost is known only at its end (`claude -p`, Codex): checked then.
     if let Some(why) = result.cost_usd.and_then(|c| ctx.budget.settle(agent, c)) {
-        return Some((BranchStatus::BudgetExceeded, Some(why)));
+        return Some(Ending::because(BranchStatus::BudgetExceeded, why));
     }
     let required = ctx.rules.handoff_required && !ctx.is_last(agent);
     if required && ctx.handoff_note(agent).is_none() {
-        return Some((BranchStatus::Failed, Some("no handoff".to_string())));
+        return Some(Ending::failed("no handoff"));
     }
     None
 }
@@ -654,11 +683,11 @@ pub const NOTHING_CHECKED: &str =
 /// failed with `NOTHING_CHECKED` when no part could be checked.
 fn verdict(check: &CheckPayload, parts: &[String]) -> Ending {
     if check.unchecked.len() >= parts.len() {
-        return (BranchStatus::Failed, Some(NOTHING_CHECKED.to_string()));
+        return Ending::failed(NOTHING_CHECKED);
     }
     match check.passed {
-        true => (BranchStatus::Passed, None),
-        false => (BranchStatus::Failed, None),
+        true => Ending::new(BranchStatus::Passed, None),
+        false => Ending::new(BranchStatus::Failed, None),
     }
 }
 
@@ -729,16 +758,16 @@ mod tests {
         let parts = ["db".to_string(), "sim".to_string()];
         assert_eq!(
             verdict(&check(true, &["sim"]), &parts),
-            (BranchStatus::Passed, None)
+            Ending::new(BranchStatus::Passed, None)
         );
         assert_eq!(
             verdict(&check(false, &[]), &parts),
-            (BranchStatus::Failed, None)
+            Ending::new(BranchStatus::Failed, None)
         );
         let none = verdict(&check(false, &["db", "sim"]), &parts);
         assert_eq!(
             none,
-            (BranchStatus::Failed, Some(NOTHING_CHECKED.to_string()))
+            Ending::new(BranchStatus::Failed, Some(NOTHING_CHECKED.to_string()))
         );
     }
 }
