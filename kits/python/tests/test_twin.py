@@ -246,3 +246,11 @@ def test_outside_work_is_undone_when_the_request_or_act_fails(undo_notes):
     assert t.call_tool("i", "notes_act", {"person": "dana", "action": "done"}, 0)["result"] == {}
     assert t.moved == ["kept", "done"]
     assert t.ctx("i").undo == []
+
+
+def test_a_twin_can_queue_an_event_of_its_own_kind(notes):
+    ctx = notes.ctx("i")
+    with ctx.lock:
+        ctx.event("deploy", "a run deploys orders", {"service": "orders"})
+    assert notes.advance("i", 100)["events"] == [
+        {"kind": "deploy", "text": "a run deploys orders", "data": {"service": "orders"}}]

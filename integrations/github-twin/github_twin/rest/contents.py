@@ -73,7 +73,7 @@ def _write(call, repo, branch: str, head: str, edit: tuple, body: dict) -> str:
     committer = call.author(body.get("committer") or body.get("author"))
     sha = call.repos.commit_tree(fn, tree, [head], body.get("message", ""), author, committer)
     try:
-        events.moved(call.ctx, repo, lambda: call.repos.update_ref(fn, f"refs/heads/{branch}", sha, head))
+        events.moved(call.ctx, repo, lambda: call.repos.update_ref(fn, f"refs/heads/{branch}", sha, head), by=call.login)
     except GitError:
         raise ApiError(409, f"is at {call.repos.ref(fn, branch)} but expected {head}") from None
     return sha

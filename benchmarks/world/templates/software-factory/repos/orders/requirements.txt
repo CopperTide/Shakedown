@@ -1,0 +1,6 @@
+# Installed offline from the platform's wheelhouse (/opt/wheels in the base image): pin what is there.
+fastapi==0.162.0
+httpx==0.28.1
+psycopg[binary]==3.3.6
+psycopg-pool==3.3.3
+platform-lib==1.0.0

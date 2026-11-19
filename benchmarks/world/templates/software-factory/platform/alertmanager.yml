@@ -1,0 +1,11 @@
+# No notifier: the platform's `alerts` probes read /api/v2/alerts, and its `alerts/paging` watch turns paging
+# alerts into world events that the alert link hands to PagerDuty.
+route:
+  receiver: world
+  group_by: [alertname, service_name]
+  group_wait: 10s
+  group_interval: 1m
+  repeat_interval: 4h
+
+receivers:
+  - name: world

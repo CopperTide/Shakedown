@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Consumer contract",
+  "description": "What a service (the consumer) expects of the answers of a service it calls (the provider). The platform's contract probe runs each call against production, so calls only read (GET).",
+  "type": "object",
+  "required": ["consumer", "provider", "calls"],
+  "additionalProperties": false,
+  "properties": {
+    "consumer": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
+    "provider": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
+    "calls": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["method", "path", "fields"],
+        "additionalProperties": false,
+        "properties": {
+          "method": {"const": "GET"},
+          "path": {"type": "string", "pattern": "^/[^?#\\s]*$"},
+          "fields": {
+            "type": "object",
+            "minProperties": 1,
+            "additionalProperties": {"enum": ["string", "number", "boolean", "array", "object", "null"]}
+          }
+        }
+      }
+    }
+  }
+}

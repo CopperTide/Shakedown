@@ -1,0 +1,35 @@
+# Production's alerts. Severity `page` alerts are what the platform's `alerts/paging` watch turns into PagerDuty
+# incidents (with `pagerduty_severity`); `ticket` alerts only show in Alertmanager. Health checks are left out
+# of every ratio. ServiceDown compares each service's newest sample with the newest of any service rather than
+# with the wall clock, so a paused world or a fork run later never looks like an outage.
+groups:
+  - name: production
+    rules:
+      - alert: HighErrorRate
+        expr: |
+          sum by (service_name) (rate(http_server_request_duration_seconds_count{deployment_environment_name="production", http_route!="/healthz", http_response_status_code=~"5.."}[5m]))
+            / sum by (service_name) (rate(http_server_request_duration_seconds_count{deployment_environment_name="production", http_route!="/healthz"}[5m]))
+            > 0.05
+        for: 2m
+        labels: {severity: page, pagerduty_severity: critical}
+        annotations:
+          summary: "{{ $labels.service_name }} answers {{ $value | humanizePercentage }} of requests with a server error"
+
+      - alert: HighLatency
+        expr: |
+          histogram_quantile(0.95, sum by (le, service_name) (rate(http_server_request_duration_seconds_bucket{deployment_environment_name="production", http_route!="/healthz"}[5m])))
+            > 1
+        for: 5m
+        labels: {severity: ticket, pagerduty_severity: warning}
+        annotations:
+          summary: "{{ $labels.service_name }} p95 latency is {{ $value | humanizeDuration }}"
+
+      - alert: ServiceDown
+        expr: |
+          scalar(max(max_over_time(timestamp(http_server_request_duration_seconds_count{deployment_environment_name="production"})[1h:1m])))
+            - max by (service_name) (max_over_time(timestamp(http_server_request_duration_seconds_count{deployment_environment_name="production"})[1h:1m]))
+            > 180
+        for: 1m
+        labels: {severity: page, pagerduty_severity: critical}
+        annotations:
+          summary: "{{ $labels.service_name }} has reported nothing for {{ $value | humanizeDuration }} while the others have"

@@ -1,0 +1,331 @@
+# The platform: the shop's staging and production (three services and a Postgres each), their seed data, and the
+# observability stack (collector, world-time gateway, Prometheus, Alertmanager, Loki, Tempo, Grafana, GlitchTip).
+# Run by the `service` part as one project. Images come as IMAGE_<SERVICE> (images.yaml), memory limits and
+# program knobs as MEM_<SERVICE> and friends (profiles/lean.yaml or profiles/full.yaml); services only the full
+# profile runs are under `profiles: [full]`. The part mounts the world clock at ARENA_CLOCK_DIR.
+
+x-app-health: &app-health
+  test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=2)"]
+  interval: 5s
+  timeout: 3s
+  retries: 3
+  start_period: 300s
+
+x-db-health: &db-health
+  test: ["CMD", "pg_isready", "-U", "shop", "-d", "shop"]
+  interval: 2s
+  timeout: 3s
+  retries: 30
+
+x-telemetry: &telemetry
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+  OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+
+x-db: &db
+  POSTGRES_USER: shop
+  POSTGRES_PASSWORD: shop
+  POSTGRES_DB: shop
+
+services:
+  # ---- production -------------------------------------------------------------------------------------------
+  prod-db:
+    image: ${IMAGE_PROD_DB:?set by the service part}
+    restart: unless-stopped
+    environment: *db
+    command: [postgres, -c, "shared_buffers=${PG_PROD_SHARED_BUFFERS}", -c, work_mem=2MB, -c, max_connections=40]
+    volumes: [prod-db:/var/lib/postgresql/data]
+    healthcheck: *db-health
+    mem_limit: ${MEM_PROD_DB}
+
+  prod-storefront:
+    image: ${IMAGE_PROD_STOREFRONT:?set by the service part}
+    restart: unless-stopped
+    depends_on: {prod-db: {condition: service_healthy}}
+    environment:
+      <<: *telemetry
+      DEPLOY_ENV: production
+      APP_IMAGE: ${IMAGE_PROD_STOREFRONT:?set by the service part}
+      DATABASE_URL: postgresql://shop:shop@prod-db:5432/shop
+      DB_SCHEMA: storefront
+      INVENTORY_URL: http://prod-inventory:8000
+      ORDERS_URL: http://prod-orders:8000
+      SENTRY_DSN: http://5f0c3a8e2b5d4c1e9a7f6b3d2c1e0a91@glitchtip:8000/1
+    volumes: ["${ARENA_CLOCK_DIR:?set by the service part}:/shakedown:ro"]
+    healthcheck: *app-health
+    ports: ["127.0.0.1::8000"]
+    mem_limit: ${MEM_PROD_STOREFRONT}
+
+  prod-orders:
+    image: ${IMAGE_PROD_ORDERS:?set by the service part}
+    restart: unless-stopped
+    depends_on: {prod-db: {condition: service_healthy}}
+    environment:
+      <<: *telemetry
+      DEPLOY_ENV: production
+      APP_IMAGE: ${IMAGE_PROD_ORDERS:?set by the service part}
+      DATABASE_URL: postgresql://shop:shop@prod-db:5432/shop
+      DB_SCHEMA: orders
+      INVENTORY_URL: http://prod-inventory:8000
+      SENTRY_DSN: http://8b1d4e7a3c6f4a2b9e5d1c7f3a8b2e64@glitchtip:8000/2
+    volumes: ["${ARENA_CLOCK_DIR:?set by the service part}:/shakedown:ro"]
+    healthcheck: *app-health
+    ports: ["127.0.0.1::8000"]
+    mem_limit: ${MEM_PROD_ORDERS}
+
+  prod-inventory:
+    image: ${IMAGE_PROD_INVENTORY:?set by the service part}
+    restart: unless-stopped
+    depends_on: {prod-db: {condition: service_healthy}}
+    environment:
+      <<: *telemetry
+      DEPLOY_ENV: production
+      APP_IMAGE: ${IMAGE_PROD_INVENTORY:?set by the service part}
+      DATABASE_URL: postgresql://shop:shop@prod-db:5432/shop
+      DB_SCHEMA: inventory
+      HOLD_SECONDS: "900"
+      SENTRY_DSN: http://c7e2a9d4f1b84e6a8d3c5b9e7f2a4d18@glitchtip:8000/3
+    volumes: ["${ARENA_CLOCK_DIR:?set by the service part}:/shakedown:ro"]
+    healthcheck: *app-health
+    ports: ["127.0.0.1::8000"]
+    mem_limit: ${MEM_PROD_INVENTORY}
+
+  prod-seed:
+    # The shop's history: the catalog, PROD_ORDERS_ROWS past orders and their reservations. Runs once the
+    # services have migrated; a database that already has orders is left as it is.
+    image: ${IMAGE_PROD_SEED:?set by the service part}
+    restart: "no"
+    depends_on: {prod-orders: {condition: service_healthy}, prod-inventory: {condition: service_healthy}}
+    environment: {PGHOST: prod-db, PGUSER: shop, PGPASSWORD: shop, PGDATABASE: shop}
+    command: [psql, -q, -v, ON_ERROR_STOP=1, -v, "rows=${PROD_ORDERS_ROWS:-300000}", -f, /seed/seed.sql]
+    volumes: ["./seed:/seed:ro"]
+    mem_limit: ${MEM_PROD_SEED}
+
+  # ---- staging ----------------------------------------------------------------------------------------------
+  staging-db:
+    image: ${IMAGE_STAGING_DB:?set by the service part}
+    restart: unless-stopped
+    environment: *db
+    command: [postgres, -c, "shared_buffers=${PG_STAGING_SHARED_BUFFERS}", -c, work_mem=2MB, -c, max_connections=40]
+    volumes: [staging-db:/var/lib/postgresql/data]
+    healthcheck: *db-health
+    mem_limit: ${MEM_STAGING_DB}
+
+  staging-storefront:
+    image: ${IMAGE_STAGING_STOREFRONT:?set by the service part}
+    restart: unless-stopped
+    depends_on: {staging-db: {condition: service_healthy}}
+    environment:
+      <<: *telemetry
+      DEPLOY_ENV: staging
+      APP_IMAGE: ${IMAGE_STAGING_STOREFRONT:?set by the service part}
+      DATABASE_URL: postgresql://shop:shop@staging-db:5432/shop
+      DB_SCHEMA: storefront
+      INVENTORY_URL: http://staging-inventory:8000
+      ORDERS_URL: http://staging-orders:8000
+      SENTRY_DSN: http://5f0c3a8e2b5d4c1e9a7f6b3d2c1e0a91@glitchtip:8000/1
+    volumes: ["${ARENA_CLOCK_DIR:?set by the service part}:/shakedown:ro"]
+    healthcheck: *app-health
+    ports: ["127.0.0.1::8000"]
+    mem_limit: ${MEM_STAGING_STOREFRONT}
+
+  staging-orders:
+    image: ${IMAGE_STAGING_ORDERS:?set by the service part}
+    restart: unless-stopped
+    depends_on: {staging-db: {condition: service_healthy}}
+    environment:
+      <<: *telemetry
+      DEPLOY_ENV: staging
+      APP_IMAGE: ${IMAGE_STAGING_ORDERS:?set by the service part}
+      DATABASE_URL: postgresql://shop:shop@staging-db:5432/shop
+      DB_SCHEMA: orders
+      INVENTORY_URL: http://staging-inventory:8000
+      SENTRY_DSN: http://8b1d4e7a3c6f4a2b9e5d1c7f3a8b2e64@glitchtip:8000/2
+    volumes: ["${ARENA_CLOCK_DIR:?set by the service part}:/shakedown:ro"]
+    healthcheck: *app-health
+    mem_limit: ${MEM_STAGING_ORDERS}
+
+  staging-inventory:
+    image: ${IMAGE_STAGING_INVENTORY:?set by the service part}
+    restart: unless-stopped
+    depends_on: {staging-db: {condition: service_healthy}}
+    environment:
+      <<: *telemetry
+      DEPLOY_ENV: staging
+      APP_IMAGE: ${IMAGE_STAGING_INVENTORY:?set by the service part}
+      DATABASE_URL: postgresql://shop:shop@staging-db:5432/shop
+      DB_SCHEMA: inventory
+      HOLD_SECONDS: "900"
+      SENTRY_DSN: http://c7e2a9d4f1b84e6a8d3c5b9e7f2a4d18@glitchtip:8000/3
+    volumes: ["${ARENA_CLOCK_DIR:?set by the service part}:/shakedown:ro"]
+    healthcheck: *app-health
+    mem_limit: ${MEM_STAGING_INVENTORY}
+
+  staging-seed:
+    image: ${IMAGE_STAGING_SEED:?set by the service part}
+    restart: "no"
+    depends_on: {staging-orders: {condition: service_healthy}, staging-inventory: {condition: service_healthy}}
+    environment: {PGHOST: staging-db, PGUSER: shop, PGPASSWORD: shop, PGDATABASE: shop}
+    command: [psql, -q, -v, ON_ERROR_STOP=1, -v, "rows=${STAGING_ORDERS_ROWS:-1000}", -f, /seed/seed.sql]
+    volumes: ["./seed:/seed:ro"]
+    mem_limit: ${MEM_STAGING_SEED}
+
+  # ---- telemetry --------------------------------------------------------------------------------------------
+  otel-collector:
+    image: ${IMAGE_OTEL_COLLECTOR:?set by the service part}
+    restart: unless-stopped
+    command: ["--config=/etc/otelcol/collector.yaml"]
+    environment: {GOMEMLIMIT: "${GOMEMLIMIT_OTEL_COLLECTOR}"}
+    volumes: ["./otel/collector.yaml:/etc/otelcol/collector.yaml:ro"]
+    mem_limit: ${MEM_OTEL_COLLECTOR}
+
+  worldclock-gateway:
+    # Restamps every span, log and metric from wall to world time on the way to the stores (ingest on 4318), and
+    # answers queries in world time (4319; Grafana's datasources ask with X-Shakedown-Shift: wall).
+    image: ${IMAGE_WORLDCLOCK_GATEWAY:?set by the service part}
+    restart: unless-stopped
+    environment:
+      CLOCK_FILE: /shakedown/clock.json
+      INGEST_ADDR: 0.0.0.0:4318
+      QUERY_ADDR: 0.0.0.0:4319
+      TRACES_URL: http://tempo:4318/v1/traces
+      LOGS_URL: http://loki:3100/otlp/v1/logs
+      METRICS_URL: http://prometheus:9090/api/v1/otlp/v1/metrics
+      PROMETHEUS_URL: http://prometheus:9090
+      LOKI_URL: http://loki:3100
+      TEMPO_URL: http://tempo:3200
+    volumes: ["${ARENA_CLOCK_DIR:?set by the service part}:/shakedown:ro"]
+    ports: ["127.0.0.1::4319"]
+    mem_limit: ${MEM_WORLDCLOCK_GATEWAY}
+
+  prometheus:
+    image: ${IMAGE_PROMETHEUS:?set by the service part}
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=${PROMETHEUS_RETENTION}
+      - --web.enable-otlp-receiver
+      - --web.enable-remote-write-receiver
+    environment: {GOMEMLIMIT: "${GOMEMLIMIT_PROMETHEUS}"}
+    volumes:
+      - prometheus:/prometheus
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/rules.yml:/etc/prometheus/rules.yml:ro
+    ports: ["127.0.0.1::9090"]
+    mem_limit: ${MEM_PROMETHEUS}
+
+  alertmanager:
+    image: ${IMAGE_ALERTMANAGER:?set by the service part}
+    restart: unless-stopped
+    command: [--config.file=/etc/alertmanager/alertmanager.yml, --storage.path=/alertmanager]
+    environment: {GOMEMLIMIT: "${GOMEMLIMIT_ALERTMANAGER}"}
+    volumes:
+      - alertmanager:/alertmanager
+      - ./alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    ports: ["127.0.0.1::9093"]
+    mem_limit: ${MEM_ALERTMANAGER}
+
+  loki:
+    image: ${IMAGE_LOKI:?set by the service part}
+    restart: unless-stopped
+    command: [-config.file=/etc/loki/loki.yaml, -config.expand-env=true]
+    environment: {GOMEMLIMIT: "${GOMEMLIMIT_LOKI}", LOKI_RETENTION: "${LOKI_RETENTION}"}
+    volumes: [loki:/loki, "./loki.yaml:/etc/loki/loki.yaml:ro"]
+    mem_limit: ${MEM_LOKI}
+
+  tempo:
+    image: ${IMAGE_TEMPO:?set by the service part}
+    restart: unless-stopped
+    command: ["-config.file=/etc/tempo/${TEMPO_CONFIG}"]
+    environment: {GOMEMLIMIT: "${GOMEMLIMIT_TEMPO}"}
+    volumes: [tempo:/var/tempo, "./tempo:/etc/tempo:ro"]
+    mem_limit: ${MEM_TEMPO}
+
+  grafana:
+    image: ${IMAGE_GRAFANA:?set by the service part}
+    restart: unless-stopped
+    environment:
+      GOMEMLIMIT: "${GOMEMLIMIT_GRAFANA}"
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3000/}
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Editor
+      GF_UNIFIED_ALERTING_ENABLED: "${GRAFANA_ALERTING}"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+      GF_NEWS_NEWS_FEED_ENABLED: "false"
+      GF_PLUGINS_PREINSTALL_DISABLED: "true"
+    volumes:
+      - grafana:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/etc/grafana/dashboards:ro
+    ports: ["127.0.0.1::3000"]
+    mem_limit: ${MEM_GRAFANA}
+
+  # ---- error tracking ---------------------------------------------------------------------------------------
+  glitchtip-db:
+    image: ${IMAGE_GLITCHTIP_DB:?set by the service part}
+    restart: unless-stopped
+    environment: {POSTGRES_USER: glitchtip, POSTGRES_PASSWORD: glitchtip, POSTGRES_DB: glitchtip}
+    command: [postgres, -c, shared_buffers=16MB, -c, work_mem=2MB, -c, "max_connections=${PG_GLITCHTIP_MAX_CONNECTIONS}"]
+    volumes: [glitchtip-db:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "glitchtip", "-d", "glitchtip"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    mem_limit: ${MEM_GLITCHTIP_DB}
+
+  glitchtip:
+    # init.sh migrates, makes the organisation, the three projects with the DSN keys above and the API token
+    # the probes read with, then starts GlitchTip (web and worker in one process in the lean profile).
+    image: ${IMAGE_GLITCHTIP:?set by the service part}
+    restart: unless-stopped
+    depends_on: {glitchtip-db: {condition: service_healthy}}
+    entrypoint: ["/bin/sh", "/glitchtip-init/init.sh"]
+    environment: &glitchtip-env
+      DATABASE_URL: postgres://glitchtip:glitchtip@glitchtip-db:5432/glitchtip
+      SECRET_KEY: 2f6b1c9e8d7a4f3b5e0c1d2a9b8e7f6c5d4a3b2c1e0f9a8b7c6d5e4f3a2b1c0d
+      GLITCHTIP_DOMAIN: ${GLITCHTIP_URL:-http://glitchtip:8000}
+      VALKEY_URL: ""
+      SERVER_ROLE: ${GLITCHTIP_ROLE}
+      GRANIAN_WORKERS: "1"
+      ENABLE_USER_REGISTRATION: "false"
+      GLITCHTIP_MAX_EVENT_LIFE_DAYS: "14"
+      SHOP_ORG: shop
+      SHOP_ADMIN_EMAIL: platform@shop.test
+      SHOP_ADMIN_PASSWORD: glitchtip-admin
+      SHOP_API_TOKEN: 7e1f4b2a9c8d3e6f5a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f
+      SHOP_PROJECTS: >-
+        storefront=5f0c3a8e2b5d4c1e9a7f6b3d2c1e0a91,orders=8b1d4e7a3c6f4a2b9e5d1c7f3a8b2e64,inventory=c7e2a9d4f1b84e6a8d3c5b9e7f2a4d18
+    volumes: ["./glitchtip:/glitchtip-init:ro"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/_health/', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 300s
+    ports: ["127.0.0.1::8000"]
+    mem_limit: ${MEM_GLITCHTIP}
+
+  glitchtip-worker:
+    image: ${IMAGE_GLITCHTIP_WORKER:?set by the service part}
+    profiles: [full]
+    restart: unless-stopped
+    depends_on: {glitchtip: {condition: service_healthy}}
+    environment:
+      <<: *glitchtip-env
+      SERVER_ROLE: worker
+    mem_limit: ${MEM_GLITCHTIP_WORKER}
+
+volumes:
+  prod-db:
+  staging-db:
+  glitchtip-db:
+  prometheus:
+  loki:
+  tempo:
+  grafana:
+  alertmanager:

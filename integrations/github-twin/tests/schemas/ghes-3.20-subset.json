@@ -93,6 +93,89 @@
    "title": "Api Overview",
    "type": "object"
   },
+  "artifact": {
+   "properties": {
+    "archive_download_url": {
+     "type": "string"
+    },
+    "created_at": {
+     "format": "date-time",
+     "type": [
+      "string",
+      "null"
+     ]
+    },
+    "expired": {
+     "type": "boolean"
+    },
+    "expires_at": {
+     "format": "date-time",
+     "type": [
+      "string",
+      "null"
+     ]
+    },
+    "id": {
+     "type": "integer"
+    },
+    "name": {
+     "type": "string"
+    },
+    "node_id": {
+     "type": "string"
+    },
+    "size_in_bytes": {
+     "type": "integer"
+    },
+    "updated_at": {
+     "format": "date-time",
+     "type": [
+      "string",
+      "null"
+     ]
+    },
+    "url": {
+     "type": "string"
+    },
+    "workflow_run": {
+     "properties": {
+      "head_branch": {
+       "type": "string"
+      },
+      "head_repository_id": {
+       "type": "integer"
+      },
+      "head_sha": {
+       "type": "string"
+      },
+      "id": {
+       "type": "integer"
+      },
+      "repository_id": {
+       "type": "integer"
+      }
+     },
+     "type": [
+      "object",
+      "null"
+     ]
+    }
+   },
+   "required": [
+    "id",
+    "node_id",
+    "name",
+    "size_in_bytes",
+    "url",
+    "archive_download_url",
+    "expired",
+    "created_at",
+    "expires_at",
+    "updated_at"
+   ],
+   "title": "Artifact",
+   "type": "object"
+  },
   "author-association": {
    "enum": [
     "COLLABORATOR",
@@ -552,6 +635,72 @@
     "protection_url"
    ],
    "title": "Branch With Protection",
+   "type": "object"
+  },
+  "check-annotation": {
+   "properties": {
+    "annotation_level": {
+     "type": [
+      "string",
+      "null"
+     ]
+    },
+    "blob_href": {
+     "type": "string"
+    },
+    "end_column": {
+     "type": [
+      "integer",
+      "null"
+     ]
+    },
+    "end_line": {
+     "type": "integer"
+    },
+    "message": {
+     "type": [
+      "string",
+      "null"
+     ]
+    },
+    "path": {
+     "type": "string"
+    },
+    "raw_details": {
+     "type": [
+      "string",
+      "null"
+     ]
+    },
+    "start_column": {
+     "type": [
+      "integer",
+      "null"
+     ]
+    },
+    "start_line": {
+     "type": "integer"
+    },
+    "title": {
+     "type": [
+      "string",
+      "null"
+     ]
+    }
+   },
+   "required": [
+    "path",
+    "blob_href",
+    "start_line",
+    "end_line",
+    "start_column",
+    "end_column",
+    "annotation_level",
+    "title",
+    "message",
+    "raw_details"
+   ],
+   "title": "Check Annotation",
    "type": "object"
   },
   "check-run": {
@@ -3548,6 +3697,202 @@
     "null"
    ]
   },
+  "job": {
+   "properties": {
+    "check_run_url": {
+     "type": "string"
+    },
+    "completed_at": {
+     "format": "date-time",
+     "type": [
+      "string",
+      "null"
+     ]
+    },
+    "conclusion": {
+     "enum": [
+      "success",
+      "failure",
+      "neutral",
+      "cancelled",
+      "skipped",
+      "timed_out",
+      "action_required",
+      null
+     ],
+     "type": [
+      "string",
+      "null"
+     ]
+    },
+    "created_at": {
+     "format": "date-time",
+     "type": "string"
+    },
+    "head_branch": {
+     "type": [
+      "string",
+      "null"
+     ]
+    },
+    "head_sha": {
+     "type": "string"
+    },
+    "html_url": {
+     "type": [
+      "string",
+      "null"
+     ]
+    },
+    "id": {
+     "format": "int64",
+     "type": "integer"
+    },
+    "labels": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "name": {
+     "type": "string"
+    },
+    "node_id": {
+     "type": "string"
+    },
+    "run_attempt": {
+     "type": "integer"
+    },
+    "run_id": {
+     "format": "int64",
+     "type": "integer"
+    },
+    "run_url": {
+     "type": "string"
+    },
+    "runner_group_id": {
+     "type": [
+      "integer",
+      "null"
+     ]
+    },
+    "runner_group_name": {
+     "type": [
+      "string",
+      "null"
+     ]
+    },
+    "runner_id": {
+     "type": [
+      "integer",
+      "null"
+     ]
+    },
+    "runner_name": {
+     "type": [
+      "string",
+      "null"
+     ]
+    },
+    "started_at": {
+     "format": "date-time",
+     "type": "string"
+    },
+    "status": {
+     "enum": [
+      "queued",
+      "in_progress",
+      "completed",
+      "waiting",
+      "requested",
+      "pending"
+     ],
+     "type": "string"
+    },
+    "steps": {
+     "items": {
+      "properties": {
+       "completed_at": {
+        "format": "date-time",
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "conclusion": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "name": {
+        "type": "string"
+       },
+       "number": {
+        "type": "integer"
+       },
+       "started_at": {
+        "format": "date-time",
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "status": {
+        "enum": [
+         "queued",
+         "in_progress",
+         "completed"
+        ],
+        "type": "string"
+       }
+      },
+      "required": [
+       "name",
+       "status",
+       "conclusion",
+       "number"
+      ],
+      "type": "object"
+     },
+     "type": "array"
+    },
+    "url": {
+     "type": "string"
+    },
+    "workflow_name": {
+     "type": [
+      "string",
+      "null"
+     ]
+    }
+   },
+   "required": [
+    "id",
+    "node_id",
+    "run_id",
+    "run_url",
+    "head_sha",
+    "workflow_name",
+    "head_branch",
+    "name",
+    "url",
+    "html_url",
+    "status",
+    "conclusion",
+    "started_at",
+    "completed_at",
+    "check_run_url",
+    "labels",
+    "runner_id",
+    "runner_name",
+    "runner_group_id",
+    "runner_group_name",
+    "created_at"
+   ],
+   "title": "Job",
+   "type": "object"
+  },
   "label": {
    "properties": {
     "archived_at": {
@@ -4894,6 +5239,74 @@
     "updated_at"
    ],
    "title": "Repository",
+   "type": [
+    "object",
+    "null"
+   ]
+  },
+  "nullable-simple-commit": {
+   "properties": {
+    "author": {
+     "properties": {
+      "email": {
+       "format": "email",
+       "type": "string"
+      },
+      "name": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "name",
+      "email"
+     ],
+     "type": [
+      "object",
+      "null"
+     ]
+    },
+    "committer": {
+     "properties": {
+      "email": {
+       "format": "email",
+       "type": "string"
+      },
+      "name": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "name",
+      "email"
+     ],
+     "type": [
+      "object",
+      "null"
+     ]
+    },
+    "id": {
+     "type": "string"
+    },
+    "message": {
+     "type": "string"
+    },
+    "timestamp": {
+     "format": "date-time",
+     "type": "string"
+    },
+    "tree_id": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "id",
+    "tree_id",
+    "message",
+    "timestamp",
+    "author",
+    "committer"
+   ],
+   "title": "Simple Commit",
    "type": [
     "object",
     "null"
@@ -6993,6 +7406,25 @@
    "title": "Reaction Rollup",
    "type": "object"
   },
+  "referenced-workflow": {
+   "properties": {
+    "path": {
+     "type": "string"
+    },
+    "ref": {
+     "type": "string"
+    },
+    "sha": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "path",
+    "sha"
+   ],
+   "title": "Referenced workflow",
+   "type": "object"
+  },
   "repository": {
    "properties": {
     "allow_auto_merge": {
@@ -8476,6 +8908,241 @@
   "webhook-config-url": {
    "format": "uri",
    "type": "string"
+  },
+  "workflow": {
+   "properties": {
+    "badge_url": {
+     "type": "string"
+    },
+    "created_at": {
+     "format": "date-time",
+     "type": "string"
+    },
+    "deleted_at": {
+     "format": "date-time",
+     "type": "string"
+    },
+    "html_url": {
+     "type": "string"
+    },
+    "id": {
+     "type": "integer"
+    },
+    "name": {
+     "type": "string"
+    },
+    "node_id": {
+     "type": "string"
+    },
+    "path": {
+     "type": "string"
+    },
+    "state": {
+     "enum": [
+      "active",
+      "deleted",
+      "disabled_fork",
+      "disabled_inactivity",
+      "disabled_manually"
+     ],
+     "type": "string"
+    },
+    "updated_at": {
+     "format": "date-time",
+     "type": "string"
+    },
+    "url": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "id",
+    "node_id",
+    "name",
+    "path",
+    "state",
+    "url",
+    "html_url",
+    "badge_url",
+    "created_at",
+    "updated_at"
+   ],
+   "title": "Workflow",
+   "type": "object"
+  },
+  "workflow-run": {
+   "properties": {
+    "actor": {
+     "$ref": "#/definitions/simple-user"
+    },
+    "artifacts_url": {
+     "type": "string"
+    },
+    "cancel_url": {
+     "type": "string"
+    },
+    "check_suite_id": {
+     "format": "int64",
+     "type": "integer"
+    },
+    "check_suite_node_id": {
+     "type": "string"
+    },
+    "check_suite_url": {
+     "type": "string"
+    },
+    "conclusion": {
+     "type": [
+      "string",
+      "null"
+     ]
+    },
+    "created_at": {
+     "format": "date-time",
+     "type": "string"
+    },
+    "display_title": {
+     "type": "string"
+    },
+    "event": {
+     "type": "string"
+    },
+    "head_branch": {
+     "type": [
+      "string",
+      "null"
+     ]
+    },
+    "head_commit": {
+     "$ref": "#/definitions/nullable-simple-commit"
+    },
+    "head_repository": {
+     "$ref": "#/definitions/minimal-repository"
+    },
+    "head_repository_id": {
+     "type": "integer"
+    },
+    "head_sha": {
+     "type": "string"
+    },
+    "html_url": {
+     "type": "string"
+    },
+    "id": {
+     "format": "int64",
+     "type": "integer"
+    },
+    "jobs_url": {
+     "type": "string"
+    },
+    "logs_url": {
+     "type": "string"
+    },
+    "name": {
+     "type": [
+      "string",
+      "null"
+     ]
+    },
+    "node_id": {
+     "type": "string"
+    },
+    "path": {
+     "type": "string"
+    },
+    "previous_attempt_url": {
+     "type": [
+      "string",
+      "null"
+     ]
+    },
+    "pull_requests": {
+     "items": {
+      "$ref": "#/definitions/pull-request-minimal"
+     },
+     "type": [
+      "array",
+      "null"
+     ]
+    },
+    "referenced_workflows": {
+     "items": {
+      "$ref": "#/definitions/referenced-workflow"
+     },
+     "type": [
+      "array",
+      "null"
+     ]
+    },
+    "repository": {
+     "$ref": "#/definitions/minimal-repository"
+    },
+    "rerun_url": {
+     "type": "string"
+    },
+    "run_attempt": {
+     "type": "integer"
+    },
+    "run_number": {
+     "type": "integer"
+    },
+    "run_started_at": {
+     "format": "date-time",
+     "type": "string"
+    },
+    "status": {
+     "type": [
+      "string",
+      "null"
+     ]
+    },
+    "triggering_actor": {
+     "$ref": "#/definitions/simple-user"
+    },
+    "updated_at": {
+     "format": "date-time",
+     "type": "string"
+    },
+    "url": {
+     "type": "string"
+    },
+    "workflow_id": {
+     "type": "integer"
+    },
+    "workflow_url": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "id",
+    "node_id",
+    "head_branch",
+    "run_number",
+    "display_title",
+    "event",
+    "status",
+    "conclusion",
+    "head_sha",
+    "path",
+    "workflow_id",
+    "url",
+    "html_url",
+    "created_at",
+    "updated_at",
+    "head_commit",
+    "head_repository",
+    "repository",
+    "jobs_url",
+    "logs_url",
+    "check_suite_url",
+    "cancel_url",
+    "rerun_url",
+    "artifacts_url",
+    "workflow_url",
+    "pull_requests"
+   ],
+   "title": "Workflow Run",
+   "type": "object"
   }
  },
  "paths_ops": [
@@ -12943,6 +13610,138 @@
   "GET /repos/{owner}/{repo} 404": {
    "$ref": "#/definitions/basic-error"
   },
+  "GET /repos/{owner}/{repo}/actions/jobs/{job_id} 200": {
+   "$ref": "#/definitions/job"
+  },
+  "GET /repos/{owner}/{repo}/actions/jobs/{job_id}/logs 302": {
+   "type": "null"
+  },
+  "GET /repos/{owner}/{repo}/actions/runs 200": {
+   "properties": {
+    "total_count": {
+     "type": "integer"
+    },
+    "workflow_runs": {
+     "items": {
+      "$ref": "#/definitions/workflow-run"
+     },
+     "type": "array"
+    }
+   },
+   "required": [
+    "total_count",
+    "workflow_runs"
+   ],
+   "type": "object"
+  },
+  "GET /repos/{owner}/{repo}/actions/runs 304": {
+   "type": "null"
+  },
+  "GET /repos/{owner}/{repo}/actions/runs/{run_id} 200": {
+   "$ref": "#/definitions/workflow-run"
+  },
+  "GET /repos/{owner}/{repo}/actions/runs/{run_id}/artifacts 200": {
+   "properties": {
+    "artifacts": {
+     "items": {
+      "$ref": "#/definitions/artifact"
+     },
+     "type": "array"
+    },
+    "total_count": {
+     "type": "integer"
+    }
+   },
+   "required": [
+    "total_count",
+    "artifacts"
+   ],
+   "type": "object"
+  },
+  "GET /repos/{owner}/{repo}/actions/runs/{run_id}/attempts/{attempt_number} 200": {
+   "$ref": "#/definitions/workflow-run"
+  },
+  "GET /repos/{owner}/{repo}/actions/runs/{run_id}/attempts/{attempt_number}/jobs 200": {
+   "properties": {
+    "jobs": {
+     "items": {
+      "$ref": "#/definitions/job"
+     },
+     "type": "array"
+    },
+    "total_count": {
+     "type": "integer"
+    }
+   },
+   "required": [
+    "total_count",
+    "jobs"
+   ],
+   "type": "object"
+  },
+  "GET /repos/{owner}/{repo}/actions/runs/{run_id}/attempts/{attempt_number}/jobs 404": {
+   "$ref": "#/definitions/basic-error"
+  },
+  "GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs 200": {
+   "properties": {
+    "jobs": {
+     "items": {
+      "$ref": "#/definitions/job"
+     },
+     "type": "array"
+    },
+    "total_count": {
+     "type": "integer"
+    }
+   },
+   "required": [
+    "total_count",
+    "jobs"
+   ],
+   "type": "object"
+  },
+  "GET /repos/{owner}/{repo}/actions/runs/{run_id}/logs 302": {
+   "type": "null"
+  },
+  "GET /repos/{owner}/{repo}/actions/workflows 200": {
+   "properties": {
+    "total_count": {
+     "type": "integer"
+    },
+    "workflows": {
+     "items": {
+      "$ref": "#/definitions/workflow"
+     },
+     "type": "array"
+    }
+   },
+   "required": [
+    "total_count",
+    "workflows"
+   ],
+   "type": "object"
+  },
+  "GET /repos/{owner}/{repo}/actions/workflows/{workflow_id} 200": {
+   "$ref": "#/definitions/workflow"
+  },
+  "GET /repos/{owner}/{repo}/actions/workflows/{workflow_id}/runs 200": {
+   "properties": {
+    "total_count": {
+     "type": "integer"
+    },
+    "workflow_runs": {
+     "items": {
+      "$ref": "#/definitions/workflow-run"
+     },
+     "type": "array"
+    }
+   },
+   "required": [
+    "total_count",
+    "workflow_runs"
+   ],
+   "type": "object"
+  },
   "GET /repos/{owner}/{repo}/branches 200": {
    "items": {
     "$ref": "#/definitions/short-branch"
@@ -12963,6 +13762,12 @@
   },
   "GET /repos/{owner}/{repo}/check-runs/{check_run_id} 200": {
    "$ref": "#/definitions/check-run"
+  },
+  "GET /repos/{owner}/{repo}/check-runs/{check_run_id}/annotations 200": {
+   "items": {
+    "$ref": "#/definitions/check-annotation"
+   },
+   "type": "array"
   },
   "GET /repos/{owner}/{repo}/check-suites/{check_suite_id}/check-runs 200": {
    "properties": {
@@ -13710,6 +14515,15 @@
   },
   "PATCH /repos/{owner}/{repo}/pulls/{pull_number} 422": {
    "$ref": "#/definitions/validation-error"
+  },
+  "POST /repos/{owner}/{repo}/actions/runs/{run_id}/cancel 202": {
+   "$ref": "#/definitions/empty-object"
+  },
+  "POST /repos/{owner}/{repo}/actions/runs/{run_id}/cancel 409": {
+   "$ref": "#/definitions/basic-error"
+  },
+  "POST /repos/{owner}/{repo}/actions/runs/{run_id}/rerun 201": {
+   "$ref": "#/definitions/empty-object"
   },
   "POST /repos/{owner}/{repo}/check-runs 201": {
    "$ref": "#/definitions/check-run"

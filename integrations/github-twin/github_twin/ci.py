@@ -3,7 +3,9 @@ FAILING = {"failure", "timed_out", "cancelled", "action_required", "startup_fail
 
 
 def runs(db, repo_id: int, sha: str) -> list:
-    return db.execute("SELECT * FROM check_runs WHERE repo_id = ? AND head_sha = ? ORDER BY id", (repo_id, sha)).fetchall()
+    """The commit's latest check run of each name in each suite (a re-run supersedes the attempt before)."""
+    return db.execute("SELECT * FROM check_runs WHERE id IN (SELECT MAX(id) FROM check_runs WHERE repo_id = ? AND "
+                      "head_sha = ? GROUP BY suite_id, name) ORDER BY id", (repo_id, sha)).fetchall()
 
 
 def runs_conclusion(rows: list) -> str | None:

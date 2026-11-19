@@ -1,0 +1,86 @@
+# The `platform` part's config for the `service` integration: the compose project, how each volume is saved, the
+# images it starts with, the hosts agents reach, and the probes (docs for scoring) and watches (world events).
+# `live`, `images`, `probes`, `watches`, `live_copy` and probe `headers` are the service part's Task 6 additions.
+# The template includes this file and adds the profile's env (profiles/<profile>.yaml).
+compose_file: "{world_dir}/files/platform/compose.yaml"
+live: true
+rsync_image: instrumentisto/rsync-ssh:alpine3.23-r3@sha256:6cbad37c2fbdca4ac7ad9d1c1bb8990af9efd4dc76321b349935876cbb1e9e4a
+env:
+  PROD_ORDERS_ROWS: "300000"     # the hot-table trap's `rows`
+  STAGING_ORDERS_ROWS: "1000"
+  GRAFANA_ROOT_URL: "https://grafana.{company.domain}/"
+  GLITCHTIP_URL: "https://glitchtip.{company.domain}"
+
+images:
+  prod-storefront: shakedown-sf/storefront:seed
+  prod-orders: shakedown-sf/orders:seed
+  prod-inventory: shakedown-sf/inventory:seed
+  staging-storefront: shakedown-sf/storefront:seed
+  staging-orders: shakedown-sf/orders:seed
+  staging-inventory: shakedown-sf/inventory:seed
+  prod-db: postgres:17.11-alpine@sha256:e5d2edd28b1f8d40a0a6c0c9cdc545b19b56a0d5d88f94bc11a97d970d4700d0
+  staging-db: postgres:17.11-alpine@sha256:e5d2edd28b1f8d40a0a6c0c9cdc545b19b56a0d5d88f94bc11a97d970d4700d0
+  glitchtip-db: postgres:17.11-alpine@sha256:e5d2edd28b1f8d40a0a6c0c9cdc545b19b56a0d5d88f94bc11a97d970d4700d0
+  prod-seed: postgres:17.11-alpine@sha256:e5d2edd28b1f8d40a0a6c0c9cdc545b19b56a0d5d88f94bc11a97d970d4700d0
+  staging-seed: postgres:17.11-alpine@sha256:e5d2edd28b1f8d40a0a6c0c9cdc545b19b56a0d5d88f94bc11a97d970d4700d0
+  otel-collector: otel/opentelemetry-collector:0.164.0@sha256:28b6d41ac51bff6b41ba5e8fe503569ffb9d6a1ea90f7a78419e86f34e44f750
+  worldclock-gateway: shakedown/worldclock-gateway:0.1.0
+  prometheus: prom/prometheus:v3.15.1@sha256:fa3302279710be2f21a8301ec17a8b4f2301fd829bd113839b3b6b02b6f191a2
+  alertmanager: prom/alertmanager:v0.34.2@sha256:39d8bb3966c694a124428a3a88fbcffd40bd069129ecd47c059f8a3f17c55f3b
+  loki: grafana/loki:3.7.9@sha256:0db216b630ae1f348a1584c67f3cead8b4c1fc839169a39501db664744158e28
+  tempo: grafana/tempo:2.10.10@sha256:12b0820f13ffa10ce956b6e9acc3b03f3cffded99109be6cc09d106fe56e5d38
+  grafana: grafana/grafana:12.4.14@sha256:ae509d9ae8c1021ca32ec370a9ca975d40165eda9fccd1e1102d317ff8787cd7
+  glitchtip: glitchtip/glitchtip:6.2.6@sha256:a3d8eb1b36c1e1603d55ab32711ea3dd8115874742a781a57391a62a16e0dff6
+  glitchtip-worker: glitchtip/glitchtip:6.2.6@sha256:a3d8eb1b36c1e1603d55ab32711ea3dd8115874742a781a57391a62a16e0dff6
+
+volumes:
+  - {name: prod-db, save: postgres, service: prod-db, database: shop, user: shop}
+  - {name: staging-db, save: postgres, service: staging-db, database: shop, user: shop}
+  - {name: glitchtip-db, save: postgres, service: glitchtip-db, database: glitchtip, user: glitchtip}
+  - {name: prometheus, save: hardlink, live_copy: true}
+  - {name: loki, save: hardlink, live_copy: true}
+  - {name: tempo, save: hardlink, live_copy: true}
+  - {name: grafana, save: skip}
+  - {name: alertmanager, save: skip}
+
+http:
+  - {host: "api.{company.domain}", service: prod-storefront, port: 8000}
+  - {host: "staging-api.{company.domain}", service: staging-storefront, port: 8000}
+  - {host: "grafana.{company.domain}", service: grafana, port: 3000}
+  # The gateway's query face, by host: each answers at the root in world time (Task 7).
+  - {host: "prometheus.{company.domain}", service: worldclock-gateway, port: 4319}
+  - {host: "loki.{company.domain}", service: worldclock-gateway, port: 4319}
+  - {host: "tempo.{company.domain}", service: worldclock-gateway, port: 4319}
+  - {host: "alertmanager.{company.domain}", service: alertmanager, port: 9093}
+  - {host: "glitchtip.{company.domain}", service: glitchtip, port: 8000}
+
+probes:
+  - {key: version/storefront, service: prod-storefront, port: 8000, path: /version}
+  - {key: version/orders, service: prod-orders, port: 8000, path: /version}
+  - {key: version/inventory, service: prod-inventory, port: 8000, path: /version}
+  - {key: alerts, service: alertmanager, port: 9093, path: "/api/v2/alerts?active=true&silenced=false&inhibited=false"}
+  - {key: alerts/paging, service: alertmanager, port: 9093,
+     path: "/api/v2/alerts?active=true&silenced=false&inhibited=false&filter=severity%3D%22page%22"}
+  - key: glitchtip/issues
+    service: glitchtip
+    port: 8000
+    path: "/api/0/organizations/shop/issues/?query=is%3Aunresolved"
+    headers: {Authorization: "Bearer 7e1f4b2a9c8d3e6f5a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f"}
+  # Served by Task 9's traffic service (port 9100): production's SLO from Prometheus at world now, the traffic
+  # it sent, and the contract probe's results.
+  - {key: slo/production, service: traffic, port: 9100, path: "/slo?time={world_s}"}
+  - {key: traffic/stats, service: traffic, port: 9100, path: /stats}
+  - {key: contracts, service: traffic, port: 9100, path: /contracts}
+
+watches:
+  - probe: alerts/paging
+    every_ms: 15000
+    items: ""
+    id: /fingerprint
+    "on": alert_firing
+    "off": alert_resolved
+    fields:
+      summary: /annotations/summary
+      service: /labels/service_name
+      severity: /labels/pagerduty_severity
+      alertname: /labels/alertname
