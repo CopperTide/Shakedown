@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { choicesOf, draftFor, memoryLine, prune, roleCount, STEP_LABEL, STEPS, stepProblem, toggleSystem } from './builder';
+import { afterPreview, blankDraft, choicesOf, chooseTemplate, draftFor, memoryLine, prune, roleCount, STEP_LABEL, STEPS, stepProblem, toggleSystem } from './builder';
 import { form, people, preview } from './fixtures';
 
 describe('the builder draft', () => {
@@ -61,5 +61,31 @@ describe('review', () => {
   it('is blocked by a missing image even when the preview names no problem', () => {
     const missing = { ...preview, needs: { images: [{ image: 'toy:1', present: false, hint: 'make toy' }], memory_mb: 90 } };
     expect(stepProblem(draftFor(form), form, 'review', missing)).toBe('One image is missing: build it, then build the world');
+  });
+});
+
+describe('the builder after a preview', () => {
+  const edited = { ...draftFor(form), edits: { 'dev-003': { name: 'Bo Lee' } }, removed: ['dev-002'] };
+  it('keeps every edit when the preview made no world (a choice that does not fit)', () => {
+    const failed = { ...preview, people: [], tasks: [], problems: [{ path: 'people.counts.dev', message: 'Developers need at least 1' }] };
+    expect(afterPreview(edited, failed)).toBe(edited);
+    expect(afterPreview(edited, { ...failed, people: people(1) })).toBe(edited);
+  });
+  it('prunes edits of people a world no longer has, and is the same draft when nothing goes', () => {
+    expect(afterPreview(edited, { ...preview, people: people(2) })).toMatchObject({ edits: {}, removed: ['dev-002'] });
+    expect(afterPreview(edited, preview)).toBe(edited);
+  });
+  it('choosing another template starts from a blank draft; the same one keeps it', () => {
+    expect(chooseTemplate(edited, 'other')).toEqual(blankDraft('other'));
+    expect(chooseTemplate(edited, 'example')).toBe(edited);
+  });
+});
+
+describe('review copy', () => {
+  it('a missing image the builder names reads as the mockup says; another problem comes first', () => {
+    const image = { path: 'needs.images.toy:1', message: 'the Docker image toy:1 is missing: make toy' };
+    const missing = { ...preview, needs: { images: [{ image: 'toy:1', present: false, hint: 'make toy' }], memory_mb: 90 }, problems: [image] };
+    expect(stepProblem(draftFor(form), form, 'review', missing)).toBe('One image is missing: build it, then build the world');
+    expect(stepProblem(draftFor(form), form, 'review', { ...missing, problems: [image, { path: 'size', message: 'Size is between 2 and 40' }] })).toBe('Size is between 2 and 40');
   });
 });

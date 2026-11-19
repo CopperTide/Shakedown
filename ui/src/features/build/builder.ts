@@ -23,6 +23,16 @@ export interface Draft {
   events: Record<string, { on: boolean; params: Record<string, number | string> }>;
 }
 
+/** A draft of nothing yet but the template chosen; its form's defaults fill it once the form is read. */
+export function blankDraft(template: string | null): Draft {
+  return { template, company: '', size: 0, seed: 1, systems: [], options: {}, counts: {}, edits: {}, added: [], removed: [], events: {} };
+}
+
+/** Choosing a template: another one starts from scratch (its own defaults), the same one keeps the draft. */
+export function chooseTemplate(d: Draft, id: string): Draft {
+  return d.template === id ? d : blankDraft(id);
+}
+
 /** The template's defaults: its company, size, and the systems that are required or on by default. */
 export function draftFor(form: TemplateForm): Draft {
   return {
@@ -86,6 +96,19 @@ export function prune(d: Draft, people: Person[]): Draft {
   return { ...d, edits, removed: d.removed.filter((id) => ids.has(id)) };
 }
 
+/** Whether the preview's choices made a world: the builder lists tasks only then (docs/protocol.md, "Builder calls"). */
+export const generated = (p: Preview) => p.tasks.length > 0;
+
+/**
+ * The draft once a preview of it lands: pruned of edits and removals of people the world no longer has, but only when
+ * the choices made a world (a choice that doesn't fit draws other people, or none); `d` itself when nothing changed.
+ */
+export function afterPreview(d: Draft, p: Preview): Draft {
+  if (!generated(p)) return d;
+  const q = prune(d, p.people);
+  return q.removed.length === d.removed.length && Object.keys(q.edits).length === Object.keys(d.edits).length ? d : q;
+}
+
 function companyProblem(d: Draft, form: TemplateForm): string | null {
   if (!d.company.trim()) return 'Give the company a name';
   const { min, max } = form.size;
@@ -106,11 +129,15 @@ export function stepProblem(d: Draft, form: TemplateForm | null, step: Step, pre
   return null;
 }
 
-/** Review's problem: the preview's first, else a missing image; while there is no preview, that it is coming. */
+/**
+ * Review's problem: the preview's first, where a missing image (which On this machine lists with its command) reads as
+ * the mockup's "One image is missing: …"; while there is no preview, that it is coming.
+ */
 function reviewProblem(preview: Preview | null): string | null {
   if (!preview) return 'Checking the world…';
   const missing = preview.needs.images.filter((i) => !i.present).length;
-  if (preview.problems.length) return preview.problems[0].message;
+  const first = preview.problems.find((x) => !(missing && x.path.startsWith('needs.images.')));
+  if (first) return first.message;
   if (!missing) return null;
   return missing === 1 ? 'One image is missing: build it, then build the world' : `${missing} images are missing: build them, then build the world`;
 }

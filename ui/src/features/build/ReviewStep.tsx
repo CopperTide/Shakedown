@@ -60,8 +60,9 @@ function Machine({ form, d, p }: { form: TemplateForm; d: Draft; p: Preview }) {
   );
 }
 
-/** Everything the world will be before it is built, and what was left out (muted). */
-export default function ReviewStep({ form, d, preview }: { form: TemplateForm; d: Draft; preview: Preview | null }) {
+/** Everything the world will be before it is built, and what was left out (muted); why it couldn't be checked. */
+export default function ReviewStep({ form, d, preview, error = null }: { form: TemplateForm; d: Draft; preview: Preview | null; error?: string | null }) {
+  if (!preview && error) return <Panel><div className="p-4 text-sm text-alarm">{`Can't check the world: ${error}`}</div></Panel>;
   if (!preview) return <Panel><div className="p-4 text-sm text-muted">Checking the world…</div></Panel>;
   return (
     <>
