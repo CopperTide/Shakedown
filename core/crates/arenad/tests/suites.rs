@@ -5,84 +5,31 @@
 //! another, and an external one is claimed and driven run by run over HTTP with Claude Code as
 //! its agent, as a design in its own code would (see `support/live.rs`). Whatever the agents did,
 //! the report must add up their runs.
-#[path = "support/app.rs"]
-mod app_support;
-#[path = "support/live.rs"]
-mod live;
-#[path = "support/packages.rs"]
-mod packages;
-#[path = "support/pg.rs"]
-mod pg;
+mod support;
 
-use std::{
-    future::Future,
-    sync::{Arc, LazyLock},
-    time::Duration,
-};
+use std::time::Duration;
 
-use app_support::send;
 use arenad::{
-    app::AppState,
     model::*,
     store::{NewSuite, Store},
 };
-use live::Live;
-use packages::{toy_world, TestHub, ToyRoot};
-use pg::Cleanup;
 use serde_json::{json, Value};
-
-static RT: LazyLock<tokio::runtime::Runtime> =
-    LazyLock::new(|| tokio::runtime::Runtime::new().unwrap());
-
-fn run<F: Future>(f: F) -> F::Output {
-    RT.block_on(f)
-}
-
-/// Runs `body` on the live model, when there is one (else the test was skipped, said why).
-fn run_live<F: Future<Output = ()>>(live: Option<Live>, body: impl FnOnce(Live) -> F) {
-    if let Some(live) = live {
-        run(body(live));
-    }
-}
+use support::{live, live::Live, packages::toy_world, pg, pg::Cleanup, run, run_live, AppFx};
 
 const SYSTEM: &str =
     r#"{"kind": "erp", "product": "Toy ERP", "stands_in_for": "SAP S/4HANA", "simulated": true}"#;
 
-struct Fx {
-    base: String,
-    http: reqwest::Client,
-    state: Arc<AppState>,
-    _hub: TestHub,
-    _root: ToyRoot,
-    _clean: Cleanup,
-}
-
-async fn setup(tag: &str) -> Fx {
+async fn setup(tag: &str) -> AppFx {
     let bench = ["--scored", "--two-tasks", "--safety"];
     let root = toy_world(tag, &["--system", SYSTEM], &bench);
-    let hub = TestHub::new(std::slice::from_ref(&root.0));
-    let (store, clean) = app_support::meta_store("suites", tag).await;
-    let (state, base) =
-        app_support::app_for(store, hub.hub.clone(), Some("toybench"), |_| {}).await;
-    Fx {
-        base,
-        http: reqwest::Client::new(),
-        state,
-        _hub: hub,
-        _root: root,
-        _clean: clean,
-    }
+    AppFx::configured("suites", tag)
+        .root(root)
+        .bench("toybench")
+        .start()
+        .await
 }
 
-impl Fx {
-    async fn post(&self, path: &str, body: Value) -> (u16, Value) {
-        send(self.http.post(format!("{}{path}", self.base)).json(&body)).await
-    }
-
-    async fn get(&self, path: &str) -> (u16, Value) {
-        send(self.http.get(format!("{}{path}", self.base))).await
-    }
-
+impl AppFx {
     /// Creates a suite: its id.
     async fn suite(&self, body: Value) -> String {
         let (status, v) = self.post("/api/suites", body).await;
@@ -155,7 +102,7 @@ fn rate_of(r: &Value, task: &str, check: &str) -> (i64, i64) {
 }
 
 /// The named checks of each run of a report, from its branch's check: `(task, checks)`.
-async fn runs_checks(fx: &Fx, r: &Value) -> Vec<(String, Vec<parts::proto::NamedCheck>)> {
+async fn runs_checks(fx: &AppFx, r: &Value) -> Vec<(String, Vec<parts::proto::NamedCheck>)> {
     let mut out = vec![];
     for row in r["runs"].as_array().unwrap() {
         let branch = row["branch_id"].as_str().unwrap();
@@ -186,7 +133,7 @@ fn assert_rates(r: &Value, checks: &[(String, Vec<parts::proto::NamedCheck>)]) {
 
 /// The report adds up its runs: each check's rate counts the runs that passed it, the summary's
 /// passes, rate and safety violations follow from them.
-async fn assert_report_adds_up(fx: &Fx, r: &Value, runs: usize) {
+async fn assert_report_adds_up(fx: &AppFx, r: &Value, runs: usize) {
     assert_eq!(r["runs"].as_array().unwrap().len(), runs, "{r}");
     let checks = runs_checks(fx, r).await;
     assert_rates(r, &checks);
@@ -214,7 +161,7 @@ async fn assert_report_adds_up(fx: &Fx, r: &Value, runs: usize) {
 
 /// A run's `RunStart` says what kind of system the part is and which tools read or write it, and
 /// each tool call how long it ran.
-async fn assert_run_start_names_its_systems(fx: &Fx, r: &Value) {
+async fn assert_run_start_names_its_systems(fx: &AppFx, r: &Value) {
     let branch = r["runs"][0]["branch_id"].as_str().unwrap();
     let (_, b) = fx.get(&format!("/api/branches/{branch}")).await;
     let start = &b["events"][0]["payload"];
@@ -296,7 +243,7 @@ fn live_comparing_two_suites_judges_each_check_by_its_rates() {
 }
 
 /// A built-in suite of `team` over both tasks once each, run to its end: its id and report.
-async fn suite_of(fx: &Fx, team: Value) -> (String, Value) {
+async fn suite_of(fx: &AppFx, team: Value) -> (String, Value) {
     let id = fx
         .suite(json!({"team": team, "tasks": ["t1", "t2"], "repeats": 1}))
         .await;
@@ -326,7 +273,7 @@ async fn comparing_two_suites_judges_each_check_by_its_rates(live: Live) {
 }
 
 /// Claims the next run of an external suite: the claim, or None when it is done.
-async fn claim(fx: &Fx, id: &str) -> Option<Value> {
+async fn claim(fx: &AppFx, id: &str) -> Option<Value> {
     let (status, v) = fx.post(&format!("/api/suites/{id}/claim"), json!({})).await;
     assert_eq!(status, 200, "{v}");
     (v["done"] == false).then_some(v)
@@ -347,7 +294,7 @@ fn whole_input(r: &Value) -> i64 {
 /// Drives one claimed run as an external system: Claude Code works as the agent `ext` through
 /// its MCP endpoint, its client's model calls are reported, and the run is finished. The peak
 /// context its reports showed.
-async fn drive(fx: &Fx, live: &Live, c: &Value) -> i64 {
+async fn drive(fx: &AppFx, live: &Live, c: &Value) -> i64 {
     let branch = c["branch_id"].as_str().unwrap();
     let (status, agent) = fx
         .post(

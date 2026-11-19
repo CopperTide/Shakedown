@@ -5,39 +5,16 @@
 //! model: runs an external system starts and finishes with no agent (the setup and the views are
 //! made by the world). `live_`: agents on a real model write (see `support/live.rs`); the views
 //! expected follow from what was recorded.
-#[path = "support/app.rs"]
-mod app_support;
-#[path = "support/live.rs"]
-mod live;
-#[path = "support/packages.rs"]
-mod packages;
-#[path = "support/pg.rs"]
-mod pg;
+mod support;
 
-use std::{
-    future::Future,
-    sync::{Arc, LazyLock},
-};
-
-use arenad::{app::AppState, model::*};
-use live::Live;
-use packages::{package_root, toy, TestHub, ToyRoot};
-use pg::Cleanup;
+use arenad::model::*;
 use serde_json::{json, Value};
-
-static RT: LazyLock<tokio::runtime::Runtime> =
-    LazyLock::new(|| tokio::runtime::Runtime::new().unwrap());
-
-fn run<F: Future>(f: F) -> F::Output {
-    RT.block_on(f)
-}
-
-/// Runs `body` on the live model, when there is one (else the test was skipped, said why).
-fn run_live<F: Future<Output = ()>>(live: Option<Live>, body: impl FnOnce(Live) -> F) {
-    if let Some(live) = live {
-        run(body(live));
-    }
-}
+use support::{
+    live,
+    live::Live,
+    packages::{package_root, toy, ToyRoot},
+    run, run_live, AppFx,
+};
 
 /// One disruption the builder may add: `jam` on part `a`, after `{after}` calls.
 fn options() -> Value {
@@ -77,37 +54,18 @@ fn world_with(tag: &str, extra: &[&str], part: &[&str]) -> ToyRoot {
     )
 }
 
-struct Fx {
-    state: Arc<AppState>,
-    base: String,
-    _hub: TestHub,
-    _root: ToyRoot,
-    _clean: Cleanup,
+async fn setup(tag: &str, root: ToyRoot) -> AppFx {
+    AppFx::configured("twin", tag)
+        .root(root)
+        .bench("toybench")
+        .start()
+        .await
 }
 
-async fn setup(tag: &str, root: ToyRoot) -> Fx {
-    let hub = TestHub::new(std::slice::from_ref(&root.0));
-    let (store, clean) = app_support::meta_store("twin", tag).await;
-    let (state, base) =
-        app_support::app_for(store, hub.hub.clone(), Some("toybench"), |_| {}).await;
-    Fx {
-        state,
-        base,
-        _hub: hub,
-        _root: root,
-        _clean: clean,
-    }
-}
-
-impl Fx {
-    async fn post(&self, path: &str, body: Value) -> (u16, Value) {
-        let url = format!("{}{path}", self.base);
-        app_support::send(reqwest::Client::new().post(url).json(&body)).await
-    }
-
-    async fn get(&self, path: &str) -> Value {
-        let url = format!("{}{path}", self.base);
-        let (status, v) = app_support::send(reqwest::Client::new().get(url)).await;
+impl AppFx {
+    /// The body of a `GET` that must answer 200.
+    async fn get_ok(&self, path: &str) -> Value {
+        let (status, v) = self.get(path).await;
         assert_eq!(status, 200, "{v}");
         v
     }
@@ -202,7 +160,7 @@ fn views_wanted(evs: &[Event]) -> Vec<(i64, String)> {
 fn a_scenario_is_expanded_into_the_setup_and_recorded() {
     run(async {
         let fx = setup("scen", world("scen", &[])).await;
-        let offered = fx.get("/api/benchmark").await;
+        let offered = fx.get_ok("/api/benchmark").await;
         assert_eq!(offered["scenario_options"]["disruptions"][0]["id"], "jam");
         assert_eq!(offered["view"], true);
         let bad = json!({"disruptions": [{"id": "jam", "params": {"after": 99}}]});
@@ -254,7 +212,7 @@ async fn views_follow_the_writing_steps_and_forks_inherit_them(live: Live) {
             json!({"disruptions": [{"id": "jam", "params": {}}]}),
         )
         .await;
-    let views = fx.get(&format!("/api/branches/{parent}/views")).await;
+    let views = fx.get_ok(&format!("/api/branches/{parent}/views")).await;
     let want = views_wanted(&evs);
     assert_eq!(drawn(&views), want);
     let set = steps(&evs, "setup");
@@ -265,7 +223,7 @@ async fn views_follow_the_writing_steps_and_forks_inherit_them(live: Live) {
         cevs[0].payload["scenario"]["disruptions"][0]["id"], "jam",
         "the fork keeps it"
     );
-    let inherited = drawn(&fx.get(&format!("/api/branches/{child}/views")).await);
+    let inherited = drawn(&fx.get_ok(&format!("/api/branches/{child}/views")).await);
     let before: Vec<_> = want.iter().filter(|(s, _)| *s < at).cloned().collect();
     assert_eq!(inherited[..before.len()], before[..]);
     assert_eq!(inherited, views_wanted(&cevs));
@@ -282,7 +240,7 @@ fn a_failing_view_records_nothing_and_fails_nothing() {
         assert_eq!(evs.last().unwrap().kind, EventKind::Check);
         let fx = setup("startview", world("startview", &[])).await;
         let (branch, _) = fx.external_run(Value::Null).await;
-        let views = fx.get(&format!("/api/branches/{branch}/views")).await;
+        let views = fx.get_ok(&format!("/api/branches/{branch}/views")).await;
         assert_eq!(drawn(&views), [(1, "0".to_string())], "after RunStart");
     })
 }
@@ -321,7 +279,7 @@ async fn internal_keys_are_saved_but_make_no_write_and_no_view(live: Live) {
     let (parent, evs) = fx.run_in(&live, &team, Value::Null).await;
     let peeks = live::calls_named(&evs, "b_peek");
     assert_internal_only(&peeks);
-    let views = fx.get(&format!("/api/branches/{parent}/views")).await;
+    let views = fx.get_ok(&format!("/api/branches/{parent}/views")).await;
     let why = "after RunStart and the writes, not the peeks";
     assert_eq!(drawn(&views), views_wanted(&evs), "{why}");
     let at = live::first_of(&evs, EventKind::AgentStart, "second").unwrap();

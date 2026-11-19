@@ -1,49 +1,12 @@
 //! `/api/world`, `/api/usage`, `/api/gc` and `/api/team/default` over toy integrations and a toy
 //! benchmark. `live_`: a run on a real model (see `support/live.rs`).
-#[path = "support/app.rs"]
-mod app_support;
-#[path = "support/live.rs"]
-mod live;
-#[path = "support/packages.rs"]
-mod packages;
-#[path = "support/pg.rs"]
-mod pg;
+mod support;
 
-use std::{
-    future::Future,
-    sync::{Arc, LazyLock},
-    time::Duration,
-};
+use std::{sync::Arc, time::Duration};
 
-use arenad::{app::AppState, model::*};
-use live::Live;
-use packages::{Package, TestHub, ToyRoot};
-use pg::Cleanup;
+use arenad::model::*;
 use serde_json::{json, Value};
-
-static RT: LazyLock<tokio::runtime::Runtime> =
-    LazyLock::new(|| tokio::runtime::Runtime::new().unwrap());
-
-fn run<F: Future>(f: F) -> F::Output {
-    RT.block_on(f)
-}
-
-/// Runs `body` on the live model, when there is one (else the test was skipped, said why).
-fn run_live<F: Future<Output = ()>>(live: Option<Live>, body: impl FnOnce(Live) -> F) {
-    if let Some(live) = live {
-        run(body(live));
-    }
-}
-
-/// An app whose benchmark is the toy `toybench`; its hub, metadata database and packages are
-/// dropped with it.
-struct Fx {
-    state: Arc<AppState>,
-    hub: TestHub,
-    base: String,
-    _root: ToyRoot,
-    _clean: Cleanup,
-}
+use support::{app, live, live::Live, packages, packages::Package, run, run_live, AppFx};
 
 /// A toy integration `name` started with `args`.
 fn integration(name: &str, args: &[&str]) -> Package {
@@ -54,7 +17,7 @@ fn integration(name: &str, args: &[&str]) -> Package {
 
 /// An app over the toy `integrations` and a benchmark whose parts are `parts` (`part=integration`),
 /// with the real drivers on the configured providers.
-async fn setup(tag: &str, integrations: Vec<Package>, parts: &[&str]) -> Fx {
+async fn setup(tag: &str, integrations: Vec<Package>, parts: &[&str]) -> AppFx {
     let mut bench = vec!["bench"];
     for p in parts {
         bench.extend(["--part", p]);
@@ -62,28 +25,18 @@ async fn setup(tag: &str, integrations: Vec<Package>, parts: &[&str]) -> Fx {
     let mut all = integrations;
     all.push(packages::toy("toybench", "benchmark", &bench));
     let root = packages::package_root(tag, &all);
-    let hub = TestHub::new(std::slice::from_ref(&root.0));
-    let (store, clean) = app_support::meta_store("world", tag).await;
-    let (state, base) =
-        app_support::app_for(store, hub.hub.clone(), Some("toybench"), |_| {}).await;
-    Fx {
-        state,
-        hub,
-        base,
-        _root: root,
-        _clean: clean,
-    }
+    AppFx::configured("world", tag)
+        .root(root)
+        .bench("toybench")
+        .start()
+        .await
 }
 
-impl Fx {
-    async fn get(&self, path: &str) -> (u16, Value) {
+impl AppFx {
+    /// A `POST` with no body.
+    async fn post_empty(&self, path: &str) -> (u16, Value) {
         let client = reqwest::Client::new();
-        app_support::send(client.get(format!("{}{path}", self.base))).await
-    }
-
-    async fn post(&self, path: &str) -> (u16, Value) {
-        let client = reqwest::Client::new();
-        app_support::send(client.post(format!("{}{path}", self.base))).await
+        app::send(client.post(format!("{}{path}", self.base))).await
     }
 
     /// A toy save `save` in `integration`, with its folder.
@@ -227,7 +180,7 @@ fn gc_keeps_referenced_saves() {
         fx.record_run("toy-a", "s_kept").await;
         let folder = |s: &str| fx.hub.saves.join("toy-a").join(s);
 
-        let (st, v) = fx.post("/api/gc").await;
+        let (st, v) = fx.post_empty("/api/gc").await;
         assert_eq!(st, 200, "{v}");
         assert_eq!(v["removed"], json!(["s_orphan"]));
         assert_eq!(v["freed_bytes"], 1);
@@ -258,7 +211,7 @@ fn world_bounds_hung_part() {
 }
 
 /// A branch of the toy world, running as far as `state.live` is concerned.
-async fn make_live(fx: &Fx) {
+async fn make_live(fx: &AppFx) {
     let world = fx.hub.start_world("toybench", "b1").await;
     let team = Team {
         id: "t".into(),
@@ -284,7 +237,7 @@ fn gc_refused_while_branch_live() {
         .await;
         fx.save("toy-a", "s_orphan").await;
         make_live(&fx).await;
-        let (st, v) = fx.post("/api/gc").await;
+        let (st, v) = fx.post_empty("/api/gc").await;
         assert_eq!(st, 409, "{v}");
         assert_eq!(
             v["error"],
@@ -295,7 +248,7 @@ fn gc_refused_while_branch_live() {
             "nothing was dropped"
         );
         fx.state.live.write().unwrap().clear();
-        assert_eq!(fx.post("/api/gc").await.0, 200);
+        assert_eq!(fx.post_empty("/api/gc").await.0, 200);
     })
 }
 
@@ -311,11 +264,11 @@ fn run_refused_during_gc() {
         let held = fx.state.cleanup.clone().write_owned().await;
         let want = "Saves are being cleaned up; try again in a moment";
         for path in ["/api/runs", "/api/branches/b/fork", "/api/gc"] {
-            let (st, v) = fx.post(path).await;
+            let (st, v) = fx.post_empty(path).await;
             assert_eq!((st, v["error"].as_str()), (409, Some(want)), "{path}");
         }
         drop(held);
-        assert_eq!(fx.post("/api/gc").await.0, 200);
+        assert_eq!(fx.post_empty("/api/gc").await.0, 200);
     })
 }
 
@@ -335,7 +288,7 @@ fn gc_holds_the_lock_until_the_integration_answers() {
             .post(format!("{}/api/gc", fx.base));
         assert!(request.send().await.is_err_and(|e| e.is_timeout()));
         assert!(fx.state.cleanup.try_read().is_err(), "gc gave up the lock");
-        assert_eq!(fx.post("/api/runs").await.0, 409);
+        assert_eq!(fx.post_empty("/api/runs").await.0, 409);
         std::fs::write(&go, "").unwrap();
         for _ in 0..100 {
             if fx.state.cleanup.try_read().is_ok() {
@@ -353,7 +306,7 @@ fn gc_reports_failing_integration() {
     run(async {
         let part = integration("toy-a", &["--gc", "--gc-fails"]);
         let fx = setup("gcfails", vec![part], &["box=toy-a"]).await;
-        let (st, v) = fx.post("/api/gc").await;
+        let (st, v) = fx.post_empty("/api/gc").await;
         assert_eq!(st, 200, "{v}");
         assert_eq!(v["removed"], json!([]));
         let errors = v["errors"].as_array().unwrap();
@@ -384,10 +337,10 @@ async fn gc_refused_right_after_run_starts(live: Live) {
     let team = live.team(vec![live.agent("a", "Call the peek tool once, then stop.")]);
     let client = reqwest::Client::new();
     let req = client.post(format!("{}/api/runs", fx.base));
-    let (st, v) = app_support::send(req.json(&json!({"task_id": "t1", "team": team}))).await;
+    let (st, v) = app::send(req.json(&json!({"task_id": "t1", "team": team}))).await;
     assert_eq!(st, 200, "{v}");
     let branch = v["branch_id"].as_str().unwrap().to_string();
-    let (st, v) = fx.post("/api/gc").await;
+    let (st, v) = fx.post_empty("/api/gc").await;
     assert_eq!(st, 409, "{v}");
     let (b, evs) = live::ended_ok(&fx.state, &branch).await;
     live::assert_recorded(&b, &evs, &live);

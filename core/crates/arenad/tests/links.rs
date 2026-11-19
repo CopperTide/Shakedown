@@ -5,85 +5,40 @@
 //! gate and a link set off by a call, checked by calling the world's tools through Arena's MCP
 //! endpoint on a live branch. `live_`: runs on a real model (see `support/live.rs`), while the
 //! clock, the setup and the links do what they do on their own.
-#[path = "support/app.rs"]
-mod app_support;
-#[path = "support/live.rs"]
-mod live;
-#[path = "support/packages.rs"]
-mod packages;
-#[path = "support/pg.rs"]
-mod pg;
+mod support;
 
-use std::{
-    future::Future,
-    sync::{Arc, LazyLock},
-};
+use std::sync::Arc;
 
-use app_support::send;
-use arenad::{app::AppState, exec::BranchCtx, model::*, runner, world::plan};
-use live::Live;
-use packages::{counter, package_root, toy, Package, TestHub, ToyRoot};
-use pg::Cleanup;
+use arenad::{exec::BranchCtx, model::*, runner, world::plan};
 use serde_json::{json, Value};
-
-static RT: LazyLock<tokio::runtime::Runtime> =
-    LazyLock::new(|| tokio::runtime::Runtime::new().unwrap());
-
-fn run<F: Future>(f: F) -> F::Output {
-    RT.block_on(f)
-}
-
-/// Runs `body` on the live model, when there is one (else the test was skipped, said why).
-fn run_live<F: Future<Output = ()>>(live: Option<Live>, body: impl FnOnce(Live) -> F) {
-    if let Some(live) = live {
-        run(body(live));
-    }
-}
+use support::{
+    app::send,
+    live,
+    live::Live,
+    packages::{counter, package_root, toy, Package, TestHub, ToyRoot},
+    run, run_live, AppFx,
+};
 
 /// A team for runs that never reach an agent, and for live branches driven through MCP.
 fn idle_team() -> Team {
     Team {
         id: "t".into(),
         name: "T".into(),
-        agents: vec![AgentSpec {
-            tools: Vec::new(),
-            id: "solo".into(),
-            name: "solo".into(),
-            kind: AgentKind::ClaudeCode,
-            model: Some("haiku".into()),
-            prompt: "You are solo.".into(),
-            provider: None,
-            read_only: false,
-            lead: false,
-            url: None,
-            headers: Default::default(),
-        }],
+        agents: vec![AgentSpec::new("solo", AgentKind::ClaudeCode)
+            .with_model("haiku")
+            .with_prompt("You are solo.")],
     }
 }
 
-struct Fx {
-    state: Arc<AppState>,
-    base: String,
-    hub: TestHub,
-    _root: ToyRoot,
-    _clean: Cleanup,
+async fn setup(tag: &str, root: ToyRoot) -> AppFx {
+    AppFx::configured("links", tag)
+        .root(root)
+        .bench("toybench")
+        .start()
+        .await
 }
 
-async fn setup(tag: &str, root: ToyRoot) -> Fx {
-    let hub = TestHub::new(std::slice::from_ref(&root.0));
-    let (store, clean) = app_support::meta_store("links", tag).await;
-    let (state, base) =
-        app_support::app_for(store, hub.hub.clone(), Some("toybench"), |_| {}).await;
-    Fx {
-        state,
-        base,
-        hub,
-        _root: root,
-        _clean: clean,
-    }
-}
-
-impl Fx {
+impl AppFx {
     /// Runs `team` on task `t1` to its end (not an infrastructure error): its branch and events.
     async fn run_to_end(&self, live: &Live, team: Team) -> (String, Vec<Event>) {
         let (_run, branch) = runner::start_run(&self.state, "t1", team).await.unwrap();

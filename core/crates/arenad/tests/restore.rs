@@ -4,41 +4,20 @@
 //! made before any agent) puts the world in the state a fork must restore, and the agents are
 //! real models (see `support/live.rs`) that mostly only read, so what is restored doesn't depend
 //! on what they chose to do. Every test here is `live_`.
-#[path = "support/app.rs"]
-mod app_support;
-#[path = "support/live.rs"]
-mod live;
-#[path = "support/packages.rs"]
-mod packages;
-#[path = "support/pg.rs"]
-mod pg;
+mod support;
 
-use std::{
-    future::Future,
-    sync::{Arc, LazyLock},
-    time::Duration,
-};
+use std::{ops::Deref, sync::Arc, time::Duration};
 
 use arenad::{app::AppState, model::*, runner, store::Store};
-use live::Live;
-use packages::{counter, package_root, toy, Package, TestHub, ToyRoot};
 use parts::Hub;
-use pg::Cleanup;
 use serde_json::{json, Value};
-
-static RT: LazyLock<tokio::runtime::Runtime> =
-    LazyLock::new(|| tokio::runtime::Runtime::new().unwrap());
-
-fn run<F: Future>(f: F) -> F::Output {
-    RT.block_on(f)
-}
-
-/// Runs `body` on the live model, when there is one (else the test was skipped, said why).
-fn run_live<F: Future<Output = ()>>(live: Option<Live>, body: impl FnOnce(Live) -> F) {
-    if let Some(live) = live {
-        run(body(live));
-    }
-}
+use support::{
+    app, live,
+    live::Live,
+    packages,
+    packages::{counter, package_root, toy, Package, ToyRoot},
+    run_live, AppFx,
+};
 
 /// One call of a task's setup: `tool` of part `part` with `args`.
 fn call(part: &str, tool: &str, args: Value) -> String {
@@ -87,31 +66,34 @@ fn counter_world(tag: &str, flavour: &str, extra: &[&str], setup: &[String]) -> 
     )
 }
 
+/// An app whose benchmark is `toybench` on `root`'s packages, with the real drivers, and the
+/// live model its tests run on.
 struct Fx {
-    state: Arc<AppState>,
-    base: String,
-    hub: TestHub,
+    app: AppFx,
     live: Live,
-    _root: ToyRoot,
-    _clean: Cleanup,
+}
+
+impl Deref for Fx {
+    type Target = AppFx;
+
+    fn deref(&self) -> &AppFx {
+        &self.app
+    }
 }
 
 /// An app served on a free port whose benchmark is `toybench` on `hub`, with the real drivers.
 async fn serve_app(store: Arc<Store>, hub: Arc<Hub>) -> (Arc<AppState>, String) {
-    app_support::app_for(store, hub, Some("toybench"), |_| {}).await
+    app::app_for(store, hub, Some("toybench"), |_| {}).await
 }
 
 async fn setup(tag: &str, root: ToyRoot, live: &Live) -> Fx {
-    let hub = TestHub::new(std::slice::from_ref(&root.0));
-    let (store, clean) = app_support::meta_store("restore", tag).await;
-    let (state, base) = serve_app(store, hub.hub.clone()).await;
+    let app = AppFx::configured("restore", tag)
+        .root(root)
+        .bench("toybench");
+    let app = app.start().await;
     Fx {
-        state,
-        base,
-        hub,
+        app,
         live: live.clone(),
-        _root: root,
-        _clean: clean,
     }
 }
 
@@ -123,10 +105,6 @@ fn readers(live: &Live, n: usize, tool: &str) -> Team {
 }
 
 impl Fx {
-    async fn get(&self, path: &str) -> (u16, Value) {
-        app_support::send(reqwest::Client::new().get(format!("{}{path}", self.base))).await
-    }
-
     async fn fork(&self, branch: &str, at_seq: i64, restore: Option<&str>) -> (u16, Value) {
         fork_on(&self.base, branch, at_seq, restore).await
     }
@@ -161,7 +139,7 @@ async fn fork_on(base: &str, branch: &str, at_seq: i64, restore: Option<&str>) -
         body["restore"] = json!(r);
     }
     let url = format!("{base}/api/branches/{branch}/fork");
-    app_support::send(reqwest::Client::new().post(url).json(&body)).await
+    app::send(reqwest::Client::new().post(url).json(&body)).await
 }
 
 /// The seq of agent `id`'s start.
