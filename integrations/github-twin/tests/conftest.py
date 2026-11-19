@@ -316,3 +316,14 @@ def push_commit(t: Twin, branch: str, name: str, text: str, message=None) -> str
     sha = commit(t.clone, name, text, message)
     push(t.clone, t.token, f"HEAD:refs/heads/{branch}")
     return sha
+
+
+# --- live Docker tests --------------------------------------------------------------------
+def pytest_collection_modifyitems(config, items):
+    """Tests under `live/` run real Docker: only when asked with `-m live`, so the default gate needs none."""
+    if "live" in (config.option.markexpr or ""):
+        return
+    skip = pytest.mark.skip(reason="runs real Docker: run with -m live")
+    for item in items:
+        if "/tests/live/" in str(item.path):
+            item.add_marker(skip)

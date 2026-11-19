@@ -25,6 +25,7 @@ integration"}` with `X-Arena-Effect: read`. The proxy does not send either heade
 | `installed_version` | what `/meta` answers (default `3.20.0`, gh's leanest GHES path) |
 | `repos` | `[{name, source, default_branch, description, private}]`: `source` is a folder whose files become the first commit |
 | `protection` | `{<repo>: {required_reviews}}` (none by default) |
+| `actions` | `{enabled, runners: {<runs-on label>: <image>}, image_prefix, job_memory: "384m", job_cpus: "1", job_pids: 256, step_timeout_s: 600, deploy_timeout_s: 300}`: off unless `enabled` |
 
 ## What it serves
 
@@ -52,6 +53,19 @@ integration"}` with `X-Arena-Effect: read`. The proxy does not send either heade
   (`Field 'x' doesn't exist on type 'Y'`), execution errors carry GitHub's `type` (`NOT_FOUND`, `FORBIDDEN`,
   `UNPROCESSABLE`). Queries answer `X-Arena-Effect: read`, a mutation that changed something `write`; a read-only
   agent's mutation gets `FORBIDDEN` `Resource not accessible by integration` and changes nothing.
+- Actions (`actions.enabled`): a push, and a pull request opened, synchronised or reopened, start a run of each
+  workflow in the commit's `.github/workflows/*.yml` whose `on` matches (`push`/`pull_request`, `branches`). The
+  subset: `name`, `on`, `env`, jobs with `name`, `runs-on` (an image from `actions.runners`), `container.image`,
+  `needs`, `if` (`github.ref`/`github.event_name` `==`/`!=` a string), `env`, and steps of `run`,
+  `actions/checkout@v4` (the workspace is always the commit's files), `shakedown/build@v1 {image, context?}`
+  (`docker build --pull=false --network none -t <image_prefix>/<image>:<sha>`) and `shakedown/deploy@v1
+  {service, image}`. Anything else (and any `${{ }}` outside `if`) ends the run `startup_failure` saying where.
+  One job at a time per instance, oldest run first; each `run` step is `docker run --rm --pull never --network
+  none` with the memory, CPU and process caps, the twin's own user, and is removed past `step_timeout_s`. Each job
+  is a check run `<workflow> / <job>` and a status `<workflow> / <job> (<event>)`; logs are kept in the store
+  (saved with it). A deploy step queues the event `deploy {service, image, sha, repo, run_id, job_id, by}` and
+  waits for `github_act deploy_result {job_id, ok, error?}`, failing after `deploy_timeout_s` of world time. A run
+  in progress when a save was made runs again, as its next attempt, when an instance starts from that save.
 - Webhooks are sent after the request commits, signed with `X-Hub-Signature-256` when the hook has a secret, and
   only to `127.0.0.1`, `localhost` or `::1`; any other URL is recorded failed, `outside the world`.
 
@@ -59,7 +73,10 @@ integration"}` with `X-Arena-Effect: read`. The proxy does not send either heade
 
 `github_act {person, action, args}` (called by links): `open_pr {repo, branch, base?, patch, title, body}` (the
 patch applied with `git apply` and committed as the person), `review {repo, number, event, body}`,
-`merge {repo, number, method}`, `comment {repo, number, body}`, `close {repo, number}`.
+`merge {repo, number, method}`, `comment {repo, number, body}`, `close {repo, number}`, `deploy_result {job_id, ok,
+error?}` (the world's answer to a deploy step).
+
+With Actions on, a deploy step also reports a `deploy` event (above).
 
 At the next `advance` the twin reports `notice` events, `data = {system: "github", kind, data}`:
 `review_requested {repo, number, reviewer, author, title, checks}`, `pr_opened`, `pr_merged {repo, number, by, sha}`,
@@ -70,6 +87,7 @@ At the next `advance` the twin reports `notice` events, `data = {system: "github
 `repo/<o>/<r>` `{default_branch, private, description}`; `branch/<o>/<r>/<b>` `{sha, forced_pushes}`;
 `pull/<o>/<r>/<n>` `{state, merged, merged_by, author, head_sha, reviewed_at_merge, approvals_at_merge}`;
 `issue/<o>/<r>/<n>` `{state, title, author, labels, assignees, comments}`; `check/<o>/<r>/<sha>` `{conclusion, runs}`;
+`run/<o>/<r>/<id>` `{workflow, event, head_branch, head_sha, status, conclusion, attempt, error, jobs}`;
 `hook/<id>` `{deliveries, failed}`.
 
 ## Verified
@@ -87,3 +105,11 @@ approval refused, the reviewer's approval, squash merge); and, marked `live`, gh
 --delete-branch`; a read-only agent's `pr list` served and `pr merge` refused. Because the front listens on a
 port (not 443), gh cannot match the clone's remote to `GH_HOST`, so the tests pass `-R <host:port>/acme/app`.
 Not yet verified through arenad's proxy (it does not send `X-Arena-Agent` yet).
+
+Actions: `tests/test_actions_*.py` on a fake Docker (runs, needs and `if`, deploy result and world-time timeout,
+cancel, re-run, a run caught by a save run again after restore, the same runs from two twins giving the same docs);
+`tests/test_gh_run.py` (`live`, gh 2.45.0 through the TLS front): `run list` (table and `--json`), `run view`,
+`--log`, `--log-failed`, `--job <id> --log`, `run watch` following a run to its end, `run rerun`, `pr checks`.
+`uv run --with pytest pytest -q -m live tests/live/` (Docker 2026-11-19, `python:3.12-slim` pinned by digest in
+`tests/live/images.json`): the fixture repo's `python -m unittest` passes, then fails with unittest's lines in the
+log; a job cannot reach the network; a step past its time is removed; no container or folder is left.
