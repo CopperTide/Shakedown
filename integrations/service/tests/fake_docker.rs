@@ -14,6 +14,8 @@ case "$*" in
   *" stop") [ -n "$FAKE_STOP_FAIL" ] && { echo no stop >&2; exit 1; } ;;
   *" up "*) [ -n "$FAKE_UP_FAIL" ] && { echo no up >&2; exit 1; } ;;
   *-cpf*) case "$*" in *_bad:/v*) echo no export >&2; exit 1 ;; *) printf tar ;; esac ;;
+  *" port "*) echo 127.0.0.1:49153 ;;
+  *pg_dump*) printf -- '-- dumped at some time\nCREATE TABLE t (n int);\n' ;;
 esac
 exit 0
 "#;
@@ -203,4 +205,228 @@ async fn a_restarted_program_still_saves_inspects_and_stops_a_running_instance()
     assert!(f.log().contains(" down -v"), "{}", f.log());
     let gone = again.save(save_params(&f, "a")).await.unwrap_err();
     assert_eq!(gone.message, "no instance a");
+}
+
+/// A config with `volumes` given as JSON (names or specs) and `extra` top-level fields.
+fn config_with(f: &Fake, volumes: Value, extra: Value) -> Value {
+    let mut c = f.config(&[], json!({}));
+    c["volumes"] = volumes;
+    c.as_object_mut()
+        .unwrap()
+        .extend(extra.as_object().unwrap().clone());
+    c
+}
+
+fn save_as(f: &Fake, id: &str, save: &str) -> SaveParams {
+    let dir = f.0.join("saves/service").join(save);
+    SaveParams {
+        instance: id.into(),
+        save: save.into(),
+        dir: dir.to_string_lossy().into(),
+    }
+}
+
+/// The log lines written since `from` lines.
+fn log_since(f: &Fake, from: usize) -> Vec<String> {
+    f.log().lines().skip(from).map(str::to_string).collect()
+}
+
+const RSYNC: &str =
+    "example/rsync:3.2@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+
+#[tokio::test]
+async fn plain_volume_names_save_as_before() {
+    let f = Fake::new("plainnames");
+    let p = f.part();
+    p.start(start("a", f.config(&["data"], json!({}))))
+        .await
+        .unwrap();
+    let before = f.log().lines().count();
+    p.save(save_params(&f, "a")).await.unwrap();
+    let lines = log_since(&f, before);
+    assert_eq!(lines.len(), 3, "{lines:?}");
+    assert!(
+        lines[0].ends_with(" stop") && lines[2].ends_with(" start"),
+        "{lines:?}"
+    );
+    let export = "--network none --entrypoint tar -v arena_a_data:/v redis:6.2-alpine -C /v -cpf - --numeric-owner .";
+    assert!(
+        lines[1].starts_with("run --rm --pull never ") && lines[1].ends_with(export),
+        "{lines:?}"
+    );
+}
+
+#[tokio::test]
+async fn a_postgres_volume_is_dumped_without_stopping_anything() {
+    let f = Fake::new("pgdump");
+    let p = f.part();
+    let volumes = json!([{"name": "pg", "save": "postgres", "service": "db"}]);
+    p.start(start("a", config_with(&f, volumes, json!({}))))
+        .await
+        .unwrap();
+    p.save(save_params(&f, "a")).await.unwrap();
+    let log = f.log();
+    assert!(
+        log.contains("exec -T db pg_dump -U postgres --no-owner postgres"),
+        "{log}"
+    );
+    assert!(
+        !log.lines()
+            .any(|l| l.ends_with(" stop") || l.contains(" stop ")),
+        "{log}"
+    );
+    let dir = f.0.join("saves/service/s1");
+    assert!(dir.join("pg.sql").is_file() && dir.join("save.json").is_file());
+}
+
+#[tokio::test]
+async fn a_postgres_save_is_restored_with_psql_before_the_rest_starts() {
+    let f = Fake::new("pgrestore");
+    let p = f.part();
+    let volumes = json!([{"name": "pg", "save": "postgres", "service": "db", "database": "app", "user": "u"}]);
+    let config = config_with(&f, volumes, json!({}));
+    p.start(start("a", config.clone())).await.unwrap();
+    p.save(save_params(&f, "a")).await.unwrap();
+    let before = f.log().lines().count();
+    let mut from = start("b", config);
+    from.from = Some(FromSave {
+        save: "s1".into(),
+        mode: Mode::Exact,
+    });
+    p.start(from).await.unwrap();
+    let lines = log_since(&f, before);
+    let at = |needle: &str| {
+        lines
+            .iter()
+            .position(|l| l.contains(needle))
+            .unwrap_or_else(|| panic!("{needle}: {lines:?}"))
+    };
+    assert!(at(" up -d db") < at("exec -T db psql -U u -d app"));
+    assert!(at("exec -T db psql") < lines.iter().rposition(|l| l.ends_with(" up -d")).unwrap());
+}
+
+#[tokio::test]
+async fn a_skipped_volume_is_neither_saved_nor_restored() {
+    let f = Fake::new("skipvol");
+    let p = f.part();
+    let volumes = json!(["data", {"name": "cache", "save": "skip"}]);
+    let config = config_with(&f, volumes, json!({}));
+    p.start(start("a", config.clone())).await.unwrap();
+    p.save(save_params(&f, "a")).await.unwrap();
+    let mut from = start("b", config);
+    from.from = Some(FromSave {
+        save: "s1".into(),
+        mode: Mode::Exact,
+    });
+    p.start(from).await.unwrap();
+    let log = f.log();
+    assert!(
+        log.contains("arena_a_data:/v") && log.contains("arena_b_data:/v"),
+        "{log}"
+    );
+    assert!(!log.contains("_cache:/v"), "{log}");
+}
+
+/// The logged `rsync` runs.
+fn rsync_lines(f: &Fake) -> Vec<String> {
+    let lines = f.log().lines().map(str::to_string).collect::<Vec<_>>();
+    lines
+        .into_iter()
+        .filter(|l| l.contains(" rsync "))
+        .collect()
+}
+
+#[tokio::test]
+async fn a_hardlink_volume_links_against_the_previous_save() {
+    let f = Fake::new("hardlink");
+    let p = f.part();
+    let volumes = json!([{"name": "files", "save": "hardlink"}]);
+    p.start(start(
+        "a",
+        config_with(&f, volumes, json!({"rsync_image": RSYNC})),
+    ))
+    .await
+    .unwrap();
+    p.save(save_as(&f, "a", "s1")).await.unwrap();
+    p.save(save_as(&f, "a", "s2")).await.unwrap();
+    let rsyncs = rsync_lines(&f);
+    assert_eq!(rsyncs.len(), 2, "{rsyncs:?}");
+    assert!(
+        rsyncs
+            .iter()
+            .all(|l| l.contains("--pull missing") && l.contains(RSYNC)),
+        "{rsyncs:?}"
+    );
+    assert!(!rsyncs[0].contains("--link-dest"), "{}", rsyncs[0]);
+    assert!(
+        rsyncs[1].contains("--link-dest=/saves/s1/files/"),
+        "{}",
+        rsyncs[1]
+    );
+    assert!(rsyncs[1].ends_with("/v/ /saves/s2/files/"), "{}", rsyncs[1]);
+}
+
+#[tokio::test]
+async fn file_volumes_that_name_their_services_stop_only_those() {
+    let f = Fake::new("partstop");
+    let p = f.part();
+    let volumes = json!([{"name": "prom", "services": ["prom"]},
+                         {"name": "logs", "save": "hardlink", "services": ["loki"]}]);
+    p.start(start(
+        "a",
+        config_with(&f, volumes, json!({"rsync_image": RSYNC})),
+    ))
+    .await
+    .unwrap();
+    p.save(save_params(&f, "a")).await.unwrap();
+    let log = f.log();
+    assert!(log.lines().any(|l| l.ends_with(" stop prom loki")), "{log}");
+    assert!(
+        log.lines().any(|l| l.ends_with(" start prom loki")),
+        "{log}"
+    );
+    assert!(!log.lines().any(|l| l.ends_with(" stop")), "{log}");
+}
+
+#[tokio::test]
+async fn the_service_serves_the_hosts_its_config_names() {
+    let f = Fake::new("routes");
+    let p = f.part();
+    let http = json!([{"host": "app.acme.test", "service": "web", "port": 8080,
+                       "env": {"APP_URL": "https://app.acme.test"}}]);
+    p.start(start(
+        "a",
+        config_with(&f, json!(["data"]), json!({"http": http})),
+    ))
+    .await
+    .unwrap();
+    let routes = p
+        .http_routes(IdParams {
+            instance: "a".into(),
+        })
+        .await
+        .unwrap();
+    assert_eq!(routes.routes.len(), 1);
+    assert_eq!(routes.routes[0].host, "app.acme.test");
+    assert_eq!(routes.routes[0].upstream, "http://127.0.0.1:49153");
+    assert_eq!(routes.routes[0].env["APP_URL"], "https://app.acme.test");
+    assert!(f.log().contains(" port web 8080"), "{}", f.log());
+    assert_eq!(p.describe().await.unwrap().save_at, SaveAt::Points);
+}
+
+#[tokio::test]
+async fn a_hardlink_save_is_dropped_through_the_helper() {
+    let f = Fake::new("droplink");
+    let p = f.part();
+    let volumes = json!([{"name": "files", "save": "hardlink"}]);
+    p.start(start(
+        "a",
+        config_with(&f, volumes, json!({"rsync_image": RSYNC})),
+    ))
+    .await
+    .unwrap();
+    p.save(save_as(&f, "a", "s1")).await.unwrap();
+    p.drop_save(SaveId { save: "s1".into() }).await.unwrap();
+    assert!(f.log().contains("rm -rf /saves/s1"), "{}", f.log());
+    assert!(!f.0.join("saves/service/s1").exists());
 }

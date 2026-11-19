@@ -127,6 +127,103 @@ impl Project {
         run(self.compose(&["start"]), "docker compose start")
     }
 
+    /// Stops only the compose services `s`.
+    pub fn stop_services(&self, s: &[&str]) -> Result<()> {
+        run(self.compose_on(&["stop"], s)?, "docker compose stop")
+    }
+
+    /// Starts only the compose services `s` (stopped ones).
+    pub fn start_services(&self, s: &[&str]) -> Result<()> {
+        run(self.compose_on(&["start"], s)?, "docker compose start")
+    }
+
+    /// Runs the compose services `s` (every service when empty), detached, without waiting.
+    pub fn up_services(&self, s: &[&str]) -> Result<()> {
+        run(self.compose_on(&["up", "-d"], s)?, "docker compose up")
+    }
+
+    /// A compose command `args` followed by the service names `s`, each checked.
+    fn compose_on(&self, args: &[&str], s: &[&str]) -> Result<Command> {
+        if let Some(bad) = s.iter().find(|n| !name_ok(n, b"-")) {
+            bail!("{bad:?} is not a service name");
+        }
+        let mut cmd = self.compose(args);
+        cmd.args(s);
+        Ok(cmd)
+    }
+
+    /// Where `port` of `service` is published on this machine (`127.0.0.1:49153`): the port
+    /// Docker picked, on 127.0.0.1 whatever address it was published on.
+    pub fn port(&self, service: &str, port: u16) -> Result<String> {
+        let cmd = self.compose_on(&["port"], &[service])?;
+        let mut cmd = cmd;
+        cmd.arg(port.to_string());
+        let out = run_out(cmd, "docker compose port")?;
+        let first = out.lines().next().unwrap_or("").trim();
+        let published = first.rsplit_once(':').map(|(_, p)| p).unwrap_or("");
+        match published.parse::<u16>() {
+            Ok(p) => Ok(format!("127.0.0.1:{p}")),
+            Err(_) => bail!("{service} publishes no port {port} (docker said {first:?})"),
+        }
+    }
+
+    /// Runs `args` in the running container of `service` with the file `stdin` as its input.
+    pub fn exec_in(&self, service: &str, args: &[&str], stdin: &Path) -> Result<()> {
+        let mut cmd = self.compose_on(&["exec", "-T"], &[service])?;
+        cmd.args(args).stdin(File::open(stdin)?);
+        run(cmd, &format!("{service}: {}", args.first().unwrap_or(&"")))
+    }
+
+    /// A throwaway container of `image` (pulled the first time it is missing) running `args`,
+    /// with no network and each `(source, target, read_only)` mounted (a source is a host path
+    /// or one of the project's volumes); its stdout.
+    pub fn run_helper(
+        &self,
+        image: &str,
+        mounts: &[(String, String, bool)],
+        args: &[&str],
+    ) -> Result<String> {
+        let cmd = self.helper_command(image, mounts, args)?;
+        run_out(cmd, &format!("helper {}", args.first().unwrap_or(&"")))
+    }
+
+    /// [`run_helper`](Self::run_helper), its stdout written to `dest`.
+    pub fn run_helper_into(
+        &self,
+        image: &str,
+        mounts: &[(String, String, bool)],
+        args: &[&str],
+        dest: &Path,
+    ) -> Result<()> {
+        let mut cmd = self.helper_command(image, mounts, args)?;
+        cmd.stdout(File::create(dest)?);
+        run(cmd, &format!("helper {}", args.first().unwrap_or(&"")))
+    }
+
+    fn helper_command(
+        &self,
+        image: &str,
+        mounts: &[(String, String, bool)],
+        args: &[&str],
+    ) -> Result<Command> {
+        if !valid_image(image) {
+            bail!("{image:?} is not an image name");
+        }
+        let mut cmd = self.docker();
+        cmd.args(["run", "--rm", "--pull", "missing", "--network", "none"]);
+        for (source, target, read_only) in mounts {
+            let mode = if *read_only { ":ro" } else { "" };
+            cmd.args(["-v", &format!("{source}:{target}{mode}")]);
+        }
+        cmd.args(["--entrypoint=", image]).args(args);
+        Ok(cmd)
+    }
+
+    /// Docker's name for the project's volume `volume`, to mount it in a helper.
+    pub fn volume(&self, volume: &str) -> Result<String> {
+        self.volume_name(volume)
+    }
+
     /// Removes the project's containers, networks and volumes.
     pub fn down_with_volumes(&self) -> Result<()> {
         run(self.compose(&["down", "-v"]), "docker compose down")
