@@ -86,7 +86,7 @@ def _serve(fn, req, ctx, read: bool, anonymous: bool) -> Response:
     if refused is not None:
         return refused
     resp = _run(fn, req, ctx, anonymous)
-    if read:
+    if read or req.method in READ_METHODS:
         resp.effect = "read"
     return resp
 
