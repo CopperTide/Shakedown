@@ -71,3 +71,9 @@ def test_other_errors_go_up():
         with pytest.raises(ValueError, match="a bug"):
             run_design(main, open_run=_open(run))
         assert run.reasoning == []
+
+
+def test_arenad_saying_the_run_ended_is_a_stop():
+    from arena.errors import Conflict, NotFound
+    assert stopped_reason(Conflict(409, "the branch already ended", "GET", "/api/branches/b1/clock")) == "the run ended"
+    assert stopped_reason(NotFound(404, "no such branch")) == "the run ended"

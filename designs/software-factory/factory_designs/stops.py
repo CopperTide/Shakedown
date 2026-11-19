@@ -12,7 +12,7 @@ from typing import Any, Callable, ContextManager, Iterator, Optional
 import openai
 
 from arena import driver
-from arena.errors import ArenaError
+from arena.errors import ArenaError, Conflict, NotFound
 
 from .bridge import ProxyBridge, bridge_socket
 
@@ -35,6 +35,8 @@ def _chain(exc: BaseException) -> Iterator[BaseException]:
 
 
 def _reason(e: BaseException) -> Optional[str]:
+    if isinstance(e, (Conflict, NotFound)):  # arenad itself: the run's clock or record is gone
+        return "the run ended"
     if isinstance(e, openai.APIStatusError):
         code = e.status_code
         if code == 402:
