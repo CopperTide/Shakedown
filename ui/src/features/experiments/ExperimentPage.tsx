@@ -9,9 +9,9 @@ import { Panel } from '@/components/ui/panel';
 import { ErrorState, LoadingState } from '@/components/ui/state';
 import { StatusMark } from '@/components/ui/status';
 import { SuiteWhatMatters } from '@/features/review/WhatMatters';
+import { useAction } from '@/hooks/useAction';
 import { pollWhile, useQuery } from '@/hooks/useQuery';
 import { useTaskNames } from '@/hooks/useTasks';
-import { errorMessage } from '@/lib/errors';
 import { experimentMark } from '@/lib/mark';
 import type { Experiment } from '@/model/experiment';
 import { measureRows } from './measures';
@@ -43,8 +43,8 @@ function ScenarioLine({ e }: { e: Experiment }) {
 
 function StopButton({ id, onStopped }: { id: string; onStopped: () => void }) {
   const [open, setOpen] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const stop = () => { setOpen(false); stopExperiment(id).then(onStopped, (e) => setError(errorMessage(e))); };
+  const { error, run } = useAction(async () => { await stopExperiment(id); onStopped(); });
+  const stop = () => { setOpen(false); void run(); };
   return (
     <>
       <Button variant="ghost" onClick={() => setOpen(true)} title={error ?? undefined}><CircleStop />Stop</Button>
