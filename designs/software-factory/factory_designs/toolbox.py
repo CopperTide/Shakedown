@@ -88,6 +88,12 @@ def window_minutes(run: Any) -> Optional[float]:
     return float(value) if value else None
 
 
+def time_left(run: Any) -> bool:
+    """Whether the run's window is known and has world time left."""
+    m = window_minutes(run)
+    return bool(m) and run.clock()["clock_ms"] < m * 60_000
+
+
 def minutes_text(run: Any) -> str:
     """The window for a prompt: ``60``, or ``a limited number of`` when it is not known."""
     m = window_minutes(run)
