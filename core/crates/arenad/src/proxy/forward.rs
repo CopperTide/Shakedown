@@ -4,7 +4,7 @@
 use std::{sync::LazyLock, time::Duration};
 
 use bytes::Bytes;
-use parts::proto::{Effect, EFFECT_HEADER};
+use parts::proto::{Effect, AGENT_HEADER, EFFECT_HEADER, READONLY_HEADER};
 
 use crate::{exec::HttpCall, world::HostRoute};
 
@@ -61,24 +61,52 @@ fn host_header(route: &HostRoute, call: &HttpCall) -> String {
     }
 }
 
-/// Sends `call` to `route`'s upstream; the error when the upstream doesn't answer.
-pub async fn forward(route: &HostRoute, call: &HttpCall) -> Result<Forwarded, String> {
+/// Who sent a request, as the upstream is told: the agent (`AGENT_HEADER`) and, for a route that
+/// honours read-only, that the agent may only read (`READONLY_HEADER`).
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Sender<'a> {
+    pub agent: Option<&'a str>,
+    pub readonly: bool,
+}
+
+/// Sends `call` from `sender` to `route`'s upstream; the error when the upstream doesn't answer.
+pub async fn forward(
+    route: &HostRoute,
+    call: &HttpCall,
+    sender: Sender<'_>,
+) -> Result<Forwarded, String> {
     let method = reqwest::Method::from_bytes(call.method.as_bytes()).map_err(|e| e.to_string())?;
     let mut req = CLIENT.request(method, route.target(&call.path_and_query));
     let passed = |(k, _): &&(String, String)| !is_hop(k) && !is_set_by_proxy(k);
     for (k, v) in call.headers.iter().filter(passed) {
         req = req.header(k, v);
     }
-    let host = host_header(route, call);
-    let resp = (req.header("host", &host))
-        .header("x-forwarded-host", &host)
-        .header("x-forwarded-proto", call.scheme)
-        .header("x-forwarded-port", call.port.to_string())
-        .body(call.body.clone())
+    let resp = (own_headers(req, route, call, sender).body(call.body.clone()))
         .send()
         .await
         .map_err(|e| error_chain(&e))?;
     answered(resp).await
+}
+
+/// The headers the proxy sets itself: the world's `Host`, `x-forwarded-*` and who sent it.
+fn own_headers(
+    req: reqwest::RequestBuilder,
+    route: &HostRoute,
+    call: &HttpCall,
+    sender: Sender<'_>,
+) -> reqwest::RequestBuilder {
+    let host = host_header(route, call);
+    let mut req = (req.header("host", &host))
+        .header("x-forwarded-host", &host)
+        .header("x-forwarded-proto", call.scheme)
+        .header("x-forwarded-port", call.port.to_string());
+    if let Some(agent) = sender.agent {
+        req = req.header(AGENT_HEADER, agent);
+    }
+    if sender.readonly {
+        req = req.header(READONLY_HEADER, "1");
+    }
+    req
 }
 
 /// The upstream's answer read whole, its effect header taken out.

@@ -15,6 +15,9 @@ pub struct Lifecycle {
     pub(super) ticker: tokio::sync::Mutex<Option<Ticker>>,
     /// Set when a program of the world has stopped: the branch ends `infra_error` with it.
     fatal: Mutex<Option<String>>,
+    /// Set when an agent broke a rule arenad could only judge after the fact (a read-only agent's
+    /// request a part said wrote): the branch fails with it.
+    violation: Mutex<Option<String>>,
     /// Set once something has begun to end the branch.
     ending: AtomicBool,
     /// Set once the lead of a dispatch run has finished it: every later call is refused.
@@ -39,6 +42,16 @@ impl Lifecycle {
     /// Why the branch can't go on (a world program stopped), once that has happened.
     pub fn fatal(&self) -> Option<String> {
         self.fatal.lock().unwrap().clone()
+    }
+
+    /// The first rule an agent broke, once one did.
+    pub fn violation(&self) -> Option<String> {
+        self.violation.lock().unwrap().clone()
+    }
+
+    pub(crate) fn set_violation(&self, why: &str) {
+        let mut v = self.violation.lock().unwrap();
+        v.get_or_insert_with(|| why.to_string());
     }
 
     pub(crate) fn set_fatal(&self, msg: &str) {

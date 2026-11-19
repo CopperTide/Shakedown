@@ -17,6 +17,8 @@ pub struct HostRoute {
     pub env: BTreeMap<String, String>,
     /// `(METHOD, path glob)` of requests that only read.
     reads: Vec<(String, String)>,
+    /// True when the part refuses a read-only agent's writes itself (see `HttpRoute`).
+    pub honours_readonly: bool,
 }
 
 impl HostRoute {
@@ -152,6 +154,7 @@ fn host_route(part: &str, r: HttpRoute) -> Result<HostRoute, String> {
         upstream,
         env: r.env,
         reads,
+        honours_readonly: r.honours_readonly,
     })
 }
 
@@ -189,6 +192,7 @@ mod tests {
             upstream: upstream.into(),
             env: BTreeMap::new(),
             reads: vec![],
+            honours_readonly: false,
         }
     }
 

@@ -26,6 +26,8 @@ async fn echo_host(h: HeaderMap) -> axum::Json<Value> {
         "x-forwarded-for",
         "forwarded",
         "x-arena-effect",
+        "x-arena-agent",
+        "x-arena-readonly",
     ];
     let got: HashMap<&str, &str> = (names.iter())
         .filter_map(|n| Some((*n, h.get(*n)?.to_str().ok()?)))
@@ -50,7 +52,15 @@ async fn upstream() -> String {
             "/items",
             post(|b: String| async { (StatusCode::CREATED, b) }),
         )
-        .route("/graphql", post(graphql));
+        .route("/graphql", post(graphql))
+        .route(
+            "/read",
+            post(|h| async { ([("x-arena-effect", "read")], echo_host(h).await) }),
+        )
+        .route(
+            "/write",
+            post(|| async { (StatusCode::CREATED, [("x-arena-effect", "write")], "done") }),
+        );
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());
     tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
@@ -158,7 +168,8 @@ fn a_client_cannot_set_the_forwarding_headers() {
             .await;
         let v: Value = r.unwrap().json().await.unwrap();
         let want = json!({"host": "toy.test", "x-forwarded-host": "toy.test",
-                          "x-forwarded-proto": "http", "x-forwarded-port": "80"});
+                          "x-forwarded-proto": "http", "x-forwarded-port": "80",
+                          "x-arena-agent": "planner"});
         assert_eq!(v, want);
     })
 }
@@ -216,7 +227,8 @@ fn the_upstream_sees_the_worlds_host_name() {
             .await;
         let v: Value = r.unwrap().json().await.unwrap();
         let want = json!({"host": "toy.test", "x-forwarded-host": "toy.test",
-                          "x-forwarded-proto": "http", "x-forwarded-port": "80"});
+                          "x-forwarded-proto": "http", "x-forwarded-port": "80",
+                          "x-arena-agent": "planner"});
         assert_eq!(v, want);
     })
 }
@@ -345,6 +357,79 @@ fn a_read_only_agent_may_read_but_not_write() {
             (Some("reader"), &json!(refused))
         );
         assert!(e.payload.get("saves").is_none());
+    })
+}
+
+#[test]
+fn the_upstream_is_told_which_agent_sent_each_request() {
+    run(async {
+        let fx = ProxyFx::new("agent", &upstream().await, &[]).await;
+        for agent in ["planner", "reader"] {
+            let r = (fx.client(agent).get("http://toy.test/echo-host"))
+                .header("x-arena-agent", "boss")
+                .header("x-arena-readonly", "0")
+                .send()
+                .await;
+            let v: Value = r.unwrap().json().await.unwrap();
+            assert_eq!(v["x-arena-agent"], agent, "{v}");
+            assert!(v.get("x-arena-readonly").is_none(), "{v}");
+        }
+    })
+}
+
+#[test]
+fn a_read_only_post_goes_marked_to_a_route_that_honours_read_only() {
+    run(async {
+        let honours = ["--route-honours-readonly"];
+        let fx = ProxyFx::new("honours", &upstream().await, &honours).await;
+        let (status, v) = post_json(&fx.client("reader"), "http://toy.test/read").await;
+        assert_eq!(status, 200);
+        assert_eq!(
+            (&v["x-arena-agent"], &v["x-arena-readonly"]),
+            (&json!("reader"), &json!("1"))
+        );
+        let e = fx.last_tool_call().await;
+        assert!(e.payload["error"].is_null(), "{}", e.payload);
+        assert_eq!(e.payload["reads"], json!(["http/toy.test"]));
+        let (_, v) = post_json(&fx.client("planner"), "http://toy.test/read").await;
+        assert!(
+            v.get("x-arena-readonly").is_none(),
+            "only a read-only agent's: {v}"
+        );
+    })
+}
+
+/// An empty POST to `url`: the status and the JSON answer.
+async fn post_json(c: &reqwest::Client, url: &str) -> (u16, Value) {
+    let r = c.post(url).send().await.unwrap();
+    (r.status().as_u16(), r.json().await.unwrap())
+}
+
+#[test]
+fn a_read_only_request_the_part_says_wrote_is_a_violation_that_fails_the_branch() {
+    run(async {
+        let honours = ["--route-honours-readonly"];
+        let fx = ProxyFx::new("violation", &upstream().await, &honours).await;
+        let r = fx
+            .client("reader")
+            .post("http://toy.test/write")
+            .send()
+            .await;
+        assert_eq!(r.unwrap().status().as_u16(), 201);
+        let e = fx.last_tool_call().await;
+        let why = "a read-only agent's request wrote: the box part answered X-Arena-Effect: write \
+                   to POST http://toy.test/write";
+        assert_eq!(
+            (e.agent.as_deref(), &e.payload["error"]),
+            (Some("reader"), &json!(why))
+        );
+        assert_eq!(e.payload["writes"], json!(["http/toy.test"]));
+        assert_eq!(fx.on("finish").await.0, 200);
+        let b = fx.fx.state.store.branch(&fx.branch).await.unwrap();
+        assert_eq!(
+            (b.status, b.error.as_deref()),
+            (BranchStatus::Failed, Some(why))
+        );
     })
 }
 
@@ -593,7 +678,8 @@ fn https_forwarding_says_https_on_443() {
             .await
             .unwrap();
         let want = json!({"host": "toy.test", "x-forwarded-host": "toy.test",
-                          "x-forwarded-proto": "https", "x-forwarded-port": "443"});
+                          "x-forwarded-proto": "https", "x-forwarded-port": "443",
+                          "x-arena-agent": "planner"});
         assert_eq!(v, want);
     })
 }

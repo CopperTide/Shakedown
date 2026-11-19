@@ -16,6 +16,7 @@ pub fn routes(project: &Project, specs: &[HttpSpec]) -> anyhow::Result<HttpRoute
             upstream: format!("http://{at}"),
             env: s.env.clone(),
             reads: s.reads.clone(),
+            honours_readonly: false,
         });
     }
     Ok(HttpRoutes { routes })

@@ -10,7 +10,7 @@ use super::{save_step, tool_call_payload, BranchCtx, CallFacts, ToolExec};
 use crate::{
     model::EventKind,
     proxy::{
-        forward::{forward, Forwarded},
+        forward::{forward, Forwarded, Sender},
         record::{body_record, kept_headers},
     },
     world::{HostRoute, HTTP_TOOL},
@@ -168,7 +168,7 @@ impl ToolExec {
         call: &HttpCall,
     ) -> Exchanged {
         let mut facts = CallFacts::default();
-        let (route, write_by_rule) = match admit(branch, agent, call, &mut facts) {
+        let admitted = match admit(branch, agent, call, &mut facts) {
             Ok(admitted) => admitted,
             Err((status, why)) => return Exchanged::refused(status, why, facts),
         };
@@ -177,18 +177,16 @@ impl ToolExec {
         if let Err(e) = self.advance(branch, clock).await {
             return Exchanged::refused(503, e, facts);
         }
+        let sender = Sender {
+            agent,
+            readonly: admitted.readonly,
+        };
         let since = std::time::Instant::now();
-        let forwarded = forward(route, call).await;
+        let forwarded = forward(admitted.route, call, sender).await;
         facts.duration_ms = Some(since.elapsed().as_secs_f64() * 1000.0);
         match forwarded {
-            Ok(f) => answered(branch, route, f, write_by_rule, facts).await,
-            Err(e) => {
-                let why = format!(
-                    "the {} part did not answer at {}: {e}",
-                    route.part, route.host
-                );
-                Exchanged::refused(502, why, facts)
-            }
+            Ok(f) => answered(branch, &admitted, call, f, facts).await,
+            Err(e) => Exchanged::refused(502, not_answered(admitted.route, &e), facts),
         }
     }
 
@@ -214,15 +212,31 @@ impl ToolExec {
     }
 }
 
-/// The route of `call`'s host and whether the request writes by the method rule (the part is
-/// noted in `facts`); else the status and why arenad refuses it: an unknown host, a branch that
-/// can't go on, a write of a read-only agent.
+/// Why a request got no answer from the part serving its host.
+fn not_answered(route: &HostRoute, e: &str) -> String {
+    format!(
+        "the {} part did not answer at {}: {e}",
+        route.part, route.host
+    )
+}
+
+/// A request arenad lets through: its host's route, whether it writes by the method rule, and
+/// whether it goes marked read-only (a read-only agent's, to a route that honours read-only).
+struct Admitted<'w> {
+    route: &'w HostRoute,
+    write_by_rule: bool,
+    readonly: bool,
+}
+
+/// The request admitted (the part is noted in `facts`); else the status and why arenad refuses
+/// it: an unknown host, a branch that can't go on, a write of a read-only agent to a route that
+/// does not honour read-only.
 fn admit<'w>(
     branch: &'w BranchCtx,
     agent: Option<&str>,
     call: &HttpCall,
     facts: &mut CallFacts,
-) -> Result<(&'w HostRoute, bool), (u16, String)> {
+) -> Result<Admitted<'w>, (u16, String)> {
     let Some(route) = branch.world.hosts().route(&call.host) else {
         return Err((
             403,
@@ -234,31 +248,43 @@ fn admit<'w>(
         return Err((503, fatal));
     }
     let write_by_rule = !route.is_read(&call.method, call.path());
-    if write_by_rule && agent.is_some_and(|a| branch.roster.read_only(a)) {
+    let read_only = agent.is_some_and(|a| branch.roster.read_only(a));
+    if write_by_rule && read_only && !route.honours_readonly {
         return Err((403, READ_ONLY.to_string()));
     }
-    Ok((route, write_by_rule))
+    Ok(Admitted {
+        route,
+        write_by_rule,
+        readonly: read_only && route.honours_readonly,
+    })
 }
 
 /// The upstream's answer as a step: a read or a write of the host (the upstream's effect header
-/// has the last word), the part saved when it wrote.
+/// has the last word), the part saved when it wrote; a violation when a request marked read-only
+/// wrote.
 async fn answered(
     branch: &BranchCtx,
-    route: &HostRoute,
+    admitted: &Admitted<'_>,
+    call: &HttpCall,
     f: Forwarded,
-    write_by_rule: bool,
     mut facts: CallFacts,
 ) -> Exchanged {
-    let write = f.effect.map_or(write_by_rule, |e| e == Effect::Write);
+    let route = admitted.route;
+    let write = f
+        .effect
+        .map_or(admitted.write_by_rule, |e| e == Effect::Write);
     let key = vec![format!("http/{}", route.host)];
     match write {
         true => facts.writes = key,
         false => facts.reads = key,
     }
-    let written = write.then_some(route.part.as_str());
-    save_step(branch, written, &mut facts).await;
+    save_step(branch, write.then_some(route.part.as_str()), &mut facts).await;
     let result = json!({"status": f.status, "headers": kept_headers(&f.headers),
                         "body": body_record(&f.body)});
+    let outcome = match violation(branch, admitted, call, &f) {
+        Some(why) => Err(why),
+        None => Ok(result),
+    };
     let answer = HttpAnswer {
         status: f.status,
         headers: f.headers,
@@ -266,7 +292,28 @@ async fn answered(
     };
     Exchanged {
         answer,
-        outcome: Ok(result),
+        outcome,
         facts,
     }
+}
+
+/// A request marked read-only that the part says wrote (it should have refused it): why, noted
+/// on the branch, which then fails.
+fn violation(
+    branch: &BranchCtx,
+    admitted: &Admitted<'_>,
+    call: &HttpCall,
+    f: &Forwarded,
+) -> Option<String> {
+    if !admitted.readonly || f.effect != Some(Effect::Write) {
+        return None;
+    }
+    let why = format!(
+        "a read-only agent's request wrote: the {} part answered X-Arena-Effect: write to {} {}",
+        admitted.route.part,
+        call.method,
+        call.url()
+    );
+    branch.lifecycle.set_violation(&why);
+    Some(why)
 }

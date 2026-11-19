@@ -14,12 +14,16 @@ pub(crate) async fn freeze(ctx: &BranchCtx) {
     ctx.clock.freeze();
 }
 
-/// Scores the world and records the Check.
+/// Scores the world and records the Check. A branch on which an agent broke a rule fails with it,
+/// whatever the checks say.
 pub(crate) async fn check(state: &AppState, ctx: &BranchCtx) -> Result<Ending> {
     let since = Instant::now();
     let check = score(state, ctx).await?;
     ctx.overhead.add_since(Cat::Score, since);
-    let ending = verdict(&check, &ctx.world.part_names());
+    let ending = match ctx.lifecycle.violation() {
+        Some(why) => Ending::failed(why),
+        None => verdict(&check, &ctx.world.part_names()),
+    };
     let payload = serde_json::to_value(&check)?;
     ctx.append(&state.store, None, EventKind::Check, payload)
         .await?;

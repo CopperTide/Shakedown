@@ -4,7 +4,8 @@
               [--prefix P] [--exact save|replay|none] [--approximate] [--uses-clock [--event-every]]
               [--save-sleep MS] [--refuse-start-if FILE] [--describe-fails] [--describe-hangs] [--gc] [--gc-fails]
               [--gc-waits-for FILE] [--tool-event KIND] [--system JSON] [--internal-peeks]
-              [--http-route HOST=URL ... [--route-env K=V ...] [--route-reads PATTERN ...]] [--save-at step|points]
+              [--http-route HOST=URL ... [--route-env K=V ...] [--route-reads PATTERN ...]
+              [--route-honours-readonly] [--route-after-save URL]] [--save-at step|points]
               [--log-time FILE]
       An integration with one counter per instance and tools `poke` (write, adds 1) and `peek`
       (read), named `<P>poke` and `<P>peek` with --prefix. It exits on its N-th call_tool (only
@@ -21,7 +22,9 @@
       `poke`'s result gives an event of that kind with data {"n": <the new value>}. With
       --internal-peeks, `peek` counts its calls in the internal key `_peeks/n` (saved with the
       counter) and answers {"n", "peeks"}. Each --http-route makes `http_routes` give a route from HOST
-      to URL (the first one with the --route-env variables and --route-reads patterns); without
+      to URL (the first one with the --route-env variables and --route-reads patterns, and
+      `honours_readonly` with --route-honours-readonly; once the instance saved, the first one goes to
+      the --route-after-save URL, as a service that restarts on a new port); without
       one, `http_routes` answers -32601. --save-at sets `describe.save_at`. --log-time
       appends "start <instance> <epoch_ms> <speed>" (from `world_time`, "none" without it) per `start` and
       "advance <instance> <clock_ms> <wall unix ms>" per `advance` to FILE.
@@ -77,6 +80,7 @@ class Part:
         self.saves_ok = int(opt("--save-fails-after", "-1"))
         self.calls = self.saved = 0
         self.counters, self.saves, self.clocks = {}, {}, {}
+        self.saved_instances = set()
         self.peeks, self.peek_saves = {}, {}
 
     def describe(self, p):
@@ -161,6 +165,7 @@ class Part:
         if 0 <= self.saves_ok < self.saved:
             raise RpcError(-32000, "the toy can't save today")
         self.saves[p["save"]] = self.lookup(self.counters, p["instance"], "instance")
+        self.saved_instances.add(p["instance"])
         self.peek_saves[p["save"]] = self.peeks.get(p["instance"], 0)
         return {"bytes": 1, "exact": EXACT == "save"}
 
@@ -195,6 +200,11 @@ class Part:
         routes = [{"host": host, "upstream": url} for host, url in served]
         routes[0]["env"] = dict(spec.split("=", 1) for spec in opts("--route-env"))
         routes[0]["reads"] = opts("--route-reads")
+        if "--route-honours-readonly" in ARGS:
+            routes[0]["honours_readonly"] = True
+        moved = opt("--route-after-save", None)
+        if moved and p["instance"] in self.saved_instances:
+            routes[0]["upstream"] = moved
         return {"routes": routes}
 
     def gc(self, p):

@@ -71,7 +71,7 @@ environment, and `${ARENA_BIN_DIR}` substituted). Use it for a part on another m
 | `usage` | `{}` | `{bytes}` |
 | `gc` (optional) | `{keep: [save]}` | `{dropped, bytes}` |
 | `connect` (optional) | `{instance}` | connection info, e.g. `{url}` for `postgres` |
-| `http_routes` (optional) | `{instance}` | `{routes: [{host, upstream, env?, reads?}]}`: the hosts the instance serves ([Serving HTTP](#serving-http)) |
+| `http_routes` (optional) | `{instance}` | `{routes: [{host, upstream, env?, reads?, honours_readonly?}]}`: the hosts the instance serves ([Serving HTTP](#serving-http)) |
 
 `system` (optional, additive) says what kind of system the part is, for monitoring views: `kind` is a
 short word ("erp", "crm", "database", "api", "mcp", "messaging", "approvals", "plant", "lims", "files",
@@ -351,7 +351,16 @@ request is recorded as a step named `http` owned by the part. A part that answer
   GraphQL query is a `POST` that reads). arenad strips it before the client sees the answer.
 - The proxy keeps `Host: <host>` and adds `X-Forwarded-Proto`, `X-Forwarded-Host` and `X-Forwarded-Port`. Every
   absolute URL a part mints (`html_url`, `next` links) must be built from them, never from its upstream address: the
-  kits' `public_base` does this.
+  kits' `public_base` does this. A client's own `X-Forwarded-*`, `Forwarded` and `X-Arena-*` headers are dropped, so
+  what a part reads there is the proxy's.
+- `X-Arena-Agent: <agent id>` names the agent that sent the request (a driver's request is the agent's whose model call
+  came last; none before any did). Rust kit: `proto::AGENT_HEADER`.
+- A read-only agent's request that writes by the rules above is refused (403) before it is sent, unless the route says
+  `honours_readonly: true`. To such a route every request of a read-only agent goes with `X-Arena-Readonly: 1`
+  (Rust kit: `proto::READONLY_HEADER`), and the part must refuse its writes
+  itself (a twin answers them `403` with `X-Arena-Effect: read`): so a GraphQL query, a `POST`, still reaches it. If
+  the part answers such a request with `X-Arena-Effect: write`, the step is recorded with the violation as its error
+  and the branch ends `failed` with it.
 - Clients reach a host over plain HTTP or over HTTPS on port 443 (the proxy terminates TLS with a CA of the branch,
   which drivers and agents are told to trust); the upstream itself is plain HTTP or HTTPS as `upstream` says.
 - Recorded HTTP requests are never sent again: a part that serves HTTP must restore from saves. A world with a part
