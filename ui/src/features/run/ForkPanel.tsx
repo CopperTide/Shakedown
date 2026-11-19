@@ -4,9 +4,9 @@ import { ModelHint, ModelInput, ProviderSelect } from '@/components/ProviderFiel
 import { Button } from '@/components/ui/button';
 import { Field, NativeSelect, Textarea } from '@/components/ui/input';
 import { ErrorState } from '@/components/ui/state';
+import { useAction } from '@/hooks/useAction';
 import { useProviderList } from '@/hooks/useProviders';
 import { cn } from '@/lib/cn';
-import { errorMessage } from '@/lib/errors';
 import { MODE_LABEL, modelProblem, providerId, providerOf } from '@/model/providers';
 import type { AgentKind, AgentSpec, BranchDetail, Change, ForkResponse, ProviderStatus, RestoreMode, Team } from '@/model/types';
 import { ARCHITECTURES, type ForkChoice, architectureOf, singleTeam, swapChanges, teamSwapProblem } from './architecture';
@@ -133,21 +133,17 @@ function useFork(branch: BranchDetail, seq: number, onForked: (r: ForkResponse) 
   const architecture = useArchitecture();
   const [edits, setEdits] = useState<Record<string, Change>>({});
   const [restore, setRestore] = useState<RestoreMode>('exact');
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
+  const forking = useAction(async () => onForked(await fork(branch.id, seq, changes, restore, team)), { stayBusy: true });
   const plan = useRestorePlan(branch.id, seq, restore);
   const { list } = useProviderList();
   const set = (id: string, patch: Change) => setEdits((e) => ({ ...e, [id]: { ...e[id], ...patch } }));
   const swap = choice === 'architecture' ? architectureOf(architecture.arch) : null;
   const team = swap?.shape === 'team' ? singleTeam(branch.team, architecture.rules) : undefined;
   const changes = team ? {} : swap ? swapChanges(branch.team, architecture.rules) : changedFields(branch.team.agents, edits);
-  const go = async () => {
-    setBusy(true); setErr(null);
-    try { onForked(await fork(branch.id, seq, changes, restore, team)); } catch (e) { setErr(errorMessage(e)); setBusy(false); }
-  };
+  const go = async () => { await forking.run(); };
   const teamProblem = team ? teamSwapProblem(branch.events) : null;
   const blocked = blockedReason(plan, branch.status === 'running') ?? teamProblem ?? forkProblem(branch.team.agents, changes, list);
-  return { choice, setChoice, architecture, edits, set, restore, setRestore, plan, list, changes, team, go, busy, err, blocked };
+  return { choice, setChoice, architecture, edits, set, restore, setRestore, plan, list, changes, team, go, busy: forking.busy, err: forking.error, blocked };
 }
 
 export default function ForkPanel({ branch, seq, onForked, onClose, choice = 'agents' }: {
