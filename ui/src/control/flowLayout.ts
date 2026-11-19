@@ -1,14 +1,14 @@
 // The process view as a React Flow graph: agents (units) in a column on the left, the world's
 // systems (equipment) on the right, one edge per flow, heavier when it carries writes.
 import type { Edge, Node } from '@xyflow/react';
-import { type Equipment, type Flow, type ProcessView, type Unit, abnormal } from './process';
+import { type Equipment, type ProcessFlow, type ProcessUnit, type ProcessView, abnormal } from './process';
 
 export const UNIT_W = 232;
 export const EQUIP_W = 300;
 export const ROW_H = 92;
 const GAP_X = 260;
 
-export type UnitNode = Node<{ unit: Unit }, 'unit'>;
+export type UnitNode = Node<{ unit: ProcessUnit }, 'unit'>;
 export type EquipNode = Node<{ equipment: Equipment }, 'equipment'>;
 
 /** The simple shape that stands for a kind of system. */
@@ -23,13 +23,13 @@ export function equipShape(kind: string | undefined): EquipShape {
 }
 
 /** A flow's line: weight from its writes (reads only: thin and dashed), the alarm colour when abnormal. */
-export function flowStroke(f: Flow): { width: number; dashed: boolean; abnormal: boolean } {
+export function flowStroke(f: ProcessFlow): { width: number; dashed: boolean; abnormal: boolean } {
   const width = f.writes > 0 ? Math.min(5, 2 + Math.log2(f.writes)) : 1.25;
   return { width, dashed: f.writes === 0, abnormal: abnormal(f) };
 }
 
 /** "⚠ 1 refused, 2 errors" on an abnormal flow; nothing on a normal one (its counts are on the nodes). */
-export function flowLabel(f: Flow): string {
+export function flowLabel(f: ProcessFlow): string {
   if (!abnormal(f)) return '';
   const bits = [f.refused && `${f.refused} refused`, f.errors && `${f.errors} error${f.errors > 1 ? 's' : ''}`].filter(Boolean);
   return `⚠ ${bits.join(', ')}`;

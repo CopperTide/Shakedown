@@ -9,7 +9,7 @@ import { asRecord } from '@/lib/record';
 
 export type MarkKind = 'action' | 'interlock' | 'message' | 'model' | 'start' | 'end' | 'check' | 'world';
 
-export interface Mark {
+export interface TimelineMark {
   seq: number;
   at: number;
   kind: MarkKind;
@@ -39,7 +39,7 @@ export interface LaneRow {
   /** The agent id; `world` for the world's own steps (links, world events), `check` for scoring. */
   id: string;
   name: string;
-  marks: Mark[];
+  marks: TimelineMark[];
   /** When the agent waited, idle, for work (dispatch runs only). */
   gaps?: Gap[];
 }
@@ -53,7 +53,7 @@ export const CHECK_LANE = 'check';
 
 const APPROVALS = 'approvals';
 
-function actionMark(a: Action): Mark {
+function actionMark(a: Action): TimelineMark {
   const interlock = a.system?.kind === APPROVALS || a.outcome === 'refused';
   return {
     seq: a.seq, at: a.at, kind: interlock ? 'interlock' : 'action',
@@ -63,10 +63,10 @@ function actionMark(a: Action): Mark {
   };
 }
 
-type Base = Pick<Mark, 'seq' | 'at' | 'outcome' | 'durationMs' | 'inherited' | 'saved'>;
+type Base = Pick<TimelineMark, 'seq' | 'at' | 'outcome' | 'durationMs' | 'inherited' | 'saved'>;
 type Payload = Record<string, unknown>;
 
-function messageMark(e: Event, p: Payload, base: Base): Mark {
+function messageMark(e: Event, p: Payload, base: Base): TimelineMark {
   const raw = typeof p.to === 'string' ? p.to : null;
   const to = raw == null ? 'next' : raw === '*' ? 'everyone' : raw;
   const word = e.kind === 'handoff' ? 'Handoff' : 'Message';
@@ -74,7 +74,7 @@ function messageMark(e: Event, p: Payload, base: Base): Mark {
 }
 
 /** A dispatch run's delegation (lead → agent) or report (agent → lead), drawn as a message. */
-function dispatchMark(e: Event, p: Payload, base: Base): Mark {
+function dispatchMark(e: Event, p: Payload, base: Base): TimelineMark {
   const to = typeof p.to === 'string' ? p.to : null;
   if (e.kind === 'delegation') return { ...base, kind: 'message', label: `Delegate → ${to ?? '?'}`, detail: String(p.task ?? ''), to };
   const word = p.turn_end ? 'Report (turn end)' : 'Report';
@@ -99,12 +99,12 @@ export function wakeWord(p: Payload): string {
   }
 }
 
-function endMark(p: Payload, base: Base): Mark {
+function endMark(p: Payload, base: Base): TimelineMark {
   const failed = p.ok === false;
   return { ...base, kind: 'end', label: failed ? 'Ended: failed' : 'Ended', detail: String(p.error ?? ''), outcome: failed ? 'error' : 'ok' };
 }
 
-const MARKS: Partial<Record<Event['kind'], (e: Event, p: Payload, base: Base) => Mark>> = {
+const MARKS: Partial<Record<Event['kind'], (e: Event, p: Payload, base: Base) => TimelineMark>> = {
   message: messageMark,
   handoff: messageMark,
   delegation: dispatchMark,
@@ -120,7 +120,7 @@ const MARKS: Partial<Record<Event['kind'], (e: Event, p: Payload, base: Base) =>
 };
 
 /** The mark of any step but a tool call. */
-function stepMark(e: Event, inherited: boolean): Mark | null {
+function stepMark(e: Event, inherited: boolean): TimelineMark | null {
   const make = MARKS[e.kind];
   if (!make) return null;
   return make(e, asRecord(e.payload), { seq: e.seq, at: Date.parse(e.at), outcome: 'ok', durationMs: null, inherited, saved: false });

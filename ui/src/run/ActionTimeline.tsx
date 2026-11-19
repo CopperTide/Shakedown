@@ -1,6 +1,6 @@
 import { Minus, MoreHorizontal, Plus, Radio } from 'lucide-react';
 import { type CSSProperties, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { CHECK_LANE, type LaneRow, type Mark, type Span, WORLD_LANE } from '../control/lanes';
+import { CHECK_LANE, type LaneRow, type Span, type TimelineMark, WORLD_LANE } from '../control/lanes';
 import { Button } from '../components/ui/button';
 import { Checkbox } from '../components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover';
@@ -30,7 +30,7 @@ const SHAPE: Record<Shape, string> = {
   world: 'size-2 rotate-45 border border-muted bg-surface',
 };
 
-const hint = (m: Mark) => `step ${m.seq} · ${m.label}${m.detail ? ` · ${m.detail.slice(0, 160)}` : ''}${m.saved ? ' · saved after this step' : ''}${m.inherited ? ' (inherited from the parent run)' : ''}`;
+const hint = (m: TimelineMark) => `step ${m.seq} · ${m.label}${m.detail ? ` · ${m.detail.slice(0, 160)}` : ''}${m.saved ? ' · saved after this step' : ''}${m.inherited ? ' (inherited from the parent run)' : ''}`;
 
 /** The label next to a mark: the full action word when selected, the system kind when there is room. */
 function textOf(p: Placed, selected: boolean): string {

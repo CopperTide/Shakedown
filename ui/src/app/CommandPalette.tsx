@@ -9,7 +9,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Dialog, DialogContent } from '../components/ui/dialog';
 import { Kbd } from '../components/ui/kbd';
 import { hasModifier } from '@/lib/keys';
-import { type Action, type Item, type Mode, hereOf, itemsFor, placeholderOf } from './palette';
+import { type Item, type Mode, type PaletteAction, hereOf, itemsFor, placeholderOf } from './palette';
 import { setThemePref, useTheme } from './theme';
 import { nextPref } from './themeModel';
 import { errorMessage } from '@/lib/errors';
@@ -79,7 +79,7 @@ export default function CommandPalette({ open, onOpenChange, start }: { open: bo
   const [query, setQuery] = useState('');
   const { mode, setMode, items, lists } = useItems(open, start);
   const close = (o: boolean) => { onOpenChange(o); if (!o) { setMode({ kind: 'root' }); setQuery(''); } };
-  const run = (a: Action) => {
+  const run = (a: PaletteAction) => {
     if ('mode' in a) { setMode(a.mode); setQuery(''); return; }
     if ('theme' in a) setThemePref(nextPref(theme.pref));
     else nav(a.go);

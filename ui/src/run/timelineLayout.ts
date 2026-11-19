@@ -2,7 +2,7 @@
 // connectors of messages, handoffs, delegations and reports between lanes, each lane's active span
 // (with the times a dispatch run's agent waited for work as faint gaps), the time ticks,
 // and which marks have room for their label (system kind and read/write).
-import { type LaneRow, type Mark, type Span, position } from '../control/lanes';
+import { type LaneRow, type Span, type TimelineMark, position } from '../control/lanes';
 import type { Pause } from './flow';
 
 export const LANE_H = 36;
@@ -14,7 +14,7 @@ export type Shape =
   | 'message' | 'model' | 'start' | 'end' | 'end-failed' | 'check-pass' | 'check-fail' | 'world';
 
 /** Reads hollow, writes solid (heavier), approvals a diamond; refusals and errors a triangle in the alarm colour. */
-export function shapeOf(m: Mark): Shape {
+export function shapeOf(m: TimelineMark): Shape {
   const ok = m.outcome === 'ok';
   switch (m.kind) {
     case 'action': return !ok ? 'abnormal' : m.effect === 'write' ? 'write' : m.effect === 'read' ? 'read' : 'call';
@@ -26,7 +26,7 @@ export function shapeOf(m: Mark): Shape {
 }
 
 /** The text a mark carries when there is room: the system kind of an action ("ERP"; its shape says read or write), "→ quality", "check passed". */
-export function shortLabel(m: Mark): string {
+export function shortLabel(m: TimelineMark): string {
   if (m.system && (m.kind === 'action' || m.kind === 'interlock')) return m.system;
   if (m.kind === 'message') return `→ ${m.to === '*' ? 'everyone' : m.to ?? 'next'}`;
   if (m.kind === 'model' || m.kind === 'start') return '';
@@ -35,7 +35,7 @@ export function shortLabel(m: Mark): string {
 }
 
 export interface Placed {
-  mark: Mark;
+  mark: TimelineMark;
   lane: number;
   x: number;
   /** The label fits before the next mark in the lane. */
@@ -87,7 +87,7 @@ export interface Layout {
 const labelReach = (text: string) => 10 + text.length * 6.8 + 4 + 7;
 
 /** Marks in x order; each labelled when no other mark (model ticks aside) sits under its label. */
-function placeLane(marks: Mark[], lane: number, xOf: (at: number) => number, width: number): Placed[] {
+function placeLane(marks: TimelineMark[], lane: number, xOf: (at: number) => number, width: number): Placed[] {
   const placed = marks.map((mark) => ({ mark, lane, x: xOf(mark.at), labelled: false })).sort((a, b) => a.x - b.x);
   const solid = placed.filter((p) => p.mark.kind !== 'model');
   let clearFrom = -Infinity;

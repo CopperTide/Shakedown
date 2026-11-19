@@ -20,7 +20,7 @@ export interface Counts {
   lastAt: number | null;
 }
 
-export interface Unit extends Counts {
+export interface ProcessUnit extends Counts {
   id: string;
   name: string;
   state: UnitState;
@@ -31,15 +31,15 @@ export interface Equipment extends Counts {
   system: SystemInfo | null;
 }
 
-export interface Flow extends Counts {
+export interface ProcessFlow extends Counts {
   agent: string;
   part: string;
 }
 
 export interface ProcessView {
-  units: Unit[];
+  units: ProcessUnit[];
   equipment: Equipment[];
-  flows: Flow[];
+  flows: ProcessFlow[];
 }
 
 const empty = (): Counts => ({ reads: 0, writes: 0, other: 0, errors: 0, refused: 0, lastAt: null });
@@ -69,7 +69,7 @@ function getOr<K, V>(m: Map<K, V>, k: K, make: () => V): V {
   return m.get(k)!;
 }
 
-function newUnit(id: string, states: Map<string, UnitState>): Unit {
+function newUnit(id: string, states: Map<string, UnitState>): ProcessUnit {
   if (id === LINK_AGENT) return { id, name: 'World links', state: 'automatic', ...empty() };
   return { id, name: id, state: states.get(id) ?? 'idle', ...empty() };
 }
@@ -77,9 +77,9 @@ function newUnit(id: string, states: Map<string, UnitState>): Unit {
 export function processView(events: Event[], actions: Action[], team: Team): ProcessView {
   const info = worldInfo(events);
   const states = unitStates(events);
-  const units = new Map<string, Unit>(team.agents.map((a) => [a.id, { id: a.id, name: a.name, state: states.get(a.id) ?? 'idle', ...empty() }]));
+  const units = new Map<string, ProcessUnit>(team.agents.map((a) => [a.id, { id: a.id, name: a.name, state: states.get(a.id) ?? 'idle', ...empty() }]));
   const equipment = new Map<string, Equipment>(info.parts.map((p) => [p, { part: p, system: info.systems[p] ?? null, ...empty() }]));
-  const flows = new Map<string, Flow>();
+  const flows = new Map<string, ProcessFlow>();
   for (const a of actions) {
     count(getOr(units, a.agent, () => newUnit(a.agent, states)), a);
     if (a.part == null) continue;

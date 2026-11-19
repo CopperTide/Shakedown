@@ -8,7 +8,7 @@ export type Mode =
   | { kind: 'compare-runs'; first: string | null }
   | { kind: 'world' };
 
-export type Action = { go: string } | { mode: Mode } | { theme: true };
+export type PaletteAction = { go: string } | { mode: Mode } | { theme: true };
 
 export interface Item {
   id: string;
@@ -17,7 +17,7 @@ export interface Item {
   hint?: string;
   /** Extra words the filter matches (ids, task, status). */
   keywords: string[];
-  action: Action;
+  action: PaletteAction;
 }
 
 const FINISHED: BranchStatus[] = ['passed', 'failed'];
@@ -41,7 +41,7 @@ function actions(): Item[] {
 }
 
 /** Every branch of every run, newest run first, each opening its run page. */
-export function runItems(runs: RunSummary[], group = 'Runs', pick?: (branchId: string, runId: string) => Action, only?: BranchStatus[]): Item[] {
+export function runItems(runs: RunSummary[], group = 'Runs', pick?: (branchId: string, runId: string) => PaletteAction, only?: BranchStatus[]): Item[] {
   return runs.flatMap((r) => branchTree(r.branches)
     .filter(({ branch: b }) => !only || only.includes(b.status))
     .map(({ branch: b, depth }) => ({
@@ -92,7 +92,7 @@ export function itemsFor(mode: Mode, runs: RunSummary[], experiments: ListedExpe
   if (mode.kind === 'root') return [...hereItems(here), ...pages(), ...actions(), ...experimentItems(experiments), ...runItems(runs)];
   if (mode.kind === 'world') return runItems(runs, 'World view of', (id, run) => ({ go: `/world/${run}/${id}` }));
   const first = mode.first;
-  const pick = (id: string): Action => (first ? { go: `/compare/${first}/${id}` } : { mode: { kind: 'compare-runs', first: id } });
+  const pick = (id: string): PaletteAction => (first ? { go: `/compare/${first}/${id}` } : { mode: { kind: 'compare-runs', first: id } });
   return runItems(runs, first ? 'Compare with' : 'First run', pick, FINISHED).filter((i) => i.id !== `branch-${first}`);
 }
 

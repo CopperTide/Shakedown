@@ -2,8 +2,6 @@ import type { ComponentProps } from 'react';
 import { cn } from '@/lib/cn';
 import type { Mark } from '@/lib/mark';
 
-export type { Mark };
-
 /** Glyph + word, then colour: abnormal states get the alarm colour and a tinted chip. */
 export function StatusMark({ mark, className, title }: { mark: Mark; className?: string; title?: string }) {
   return (

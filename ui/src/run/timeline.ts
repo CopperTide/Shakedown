@@ -47,7 +47,7 @@ export function diffCounts(d: DiffLine[]): { added: number; removed: number } {
   return { added: d.filter((l) => l.op === '+').length, removed: d.filter((l) => l.op === '-').length };
 }
 
-export interface Summary {
+export interface TimelineSummary {
   seconds: number | null;
   live: boolean;
   tokens: number;
@@ -62,7 +62,7 @@ export function summarize(
   branch: Pick<Branch, 'start_seq' | 'created_at' | 'ended_at' | 'status'>,
   events: Event[],
   now: number = Date.now(),
-): Summary {
+): TimelineSummary {
   const spend = ownSpend(events, branch.start_seq ?? 0);
   const time = elapsed(branch, now);
   return {
