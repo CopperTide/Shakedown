@@ -13,17 +13,17 @@ import { PageBody, PageHeader } from '@/components/ui/page';
 import { Panel } from '@/components/ui/panel';
 import { EmptyState, ErrorState } from '@/components/ui/state';
 import { DISK_CHANGED } from '@/hooks/useHealth';
+import { pollWhile, useQuery } from '@/hooks/useQuery';
 import { useTaskNames } from '@/hooks/useTasks';
 import { errorMessage } from '@/lib/errors';
 import { ago, formatTime } from '@/lib/time';
 import { qs } from '@/lib/url';
-import { usePolled } from '@/lib/usePolled';
 import type { RunSummary } from '@/model/types';
 import { type BranchRow, branchRows, runIsRunning, runTitle } from './runsTable';
 
 /** The runs, read again every 3 s while any of them runs. */
 function useRuns() {
-  const { data: runs, error, reload: refresh } = usePolled(fetchRuns, (r) => r.some(runIsRunning), 3000, 'runs');
+  const { data: runs, error, reload: refresh } = useQuery('runs', fetchRuns, pollWhile(3000, (r) => r.some(runIsRunning)));
   return { runs, error, refresh };
 }
 

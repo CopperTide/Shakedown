@@ -149,7 +149,7 @@ Logic lives in pure modules with tests, and components only render. For example:
 `features/run/timelineLayout.ts`, `features/run/zoom.ts`, `features/run/flow.ts`, `features/run/result.ts`,
 `features/run/stepSummary.ts`, `features/run/waterfall.ts`, `features/run/runStats.ts`, `features/team/board.ts`,
 `features/team/importTeam.ts`, `model/summary.ts`, `features/process/flowLayout.ts`, `model/permit.ts`,
-`features/experiments/model.ts`, `lib/format.ts` and `lib/usePolled.ts` (one way to poll).
+`features/experiments/model.ts`, `lib/format.ts` and `hooks/query.ts` (one way to read, poll and share a value).
 
 ## Patterns
 

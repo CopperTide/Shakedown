@@ -8,6 +8,10 @@ export interface UseQueryOptions<T> extends QueryOptions<T> {
   keepPrevious?: boolean;
 }
 
+/** A list read again every `ms` while `still(value)` holds; a failed read keeps the last value beside its error. */
+export const pollWhile = <T>(ms: number, still: (v: T) => boolean): UseQueryOptions<T> =>
+  ({ poll: { ms, while: still }, keepOnError: true, keepPrevious: true });
+
 const IDLE: QueryState<never> = { data: null, error: null, loading: false };
 const idle = () => IDLE;
 const none = () => () => {};

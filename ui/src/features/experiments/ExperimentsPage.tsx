@@ -8,11 +8,11 @@ import { PageBody, PageHeader } from '@/components/ui/page';
 import { Panel } from '@/components/ui/panel';
 import { ErrorState, LoadingState } from '@/components/ui/state';
 import { StatusMark } from '@/components/ui/status';
+import { pollWhile, useQuery } from '@/hooks/useQuery';
 import { useTaskNames } from '@/hooks/useTasks';
 import { cn } from '@/lib/cn';
 import { experimentMark } from '@/lib/mark';
 import { ago, formatTime } from '@/lib/time';
-import { usePolled } from '@/lib/usePolled';
 import type { ListedExperiment, SetupLine } from '@/model/experiment';
 
 /** While any experiment runs, the list is read again this often. */
@@ -74,7 +74,7 @@ function Empty() {
 /** The experiments, newest first; pick two or more to see their setups side by side. */
 export default function ExperimentsPage() {
   const nav = useNavigate();
-  const { data: list, error, reload: load } = usePolled(fetchExperiments, anyRunning, POLL_MS, 'experiments');
+  const { data: list, error, reload: load } = useQuery('experiments', fetchExperiments, pollWhile(POLL_MS, anyRunning));
   const nameOf = useTaskNames();
   const [picked, setPicked] = useState<string[]>([]);
   const toggle = (id: string) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id].slice(-4)));

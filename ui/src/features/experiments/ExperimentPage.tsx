@@ -9,10 +9,10 @@ import { Panel } from '@/components/ui/panel';
 import { ErrorState, LoadingState } from '@/components/ui/state';
 import { StatusMark } from '@/components/ui/status';
 import { SuiteWhatMatters } from '@/features/review/WhatMatters';
+import { pollWhile, useQuery } from '@/hooks/useQuery';
 import { useTaskNames } from '@/hooks/useTasks';
 import { errorMessage } from '@/lib/errors';
 import { experimentMark } from '@/lib/mark';
-import { usePolled } from '@/lib/usePolled';
 import type { Experiment } from '@/model/experiment';
 import { measureRows } from './measures';
 import { columnOf } from './model';
@@ -25,7 +25,7 @@ const POLL_MS = 2000;
 function useExperiments(ids: string[]) {
   const key = ids.join(',');
   const load = () => Promise.all(key.split(',').filter(Boolean).map(fetchExperiment));
-  const { data, error, reload } = usePolled(load, (v) => v.some((e) => e.status === 'running'), POLL_MS, key);
+  const { data, error, reload } = useQuery(key, load, pollWhile(POLL_MS, (v) => v.some((e) => e.status === 'running')));
   return { list: data, error, reload };
 }
 
