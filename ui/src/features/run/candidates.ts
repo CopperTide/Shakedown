@@ -2,7 +2,8 @@
 // (`{label, value, ci95?, unit?, better}`, docs/protocol.md "Optimisation studies") is one candidate
 // evaluated, in step order, with the best feasible value so far. The check's measure with the same
 // label gives the target and the recommendation's verified value. Pure functions only.
-import type { CheckPayload, Event, Measure, ToolCallPayload } from '@/model/types';
+import { lastPayload, payloadOf } from '@/model/events';
+import type { Event, Measure } from '@/model/types';
 
 export interface Objective {
   label: string;
@@ -43,15 +44,14 @@ const changesLine = (c: unknown) => (c && typeof c === 'object' ? Object.entries
 
 /** The check's measure that reports this objective (same label), if the run was scored. */
 function measureOf(events: Event[], label: string): Measure | null {
-  const check = [...events].reverse().find((e) => e.kind === 'check')?.payload as CheckPayload | undefined;
-  return check?.checks?.find((c) => c.measure?.label === label)?.measure ?? null;
+  return lastPayload(events, 'check')?.checks?.find((c) => c.measure?.label === label)?.measure ?? null;
 }
 
 /** The study a run made, or null when no step evaluated a candidate. */
 export function studyOf(events: Event[]): Study | null {
-  const calls = events.filter((e) => e.kind === 'tool_call' && !(e.payload as ToolCallPayload).error);
-  const found = calls.flatMap((e) => {
-    const p = e.payload as ToolCallPayload;
+  const found = events.flatMap((e) => {
+    const p = payloadOf(e, 'tool_call');
+    if (!p || p.error) return [];
     const o = objectiveOf(p.result);
     return o ? [{ e, p, o }] : [];
   });

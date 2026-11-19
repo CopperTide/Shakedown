@@ -2,6 +2,7 @@
 // action flows between them, each counted as reads and writes with abnormal ones (errors,
 // refusals) apart.
 import { type Action, worldInfo } from '@/model/actions';
+import { payloadOf } from '@/model/events';
 import type { SystemInfo } from '@/model/report';
 import type { Event, Team } from '@/model/types';
 
@@ -59,7 +60,7 @@ export function unitStates(events: Event[]): Map<string, UnitState> {
   for (const e of [...events].sort((a, b) => a.seq - b.seq)) {
     if (!e.agent) continue;
     if (e.kind === 'agent_start') out.set(e.agent, 'running');
-    if (e.kind === 'agent_end') out.set(e.agent, (e.payload as { ok?: boolean })?.ok === false ? 'failed' : 'done');
+    if (e.kind === 'agent_end') out.set(e.agent, payloadOf(e, 'agent_end')?.ok === false ? 'failed' : 'done');
   }
   return out;
 }

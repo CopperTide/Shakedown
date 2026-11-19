@@ -1,5 +1,6 @@
 // The result banner of a finished run: Passed or Failed (or Stopped, or an error) and one plain
 // sentence on why: the first safety violation, else the first failed check, in words.
+import { lastPayload } from '@/model/events';
 import type { BranchDetail, CheckPayload } from '@/model/types';
 import { type Flow, flowOf } from './flow';
 
@@ -36,7 +37,7 @@ function checkWhy(p: Partial<CheckPayload>, passed: boolean): string {
 /** The banner of a branch that ended; `null` while it runs. */
 export function resultOf(d: Pick<BranchDetail, 'status' | 'events' | 'error'>): Result | null {
   const flow = flowOf(d);
-  const check = [...d.events].reverse().find((e) => e.kind === 'check')?.payload as Partial<CheckPayload> | undefined;
+  const check = lastPayload(d.events, 'check');
   switch (flow) {
     case 'passed': return { flow, title: 'Passed', why: checkWhy(check ?? {}, true) };
     case 'failed': return { flow, title: 'Failed', why: check ? checkWhy(check, false) : sentence(d.error ?? 'An agent failed') };

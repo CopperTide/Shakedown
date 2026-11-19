@@ -18,6 +18,7 @@ import { normalizeViews } from '@/features/world/twin';
 import { useQuery } from '@/hooks/useQuery';
 import { cn } from '@/lib/cn';
 import { pretty } from '@/lib/format';
+import { asRecord } from '@/lib/record';
 import { agentModelLine, costIsUnknown, teamProviders } from '@/model/providers';
 import { APPROXIMATE_NOTE, isApproximate, notComparedLine } from '@/model/restore';
 import type { BranchView, TwinView } from '@/model/twin';
@@ -26,7 +27,7 @@ import { divergenceStrip } from './divergence';
 import OutcomePanel, { DivergenceStrip } from './OutcomePanel';
 
 function StepView({ label, id, run, ev }: { label: string; id: string; run?: string; ev: Event | undefined }) {
-  const p = (ev?.payload ?? {}) as Record<string, unknown>;
+  const p = asRecord(ev?.payload);
   return (
     <Panel>
       <PanelHeader title={`${label} at this step`} meta={<span className="font-mono">{id.slice(0, 8)}</span>}>

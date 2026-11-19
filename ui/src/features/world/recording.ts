@@ -1,5 +1,6 @@
 // The plant's recording for the world view: Isaac Sim writes its frames on arena time, so a step's arena second is the
 // video's second. `GET /api/branches/{id}/recording` says whether there is one (`video` null when not).
+import { asRecord } from '@/lib/record';
 import type { Event } from '@/model/types';
 
 /** The arena second of step `seq`: its own world clock, else the last one recorded before it (null when none). */
@@ -8,7 +9,7 @@ export function arenaSecondAt(events: Event[], seq: number | null): number | nul
   let found: number | null = null;
   for (const e of events) {
     if (e.seq > seq) break;
-    const ms = (e.payload as { clock_ms?: unknown } | null)?.clock_ms;
+    const ms = asRecord(e.payload).clock_ms;
     if (typeof ms === 'number') found = ms / 1000;
   }
   return found;

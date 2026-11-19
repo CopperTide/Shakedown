@@ -10,6 +10,12 @@ export function payloadOf<K extends EventKind>(e: Event | null | undefined, kind
   return e && e.kind === kind ? (e.payload as Payloads[K]) : null;
 }
 
+/** The payload of the last event of `kind` (the check a run was scored with), or null when there is none. */
+export function lastPayload<K extends EventKind>(events: Event[], kind: K): Payloads[K] | null {
+  for (let i = events.length - 1; i >= 0; i--) if (events[i].kind === kind) return payloadOf(events[i], kind);
+  return null;
+}
+
 /** The run's `run_start` payload (absent in a branch whose record doesn't have it). */
 export const runStartOf = (events: Event[]): RunStartPayload | undefined =>
   payloadOf(events.find((e) => e.kind === 'run_start'), 'run_start') ?? undefined;

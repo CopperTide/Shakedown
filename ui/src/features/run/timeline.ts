@@ -1,3 +1,4 @@
+import { payloadOf } from '@/model/events';
 import { LOCAL_COST_SOURCE, providerId } from '@/model/providers';
 import type { AgentKind, AgentSpec, Branch, Change, Event } from '@/model/types';
 
@@ -78,8 +79,8 @@ function ownSpend(events: Event[], from: number): { tokens: number; cost: number
   let cost: number | null = 0;
   const sources: string[] = [];
   for (const e of events) {
-    if (e.seq < from || e.kind !== 'agent_end') continue;
-    const p = (e.payload ?? {}) as { tokens?: number | null; cost_usd?: number | null; cost_source?: string | null };
+    const p = payloadOf(e, 'agent_end');
+    if (e.seq < from || !p) continue;
     tokens += p.tokens ?? 0;
     cost = cost != null && p.cost_usd != null ? cost + p.cost_usd : null;
     if (p.cost_source && !sources.includes(p.cost_source)) sources.push(p.cost_source);

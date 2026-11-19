@@ -2,8 +2,8 @@
 // returns (the check's named checks, the metrics, the events and the last view of the twin).
 import { costLabel } from '@/features/run/timeline';
 import { viewsFromEvents } from '@/features/world/twin';
-import { asRecord } from '@/lib/record';
 import { actionsOf } from '@/model/actions';
+import { lastPayload } from '@/model/events';
 import type { TwinView } from '@/model/twin';
 import type { BranchDetail, CompareSide, Event, NamedCheck } from '@/model/types';
 
@@ -30,10 +30,9 @@ const NONE: Figure = { text: '–', value: null, abnormal: false };
 
 /** The named checks of the branch's last check, or null when it was not scored. */
 export function namedChecks(events: Event[]): { passed: boolean; checks: NamedCheck[] } | null {
-  const check = [...events].reverse().find((e) => e.kind === 'check');
+  const check = lastPayload(events, 'check');
   if (!check) return null;
-  const p = asRecord(check.payload);
-  return { passed: !!p.passed, checks: Array.isArray(p.checks) ? (p.checks as NamedCheck[]) : [] };
+  return { passed: !!check.passed, checks: Array.isArray(check.checks) ? check.checks : [] };
 }
 
 /** "✓ valid 9/9" when every goal check (the non-safety ones) passed. */

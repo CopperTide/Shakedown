@@ -2,6 +2,7 @@
 import { type Mark, passMark } from '@/lib/mark';
 import { actionsOf } from '@/model/actions';
 import { runStartOf } from '@/model/events';
+import { lastPayload } from '@/model/events';
 import type { Event } from '@/model/types';
 
 export interface RunStats {
@@ -18,16 +19,15 @@ export interface RunStats {
 export function runStats(events: Event[], startSeq: number | null): RunStats {
   const own = events.filter((e) => e.kind !== 'run_start' && e.kind !== 'world_view' && (startSeq == null || e.seq >= startSeq));
   const actions = actionsOf(events, startSeq).filter((a) => !a.inherited);
-  const check = [...events].reverse().find((e) => e.kind === 'check');
-  const p = (check?.payload ?? {}) as { passed?: boolean; checks?: { passed: boolean; safety?: boolean }[] };
-  const list = Array.isArray(p.checks) ? p.checks : [];
+  const check = lastPayload(events, 'check');
+  const list = Array.isArray(check?.checks) ? check.checks : [];
   const safety = list.filter((c) => c.safety);
   return {
     steps: own.length,
     reads: actions.filter((a) => a.effect === 'read').length,
     writes: actions.filter((a) => a.effect === 'write').length,
     abnormal: actions.filter((a) => a.outcome !== 'ok').length,
-    check: check ? { passed: !!p.passed, ok: list.filter((c) => c.passed).length, total: list.length } : null,
+    check: check ? { passed: !!check.passed, ok: list.filter((c) => c.passed).length, total: list.length } : null,
     safety: safety.length ? { violated: safety.filter((c) => !c.passed).length, total: safety.length } : null,
   };
 }
