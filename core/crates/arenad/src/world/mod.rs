@@ -3,21 +3,26 @@
 //! the benchmark's own tools.
 
 mod clocked;
+mod gates;
 mod ids;
+mod links;
 mod plan;
 mod saving;
+mod scoring;
 mod standard;
+mod systems;
+mod view;
 
 use std::{
     collections::{BTreeMap, BTreeSet},
     sync::{Arc, Mutex},
 };
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{anyhow, bail, Result};
 use parts::{
     proto::{
-        BenchDescribe, BenchToolOutput, Describe, Effect, ExactKind, FromSave, Mode, ToolOutput,
-        ToolSchema, WorldPart,
+        BenchDescribe, BenchToolOutput, Describe, Effect, ExactKind, FromSave, Gate, Link, Mode,
+        ToolOutput, ToolSchema, ViewInfo, WorldPart,
     },
     CallError, Client, Hub,
 };
@@ -28,6 +33,7 @@ use crate::restore::{in_shared_saves, keeps_saves};
 
 pub use clocked::PartEvent;
 pub use ids::{instance_id, new_save_id};
+pub use links::link_args;
 pub use plan::{plan, Plan, PlannedPart, Route};
 pub use saving::StepSaves;
 pub use standard::{ensure_base, ensure_gold, SHARED_SEED};
@@ -122,6 +128,27 @@ impl std::fmt::Display for StartingPart {
 pub struct Called {
     pub output: ToolOutput,
     pub part: Option<String>,
+    /// Milliseconds spent checking the world's gates before the call (arena's own work).
+    pub gate_ms: f64,
+}
+
+impl Called {
+    fn new(output: ToolOutput, part: Option<String>) -> Called {
+        Called {
+            output,
+            part,
+            gate_ms: 0.0,
+        }
+    }
+
+    /// A tool error that reached no part.
+    fn error(message: String) -> Called {
+        let output = ToolOutput {
+            error: Some(message),
+            ..Default::default()
+        };
+        Called::new(output, None)
+    }
 }
 
 struct Part {
@@ -171,12 +198,83 @@ struct Track {
     stopped: bool,
 }
 
+/// What starting one part came to: the part when it started (with its save and connection info),
+/// and the error when starting or connecting it failed.
+struct StartedPart {
+    part: Option<Part>,
+    save: Option<String>,
+    connection: Option<Value>,
+    error: Option<anyhow::Error>,
+}
+
+impl StartedPart {
+    fn failed(part: Option<Part>, save: Option<String>, e: anyhow::Error) -> StartedPart {
+        StartedPart {
+            part,
+            save,
+            connection: None,
+            error: Some(e),
+        }
+    }
+}
+
+/// Starts `p`'s instance for `branch_id` (from its save in `from`, if any) and connects it when a
+/// benchmark may reach it.
+async fn start_part(
+    hub: &Hub,
+    p: PlannedPart,
+    branch_id: &str,
+    seed: u64,
+    from: Option<&StartSaves>,
+) -> StartedPart {
+    let (part, save) = match begin_part(hub, p, branch_id, seed, from).await {
+        Ok(begun) => begun,
+        Err(e) => return StartedPart::failed(None, None, e),
+    };
+    match connect(&part).await {
+        Ok(connection) => StartedPart {
+            part: Some(part),
+            save,
+            connection,
+            error: None,
+        },
+        Err(e) => StartedPart::failed(Some(part), save, e),
+    }
+}
+
+/// The part's instance started: the part, and the save it started from.
+async fn begin_part(
+    hub: &Hub,
+    p: PlannedPart,
+    branch_id: &str,
+    seed: u64,
+    from: Option<&StartSaves>,
+) -> Result<(Part, Option<String>)> {
+    let instance = instance_id(branch_id, &p.part.part);
+    let (params, save) = start_params(&p, &instance, seed, from)?;
+    let part = Part {
+        client: hub.client(&p.part.integration).await?,
+        name: p.part.part,
+        integration: p.part.integration,
+        instance,
+        describe: p.describe,
+    };
+    let started: Result<Value, WorldError> =
+        call(&part.client, &part.label(), "start", params).await;
+    started.map_err(|e| anyhow::Error::from(e).context(StartingPart(part.name.clone())))?;
+    Ok((part, save))
+}
+
 pub struct World {
     hub: Arc<Hub>,
     bench: String,
     bench_client: Option<Arc<Client>>,
     parts: Vec<Part>,
     tools: Vec<(ToolSchema, Route)>,
+    links: Vec<Link>,
+    gates: Vec<Gate>,
+    /// Present when the benchmark draws the world's view.
+    view: Option<ViewInfo>,
     connections: Map<String, Value>,
     track: Mutex<Track>,
 }
@@ -240,25 +338,24 @@ impl World {
         World::start_parts(hub, bench, planned, branch_id, seed, Some(&from)).await
     }
 
-    fn new(
-        hub: Arc<Hub>,
-        bench: &str,
-        bench_client: Option<Arc<Client>>,
-        tools: Vec<(ToolSchema, Route)>,
-    ) -> World {
+    fn new(hub: Arc<Hub>, bench: &str, bench_client: Option<Arc<Client>>, plan: Plan) -> World {
         World {
             hub,
             bench: bench.to_string(),
             bench_client,
             parts: vec![],
-            tools,
+            tools: plan.tools,
+            links: plan.links,
+            gates: plan.gates,
+            view: plan.view,
             connections: Map::new(),
             track: Mutex::default(),
         }
     }
 
-    /// Starts every part (from `from`, or empty when None) and connects the ones that can be.
-    /// On a failure the parts already started are stopped.
+    /// Starts every part (from `from`, or empty when None) at once and connects the ones that
+    /// can be: a world restores in the time of its slowest part. On a failure the parts that
+    /// started are stopped.
     async fn start_parts(
         hub: Arc<Hub>,
         bench: &BenchDescribe,
@@ -267,56 +364,40 @@ impl World {
         seed: u64,
         from: Option<&StartSaves>,
     ) -> Result<World> {
-        let Plan { parts, tools } = planned;
+        let mut planned = planned;
+        let parts = std::mem::take(&mut planned.parts);
         let bench_client = hub.client(&bench.name).await?;
-        let mut world = World::new(hub, &bench.name, Some(bench_client), tools);
-        for p in parts {
-            if let Err(e) = world.add_part(p, branch_id, seed, from).await {
-                world.stop().await;
-                return Err(e);
+        let starts = (parts.into_iter()).map(|p| start_part(&hub, p, branch_id, seed, from));
+        let started = futures_util::future::join_all(starts).await;
+        let mut world = World::new(hub, &bench.name, Some(bench_client), planned);
+        let mut failed = None;
+        for s in started {
+            if let Some(e) = world.take_started(s) {
+                failed.get_or_insert(e);
             }
+        }
+        if let Some(e) = failed {
+            world.stop().await;
+            return Err(e);
         }
         Ok(world)
     }
 
-    async fn add_part(
-        &mut self,
-        p: PlannedPart,
-        branch_id: &str,
-        seed: u64,
-        from: Option<&StartSaves>,
-    ) -> Result<()> {
-        let instance = instance_id(branch_id, &p.part.part);
-        let (params, save) = start_params(&p, &instance, seed, from)?;
-        let part = Part {
-            client: self.hub.client(&p.part.integration).await?,
-            name: p.part.part,
-            integration: p.part.integration,
-            instance,
-            describe: p.describe,
-        };
-        let _: Value = call(&part.client, &part.label(), "start", params)
-            .await
-            .with_context(|| StartingPart(part.name.clone()))?;
-        if let Some(save) = save {
-            self.track
-                .get_mut()
-                .unwrap()
-                .last
-                .insert(part.name.clone(), save);
+    /// Adds a part that started (in world order) with its save and connection; the error of one
+    /// that failed. A part that started and then failed to connect is added too, so it is stopped
+    /// with the world.
+    fn take_started(&mut self, s: StartedPart) -> Option<anyhow::Error> {
+        if let Some(part) = s.part {
+            let track = self.track.get_mut().unwrap();
+            if let Some(save) = s.save {
+                track.last.insert(part.name.clone(), save);
+            }
+            if let Some(info) = s.connection {
+                self.connections.insert(part.name.clone(), info);
+            }
+            self.parts.push(part);
         }
-        // Pushed first: a part that started is stopped with the world even if connecting fails.
-        self.parts.push(part);
-        self.connect_last().await
-    }
-
-    /// Connects the part added last, when a benchmark may reach it.
-    async fn connect_last(&mut self) -> Result<()> {
-        let part = self.parts.last().expect("a part was just added");
-        if let Some(info) = connect(part).await? {
-            self.connections.insert(part.name.clone(), info);
-        }
-        Ok(())
+        s.error
     }
 
     pub fn bench(&self) -> &str {
@@ -337,6 +418,11 @@ impl World {
     /// The tools agents get (MCP shape plus `effect`).
     pub fn tools(&self) -> impl Iterator<Item = &ToolSchema> {
         self.tools.iter().map(|(t, _)| t)
+    }
+
+    /// True when `name` is one of the world's tools agents get.
+    pub fn has_tool(&self, name: &str) -> bool {
+        self.tools().any(|t| t.name == name)
     }
 
     pub fn is_write(&self, name: &str) -> bool {
@@ -388,36 +474,32 @@ impl World {
             .ok_or_else(|| WorldError::other(format!("there is no part {name} in this world")))
     }
 
-    /// Runs a tool: the benchmark's own, or the part's that lists it. An unknown tool is a tool error.
+    /// Runs a tool: the benchmark's own, or the part's that lists it. An unknown tool, or one a
+    /// gate holds back, is a tool error and reaches no part.
     pub async fn call_tool(
         &self,
         name: &str,
         args: Value,
         clock_ms: i64,
     ) -> Result<Called, WorldError> {
-        match self
-            .tools
-            .iter()
-            .find(|(t, _)| t.name == name)
-            .map(|(_, r)| *r)
-        {
-            None => Ok(Called {
-                output: ToolOutput {
-                    error: Some(format!("unknown tool {name}")),
-                    ..Default::default()
-                },
-                part: None,
-            }),
-            Some(Route::Bench) => self.call_bench_tool(name, args).await,
-            Some(Route::Part(i)) => {
+        let route = self.tools.iter().find(|(t, _)| t.name == name);
+        let Some(route) = route.map(|(_, r)| *r) else {
+            return Ok(Called::error(format!("unknown tool {name}")));
+        };
+        let since = std::time::Instant::now();
+        let refused = self.gate_refusal(name, &args).await?;
+        let gate_ms = crate::overhead::ms_since(since);
+        let mut called = match (refused, route) {
+            (Some(output), _) => Called::new(output, None),
+            (None, Route::Bench) => self.call_bench_tool(name, args).await?,
+            (None, Route::Part(i)) => {
                 let p = &self.parts[i];
                 let output = p.call_tool(name, args, clock_ms).await?;
-                Ok(Called {
-                    output,
-                    part: Some(p.name.clone()),
-                })
+                Called::new(output, Some(p.name.clone()))
             }
-        }
+        };
+        called.gate_ms = gate_ms;
+        Ok(called)
     }
 
     /// Runs `part`'s own tool `name` (for a replay).
@@ -441,24 +523,16 @@ impl World {
         )
         .await?;
         if let Some(error) = self.bench_part_error(&o) {
-            return Ok(Called {
-                output: ToolOutput {
-                    error: Some(error),
-                    ..Default::default()
-                },
-                part: None,
-            });
+            return Ok(Called::error(error));
         }
         let output = ToolOutput {
             result: o.result,
             error: o.error,
             reads: o.reads,
             writes: o.writes,
+            ..Default::default()
         };
-        Ok(Called {
-            output,
-            part: Some(o.part),
-        })
+        Ok(Called::new(output, Some(o.part)))
     }
 
     /// Why a benchmark tool's answer can't stand: it names an unknown part, or wrote to a part

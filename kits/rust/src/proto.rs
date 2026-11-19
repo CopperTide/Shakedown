@@ -4,6 +4,12 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
+mod scenario;
+mod view;
+
+pub use scenario::*;
+pub use view::*;
+
 pub const PROTOCOL: u32 = 1;
 
 fn all(s: &str, ok: impl Fn(u8) -> bool, max: usize) -> bool {
@@ -84,6 +90,44 @@ pub struct Describe {
     pub uses_clock: bool,
     pub fingerprint: Value,
     pub tools: Vec<ToolSchema>,
+    /// What kind of system this part is, for monitoring views (absent: not said).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub system: Option<SystemInfo>,
+}
+
+/// The kind of system a part is: `kind` is one of "erp", "crm", "database", "api", "mcp",
+/// "messaging", "approvals", "plant", "lims", "files", "logistics" or another short word;
+/// `product` is what runs ("ERPNext"); `stands_in_for` names the commercial systems an
+/// open-source stand-in represents ("SAP S/4HANA"); `simulated` is true when the part is a
+/// simulation, not the real product.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SystemInfo {
+    pub kind: String,
+    pub product: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stands_in_for: Option<String>,
+    #[serde(default)]
+    pub simulated: bool,
+}
+
+impl SystemInfo {
+    /// A real product: `kind`, `product`, and what it stands in for (if anything).
+    pub fn real(kind: &str, product: &str, stands_in_for: Option<&str>) -> Self {
+        SystemInfo {
+            kind: kind.into(),
+            product: product.into(),
+            stands_in_for: stands_in_for.map(Into::into),
+            simulated: false,
+        }
+    }
+
+    /// A simulation of a kind of system.
+    pub fn simulated(kind: &str, product: &str, stands_in_for: Option<&str>) -> Self {
+        SystemInfo {
+            simulated: true,
+            ..SystemInfo::real(kind, product, stands_in_for)
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -129,6 +173,22 @@ pub struct ToolOutput {
     pub reads: Vec<String>,
     #[serde(default)]
     pub writes: Vec<String>,
+    /// Events the call itself gives the world: recorded, and matched against the world's links.
+    #[serde(default, skip_serializing_if = "<[_]>::is_empty")]
+    pub events: Box<[WorldEvent]>,
+}
+
+/// True for a key that is the part's own bookkeeping, which no agent's call is about: its kind
+/// starts with `_` (`_disruption/courier-capacity`). See docs/protocol.md, "Ids and keys".
+pub fn is_internal_key(key: &str) -> bool {
+    key.starts_with('_')
+}
+
+impl ToolOutput {
+    /// `writes` split into the world's keys and the part's internal ones, in order.
+    pub fn split_writes(writes: Vec<String>) -> (Vec<String>, Vec<String>) {
+        writes.into_iter().partition(|k| !is_internal_key(k))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -245,30 +305,85 @@ pub struct WorldPart {
     pub config: Value,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct TaskInfo {
     pub id: String,
     pub reason: String,
     pub ticket: String,
+    /// Calls arenad makes on a run's world right after it starts, before any agent: the task's
+    /// scripted setup (a scenario, a disruption). The tools they call are the world's own: agents
+    /// don't get them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub setup: Vec<SetupCall>,
+    /// The world's date and time at clock 0 (`YYYY-MM-DDTHH:MM:SS`, the world's local time), for a
+    /// world whose clock is not today's: arenad then tells every agent the world's current date and
+    /// time (clock 0 plus the branch clock), so agents read the world's dates against its own clock
+    /// rather than the date their environment reports.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub clock_start: Option<String>,
 }
 
-/// One agent of a benchmark's suggested team: its id (`^[a-z0-9_-]+$`), name and system prompt.
+/// One call of a task's setup: `tool` of the part `part`, with `args`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SetupCall {
+    pub part: String,
+    pub tool: String,
+    #[serde(default)]
+    pub args: Value,
+}
+
+/// One agent of a benchmark's suggested team: its id (`^[a-z0-9_-]+$`), name and system prompt,
+/// and whether the team keeps it from writing (absent: it may use every tool).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TeamRole {
     pub id: String,
     pub name: String,
     pub prompt: String,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub read_only: bool,
+    /// The world tools the role may see and call (empty: every tool).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tools: Vec<String>,
 }
 
-/// The team a benchmark suggests: its agents in the order they run (the last one writes).
+/// A link between two parts: an event of `from` of kind `event` calls `to`'s `tool`. In `args`, a
+/// string starting with `/` is a JSON pointer into the event's `data`; anything else is a constant.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Link {
+    pub from: String,
+    pub event: String,
+    pub to: String,
+    pub tool: String,
+    #[serde(default)]
+    pub args: Map<String, Value>,
+}
+
+/// A gate on a tool: the call goes through only if a document of `part` says so. `key` is the
+/// document's key, with `{arg}` standing for the call's argument `arg`. Each entry of `require` is
+/// a JSON pointer into the document and the value it must have; the string `"{arg}"` is the call's
+/// argument. A world's gates hold for agents' calls, not a link's.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Gate {
+    pub tool: String,
+    pub part: String,
+    pub key: String,
+    #[serde(default)]
+    pub require: Map<String, Value>,
+}
+
+/// A team a benchmark suggests: its agents in the order they run, and the arenad runner its
+/// prompts are written for (`chain`, `concurrent` or `dispatch`; absent: any). In a `dispatch`
+/// run the first agent leads.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BenchTeam {
     pub id: String,
     pub name: String,
     pub agents: Vec<TeamRole>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runner: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct BenchDescribe {
     pub name: String,
     pub version: String,
@@ -282,7 +397,27 @@ pub struct BenchDescribe {
     /// The team the benchmark suggests; arenad suggests a generic one if absent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub team: Option<BenchTeam>,
+    /// Other teams it suggests beside `team` (a dispatching team, a chain), offered one click
+    /// away.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub teams: Vec<BenchTeam>,
     pub tools: Vec<ToolSchema>,
+    /// Calls between the parts of the world.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub links: Vec<Link>,
+    /// Conditions on tools, checked against other parts' documents.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub gates: Vec<Gate>,
+    /// True: a branch is scored by the benchmark's `score` over the world's end state, and no gold
+    /// world is made.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub scored: bool,
+    /// The disruptions a run's scenario builder may add.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scenario_options: Option<ScenarioOptions>,
+    /// Present when the benchmark answers `view` (the world's digital twin).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub view: Option<ViewInfo>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -328,9 +463,117 @@ pub struct GoldActions {
     pub actions: Vec<Action>,
 }
 
+/// `score`: a task and every part's end state, `{part: {key: doc}}`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ScoreParams {
+    pub task: String,
+    pub docs: Map<String, Value>,
+}
+
+/// One named pass-or-fail check of a branch's end state.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct NamedCheck {
+    pub name: String,
+    pub passed: bool,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub detail: String,
+    /// A hard safety check (an unsafe action, not a missed goal): reported apart from the score.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub safety: bool,
+    /// The figure the check measured, when it has one (an optimisation's verified objective, the
+    /// simulations a study used): experiments show it per setup beside the pass rate.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub measure: Option<Measure>,
+}
+
+/// Which way a measure is better.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Better {
+    Higher,
+    Lower,
+}
+
+/// A number a named check measured, with what it means. `better` says which way is better (absent:
+/// neither, as for a count); `target` is the value the task asks for; `reference` a value to read it
+/// against that no run made (an offline baseline search).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Measure {
+    pub label: String,
+    pub value: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unit: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub better: Option<Better>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reference: Option<Reference>,
+}
+
+/// A labelled value a measure is read against.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Reference {
+    pub label: String,
+    pub value: f64,
+}
+
+impl NamedCheck {
+    /// A check whose `detail` is `fails_with` when it failed and empty when it passed.
+    pub fn new(name: &str, passed: bool, fails_with: String, safety: bool) -> NamedCheck {
+        NamedCheck {
+            name: name.into(),
+            passed,
+            detail: if passed { String::new() } else { fails_with },
+            safety,
+            measure: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct Score {
+    pub checks: Vec<NamedCheck>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_check_may_carry_a_measure_and_one_without_reads_as_before() {
+        let with: NamedCheck = serde_json::from_value(serde_json::json!({
+            "name": "goal_reached", "passed": true,
+            "measure": {"label": "Line 2 OEE", "value": 86.2, "unit": "%", "better": "higher", "target": 85,
+                        "reference": {"label": "Random search", "value": 79.5}}}))
+        .unwrap();
+        let m = with.measure.as_ref().unwrap();
+        assert_eq!(
+            (m.better, m.target, m.reference.as_ref().unwrap().value),
+            (Some(Better::Higher), Some(85.0), 79.5)
+        );
+        let plain = NamedCheck::new("a", true, String::new(), false);
+        assert_eq!(
+            serde_json::to_value(&plain).unwrap(),
+            serde_json::json!({"name": "a", "passed": true})
+        );
+    }
+
+    #[test]
+    fn internal_keys_are_split_from_the_worlds_writes() {
+        let writes = ["_disruption/a", "quote/Q-1", "_peeks/n"]
+            .map(String::from)
+            .to_vec();
+        let (world, internal) = ToolOutput::split_writes(writes);
+        assert_eq!(
+            (world, internal),
+            (
+                vec!["quote/Q-1".to_string()],
+                vec!["_disruption/a".to_string(), "_peeks/n".to_string()]
+            )
+        );
+        assert!(!is_internal_key("disruption/a"));
+    }
 
     #[test]
     fn ids() {

@@ -39,12 +39,17 @@ fn fixture(name: &str) -> String {
 
 fn spec(model: Option<&str>) -> AgentSpec {
     AgentSpec {
+        tools: Vec::new(),
         id: "triage".into(),
         name: "Triage".into(),
         kind: AgentKind::ClaudeCode,
         model: model.map(Into::into),
         prompt: "p".into(),
         provider: None,
+        read_only: false,
+        lead: false,
+        url: None,
+        headers: Default::default(),
     }
 }
 
@@ -312,12 +317,17 @@ fn driver_times_out() {
 
 fn agent_spec(id: &str, kind: AgentKind, prompt: &str) -> AgentSpec {
     AgentSpec {
+        tools: Vec::new(),
         id: id.into(),
         name: id.into(),
         kind,
         model: None,
         prompt: prompt.into(),
         provider: None,
+        read_only: false,
+        lead: false,
+        url: None,
+        headers: Default::default(),
     }
 }
 

@@ -1,7 +1,12 @@
 //! `inspect` and `diff` through REST: an instance's site is read in place; a save is read
-//! through a scratch site made from it and removed after.
+//! through a scratch site made from it and removed after. Building a scratch site takes tens of
+//! seconds, so `diff` reads both sides at once and keeps the differing documents of saves for the
+//! `inspect` of them that follows (Arena's compare asks for exactly those).
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
+
+use tokio::sync::{oneshot, watch};
 
 use arena_part::proto::{DiffParams, Differing, Docs, InspectParams, Target};
 use arena_part::PartError;
@@ -62,6 +67,11 @@ impl Erpnext {
     }
 
     pub(crate) async fn inspect_target(&self, p: InspectParams) -> Result<Docs, PartError> {
+        if let (Target::Save { save }, false) = (&p.target, p.keys.is_empty()) {
+            if let Some(docs) = self.docs.get(save, &p.keys) {
+                return Ok(Docs { docs });
+            }
+        }
         let all = match p.keys.is_empty() {
             true => self.doctypes_of(&p.target)?,
             false => vec![],
@@ -81,14 +91,67 @@ impl Erpnext {
         if p.a == p.b {
             return Ok(Differing { differing: vec![] });
         }
+        if let Some(differing) = self.kept_diff(&p) {
+            return Ok(Differing { differing });
+        }
         let doctypes: Vec<String> = doctypes.into_iter().collect();
-        let a = self
-            .read(&p.a, async |r, s| dump_docs(r, s, &doctypes).await)
-            .await?;
-        let b = self
-            .read(&p.b, async |r, s| dump_docs(r, s, &doctypes).await)
-            .await?;
-        Ok(Differing::between(&a, &b))
+        let (keys_tx, keys_rx) = watch::channel(None);
+        let ((a_tx, a_rx), (b_tx, b_rx)) = (oneshot::channel(), oneshot::channel());
+        let decide = async move {
+            let (a, b): (DocMap, DocMap) = (a_rx.await.ok()?, b_rx.await.ok()?);
+            let d = Differing::between(&a, &b);
+            let _ = keys_tx.send(Some(Arc::new(d.differing.clone())));
+            Some(d)
+        };
+        let (da, db, d) = tokio::join!(
+            self.read_side(&p.a, &doctypes, a_tx, keys_rx.clone()),
+            self.read_side(&p.b, &doctypes, b_tx, keys_rx),
+            decide
+        );
+        let (da, db) = (da?, db?);
+        let d = d.ok_or_else(|| PartError::internal("diff: a side was not read"))?;
+        self.keep(&p, [da, db], &d.differing);
+        Ok(d)
+    }
+
+    /// The diff of two saves made before (saves never change); none for an instance.
+    fn kept_diff(&self, p: &DiffParams) -> Option<Vec<String>> {
+        match (&p.a, &p.b) {
+            (Target::Save { save: a }, Target::Save { save: b }) => self.docs.diff(a, b),
+            _ => None,
+        }
+    }
+
+    /// One side of a diff: its documents go to `dumped`; once the differing keys are known, it
+    /// reads their documents before its scratch site goes (none, if that fails: the diff stands).
+    async fn read_side(
+        &self,
+        t: &Target,
+        doctypes: &[String],
+        dumped: oneshot::Sender<DocMap>,
+        mut keys: watch::Receiver<Option<Arc<Vec<String>>>>,
+    ) -> Result<Map<String, Value>, PartError> {
+        self.read(t, async move |rest, site| {
+            let _ = dumped.send(dump_docs(rest, site, doctypes).await?);
+            let known = keys.wait_for(Option::is_some).await.map(|k| k.clone());
+            let known = known.map_err(|_| PartError::internal("diff: the other side failed"))?;
+            let keys: Arc<Vec<String>> = known.unwrap_or_default();
+            Ok(some_docs(rest, site, &keys).await.unwrap_or_default())
+        })
+        .await
+    }
+
+    /// Keeps what a diff read from saves: each side's documents and, for two saves, the diff
+    /// (an instance changes, so nothing of one is kept).
+    fn keep(&self, p: &DiffParams, docs: [Map<String, Value>; 2], differing: &[String]) {
+        for (t, d) in [&p.a, &p.b].into_iter().zip(docs) {
+            if let Target::Save { save } = t {
+                self.docs.put(save, d);
+            }
+        }
+        if let (Target::Save { save: a }, Target::Save { save: b }) = (&p.a, &p.b) {
+            self.docs.put_diff(a, b, differing);
+        }
     }
 }
 
@@ -132,10 +195,21 @@ async fn some_docs(
             Reply::Ok(doc) => doc,
             Reply::Refused { status: 404, .. } => Value::Null,
             Reply::Refused { message, .. } => {
-                return Err(PartError::internal(format!("reading {k}: {message}")))
+                if doctype_exists(rest, site, doctype).await? {
+                    return Err(PartError::internal(format!("reading {k}: {message}")));
+                }
+                Value::Null
             }
         };
         out.insert(k.clone(), doc);
     }
     Ok(out)
+}
+
+/// False when Frappe has no such doctype: it answers a read of one with a server error, not 404,
+/// and a key of a doctype that doesn't exist names no document (arenad probes saves with one).
+async fn doctype_exists(rest: &Rest, site: &str, doctype: &str) -> Result<bool, PartError> {
+    let path = ["resource", "DocType", doctype];
+    let reply = rest.get(site, &path, &[]).await?;
+    Ok(!matches!(reply, Reply::Refused { status: 404, .. }))
 }

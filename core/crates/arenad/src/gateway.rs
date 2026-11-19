@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Instant};
 
 use axum::{
     extract::{Path, State},
@@ -11,8 +11,12 @@ use serde_json::{json, Value};
 
 use crate::{
     app::AppState,
+    exec::BranchCtx,
     model::*,
+    overhead::{self, ms_since, Cat},
     providers::{Provider, Upstream},
+    reasoning,
+    store::Store,
 };
 
 pub fn router() -> Router<Arc<AppState>> {
@@ -127,28 +131,68 @@ fn model_call_payload(
     (status, payload)
 }
 
+/// Adds the call to the run's spend estimate; the loop that made the call checks the run's limit
+/// once it has the answer.
+fn charge(ctx: &BranchCtx, agent: &str, provider: &Result<Provider, String>, p: &ModelCallPayload) {
+    if let Some(usd) = call_cost(provider, p) {
+        let _ = ctx.budget.add(agent, usd);
+    }
+}
+
+/// What a call cost: the provider's figure, else its list price for the model it asked for
+/// (the OpenAI-shape usage, cached prompt tokens priced as cache hits).
+fn call_cost(provider: &Result<Provider, String>, p: &ModelCallPayload) -> Option<f64> {
+    if p.cost_usd.is_some() {
+        return p.cost_usd;
+    }
+    let n = |v: &Value| v.as_i64().unwrap_or(0);
+    let u = &p.usage;
+    let cached = n(&u["prompt_tokens_details"]["cached_tokens"]);
+    let t = crate::prices::CallTokens {
+        input: (n(&u["prompt_tokens"]) - cached).max(0),
+        cache_read: cached,
+        output: n(&u["completion_tokens"]),
+        ..Default::default()
+    };
+    let id = provider.as_ref().ok()?.id.as_str();
+    crate::budget::price(id, p.request["model"].as_str(), &t)
+}
+
 async fn record(
-    state: &AppState,
-    branch: &str,
+    ctx: &BranchCtx,
+    store: &Store,
     agent: &str,
     payload: &ModelCallPayload,
 ) -> Result<(), String> {
     let v = serde_json::to_value(payload).map_err(|e| e.to_string())?;
-    state
-        .store
-        .append(branch, Some(agent), EventKind::ModelCall, v)
+    let ev = ctx
+        .append(store, Some(agent), EventKind::ModelCall, v)
         .await
-        .map(|_| ())
-        .map_err(|e| format!("{e:#}"))
+        .map_err(|e| format!("{e:#}"))?;
+    let items =
+        reasoning::from_chat_response(&payload.response, payload.provider_response.as_ref());
+    reasoning::record(
+        ctx,
+        store,
+        agent,
+        items,
+        reasoning::SOURCE_GATEWAY,
+        Some(ev.seq),
+    )
+    .await;
+    Ok(())
 }
 
-/// The provider of `agent` on the live `branch` (`Some(None)`: the default one); `None` when the
+/// The live `branch` and the provider of its `agent` (`None`: the default one); `None` when the
 /// branch isn't live or has no such agent.
-fn live_provider(state: &AppState, branch: &str, agent: &str) -> Option<Option<String>> {
-    let live = state.live.read().unwrap();
-    live.get(branch)?
-        .provider_of(agent)
-        .map(|p| p.map(str::to_string))
+fn live_agent(
+    state: &AppState,
+    branch: &str,
+    agent: &str,
+) -> Option<(Arc<BranchCtx>, Option<String>)> {
+    let ctx = state.live.read().unwrap().get(branch)?.clone();
+    let provider = ctx.provider_of(agent)?;
+    Some((ctx, provider))
 }
 
 async fn handle(
@@ -156,9 +200,14 @@ async fn handle(
     Path((branch, agent)): Path<(String, String)>,
     Json(body): Json<Value>,
 ) -> Response {
-    let Some(provider) = live_provider(&state, &branch, &agent) else {
+    let Some((ctx, provider)) = live_agent(&state, &branch, &agent) else {
         return error_response(StatusCode::NOT_FOUND, "unknown branch or agent");
     };
+    // A paused branch holds the call until it resumes; that wait is no part of the gateway's.
+    if ctx.flow.go().await.is_err() {
+        return error_response(StatusCode::CONFLICT, crate::flow::STOPPED);
+    }
+    let since = Instant::now();
     if !body.is_object() {
         return error_response(
             StatusCode::BAD_REQUEST,
@@ -166,9 +215,15 @@ async fn handle(
         );
     }
     let provider = state.config.providers.resolve(provider.as_deref());
+    let asked = Instant::now();
     let upstream = send_upstream(&state, &provider, &body).await;
+    let upstream_ms = ms_since(asked);
     let (status, payload) = model_call_payload(body, &provider, &upstream);
-    if let Err(e) = record(&state, &branch, &agent, &payload).await {
+    // The gateway's own handling: everything but the provider's answer (and the record's time,
+    // which the store counts).
+    overhead::add(&branch, Cat::Gateway, ms_since(since) - upstream_ms);
+    charge(&ctx, &agent, &provider, &payload);
+    if let Err(e) = record(&ctx, &state.store, &agent, &payload).await {
         return error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             format!("recording model call: {e}"),

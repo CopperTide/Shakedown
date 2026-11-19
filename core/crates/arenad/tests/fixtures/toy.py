@@ -3,7 +3,7 @@
   toy.py part [--crash-on-call N [--crash-mark FILE]] [--save-fails-after N] [--bad-diff] [--log FILE]
               [--prefix P] [--exact save|replay|none] [--approximate] [--uses-clock [--event-every]]
               [--save-sleep MS] [--refuse-start-if FILE] [--describe-fails] [--describe-hangs] [--gc] [--gc-fails]
-              [--gc-waits-for FILE]
+              [--gc-waits-for FILE] [--tool-event KIND] [--system JSON] [--internal-peeks]
       An integration with one counter per instance and tools `poke` (write, adds 1) and `peek`
       (read), named `<P>poke` and `<P>peek` with --prefix. It exits on its N-th call_tool (only
       once across restarts when FILE marks that it did); every `save` after the first N is an
@@ -15,12 +15,24 @@
       reports a change whenever the clock moved, and an `alarm` event on an instance's first
       advance (on every advance with --event-every). --save-sleep makes every `save` take MS
       milliseconds. With --refuse-start-if, `start` answers -32003 (fingerprint mismatch) while
-      FILE exists. With --gc-waits-for, `gc` answers only once FILE exists.
+      FILE exists. With --gc-waits-for, `gc` answers only once FILE exists. With --tool-event,
+      `poke`'s result gives an event of that kind with data {"n": <the new value>}. With
+      --internal-peeks, `peek` counts its calls in the internal key `_peeks/n` (saved with the
+      counter) and answers {"n", "peeks"}.
   toy.py bench --integration NAME [--part NAME=INTEGRATION ...] [--gold TOOL [--gold-args JSON]]
-               [--config PART=JSON ...] [--clash] [--bench-tool [--tool-part PART]]
+               [--config PART=JSON ...] [--clash] [--bench-tool [--tool-part PART]] [--link JSON ...]
+               [--gate JSON ...] [--setup JSON ...] [--scored [--two-tasks] [--safety]]
+               [--view PART [--view-fails]] [--scenario-options JSON] [--clock-start ISO]
       A benchmark with one task `t1` whose world is one part `box` of integration NAME, or the
       --part list; each part's config is `{}` or the --config given for it. Tools: none; with --clash a `poke`; with --bench-tool a `ring` that reports it
-      ran on PART (default `box`). Gold: one TOOL with JSON args (default `poke` with `{}`).
+      ran on PART (default `box`). --link adds a link to the world, --gate a gate, --setup a call to `t1`'s setup. With --scored,
+      `score` has one check `poked`: the first part's box/n is at least 1. Gold: one TOOL with JSON args (default `poke` with `{}`).
+      --two-tasks adds task t2, which needs two pokes (`poked`: box/n is at least the task's number).
+      --safety adds the safety check `not_overpoked`: box/n is at most the task's number. --system
+      makes the part's `describe` say what kind of system it is (JSON). --view PART draws the world's
+      view from PART's docs: one area `box` with one item `n` whose status is box/n (abnormal above 1);
+      --view-fails makes `view` an error. --scenario-options puts JSON in `describe.scenario_options`.
+      --clock-start gives `t1` a `clock_start` (the world's date and time at clock 0).
 """
 import json
 import os
@@ -59,6 +71,7 @@ class Part:
         self.saves_ok = int(opt("--save-fails-after", "-1"))
         self.calls = self.saved = 0
         self.counters, self.saves, self.clocks = {}, {}, {}
+        self.peeks, self.peek_saves = {}, {}
 
     def describe(self, p):
         if "--describe-hangs" in ARGS:
@@ -67,7 +80,7 @@ class Part:
             raise RpcError(-32000, "the toy cannot describe itself")
         return {"name": "toy", "version": "0.1.0", "protocol": 1,
                 "restore": {"exact": EXACT, "approximate": APPROXIMATE}, "uses_clock": "--uses-clock" in ARGS,
-                "fingerprint": {"toy": 1}, "tools": TOOLS}
+                "fingerprint": {"toy": 1}, "tools": TOOLS, **system()}
 
     def value(self, target):
         if "save" in target:
@@ -89,6 +102,7 @@ class Part:
         if src and not mode_ok:
             raise RpcError(-32001, "the toy can't restore from a save in that mode")
         self.counters[p["instance"]] = 0 if not src else self.lookup(self.saves, src["save"], "save")
+        self.peeks[p["instance"]] = self.peek_saves.get(src.get("save"), 0)
         return {}
 
     def advance(self, p):
@@ -109,7 +123,13 @@ class Part:
         n = self.lookup(self.counters, i, "instance")
         if p["name"] == PREFIX + "poke":
             self.counters[i] = n + 1
-            return {"result": {"n": n + 1}, "reads": [], "writes": ["box/n"]}
+            out = {"result": {"n": n + 1}, "reads": [], "writes": ["box/n"]}
+            if "--tool-event" in ARGS:
+                out["events"] = [{"kind": opt("--tool-event", ""), "text": "poked", "data": {"n": n + 1}}]
+            return out
+        if p["name"] == PREFIX + "peek" and "--internal-peeks" in ARGS:
+            self.peeks[i] = self.peeks.get(i, 0) + 1
+            return {"result": {"n": n, "peeks": self.peeks[i]}, "reads": ["box/n"], "writes": ["_peeks/n"]}
         if p["name"] == PREFIX + "peek":
             return {"result": {"n": n}, "reads": ["box/n"], "writes": []}
         return {"error": "unknown tool " + p["name"], "reads": [], "writes": []}
@@ -132,6 +152,7 @@ class Part:
         if 0 <= self.saves_ok < self.saved:
             raise RpcError(-32000, "the toy can't save today")
         self.saves[p["save"]] = self.lookup(self.counters, p["instance"], "instance")
+        self.peek_saves[p["save"]] = self.peeks.get(p["instance"], 0)
         return {"bytes": 1, "exact": EXACT == "save"}
 
     def inspect(self, p):
@@ -174,6 +195,11 @@ class Part:
         return {"dropped": len(doomed), "bytes": len(doomed)}
 
 
+def system():
+    given = opt("--system", None)
+    return {"system": json.loads(given)} if given else {}
+
+
 RING = {"name": "ring", "description": "Ring the bell.", "inputSchema": {"type": "object", "properties": {}}, "effect": "read"}
 
 
@@ -182,8 +208,19 @@ class Bench:
         tools = [dict(TOOLS[0], description="The benchmark's own poke.")] if "--clash" in ARGS else []
         tools += [RING] if "--bench-tool" in ARGS else []
         return {"name": "toybench", "version": "0.1.0", "protocol": 1, "world": world(),
-                "tasks": [{"id": "t1", "reason": "poke it", "ticket": "# Ticket\n\nPoke the box once.\n"}],
-                "instructions": "Be kind to the box.", "tools": tools}
+                "tasks": tasks(),
+                "instructions": "Be kind to the box.", "tools": tools,
+                "links": [json.loads(link) for link in opts("--link")],
+                "gates": [json.loads(gate) for gate in opts("--gate")], "scored": "--scored" in ARGS,
+                **view_and_scenario()}
+
+    def view(self, p):
+        if "--view-fails" in ARGS:
+            raise RpcError(-32000, "the toy cannot draw today")
+        n = p["docs"][opt("--view", "box")]["box/n"]["n"]
+        item = {"id": "n", "label": "n", "status": str(n), "abnormal": n > 1}
+        return {"view": {"title": "Box", "areas": [{"id": "box", "label": "Box", "kind": "plant", "items": [item]}],
+                         "flows": [], "kpis": [{"id": "n", "label": "n", "value": str(n), "abnormal": False}]}}
 
     def seed(self, p):
         return {}
@@ -193,8 +230,31 @@ class Bench:
             return {"result": {"rang": True}, "part": opt("--tool-part", "box"), "reads": [], "writes": []}
         return {"error": "the toy benchmark has no working tools", "part": "box", "reads": [], "writes": []}
 
+    def score(self, p):
+        n, need = p["docs"][world()[0]["part"]]["box/n"]["n"], int(p["task"][1:])
+        checks = [{"name": "poked", "passed": n >= need, "detail": "n is %d" % n}]
+        if "--safety" in ARGS:
+            checks.append({"name": "not_overpoked", "passed": n <= need, "safety": True})
+        return {"checks": checks}
+
     def gold_actions(self, p):
         return {"actions": [{"name": opt("--gold", "poke"), "args": json.loads(opt("--gold-args", "{}"))}]}
+
+
+def view_and_scenario():
+    out = {"view": {"docs": [opt("--view", "")]}} if "--view" in ARGS else {}
+    if "--scenario-options" in ARGS:
+        out["scenario_options"] = json.loads(opt("--scenario-options", "{}"))
+    return out
+
+
+def tasks():
+    once = {"id": "t1", "reason": "poke it", "ticket": "# Ticket\n\nPoke the box once.\n"}
+    once["setup"] = [json.loads(call) for call in opts("--setup")]
+    if opt("--clock-start", None):
+        once["clock_start"] = opt("--clock-start", None)
+    twice = {"id": "t2", "reason": "poke it twice", "ticket": "# Ticket\n\nPoke the box twice.\n"}
+    return [once, twice] if "--two-tasks" in ARGS else [once]
 
 
 def world():

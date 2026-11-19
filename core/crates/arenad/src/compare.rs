@@ -1,11 +1,16 @@
 //! Branch comparison: per-branch totals, first divergent step, differing final rows.
 
 use anyhow::{anyhow, Result};
-use parts::{proto::WorldPart, Hub};
+use parts::{
+    proto::{is_internal_key, WorldPart},
+    Hub,
+};
 use serde_json::{json, Map, Value};
 
 use crate::{
+    metrics::metrics,
     model::*,
+    prices,
     restore::keeps_saves,
     saves::{self, part_code},
     world::Saves,
@@ -24,14 +29,17 @@ pub fn summary(branch: &Branch, events: &[Event]) -> Value {
     let seconds = branch
         .ended_at
         .map(|t| (t - branch.created_at).num_milliseconds() as f64 / 1000.0);
+    // Tokens as arena's metrics count them (a client's calls once each), not the ends' own sums.
+    let m = metrics(branch, events, prices::table(), chrono::Utc::now());
     json!({
         "status": branch.status,
         "restore_mode": branch.restore_mode,
         "restored": branch.restored,
         "seconds": seconds,
-        "tokens": ends.iter().map(|e| e.tokens.unwrap_or(0)).sum::<i64>(),
+        "tokens": m.tokens,
         "cost_usd": ends.iter().try_fold(0.0f64, |c, e| add_cost(Some(c), e.cost_usd)),
         "cost_source": combined_source(&ends),
+        "metrics": m,
     })
 }
 
@@ -50,7 +58,10 @@ fn combined_source(ends: &[AgentEndPayload]) -> Value {
     }
 }
 
-fn signature(e: &Event) -> (Option<&str>, EventKind, &Value, &Value) {
+/// What makes two steps the same: agent, kind, tool name and arguments.
+type Signature<'a> = (Option<&'a str>, EventKind, &'a Value, &'a Value);
+
+fn signature(e: &Event) -> Signature<'_> {
     (
         e.agent.as_deref(),
         e.kind,
@@ -59,17 +70,31 @@ fn signature(e: &Event) -> (Option<&str>, EventKind, &Value, &Value) {
     )
 }
 
-/// The first position at which the event lists differ in `(agent, kind, name, args)`; its seq
-/// (from `a`, else `b` when `a` is the shorter list). None when identical.
+/// Each step's seq and signature, the world's views and pauses left out.
+fn steps(evs: &[Event]) -> Vec<(i64, Signature<'_>)> {
+    let step = |e: &&Event| {
+        !matches!(
+            e.kind,
+            EventKind::WorldView | EventKind::Pause | EventKind::Resume
+        )
+    };
+    (evs.iter().filter(step))
+        .map(|e| (e.seq, signature(e)))
+        .collect()
+}
+
+/// The first position at which the steps differ in `(agent, kind, name, args)`; its seq (from
+/// `a`, else `b` when `a` has fewer steps). The world's views are not steps and are skipped.
+/// None when identical.
 pub fn first_divergent_seq(a: &[Event], b: &[Event]) -> Option<i64> {
-    for (x, y) in a.iter().zip(b) {
-        if signature(x) != signature(y) {
-            return Some(x.seq);
-        }
+    let (a, b) = (steps(a), steps(b));
+    let differs = a.iter().zip(&b).find(|(x, y)| x.1 != y.1);
+    if let Some((x, _)) = differs {
+        return Some(x.0);
     }
     match a.len().cmp(&b.len()) {
-        std::cmp::Ordering::Less => Some(b[a.len()].seq),
-        std::cmp::Ordering::Greater => Some(a[b.len()].seq),
+        std::cmp::Ordering::Less => Some(b[a.len()].0),
+        std::cmp::Ordering::Greater => Some(a[b.len()].0),
         std::cmp::Ordering::Equal => None,
     }
 }
@@ -123,7 +148,14 @@ pub async fn differing_rows(
     let many = a.world.len() > 1;
     let mut out = vec![];
     for p in a.world.iter().filter(|p| !skip.contains(&p.part)) {
-        let rows = part_rows(hub, p, [a.save(&p.part)?, b.save(&p.part)?]).await?;
+        let rows = match part_rows(hub, p, [a.save(&p.part)?, b.save(&p.part)?]).await {
+            Ok(rows) => rows,
+            // A part that can't answer (one on another machine that is gone, say) is said to be
+            // uncompared rather than failing the whole comparison.
+            Err(e) => {
+                vec![json!({"key": "(not compared)", "a": format!("{e:#}"), "b": Value::Null})]
+            }
+        };
         out.extend(rows.into_iter().map(|mut r| {
             if many {
                 r["key"] = json!(format!("{}:{}", p.part, r["key"].as_str().unwrap_or("")));
@@ -136,8 +168,10 @@ pub async fn differing_rows(
 }
 
 /// `[{key, a, b}]` of one part: the keys that differ between its two saves, with their docs.
+/// The part's internal keys (its own bookkeeping) are left out.
 async fn part_rows(hub: &Hub, p: &WorldPart, [a, b]: [&str; 2]) -> Result<Vec<Value>> {
-    let keys = saves::diff(hub, &p.integration, a, b).await?;
+    let mut keys = saves::diff(hub, &p.integration, a, b).await?;
+    keys.retain(|k| !is_internal_key(k));
     let da = docs(hub, &p.integration, a, &keys).await?;
     let db = docs(hub, &p.integration, b, &keys).await?;
     let doc = |d: &Map<String, Value>, k: &str| d.get(k).cloned().unwrap_or(Value::Null);
@@ -166,14 +200,7 @@ mod tests {
     use super::*;
 
     fn ev(seq: i64, agent: &str, kind: EventKind, payload: Value) -> Event {
-        Event {
-            branch_id: "b".into(),
-            seq,
-            at: chrono::Utc::now(),
-            agent: Some(agent.into()),
-            kind,
-            payload,
-        }
+        crate::testkit::event(seq, Some(agent), kind, payload)
     }
 
     fn call(seq: i64, name: &str, args: Value) -> Event {
@@ -193,28 +220,19 @@ mod tests {
         assert_eq!(first_divergent_seq(&a, &b), Some(2));
         assert_eq!(first_divergent_seq(&a[..1], &a), Some(2));
         assert_eq!(first_divergent_seq(&a, &a[..1]), Some(2));
+        // A view only one side drew is not a step: the next step decides.
+        let view = |seq| ev(seq, "r", EventKind::WorldView, json!({"seq_of": 1}));
+        let viewed = vec![
+            call(1, "x", json!({"k": 1})),
+            view(2),
+            call(3, "y", json!({})),
+        ];
+        assert_eq!(first_divergent_seq(&a, &viewed), None);
+        assert_eq!(first_divergent_seq(&viewed, &b), Some(3));
     }
 
     fn branch() -> Branch {
-        Branch {
-            id: "b".into(),
-            run_id: "r".into(),
-            parent_id: None,
-            start_seq: None,
-            team: Team {
-                id: "t".into(),
-                name: "T".into(),
-                agents: vec![],
-            },
-            changes: json!([]),
-            fork_note: None,
-            status: BranchStatus::Passed,
-            error: None,
-            created_at: chrono::Utc::now(),
-            ended_at: None,
-            restore_mode: None,
-            restored: vec![],
-        }
+        crate::testkit::branch(BranchStatus::Passed)
     }
 
     fn end(seq: i64, agent: &str, tokens: i64, cost: Option<f64>, source: Option<&str>) -> Event {
@@ -226,10 +244,17 @@ mod tests {
         )
     }
 
+    fn start(seq: i64, agent: &str) -> Event {
+        let p = json!({"name": agent, "kind": "claude_code", "model": "m"});
+        ev(seq, agent, EventKind::AgentStart, p)
+    }
+
     #[test]
     fn summary_shows_dollars_only_when_every_agent_has_them() {
         // One agent with a dollar figure, one without (Codex): tokens summed, no dollars.
         let mixed = [
+            start(0, "a"),
+            start(0, "b"),
             end(1, "a", 100, Some(0.5), Some("api_equivalent_estimate")),
             end(2, "b", 50, None, None),
         ];

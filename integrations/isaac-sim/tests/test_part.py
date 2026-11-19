@@ -78,6 +78,16 @@ def test_scenario_alarm_on_arena_clock():
     assert docs(part)["incident/INC-20260310-01"]["machine"] == "PR-A1"
 
 
+def test_add_shipment_puts_a_shipment_on_the_plant():
+    part = started()
+    args = {"part": "SP-SPN-800", "origin": "Dock", "carrier": "Lakeshore", "transit_hours": 2, "ref": "Q-1"}
+    out = part.call_tool("i1", "add_shipment", args, 0)
+    sid = out["result"]["id"]
+    assert out["writes"] == [f"shipment/{sid}"]
+    doc = docs(part)[f"shipment/{sid}"]
+    assert (doc["part"], doc["ref"], doc["status"]) == ("SP-SPN-800", "Q-1", "in-transit")
+
+
 def test_advance_split_does_not_matter():
     one, many = started("a"), started("b")
     one.advance("a", 5_000)
@@ -87,8 +97,9 @@ def test_advance_split_does_not_matter():
     assert docs(one, "a") == docs(many, "b")
 
 
-def scripted(part, instance):
-    """Tool calls and advances on the arena clock; returns every result and event, in order."""
+def same_inputs(part, instance):
+    """The same tool calls and advances on the arena clock (the part's inputs, no agent); every
+    result and event, in order."""
     out = [part.call_tool(instance, "set_line_status", {"line": "LINE-B", "status": "running", "rate": 1.2}, 2_000),
            part.advance(instance, 4_000),
            part.call_tool(instance, "dispatch_technician",
@@ -101,13 +112,13 @@ def scripted(part, instance):
 def test_replay_equals():
     a = started("a")
     b = started("b", part=a)  # two instances in one process, as arenad runs them
-    assert scripted(a, "a") == scripted(a, "b")
+    assert same_inputs(a, "a") == same_inputs(a, "b")
     assert docs(a, "a") == docs(a, "b")
     assert docs(a, "a")["technician/T-1"]["machine"] == "PR-C1"
     assert docs(a, "a")["line/LINE-B"]["boost"] == 1.2
     assert a.diff({"instance": "a"}, {"instance": "b"}) == {"differing": []} and b is a
     other = started("c", seed=11)
-    assert scripted(other, "c") != scripted(a, "a")  # floor noise follows the seed
+    assert same_inputs(other, "c") != same_inputs(a, "a")  # floor noise follows the seed
 
 
 def test_approximate_restore_continues(saves_root):
@@ -271,7 +282,8 @@ def test_tools_keys_and_refusals():
     part = started()
     names = {t["name"] for t in part.describe()["tools"]}
     assert names == {"plant_state", "machine_telemetry", "vibration_spectrum", "recent_events", "wait_for_event",
-                     "predict_move", "dispatch_technician", "set_line_status"}
+                     "predict_move", "dispatch_technician", "set_line_status", "add_shipment", "safe_stop_cell",
+                     "start_cell", "plant_scenario", "show_status"}
     sent = part.call_tool("i1", "dispatch_technician",
                           {"proposal_id": "P", "technician": "T-1", "machine": "PR-A1", "task": "inspect"}, 1_000)
     assert sent["result"]["status"] == "walking" and sent["writes"] == ["technician/T-1", "machine/PR-A1"]
@@ -367,15 +379,20 @@ def test_mirror_mode_has_no_tools_and_relays_events(stub_plant, saves_root):
 
 
 def checker():
-    for profile in ("debug", "release"):
-        p = ARENA / "core" / "target" / profile / "arena-part-check"
-        if p.is_file():
-            return p
+    dirs = [Path(os.environ["ARENA_BIN_DIR"])] if os.environ.get("ARENA_BIN_DIR") else []
+    for d in dirs + [ARENA / "core" / "target" / profile for profile in ("debug", "release")]:
+        if (d / "arena-part-check").is_file():
+            return d / "arena-part-check"
     return None
 
 
-def test_conformance(tmp_path):
-    """arena-part-check on a copy of the manifest that runs the stand-in backend."""
+SHIFT_PLANT = ARENA / "benchmarks" / "factory" / "data" / "shift.json"
+
+
+@pytest.mark.parametrize("config", [None, "shift"])
+def test_conformance(tmp_path, config):
+    """arena-part-check on a copy of the manifest that runs the stand-in backend: as it is, and with the factory
+    benchmark's robot cell and load model (its shift task's config)."""
     binary = checker()
     if binary is None or shutil.which("uv") is None:
         pytest.skip("arena-part-check is not built (cargo build -p parts --bin arena-part-check) or uv missing")
@@ -387,7 +404,11 @@ def test_conformance(tmp_path):
     saves = tmp_path / "check-saves"
     saves.mkdir()
     env = {**os.environ, "ARENA_SAVES": str(saves)}
-    r = subprocess.run([str(binary), str(tmp_path / "pkg")], capture_output=True, text=True, env=env, timeout=300)
+    args = [str(binary), str(tmp_path / "pkg")]
+    if config:
+        (tmp_path / "config.json").write_text(json.dumps(json.loads(SHIFT_PLANT.read_text())["plant"]))
+        args += ["--config", str(tmp_path / "config.json")]
+    r = subprocess.run(args, capture_output=True, text=True, env=env, timeout=300)
     assert r.returncode == 0, r.stdout + r.stderr
     report = json.loads(r.stdout)
     restore = next(s for s in report["steps"] if s["name"] == "restore")["detail"]
@@ -429,3 +450,83 @@ def test_diff_tolerance_is_only_for_physics_readings():
                                                                           "pose": {"x": 1.02}})
     assert not same({"boost": 1.2}, {"boost": 1.21}) and not same({"t": 20.0}, {"t": 20.01})
     assert not same({"sensors": {"zone": "B"}}, {"sensors": {"zone": "C"}})
+
+
+def test_bad_recording_config_is_invalid():
+    for config, text in [({"record": ""}, "record"), ({"record": "v.mp4", "camera": 5}, "camera"),
+                         ({"record": "v.mp4", "record_fps": 0}, "record_fps")]:
+        with pytest.raises(PartError) as e:
+            started(**config)
+        assert e.value.code == -32602 and text in e.value.message
+    with pytest.raises(PartError) as e:
+        started(record="v.mp4")
+    assert e.value.code == -32602 and "record needs the isaac backend" in e.value.message
+    with pytest.raises(PartError) as e:  # checked before Isaac Sim is needed
+        started(part=isaac(), record="v.mp4", camera="nope")
+    assert e.value.code == -32602 and "camera must be one of" in e.value.message and "'nope'" in e.value.message
+
+
+class FakeVideo:
+    """Stands in for isaac_video.Video: notes the plant step of each frame."""
+    made = []
+
+    def __init__(self, cfg, _io, physics_hz, path):
+        from isaac_part.recording import frame_every
+        self.every, self.path, self.at, self.closed = frame_every(physics_hz, cfg.record_fps), path, [], False
+        FakeVideo.made.append(self)
+
+    def frame(self, plant):
+        self.at.append(plant.steps)
+
+    def close(self):
+        self.closed = True
+
+
+def test_recording_frames_fall_on_arena_time_and_change_nothing(saves_root):
+    FakeVideo.made.clear()
+    part = started(part=IsaacSim(dataclasses.replace(BACKENDS["standin"], video=FakeVideo)), record="run.mp4",
+                   camera="auto", record_fps=30)
+    plain = started("i2")
+    for clock_ms in (500, 1_234, 3_000):
+        assert part.advance("i1", clock_ms) == plain.advance("i2", clock_ms)
+    video = FakeVideo.made[0]
+    assert video.path == saves_root / "isaac-sim" / "run-i1.mp4"
+    assert video.every == 12 and video.at == list(range(12, 1081, 12))  # 3 s at 360 Hz, 30 frames a second
+    part.stop("i1")
+    assert video.closed
+
+
+def test_recording_paths_and_frame_spacing(tmp_path):
+    from isaac_part.recording import frame_every, next_frame, path_for
+    assert path_for("out/run.mp4", tmp_path, "b1") == tmp_path / "out" / "run-b1.mp4"
+    assert path_for("/v/run", tmp_path, "b1") == Path("/v/run-b1.mp4")
+    assert (frame_every(360, 30), frame_every(360, 1000), next_frame(0, 12), next_frame(12, 12)) == (12, 1, 12, 24)
+
+
+def test_save_goes_to_the_save_folder_by_convention(saves_root, tmp_path):
+    """arenad's `dir` is its own path; the program, which may run elsewhere, keeps saves under its ARENA_SAVES."""
+    part = started()
+    part.save("i1", "s1", str(tmp_path / "arenad-side" / "s1"))
+    assert (saves_root / "isaac-sim" / "s1" / "plant.pkl.gz").exists()
+    assert not (tmp_path / "arenad-side").exists()
+
+
+def test_steps_that_never_reach_the_plant_are_an_error():
+    """A backend whose physics callback has stopped must not leave the plant silently standing still."""
+    part = started(part=IsaacSim(dataclasses.replace(BACKENDS["standin"], run=lambda *_args: None)))
+    with pytest.raises(PartError) as e:
+        part.advance("i1", 1_000)
+    assert e.value.code == -32603 and "physics callback is not running" in e.value.message
+
+
+def test_only_the_newest_physics_callback_reaches_a_plant():
+    from types import SimpleNamespace
+    from isaac_part import isaac_backend
+    callbacks, stepped = [], []
+    sim_io = SimpleNamespace(on_physics_step=callbacks.append)
+    isaac_backend._APP["step"] = stepped.append
+    isaac_backend._register_callback(sim_io)
+    isaac_backend._register_callback(sim_io)  # a second plant's stage
+    callbacks[0](1.0)
+    callbacks[1](2.0)
+    assert stepped == [2.0]

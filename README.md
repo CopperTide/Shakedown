@@ -2,7 +2,7 @@
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset=".github/assets/banner-dark.svg">
     <source media="(prefers-color-scheme: light)" srcset=".github/assets/banner-light.svg">
-    <img alt="Shakedown: a rewindable arena for testing multi-agent systems" src=".github/assets/banner-light.svg" width="100%">
+    <img alt="Shakedown: test agent systems in a simulated copy of their world" src=".github/assets/banner-light.svg" width="100%">
   </picture>
 </p>
 
@@ -15,6 +15,7 @@
 </p>
 
 <p align="center">
+  <a href="#use-shakedown-from-code">From code</a> ·
   <a href="#quick-start">Quick start</a> ·
   <a href="docs/concepts.md">Concepts</a> ·
   <a href="docs/protocol.md">Protocol</a> ·
@@ -23,14 +24,58 @@
   <a href="CONTRIBUTING.md">Contributing</a>
 </p>
 
-**Shakedown is a rewindable arena for testing multi-agent systems.** A team of AI agents works on a task in a world
-made of real systems: a database, a folder of files, a Docker Compose project, a simulator. arenad, the arena
-service, records every step and saves the world as it was at that step. Go back to any step, change an agent's
-prompt, model or harness, fork with an exact or approximate restore of the world, rerun from there, and compare
-the runs.
+**Shakedown tests agent systems in a simulated copy of the world they will be deployed in.** An *environment* is the
+systems the agents work with (an ERP, a database, suppliers, a plant), made of real software or simulators. A
+*scenario* is what happens to it: a task and the disruptions along the way. An *agent setup* is a model, a team
+structure and its rules. An **experiment** runs each of 1 to 4 setups several times on the same environment and
+scenario, and shows them side by side: pass rate (with its range), the checks each run passed, cost, time, and
+safety (actions the environment denied, flags raised for a human, safety checks violated). Limits live in the
+environment, not in the agent's prompt, and are enforced deterministically; scoring is by deterministic checks,
+never by a model. arenad, the Shakedown service, records every step of every run, so any run can be opened and read
+step by step.
+
+Shakedown (code name `arena`): the service is still `arenad`, the Python package `arena` (`arena-sdk`), the protocol
+`arena-part/1` and the environment variables `ARENA_*`. Those internal names are
+renamed later, in one pass.
+
+## Use Shakedown from code
+
+The core runs headless; no UI is needed. With the Python SDK ([docs/sdk.md](docs/sdk.md), `sdk/python`):
+
+```python
+from arena import Arena, Agent
+
+with Arena.local(benchmark="retail", bin_dir="core/target/release") as arena:   # or Arena("http://127.0.0.1:4510")
+    branch = arena.run("72", team=[Agent.claude_code("support", model="haiku")], seed=7)
+    for event in branch.stream():                 # every step, live
+        print(event.summary())
+    print(branch.check())                         # passed?, named checks, safety violations
+    branch.export("data/run-72")                  # JSONL dataset with a schema
+```
+
+Bring your own agents instead (`arena.external_run(...)`: each agent gets an MCP endpoint with the world's tools
+and an OpenAI-compatible gateway), run experiments (`POST /api/experiments`), or drive a world step by step as a multi-agent RL environment
+(`arena.env.ArenaParallelEnv`). Any other language uses the [HTTP API](docs/reference.md#http-api).
+
+## Bring your own agent
+
+Test the agent system you already run. Add it to a team as an `http` agent, `{kind: "http", url, headers?}`:
+when the run starts, arenad POSTs the task, an MCP endpoint with the world's tools and a token to the URL; the
+agent works through that endpoint, every call recorded, and answers the POST when it is done. Or name a model on
+Amazon Bedrock, `{kind: "bedrock", model_id, region}`, and arenad runs the tool-use loop with your AWS
+credentials. In the UI it is **Connect your agent** in the team picker, then **Test connection**. Header values
+never reach a log or a saved run. `sdk/python/examples/agent_server.py` is a working example; the Bedrock path is
+untested live. See [docs/agents.md](docs/agents.md).
 
 ## Why Shakedown
 
+- **Experiments, not anecdotes.** One run of an LLM agent says little. An experiment runs each setup N times on
+  the same seeded world and scenario, interleaving the setups so they meet the same conditions, and reports pass
+  rate with a 95% range, checks, cost, time and safety per setup.
+- **Hard limits outside the agent.** A purchasing cap, an approval gate or a sandbox policy is enforced by the
+  environment and recorded: every denied action is a step with its reason, counted per run.
+- **Deterministic scoring.** Each benchmark's checks (goal checks and safety checks, apart) decide pass or fail.
+  An optional AI review explains a run; it never scores one.
 - **Rewind the world, not just the transcript.** After each step that changes the world, arenad saves the parts
   that changed (a part that can only replay is replayed instead). A fork puts each part back as it was just
   before the fork point, and the team continues from there.
@@ -56,24 +101,26 @@ the runs.
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/images/run.png" alt="A run page: the steps of each agent on a timeline, a failed check, and the branch list with an approximately restored branch labelled"></td>
-    <td width="50%"><img src="docs/images/rerun.png" alt="The change and rerun panel at step 7: mode, model and prompt of the agent, exact or approximate restore, and how each part of the world will be restored"></td>
+    <td width="50%"><img src="docs/images/experiment.png" alt="Three agent setups side by side on the same pharma scenario: pass rate with its range, a square per run, checks passed, safety, cost and time, and the checks some run failed"></td>
+    <td width="50%"><img src="docs/images/new-experiment.png" alt="New experiment: the scenario, two agent setups (team, model, rules) and runs per setup"></td>
   </tr>
   <tr>
-    <td><sub><b>Run.</b> Every step of every agent, its branches, and which were restored approximately.</sub></td>
-    <td><sub><b>Change and rerun.</b> Edit an agent, pick a restore mode, and see how each part will be restored.</sub></td>
+    <td><sub><b>Experiment.</b> One column per setup: pass rate, every run, checks, safety, cost, time.</sub></td>
+    <td><sub><b>New experiment.</b> A scenario, 1 to 4 setups, runs per setup.</sub></td>
   </tr>
   <tr>
-    <td width="50%"><img src="docs/images/compare.png" alt="Compare: two branches side by side with seconds, tokens and cost, a note that differences may come from the approximate restore, the first divergence at step 7, and one differing key"></td>
-    <td width="50%"><img src="docs/images/runs.png" alt="The Runs page: a task picker, a New run button, and a run with its original branch and two forks"></td>
+    <td width="50%"><img src="docs/images/run.png" alt="A run: its time, cost, checks and safety, the AI review's one line, and every step on a timeline"></td>
+    <td width="50%"><img src="docs/images/world.png" alt="The world view of a pharma run: KPIs, a scrubber over the steps, and the plant's systems as an HMI overview"></td>
   </tr>
   <tr>
-    <td><sub><b>Compare.</b> Cost, first divergent step, and the state that differs at the end.</sub></td>
-    <td><sub><b>Runs.</b> Each run with its original branch and the forks made from it.</sub></td>
+    <td><sub><b>Run.</b> Every step of every agent on one timeline.</sub></td>
+    <td><sub><b>World view.</b> The simulated systems at any step.</sub></td>
   </tr>
 </table>
 
-<sub>Captured from Shakedown's web UI on a small test world (a toy part and the kit's counter, with agents on a fake model).</sub>
+<sub>Captured from Shakedown's web UI on 2026-11-08: real runs of the pharma benchmark (Claude Code on Sonnet; the setups
+in the first capture are suites from before experiments, shown side by side), and the retail benchmark's New
+experiment page.</sub>
 
 ## How it works
 
@@ -122,8 +169,8 @@ speak the `arena-part/1` protocol with arenad ([docs/protocol.md](docs/protocol.
 instances, runs tool calls, saves an instance's state, starts from a save, shows the state and compares two
 states. A **benchmark** names the world it runs in (its **parts**) and brings the tasks, the tools, the data and
 the gold actions. When a branch ends, arenad diffs its world with the task's gold world; it passes when no key
-differs and at least one part could be checked. The web UI is one client of arenad's HTTP API; CopperTide's
-Shakedown control workspace is another.
+differs and at least one part could be checked. The core (arenad, the protocol, the kits) depends on no UI: the
+web UI is one client of arenad's HTTP API, and the Python SDK and CopperTide's Shakedown control workspace are others.
 
 Read [docs/concepts.md](docs/concepts.md) for the full model: runs, branches, steps, saves, the restore table,
 teams and handoffs, forking rules and cost labels.
@@ -150,7 +197,8 @@ can't be described (package missing or not built). It listens on 127.0.0.1 only.
 benchmark, which CLIs were found, each model provider and whether API mode is available, and the disk use;
 `GET /api/providers` also asks the local servers and lists the models each provider offers.
 
-Or build the UI and let arenad serve it:
+The UI is optional: everything works from code ([docs/sdk.md](docs/sdk.md)). A UI served from another origin
+can call arenad when that origin is in `ARENA_CORS_ORIGIN`. Or build the UI and let arenad serve it:
 
 ```bash
 (cd ui && npm install && npm run build)
@@ -159,14 +207,13 @@ Or build the UI and let arenad serve it:
 
 Then:
 
-1. **Start a run:** pick a task and a team. On the Team page each agent gets a mode, and an API-mode agent a
-   provider and a model.
-2. **Inspect:** click a step to see its arguments, its result, and the state it read or wrote, as it was at
-   that step.
-3. **Fork:** at a step, with a change (for example a new prompt for one agent, or that agent run by another
-   harness). The world is restored to just before that step, and the run continues from there.
-4. **Compare** the two branches: outcome, time, tokens, cost, the first step where they differ, and the state
-   that differs at the end.
+1. **New experiment:** pick the scenario (a task and any disruptions), add 1 to 4 agent setups (team, model,
+   rules), choose runs per setup, and press Run experiment.
+2. **Read the results:** one column per setup: pass rate, a square per run, checks, safety, cost and time. Click
+   a square to open that run.
+3. **Inspect a run:** its timeline; click a step to see its arguments, its result, and the state it read or
+   wrote, as it was at that step. A run's ⋯ menu has its world view, process view, comparison with another run,
+   and, under Advanced, rewind (fork from a step with a change and rerun).
 
 Settings (port, benchmark, package folders, disk limit, clock speed, model providers) are environment variables;
 see [docs/reference.md](docs/reference.md#configuration).
@@ -184,10 +231,15 @@ the prefix `live_` and needs Docker or a real server. Each folder's README has t
 | `service` | Any Docker Compose project per instance | save | no | no | `live_service_roundtrip` against a real Redis 6.2 project in Docker. No `arena-part-check` run |
 | `mariadb` | A MariaDB database per instance (saves are binary-log positions) | save | no | no | Seven `live_mariadb_*` tests against MariaDB 11.8 in Docker, including `arena-part-check` |
 | `erpnext` | An ERPNext site per instance (saves are binary-log positions plus the site's files) | save | no | no | `live_erpnext_roundtrip` against ERPNext v16.53.0 in Docker, including `arena-part-check` |
-| `sculptured` | A CopperTide server per instance, for approvals | save | no | no | `live_sculptured_roundtrip` against a real `coppertide` build; `arena-part-check` passed once by hand |
+| `twenty-crm` | A Twenty CRM server per instance (saves are copies of its Postgres database) | save | no | no | `live_twenty_roundtrip` against Twenty v2.51.0 in Docker, including `arena-part-check` |
+| `sculptured` | A CopperTide server per instance, for approvals | save | no | no | `live_sculptured_roundtrip` against a real `sculptured` build; `arena-part-check` passed once by hand |
 | `ridgeline-hub` | A factory's simulated suppliers, carriers, insurer and customers | save | no | yes | Python tests against the real hub `market.py`, with `arena-part-check`. No services, no arenad run |
 | `isaac-sim` | A factory plant, on Isaac Sim physics or a stand-in | replay | yes | yes | **Stand-in only.** Python tests with `arena-part-check`. The `isaac` backend has never run on Isaac Sim |
 | `isaac-sim-mirror` | A read-only view of a running plant | none | no | yes | One Python test against a stub HTTP server. A world containing it can't be rerun |
+| `utility` | A simulated electric utility: the site meter fed from the plant's load, tariff, demand-response events | save | no | yes | Python tests with `arena-part-check`. No arenad run |
+| `ot-network` | A simulated plant OT network: zones, conduits, the IT/OT gateway's sessions, the incident playbook | save | no | no | Python tests with `arena-part-check`. No arenad run |
+| `shift-roster` | A simulated shift roster: stations, operators, certifications, call-outs and call-ins | save | no | no | Python tests with `arena-part-check`. No arenad run |
+| `line-sim` | A plant's discrete-event simulation model for an optimisation study: simulate configs, a budget, hard limits, a verified recommendation | save | no | no | Python tests (model determinism and common random numbers, limits, budget, verification, saves); real Claude Code runs through arenad with `benchmarks/line2-oee` |
 | `counter` (Rust), `counter-py` (Python) | Kit examples: one integer per instance | save (flavours: replay, approximate) | no (flavour) | yes | Kit and core tests (`kits/*/tests`, `core/crates/parts/tests`, arenad tests) |
 
 Only `postgres` (through the retail example) has been used in an arenad run with agents. The other
@@ -208,7 +260,9 @@ factory example. Without those, their tests are skipped.
 
 | Document | What it covers |
 |---|---|
-| [docs/concepts.md](docs/concepts.md) | Glossary, restore modes, teams and agents, CLI isolation, forking, cost labels |
+| [docs/sdk.md](docs/sdk.md) | Using Shakedown from code: the Python SDK, external agents, the step-loop env, export, reproducibility, Rust, citing |
+| [docs/agents.md](docs/agents.md) | Bringing your own deployed agent: the `arena-agent/1` protocol, Bedrock agents, secrets, what is verified |
+| [docs/concepts.md](docs/concepts.md) | Glossary, restore modes, teams and runners, external designs, overhead and estimates, CLI isolation, forking, cost labels |
 | [docs/protocol.md](docs/protocol.md) | `arena-part/1`: transport, manifest, every call, errors, clock and determinism contracts |
 | [integrations/README.md](integrations/README.md) | The integrations, a step-by-step counter integration, `arena-part-check` |
 | [docs/packages.md](docs/packages.md) | Writing and installing integrations and benchmarks |
@@ -224,19 +278,27 @@ other integration is checked on its own, and API mode has not been measured.
 <summary><b>Limits and not built yet</b></summary>
 
 - Only `postgres` has been used in an arenad run with agents; every other integration is checked on its own.
-- Only one benchmark is included, the retail example. arenad runs one benchmark at a time.
-- Teams are a fixed sequence of agents with handoff notes; only the last agent writes.
-- API mode has not been measured with any provider. Its providers (OpenRouter, OpenAI, the Claude API, local
-  servers) are tested against fake servers only, with no real model call.
+- Two benchmarks are included: the retail example and `benchmarks/factory`, which needs a factory example that is
+  not public yet. arenad runs one benchmark at a time.
+- arenad's own runners run a team one after another or all at once; any other shape needs the design's own code
+  to drive the run through the external API (`docs/concepts.md`, "External designs"), which is tested with
+  Claude Code as the external system's agent (`core/crates/arenad/tests/external.rs`, `live_`). Any agent may
+  write unless its team marks it `read_only`.
+- The production estimate (measured time minus Shakedown's overhead) has been checked by tests only, not against a
+  production deployment. Costs not reported by a provider are estimated only for the models in
+  `docs/prices.toml`; every other cost shows as unknown.
+- API mode has not been measured with any provider. Its providers' request and answer translation is unit-tested
+  on data; its `live_` tests call a real provider only when its key is set, and none has run yet (only a rejected
+  key, against OpenAI and the Claude API).
 - Isaac Sim on hardware: the `isaac` backend of `isaac-sim` has never run on Isaac Sim 6.2 (needs a 16 GB GPU).
-- Cross-part calls: protocol v1 has no calls between parts. `proposal_id` is accepted by the `ridgeline-hub`
-  and `isaac-sim` tools and not checked.
-- A world with agents made of several integrations (for example ERPNext, the hub, CopperTide and the plant
-  together) has not been built or run.
+- Cross-part calls: parts only reach each other through a benchmark's `links`, one tool call per event
+  (`docs/protocol.md`); tested with toy parts. `proposal_id` on the `ridgeline-hub` and `isaac-sim` tools binds
+  only in a world whose benchmark puts a gate on them.
+- A world with real agents made of several integrations has not been run. `benchmarks/factory` builds one (ERPNext,
+  the hub, CopperTide and the plant) and reads a factory example that is not public yet; its live test now runs the
+  benchmark's own team on a real model and has not been run yet (earlier runs used a scripted team, since removed).
 - Comparing a world made only of replay parts: there is no final save to compare, so compare answers 409 and
   the branch fails with "no part of this world can be checked against the task's expected result".
-- Re-rooting the kept base and gold saves of `mariadb` and `erpnext`: those saves pin the binary log, so a
-  long-lived server's binlog grows until they are re-rooted. Not built; no benchmark uses these integrations yet.
 - Community publishing of integrations and benchmarks (design only). Packages install from a local folder.
 - Process checkpointing (CRIU), fault injection, fault search and design search.
 - SGLang or vLLM hosting, serving-state capture and chain-of-thought capture.
@@ -257,3 +319,8 @@ Shakedown is licensed under the [Apache License 2.0](LICENSE).
 The retail data in `data/retail/` (`db.json`, `tasks.json`, `policy.md`) comes from
 [tau2-bench](https://github.com/sierra-research/tau2-bench), MIT License, Copyright (c) 2025 Sierra Research;
 see [data/retail/LICENSE](data/retail/LICENSE) and [NOTICE](NOTICE).
+
+## Examples and demos
+
+Worlds, demos and showcases built on Shakedown (the factory showcase, the local pharma stack) live in the separate
+`Shakedown-Examples` repo, next to this one, so this repo stays the core.

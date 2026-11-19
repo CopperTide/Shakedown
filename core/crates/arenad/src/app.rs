@@ -8,7 +8,9 @@ use axum::Router;
 use parts::{proto::BenchDescribe, Hub};
 
 use crate::{
-    agents::{claude::ClaudeDriver, codex::CodexDriver, open::OpenDriver, Driver},
+    agents::{
+        claude::ClaudeDriver, codex::CodexDriver, http::HttpDriver, open::OpenDriver, Driver,
+    },
     exec::BranchCtx,
     model::AgentKind,
     providers::ProviderConfig,
@@ -28,8 +30,23 @@ pub struct Config {
     /// The wait before an open agent retries a model call its provider turned down as
     /// overloaded or rate-limited, doubling for each further retry (unless it says how long).
     pub retry_base: Duration,
+    /// Web origins (`scheme://host[:port]`) other than arenad's own that may call `/api` from a
+    /// browser, such as a UI served from elsewhere: env `ARENA_CORS_ORIGIN`, comma-separated.
+    /// Empty: same origin only.
+    pub cors_origins: Vec<String>,
+    /// The base URL an `http` agent is told to reach its MCP endpoint at: env
+    /// `ARENA_AGENT_BASE` (for an agent elsewhere, through a tunnel); empty means `self_base`.
+    pub agent_base: String,
+    /// How long arenad waits for an `http` agent to answer a run (time paused left out).
+    pub http_agent_timeout: Duration,
+    /// How long a Code connection's driver may run on after its run ended before arenad kills it.
+    pub driver_grace: Duration,
+    /// How long a Code connection's driver may drive its run before arenad ends the run
+    /// `failed` (scored) for it (time paused counted too).
+    pub code_run_limit: Duration,
 }
 
+pub const DEFAULT_DRIVER_GRACE: Duration = Duration::from_secs(30);
 pub const DEFAULT_MAX_DB_BYTES: u64 = 5 * 1024 * 1024 * 1024;
 pub const DEFAULT_RETRY_BASE: Duration = Duration::from_secs(1);
 
@@ -52,6 +69,18 @@ impl Config {
                 .and_then(|v| v.trim().parse().ok())
                 .unwrap_or(DEFAULT_MAX_DB_BYTES),
             retry_base: DEFAULT_RETRY_BASE,
+            cors_origins: cors_origins_from(
+                &std::env::var("ARENA_CORS_ORIGIN").unwrap_or_default(),
+            ),
+            agent_base: std::env::var("ARENA_AGENT_BASE").unwrap_or_default(),
+            http_agent_timeout: Duration::from_secs(crate::agents::CLI_TIMEOUT_SECS),
+            driver_grace: DEFAULT_DRIVER_GRACE,
+            code_run_limit: Duration::from_secs(
+                std::env::var("ARENA_CODE_RUN_SECS")
+                    .ok()
+                    .and_then(|v| v.trim().parse().ok())
+                    .unwrap_or(crate::agents::CLI_TIMEOUT_SECS),
+            ),
         }
     }
 
@@ -122,6 +151,12 @@ impl AppState {
         self.hub.bench_describe(&self.benchmark).await
     }
 
+    /// True when the arena's saves use at least the configured limit: new runs are refused.
+    pub async fn saves_over_limit(&self) -> anyhow::Result<bool> {
+        let bytes = crate::gc::usage(&self.hub, &self.benchmark).await?;
+        Ok(bytes >= self.config.max_db_bytes)
+    }
+
     /// Installs the driver map; false if one was already installed.
     pub fn install_drivers(&self, drivers: Drivers) -> bool {
         self.drivers.set(drivers).is_ok()
@@ -143,7 +178,8 @@ fn no_benchmark_chosen(hub: &Hub) -> String {
 
 /// The name of the one installed benchmark; empty when there are none or several.
 fn only_benchmark(hub: &Hub) -> String {
-    let mut names = hub.registry().benchmarks().map(|m| m.name.clone());
+    let benchmarks = hub.registry().benchmarks().filter(|m| !m.opt_in);
+    let mut names = benchmarks.map(|m| m.name.clone());
     match (names.next(), names.next()) {
         (Some(one), None) => one,
         _ => String::new(),
@@ -159,6 +195,16 @@ pub fn install_default_drivers(state: &Arc<AppState>) -> bool {
         AgentKind::ClaudeCode,
         Arc::new(ClaudeDriver::new(base.clone())),
     );
+    let agent_base = match state.config.agent_base.trim() {
+        "" => base.clone(),
+        b => b.to_string(),
+    };
+    let http = HttpDriver::new(
+        agent_base,
+        state.store.clone(),
+        state.config.http_agent_timeout,
+    );
+    m.insert(AgentKind::Http, Arc::new(http));
     m.insert(AgentKind::Codex, Arc::new(CodexDriver::new(base)));
     state.install_drivers(m)
 }
@@ -208,8 +254,83 @@ async fn loopback_host_only(
     next.run(req).await
 }
 
+/// The origins of `ARENA_CORS_ORIGIN` (comma-separated, each `http(s)://host[:port]` without a
+/// path); anything else, `*` included, is skipped with a warning, since a wildcard would let any
+/// web page drive this machine's arena.
+pub fn cors_origins_from(value: &str) -> Vec<String> {
+    let mut out = vec![];
+    for o in value.split(',').map(|o| o.trim().trim_end_matches('/')) {
+        if o.is_empty() {
+            continue;
+        }
+        let rest = o
+            .strip_prefix("http://")
+            .or_else(|| o.strip_prefix("https://"));
+        match rest {
+            Some(host) if !host.is_empty() && !host.contains(['/', '*', ' ']) => {
+                out.push(o.to_string())
+            }
+            _ => eprintln!(
+                "arenad: ARENA_CORS_ORIGIN: skipped {o:?} (expected http(s)://host[:port])"
+            ),
+        }
+    }
+    out
+}
+
+/// CORS for the origins in `ARENA_CORS_ORIGIN`: a request from one of them gets
+/// `Access-Control-Allow-Origin`, and its preflight (`OPTIONS`) is answered here. Requests from
+/// any other origin are left as they are (the browser then refuses the answer).
+async fn cors(
+    axum::extract::State(origins): axum::extract::State<Arc<Vec<String>>>,
+    req: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    use axum::http::{header, HeaderValue, Method};
+    let origin = req
+        .headers()
+        .get(header::ORIGIN)
+        .and_then(|h| h.to_str().ok())
+        .filter(|o| origins.iter().any(|a| a == o))
+        .and_then(|o| HeaderValue::from_str(o).ok());
+    let Some(origin) = origin else {
+        return next.run(req).await;
+    };
+    let preflight = req.method() == Method::OPTIONS
+        && (req.headers()).contains_key(header::ACCESS_CONTROL_REQUEST_METHOD);
+    let mut res = match preflight {
+        true => preflight_answer(),
+        false => next.run(req).await,
+    };
+    let h = res.headers_mut();
+    h.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, origin);
+    h.append(header::VARY, HeaderValue::from_static("origin"));
+    res
+}
+
+/// The answer to an allowed origin's CORS preflight (its `Access-Control-Allow-Origin` is added
+/// by [`cors`]).
+fn preflight_answer() -> axum::response::Response {
+    use axum::http::{header, HeaderValue, StatusCode};
+    use axum::response::IntoResponse;
+    let mut r = StatusCode::NO_CONTENT.into_response();
+    let h = r.headers_mut();
+    let methods = HeaderValue::from_static("GET, POST, DELETE, OPTIONS");
+    h.insert(header::ACCESS_CONTROL_ALLOW_METHODS, methods);
+    let headers = HeaderValue::from_static("content-type");
+    h.insert(header::ACCESS_CONTROL_ALLOW_HEADERS, headers);
+    h.insert(
+        header::ACCESS_CONTROL_MAX_AGE,
+        HeaderValue::from_static("600"),
+    );
+    r
+}
+
 pub fn router(state: Arc<AppState>) -> Router {
-    let api = crate::api::router().layer(axum::middleware::from_fn(loopback_host_only));
+    let origins = Arc::new(state.config.cors_origins.clone());
+    let api = crate::api::router()
+        .layer(axum::middleware::from_fn(loopback_host_only))
+        .layer(axum::middleware::from_fn_with_state(origins, cors));
     crate::mcp::router()
         .merge(crate::gateway::router())
         .merge(api)
@@ -218,6 +339,50 @@ pub fn router(state: Arc<AppState>) -> Router {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn cors_origins() {
+        let got = super::cors_origins_from(
+            " http://127.0.0.1:5173, https://ui.example/ ,*,ftp://x,http://a/b,,http://",
+        );
+        assert_eq!(got, ["http://127.0.0.1:5173", "https://ui.example"]);
+    }
+
+    /// A router with one `/api/x` route behind [`super::cors`] for `http://ui.test:5173`, and a
+    /// request to it with `method` from `origin`, answered with its status and allowed origin.
+    async fn cors_call(method: &str, origin: &str) -> (u16, Option<String>, bool) {
+        use axum::{body::Body, http::Request, routing::get, Router};
+        use tower::ServiceExt;
+        let origins = std::sync::Arc::new(vec!["http://ui.test:5173".to_string()]);
+        let app = Router::new()
+            .route("/api/x", get(|| async { "ok" }))
+            .layer(axum::middleware::from_fn_with_state(origins, super::cors));
+        let req = Request::builder()
+            .method(method)
+            .uri("/api/x")
+            .header("origin", origin)
+            .header("access-control-request-method", "GET")
+            .body(Body::empty())
+            .unwrap();
+        let r = app.oneshot(req).await.unwrap();
+        let h = r.headers();
+        let allow = (h.get("access-control-allow-origin")).map(|v| v.to_str().unwrap().to_string());
+        let methods = h.contains_key("access-control-allow-methods");
+        (r.status().as_u16(), allow, methods)
+    }
+
+    #[tokio::test]
+    async fn cors_answers_allowed_origins_only() {
+        let ui = "http://ui.test:5173";
+        assert_eq!(cors_call("GET", ui).await, (200, Some(ui.into()), false));
+        assert_eq!(cors_call("OPTIONS", ui).await, (204, Some(ui.into()), true));
+        assert_eq!(
+            cors_call("GET", "http://evil.test").await,
+            (200, None, false)
+        );
+        let (status, allow, _) = cors_call("OPTIONS", "http://evil.test").await;
+        assert!(status != 204 && allow.is_none());
+    }
+
     #[test]
     fn loopback_hosts() {
         use super::is_loopback_host as ok;

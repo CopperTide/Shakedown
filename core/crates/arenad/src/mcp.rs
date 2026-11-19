@@ -1,8 +1,8 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Instant};
 
 use axum::{
     extract::{Path, State},
-    http::StatusCode,
+    http::{header::AUTHORIZATION, HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     routing::post,
     Json, Router,
@@ -12,6 +12,7 @@ use serde_json::{json, Value};
 use crate::{
     app::AppState,
     exec::{tool_schemas, BranchCtx, ToolExec},
+    overhead::{self, ms_since, Cat},
 };
 
 pub fn router() -> Router<Arc<AppState>> {
@@ -22,38 +23,67 @@ fn rpc_error(id: Value, code: i64, msg: &str) -> Value {
     json!({"jsonrpc": "2.0", "id": id, "error": {"code": code, "message": msg}})
 }
 
-/// The JSON-RPC reply to one request; `None` for a notification (nothing to answer).
-async fn reply_to(state: &AppState, ctx: &BranchCtx, agent: &str, req: &Value) -> Option<Value> {
+/// The JSON-RPC reply to one request; `None` for a notification (nothing to answer). The time
+/// spent running a tool goes into `ran_ms`.
+async fn reply_to(
+    state: &AppState,
+    ctx: &BranchCtx,
+    agent: &str,
+    req: &Value,
+    ran_ms: &mut f64,
+) -> Option<Value> {
     let id = req.get("id").cloned()?;
     let method = req.get("method").and_then(Value::as_str).unwrap_or("");
     let params = req.get("params").cloned().unwrap_or(Value::Null);
     Some(match method {
         "initialize" => ok(id, initialize_result(ctx)),
         "ping" => ok(id, json!({})),
-        "tools/list" => ok(
-            id,
-            json!({"tools": tool_schemas(&ctx.world, !ctx.is_last(agent))}),
-        ),
+        "tools/list" => ok(id, json!({"tools": tool_schemas(ctx, agent)})),
         "tools/call" => {
+            let since = Instant::now();
             let result = call_tool(state, ctx, agent, &id, &params).await;
+            *ran_ms = ms_since(since);
             ok(id, result)
         }
         _ => rpc_error(id, -32601, &format!("method not found: {method}")),
     })
 }
 
+/// The live branch whose `agent` may call: 404 when there is no such branch or agent, 401 when
+/// the agent was given a token and the call doesn't carry it.
+fn admitted(
+    state: &AppState,
+    branch: &str,
+    agent: &str,
+    headers: &HeaderMap,
+) -> Result<Arc<BranchCtx>, (StatusCode, Json<Value>)> {
+    let refuse = |status, code, msg| (status, Json(rpc_error(Value::Null, code, msg)));
+    let ctx: Option<Arc<BranchCtx>> = state.live.read().unwrap().get(branch).cloned();
+    let Some(ctx) = ctx.filter(|c| c.has_agent(agent)) else {
+        return Err(refuse(
+            StatusCode::NOT_FOUND,
+            -32000,
+            "unknown branch or agent",
+        ));
+    };
+    let authorization = headers.get(AUTHORIZATION).and_then(|v| v.to_str().ok());
+    if !ctx.token_ok(agent, authorization) {
+        let why = "this endpoint wants the run's bearer token";
+        return Err(refuse(StatusCode::UNAUTHORIZED, -32001, why));
+    }
+    Ok(ctx)
+}
+
 async fn handle(
     State(state): State<Arc<AppState>>,
     Path((branch, agent)): Path<(String, String)>,
+    headers: HeaderMap,
     body: String,
 ) -> Response {
-    let ctx: Option<Arc<BranchCtx>> = state.live.read().unwrap().get(&branch).cloned();
-    let Some(ctx) = ctx.filter(|c| c.has_agent(&agent)) else {
-        return (
-            StatusCode::NOT_FOUND,
-            Json(rpc_error(Value::Null, -32000, "unknown branch or agent")),
-        )
-            .into_response();
+    let since = Instant::now();
+    let ctx = match admitted(&state, &branch, &agent, &headers) {
+        Ok(ctx) => ctx,
+        Err(refused) => return refused.into_response(),
     };
     let req: Value = match serde_json::from_str(&body) {
         Ok(v) => v,
@@ -62,7 +92,11 @@ async fn handle(
                 .into_response()
         }
     };
-    match reply_to(&state, &ctx, &agent, &req).await {
+    let mut ran_ms = 0.0;
+    let reply = reply_to(&state, &ctx, &agent, &req, &mut ran_ms).await;
+    // The endpoint's own handling: everything but running the tool.
+    overhead::add(&ctx.branch_id, Cat::Mcp, ms_since(since) - ran_ms);
+    match reply {
         Some(reply) => Json(reply).into_response(),
         // Notification (or stray response): nothing to answer.
         None => StatusCode::ACCEPTED.into_response(),
@@ -95,6 +129,11 @@ async fn call_tool(
     let res = exec
         .run_outcome(ctx, agent, name, args, Some(id_string(id)))
         .await;
+    tool_result(res)
+}
+
+/// A tool's outcome as an MCP `tools/call` result.
+fn tool_result(res: Result<Value, String>) -> Value {
     match res {
         Ok(v) => {
             let mut r =

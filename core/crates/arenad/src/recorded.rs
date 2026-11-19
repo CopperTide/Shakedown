@@ -10,7 +10,7 @@ use parts::proto::WorldPart;
 use serde_json::{Map, Value};
 
 use crate::{
-    model::{Event, EventKind},
+    model::{Event, EventKind, Rules},
     world::Saves,
 };
 
@@ -75,6 +75,12 @@ pub fn run_info(events: &[Event]) -> RunInfo {
         world: world.unwrap_or_default(),
         fingerprints: fingerprints.unwrap_or_default(),
     }
+}
+
+/// The rules the run of `events` runs under, from its `RunStart` (legacy when there is none).
+pub fn rules(events: &[Event]) -> Rules {
+    let start = events.iter().find(|e| e.kind == EventKind::RunStart);
+    start.map_or_else(Rules::legacy, |e| Rules::of_run_start(&e.payload))
 }
 
 /// The arena clock just before step `before_seq`: the `clock_ms` of the last event before it
@@ -179,9 +185,13 @@ pub fn named_saves(branch: &str, events: &[Event]) -> BTreeSet<NamedSave> {
         .collect()
 }
 
-/// True for a tool call that committed a write.
+/// True for a tool call that committed a write: one that names keys it wrote, refused or not (a
+/// part may change on a call it refuses, when a scheduled disruption fires).
+/// True when the call changed its part: the world's keys or the part's internal ones (either
+/// way the part must have been saved with the step).
 fn wrote(payload: &Value) -> bool {
-    payload["error"].is_null() && payload["writes"].as_array().is_some_and(|w| !w.is_empty())
+    let any = |k: &str| payload[k].as_array().is_some_and(|w| !w.is_empty());
+    any("writes") || any("internal")
 }
 
 #[cfg(test)]
@@ -190,14 +200,7 @@ mod tests {
     use serde_json::json;
 
     fn ev(seq: i64, kind: EventKind, payload: Value) -> Event {
-        Event {
-            branch_id: "b".into(),
-            seq,
-            at: chrono::Utc::now(),
-            agent: None,
-            kind,
-            payload,
-        }
+        crate::testkit::event(seq, None, kind, payload)
     }
 
     fn write(seq: i64, part: &str, saves: Value) -> Event {

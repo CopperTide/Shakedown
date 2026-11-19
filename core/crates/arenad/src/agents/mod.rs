@@ -9,8 +9,12 @@ use crate::{
 };
 
 pub mod claude;
+mod claude_session;
 pub mod codex;
+pub mod http;
 pub mod open;
+pub mod session;
+mod usage;
 
 /// One agent's turn in a branch.
 pub struct AgentRun {
@@ -28,6 +32,9 @@ pub struct AgentRun {
 pub enum FailureKind {
     /// The model's own behavior (too many calls, output cut off): the branch is `failed`.
     Model,
+    /// The run's spend estimate passed its limit (`crate::budget`): the branch is
+    /// `budget_exceeded`, scored as it stands.
+    Budget,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -46,6 +53,15 @@ pub struct AgentResult {
 
 pub trait Driver: Send + Sync {
     fn run<'a>(&'a self, ctx: AgentRun) -> Pin<Box<dyn Future<Output = AgentResult> + Send + 'a>>;
+
+    /// Starts the agent as a session that stays alive across turns (for the dispatch runner);
+    /// an error when this kind of agent can't keep one.
+    fn session(&self, start: session::SessionStart) -> Result<Box<dyn session::Session>, String> {
+        Err(format!(
+            "a {:?} agent can't keep a session across turns, which a dispatch run needs",
+            start.spec.kind
+        ))
+    }
 }
 
 pub const CLI_TIMEOUT_SECS: u64 = 900;
@@ -84,9 +100,11 @@ fn failed(error: String, seconds: f64) -> AgentResult {
     }
 }
 
-/// Spawn `cmd` (stdin null, output captured, killed on drop) and wait up to `timeout_secs`.
+/// Spawn `cmd` (stdin null, output captured, killed on drop) and wait up to `timeout_secs`, the
+/// time the branch is paused (`flow`) left out.
 /// `parse` maps (stdout, exit code) to a result; `seconds` is filled in here.
 pub(crate) async fn run_cli(
+    flow: &crate::flow::FlowControl,
     cmd: std::process::Command,
     timeout_secs: u64,
     parse: impl FnOnce(&str, i32) -> AgentResult,
@@ -101,16 +119,14 @@ pub(crate) async fn run_cli(
         Ok(c) => c,
         Err(e) => return failed(format!("failed to start CLI: {e}"), 0.0),
     };
-    let waited = tokio::time::timeout(
-        std::time::Duration::from_secs(timeout_secs),
-        child.wait_with_output(),
-    )
-    .await;
+    let limit = std::time::Duration::from_secs(timeout_secs);
+    // Time the branch spends paused doesn't count against the CLI's limit.
+    let waited = flow.timeout(limit, child.wait_with_output()).await;
     let seconds = start.elapsed().as_secs_f64();
     match waited {
-        Err(_) => failed(format!("timed out after {timeout_secs} s"), seconds),
-        Ok(Err(e)) => failed(format!("CLI failed: {e}"), seconds),
-        Ok(Ok(out)) => finish_cli(&out, seconds, parse),
+        None => failed(format!("timed out after {timeout_secs} s"), seconds),
+        Some(Err(e)) => failed(format!("CLI failed: {e}"), seconds),
+        Some(Ok(out)) => finish_cli(&out, seconds, parse),
     }
 }
 
@@ -150,7 +166,7 @@ pub(crate) async fn run_in_workdir(
         Ok(d) => d,
         Err(e) => return fail(format!("cannot create workdir: {e}")),
     };
-    let r = run_cli(build(&workdir), timeout_secs, parse).await;
+    let r = run_cli(&run.branch.flow, build(&workdir), timeout_secs, parse).await;
     let _ = std::fs::remove_dir_all(&workdir);
     r
 }
@@ -172,14 +188,19 @@ pub struct Mcp {
 impl Mcp {
     /// `run`'s endpoint on the arenad at `self_base`, named after the benchmark.
     pub(crate) fn of(self_base: &str, run: &AgentRun) -> Mcp {
+        Mcp::for_agent(self_base, &run.branch, &run.spec.id)
+    }
+
+    /// `agent`'s endpoint on `branch`, on the arenad at `self_base`.
+    pub(crate) fn for_agent(self_base: &str, branch: &BranchCtx, agent: &str) -> Mcp {
         let url = format!(
             "{}/mcp/{}/{}",
             self_base.trim_end_matches('/'),
-            run.branch.branch_id,
-            run.spec.id
+            branch.branch_id,
+            agent
         );
         Mcp {
-            server: server_name(run.branch.world.bench()),
+            server: server_name(branch.world.bench()),
             url,
         }
     }

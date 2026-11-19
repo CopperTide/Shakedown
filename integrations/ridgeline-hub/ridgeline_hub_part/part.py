@@ -3,7 +3,7 @@ from arena_part import Part, errors, saves, sources
 
 from . import state
 from .config import parse_config, source_files, source_hashes
-from .tools import TOOLS, run_tool
+from .tools import run_tool, schemas
 from .world import TICK_MS, World
 
 NAME = "ridgeline-hub"
@@ -37,10 +37,11 @@ class RidgelineHub(Part):
         return {
             "name": NAME, "version": "0.1.0", "protocol": 1,
             "restore": {"exact": "save", "approximate": False},
+            "system": {"kind": "logistics", "product": "Ridgeline hub (simulated suppliers, carriers, customers)", "simulated": True},
             "uses_clock": True,
             "fingerprint": {"adapter": 1, "tick_ms": TICK_MS, "seed": SEED_NOTE,
                             "sha256": source_hashes(parse_config({}))},
-            "tools": [t.schema() for t in TOOLS.values()],
+            "tools": schemas(),
         }
 
     def start(self, instance, config, seed, clock_ms, from_=None):

@@ -3,15 +3,29 @@ use parts::proto::Mode;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+pub use crate::secrets::Headers;
+
+mod agent_in;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AgentKind {
     ClaudeCode,
     Codex,
     Open,
+    /// Driven by an external system (a design's own code), not by arenad: it reaches the world
+    /// through its MCP endpoint and its models through the gateway.
+    External,
+    /// An agent deployed anywhere, behind a URL: arenad POSTs it the run (the task, its MCP
+    /// endpoint and a token) and it answers when it is done (see `crate::agents::http`).
+    Http,
 }
 
+/// A team member. Read through [`agent_in::AgentSpecIn`], which also takes a Bedrock agent
+/// (`{kind: "bedrock", model_id, region}`) and makes it an `open` agent on provider
+/// `bedrock:<region>`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(from = "agent_in::AgentSpecIn")]
 pub struct AgentSpec {
     pub id: String,
     pub name: String,
@@ -23,9 +37,36 @@ pub struct AgentSpec {
     /// teams made before providers.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provider: Option<String>,
+    /// True when the team keeps this agent from writing: it gets no write tools, and a write call
+    /// is refused. Absent means false, so every agent may use every tool unless its team says
+    /// otherwise. Always stored: a stored team without it was recorded under the old rule (only
+    /// the last agent writes), which [`legacy_read_only`] applies.
+    #[serde(default)]
+    pub read_only: bool,
+    /// True for the agent that leads a `dispatch` run (absent: the team's first agent leads).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub lead: bool,
+    /// Where an `http` agent answers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    /// The headers an `http` agent's requests carry; their values are secrets, never written
+    /// out (see [`crate::secrets`]).
+    #[serde(default, skip_serializing_if = "Headers::is_empty")]
+    pub headers: Headers,
+    /// The world tools this agent may see and call, by name (empty: every tool). A restriction
+    /// of the setup, like `read_only`; the talk tools of its runner are always offered.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tools: Vec<String>,
 }
 
-/// A chain of agents; the last agent writes.
+impl AgentSpec {
+    /// True when the agent's setup lets it see and call the world tool `name`.
+    pub fn may_use(&self, name: &str) -> bool {
+        self.tools.is_empty() || self.tools.iter().any(|t| t == name)
+    }
+}
+
+/// The agents of a run. How they run (in order, at once) is the run's runner, not the team's.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Team {
     pub id: String,
@@ -42,6 +83,121 @@ pub struct Change {
     /// rules.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provider: Option<String>,
+    /// Whether the agent is kept from writing (see [`AgentSpec::read_only`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub read_only: Option<bool>,
+}
+
+/// A stored team as it ran: an agent recorded before `read_only` existed (no such key) ran under
+/// the old rule, where only the last agent could write, so it is read-only unless it is last.
+pub fn legacy_read_only(team: &mut Value) {
+    let Some(agents) = team.get_mut("agents").and_then(Value::as_array_mut) else {
+        return;
+    };
+    let last = agents.len().saturating_sub(1);
+    for (i, a) in agents.iter_mut().enumerate() {
+        if let Some(a) = a.as_object_mut() {
+            a.entry("read_only").or_insert(Value::Bool(i != last));
+        }
+    }
+}
+
+/// Who drives a run's agents.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Runner {
+    /// arenad runs the agents one after another, in the team's order.
+    #[default]
+    Chain,
+    /// arenad runs every agent at once.
+    Concurrent,
+    /// arenad starts the lead with the ticket; the lead delegates work to the other agents, who
+    /// wake when work or a message arrives, report back and stay available, until the lead
+    /// finishes the run (see `crate::dispatch`).
+    Dispatch,
+    /// An external system registers the agents and drives them through their endpoints; arenad
+    /// records what they do and scores the world when the system says the run is finished.
+    External,
+}
+
+impl Team {
+    /// The index of the agent that leads a `dispatch` run: the one marked `lead`, else the first.
+    pub fn lead_index(&self) -> usize {
+        self.agents.iter().position(|a| a.lead).unwrap_or(0)
+    }
+}
+
+/// The rules a branch runs under, recorded in its run's `RunStart` (`runner`, `handoff`,
+/// `max_cost_usd`, `connection`).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Rules {
+    pub runner: Runner,
+    /// True for runs recorded before handoffs were optional: every agent but the last must hand
+    /// off, the last may not, and an agent's input has only the previous agent's note.
+    pub handoff_required: bool,
+    /// The run's model-spend limit in USD (`crate::budget`); None: no limit.
+    pub max_cost_usd: Option<f64>,
+    /// The Code connection whose driver Shakedown launched for the run (`crate::driver`).
+    pub connection: Option<String>,
+}
+
+impl Rules {
+    /// What a new run gets with `runner`: handoffs and messages optional.
+    pub fn new(runner: Runner) -> Rules {
+        Rules {
+            runner,
+            handoff_required: false,
+            max_cost_usd: crate::budget::env_default(),
+            connection: None,
+        }
+    }
+
+    /// These rules with the spend limit `max` (`None` keeps the env default).
+    pub fn with_max_cost(mut self, max: Option<f64>) -> Rules {
+        if let Some(m) = max.and_then(crate::budget::positive) {
+            self.max_cost_usd = Some(m);
+        }
+        self
+    }
+
+    /// The rules of a run recorded before runners: a chain with a handoff required.
+    pub fn legacy() -> Rules {
+        Rules {
+            runner: Runner::Chain,
+            handoff_required: true,
+            max_cost_usd: None,
+            connection: None,
+        }
+    }
+
+    /// The rules a `RunStart` payload records; one without `runner` is a legacy run.
+    pub fn of_run_start(payload: &Value) -> Rules {
+        match serde_json::from_value::<Runner>(payload["runner"].clone()) {
+            Ok(runner) => Rules {
+                runner,
+                handoff_required: payload["handoff"] == "required",
+                max_cost_usd: payload["max_cost_usd"]
+                    .as_f64()
+                    .and_then(crate::budget::positive),
+                connection: payload["connection"].as_str().map(String::from),
+            },
+            Err(_) => Rules::legacy(),
+        }
+    }
+
+    /// These rules with the Code connection `id` (`None` keeps none).
+    pub fn with_connection(mut self, id: Option<String>) -> Rules {
+        self.connection = id;
+        self
+    }
+
+    /// How `RunStart` writes `handoff_required` (its field `handoff`).
+    pub fn handoff_word(&self) -> &'static str {
+        match self.handoff_required {
+            true => "required",
+            false => "optional",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -52,6 +208,11 @@ pub enum BranchStatus {
     Failed,
     InfraError,
     Interrupted,
+    /// Someone stopped the run before it ended; it is not scored.
+    Stopped,
+    /// The run's model-spend estimate passed its `max_cost_usd`: its agents were stopped and the
+    /// world scored as it stood (a failure).
+    BudgetExceeded,
 }
 
 /// `text` trimmed, `None` when that leaves nothing: what a blank provider or model means.
@@ -73,6 +234,8 @@ impl BranchStatus {
             BranchStatus::Failed => "failed",
             BranchStatus::InfraError => "infra_error",
             BranchStatus::Interrupted => "interrupted",
+            BranchStatus::Stopped => "stopped",
+            BranchStatus::BudgetExceeded => "budget_exceeded",
         }
     }
 
@@ -83,6 +246,8 @@ impl BranchStatus {
             "failed" => BranchStatus::Failed,
             "infra_error" => BranchStatus::InfraError,
             "interrupted" => BranchStatus::Interrupted,
+            "stopped" => BranchStatus::Stopped,
+            "budget_exceeded" => BranchStatus::BudgetExceeded,
             _ => return None,
         })
     }
@@ -96,9 +261,29 @@ pub enum EventKind {
     ModelCall,
     ToolCall,
     Handoff,
+    Message,
     AgentEnd,
     Check,
     WorldEvent,
+    /// The world's view after a step (`{seq_of, view}`), when the benchmark draws one.
+    WorldView,
+    /// Someone paused the branch: its calls wait and its clock stands still until `Resume`.
+    Pause,
+    /// The branch goes on after a `Pause` (`{paused_ms}`).
+    Resume,
+    /// A dispatch run's lead gives an agent work (`{to, task}`).
+    Delegation,
+    /// An agent of a dispatch run reports to its lead (`{to, text, turn_end?}`).
+    Report,
+    /// arenad starts an agent's turn in a dispatch run (`{reason, mail?, input}`).
+    Wake,
+    /// An agent of a dispatch run ended its turn and waits (`{ok, error?, text?}`).
+    Idle,
+    /// The lead of a dispatch run ends it (`{summary}`).
+    Finish,
+    /// What an agent thought or said it would do (`{text, kind, source, model_call_seq?,
+    /// truncated?}`), reported by its driver or pulled from a recorded model response.
+    Reasoning,
 }
 
 impl EventKind {
@@ -109,9 +294,19 @@ impl EventKind {
             EventKind::ModelCall => "model_call",
             EventKind::ToolCall => "tool_call",
             EventKind::Handoff => "handoff",
+            EventKind::Message => "message",
             EventKind::AgentEnd => "agent_end",
             EventKind::Check => "check",
             EventKind::WorldEvent => "world_event",
+            EventKind::WorldView => "world_view",
+            EventKind::Pause => "pause",
+            EventKind::Resume => "resume",
+            EventKind::Delegation => "delegation",
+            EventKind::Report => "report",
+            EventKind::Wake => "wake",
+            EventKind::Idle => "idle",
+            EventKind::Finish => "finish",
+            EventKind::Reasoning => "reasoning",
         }
     }
 
@@ -122,9 +317,19 @@ impl EventKind {
             "model_call" => EventKind::ModelCall,
             "tool_call" => EventKind::ToolCall,
             "handoff" => EventKind::Handoff,
+            "message" => EventKind::Message,
             "agent_end" => EventKind::AgentEnd,
             "check" => EventKind::Check,
             "world_event" => EventKind::WorldEvent,
+            "world_view" => EventKind::WorldView,
+            "pause" => EventKind::Pause,
+            "resume" => EventKind::Resume,
+            "delegation" => EventKind::Delegation,
+            "report" => EventKind::Report,
+            "wake" => EventKind::Wake,
+            "idle" => EventKind::Idle,
+            "finish" => EventKind::Finish,
+            "reasoning" => EventKind::Reasoning,
             _ => return None,
         })
     }
@@ -149,6 +354,10 @@ pub struct ToolCallPayload {
     pub error: Option<String>,
     pub reads: Value,
     pub writes: Value,
+    /// Keys the call changed for its part's own bookkeeping (`_disruption/<id>`): saved like a
+    /// write, but not one (docs/protocol.md, "Ids and keys").
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub internal: Vec<String>,
     /// `saves["retail"]` when that part was saved, so the old UIs keep working. Runs recorded
     /// before integrations have only this (read as `saves: {"retail": snapshot}`).
     pub snapshot: Option<String>,
@@ -168,6 +377,10 @@ pub struct ToolCallPayload {
     /// How long the world's clock was paused for this step's saves (None when nothing was saved).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub paused_ms: Option<i64>,
+    /// How long the tool ran in the world, gate checks and saves left out (None when it reached
+    /// no part, and in calls recorded before durations were kept).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duration_ms: Option<f64>,
 }
 
 /// Payload of `EventKind::WorldEvent`: something a part reported when its clock advanced.
@@ -203,6 +416,11 @@ pub struct AgentEndPayload {
     pub ok: bool,
     pub error: Option<String>,
     pub tokens: Option<i64>,
+    /// The input and output tokens of `tokens` (absent in runs recorded before they were kept).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt_tokens: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub completion_tokens: Option<i64>,
     pub cost_usd: Option<f64>,
     pub cost_source: Option<String>,
     pub seconds: Option<f64>,
@@ -212,7 +430,43 @@ pub struct AgentEndPayload {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct HandoffPayload {
     pub note: String,
+    /// The agent the note is for; absent: for whoever comes next.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub to: Option<String>,
 }
+
+/// Payload of `EventKind::Message`: one agent's message to another, or to all (`to` = `*`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MessagePayload {
+    pub to: String,
+    pub text: String,
+}
+
+/// Payload of `EventKind::Delegation`: the lead gives agent `to` its `task`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DelegationPayload {
+    pub to: String,
+    pub task: String,
+}
+
+/// Payload of `EventKind::Report`: an agent's report to the lead (`to`). `turn_end` is set when
+/// the agent ended a turn without reporting and arenad passed on what it said last.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ReportPayload {
+    pub to: String,
+    pub text: String,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub turn_end: bool,
+}
+
+/// Payload of `EventKind::Finish`: the lead's summary of the run.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FinishPayload {
+    pub summary: String,
+}
+
+/// `to` of a message for every agent.
+pub const EVERYONE: &str = "*";
 
 /// Payload of `EventKind::Check`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -223,6 +477,10 @@ pub struct CheckPayload {
     /// Keys (`<table>/<id>`) whose documents differ from the gold save, sorted; prefixed
     /// `part:` when the world has more than one part.
     pub differing_rows: Option<Vec<String>>,
+    /// The benchmark's named checks, for a benchmark that scores the end state itself. Then
+    /// `differing_rows` lists the checks that failed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub checks: Option<Vec<parts::proto::NamedCheck>>,
     /// `{part: save}` of every part's final state, saved before its instance stopped.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub final_saves: Option<std::collections::BTreeMap<String, String>>,
@@ -272,6 +530,8 @@ pub struct Branch {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RunSummary {
     pub id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
     pub task_id: String,
     pub created_at: DateTime<Utc>,
     pub branches: Vec<Branch>,

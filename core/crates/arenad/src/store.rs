@@ -5,8 +5,21 @@ use serde_json::Value;
 use tokio::sync::{broadcast, Mutex as AsyncMutex};
 use tokio_postgres::{Client, NoTls, Row};
 
-use crate::{model::*, pg::Admin};
+use crate::{
+    model::*,
+    overhead::{self, Cat},
+    pg::Admin,
+};
 use parts::proto::Mode;
+
+mod connections;
+mod experiments;
+mod reviews;
+mod suites;
+pub use connections::{is_secret, Connection, NewConnection, REDACTED};
+pub use experiments::{NewExperiment, NewSetup};
+pub use reviews::{ReviewDone, StoredReview};
+pub use suites::NewSuite;
 
 pub type RunId = String;
 pub type BranchId = String;
@@ -42,6 +55,7 @@ CREATE TABLE IF NOT EXISTS events (
     payload jsonb NOT NULL,
     PRIMARY KEY (branch_id, seq)
 );
+ALTER TABLE runs ADD COLUMN IF NOT EXISTS name text;
 ALTER TABLE branches ADD COLUMN IF NOT EXISTS restore_mode text;
 ALTER TABLE branches ADD COLUMN IF NOT EXISTS restored jsonb NOT NULL DEFAULT '[]';
 "#;
@@ -49,6 +63,26 @@ ALTER TABLE branches ADD COLUMN IF NOT EXISTS restored jsonb NOT NULL DEFAULT '[
 const BRANCH_COLS: &str = "id, run_id, parent_id, start_seq, team, changes, fork_note, status, \
      error, created_at, ended_at, restore_mode, restored";
 const EVENT_COLS: &str = "branch_id, seq, at, agent, kind, payload";
+
+/// Makes the tables (adding what newer arenads keep), and marks what was running when arenad
+/// last stopped as interrupted.
+async fn migrate(client: &Client) -> Result<()> {
+    client.batch_execute(SCHEMA).await?;
+    client.batch_execute(suites::SCHEMA).await?;
+    client.batch_execute(experiments::SCHEMA).await?;
+    client.batch_execute(reviews::SCHEMA).await?;
+    client.batch_execute(connections::SCHEMA).await?;
+    client
+        .execute(
+            "UPDATE branches SET status = 'interrupted', ended_at = now() WHERE status = 'running'",
+            &[],
+        )
+        .await?;
+    client.execute(suites::INTERRUPT, &[]).await?;
+    client.execute(experiments::INTERRUPT, &[]).await?;
+    client.execute(reviews::INTERRUPT, &[]).await?;
+    Ok(())
+}
 
 fn new_id() -> String {
     uuid::Uuid::new_v4().simple().to_string()
@@ -81,13 +115,7 @@ impl Store {
             .await
             .with_context(|| format!("connecting to {name}"))?;
         tokio::spawn(conn);
-        client.batch_execute(SCHEMA).await?;
-        client
-            .execute(
-                "UPDATE branches SET status = 'interrupted', ended_at = now() WHERE status = 'running'",
-                &[],
-            )
-            .await?;
+        migrate(&client).await?;
         let (tx, _) = broadcast::channel(1024);
         Ok(Store {
             client,
@@ -114,6 +142,15 @@ impl Store {
             )
             .await?;
         Ok(id)
+    }
+
+    /// Sets a run's display name without changing its task or recorded events.
+    pub async fn name_run(&self, id: &str, name: &str) -> Result<bool> {
+        Ok(self
+            .client
+            .execute("UPDATE runs SET name = $2 WHERE id = $1", &[&id, &name])
+            .await?
+            == 1)
     }
 
     /// `team` is the branch's effective team (the run's team with `changes` applied).
@@ -148,6 +185,17 @@ impl Store {
         Ok(id)
     }
 
+    /// Replaces a branch's team (an external system registered another agent).
+    pub async fn set_team(&self, branch_id: &str, team: &Team) -> Result<()> {
+        self.client
+            .execute(
+                "UPDATE branches SET team = $2 WHERE id = $1",
+                &[&branch_id, &serde_json::to_value(team)?],
+            )
+            .await?;
+        Ok(())
+    }
+
     /// Records how a fork's world was restored: the mode asked for and each part's restore.
     pub async fn set_restore(
         &self,
@@ -168,7 +216,25 @@ impl Store {
         Ok(())
     }
 
+    /// Records an event of a branch; an object payload also gets the branch's `overhead_ms` built
+    /// up since its last event. The time this takes is overhead of the kind `record`.
     pub async fn append(
+        &self,
+        branch_id: &str,
+        agent: Option<&str>,
+        kind: EventKind,
+        mut payload: Value,
+    ) -> Result<Event> {
+        let since = std::time::Instant::now();
+        if let (Some(o), Some(obj)) = (overhead::take(branch_id), payload.as_object_mut()) {
+            obj.insert("overhead_ms".into(), serde_json::to_value(o)?);
+        }
+        let ev = self.insert_event(branch_id, agent, kind, payload).await;
+        overhead::add_since(branch_id, Cat::Record, since);
+        ev
+    }
+
+    async fn insert_event(
         &self,
         branch_id: &str,
         agent: Option<&str>,
@@ -210,6 +276,10 @@ impl Store {
         status: BranchStatus,
         error: Option<String>,
     ) -> Result<()> {
+        if status != BranchStatus::Running {
+            // What built up after the branch's last event has no event to go on.
+            overhead::take(branch_id);
+        }
         self.client
             .execute(
                 "UPDATE branches SET status = $2, error = $3,
@@ -242,7 +312,7 @@ impl Store {
         let runs = self
             .client
             .query(
-                "SELECT id, task_id, created_at FROM runs ORDER BY created_at DESC, id",
+                "SELECT id, name, task_id, created_at FROM runs ORDER BY created_at DESC, id",
                 &[],
             )
             .await?;
@@ -254,6 +324,7 @@ impl Store {
                 RunSummary {
                     branches: by_run.remove(&id).unwrap_or_default(),
                     id,
+                    name: r.get("name"),
                     task_id: r.get("task_id"),
                     created_at: r.get("created_at"),
                 }
@@ -373,7 +444,8 @@ fn event_from(r: &Row) -> Result<Event> {
 
 fn branch_from(r: &Row) -> Result<Branch> {
     let status: String = r.get("status");
-    let team: Value = r.get("team");
+    let mut team: Value = r.get("team");
+    crate::model::legacy_read_only(&mut team);
     let mode: Option<String> = r.get("restore_mode");
     let restored: Value = r.get("restored");
     Ok(Branch {

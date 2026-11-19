@@ -56,3 +56,18 @@ and `src/tasks.rs` reads the tasks and gold actions from `data/retail/tasks.json
 ids in `data/retail/demo_tasks.json`); `src/team.rs` holds the team it suggests and the `Store policy` heading
 over its policy. Its tests are in `benchmarks/retail/tests`. arenad runs one benchmark at a time, chosen with
 `ARENA_BENCHMARK`.
+
+`benchmarks/factory` is a benchmark over eight integrations (`erpnext`, `twenty-crm`, `ridgeline-hub`, the stand-in
+plant, `sculptured`, and three simulations: `utility`, `ot-network`, `shift-roster`) with two tasks, a press bearing
+failure and a shift whose scenario opens up to four fronts. It shows what a world of several parts adds: `links` between
+parts, `gates` on tools (approvals, and interlocks between the plant, the OT network and the roster), scoring by named
+checks with `scored` and safety checks, scenario options and a twin `view` (`docs/protocol.md`). It reads a factory example that is not public yet, so its
+world can't start without it; see `benchmarks/factory/README.md`.
+
+`benchmarks/pharma` is a benchmark of a production incident at a fictional sterile-injectables maker over five parts:
+`erpnext`, `twenty-crm`, `sculptured` and two simulations, `pharma-lims` (a LIMS with a simulated QA head) and
+`pharma-logistics` (cold-chain carriers and a customer desk with a simulated supply chain director). Its five tasks are
+scenarios of one incident, each set by a task's `setup` (`docs/protocol.md`, "A task's setup"); links hand every
+proposed change to the simulated deciders and their decisions back to the approvals part; its named checks include hard
+safety checks (`safety: true`). See `benchmarks/pharma/README.md`.
+

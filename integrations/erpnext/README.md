@@ -74,8 +74,9 @@ helper this integration uses: `arena_part::helpers::mariadb`).
 - **Restore** (`from`, either mode; exact only, `approximate: false`): a new instance from the save's
   manifest and files, as above. A save made on another server (or a replaced one) is -32001.
 - **Tools** (REST on `127.0.0.1:8180` with the Administrator's key and `Host: <site>`):
-  `get_doc {doctype, name}` (read), `list_docs {doctype, filters?, fields?, limit?}` (read; `name` is
-  always among the fields; `limit` default 20, 0 for all), `insert_doc {doc}` (write; `doc` has its
+  `get_doc {doctype, name}` (read), `list_docs {doctype, filters?, fields?, limit?, start?, order_by?}` (read; `name` is
+  always among the fields; `limit` default 20, 0 for all; `start` skips that many, for the next page;
+  `order_by` is Frappe's), `insert_doc {doc}` (write; `doc` has its
   `doctype`), `update_doc {doctype, name, fields}` (write), `submit_doc {doctype, name}` (write; sets
   `docstatus` 1, which Frappe runs as a submit). Keys are `<Doctype>/<name>`. Frappe refusing a call (a
   missing document, a failed validation) is the tool's error, with Frappe's message; bad arguments are
@@ -84,12 +85,15 @@ helper this integration uses: `arena_part::helpers::mariadb`).
   `view-<pid>-<n>.localhost` on database `ev_<pid>_<n>`, made from it and removed after. `inspect`
   with no keys gives every document of the target's `diff_doctypes`; `diff` lists all fields of every
   document of both targets' `diff_doctypes` and compares them by key. A target diffed with itself is
-  not read. In `inspect`, a key Frappe answers 404 for is null; other refusals are errors.
+  not read. In `inspect`, a key Frappe answers 404 for, or of a doctype it doesn't have, is null; other refusals are errors.
 - **drop_save** and **gc {keep}**: as mariadb (remove the dumps no save, live instance or the base
   needs; purge the binlog before the oldest position still needed), and when nothing needs any
   position and no site is being made, the binlog is rotated first so all of it goes. `gc` also drops
   the saves not kept, the databases and accounts of sites not live and not being read, and their
   folders.
+- **Re-rooting:** as in the mariadb integration, `gc` rewrites the saves `keep` keeps by a pattern (`base_*`,
+  `gold_*`) as full dumps once they alone hold more than 256 MiB of binlog; their files stay as they are. It shares
+  mariadb's code (the kit's `Dumps::reroot_standing`) and has not been run live on this integration.
 - **usage** is this server's binlog plus the `eb_*` and `ev_*` databases. The mariadb integration does
   not count this server, so nothing is counted twice. The sites folder, saves, dumps and the base are
   under `ARENA_SAVES`, which arenad counts; the server's own data volume and the Redis volumes are not
@@ -103,10 +107,3 @@ helper this integration uses: `arena_part::helpers::mariadb`).
   the round trip and the check against a project (`arena_erpnext_t<pid>`, on a free port) and a
   server of its own, and removes them (`docker compose down -v`, the server's container and volume,
   the saves and sites) when it ends.
-
-## Known limits
-
-- **Kept base and gold saves pin the binlog.** A save holds a binlog position, and the binlog is purged
-  only up to the oldest position a remaining save needs. arenad keeps every benchmark's base and gold
-  saves (`base_*`, `gold_*`), so on a long-lived server the binlog grows from their positions until
-  those saves are re-rooted onto a dump. Re-rooting is not built; no benchmark uses this integration yet.

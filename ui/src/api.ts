@@ -1,6 +1,10 @@
+import type { CheckAnswer, CheckBody } from './connect/connect';
+import { api } from './core';
+import type { ScenarioChoice } from './scenario/types';
+import type { BranchView } from './world/types';
 import type {
-  Branch, BranchDetail, Change, CompareResponse, Event, ForkResponse, Health, NewRunResponse,
-  ProviderStatus, RestoreMode, RestorePlan, RowsResponse, RunSummary, StatusEvent, TaskSummary, Team,
+  BenchmarkDescription, Branch, BranchDetail, Change, CompareResponse, Event, ForkResponse, Health, NewRunResponse,
+  ProviderStatus, RestoreMode, RestorePlan, RowsResponse, RunSummary, Runner, StatusEvent, TaskSummary, Team,
 } from './types';
 
 export class ApiError extends Error {
@@ -9,8 +13,9 @@ export class ApiError extends Error {
   }
 }
 
-async function call<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, init);
+/** `path` (`/api/…`) on the Arena core this page talks to (`core.ts`). */
+export async function call<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(api(path), init);
   const text = await res.text();
   let body: unknown = null;
   try {
@@ -25,7 +30,7 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
-const post = <T>(path: string, body: unknown) =>
+export const post = <T>(path: string, body: unknown) =>
   call<T>(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
 
 export const deleteRun = (id: string) =>
@@ -35,16 +40,35 @@ export const health = () => call<Health>('/api/health');
 export const providers = () => call<ProviderStatus[]>('/api/providers');
 export const tasks = () => call<TaskSummary[]>('/api/tasks');
 export const defaultTeam = () => call<Team>('/api/team/default');
-export const startRun = (task_id: string, team: Team) => post<NewRunResponse>('/api/runs', { task_id, team });
+/** Every team the benchmark suggests, the default first, each with the runner it is written for. */
+export const suggestedTeams = () => call<Team[]>('/api/teams');
+/** Starts a run; with `connection`, Shakedown launches that Code connection's driver, which drives it. */
+export const startRun = (task_id: string, team: Team, runner: Runner = 'chain', scenario?: ScenarioChoice, connection?: string) =>
+  post<NewRunResponse>('/api/runs', {
+    task_id, team, runner: connection ? 'external' : runner, ...(scenario ? { scenario } : {}), ...(connection ? { connection } : {}),
+  });
+/** The Connect screen's handshake: arenad says hello to an HTTP agent, or makes a 1-token Bedrock call. */
+export const checkAgent = (body: CheckBody) => post<CheckAnswer>('/api/agents/check', body);
 export const runs = () => call<RunSummary[]>('/api/runs');
 export const branch = (id: string) => call<BranchDetail>(`/api/branches/${encodeURIComponent(id)}`);
 export const rows = (id: string, seq: number, keys: string[]) =>
   call<RowsResponse>(`/api/branches/${encodeURIComponent(id)}/rows?seq=${seq}&keys=${encodeURIComponent(keys.join(','))}`);
-export const fork = (id: string, at_seq: number, changes: Record<string, Change> = {}, restore: RestoreMode = 'exact') =>
-  post<ForkResponse>(`/api/branches/${encodeURIComponent(id)}/fork`, { at_seq, changes, restore });
+/** Forks at `at_seq` with agent `changes`, or with another `team` (a run an external system drives only). */
+export const fork = (id: string, at_seq: number, changes: Record<string, Change> = {}, restore: RestoreMode = 'exact', team?: Team) =>
+  post<ForkResponse>(`/api/branches/${encodeURIComponent(id)}/fork`, team ? { at_seq, restore, team } : { at_seq, changes, restore });
 /** How each part of a fork at `at_seq` would be restored; a 409 names the part that can't be. */
 export const restorePlan = (id: string, at_seq: number, restore: RestoreMode) =>
   call<RestorePlan>(`/api/branches/${encodeURIComponent(id)}/restore-plan?at_seq=${at_seq}&restore=${restore}`);
+/** Pause or resume a live branch: its calls wait while paused (`{paused, changed}`). */
+export const setPaused = (id: string, paused: boolean) =>
+  post<{ paused: boolean; changed: boolean }>(`/api/branches/${encodeURIComponent(id)}/${paused ? 'pause' : 'resume'}`, {});
+/** Stop a live branch: it ends `stopped`, unscored; the stream's status says when. */
+export const stopBranch = (id: string) => post<{ stopping: boolean }>(`/api/branches/${encodeURIComponent(id)}/stop`, {});
+/** The branch's digital twin after each step that wrote anything, inherited views included. */
+export const views = (id: string) => call<BranchView[]>(`/api/branches/${encodeURIComponent(id)}/views`);
+
+/** The disruptions new runs can be started with (`GET /api/benchmark`); null when it offers none. */
+export const scenarioOptions = async () => (await call<BenchmarkDescription>('/api/benchmark')).scenario_options ?? null;
 export const compare = (a: string, b: string) =>
   call<CompareResponse>(`/api/compare?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`);
 
@@ -54,7 +78,7 @@ export function stream(
   onEvent: (e: Event) => void,
   onStatus: (s: StatusEvent) => void,
 ): () => void {
-  const es = new EventSource(`/api/branches/${encodeURIComponent(id)}/stream`);
+  const es = new EventSource(api(`/api/branches/${encodeURIComponent(id)}/stream`));
   const listen = <T>(name: string, fn: (v: T) => void) =>
     es.addEventListener(name, (m) => {
       try {

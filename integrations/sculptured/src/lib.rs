@@ -1,7 +1,7 @@
-//! The CopperTide integration (`sculptured`): CopperTide's approvals (proposed changes and their decisions) in
-//! the arena world. Each instance is a `coppertide serve` of its own on a loopback port, with its
-//! data folder under `.live/<instance>/`; its team's Practice agents propose the changes and the
-//! tools decide them, all through CopperTide's HTTP API. A save is an online backup of the
+//! The `sculptured` integration: CopperTide's approvals (proposed changes and their decisions) in
+//! the arena world. Each instance is a `sculptured serve` of its own on a loopback port, with its
+//! data folder under `.live/<instance>/`; the tools propose changes to its team as an outside
+//! system and decide them, all through CopperTide's HTTP API. A save is an online backup of the
 //! server's SQLite stores plus a copy of the rest of its data folder; a restore starts a server on
 //! a copy of it and proposes again the changes that waited (see `aliases`). Saves restore exactly.
 mod aliases;
@@ -137,6 +137,7 @@ impl Part for Sculptured {
             uses_clock: false,
             fingerprint: json!({"integration": PACKAGE}),
             tools: tool_schemas::schemas(),
+            system: Some(SystemInfo::real("approvals", "CopperTide approvals", None)),
         })
     }
 

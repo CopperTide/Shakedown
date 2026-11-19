@@ -2,8 +2,10 @@
 from dataclasses import dataclass
 from typing import Callable
 
-from arena_part import errors
+from arena_part import disruptions, errors
 from arena_part.params import Param, Refusal, input_schema, normalize, refused
+
+from . import inbound
 
 
 @dataclass(frozen=True)
@@ -132,8 +134,8 @@ TOOLS = {t.name: t for t in [
          (Param("request", "string"), _wait_s()), "freight_status", _pick("request"),
          _reads(_key("freight", "request", "args")),
          validate=_exists("request", "freight", "freight request")),
-    Tool("book_freight", "Book a carrier's quote. proposal_id is recorded, not verified here. The shipment is "
-         "recorded in this part only.", "write",
+    Tool("book_freight", "Book a carrier's quote. proposal_id is recorded, not verified here. The shipment gives "
+         "a `shipment_booked` event.", "write",
          (Param("proposal_id", "string"), Param("quote_id", "string"), Param("carrier", "string"),
           Param("amount", "number"), Param("part", "string", "SP-SPN-800")),
          "book_freight", _pick("quote_id", "part"), _booking_keys, validate=_check_booking,
@@ -157,12 +159,25 @@ TOOLS = {t.name: t for t in [
 ]}
 
 
+def schemas() -> list:
+    return [t.schema() for t in TOOLS.values()] + [t.schema() for t in inbound.TOOLS.values()]
+
+
 def run_tool(world, name: str, args) -> dict:
-    """Runs one tool on a world: a call_tool result. A refusal is a tool-level `error` with no keys; an
-    unknown tool name is a protocol-level `invalid`."""
-    tool = TOOLS.get(name)
-    if tool is None:
+    """Runs one tool on a world: a call_tool result, after the disruptions the call sets off (which stay even when
+    it is refused). A refusal is a tool-level `error` with no keys; an unknown tool name is a protocol-level
+    `invalid`."""
+    if name not in TOOLS and name not in inbound.TOOLS:
         raise errors.invalid(f"unknown tool {name}")
+    fired = inbound.scheduled(world, name)
+    if name in inbound.TOOLS:
+        out = inbound.run(world, name, args, [*TOOLS, *inbound.TOOLS])
+    else:
+        out = _market_tool(world, TOOLS[name], args)
+    return disruptions.merged(out, fired)
+
+
+def _market_tool(world, tool, args) -> dict:
     try:
         args = normalize(tool.name, tool.params, args)
         if tool.validate:

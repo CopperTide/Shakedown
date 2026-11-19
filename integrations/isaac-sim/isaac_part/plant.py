@@ -1,7 +1,10 @@
 """One instance's plant: the factory's Factory on the arena clock, stepped at a fixed physics rate."""
 from datetime import datetime, timedelta, timezone
 
-from . import views
+from arena_part import errors
+
+from . import recording, views
+from .equipment import Equipment
 from .log import log
 
 
@@ -34,9 +37,9 @@ def physics_hz(cfg, mods) -> int:
 
 
 class Plant:
-    def __init__(self, mods, backend, cfg, clock_ms: int):
+    def __init__(self, mods, backend, cfg, clock_ms: int, video_path=None):
         """A Factory on `backend` with erp and triggers None, its threads never started: the part's thread calls
-        it directly."""
+        it directly. With `video_path`, the backend renders the plant there as it steps."""
         self.backend, self.cfg = backend, cfg
         self.hz = physics_hz(cfg, mods)
         self.steps = clock_ms * self.hz // 1000  # physics steps done, counted from arena time 0
@@ -46,6 +49,10 @@ class Plant:
         CLOCK.plant = self
         self.io = backend.make(cfg, data, self.hz)
         self.factory = mods.factory.Factory(self.io, data, log=log)
+        self.equipment = Equipment(cfg.cells, cfg.power, self.hz)
+        self.seed = None
+        _check_metered(self.factory, cfg.power)
+        self.video = None if video_path is None else backend.video(cfg, self.io, self.hz, video_path)
 
     def plant_now(self) -> datetime:
         return self.cfg.plant_start + timedelta(seconds=self.steps / self.hz)
@@ -58,24 +65,58 @@ class Plant:
 
     def begin(self, seed: int, scenario: bool) -> None:
         """The arena seed seeds the factory's randomness (the floor noise); start_scenario resets with it too."""
+        self.seed = seed
         self.act(lambda f: f.start_scenario(seed) if scenario else f.reset(seed))
+
+    def set_scenario(self, name: str) -> dict:
+        """`press-wear`: PR-A1's wear starts now (as `scenario: true` does at the start); `calm`: the plant is reset
+        with the run's seed, so no press wears."""
+        if name not in SCENARIOS:
+            raise ValueError(f"scenario is one of {', '.join(SCENARIOS)}")
+        self.act(lambda f: f.start_scenario(self.seed) if name == "press-wear" else f.reset(self.seed))
+        return {"scenario": name, "plant": self.factory.scenario}
 
     def _physics_step(self, dt: float) -> None:
         """After each backend step. Factory.physics_step takes the factory's lock itself, as in run.py."""
         self.steps += 1
         self.factory.physics_step(dt)
+        with self.factory.lock:
+            self.equipment.step(self.steps, self.factory)
 
     def step_to(self, clock_ms: int) -> int:
         """Physics steps of 1/hz s up to `clock_ms` (none when it is behind), then the factory's queued work.
         Events stay queued for `advance`. Returns the number of steps."""
-        n = max(0, clock_ms * self.hz // 1000 - self.steps)
+        target = clock_ms * self.hz // 1000
+        n = max(0, target - self.steps)
         CLOCK.plant = self
         if n:
-            self.backend.run(self.io, n, 1.0 / self.hz, self._physics_step)
+            self._run_to(target)
         self.factory.drain()
         return n
 
+    def _run_to(self, target: int) -> None:
+        """Physics steps up to step `target`. With a recording, a frame at each frame boundary on the way. Steps
+        that rendering itself makes still reach Factory.physics_step and count, so the clock stays right."""
+        if self.video is None:
+            self._run(target - self.steps)
+            return
+        every = self.video.every
+        while self.steps < target:
+            self._run(min(target, recording.next_frame(self.steps, every)) - self.steps)
+            if self.steps % every == 0:
+                self.video.frame(self)
+
+    def _run(self, n: int) -> None:
+        """`n` backend steps; each must reach Factory.physics_step, or the plant would silently stand still."""
+        before = self.steps
+        self.backend.run(self.io, n, 1.0 / self.hz, self._physics_step)
+        if self.steps < before + n:
+            raise errors.internal(f"{n} physics steps ran but only {self.steps - before} reached the plant: the "
+                                  "physics callback is not running")
+
     def stop(self) -> None:
+        if self.video is not None:
+            self.video.close()
         self.backend.stop(self.io)
 
     def new_events(self) -> list:
@@ -91,4 +132,14 @@ class Plant:
         return {"changed": bool(n or events), "events": events}
 
     def state(self) -> dict:
-        return self.act(lambda f: f.state())
+        """The factory's state, with the cells and the load the arena adds."""
+        return self.act(lambda f: {**f.state(), **self.equipment.state(f)})
+
+
+SCENARIOS = ("press-wear", "calm")
+
+
+def _check_metered(factory, power) -> None:
+    unknown = sorted(set((power or {}).get("lines", {})) - set(factory.lines_meta))
+    if unknown:
+        raise errors.invalid(f"power names lines the plant doesn't have: {', '.join(unknown)}")

@@ -2,23 +2,24 @@
 
 Puts the Ridgeline factory plant in the world, with Isaac Sim as the physics (the `isaac` backend) or a stand-in
 double (the `standin` backend). Restore: exact by replay from the seed and inputs; approximate from a save
-(a pickle of the factory and simulation state). `uses_clock`: true. Verified on the stand-in only, by its pytest
-suite and the `arena-part-check` conformance check; **the `isaac` backend has never run on Isaac Sim** (no Isaac
-Sim image or 16 GB GPU here). Its package `isaac-sim-mirror` (see `integrations/isaac-sim-mirror/README.md`)
+(a pickle of the factory and simulation state). `uses_clock`: true. Verified on the stand-in by its pytest suite
+and the `arena-part-check` conformance check. The `isaac` backend has run once on Isaac Sim 6.2.0, on a rented
+RTX 3090, through the factory benchmark's gold path, and recorded it to MP4 (see "Verified on Isaac Sim"). Its
+package `isaac-sim-mirror` (see `integrations/isaac-sim-mirror/README.md`)
 only follows a live plant.
 
 **The factory example this package wraps is not public yet.** Its default `isaac_path` points into a private
-`CopperTide-Examples` checkout next to the arena checkout; without one the package can't start and every test in
+`CopperTide-Examples` checkout next to the `Shakedown` checkout; without one the package can't start and every test in
 `tests/` is skipped (pytest says why). Outside contributors can read and change the code, but can't run it.
 
-The Ridgeline factory as an `arena-part/1` integration, on the arena clock. In the factory demo
+The Ridgeline factory as an `arena-part/1` integration, on the Shakedown clock. In the factory demo
 (`CopperTide-Examples/factory`, branch `isaac-plant`), Isaac Sim 6.2 **is** the plant. This integration wraps
 that demo's `isaac/factory.py` class `Factory` without editing it. Factory is plain Python and reaches the
 simulation only through a `PlantIO`.
 
-**The `isaac` backend has not run on Isaac Sim.** The machine it was written on has no Isaac Sim image and no
-16 GB GPU. Everything below that says *verified* ran on the `standin` backend: the factory's own offline double,
-`isaac/tests/fake_sim.FakeIO`, which is backed by `isaac/tests/press_dynamics.py`.
+Unless a line says Isaac Sim, *verified* below means the `standin` backend: the factory's own offline double,
+`isaac/tests/fake_sim.FakeIO`, which is backed by `isaac/tests/press_dynamics.py`. What ran on Isaac Sim is in
+"Verified on Isaac Sim".
 
 ## Backends
 
@@ -28,7 +29,7 @@ changes the fingerprint.
 | Backend | PlantIO | Used by |
 |---|---|---|
 | `isaac` | `sim_io.IsaacIO` in a headless `SimulationApp`, set up as `run.py` does it: scene build, `IsaacIO`, `setup_physics`, play, `start()`. PhysX steps run with `SimulationManager.step`, and `Factory.physics_step` runs in the post-step callback. | `arena-package.toml` (`needs.gpu_vram_gb = 16`) |
-| `standin` | `fake_sim.FakeIO`. Each step is `io.step(dt)` and then `Factory.physics_step(dt)`, the order `test_scenario.py` and the app use. | the tests (a test manifest written to `tmp_path`) |
+| `standin` | `fake_sim.FakeIO`. Each step is `io.step(dt)` and then `Factory.physics_step(dt)`, the order `test_scenario.py` and the app use. | the tests (a test manifest written to `tmp_path`) and package `isaac-sim-standin` (`integrations/isaac-sim-standin`) |
 
 - If `isaacsim` can't be imported, `describe` still answers and `start` fails with -32603: "Isaac Sim is not
   importable here: run this integration with Isaac Sim's Python on the DGX Spark (see README)".
@@ -44,9 +45,9 @@ changes the fingerprint.
 
 | key | default |
 |---|---|
-| `isaac_path` | `CopperTide-Examples/factory/isaac`, next to the arena checkout |
+| `isaac_path` | `CopperTide-Examples/factory/isaac`, next to the `Shakedown` checkout |
 | `data_path` | `<isaac_path>/../data/ridgeline.json`, passed to `press_model.load_data` |
-| `plant_start` | `2026-03-10T06:00:00`, the plant clock at arena time 0 |
+| `plant_start` | `2026-03-10T06:00:00`, the plant clock at Shakedown time 0 |
 | `physics_hz` | the factory's `press_model.PHYSICS_HZ` (360) |
 | `scenario` | `true`: `start` begins the PR-A1 wear scenario at once |
 
@@ -58,7 +59,77 @@ changes the fingerprint.
   (`VibrationChannel`'s sample rate, telemetry every `PHYSICS_HZ` steps), so any other rate changes the
   readings.
 
-## Fingerprint
+## Recording: `record`, `camera`, `record_fps`
+
+| key | default |
+|---|---|
+| `record` | none. An MP4 path, relative to `$ARENA_SAVES/isaac-sim/`. Each instance writes `<stem>-<instance>.mp4` (arenad runs a base, then a branch) |
+| `camera` | `auto`: the factory's camera director, which cuts to events. Or `free`, or a rig in the factory's `layout.CAMERAS` |
+| `record_fps` | 30: frames per second of Shakedown time. The MP4 plays at this rate, so it runs in Shakedown time |
+| `record_height` | 720: the MP4's height; the width follows at 16:9 |
+| `scene` | `ridgeline`: the factory's own scene. `showcase`: a dressed stamping plant (see "The showcase scene"). Visuals only |
+
+- Only the `isaac` backend renders; `record` on `standin` is -32602. An unknown camera is -32602 before Isaac Sim
+  starts.
+- It reuses the factory's own code, read only: `visuals.Visuals` (tower lights, labels, crate, truck, camera
+  director) and `record.Recorder` (a Replicator render product on the main camera, piped to ffmpeg), headless at
+  1280x720 with the RaytracedLighting renderer, as `run.py --headless --record` does. The difference is the clock:
+  a frame is rendered every `physics_hz / record_fps` physics steps, so frames fall on Shakedown time, not wall time.
+- Label textures go to `<stem>-<instance>_labels/` beside the MP4, and the recorder's `<stem>-<instance>.json`
+  (frames, duration) too. The MP4 is finished on `stop` (or when the process exits normally); the log says
+  `[isaac-sim] wrote <path>`. Fetch it from the machine the program ran on.
+- If physics steps stop reaching the plant (its physics callback is not running), `advance` and `call_tool` fail
+  with -32603 instead of leaving the plant standing still.
+
+## The showcase scene: `scene: showcase`
+
+With a recording and `scene: showcase`, the stage the factory built is dressed as a stamping plant before physics
+starts (`isaac_part/showcase_*.py`). It changes only what is seen:
+- The factory's press articulations, iw.hub, people, physics scene and floor stay exactly as built. Its press bodies are
+  made invisible, its old shells and conveyors inactive, and its labels hidden. Factory, PlantIO, the press model and
+  the signals are not touched, and `scene` is not passed to the plant. A test runs the stand-in plant with and without
+  `scene: showcase` and compares events and documents.
+- What is added is referenced at run time from NVIDIA's public asset server (the `Assets` folder of
+  `omniverse-content-production.s3-us-west-2.amazonaws.com`); nothing is copied into this repo:
+  - the ArchVis industrial hall (`ArchVis/Industrial/Buildings/Warehouse/Warehouse01.usd`, authored in cm, scaled 0.01);
+  - two FANUC R-2000iC/165F arms per line, loading and unloading the press (`Isaac/6.2/Isaac/Robots/Fanuc/r2000ic_165f`);
+  - conveyors (`ConveyorBelt_A08`), pallets, a forklift (`Isaac/6.2/Isaac/Props/Forklift`) and stock racks
+    (`ArchVis/Industrial/Racks/RackLong_A1.usd`).
+
+  Their physics is removed (bodies, joints, colliders, articulation roots), and a check at build time fails if
+  anything under `/World/Showcase` would be simulated.
+- The presses, washers, stillages, parts, stack lights, beacon and screens are generated meshes
+  (`showcase_press.py`, `showcase_mesh.py`), merged one per material, with OmniPBR materials.
+- Everything moves kinematically, from the plant's own readings, once per rendered frame (`showcase_visuals.py`):
+  - the slide follows the ram's measured position, scaled to the visual stroke;
+  - the arms follow the crank: joint angles from numeric inverse kinematics of the arm's declared joints, keyed to the
+    press cycle (`showcase_robot.py`, `showcase_layout.py`);
+  - blanks run along the infeed and formed parts along the outfeed into the stillage (`showcase_motion.LineFlow`).
+    When the press stops, the infeed queues to the gate, the outfeed runs empty and the stillage stops growing;
+  - the frame shakes with the measured vibration: nothing below 2.3 mm/s, 3 cm at the 11.2 mm/s trip level. That is
+    exaggerated on purpose; it only follows the reading;
+  - the stack light shows the press status, and a rotating red beacon lights while it is tripped or locked out;
+  - a small andon screen on the press and an operator HMI show the press's spm, vibration and count;
+  - a forklift drives a loop delivering blank pallets.
+- `camera: auto` follows a plan (`showcase_camera.py`): establishing shots while nothing is wrong, then cuts to PR-A1
+  on its zone C and zone D warnings and on the trip (the press, the beacon, the backed-up infeed, the empty outfeed). Any
+  shot name holds that shot.
+- `remote/render_showcase.py` drives the part (start, advance, stop) without arenad, for a video or stills.
+
+**Ran on Isaac Sim (RunPod, 2026-11-05).** An NVIDIA RTX A5000 (24 GB, driver 595.91.07), the image
+`nvcr.io/nvidia/isaac-sim:6.2.0`, `remote/render_showcase.py --seconds 100` (seed 7, 1280x720, 30 fps, RaytracedLighting):
+- The MP4 has 3000 frames, 100.0 s at 30 fps, so it plays in Shakedown time. The plant's own events in that run: zone C at
+  35 s, zone D at 48 s, the trip at 64 s (the stand-in, seed 7: 33.7 s, 46.4 s, 61.9 s).
+- Wall time: 10.9 to 11.1 s per Shakedown second with the recording. Physics alone (no frames rendered) was 5.8 to 6.0 s per
+  Shakedown second with the showcase scene loaded, and 6.4 s with the factory's own scene on the same pod, so the dressing
+  adds no physics cost. A frame cost 22 to 24 ms for the visuals in Python and 129 to 132 ms to render and hand to
+  ffmpeg.
+- Seen on 6.2: changing a material's `emissive_intensity` while running did not show in the render (texture and
+  visibility changes did), so lit lamps are separate meshes that are shown or hidden.
+- The first start, with empty caches, took 265 s; later starts 45 to 48 s.
+- Not run with the showcase scene: arenad, a branch from a save, the dock and the truck (they come later in the
+  scenario than 100 s).
+
 
 `describe` declares:
 - `sha256` of the files at the default paths. These are `factory.py`, `press_model.py`, `signals.py`,
@@ -77,29 +148,55 @@ changes the fingerprint.
 result is `{}`, so the Isaac Sim version that ran is in `inspect`, as `plant/sim.isaac_version`. It comes from
 `IsaacIO.info()`; the stand-in reports `"test double"`.
 
-## The arena clock
+## The shift's scene pieces (`showcase_shift*.py`)
+
+With `scene: showcase` and `cells` configured (the factory benchmark's shift), the showcase adds, from NVIDIA's stock
+assets with physics stripped: robot welding cell R1 (a UR10e on a pedestal at a welding fixture, fence, stack light,
+HMI; its weld cycle is solved on the UR10e's own joints, `tests/data/ur10e_joints.json`, and it parks over 2.5 s on a
+safe stop, the torch's spark lit while it welds), two Nova Carter AMRs carrying KLT bins on their rounds, an energy
+board (load against the utility's target), the IT/OT gateway's cabinet with a stack light and a screen, and the dock's
+arrivals board. They follow the plant's equipment (the cells, the load) and its signage (`show_status`, which the
+benchmark's links set from the utility, the OT network and the hub). The camera director cuts to each front: the
+event's notice and window (energy board), the session (gateway, then the cell), its isolation, revocation and the
+zone's restore (gateway), a late truck (dock board), the cell stopping or starting (cell), a load change of 100 kW
+or more (energy board). `render` in the config sets the renderer's carb settings (e.g. the path tracer).
+
+**Ran on Isaac Sim (RunPod, 2026-11-08).** An RTX 3090 (24 GB, driver 580.95.05), `nvcr.io/nvidia/isaac-sim:6.2.0`:
+- 1080p, 24 fps, RTX real-time: 12.1 s of wall time per Shakedown second (208 ms to render a frame, 25 ms of visuals).
+- 2160p (4K), 24 fps: 22.8 s per Shakedown second (523 ms a frame). Path-traced 4K stills (64 samples, OptiX denoiser) took
+  about 30 s each.
+- The first start on a fresh pod took 16 min (shader and asset caches); later ones about 1 min.
+- On an RTX A5000 host with driver 550.144.03 DLSS was unavailable ("NGX isn't enabled"): frames were grainy and took
+  1 s each at 1080p. Use a host with a recent driver.
+- The image has no ffmpeg; `imageio-ffmpeg` on `PYTHONPATH` gives the recorder one, else it writes PNG frames.
+- The image's entrypoint (`runheadless.sh`) ignores a start command: create the pod with an entrypoint override
+  (RunPod's REST API `dockerEntrypoint`) to start `remote/sshd.py`.
+- Two hero runs of the factory benchmark recorded here (`benchmarks/factory/README.md`); the recordings' sidecars
+  give their frames and duration in Shakedown time.
+
+## The Shakedown clock
 
 - The factory is never edited. The part replaces two names on the imported `factory` module:
-  - `time`, whose `time()` is the plant epoch plus arena time;
-  - `datetime`, whose `now()` is `plant_start` plus arena time.
+  - `time`, whose `time()` is the plant epoch plus Shakedown time;
+  - `datetime`, whose `now()` is `plant_start` plus Shakedown time.
 
   That makes `Factory.reset`'s plant clock, the promised dates and each event's `wall` the same in every run.
 - `Factory` is built with `erp=None` and `triggers=None`, and its threads are never started. The part calls its
   methods directly, under its lock, and then `drain()`s its inbox.
 - `uses_clock: true`. `advance(clock_ms)` runs fixed steps of `1/physics_hz` s up to `clock_ms`, counted from
-  arena time 0. How the advances are split doesn't matter.
+  Shakedown time 0. How the advances are split doesn't matter.
 - `advance` returns the factory events since the last `advance` as `{kind, text, data}`. `data` is
   `{source, seq, t, detail}`: `t` is the plant time, `detail` is the factory event's own data, and `wall` is
   dropped. The factory's keys and these never overwrite each other.
 - `call_tool` first steps to its `clock_ms`, then acts. Its events stay queued for the next `advance`.
-- `start` calls `start_scenario(seed)` with the arena seed. That resets with the seed, so the floor noise
+- `start` calls `start_scenario(seed)` with the Shakedown seed. That resets with the seed, so the floor noise
   follows it. With `scenario: false`, `start` calls `reset(seed)` instead.
 - The plant clock advances by the factory's own `timedelta(seconds=dt)`, which rounds 1/360 s to 2778 µs. So it
-  runs 0.016 % ahead of arena time, as it would in the app.
+  runs 0.016 % ahead of Shakedown time, as it would in the app.
 
 **Speed of the stand-in (measured on this machine):** 120 s of physics at 360 Hz took 0.91 s, or 7.6 ms per
-second of physics, about 130 times real time. One arena hour costs about 30 s. With seed 7, zone C came at 33.7
-s of arena time, zone D at 46.4 s and the trip at 61.9 s. `test_scenario.py` expects the trip between 55 and
+second of physics, about 130 times real time. One Shakedown hour costs about 30 s. With seed 7, zone C came at 33.7
+s of Shakedown time, zone D at 46.4 s and the trip at 61.9 s. `test_scenario.py` expects the trip between 55 and
 66 s.
 
 ## Tools
@@ -117,11 +214,15 @@ The names and arguments are those of the factory's `mcp/src/ridgeline_mcp/floor.
 | `predict_move(order, to_line)` | read | `whatif_move` | `order/<id>`, `line/<id>` |
 | `dispatch_technician(proposal_id, technician, machine, task)` | write | `dispatch_technician` | `technician/<id>`, `machine/<id>` |
 | `set_line_status(line, status, rate)` | write | `set_line` (`rate` is `boost`) | `line/<id>` |
+| `add_shipment(part, origin, carrier, transit_hours, ref)` | write | `add_shipment` | `shipment/<id>` |
 
-- `wait_for_event` returns at once, with `timed_out` when nothing matches yet. Inside `call_tool` the arena clock
+- `wait_for_event` returns at once, with `timed_out` when nothing matches yet. Inside `call_tool` the Shakedown clock
   stands still, so a wait would never end. `timeout_s` is accepted and ignored.
-- `proposal_id` is accepted and not verified. Approval gating is the `sculptured` integration's job.
-- The plant runs without ERPNext in the arena, so it has no Work Orders. `orders` is empty, and `predict_move`
+- `proposal_id` is accepted and not verified here. A benchmark can gate the tool on the `sculptured` part
+  (`docs/protocol.md`, "Gates on tools").
+- `add_shipment` is what the factory's hub calls when a carrier is booked. In a world it comes through a
+  benchmark's link (`docs/protocol.md`, "Links between parts"), and then agents don't get the tool.
+- The plant runs without ERPNext in Shakedown, so it has no Work Orders. `orders` is empty, and `predict_move`
   refuses: "predict_move needs the plant's Work Orders, which come from ERPNext; the plant runs without ERPNext
   in the arena".
 - Records the factory would file in ERPNext (lockouts, statements, inspection notes) come out as events saying
@@ -134,11 +235,41 @@ The names and arguments are those of the factory's `mcp/src/ridgeline_mcp/floor.
 
   An unknown tool name is -32602.
 
+## Robot cells, the plant's load and its scenario: `cells`, `power`, `plant_scenario`
+
+The factory example has presses only. Shakedown adds, beside its `Factory` and without editing it
+(`isaac_part/equipment.py`), what the factory benchmark's shift task needs. A world that configures neither sees the
+plant as before (no extra keys, events or load).
+
+| key | default |
+|---|---|
+| `cells` | none. `[{id, name, rate_per_hour, running_kw, idle_kw, line?, zone?, robot?}]`: robot cells, each running at the start |
+| `power` | none. `{meter, base_kw, lines: {<line>: {running_kw, idle_kw}}}`: the plant's load model, for the lines on that meter |
+
+| Tool | Effect | Keys |
+|---|---|---|
+| `safe_stop_cell(cell, reason?)` | write | `cell/<id>`: the robot parks, its safety PLC holds; refused when it is safe-stopped already |
+| `start_cell(cell)` | write | `cell/<id>`: refused when it runs already |
+| `show_status(key, value, number?)` | write | `_signage/<key>` (internal): what the showcase's boards show of another system (`dr`, `ot`, `truck`); for a benchmark's links, so agents don't get it. It is in no document or tool answer |
+| `plant_scenario(name)` | write | `plant/clock`: `press-wear` starts PR-A1's wear now (what `scenario: true` does at the start); `calm` resets the plant with the run's seed, so no press wears. For a task's setup, so agents don't get it |
+
+- A cell counts the parts it makes from the physics steps it ran (`rate_per_hour`). It gives a `cell` event when it
+  stops or starts. Its document has `status` (`running` or `safe-stopped`), `safe_stopped`, `parts` and `kw`.
+- The load is `base_kw` plus each metered line's `running_kw` times its speed (`boost`) while it runs, else its
+  `idle_kw`, plus each cell's running or idle load. It is checked every 0.1 s of physics (from the step count, so
+  how the advances are split doesn't matter), and a change gives a `power` event `{kw, meter}` (in the event's
+  `detail`), which a benchmark can link to a utility's meter. The first check after the start reports it.
+- `plant_state` lists `cells` and `power`; `plant/power` is `{meter, kw, reported_kw}`.
+- An approximate save keeps the cells, the last load reported and the seed, and a save made with other `cells` or
+  `power` can't be restored (-32001).
+- Verified on `standin` only (`tests/test_equipment.py`, and `arena-part-check` with the factory benchmark's
+  `data/shift.json` plant config). Not run on Isaac Sim, and nothing in the Isaac Sim scene shows the cells yet.
+
 ## Keys, inspect and diff
 
 - Keys come from `state()`: `machine/<id>`, `line/<id>`, `order/<id>`, `technician/<id>`, `operator/<id>`,
-  `shipment/<id>`, `robot/<id>` and `incident/<id>`. There are also `plant/clock` (`t`, `clock`, `speed`,
-  `scenario`, `log_seq`) and `plant/sim`.
+  `shipment/<id>`, `robot/<id>` and `incident/<id>`, and Shakedown's `cell/<id>`. There are also `plant/clock` (`t`,
+  `clock`, `speed`, `scenario`, `log_seq`), `plant/sim` and, with `power`, `plant/power`.
 - `diff` compares documents exactly, except for floats inside the physics readings (`sensors` and `pose`
   subtrees). Those count as the same when they differ by at most 0.05 plus 1 % of the larger one, because they
   drift after an approximate restore. The protocol has no "not compared" mark.
@@ -190,36 +321,95 @@ factory (config `plant_url`, default `http://127.0.0.1:8090`) and only ever GETs
   -32001, and arenad's restore table refuses to fork a world that contains the mirror.
 - It has no `[[example]]`, so `arena-part-check` can't run on it. Its test uses a stub HTTP server on a free port.
 
-## Running the `isaac` backend on a DGX Spark (not yet done)
+## Running on another machine: `ARENA_RUN_ISAAC_SIM`
 
-The factory's `isaac/spark/run.sh` shows how Isaac Sim 6.2 runs there: the `nvcr.io/nvidia/isaac-sim:6.2.0`
-container, its cache mounts, `-u 1234:1234`, `--network=host`, and `LD_PRELOAD` of libgomp on aarch64. This
-integration needs the same container, with three changes:
-- `-i` instead of `-t`, because the protocol is stdin and stdout;
-- the `CopperTide` folder (holding both `arena/` and `CopperTide-Examples/`) mounted, for example at `/work`;
-- `ARENA_SAVES` passed and mounted read-write.
-
-Inside the container, the command is:
+arenad replaces a package's run command with the command line in `ARENA_RUN_<PACKAGE>` (here
+`ARENA_RUN_ISAAC_SIM`), run by `/bin/sh -c` (`docs/protocol.md`). Pointed at `ssh <host> -- <command>`, the part
+runs on a GPU machine with the protocol on the ssh session's stdio:
 
 ```bash
-cd /work/arena/integrations/isaac-sim && PYTHONPATH=/work/arena/kits/python \
-  exec /isaac-sim/python.sh -m isaac_part --backend isaac
+export ARENA_RUN_ISAAC_SIM="exec ssh -p <port> -i <key> -o BatchMode=yes isaac@<host> -- 'cd /isaac-sim/work/arena/integrations/isaac-sim && \
+  ARENA_SAVES=/isaac-sim/work/saves PYTHONPATH=/isaac-sim/work/arena/kits/python exec /isaac-sim/python.sh -m isaac_part --backend isaac'"
 ```
 
-Put that `docker run` in a manifest under a separate `ARENA_PACKAGES` root, named `isaac-sim`, in place of the
-`uv run` command. Then check:
-1. `start` builds the scene and steps;
-2. `inspect` shows `plant/sim.isaac_version`;
-3. the zone C, zone D and trip events land near the stand-in's times;
-4. an approximate restore continues without a jump in the vibration readings.
+- The remote machine needs this folder, `kits/python` and the factory's `isaac/` and `data/` in the same layout
+  (`arena/` next to `CopperTide-Examples/`), since the default paths and the fingerprint are relative to it.
+- Saves and recordings stay on the remote machine, under its `ARENA_SAVES`: `save` writes to
+  `$ARENA_SAVES/isaac-sim/<save>` (the protocol's convention) rather than arenad's `dir`, which is a local path.
+  arenad's own count of save bytes doesn't see them.
+- The `nvcr.io/nvidia/isaac-sim:6.2.0` image has no sshd and runs as uid 1234 without root, so `remote/sshd.py`
+  is a small SSH server (asyncssh, key login only, one command per session) to start inside the container.
+
+## Verified on Isaac Sim (RunPod, 2026-11-04)
+
+**What ran where.**
+- On a RunPod community-cloud pod, the plant ran: this part with `--backend isaac`. The pod had:
+  - an NVIDIA GeForce RTX 3090 (24 GB), driver 580.95.05;
+  - the image `nvcr.io/nvidia/isaac-sim:6.2.0`, whose `plant/sim.isaac_version` reads `6.2.0.rc.14.6`;
+  - a 40 GB container disk and no volume.
+- Everything else ran on a Linux workstation: arenad (`live_factory_gold_path_report`), the factory benchmark with
+  `--backend isaac`, ERPNext (`frappe/erpnext:v16.53.0`), `ridgeline-hub` and CopperTide.
+- arenad started the part over `ssh` (`ARENA_RUN_ISAAC_SIM`, `remote/sshd.py` on the pod), with
+  `ARENA_CLOCK_SPEED=0.1` and `{"record": "factory-gold.mp4", "camera": "auto", "record_fps": 10}`.
+- The team was the scripted, no-model team, on the gold path. Shakedown no longer has that team: the factory's live
+  test (now `live_factory_team_runs_the_incident_and_arena_scores_it`) runs the benchmark's team on a real model,
+  and has not run on Isaac Sim.
+
+**Result.**
+- The branch passed, with all nine checks.
+- Its metrics: 1311.0 s measured, 156.9 s of Shakedown overhead (145.9 s of it restoring the base, mostly ERPNext), so
+  1154.1 s estimated in production. That estimate is at 0.1× clock speed, so it measures the slow clock more than
+  the team.
+- The test took 1324 s.
+- The branch started from the base save approximately, so `set_state` (`set_dof_positions` ...) ran on 6.2
+  without an error. The continuity of the readings after it was not measured.
+
+**The recording.** 1158 frames, 115.8 s of Shakedown time at 10 fps, 1280x720 H.264, 21.5 MB. The camera director
+cut to PR-A1 near 35 s and near 50 s. From about 65 s to 75 s it showed "Press Line A DOWN" at 0 spm, then went
+back to the wide shot. That is near the stand-in's zone C (33.7 s), zone D (46.4 s) and trip (61.9 s). The events'
+own times were not compared.
+
+**Speed on the RTX 3090.**
+
+| What | Measured |
+|---|---|
+| First start (shader and asset caches empty) | about 4.5 min |
+| Later starts | 31 s; another plant in the same process: 6 to 8 s |
+| Physics alone | about 4 s of wall time per second of Shakedown time (about 11 ms per 360 Hz step) |
+| Recording at 30 fps | 9.4 s per Shakedown second |
+| Recording at 10 fps | 5.9 s per Shakedown second |
+
+That is why the clock ran at 0.1. The plant must step faster than the Shakedown clock runs, or every call waits
+longer than the last.
+
+**Found and fixed on the way.**
+- The physics callback registered for the first plant's stage stopped running after `ctx.new_stage()`. A second
+  plant in the process then stood still, and a recorded one looped forever. Each plant now registers its own
+  callback, and only the newest one reaches a plant.
+- Fetching the 21 MB MP4 through `remote/sshd.py` broke off partway several times ("Broken pipe"). It came back
+  whole in 256 kB `dd` pieces (sha256 checked). `sshd.py` now copies output with backpressure. The local test sends
+  25 MB whole, but this version has not run over the internet link.
+
+**Seen, not chased.**
+- Right after a start, the readings are not like the stand-in's: PR-A1 read 16.4 mm/s (zone D) at 3 s.
+- The early frames' labels show PR-C1 at 888.8 mm/s. This looks like the presses spinning up from rest.
+
+**Not run on Isaac Sim:**
+- `arena-part-check`, which needs three live instances, one more than the backend allows;
+- a replay, a fork or a rerun;
+- the wrong path;
+- real models.
 
 ## Tests
 
 ```
-uv run --with pytest pytest -q
+uv run --with pytest --with asyncssh pytest -q
 ```
 
+Without `asyncssh`, the tests of `remote/sshd.py` are skipped.
+
 All tests run on `standin`. The conformance test runs `arena-part-check` on a copy of the manifest that uses
-`--backend standin`; it is skipped when the binary is not built (`cargo build -p parts --bin
-arena-part-check`). A restore in a fresh process is tested by running the part over stdio. The suite takes
+`--backend standin`, as it is and with the factory benchmark's cells and load model; it is skipped when the binary
+is not built (`cargo build -p parts --bin arena-part-check`; `ARENA_BIN_DIR` names where it is). Verified on Linux,
+2026-11-07: 61 passed, 1 skipped (`asyncssh` not installed), the conformance runs included. A restore in a fresh process is tested by running the part over stdio. The suite takes
 about 3 s.

@@ -1,16 +1,29 @@
+mod dispatch;
+mod links;
+mod setup;
+mod talk;
+mod view;
+
 use std::{collections::HashMap, sync::Arc, sync::Mutex};
 
-use parts::proto::ToolOutput;
+use parts::proto::{Effect, ToolOutput, WorldEvent};
 use serde_json::{json, Value};
 
 use crate::{
     clock::BranchClock,
+    flow::{FlowControl, STOPPED},
     model::*,
+    overhead::{self, Cat},
     recorded::LEGACY_PART,
     store::Store,
     ticker::Ticker,
     world::{Called, PartEvent, Saves, World, WorldError},
 };
+
+pub use dispatch::{Said, CLOSED, DELEGATE, FINISH, REPORT};
+pub use links::LINK_ACTOR;
+pub use setup::SETUP_ACTOR;
+pub use talk::{handoff_schema, mail_for, said_text, HANDOFF, INBOX, MESSAGE};
 
 /// One running branch: its world, team, arena clock and per-agent handoff notes.
 pub struct BranchCtx {
@@ -22,16 +35,34 @@ pub struct BranchCtx {
     pub clock: BranchClock,
     /// Sends `advance` to the world's clock parts while the branch runs.
     ticker: tokio::sync::Mutex<Option<Ticker>>,
-    /// agent id -> handoff note, set once the agent has called `handoff`.
+    /// The rules the branch runs under (from its run's `RunStart`).
+    pub rules: Rules,
+    /// Its spend limit and running estimate (`rules.max_cost_usd`).
+    pub budget: crate::budget::Budget,
+    /// Agents an external system registered while the branch runs (not in `team`).
+    joined: std::sync::RwLock<Vec<AgentSpec>>,
+    /// agent id -> its latest handoff note.
     pub handoffs: Mutex<HashMap<String, String>>,
     /// Set when a program of the world has stopped: the branch ends `infra_error` with it.
     fatal: Mutex<Option<String>>,
     /// Held across every tool call so world order, saves and event order agree.
     gate: tokio::sync::Mutex<()>,
+    /// Set once something has begun to end the branch.
+    ending: std::sync::atomic::AtomicBool,
+    /// Paused, stopped or running: calls wait while the branch is paused.
+    pub flow: FlowControl,
+    /// Where what agents say is passed on, while a dispatch runner listens.
+    tap: Mutex<Option<tokio::sync::mpsc::UnboundedSender<Said>>>,
+    /// Set once the lead of a dispatch run has finished it: every later call is refused.
+    closed: std::sync::atomic::AtomicBool,
+    /// agent id -> the bearer token its MCP endpoint wants, for an agent given one (an `http`
+    /// agent, while arenad waits for it). Kept in memory only.
+    tokens: Mutex<HashMap<String, String>>,
 }
 
 impl BranchCtx {
-    /// A branch whose clock starts at 0 (at the speed `ARENA_CLOCK_SPEED` sets).
+    /// A branch whose clock starts at 0 (at the speed `ARENA_CLOCK_SPEED` sets), under the rules
+    /// of runs recorded before runners (see [`Rules::legacy`]) until `with_rules` says otherwise.
     pub fn new(branch_id: String, world: Arc<World>, team: Team, task_id: String) -> BranchCtx {
         BranchCtx {
             branch_id,
@@ -40,10 +71,25 @@ impl BranchCtx {
             task_id,
             clock: BranchClock::from_env(0),
             ticker: tokio::sync::Mutex::new(None),
+            rules: Rules::legacy(),
+            budget: crate::budget::Budget::default(),
+            joined: Default::default(),
             handoffs: Mutex::new(HashMap::new()),
             fatal: Mutex::new(None),
             gate: tokio::sync::Mutex::new(()),
+            ending: Default::default(),
+            flow: FlowControl::default(),
+            tap: Mutex::new(None),
+            closed: Default::default(),
+            tokens: Default::default(),
         }
+    }
+
+    /// The same branch under `rules`.
+    pub fn with_rules(mut self, rules: Rules) -> BranchCtx {
+        self.budget = crate::budget::Budget::new(rules.max_cost_usd);
+        self.rules = rules;
+        self
     }
 
     /// The same branch with `clock` as its arena clock.
@@ -67,22 +113,126 @@ impl BranchCtx {
         }
     }
 
+    /// The id of the agent that leads a dispatch run (see [`Team::lead_index`]).
+    pub fn lead_id(&self) -> String {
+        let lead = self.team.agents.get(self.team.lead_index());
+        lead.map(|a| a.id.clone()).unwrap_or_default()
+    }
+
+    pub fn is_lead(&self, agent: &str) -> bool {
+        self.lead_id() == agent
+    }
+
+    /// Passes what agents say from now on to the returned receiver (replacing an earlier one).
+    pub fn listen(&self) -> tokio::sync::mpsc::UnboundedReceiver<Said> {
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+        *self.tap.lock().unwrap() = Some(tx);
+        rx
+    }
+
+    /// Passes on what an agent said, when someone listens.
+    pub fn tell(&self, said: Said) {
+        if let Some(tx) = self.tap.lock().unwrap().as_ref() {
+            let _ = tx.send(said);
+        }
+    }
+
+    /// Refuses every later call: the run is over.
+    pub fn close(&self) {
+        self.closed.store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    pub fn is_closed(&self) -> bool {
+        self.closed.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
     pub fn is_last(&self, agent: &str) -> bool {
         self.team.agents.last().is_some_and(|a| a.id == agent)
     }
 
+    /// The agent `id`: one of the team, or one that joined while the branch runs.
+    pub fn agent(&self, id: &str) -> Option<AgentSpec> {
+        let known = self.team.agents.iter().find(|a| a.id == id).cloned();
+        known.or_else(|| {
+            self.joined
+                .read()
+                .unwrap()
+                .iter()
+                .find(|a| a.id == id)
+                .cloned()
+        })
+    }
+
+    /// Every agent: the team's, then those that joined, in order.
+    pub fn agents(&self) -> Vec<AgentSpec> {
+        let mut all = self.team.agents.clone();
+        all.extend(self.joined.read().unwrap().iter().cloned());
+        all
+    }
+
+    /// Adds an agent that joined while the branch runs; false when one has its id already.
+    pub fn join(&self, spec: AgentSpec) -> bool {
+        let mut joined = self.joined.write().unwrap();
+        let taken = self
+            .team
+            .agents
+            .iter()
+            .chain(joined.iter())
+            .any(|a| a.id == spec.id);
+        if !taken {
+            joined.push(spec);
+        }
+        !taken
+    }
+
+    /// True when `agent`'s team keeps it from writing (an unknown agent writes nothing either).
+    pub fn read_only(&self, agent: &str) -> bool {
+        self.agent(agent).is_none_or(|a| a.read_only)
+    }
+
+    /// True when `agent`'s setup lets it use the world tool `name` (an unknown agent uses none).
+    pub fn may_use(&self, agent: &str, name: &str) -> bool {
+        self.agent(agent).is_some_and(|a| a.may_use(name))
+    }
+
     pub fn has_agent(&self, agent: &str) -> bool {
-        self.team.agents.iter().any(|a| a.id == agent)
+        self.agent(agent).is_some()
     }
 
     /// The provider `agent`'s model calls go to (`Some(None)`: it names none, so the default
-    /// one); `None` when the team has no such agent.
-    pub fn provider_of(&self, agent: &str) -> Option<Option<&str>> {
-        self.team
-            .agents
-            .iter()
-            .find(|a| a.id == agent)
-            .map(|a| a.provider.as_deref())
+    /// one); `None` when the branch has no such agent.
+    pub fn provider_of(&self, agent: &str) -> Option<Option<String>> {
+        self.agent(agent).map(|a| a.provider)
+    }
+
+    /// A new bearer token for `agent`'s MCP endpoint, which takes no call without it from now on.
+    pub fn issue_token(&self, agent: &str) -> String {
+        let token = uuid::Uuid::new_v4().simple().to_string();
+        self.tokens
+            .lock()
+            .unwrap()
+            .insert(agent.into(), token.clone());
+        token
+    }
+
+    /// Takes back `agent`'s token: its endpoint answers no one until another is issued.
+    pub fn revoke_token(&self, agent: &str) {
+        self.tokens
+            .lock()
+            .unwrap()
+            .insert(agent.into(), String::new());
+    }
+
+    /// True when a call to `agent`'s endpoint with `authorization` (the header's value) may go
+    /// through: the agent was never given a token, or this is it.
+    pub fn token_ok(&self, agent: &str, authorization: Option<&str>) -> bool {
+        match self.tokens.lock().unwrap().get(agent) {
+            None => true,
+            Some(t) => {
+                let given = authorization.and_then(|a| a.strip_prefix("Bearer "));
+                !t.is_empty() && given == Some(t.as_str())
+            }
+        }
     }
 
     pub fn handoff_note(&self, agent: &str) -> Option<String> {
@@ -92,6 +242,58 @@ impl BranchCtx {
     /// Holds the branch gate: no tool call runs on the world until the guard drops.
     pub async fn gate(&self) -> tokio::sync::MutexGuard<'_, ()> {
         self.gate.lock().await
+    }
+
+    /// Records an event of this branch with the world clock paused: recording is arena's work.
+    pub async fn append(
+        &self,
+        store: &Store,
+        agent: Option<&str>,
+        kind: EventKind,
+        payload: Value,
+    ) -> anyhow::Result<Event> {
+        let _paused = self.clock.paused();
+        store.append(&self.branch_id, agent, kind, payload).await
+    }
+
+    /// Pauses the branch: new tool calls and model calls wait and the world clock stands still
+    /// until `resume`. Records `Pause`; false when the branch wasn't running.
+    pub async fn pause(&self, store: &Store) -> anyhow::Result<bool> {
+        if !self.flow.pause() {
+            return Ok(false);
+        }
+        self.clock.pause();
+        self.append(store, None, EventKind::Pause, json!({}))
+            .await?;
+        Ok(true)
+    }
+
+    /// Resumes a paused branch: the calls that wait go on and the clock runs again. Records
+    /// `Resume` with how long the pause lasted (counted as arena's time, not the run's); false
+    /// when the branch wasn't paused.
+    pub async fn resume(&self, store: &Store) -> anyhow::Result<bool> {
+        let Some(lasted) = self.flow.resume() else {
+            return Ok(false);
+        };
+        let ms = lasted.as_secs_f64() * 1000.0;
+        overhead::add(&self.branch_id, Cat::Pause, ms);
+        self.clock.resume();
+        let payload = json!({"paused_ms": ms.round() as i64});
+        self.append(store, None, EventKind::Resume, payload).await?;
+        Ok(true)
+    }
+
+    /// Waits for the branch gate, counting the wait as arena's overhead.
+    async fn gate_timed(&self) -> tokio::sync::MutexGuard<'_, ()> {
+        let since = std::time::Instant::now();
+        let guard = self.gate.lock().await;
+        overhead::add_since(&self.branch_id, Cat::Wait, since);
+        guard
+    }
+
+    /// True for the one caller that may end the branch: the first to ask.
+    pub fn claim_end(&self) -> bool {
+        !self.ending.swap(true, std::sync::atomic::Ordering::SeqCst)
     }
 
     /// Why the branch can't go on (a world program stopped), once that has happened.
@@ -112,23 +314,19 @@ pub struct ToolExec {
     pub store: Arc<Store>,
 }
 
-pub fn handoff_schema() -> Value {
-    json!({"name": "handoff",
-           "description": "Pass the conversation to the next agent with a note summarising what you learned and what remains. Call it exactly once, when you are done.",
-           "inputSchema": {"type": "object",
-                           "properties": {"note": {"type": "string"}},
-                           "required": ["note"]}})
-}
-
-/// The world's tools in MCP shape (`name`, `description`, `inputSchema`), plus `handoff` when asked.
-pub fn tool_schemas(world: &World, with_handoff: bool) -> Vec<Value> {
-    let mut list: Vec<Value> = world
+/// The tools `agent` gets on `branch`, in MCP shape (`name`, `description`, `inputSchema`): the
+/// world's (only its read tools when the agent's team made it read-only, only those its setup lists
+/// when it lists some), and the tools agents talk with (see `talk`).
+pub fn tool_schemas(branch: &BranchCtx, agent: &str) -> Vec<Value> {
+    let read_only = branch.read_only(agent);
+    let mut list: Vec<Value> = branch
+        .world
         .tools()
+        .filter(|t| !read_only || t.effect != Effect::Write)
+        .filter(|t| branch.may_use(agent, &t.name))
         .map(|t| json!({"name": t.name, "description": t.description, "inputSchema": t.input_schema}))
         .collect();
-    if with_handoff {
-        list.push(handoff_schema());
-    }
+    list.extend(talk::schemas(branch, agent));
     list
 }
 
@@ -137,11 +335,44 @@ pub fn tool_schemas(world: &World, with_handoff: bool) -> Vec<Value> {
 struct CallFacts {
     part: Option<String>,
     reads: Vec<String>,
+    /// The world's keys the call wrote.
     writes: Vec<String>,
+    /// The part's internal keys it wrote: the part is saved for them, but the step is no write.
+    internal: Vec<String>,
     saves: Option<Saves>,
     save_error: Option<String>,
     clock_ms: Option<i64>,
     paused_ms: Option<i64>,
+    duration_ms: Option<f64>,
+    /// Events the call gave the world, reported after the call is recorded.
+    events: Vec<PartEvent>,
+}
+
+impl CallFacts {
+    /// What a call on `part` gave back besides its outcome: its reads, writes (the world's and
+    /// the internal ones apart) and events.
+    fn of_output(part: Option<String>, output: ToolOutput, clock_ms: i64) -> CallFacts {
+        let (writes, internal) = ToolOutput::split_writes(output.writes);
+        CallFacts {
+            events: part_events(part.as_deref(), output.events, clock_ms),
+            part,
+            reads: output.reads,
+            writes,
+            internal,
+            clock_ms: Some(clock_ms),
+            ..CallFacts::default()
+        }
+    }
+
+    /// True when the call changed its part at all, internal keys included: it must be saved.
+    fn changed_part(&self) -> bool {
+        !self.writes.is_empty() || !self.internal.is_empty()
+    }
+
+    /// True when the call wrote the world's state (internal keys aside): a step that wrote.
+    fn wrote_world(&self) -> bool {
+        self.part.is_some() && !self.writes.is_empty()
+    }
 }
 
 fn tool_call_payload(
@@ -158,6 +389,7 @@ fn tool_call_payload(
         error: outcome.as_ref().err().cloned(),
         reads: json!(f.reads),
         writes: json!(f.writes),
+        internal: f.internal,
         snapshot: f.saves.as_ref().and_then(|s| s.get(LEGACY_PART).cloned()),
         snapshot_error: f.save_error,
         tool_call_id,
@@ -165,6 +397,7 @@ fn tool_call_payload(
         saves: f.saves,
         clock_ms: f.clock_ms,
         paused_ms: f.paused_ms,
+        duration_ms: f.duration_ms,
     }
 }
 
@@ -186,14 +419,36 @@ fn world_event_payload(e: PartEvent) -> WorldEventPayload {
     }
 }
 
-/// Why `agent` may not run `name` now: the branch can't go on, or it writes and the agent is not
-/// the last one.
+/// `events` a tool call on `part` gave at `clock_ms`, as part events.
+fn part_events(part: Option<&str>, events: Box<[WorldEvent]>, clock_ms: i64) -> Vec<PartEvent> {
+    let Some(part) = part else {
+        return vec![];
+    };
+    events
+        .into_vec()
+        .into_iter()
+        .map(|event| PartEvent {
+            part: part.to_string(),
+            event,
+            clock_ms,
+        })
+        .collect()
+}
+
+/// Why `agent` may not run `name` now: the branch can't go on, its setup doesn't give it the tool,
+/// or it writes and the agent's team made it read-only.
 fn refusal(branch: &BranchCtx, agent: &str, name: &str) -> Option<String> {
     if let Some(f) = branch.fatal() {
         return Some(f);
     }
-    (branch.world.is_write(name) && !branch.is_last(agent))
-        .then(|| "Write tools are not available to this agent".to_string())
+    if branch.world.has_tool(name) && branch.has_agent(agent) && !branch.may_use(agent, name) {
+        return Some(format!(
+            "{name} is not available to this agent: its setup does not list it"
+        ));
+    }
+    (branch.world.is_write(name) && branch.read_only(agent)).then(|| {
+        "Write tools are not available to this agent: its team made it read-only".to_string()
+    })
 }
 
 /// Saves what changed with a step (the part written to, the clock parts that changed) with the
@@ -203,6 +458,7 @@ async fn save_step(branch: &BranchCtx, written: Option<&str>, facts: &mut CallFa
     let step = branch.world.save_changed(written).await;
     if !step.saves.is_empty() || step.error.is_some() {
         facts.paused_ms = Some(paused.elapsed_ms());
+        overhead::add(&branch.branch_id, Cat::Save, paused.elapsed_ms_f64());
     }
     facts.saves = (!step.saves.is_empty()).then_some(step.saves);
     facts.save_error = step.error.map(|e| failure(branch, e));
@@ -216,27 +472,6 @@ fn failure(branch: &BranchCtx, e: WorldError) -> String {
     } else {
         format!("internal error: {e}")
     }
-}
-
-/// Records `agent`'s handoff note, or says why it can't.
-fn take_handoff(branch: &BranchCtx, agent: &str, args: &Value) -> Result<String, String> {
-    let note = args
-        .get("note")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .unwrap_or("");
-    if branch.is_last(agent) {
-        return Err("handoff is not available to the last agent".to_string());
-    }
-    if note.is_empty() {
-        return Err("handoff() requires a non-empty 'note' string".to_string());
-    }
-    let mut h = branch.handoffs.lock().unwrap();
-    if h.contains_key(agent) {
-        return Err("handoff already sent".to_string());
-    }
-    h.insert(agent.to_string(), note.to_string());
-    Ok(note.to_string())
 }
 
 impl ToolExec {
@@ -271,19 +506,14 @@ impl ToolExec {
         self.advance(branch, branch.clock.now_ms()).await
     }
 
-    /// Advances the clock parts to `clock_ms` and records the events they report.
+    /// Advances the clock parts to `clock_ms` and reports the events they give.
     async fn advance(&self, branch: &BranchCtx, clock_ms: i64) -> Result<(), String> {
         let events = branch
             .world
             .advance_all(clock_ms)
             .await
             .map_err(|e| failure(branch, e))?;
-        for e in events {
-            let payload = world_event_payload(e);
-            self.record(branch, None, EventKind::WorldEvent, &payload)
-                .await?;
-        }
-        Ok(())
+        self.report(branch, events).await.map(drop)
     }
 
     /// Runs a tool call on the branch's world at the branch clock (the clock parts advanced to
@@ -304,15 +534,23 @@ impl ToolExec {
         if let Err(e) = self.advance(branch, clock).await {
             return (Err(e), facts);
         }
-        let Called { output, part } = match branch.world.call_tool(name, args.clone(), clock).await
-        {
+        let since = std::time::Instant::now();
+        let called = match branch.world.call_tool(name, args.clone(), clock).await {
             Ok(c) => c,
             Err(e) => return (Err(failure(branch, e)), facts),
         };
-        let outcome = outcome_of(&output);
-        (facts.part, facts.reads, facts.writes) = (part, output.reads, output.writes);
-        let wrote = outcome.is_ok() && !facts.writes.is_empty();
-        let written = facts.part.clone().filter(|_| wrote);
+        let gate_ms = called.gate_ms;
+        facts.duration_ms = Some((since.elapsed().as_secs_f64() * 1000.0 - gate_ms).max(0.0));
+        overhead::add(&branch.branch_id, Cat::Gate, gate_ms);
+        let outcome = outcome_of(&called.output);
+        let Called { output, part, .. } = called;
+        facts = CallFacts {
+            duration_ms: facts.duration_ms,
+            ..CallFacts::of_output(part, output, clock)
+        };
+        // A refused call may have changed its part anyway (a disruption fired), and a call that
+        // changed only internal keys must keep them: saved too.
+        let written = facts.part.clone().filter(|_| facts.changed_part());
         save_step(branch, written.as_deref(), &mut facts).await;
         (outcome, facts)
     }
@@ -326,49 +564,26 @@ impl ToolExec {
         args: Value,
         tool_call_id: Option<String>,
     ) -> Result<Value, String> {
-        let _gate = branch.gate().await;
-        if name == "handoff" {
-            return self.handoff(branch, agent, args, tool_call_id).await;
+        branch.flow.go().await.map_err(|_| STOPPED.to_string())?;
+        let _gate = branch.gate_timed().await;
+        if branch.is_closed() {
+            return Err(CLOSED.to_string());
         }
-        let (outcome, facts) = self.execute(branch, agent, name, &args).await;
+        if talk::is_talk(branch, name) {
+            return self.talk(branch, agent, name, args, tool_call_id).await;
+        }
+        let (outcome, mut facts) = self.execute(branch, agent, name, &args).await;
+        let events = std::mem::take(&mut facts.events);
+        let wrote = facts.wrote_world();
         let payload = tool_call_payload(name, args, &outcome, tool_call_id, facts);
-        self.record(branch, Some(agent), EventKind::ToolCall, &payload)
+        let seq = self
+            .record_seq(branch, Some(agent), EventKind::ToolCall, &payload)
             .await?;
-        outcome
-    }
-
-    async fn handoff(
-        &self,
-        branch: &BranchCtx,
-        agent: &str,
-        args: Value,
-        tool_call_id: Option<String>,
-    ) -> Result<Value, String> {
-        match take_handoff(branch, agent, &args) {
-            Ok(note) => {
-                self.record(
-                    branch,
-                    Some(agent),
-                    EventKind::Handoff,
-                    &HandoffPayload { note },
-                )
-                .await?;
-                Ok(json!({"ok": true}))
-            }
-            Err(e) => {
-                let outcome = Err(e);
-                let payload = tool_call_payload(
-                    "handoff",
-                    args,
-                    &outcome,
-                    tool_call_id,
-                    CallFacts::default(),
-                );
-                self.record(branch, Some(agent), EventKind::ToolCall, &payload)
-                    .await?;
-                outcome
-            }
+        let linked = self.report(branch, events).await?;
+        if let Some(seq_of) = linked.or(wrote.then_some(seq)) {
+            self.record_view(branch, seq_of).await;
         }
+        outcome
     }
 
     async fn record<T: serde::Serialize>(
@@ -378,11 +593,24 @@ impl ToolExec {
         kind: EventKind,
         payload: &T,
     ) -> Result<(), String> {
+        self.record_seq(branch, agent, kind, payload)
+            .await
+            .map(drop)
+    }
+
+    /// Records an event; its seq.
+    async fn record_seq<T: serde::Serialize>(
+        &self,
+        branch: &BranchCtx,
+        agent: Option<&str>,
+        kind: EventKind,
+        payload: &T,
+    ) -> Result<i64, String> {
         let v = serde_json::to_value(payload).map_err(|e| format!("internal error: {e}"))?;
-        self.store
-            .append(&branch.branch_id, agent, kind, v)
+        let e = branch
+            .append(&self.store, agent, kind, v)
             .await
             .map_err(|e| format!("internal error: recording event: {e:#}"))?;
-        Ok(())
+        Ok(e.seq)
     }
 }

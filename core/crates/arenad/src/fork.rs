@@ -17,9 +17,11 @@ use crate::{
     app::AppState,
     clock::BranchClock,
     exec::BranchCtx,
+    external,
     model::*,
+    overhead::{self, Cat},
     providers::ProviderConfig,
-    recorded::{run_info, saves_at_except},
+    recorded::{self, run_info, saves_at_except},
     restore::{restored, Refused},
     runner::{self, StartPoint},
     world::Saves,
@@ -31,12 +33,17 @@ pub const REASON_EARLIER: &str = "a change targets an agent that finished earlie
 pub const REASON_CLI: &str = "Claude Code and Codex sessions restart from the agent's start";
 pub const REASON_KIND: &str = "the agent's mode changes";
 pub const REASON_TOOL: &str = "a tool call is redone from the model call that chose it";
+pub const REASON_CONCURRENT: &str = "agents that ran at once all restart from the run's start";
 pub const REASON_RUN_START: &str = "the run restarts from the first agent's start";
+pub const REASON_FINISHED: &str = "the lead had finished the run: the fork starts at its finish";
 pub const REASON_AGENT_RESTART: &str = "the agent restarts from its first start";
 pub const REASON_LAST_MODEL_CALL: &str =
     "the step is redone from the agent's last model call before it";
 pub const REASON_NO_MODEL_CALL: &str =
     "the agent made no model call to resume from, so it restarts from its start";
+pub const TEAM_NOT_EXTERNAL: &str =
+    "a fork can change the whole team only in a run an external system drives; change its agents instead";
+pub const TEAM_AND_CHANGES: &str = "give a fork either agent changes or a new team, not both";
 
 /// Where a fork actually starts, and what it carries over.
 #[derive(Debug, Clone, PartialEq)]
@@ -75,6 +82,8 @@ pub enum ForkError {
     ReplayDiverged { part: String, seq: i64 },
     /// A part to replay runs on a different machine or version than when the run started.
     FingerprintMismatch { part: String },
+    /// A team change the run can't take (see [`ForkRequest::team`]).
+    TeamChange(&'static str),
     /// Storage or database failure.
     Internal(anyhow::Error),
 }
@@ -100,6 +109,7 @@ impl std::fmt::Display for ForkError {
                 f,
                 "the {part} integration is running on a different machine or version than the original"
             ),
+            ForkError::TeamChange(why) => write!(f, "{why}"),
             ForkError::Internal(e) => write!(f, "fork failed: {e:#}"),
         }
     }
@@ -119,6 +129,15 @@ pub struct ForkResponse {
     pub start_seq: i64,
     pub moved_from: Option<i64>,
     pub reason: Option<String>,
+    /// For a run an external system drives: each agent's recorded history before `start_seq`
+    /// and its endpoints on the new branch, which is live and waits for the system to resume it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agents: Option<Vec<external::Resumable>>,
+    /// For a run a Code connection drives: `relaunched` when arenad started its driver again for
+    /// the new branch (with `ARENA_FORK_OF`), `failed` when it couldn't (the branch then ended
+    /// `failed`, saying why).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub driver: Option<&'static str>,
 }
 
 /// True when `c` changes the agent's mode (a kind equal to the current one is no change).
@@ -172,9 +191,16 @@ pub fn settle_changes(
     }
 }
 
-/// A provider change is a model change: the fork rules treat both alike.
+/// True when `c` makes the agent read-only or lets it write again.
+fn changes_read_only(c: &Change, spec: &AgentSpec) -> bool {
+    c.read_only.is_some_and(|r| r != spec.read_only)
+}
+
+/// A provider change is a model change: the fork rules treat both alike. A read-only change is
+/// treated like a prompt change.
 fn is_change(c: &Change, spec: &AgentSpec) -> bool {
     c.prompt.is_some()
+        || changes_read_only(c, spec)
         || changes_model(c, spec)
         || changes_provider(c, spec)
         || changes_kind(c, spec)
@@ -233,6 +259,70 @@ impl Planner<'_> {
                 let id = s.agent.clone().unwrap_or_default();
                 index_of(self.team, &id).ok_or(ForkError::UnknownAgent(id))
             }
+        }
+    }
+
+    /// Where the fork starts under the run's runner.
+    fn start_under(
+        &self,
+        rules: Rules,
+        changes: &HashMap<String, Change>,
+        changed: &[usize],
+    ) -> Result<Start, ForkError> {
+        Ok(match rules.runner {
+            Runner::Concurrent => self.restart_all(),
+            Runner::External => self.at_point(),
+            Runner::Dispatch => self.dispatch_point(),
+            Runner::Chain => self.start_for(changes, changed, self.active_agent()?)?,
+        })
+    }
+
+    /// A concurrent run's agents all restart, from the first agent's start (or right after
+    /// `RunStart` if none began).
+    fn restart_all(&self) -> Start {
+        let first = self.events.iter().find(|e| e.kind == EventKind::AgentStart);
+        Start {
+            seq: first.map_or(self.at_seq + 1, |e| e.seq),
+            reason: Some(REASON_CONCURRENT),
+            agent: 0,
+            resume: None,
+        }
+    }
+
+    /// A dispatch run forks where asked: every agent restarts there in a new session with its
+    /// recorded history (see `crate::dispatch`). Asked for `RunStart`, it starts at the first
+    /// agent's start; asked for a step after the lead's finish, at the finish.
+    fn dispatch_point(&self) -> Start {
+        if self.at.kind == EventKind::RunStart {
+            let first = self.events.iter().find(|e| e.kind == EventKind::AgentStart);
+            return Start {
+                seq: first.map_or(self.at_seq + 1, |e| e.seq),
+                reason: Some(REASON_RUN_START),
+                agent: 0,
+                resume: None,
+            };
+        }
+        let finish = self
+            .events
+            .iter()
+            .find(|e| e.kind == EventKind::Finish && e.seq < self.at_seq);
+        Start {
+            seq: finish.map_or(self.at_seq, |f| f.seq),
+            reason: finish.map(|_| REASON_FINISHED),
+            agent: 0,
+            resume: None,
+        }
+    }
+
+    /// A run an external system drives forks where asked (right after `RunStart` when asked for
+    /// it): how its agents resume is the system's choice.
+    fn at_point(&self) -> Start {
+        let after_start = self.at.kind == EventKind::RunStart;
+        Start {
+            seq: self.at_seq + i64::from(after_start),
+            reason: after_start.then_some(REASON_RUN_START),
+            agent: 0,
+            resume: None,
         }
     }
 
@@ -388,8 +478,8 @@ pub fn plan_fork_with(
         at_seq,
         at,
     };
-    let active = planner.active_agent()?;
-    let mut start = planner.start_for(changes, &changed, active)?;
+    let rules = recorded::rules(events);
+    let mut start = planner.start_under(rules.clone(), changes, &changed)?;
     let a = start.agent;
     if start.seq == planner.first_start(a).unwrap_or(i64::MIN) {
         start.resume = None;
@@ -397,7 +487,11 @@ pub fn plan_fork_with(
     // 5. The world just before the start: per part, the save of its last write before it.
     let restore = saves_at_except(events, start.seq - 1, &run_info(events).base, replayed)
         .map_err(|n| ForkError::NoRestorePoint { seq: n.seq })?;
-    let notes = planner.handoff_notes(a, start.seq)?;
+    let notes = match rules.handoff_required {
+        true => planner.handoff_notes(a, start.seq)?,
+        // An agent's input then has the notes recorded before its start, copied with the prefix.
+        false => vec![],
+    };
     Ok(finish_plan(start, at_seq, restore, notes))
 }
 
@@ -414,7 +508,8 @@ fn finish_plan(start: Start, at_seq: i64, restore: Saves, notes: Vec<String>) ->
     }
 }
 
-/// `team` with each agent's prompt/model/kind/provider replaced where `changes` sets them.
+/// `team` with each agent's prompt/model/kind/provider/read_only replaced where `changes` sets
+/// them.
 pub fn apply_changes(team: &Team, changes: &HashMap<String, Change>) -> Team {
     let mut t = team.clone();
     for spec in &mut t.agents {
@@ -442,6 +537,9 @@ fn apply_change(spec: &mut AgentSpec, c: &Change) {
     if let Some(k) = c.kind {
         spec.kind = k;
     }
+    if let Some(r) = c.read_only {
+        spec.read_only = r;
+    }
 }
 
 /// Forks `branch_id` at `at_seq` with `changes`, restoring exactly, and starts the new branch.
@@ -456,6 +554,7 @@ pub async fn fork(
         at_seq,
         changes,
         restore,
+        team: None,
     };
     fork_with(state, branch_id, req).await
 }
@@ -472,12 +571,94 @@ pub async fn fork_with(
     let events = state.store.events(branch_id).await?;
     let mut rerun = prepare(state, &parent, &events, &req).await?;
     let task_id = task_of(state, &events, &parent).await?;
-    let team = apply_changes(&parent.team, &req.changes);
+    let team = new_team(&parent.team, &events, &req)?;
     let new_id = create_child(state, &parent, &rerun, &team, &req).await?;
     let world = start_child_world(state, &events, &parent.id, &new_id, &mut rerun).await?;
-    let ctx = BranchCtx::new(new_id, Arc::new(world), team, task_id)
+    let ctx = BranchCtx::new(new_id, Arc::new(world), team, task_id.clone())
+        .with_rules(recorded::rules(&events))
         .with_clock(BranchClock::from_env(rerun.clock_ms));
+    if ctx.rules.runner == Runner::External {
+        let conn = ctx.rules.connection.clone();
+        let mut res = live_child(state, ctx, rerun.plan, &events).await;
+        if let Some(conn) = conn {
+            let ids = (parent.run_id.as_str(), parent.id.as_str(), task_id.as_str());
+            res.driver = Some(relaunch(state, &conn, ids, &res.branch_id).await);
+        }
+        return Ok(res);
+    }
     Ok(spawn_child(state, ctx, rerun.plan))
+}
+
+/// Starts the Code connection `conn_id`'s driver again for the new branch `branch_id` of a fork
+/// of `(run, parent, task)`: `relaunched`, or `failed` (the branch ended `failed`, saying why).
+async fn relaunch(
+    state: &Arc<AppState>,
+    conn_id: &str,
+    (run_id, parent, task_id): (&str, &str, &str),
+    branch_id: &str,
+) -> &'static str {
+    let found = state.store.connection(conn_id).await;
+    let found = found.map_err(|e| format!("reading the Code connection: {e:#}"));
+    let gone = || format!("the Code connection {conn_id} was deleted");
+    let conn = match found.and_then(|c| c.ok_or_else(gone)) {
+        Ok(c) => c,
+        Err(why) => return driver_gone(state, branch_id, why).await,
+    };
+    let ids = crate::driver::RunIds {
+        run_id,
+        branch_id,
+        task_id,
+        fork_of: Some(parent),
+    };
+    match crate::driver::launch_or_fail(state, &conn, ids).await {
+        Some(_) => "relaunched",
+        None => "failed",
+    }
+}
+
+/// Ends the new branch `failed` (scored) because its driver can't be started: `failed`.
+async fn driver_gone(state: &Arc<AppState>, branch_id: &str, why: String) -> &'static str {
+    let ctx = state.live.read().unwrap().get(branch_id).cloned();
+    if let Some(ctx) = ctx {
+        runner::finish_failed(state, &ctx, why).await;
+    }
+    "failed"
+}
+
+/// The new branch's team: the one the request gives (a run an external system drives only, and
+/// without agent changes), else the parent's with the changes applied.
+fn new_team(parent: &Team, events: &[Event], req: &ForkRequest) -> Result<Team, ForkError> {
+    let Some(team) = &req.team else {
+        return Ok(apply_changes(parent, &req.changes));
+    };
+    if recorded::rules(events).runner != Runner::External {
+        return Err(ForkError::TeamChange(TEAM_NOT_EXTERNAL));
+    }
+    if !req.changes.is_empty() {
+        return Err(ForkError::TeamChange(TEAM_AND_CHANGES));
+    }
+    Ok(team.clone())
+}
+
+/// Makes the new branch of an external run live, for its system to resume: the response gives
+/// each agent's history before the fork point and its endpoints.
+async fn live_child(
+    state: &AppState,
+    ctx: BranchCtx,
+    plan: ForkPlan,
+    events: &[Event],
+) -> ForkResponse {
+    let (branch_id, base) = (ctx.branch_id.clone(), &state.config.self_base);
+    let agents = external::resumables(base, &branch_id, &ctx.team, events, plan.start_seq);
+    runner::go_live(state, Arc::new(ctx)).await;
+    ForkResponse {
+        branch_id,
+        start_seq: plan.start_seq,
+        moved_from: plan.moved_from,
+        reason: plan.reason,
+        agents: Some(agents),
+        driver: None,
+    }
 }
 
 /// How each part of a fork of `branch_id` at `at_seq` would be restored in `mode` (what the
@@ -498,6 +679,7 @@ pub async fn restore_preview(
         at_seq,
         changes: HashMap::new(),
         restore,
+        team: None,
     };
     let rerun = prepare(state, &branch, &events, &req).await?;
     Ok(part_plans(&rerun, &events))
@@ -529,6 +711,8 @@ fn spawn_child(state: &Arc<AppState>, ctx: BranchCtx, plan: ForkPlan) -> ForkRes
         start_seq,
         moved_from,
         reason,
+        agents: None,
+        driver: None,
     }
 }
 
@@ -553,7 +737,8 @@ async fn create_child(
     let changes_json = serde_json::to_value(&req.changes)?;
     let plan = &rerun.plan;
     let from = Some((parent.id.as_str(), plan.start_seq));
-    let note = plan.reason.clone();
+    let swapped = (req.team.as_ref()).map(|t| format!("the team changed to {}", t.name));
+    let note = plan.reason.clone().or(swapped);
     let store = &state.store;
     let id = store
         .create_branch(&parent.run_id, from, team, &changes_json, note)
@@ -592,7 +777,10 @@ async fn start_child_world(
     let started = async {
         let start = rerun.plan.start_seq;
         state.store.copy_prefix(parent, new_id, start).await?;
-        rerun::start_world(state, events, new_id, rerun).await
+        let since = std::time::Instant::now();
+        let world = rerun::start_world(state, events, new_id, rerun).await?;
+        overhead::add_since(new_id, Cat::Restore, since);
+        Ok(world)
     }
     .await;
     if let Err(e) = &started {
@@ -612,12 +800,17 @@ mod tests {
 
     fn spec(id: &str, kind: AgentKind) -> AgentSpec {
         AgentSpec {
+            tools: Vec::new(),
             id: id.into(),
             name: id.into(),
             kind,
             model: None,
             prompt: format!("You are {id}."),
             provider: None,
+            read_only: false,
+            lead: false,
+            url: None,
+            headers: Default::default(),
         }
     }
 
@@ -716,6 +909,74 @@ mod tests {
 
     fn change(agent: &str, c: Change) -> HashMap<String, Change> {
         [(agent.to_string(), c)].into_iter().collect()
+    }
+
+    /// `events()` as a run of today recorded it, with `runner`.
+    fn events_of(runner: &str) -> Vec<Event> {
+        let mut evs = events();
+        evs[0].payload = json!({"task_id": "27", "runner": runner, "handoff": "optional"});
+        evs
+    }
+
+    #[test]
+    fn only_an_external_run_takes_another_team_and_not_with_changes() {
+        let start =
+            |runner: &str| vec![ev(1, None, EventKind::RunStart, json!({"runner": runner}))];
+        let id = "single".to_string();
+        let mut req = ForkRequest {
+            at_seq: 1,
+            changes: HashMap::new(),
+            restore: parts::proto::Mode::Exact,
+            team: Some(Team {
+                id,
+                ..team(AgentKind::Open)
+            }),
+        };
+        let parent = team(AgentKind::Open);
+        let refused = new_team(&parent, &start("chain"), &req);
+        assert!(matches!(
+            refused,
+            Err(ForkError::TeamChange(TEAM_NOT_EXTERNAL))
+        ));
+        let swapped = new_team(&parent, &start("external"), &req).unwrap();
+        assert_eq!(swapped.id, "single");
+        let prompt = Some("x".to_string());
+        req.changes.insert(
+            "triage".into(),
+            Change {
+                prompt,
+                ..Change::default()
+            },
+        );
+        let both = new_team(&parent, &start("external"), &req);
+        assert!(matches!(both, Err(ForkError::TeamChange(TEAM_AND_CHANGES))));
+    }
+
+    #[test]
+    fn a_concurrent_run_restarts_every_agent() {
+        let p = plan_fork(
+            &events_of("concurrent"),
+            &team(AgentKind::Open),
+            12,
+            &no_changes(),
+        );
+        let p = p.unwrap();
+        assert_eq!((p.start_seq, p.agent_index), (2, 0));
+        assert_eq!(p.reason.as_deref(), Some(REASON_CONCURRENT));
+        assert_eq!((p.restore, p.resume, p.notes), (base(), None, vec![]));
+    }
+
+    #[test]
+    fn a_new_chain_needs_no_handoff_to_fork_after_it() {
+        let mut evs = events_of("chain");
+        evs.retain(|e| e.kind != EventKind::Handoff);
+        let p = plan_fork(&evs, &team(AgentKind::Open), 11, &no_changes()).unwrap();
+        assert_eq!((p.start_seq, p.agent_index, p.notes), (11, 1, vec![]));
+        // A legacy run without the handoff can't be forked there.
+        let mut legacy = events();
+        legacy.retain(|e| e.kind != EventKind::Handoff);
+        let refused = plan_fork(&legacy, &team(AgentKind::Open), 11, &no_changes());
+        assert!(matches!(refused, Err(ForkError::MissingHandoff(_))));
     }
 
     #[test]
@@ -1109,6 +1370,20 @@ mod tests {
         let c = change(&id, empty);
         let p = plan_fork(&events(), &t, 11, &c).unwrap();
         assert_eq!((p.start_seq, p.moved_from), (11, None));
+    }
+
+    #[test]
+    fn a_read_only_change_is_carried_and_only_counts_when_it_differs() {
+        let t = team(AgentKind::Open);
+        let ro = |r: bool| Change {
+            read_only: Some(r),
+            ..Default::default()
+        };
+        assert!(!is_change(&ro(false), &t.agents[0]));
+        assert!(is_change(&ro(true), &t.agents[0]));
+        let id = t.agents[0].id.clone();
+        let forked = apply_changes(&t, &change(&id, ro(true)));
+        assert!(forked.agents[0].read_only && !forked.agents[1].read_only);
     }
 
     #[test]

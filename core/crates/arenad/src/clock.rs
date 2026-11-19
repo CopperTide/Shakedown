@@ -22,6 +22,8 @@ struct State {
     running_since: Option<Instant>,
     /// Open pauses; the clock runs when there are none.
     pauses: u32,
+    /// Set by `freeze`: the clock never runs again.
+    frozen: bool,
     speed: f64,
 }
 
@@ -52,6 +54,7 @@ impl BranchClock {
                 counted: base_ms as f64,
                 running_since: Some(Instant::now()),
                 pauses: 0,
+                frozen: false,
                 speed,
             }),
         }
@@ -66,10 +69,9 @@ impl BranchClock {
         self.state.lock().unwrap().now_ms() as i64
     }
 
-    pub fn set_speed(&self, speed: f64) {
-        let mut s = self.state.lock().unwrap();
-        s.settle();
-        s.speed = speed;
+    /// How many clock ms pass per real ms while the clock runs.
+    pub fn speed(&self) -> f64 {
+        self.state.lock().unwrap().speed
     }
 
     /// Stops the clock until the matching `resume` (pauses nest).
@@ -84,9 +86,17 @@ impl BranchClock {
     pub fn resume(&self) {
         let mut s = self.state.lock().unwrap();
         s.pauses = s.pauses.saturating_sub(1);
-        if s.pauses == 0 && s.running_since.is_none() {
+        if s.pauses == 0 && !s.frozen && s.running_since.is_none() {
             s.running_since = Some(Instant::now());
         }
+    }
+
+    /// Stops the clock for good (a later `freeze` changes nothing; it never resumes).
+    pub fn freeze(&self) {
+        let mut s = self.state.lock().unwrap();
+        s.settle();
+        s.frozen = true;
+        s.running_since = None;
     }
 
     /// Pauses the clock until the returned guard drops; the guard tells how long it was held.
@@ -109,6 +119,11 @@ impl Paused<'_> {
     /// Real milliseconds since the pause began.
     pub fn elapsed_ms(&self) -> i64 {
         self.since.elapsed().as_millis() as i64
+    }
+
+    /// Real milliseconds since the pause began, with the fraction kept.
+    pub fn elapsed_ms_f64(&self) -> f64 {
+        crate::overhead::ms_since(self.since)
     }
 }
 
@@ -158,13 +173,20 @@ mod tests {
     }
 
     #[test]
+    fn a_frozen_clock_stays_frozen() {
+        let c = BranchClock::new(0, 1.0);
+        c.freeze();
+        let t = c.now_ms();
+        drop(c.paused());
+        c.freeze();
+        sleep(30);
+        assert_eq!(c.now_ms(), t);
+    }
+
+    #[test]
     fn speed_scales_real_time() {
         let c = BranchClock::new(0, 4.0);
         sleep(50);
         assert!(c.now_ms() >= 190, "{}", c.now_ms());
-        c.set_speed(0.0);
-        let t = c.now_ms();
-        sleep(30);
-        assert_eq!(c.now_ms(), t);
     }
 }

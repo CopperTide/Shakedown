@@ -3,3 +3,8 @@ ui/node_modules/
 ui/dist/
 .superpowers/
 core/saves/
+__pycache__/
+ui/lint/node_modules/
+
+# Local git worktrees
+/.worktrees/

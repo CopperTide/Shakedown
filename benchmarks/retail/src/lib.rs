@@ -67,18 +67,27 @@ fn schemas() -> Vec<ToolSchema> {
         .collect()
 }
 
+impl Retail {
+    /// The demo tasks, each with its ticket.
+    fn task_infos(&self) -> Vec<TaskInfo> {
+        let task = |(id, reason): (String, String)| {
+            let ticket = self.tasks.ticket(&id).unwrap_or_default();
+            TaskInfo {
+                id,
+                reason,
+                ticket,
+                setup: vec![],
+                clock_start: None,
+            }
+        };
+        self.tasks.demo().into_iter().map(task).collect()
+    }
+}
+
 #[async_trait]
 impl Benchmark for Retail {
     async fn describe(&self) -> R<BenchDescribe> {
-        let tasks = self
-            .tasks
-            .demo()
-            .into_iter()
-            .map(|(id, reason)| {
-                let ticket = self.tasks.ticket(&id).unwrap_or_default();
-                TaskInfo { id, reason, ticket }
-            })
-            .collect();
+        let tasks = self.task_infos();
         Ok(BenchDescribe {
             name: "retail".into(),
             version: "0.1.0".into(),
@@ -90,9 +99,15 @@ impl Benchmark for Retail {
             }],
             tasks,
             instructions: self.policy.clone(),
+            teams: vec![],
             instructions_title: Some(team::INSTRUCTIONS_TITLE.into()),
             team: Some(team::team()),
             tools: schemas(),
+            links: vec![],
+            gates: vec![],
+            scored: false,
+            scenario_options: None,
+            view: None,
         })
     }
 

@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Instant};
 
 use anyhow::{anyhow, Result};
 use parts::proto::BenchDescribe;
@@ -7,11 +7,14 @@ use serde_json::{json, Value};
 use crate::{
     agents::{AgentResult, AgentRun, Driver, FailureKind},
     app::AppState,
-    exec::BranchCtx,
+    exec::{mail_for, BranchCtx, ToolExec},
     model::*,
+    overhead::{self, Cat},
     prompts,
+    scenario::{self, Scenario},
     store::{BranchId, RunId},
     world::{self, Plan, World, WorldFrom},
+    world_clock::WorldClock,
 };
 
 /// Where a branch's work starts. `notes[j]` is the recorded handoff note of agent `j`
@@ -22,6 +25,9 @@ pub struct StartPoint {
     pub resume: Option<Vec<Value>>,
     pub notes: Vec<String>,
 }
+
+/// The largest seed a run may ask for: below 2^53, so every JSON reader keeps it exact.
+pub const MAX_SEED: u64 = (1 << 53) - 1;
 
 /// A new branch seed: random, below 2^53 so every JSON reader keeps it exact.
 fn new_seed() -> u64 {
@@ -41,13 +47,63 @@ impl std::fmt::Display for UnknownTask {
 impl std::error::Error for UnknownTask {}
 
 /// Creates a run and its first branch (its world started from the benchmark's base save),
-/// records `RunStart`, and runs the team on a spawned task. A world whose tools clash is
-/// refused before anything is recorded.
+/// records `RunStart`, and runs the team on a spawned task, one agent after another. A world
+/// whose tools clash is refused before anything is recorded.
 pub async fn start_run(
     state: &Arc<AppState>,
     task_id: &str,
     team: Team,
 ) -> Result<(RunId, BranchId)> {
+    start_run_with(state, task_id, team, Runner::Chain).await
+}
+
+/// `start_run` with the agents run by `runner`.
+pub async fn start_run_with(
+    state: &Arc<AppState>,
+    task_id: &str,
+    team: Team,
+    runner: Runner,
+) -> Result<(RunId, BranchId)> {
+    start_run_in(state, task_id, team, runner, &Scenario::default()).await
+}
+
+/// `start_run_with` in `scenario` (its disruptions added to the task's setup).
+pub async fn start_run_in(
+    state: &Arc<AppState>,
+    task_id: &str,
+    team: Team,
+    runner: Runner,
+    scenario: &Scenario,
+) -> Result<(RunId, BranchId)> {
+    start_run_capped(state, task_id, team, runner, scenario, None).await
+}
+
+/// `start_run_in` with a model-spend limit (`None`: `ARENA_MAX_COST_USD`, else no limit).
+pub async fn start_run_capped(
+    state: &Arc<AppState>,
+    task_id: &str,
+    team: Team,
+    runner: Runner,
+    scenario: &Scenario,
+    max_cost_usd: Option<f64>,
+) -> Result<(RunId, BranchId)> {
+    let rules = Rules::new(runner).with_max_cost(max_cost_usd);
+    let (run_id, ctx) = begin_run(state, task_id, team, rules, scenario).await?;
+    let branch_id = ctx.branch_id.clone();
+    spawn_branch(state, Arc::new(ctx), StartPoint::default());
+    Ok((run_id, branch_id))
+}
+
+/// Creates a run and its first branch, starts its world from the base save, records `RunStart`
+/// with `rules` and `scenario`, and makes the task's setup (with the scenario's disruptions): the
+/// branch, ready to be driven.
+pub async fn begin_run(
+    state: &AppState,
+    task_id: &str,
+    team: Team,
+    rules: Rules,
+    scenario: &Scenario,
+) -> Result<(RunId, BranchCtx)> {
     let bench = state.bench().await?;
     if !bench.tasks.iter().any(|t| t.id == task_id) {
         return Err(UnknownTask(task_id.to_string()).into());
@@ -58,16 +114,58 @@ pub async fn start_run(
         .store
         .create_branch(&run_id, None, &team, &json!([]), None)
         .await?;
-    let started = start_world(state, &bench, planned, &branch_id, task_id, &team).await;
-    let world = setup_or_infra_error(state, &branch_id, started).await?;
-    let ctx = Arc::new(BranchCtx::new(
-        branch_id.clone(),
-        Arc::new(world),
-        team,
-        task_id.to_string(),
-    ));
-    spawn_branch(state, ctx, StartPoint::default());
-    Ok((run_id, branch_id))
+    let start = RunStartOf {
+        branch_id: &branch_id,
+        task_id,
+        team: &team,
+        rules: rules.clone(),
+        scenario,
+    };
+    let started = start_world(state, &bench, planned, start).await;
+    let (world, start_seq) = setup_or_infra_error(state, &branch_id, started).await?;
+    let ctx = BranchCtx::new(branch_id, Arc::new(world), team, task_id.to_string());
+    let ctx = ctx.with_rules(rules);
+    set_up_task(state, &bench, &ctx, scenario, start_seq).await?;
+    Ok((run_id, ctx))
+}
+
+/// Makes the task's setup calls (with `scenario`'s disruptions) on a new run's world, then records
+/// the world's view after them (after `RunStart`, at `start_seq`, when nothing was written); when
+/// a call fails, stops the world and ends the branch `infra_error` with why.
+async fn set_up_task(
+    state: &AppState,
+    bench: &BenchDescribe,
+    ctx: &BranchCtx,
+    scenario: &Scenario,
+    start_seq: i64,
+) -> Result<()> {
+    let task = bench.tasks.iter().find(|t| t.id == ctx.task_id);
+    let task_calls = task.map_or(&[][..], |t| &t.setup[..]);
+    let exec = ToolExec::new(state.store.clone());
+    let calls = scenario::setup_calls(task_calls, scenario, bench.scenario_options.as_ref());
+    let done = match calls {
+        Ok(calls) => exec.setup(ctx, &calls).await,
+        Err(e) => Err(e),
+    };
+    let e = match done {
+        Ok(wrote) => {
+            exec.record_view(ctx, wrote.unwrap_or(start_seq)).await;
+            return Ok(());
+        }
+        Err(e) => e,
+    };
+    ctx.world.stop().await;
+    setup_failed(state, &ctx.branch_id, e.clone()).await;
+    Err(anyhow!(e))
+}
+
+/// What a run's `RunStart` records besides its world.
+struct RunStartOf<'a> {
+    branch_id: &'a str,
+    task_id: &'a str,
+    team: &'a Team,
+    rules: Rules,
+    scenario: &'a Scenario,
 }
 
 /// A new branch's setup result; a failed setup ends the branch `infra_error` with its message.
@@ -89,38 +187,63 @@ pub async fn setup_failed(state: &AppState, branch_id: &str, error: String) {
 }
 
 /// Starts the first branch's world from the base save and records `RunStart`:
-/// `{task_id, team, benchmark, world, seed, base_seed, fingerprints, saves}` (`saves` names only
-/// the parts that keep saves; `base_seed` is the seed the base save was made with).
+/// `{task_id, team, benchmark, world, seed, base_seed, fingerprints, saves, runner, handoff,
+/// systems, tools, scenario?}` (`saves` names only the parts that keep saves; `base_seed` is the
+/// seed the base save was made with; `runner` and `handoff` are the run's rules; `systems` and
+/// `tools` are what `World::systems` and `World::tool_info` say; `scenario` the expanded scenario,
+/// when the run has one). The world, and `RunStart`'s seq.
 async fn start_world(
     state: &AppState,
     bench: &BenchDescribe,
     planned: Plan,
-    branch_id: &str,
-    task_id: &str,
-    team: &Team,
-) -> Result<World> {
-    let seed = new_seed();
+    of: RunStartOf<'_>,
+) -> Result<(World, i64)> {
+    let branch_id = of.branch_id;
+    let seed = of.scenario.seed.unwrap_or_else(new_seed);
     let hub = state.hub.clone();
+    let since = Instant::now();
     let world = World::start_planned(hub, bench, planned, branch_id, seed, WorldFrom::Base).await?;
-    let start = json!({
-        "task_id": task_id,
-        "team": team,
+    overhead::add_since(branch_id, Cat::Restore, since);
+    let start = run_start(bench, &world, seed, &of);
+    match state
+        .store
+        .append(branch_id, None, EventKind::RunStart, start)
+        .await
+    {
+        Ok(e) => Ok((world, e.seq)),
+        Err(e) => {
+            world.stop().await;
+            Err(e)
+        }
+    }
+}
+
+/// The payload of `RunStart` (see `start_world`).
+fn run_start(bench: &BenchDescribe, world: &World, seed: u64, of: &RunStartOf<'_>) -> Value {
+    let mut start = json!({
+        "task_id": of.task_id,
+        "team": of.team,
         "benchmark": bench.name,
         "world": bench.world,
         "seed": seed,
         "base_seed": world::SHARED_SEED,
         "fingerprints": world.fingerprints(),
         "saves": world.saves(),
+        "runner": of.rules.runner,
+        "handoff": of.rules.handoff_word(),
+        "systems": world.systems(),
+        "tools": world.tool_info(),
     });
-    if let Err(e) = state
-        .store
-        .append(branch_id, None, EventKind::RunStart, start)
-        .await
-    {
-        world.stop().await;
-        return Err(e);
+    if !of.scenario.is_empty() {
+        start["scenario"] = json!(of.scenario);
     }
-    Ok(world)
+    if let Some(max) = of.rules.max_cost_usd {
+        start["max_cost_usd"] = json!(max);
+    }
+    if let Some(c) = &of.rules.connection {
+        start["connection"] = json!(c);
+    }
+    start
 }
 
 /// Runs `run_branch` on its own task; a panic still ends the branch as `infra_error`. The branch
@@ -149,14 +272,73 @@ pub fn spawn_branch(state: &Arc<AppState>, ctx: Arc<BranchCtx>, from: StartPoint
 pub async fn run_branch(state: Arc<AppState>, ctx: Arc<BranchCtx>, from: StartPoint) {
     ctx.start_ticker(&state.store).await;
     let outcome = drive(&state, &ctx, from).await;
-    leave_live(&state, &ctx).await;
-    let (status, error) = match (ctx.fatal(), outcome) {
-        // A world program stopped: whatever the agents did after it doesn't count.
+    conclude(&state, &ctx, outcome).await;
+}
+
+/// Makes a branch that an external system drives live, its clock ticking.
+pub async fn go_live(state: &AppState, ctx: Arc<BranchCtx>) {
+    let id = ctx.branch_id.clone();
+    state.live.write().unwrap().insert(id, ctx.clone());
+    ctx.start_ticker(&state.store).await;
+}
+
+/// Ends a live branch an external system drove: freezes and scores its world, stops it and
+/// records how it ended. `None` when the branch is ending already.
+pub async fn finish(state: &AppState, ctx: &BranchCtx) -> Option<Ending> {
+    if !ctx.claim_end() {
+        return None;
+    }
+    freeze(ctx).await;
+    let outcome = check(state, ctx).await;
+    Some(conclude(state, ctx, outcome).await)
+}
+
+/// Ends a live branch an external system drove that went wrong (its driver raised, or exited
+/// without finishing): its world is frozen and scored like `finish`'s, so the check is recorded,
+/// but the branch ends `failed` with `why`. An infra error stays one. `None` when the branch is
+/// ending already.
+pub async fn finish_failed(state: &AppState, ctx: &BranchCtx, why: String) -> Option<Ending> {
+    if !ctx.claim_end() {
+        return None;
+    }
+    freeze(ctx).await;
+    let outcome = check(state, ctx).await.map(|(status, error)| match status {
+        BranchStatus::InfraError => (status, error),
+        _ => (BranchStatus::Failed, Some(why)),
+    });
+    Some(conclude(state, ctx, outcome).await)
+}
+
+/// How a branch someone stopped ends: unscored.
+pub(crate) const STOPPED_ENDING: Ending = (BranchStatus::Stopped, None);
+
+/// Stops a live branch: its agents are dropped where they are, calls that wait are refused, and
+/// it ends `stopped` without being scored. A branch an external system drives ends here; arenad's
+/// own runner ends its branch itself. False when the branch was stopped or ending already.
+pub async fn stop(state: &AppState, ctx: &BranchCtx) -> bool {
+    if !ctx.flow.stop() {
+        return false;
+    }
+    if ctx.rules.runner == Runner::External {
+        if !ctx.claim_end() {
+            return false;
+        }
+        conclude(state, ctx, Ok(STOPPED_ENDING)).await;
+    }
+    true
+}
+
+/// Stops a branch's world and records how it ended: as `outcome` says, unless a world program
+/// stopped, which makes it `infra_error` whatever the agents did after.
+async fn conclude(state: &AppState, ctx: &BranchCtx, outcome: Result<Ending>) -> Ending {
+    leave_live(state, ctx).await;
+    let ending = match (ctx.fatal(), outcome) {
         (Some(f), _) => (BranchStatus::InfraError, Some(f)),
         (None, Ok(v)) => v,
         (None, Err(e)) => (BranchStatus::InfraError, Some(format!("{e:#}"))),
     };
-    record_ending(&state, &ctx.branch_id, (status, error)).await;
+    record_ending(state, &ctx.branch_id, ending.clone()).await;
+    ending
 }
 
 /// Stops the branch's ticker and world, then takes it out of `state.live`. In that order: a
@@ -168,7 +350,7 @@ async fn leave_live(state: &AppState, ctx: &BranchCtx) {
 }
 
 /// How a branch ended: its status and error.
-type Ending = (BranchStatus, Option<String>);
+pub type Ending = (BranchStatus, Option<String>);
 
 /// Records how a branch ended, trying once more when the store fails; a failure is logged (the
 /// branch then stays `running` in the store).
@@ -187,31 +369,98 @@ async fn record_ending(state: &AppState, branch_id: &str, (status, error): Endin
 
 /// What every agent's input starts with: the task's ticket and the benchmark's instructions
 /// under their title.
-struct Brief {
-    ticket: String,
-    title: String,
-    instructions: String,
+#[derive(Debug, Clone)]
+pub(crate) struct Brief {
+    pub(crate) ticket: String,
+    pub(crate) title: String,
+    pub(crate) instructions: String,
+    /// The world's own clock, when the task's world keeps a calendar of its own.
+    pub(crate) clock: Option<WorldClock>,
 }
 
 async fn drive(state: &Arc<AppState>, ctx: &Arc<BranchCtx>, from: StartPoint) -> Result<Ending> {
-    let bench = state.hub.bench_describe(ctx.world.bench()).await?;
-    let task = bench.tasks.iter().find(|t| t.id == ctx.task_id);
-    let ticket = task
-        .map(|t| t.ticket.clone())
-        .ok_or_else(|| anyhow!("unknown task {}", ctx.task_id))?;
-    let brief = Brief {
-        ticket,
-        title: prompts::instructions_title(&bench).to_string(),
-        instructions: bench.instructions,
-    };
+    let brief = brief_of(state, ctx).await?;
     restore_notes(ctx, &from)?;
+    let agents = async {
+        match ctx.rules.runner {
+            Runner::Chain => run_chain(state, ctx, &brief, from).await,
+            Runner::Concurrent => run_concurrent(state, ctx, &brief, from.agent_index).await,
+            Runner::Dispatch => crate::dispatch::run(state, ctx, &brief).await,
+            Runner::External => Err(anyhow!("an external system drives this run, not arenad")),
+        }
+    };
+    // Stopping drops the agents where they are (a CLI agent's process is killed with it).
+    let ended = tokio::select! {
+        ended = agents => ended?,
+        () = ctx.flow.stopped() => return Ok(STOPPED_ENDING),
+    };
+    if let Some(end) = ended {
+        // Over its spend limit, a run is scored as it stands (a failure).
+        if end.0 == BranchStatus::BudgetExceeded {
+            freeze(ctx).await;
+            check(state, ctx).await?;
+        }
+        return Ok(end);
+    }
+    freeze(ctx).await;
+    check(state, ctx).await
+}
+
+/// The task's ticket, the benchmark's instructions and the world's clock.
+async fn brief_of(state: &AppState, ctx: &BranchCtx) -> Result<Brief> {
+    let bench = state.hub.bench_describe(ctx.world.bench()).await?;
+    let task = (bench.tasks.iter().find(|t| t.id == ctx.task_id))
+        .ok_or_else(|| anyhow!("unknown task {}", ctx.task_id))?;
+    Ok(Brief {
+        ticket: task.ticket.clone(),
+        title: prompts::instructions_title(&bench).to_string(),
+        clock: WorldClock::of(task.clock_start.as_deref(), ctx.clock.speed()),
+        instructions: bench.instructions,
+    })
+}
+
+/// The agents from the start point on, one after another; `Some` when one ends the branch.
+async fn run_chain(
+    state: &Arc<AppState>,
+    ctx: &Arc<BranchCtx>,
+    brief: &Brief,
+    from: StartPoint,
+) -> Result<Option<Ending>> {
     let mut resume = from.resume;
     for idx in from.agent_index..ctx.team.agents.len() {
-        if let Some(end) = run_agent(state, ctx, idx, &brief, resume.take()).await? {
-            return Ok(end);
+        if let Some(end) = run_agent(state, ctx, idx, brief, resume.take()).await? {
+            return Ok(Some(end));
         }
     }
-    check(state, ctx).await
+    Ok(None)
+}
+
+/// The agents from `first` on, all at once. Every one runs to its end; the branch then ends
+/// with the worst of their endings, if any.
+async fn run_concurrent(
+    state: &Arc<AppState>,
+    ctx: &Arc<BranchCtx>,
+    brief: &Brief,
+    first: usize,
+) -> Result<Option<Ending>> {
+    let runs = (first..ctx.team.agents.len()).map(|i| run_agent(state, ctx, i, brief, None));
+    let mut worst = None;
+    for ended in futures_util::future::join_all(runs).await {
+        worst = worse(worst, ended?);
+    }
+    Ok(worst)
+}
+
+/// The worse of two endings: an infrastructure error before a failure, the first of equals.
+fn worse(a: Option<Ending>, b: Option<Ending>) -> Option<Ending> {
+    let infra = |e: &Option<Ending>| matches!(e, Some((BranchStatus::InfraError, _)));
+    if infra(&a) || b.is_none() {
+        return a;
+    }
+    if a.is_none() || infra(&b) {
+        return b;
+    }
+    a
 }
 
 /// Carries over the recorded handoff notes of the agents before the start point.
@@ -230,22 +479,61 @@ fn restore_notes(ctx: &BranchCtx, from: &StartPoint) -> Result<()> {
     Ok(())
 }
 
-/// The ticket, the instructions, and the previous agent's handoff note.
-fn agent_input(ctx: &BranchCtx, idx: usize, brief: &Brief) -> Result<String> {
+/// The ticket, the instructions, and the handoff notes left for the agent: in a legacy run the
+/// previous agent's (which must exist), otherwise every note recorded so far for it.
+async fn agent_input(
+    state: &AppState,
+    ctx: &BranchCtx,
+    idx: usize,
+    brief: &Brief,
+) -> Result<String> {
     let Brief {
         ticket,
         title,
         instructions,
+        clock,
     } = brief;
-    let mut input = format!("{ticket}\n# {title}\n\n{instructions}\n");
-    if let Some(prev) = idx.checked_sub(1).map(|i| &ctx.team.agents[i]) {
-        let spec = &ctx.team.agents[idx];
-        let note = ctx
-            .handoff_note(&prev.id)
-            .ok_or_else(|| anyhow!("no handoff note from {} to start {}", prev.id, spec.id))?;
-        input.push_str(&format!("\n# Handoff note from {}\n\n{note}\n", prev.name));
+    let mut input = clock.map_or_else(String::new, |c| c.brief(ctx.clock.now_ms()));
+    input.push_str(&format!("{ticket}\n# {title}\n\n{instructions}\n"));
+    let notes = match ctx.rules.handoff_required {
+        true => legacy_note(ctx, idx)?.into_iter().collect(),
+        false => notes_for(state, ctx, &ctx.team.agents[idx].id).await?,
+    };
+    for (from, note) in notes {
+        input.push_str(&format!("\n# Handoff note from {from}\n\n{note}\n"));
     }
     Ok(input)
+}
+
+/// The previous agent's name and note, in a legacy run (none for the first agent).
+fn legacy_note(ctx: &BranchCtx, idx: usize) -> Result<Option<(String, String)>> {
+    let Some(prev) = idx.checked_sub(1).map(|i| &ctx.team.agents[i]) else {
+        return Ok(None);
+    };
+    let spec = &ctx.team.agents[idx];
+    let note = ctx
+        .handoff_note(&prev.id)
+        .ok_or_else(|| anyhow!("no handoff note from {} to start {}", prev.id, spec.id))?;
+    Ok(Some((prev.name.clone(), note)))
+}
+
+/// The name of the sender and the note of each handoff recorded so far for `agent`.
+async fn notes_for(
+    state: &AppState,
+    ctx: &BranchCtx,
+    agent: &str,
+) -> Result<Vec<(String, String)>> {
+    let events = state.store.events(&ctx.branch_id).await?;
+    let name_of = |id: &str| {
+        let spec = ctx.team.agents.iter().find(|a| a.id == id);
+        spec.map_or_else(|| id.to_string(), |a| a.name.clone())
+    };
+    let mail = mail_for(&events, agent);
+    let notes = mail.iter().filter(|m| m["kind"] == "handoff").map(|m| {
+        let from = name_of(m["from"].as_str().unwrap_or(""));
+        (from, m["text"].as_str().unwrap_or("").to_string())
+    });
+    Ok(notes.collect())
 }
 
 /// Runs agent `idx` between its AgentStart and AgentEnd events; `Some` when the branch ends here.
@@ -257,16 +545,14 @@ async fn run_agent(
     resume: Option<Vec<Value>>,
 ) -> Result<Option<Ending>> {
     let spec = ctx.team.agents[idx].clone();
-    let input = agent_input(ctx, idx, brief)?;
+    let input = agent_input(state, ctx, idx, brief).await?;
     let driver = driver_for(state, spec.kind)?;
     let mut start = json!({"name": spec.name, "kind": spec.kind, "model": spec.model});
     if let Some(p) = &spec.provider {
         start["provider"] = json!(p);
     }
     let id = Some(spec.id.as_str());
-    state
-        .store
-        .append(&ctx.branch_id, id, EventKind::AgentStart, start)
+    ctx.append(&state.store, id, EventKind::AgentStart, start)
         .await?;
     let run = AgentRun {
         branch: ctx.clone(),
@@ -279,32 +565,31 @@ async fn run_agent(
     Ok(agent_ending(ctx, &spec.id, result))
 }
 
-/// Records an agent's AgentEnd; after the last agent the world is frozen first, so nothing
-/// happens in it after its end.
+/// Records an agent's AgentEnd; in a legacy run the world is frozen first after the last agent,
+/// so nothing happens in it after its end. Otherwise it freezes once every agent is done.
 async fn record_end(
     state: &AppState,
     ctx: &BranchCtx,
     agent: &str,
     result: &AgentResult,
 ) -> Result<()> {
-    if ctx.is_last(agent) {
+    if ctx.rules.handoff_required && ctx.is_last(agent) {
         freeze(ctx).await;
     }
     let end = serde_json::to_value(agent_end(result))?;
-    state
-        .store
-        .append(&ctx.branch_id, Some(agent), EventKind::AgentEnd, end)
+    ctx.append(&state.store, Some(agent), EventKind::AgentEnd, end)
         .await?;
     Ok(())
 }
 
-/// Once the last agent is done the world stands still: no tick and no clock while it is scored.
-async fn freeze(ctx: &BranchCtx) {
+/// Once the agents are done the world stands still: no tick and no clock while it is scored.
+/// Freezing twice is freezing once.
+pub(crate) async fn freeze(ctx: &BranchCtx) {
     ctx.stop_ticker().await;
-    ctx.clock.pause();
+    ctx.clock.freeze();
 }
 
-fn driver_for(state: &AppState, kind: AgentKind) -> Result<Arc<dyn Driver>> {
+pub(crate) fn driver_for(state: &AppState, kind: AgentKind) -> Result<Arc<dyn Driver>> {
     let drivers = state
         .drivers
         .get()
@@ -315,11 +600,13 @@ fn driver_for(state: &AppState, kind: AgentKind) -> Result<Arc<dyn Driver>> {
         .ok_or_else(|| anyhow!("no driver for agent kind {kind:?}"))
 }
 
-fn agent_end(result: &AgentResult) -> AgentEndPayload {
+pub(crate) fn agent_end(result: &AgentResult) -> AgentEndPayload {
     AgentEndPayload {
         ok: result.ok,
         error: result.error.clone(),
         tokens: result.tokens["total_tokens"].as_i64(),
+        prompt_tokens: result.tokens["prompt_tokens"].as_i64(),
+        completion_tokens: result.tokens["completion_tokens"].as_i64(),
         cost_usd: result.cost_usd,
         cost_source: result.cost_source.clone(),
         seconds: Some(result.seconds),
@@ -327,7 +614,7 @@ fn agent_end(result: &AgentResult) -> AgentEndPayload {
 }
 
 /// How the branch ends after an agent, if it does: a stopped world program, a failed agent, or
-/// a missing handoff.
+/// (in a legacy run) a missing handoff.
 fn agent_ending(ctx: &BranchCtx, agent: &str, result: AgentResult) -> Option<Ending> {
     if let Some(f) = ctx.fatal() {
         return Some((BranchStatus::InfraError, Some(f)));
@@ -335,34 +622,32 @@ fn agent_ending(ctx: &BranchCtx, agent: &str, result: AgentResult) -> Option<End
     if !result.ok {
         let e = result.error.unwrap_or_else(|| "agent failed".to_string());
         // The model's own behavior is a failed attempt, not a broken harness.
-        let failed = result.failure == Some(FailureKind::Model);
-        return Some((
-            if failed {
-                BranchStatus::Failed
-            } else {
-                BranchStatus::InfraError
-            },
-            Some(e),
-        ));
+        let status = match result.failure {
+            Some(FailureKind::Model) => BranchStatus::Failed,
+            Some(FailureKind::Budget) => BranchStatus::BudgetExceeded,
+            None => BranchStatus::InfraError,
+        };
+        return Some((status, Some(e)));
     }
-    if !ctx.is_last(agent) && ctx.handoff_note(agent).is_none() {
+    // An agent whose cost is known only at its end (`claude -p`, Codex): checked then.
+    if let Some(why) = result.cost_usd.and_then(|c| ctx.budget.settle(agent, c)) {
+        return Some((BranchStatus::BudgetExceeded, Some(why)));
+    }
+    let required = ctx.rules.handoff_required && !ctx.is_last(agent);
+    if required && ctx.handoff_note(agent).is_none() {
         return Some((BranchStatus::Failed, Some("no handoff".to_string())));
     }
     None
 }
 
 /// Scores the world and records the Check.
-async fn check(state: &Arc<AppState>, ctx: &BranchCtx) -> Result<Ending> {
+pub(crate) async fn check(state: &AppState, ctx: &BranchCtx) -> Result<Ending> {
+    let since = Instant::now();
     let check = score(state, ctx).await?;
+    overhead::add_since(&ctx.branch_id, Cat::Score, since);
     let ending = verdict(&check, &ctx.world.part_names());
-    state
-        .store
-        .append(
-            &ctx.branch_id,
-            None,
-            EventKind::Check,
-            serde_json::to_value(&check)?,
-        )
+    let payload = serde_json::to_value(&check)?;
+    ctx.append(&state.store, None, EventKind::Check, payload)
         .await?;
     Ok(ending)
 }
@@ -382,10 +667,31 @@ fn verdict(check: &CheckPayload, parts: &[String]) -> Ending {
     }
 }
 
+/// Saves every part's final state and has the benchmark check the world's end state.
+async fn score_by_checks(ctx: &BranchCtx) -> Result<CheckPayload> {
+    // Behind the gate: no late tool call lands between the final save and the checks.
+    let _gate = ctx.gate().await;
+    let final_saves = ctx.world.save_all().await?;
+    let checks = ctx.world.score(&ctx.task_id).await?;
+    let failed = checks.iter().filter(|c| !c.passed);
+    let failed: Vec<String> = failed.map(|c| c.name.clone()).collect();
+    Ok(CheckPayload {
+        passed: !checks.is_empty() && failed.is_empty(),
+        gold_db: None,
+        differing_rows: Some(failed),
+        checks: Some(checks),
+        final_saves: Some(final_saves),
+        unchecked: vec![],
+    })
+}
+
 /// Saves every part's final state and compares the world with the task's gold saves; parts not
-/// in them are listed as unchecked.
-async fn score(state: &Arc<AppState>, ctx: &BranchCtx) -> Result<CheckPayload> {
+/// in them are listed as unchecked. A benchmark that scores itself has no gold saves.
+async fn score(state: &AppState, ctx: &BranchCtx) -> Result<CheckPayload> {
     let bench = state.hub.bench_describe(ctx.world.bench()).await?;
+    if bench.scored {
+        return score_by_checks(ctx).await;
+    }
     let gold = world::ensure_gold(&state.hub, &bench, &ctx.task_id).await?;
     // Behind the gate: no late tool call lands between the final save and the diff.
     let _gate = ctx.gate().await;
@@ -402,6 +708,7 @@ async fn score(state: &Arc<AppState>, ctx: &BranchCtx) -> Result<CheckPayload> {
         passed: differing.is_empty() && unchecked.len() < ctx.world.part_names().len(),
         gold_db,
         differing_rows: Some(differing),
+        checks: None,
         final_saves: Some(final_saves),
         unchecked,
     })
@@ -416,6 +723,7 @@ mod tests {
             passed,
             gold_db: None,
             differing_rows: Some(vec![]),
+            checks: None,
             final_saves: None,
             unchecked: unchecked.iter().map(|p| p.to_string()).collect(),
         }

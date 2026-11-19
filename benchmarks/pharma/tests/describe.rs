@@ -1,0 +1,106 @@
+//! What the benchmark says about itself, with no service running.
+use arena_part::proto::*;
+use arena_part::Benchmark;
+use arena_pharma::Pharma;
+use serde_json::Map;
+
+#[tokio::test]
+async fn it_describes_five_scenarios_over_five_parts() {
+    let d = Pharma::default().describe().await.unwrap();
+    let parts: Vec<&str> = d.world.iter().map(|p| p.part.as_str()).collect();
+    assert_eq!(parts, ["erp", "lims", "logistics", "approvals", "crm"]);
+    assert!(d.scored);
+    assert_eq!(d.tasks.len(), 5);
+    assert_eq!(d.tools.len(), 4);
+    assert!(d.tools.iter().all(|t| t.effect == Effect::Read));
+    assert_eq!(
+        d.team.unwrap().agents.len(),
+        1,
+        "the single agent is the default"
+    );
+    let others: Vec<(&str, Option<&str>)> = (d.teams.iter())
+        .map(|t| (t.id.as_str(), t.runner.as_deref()))
+        .collect();
+    assert_eq!(
+        others,
+        [("dispatch", Some("dispatch")), ("team", Some("chain"))]
+    );
+    let team = Pharma {
+        team: "team".into(),
+    }
+    .describe()
+    .await
+    .unwrap();
+    assert_eq!(team.team.unwrap().agents.len(), 6);
+    assert_eq!(team.teams[0].id, "single");
+}
+
+#[tokio::test]
+async fn scoring_knows_its_tasks_and_an_empty_world_fails_the_goals() {
+    let p = Pharma::default();
+    let unknown = ScoreParams {
+        task: "nope".into(),
+        docs: Map::new(),
+    };
+    assert!(p.score(unknown).await.is_err());
+    let empty = ScoreParams {
+        task: "carrier-no-capacity".into(),
+        docs: Map::new(),
+    };
+    let checks = p.score(empty).await.unwrap().checks;
+    let missed = checks.iter().filter(|c| !c.passed && !c.safety).count();
+    let unsafe_ = checks.iter().filter(|c| c.safety && !c.passed).count();
+    assert_eq!((missed, unsafe_), (8, 0));
+}
+
+#[tokio::test]
+async fn an_unknown_tool_is_the_erps_error() {
+    let call = BenchCallTool {
+        name: "nope".into(),
+        args: Default::default(),
+        connections: Map::new(),
+    };
+    let out = Pharma::default().call_tool(call).await.unwrap();
+    assert_eq!(out.part, "erp");
+    assert!(out.error.unwrap().contains("no tool nope"));
+}
+
+/// The disruptions the builder offers, in order.
+const DISRUPTIONS: [&str; 6] = [
+    "courier-capacity",
+    "lane-unavailable",
+    "transit-delay",
+    "first-reallocation-rejected",
+    "retest-fails",
+    "urgent-escalation",
+];
+
+#[tokio::test]
+async fn it_offers_the_demos_disruptions_and_a_view() {
+    let d = Pharma::default().describe().await.unwrap();
+    let o = d.scenario_options.unwrap();
+    assert_eq!(o.base.len(), 5);
+    let ids: Vec<&str> = o.disruptions.iter().map(|x| x.id.as_str()).collect();
+    assert_eq!(ids, DISRUPTIONS);
+    assert!(
+        o.disruptions.iter().all(|x| !x.default),
+        "nothing is preselected"
+    );
+    for x in &o.disruptions {
+        assert!(
+            d.world.iter().any(|p| p.part == x.part),
+            "{} names a part",
+            x.id
+        );
+        assert_eq!(x.template["id"], x.id.as_str());
+        assert!(o.setup.contains_key(&x.part), "{} has a setup call", x.id);
+    }
+    assert_eq!(o.setup["logistics"].tool, "logistics_scenario");
+    assert_eq!(d.view.unwrap().docs, ["lims", "logistics", "approvals"]);
+    let p = Pharma::default();
+    let quiet = p.view(ViewParams {
+        connections: Map::new(),
+        docs: Map::new(),
+    });
+    assert!(quiet.await.is_err(), "no ERP connection, no view");
+}

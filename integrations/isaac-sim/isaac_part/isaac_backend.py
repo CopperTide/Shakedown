@@ -1,8 +1,7 @@
 """The `isaac` backend: sim_io.IsaacIO on a headless Isaac Sim 6.2, set up as the factory's run.py does.
 
-UNVERIFIED: this has not run on Isaac Sim (no Isaac image or 16 GB GPU where it was written). It follows run.py
-and sim_io.py; the calls run.py doesn't make are marked `unverified on 6.2`. Isaac Sim has one stage per process,
-so one live plant per process (Backend.max_live)."""
+It follows run.py and sim_io.py; the calls run.py doesn't make are marked `unverified on 6.2`. Isaac Sim has one
+stage per process, so one live plant per process (Backend.max_live)."""
 import importlib
 import importlib.util
 import math
@@ -13,7 +12,7 @@ from .log import log
 
 MISSING = ("Isaac Sim is not importable here: run this integration with Isaac Sim's Python on the DGX Spark "
            "(see README)")
-_APP = {}  # the process's SimulationApp, its one physics callback, and where that callback forwards each step
+_APP = {}  # the process's SimulationApp, the newest physics callback's generation, and where it forwards each step
 
 
 def _idle(_dt):
@@ -21,12 +20,23 @@ def _idle(_dt):
 
 
 def _app():
-    """The one SimulationApp of the process (headless; omni imports come after it), with one physics callback that
-    forwards each step to the plant being run."""
+    """The one SimulationApp of the process (headless; omni imports come after it)."""
     if "app" not in _APP:
         from isaacsim import SimulationApp
-        _APP["app"] = SimulationApp({"headless": True, "sync_loads": True})
+        # The renderer and size are run.py's recording settings; without a recording nothing is rendered.
+        _APP["app"] = SimulationApp({"headless": True, "sync_loads": True, "renderer": "RaytracedLighting",
+                                     "width": 1280, "height": 720})
+        import carb
+        carb.settings.get_settings().set("/rtx/post/dlss/execMode", 2)
     return _APP["app"]
+
+
+def _render_settings(settings: dict) -> None:
+    """The renderer's carb settings a config asks for (`render`), e.g. the path tracer and its samples."""
+    import carb
+    s = carb.settings.get_settings()
+    for key, value in settings.items():
+        s.set(key, value)
 
 
 def _stop_timeline():
@@ -34,8 +44,15 @@ def _stop_timeline():
     omni.timeline.get_timeline_interface().stop()  # unverified on 6.2
 
 
+def dressed():
+    """The showcase scene as built for the plant being made (`showcase_scene.Dressed`)."""
+    return _APP["dressed"]
+
+
 def _stage(app, cfg, data):
-    """A new stage with the factory's scene, as run.py builds it. The previous plant's timeline is stopped first."""
+    """A new stage with the factory's scene, as run.py builds it, then the showcase's dressing when a recording asks
+    for it: it adds visuals only and hides the old ones, so nothing is loaded for a plant nobody looks at. The
+    previous plant's timeline is stopped first."""
     import omni.usd
     from isaacsim.storage.native import get_assets_root_path
     scene = sources.import_read_only(cfg.isaac_path, "ridgeline_scene", "isaac_path")
@@ -44,7 +61,10 @@ def _stage(app, cfg, data):
     ctx.new_stage()
     app.update()
     root = get_assets_root_path()
-    scene.build_scene(ctx.get_stage(), root, use_assets=root is not None, data=data)
+    builder = scene.build_scene(ctx.get_stage(), root, use_assets=root is not None, data=data)
+    if cfg.scene == "showcase" and cfg.record is not None:
+        from . import showcase_scene
+        _APP["dressed"] = showcase_scene.dress(builder, root, data, log, shift=bool(cfg.cells))
     for _ in range(20):
         app.update()
     return ctx.get_stage()
@@ -61,6 +81,7 @@ def make(cfg, data, physics_hz):
     load(cfg)
     _APP["step"] = _idle
     app = _app()
+    _render_settings(cfg.render)
     import isaacsim.core.experimental.utils.app as app_utils
     sim_io = sources.import_read_only(cfg.isaac_path, "sim_io", "isaac_path")
     layout = importlib.import_module("layout")
@@ -71,9 +92,16 @@ def make(cfg, data, physics_hz):
     app_utils.play()
     app_utils.update_app(steps=2)
     io.start()
-    if "callback" not in _APP:  # unverified on 6.2: the callback outlives ctx.new_stage()
-        _APP["callback"] = sim_io.on_physics_step(lambda dt: _APP["step"](dt))
+    _register_callback(sim_io)
     return io
+
+
+def _register_callback(sim_io) -> None:
+    """A physics callback for this plant's stage. On 6.2 (RTX 3090, 2026-11-04) the callback registered for an
+    earlier stage no longer ran after ctx.new_stage(), so each plant registers its own; one that does survive
+    forwards nothing, since only the newest generation reaches the plant."""
+    gen = _APP["gen"] = _APP.get("gen", 0) + 1
+    sim_io.on_physics_step(lambda dt: _APP["step"](dt) if _APP["gen"] == gen else None)
 
 
 def stop(_io):
