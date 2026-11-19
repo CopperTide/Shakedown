@@ -5,8 +5,11 @@ export { path, qs } from '@/lib/url';
 
 /** A request arenad refused: its status and arenad's `error` (else the body, else the status text). */
 export class ApiError extends Error {
-  constructor(public status: number, message: string) {
+  /** The JSON arenad answered (e.g. `{problems}` or `{error, suggested}`), when it was JSON. */
+  declare body?: unknown;
+  constructor(public status: number, message: string, body?: unknown) {
     super(message);
+    if (body !== undefined) Object.defineProperty(this, 'body', { value: body, enumerable: false });
   }
 }
 
@@ -22,7 +25,7 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
   if (!res.ok) {
     const msg = (body as { error?: string } | null)?.error ?? (text || res.statusText);
-    throw new ApiError(res.status, msg);
+    throw new ApiError(res.status, msg, body ?? undefined);
   }
   return body as T;
 }

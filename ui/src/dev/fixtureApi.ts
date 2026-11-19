@@ -1,9 +1,11 @@
 // Dev only: answers /api with the pharma fixtures, so the real pages (world view, run page,
 // compare, Run once and New experiment) render without arenad. Bundled only when the build
 // sets VITE_ARENA_FIXTURES=1 (see main.tsx); never in a normal build.
+import { form as builderForm, preview as builderPreview, templates as builderTemplates } from '@/features/build/fixtures';
 import { scenarioOptions } from '@/features/scenario/fixtures';
 import { comparison, runs, team, v1Detail, v2Detail, views } from '@/features/world/fixtures';
 import type { Health } from '@/model/types';
+import type { BuiltWorld } from '@/model/world';
 
 const branches = { [v1Detail.id]: v1Detail, [v2Detail.id]: v2Detail };
 
@@ -24,6 +26,35 @@ const tasks = [
 
 type Route = [RegExp, (m: RegExpExecArray, url: URL) => unknown];
 
+/** Worlds built in this page's life: each is ready 6 s after it was asked for. */
+const builtAt: Record<string, { title: string; at: number }> = {};
+
+function worldRow(name: string): BuiltWorld | null {
+  if (name === 'pharma') return { name, title: 'pharma', template: null, built: false, current: Object.keys(builtAt).length === 0, state: 'ready', elapsed_ms: 0, error: null };
+  const b = builtAt[name];
+  if (!b) return null;
+  const elapsed = Date.now() - b.at;
+  return { name, title: b.title, template: { id: builderForm.id, name: builderForm.name }, built: true, current: elapsed >= 6000, state: elapsed >= 6000 ? 'ready' : 'preparing', elapsed_ms: Math.min(elapsed, 6000), error: null };
+}
+
+const allWorlds = () => ['pharma', ...Object.keys(builtAt)].map(worldRow);
+
+/** The builder's POST routes: a preview of the fixture template under the company asked for, and a build. */
+function postAnswer(pathname: string, body: Record<string, unknown>): [number, unknown] | null {
+  const company = (c: unknown) => String((c as { company?: { name?: string } } | undefined)?.company?.name ?? builderForm.company.name);
+  const slug = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  if (/^\/api\/templates\/[^/]+\/preview$/.test(pathname)) {
+    const title = company(body);
+    return [200, { ...builderPreview, title, name: slug(title), domain: `${slug(title)}.test` }];
+  }
+  if (pathname === '/api/worlds') {
+    const title = company(body.choices);
+    builtAt[slug(title)] = { title, at: Date.now() };
+    return [202, { name: slug(title), state: 'preparing' }];
+  }
+  return null;
+}
+
 const ROUTES: Route[] = [
   [/^\/api\/health$/, () => health],
   [/^\/api\/benchmark$/, () => ({ name: 'pharma', version: '0.1.0', tasks, scenario_options: scenarioOptions, view: true })],
@@ -37,6 +68,10 @@ const ROUTES: Route[] = [
   [/^\/api\/branches\/([^/]+)\/restore-plan$/, () => ({ parts: ['erp', 'lims', 'logistics', 'approvals'].map((part) => ({ part, how: 'save' })) })],
   [/^\/api\/branches\/([^/]+)\/rows$/, (_m, url) => ({ seq: Number(url.searchParams.get('seq')), rows: {} })],
   [/^\/api\/branches\/([^/]+)$/, (m) => branches[decodeURIComponent(m[1])] ?? null],
+  [/^\/api\/templates$/, () => builderTemplates],
+  [/^\/api\/templates\/([^/]+)$/, () => builderForm],
+  [/^\/api\/worlds$/, () => allWorlds()],
+  [/^\/api\/worlds\/([^/]+)$/, (m) => worldRow(decodeURIComponent(m[1]))],
 ];
 
 function answer(path: string, url: URL): Response {
@@ -75,7 +110,14 @@ export function install() {
       await new Promise((r) => setTimeout(r, 600));
       return new Response(JSON.stringify(checkAnswer(JSON.parse(String(init.body ?? '{}')))), { status: 200, headers: { 'content-type': 'application/json' } });
     }
-    if ((init?.method ?? 'GET') !== 'GET') return new Response(JSON.stringify({ error: 'The fixture API starts nothing.' }), { status: 409 });
+    if ((init?.method ?? 'GET') !== 'GET') return notGet(url.pathname, init);
     return answer(url.pathname, url);
   };
+}
+
+/** A POST the builder's routes answer; any other request that is not a GET is refused (409). */
+function notGet(pathname: string, init?: RequestInit): Response {
+  const posted = init?.method === 'POST' ? postAnswer(pathname, JSON.parse(String(init.body ?? '{}'))) : null;
+  if (!posted) return new Response(JSON.stringify({ error: 'The fixture API starts nothing.' }), { status: 409 });
+  return new Response(JSON.stringify(posted[1]), { status: posted[0], headers: { 'content-type': 'application/json' } });
 }
