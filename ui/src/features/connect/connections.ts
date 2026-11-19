@@ -1,8 +1,9 @@
 // Code connections: a saved command that starts a team's own driver program (LangGraph, CrewAI,
 // the OpenAI Agents SDK or anything else), which Shakedown launches on this computer for each run
 // that uses it (`/api/connections`). Secret env values come back redacted and stay in arenad.
-import { useEffect, useState } from 'react';
+import { useMemo } from 'react';
 import { listConnections } from '@/api/connections';
+import { useQuery } from '@/hooks/useQuery';
 import type { Connection, ConnectionTest, NewConnection } from '@/model/connection';
 import type { NewSetup } from '@/model/experiment';
 import type { Runner, Team } from '@/model/types';
@@ -70,17 +71,12 @@ export function codeTeam(c: Connection): Team {
 
 /** The saved Code connections as teams to pick, with `first` (one just made) among them; none while arenad can't say. */
 export function useCodeTeams(first?: Team): Team[] {
-  const [teams, setTeams] = useState<Team[]>(() => (first?.connection ? [first] : []));
-  useEffect(() => {
-    let live = true;
-    listConnections().then((l) => {
-      if (!live) return;
-      const saved = l.map(codeTeam);
-      setTeams(first?.connection && !saved.some((t) => t.id === first.id) ? [first, ...saved] : saved);
-    }).catch(() => {});
-    return () => { live = false; };
-  }, [first]);
-  return teams;
+  const { data } = useQuery(`connections:${first?.id ?? ''}`, listConnections, { keepOnError: true, keepPrevious: true });
+  return useMemo(() => {
+    if (!data) return first?.connection ? [first] : [];
+    const saved = data.map(codeTeam);
+    return first?.connection && !saved.some((t) => t.id === first.id) ? [first, ...saved] : saved;
+  }, [data, first]);
 }
 
 /** The setup an experiment posts for a team: a Code connection's, or the team under its runner. */
