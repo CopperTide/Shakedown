@@ -1,3 +1,5 @@
+import pytest
+
 from arena_part.benchmark import check
 from arena_part.expect import evaluate
 
@@ -90,3 +92,80 @@ def test_a_ref_to_a_missing_doc_and_a_bad_check_fail_with_a_reason():
 
 def test_a_key_check_without_a_field_reads_the_whole_doc():
     assert _one({"part": "code", "key": "branch/main", "op": "exists"})["passed"]
+
+
+def _cant(body, docs=DOCS) -> str:
+    r = _one(body, docs)
+    assert r["passed"] is False, r
+    return r["detail"]
+
+
+def test_a_part_not_in_the_world_cant_be_evaluated_whatever_the_op():
+    assert _cant({"part": "nope", "key": "x", "op": "absent"}) == "can't evaluate: no part nope in this world"
+    assert _cant({"part": "nope", "key": "x", "op": "!=", "value": 1}) == "can't evaluate: no part nope in this world"
+    assert _cant({"part": "nope", "find": "*", "count": 0}) == "can't evaluate: no part nope in this world"
+    ref = {"part": "code", "key": "branch/main", "field": "sha", "op": "!=", "ref": {"part": "nope", "key": "k"}}
+    assert _cant(ref) == "can't evaluate: no part nope in this world"
+
+
+def test_an_empty_all_or_any_cant_be_evaluated():
+    assert _cant({"all": []}) == "can't evaluate: all needs a list of checks"
+    assert _cant({"any": []}) == "can't evaluate: any needs a list of checks"
+
+
+def test_a_ref_to_a_missing_field_cant_be_evaluated():
+    body = {"part": "prod", "key": "version/api", "field": "sha", "op": "!=",
+            "ref": {"part": "code", "key": "branch/main", "field": "nope"}}
+    assert _cant(body) == "can't evaluate: the ref code branch/main.nope is missing"
+
+
+def test_an_unknown_where_op_cant_be_evaluated_and_an_object_is_compared_with_equals():
+    docs = {"p": {"a": {"meta": {"k": 1}}, "b": {"meta": {"k": 2}}}}
+    assert _cant({"part": "p", "find": "*", "where": {"meta": {"~": 1}}, "count": 0}, docs) == (
+        "can't evaluate: unknown op ~")
+    assert _cant({"part": "nope", "find": "*", "where": {"meta": {"~": 1}}, "count": 0}, docs).startswith(
+        "can't evaluate:")
+    assert _cant({"part": "p", "find": "zz*", "where": {"meta": {"~": 1}}, "count": 0}, docs) == (
+        "can't evaluate: unknown op ~")
+    assert _cant({"part": "p", "find": "*", "where": {"meta": {">": 0, "<": 9}}}, docs) == (
+        "can't evaluate: where meta needs one op, as {op: value}")
+    assert _one({"part": "p", "find": "*", "where": {"meta": {"=": {"k": 1}}}, "count": 1}, docs)["passed"]
+
+
+def test_an_unknown_op_cant_be_evaluated_even_when_the_doc_is_missing():
+    assert _cant({"part": "code", "key": "gone", "op": "~", "value": 1}) == "can't evaluate: unknown op ~"
+
+
+def test_a_compare_without_a_value_or_ref_cant_be_evaluated():
+    assert _cant({"part": "code", "key": "branch/main", "field": "sha", "op": "!=", "vaule": "x"}) == (
+        "can't evaluate: a key check has no field vaule")
+    assert _cant({"part": "code", "key": "branch/main", "field": "sha", "op": "!="}) == (
+        "can't evaluate: != needs a value or a ref")
+
+
+@pytest.mark.parametrize("body", [
+    {"key": "branch/main"},                                    # no part
+    {"part": "code", "key": ["branch/main"]},                  # unhashable key
+    {"part": "code", "find": 5},                               # glob not text
+    {"all": 5},                                                # all not a list
+    {"any": ["x"]},                                            # an item not a check
+    {"part": "code", "find": "*", "where": ["status"]},        # where not an object
+    {"part": "code", "key": "branch/main", "ref": "code"},      # ref not an object
+    {"part": "code", "key": "branch/main", "op": "=", "ref": {"part": "code"}},  # ref without key
+    "not a check",
+])
+def test_a_malformed_check_fails_alone_with_a_reason(body):
+    r = evaluate([{"name": "bad", "check": body}, {"name": "good", "check": {"part": "code", "key": "branch/main"}}],
+                 DOCS)
+    assert r[0]["passed"] is False and r[0]["detail"].startswith("can't evaluate: "), r[0]
+    assert r[1]["passed"] is True
+
+
+def test_a_malformed_item_or_measure_fails_alone():
+    good = {"name": "good", "check": {"part": "code", "key": "branch/main"}}
+    r = evaluate(["not an item", {"name": "m", "measure": 5, "check": {"part": "prod", "key": "slo/prod",
+                                                                       "field": "error_rate", "op": "<=", "value": 1}},
+                  good], DOCS)
+    assert [c["passed"] for c in r] == [False, False, True]
+    assert r[0]["detail"] == "can't evaluate: a check is an object with a name and a check"
+    assert r[1]["detail"].startswith("can't evaluate: ")

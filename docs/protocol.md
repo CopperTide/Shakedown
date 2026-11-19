@@ -321,10 +321,12 @@ a list of checks in the expected end state format (end state only) into the `che
 - `{all: [check]}` or `{any: [check]}`.
 
 Numbers are equal within 0.005, as gates compare them; `= null` (in `value` or `where`) matches a missing field, and
-`absent` passes on a missing field or doc. A `measure` (`{label, unit?, better?, target?}`) gets the key's number or
+`absent` passes on a missing field or doc (of a part the world has). An object in `where` is `{op: value}`; compare
+with an object as `{"=": {…}}`. A `measure` (`{label, unit?, better?, target?}`) gets the key's number or
 the find's count as its `value`. A failed check's `detail` says what was found: `{part} {key}.{field} is {actual},
 expected {op} {value}`, `{part} has no {key}` or `{n} of {part} {glob} match, expected {count}`; a check that can't
-be evaluated as written fails with `can't evaluate: …`. The world builder's benchmarks score this way
+be evaluated as written (a part the world doesn't have, an empty `all` or `any`, a `ref` field that is missing, an
+unknown op or field, a malformed body) fails alone with `can't evaluate: …`. The world builder's benchmarks score this way
 (`benchmarks/world`).
 
 ### Optimisation studies
