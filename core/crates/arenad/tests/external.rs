@@ -3,67 +3,17 @@
 //! agents and finishes the run; a fork hands it each agent's history. Without a model: what is
 //! refused. `live_`: the agent is Claude Code (signed in; see `support/live.rs`), run by this
 //! test the way a design in its own code runs it.
-#[path = "support/app.rs"]
-mod app_support;
-#[path = "support/live.rs"]
-mod live;
-#[path = "support/packages.rs"]
-mod packages;
-#[path = "support/pg.rs"]
-mod pg;
+mod support;
 
-use std::{
-    future::Future,
-    sync::{Arc, LazyLock},
-};
-
-use app_support::send;
-use arenad::{app::AppState, model::*};
-use live::Live;
-use packages::TestHub;
-use pg::Cleanup;
+use arenad::model::*;
 use serde_json::{json, Value};
+use support::{app::send, live, live::Live, run, run_live, AppFx};
 
-static RT: LazyLock<tokio::runtime::Runtime> =
-    LazyLock::new(|| tokio::runtime::Runtime::new().unwrap());
-
-fn run<F: Future>(f: F) -> F::Output {
-    RT.block_on(f)
+async fn setup(tag: &str) -> AppFx {
+    AppFx::idle("external", tag).start().await
 }
 
-/// Runs `body` on the live model, when there is one (else the test was skipped, said why).
-fn run_live<F: Future<Output = ()>>(live: Option<Live>, body: impl FnOnce(Live) -> F) {
-    if let Some(live) = live {
-        run(body(live));
-    }
-}
-
-struct Fx {
-    state: Arc<AppState>,
-    _hub: TestHub,
-    _clean: Cleanup,
-    base: String,
-    http: reqwest::Client,
-}
-
-async fn setup(tag: &str) -> Fx {
-    let hub = TestHub::new(&[]);
-    let (store, clean) = app_support::meta_store("external", tag).await;
-    let (state, base) = app_support::idle_app(store, hub.hub.clone(), None, |_| {}).await;
-    Fx {
-        state,
-        _hub: hub,
-        _clean: clean,
-        base,
-        http: reqwest::Client::new(),
-    }
-}
-
-impl Fx {
-    async fn post(&self, path: &str, body: Value) -> (u16, Value) {
-        send(self.http.post(format!("{}{path}", self.base)).json(&body)).await
-    }
-
+impl AppFx {
     /// `POST /api/branches/{branch}/{what}`.
     async fn on(&self, branch: &str, what: &str, body: Value) -> (u16, Value) {
         self.post(&format!("/api/branches/{branch}/{what}"), body)
@@ -96,7 +46,7 @@ fn team(agents: Value) -> Value {
 }
 
 /// Starts an external run of task 27 with no agents yet: its branch id.
-async fn start(fx: &Fx) -> String {
+async fn start(fx: &AppFx) -> String {
     let body = json!({"task_id": "27", "team": team(json!([])), "runner": "external"});
     let (status, v) = fx.post("/api/runs", body).await;
     assert_eq!(status, 200, "{v}");
@@ -104,7 +54,7 @@ async fn start(fx: &Fx) -> String {
     v["branch_id"].as_str().unwrap().to_string()
 }
 
-async fn register(fx: &Fx, branch: &str, join: Value) -> Value {
+async fn register(fx: &AppFx, branch: &str, join: Value) -> Value {
     let (status, v) = fx.on(branch, "agents", join).await;
     assert_eq!(status, 200, "{v}");
     v
@@ -224,7 +174,7 @@ fn finish_with_an_error_ends_failed_and_scored() {
 // ---------------------------------------------------------------- Claude Code as the agent
 
 /// The ticket of task 27.
-async fn ticket(fx: &Fx) -> String {
+async fn ticket(fx: &AppFx) -> String {
     let bench = fx.state.hub.bench_describe("retail").await.unwrap();
     let t = bench.tasks.iter().find(|t| t.id == "27").unwrap();
     t.ticket.clone()
@@ -234,7 +184,7 @@ async fn ticket(fx: &Fx) -> String {
 /// each model call the client saw and the agent's end, as a design does. The registration and
 /// what was reported.
 async fn work(
-    fx: &Fx,
+    fx: &AppFx,
     live: &Live,
     branch: &str,
     join: Value,
@@ -273,7 +223,7 @@ fn whole_input(r: &Value) -> i64 {
 
 /// A read-only agent that joins later is offered no write tool, by registration or by its MCP
 /// endpoint.
-async fn assert_reviewer_reads_only(fx: &Fx, branch: &str) {
+async fn assert_reviewer_reads_only(fx: &AppFx, branch: &str) {
     let reviewer = register(fx, branch, json!({"id": "reviewer", "read_only": true})).await;
     let write = "exchange_delivered_order_items";
     assert!(!reviewer["tools"].to_string().contains(write));
@@ -282,7 +232,7 @@ async fn assert_reviewer_reads_only(fx: &Fx, branch: &str) {
 }
 
 /// Finishing the run scores it and records its check, after everything the system did.
-async fn assert_finished(fx: &Fx, live: &Live, branch: &str) {
+async fn assert_finished(fx: &AppFx, live: &Live, branch: &str) {
     let (status, v) = fx.finish(branch).await;
     assert_eq!(status, 200, "{v}");
     let b = fx.state.store.branch(branch).await.unwrap();
@@ -302,7 +252,7 @@ async fn assert_finished(fx: &Fx, live: &Live, branch: &str) {
 
 /// The agent's model calls as its client reported them: one per message, each with its usage,
 /// and the metrics' count and peak context are theirs.
-async fn assert_reported(fx: &Fx, branch: &str, ran: &live::ExternalRun) {
+async fn assert_reported(fx: &AppFx, branch: &str, ran: &live::ExternalRun) {
     let evs = fx.events(branch).await;
     let calls: Vec<&Event> = evs
         .iter()
@@ -398,7 +348,7 @@ async fn a_fork_of_an_external_run_hands_back_each_agents_history(live: Live) {
 }
 
 /// A fork at `at` hands back each agent's history before it and its endpoints on the new branch.
-async fn assert_history_handed_back(fx: &Fx, branch: &str, evs: &[Event], at: i64) {
+async fn assert_history_handed_back(fx: &AppFx, branch: &str, evs: &[Event], at: i64) {
     let (status, f) = fx.on(branch, "fork", json!({"at_seq": at})).await;
     assert_eq!((status, &f["start_seq"]), (200, &json!(at)), "{f}");
     let agents = f["agents"].as_array().unwrap();
@@ -419,7 +369,7 @@ async fn assert_history_handed_back(fx: &Fx, branch: &str, evs: &[Event], at: i6
 }
 
 /// A fork may give another team instead of agent changes (not both); its agents have no history.
-async fn assert_team_swap(fx: &Fx, branch: &str, at: i64) {
+async fn assert_team_swap(fx: &AppFx, branch: &str, at: i64) {
     let swap_team = json!({"id": "single", "name": "Single agent", "agents": [
         {"id": "solo2", "name": "Solo", "kind": "external", "model": null, "prompt": "You do it all."}]});
     let both = json!({"changes": {"solo": {"prompt": "x"}}, "at_seq": at, "team": swap_team});

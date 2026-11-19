@@ -11,7 +11,7 @@ use arenad::{
 };
 use parts::Hub;
 
-use crate::pg::{admin, Cleanup};
+use super::pg::{admin, Cleanup};
 
 /// A store in a fresh `arena_test_<kind>_<tag>_<id>` database.
 pub async fn meta_store(kind: &str, tag: &str) -> (Arc<Store>, Cleanup) {

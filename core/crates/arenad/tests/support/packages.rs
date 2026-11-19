@@ -15,7 +15,7 @@ use std::{
 
 use parts::{Hub, Registry};
 
-use crate::pg::{drop_databases, on_own_runtime, pg_url};
+use super::pg::{drop_databases, on_own_runtime, pg_url};
 
 /// The arena folder (this crate is core/crates/arenad).
 pub fn arena() -> PathBuf {

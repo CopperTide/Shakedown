@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use arenad::{model::*, store::Store};
 use serde_json::{json, Value};
 
-use crate::pg::{admin, Cleanup};
+use super::pg::{admin, Cleanup};
 
 /// The databases a legacy test makes, dropped on drop, and a save folder for its hub.
 pub struct LegacyDbs {

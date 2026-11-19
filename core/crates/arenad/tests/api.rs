@@ -1,56 +1,15 @@
-#[path = "support/app.rs"]
-mod app_support;
-#[path = "support/live.rs"]
-mod live;
-#[path = "support/packages.rs"]
-mod packages;
-#[path = "support/pg.rs"]
-mod pg;
+mod support;
 
-use std::{
-    future::Future,
-    sync::{Arc, LazyLock},
-    time::Duration,
-};
+use std::time::Duration;
 
-use arenad::{
-    app::{AppState, Config},
-    model::*,
-    providers::ProviderConfig,
-};
-use live::Live;
-use packages::TestHub;
-use pg::Cleanup;
+use arenad::{model::*, providers::ProviderConfig};
 use serde_json::{json, Value};
-
-static RT: LazyLock<tokio::runtime::Runtime> =
-    LazyLock::new(|| tokio::runtime::Runtime::new().unwrap());
-
-fn run<F: Future>(f: F) -> F::Output {
-    RT.block_on(f)
-}
-
-/// Runs `body` on the live model, when there is one (else the test was skipped, said why).
-fn run_live<F: Future<Output = ()>>(live: Option<Live>, body: impl FnOnce(Live) -> F) {
-    if let Some(live) = live {
-        run(body(live));
-    }
-}
+use support::{app, live, live::Live, packages, run, run_live, AppFx};
 
 fn agent(id: &str) -> AgentSpec {
-    AgentSpec {
-        tools: Vec::new(),
-        id: id.into(),
-        name: id.into(),
-        kind: AgentKind::Open,
-        model: Some("m".into()),
-        prompt: format!("You are {id}."),
-        provider: None,
-        read_only: false,
-        lead: false,
-        url: None,
-        headers: Default::default(),
-    }
+    AgentSpec::new(id, AgentKind::Open)
+        .with_model("m")
+        .with_prompt(format!("You are {id}."))
 }
 
 fn team() -> Team {
@@ -61,59 +20,23 @@ fn team() -> Team {
     }
 }
 
-struct Fx {
-    state: Arc<AppState>,
-    _hub: TestHub,
-    _clean: Cleanup,
-    base: String,
-    http: reqwest::Client,
-}
-
 /// An app that runs no agent (open mode offered on a server nothing answers on).
-async fn setup(tag: &str) -> Fx {
-    setup_with(tag, |_| {}).await
-}
-
-async fn setup_with(tag: &str, tweak: impl FnOnce(&mut Config)) -> Fx {
-    setup_on(tag, TestHub::new(&[]), false, tweak).await
+async fn setup(tag: &str) -> AppFx {
+    AppFx::idle("api", tag).start().await
 }
 
 /// An app on the configured providers and Claude Code, for live tests.
-async fn live_setup(tag: &str) -> Fx {
-    setup_on(tag, TestHub::new(&[]), true, |_| {}).await
-}
-
-async fn setup_on(tag: &str, hub: TestHub, live: bool, tweak: impl FnOnce(&mut Config)) -> Fx {
-    let (store, clean) = app_support::meta_store("api", tag).await;
-    let (state, base) = match live {
-        true => app_support::app_for(store, hub.hub.clone(), Some("retail"), tweak).await,
-        false => app_support::idle_app(store, hub.hub.clone(), None, tweak).await,
-    };
-    Fx {
-        state,
-        _hub: hub,
-        _clean: clean,
-        base,
-        http: reqwest::Client::new(),
-    }
+async fn live_setup(tag: &str) -> AppFx {
+    AppFx::configured("api", tag).bench("retail").start().await
 }
 
 /// The test's `Cleanup` drops legacy branch and snapshot databases and the metadata database;
 /// its `TestHub` drops the integration's instances and saves.
-async fn teardown(fx: Fx, _branches: &[&str]) {
+async fn teardown(fx: AppFx, _branches: &[&str]) {
     drop(fx);
 }
 
-impl Fx {
-    async fn get(&self, path: &str) -> (u16, Value) {
-        app_support::send(self.http.get(format!("{}{path}", self.base))).await
-    }
-
-    async fn post(&self, path: &str, body: Value) -> (u16, Value) {
-        let req = self.http.post(format!("{}{path}", self.base)).json(&body);
-        app_support::send(req).await
-    }
-
+impl AppFx {
     async fn run_to_end(&self, task: &str, team: &Team) -> String {
         let (st, v) = self
             .post("/api/runs", json!({"task_id": task, "team": team}))
@@ -152,7 +75,7 @@ fn frames(body: &str) -> Vec<(String, String)> {
 }
 
 /// Reads the SSE stream until a `status` frame has arrived.
-async fn read_stream(fx: &Fx, branch: &str) -> Vec<(String, String)> {
+async fn read_stream(fx: &AppFx, branch: &str) -> Vec<(String, String)> {
     let mut resp = fx
         .http
         .get(format!("{}/api/branches/{branch}/stream", fx.base))
@@ -180,7 +103,7 @@ async fn read_stream(fx: &Fx, branch: &str) -> Vec<(String, String)> {
 }
 
 /// The health, task and default-team endpoints describe the retail benchmark and task 27.
-async fn assert_health_and_tasks(fx: &Fx) {
+async fn assert_health_and_tasks(fx: &AppFx) {
     let (st, h) = fx.get("/api/health").await;
     assert_eq!(st, 200);
     assert!(h["open_available"].as_bool().unwrap());
@@ -203,7 +126,7 @@ async fn assert_health_and_tasks(fx: &Fx) {
 }
 
 /// Bad run requests: unknown task is 404; duplicate, malformed or no agents, or no team, is 400.
-async fn assert_run_validation_errors(fx: &Fx) {
+async fn assert_run_validation_errors(fx: &AppFx) {
     let (st, v) = fx
         .post("/api/runs", json!({"task_id": "nope", "team": team()}))
         .await;
@@ -221,7 +144,7 @@ async fn assert_run_validation_errors(fx: &Fx) {
 
 /// The branch's stream is ordered without gaps, ends with `check` and a `status` frame of the
 /// branch's own status. Returns the number of frames and of events.
-async fn assert_stream_ended(fx: &Fx, branch: &str) -> (usize, usize) {
+async fn assert_stream_ended(fx: &AppFx, branch: &str) -> (usize, usize) {
     let fr = read_stream(fx, branch).await;
     let last = fr.last().unwrap();
     assert_eq!(last.0, "status");
@@ -244,7 +167,7 @@ async fn assert_stream_ended(fx: &Fx, branch: &str) -> (usize, usize) {
 }
 
 /// The branch endpoint has all `n_events` and the run list shows the branch with its status.
-async fn assert_branch_and_run_listed(fx: &Fx, branch: &str, run_id: &str, n_events: usize) {
+async fn assert_branch_and_run_listed(fx: &AppFx, branch: &str, run_id: &str, n_events: usize) {
     let (_, b) = fx.get(&format!("/api/branches/{branch}")).await;
     assert_eq!(b["events"].as_array().unwrap().len(), n_events);
     let (_, runs) = fx.get("/api/runs").await;
@@ -305,7 +228,7 @@ fn solo(live: &Live) -> Team {
 
 /// A branch compared with itself has no divergence and no differing rows; an unknown branch is
 /// 404 and a missing side 400.
-async fn compare_edge_cases(fx: &Fx, a: &str) {
+async fn compare_edge_cases(fx: &AppFx, a: &str) {
     let (_, same) = fx.get(&format!("/api/compare?a={a}&b={a}")).await;
     assert!(same["first_divergent_seq"].is_null());
     assert!(same["differing_rows"].as_array().unwrap().is_empty());
@@ -314,7 +237,7 @@ async fn compare_edge_cases(fx: &Fx, a: &str) {
 }
 
 /// The final save of part `retail` of a finished branch.
-async fn final_save(fx: &Fx, branch: &str) -> String {
+async fn final_save(fx: &AppFx, branch: &str) -> String {
     let evs = fx.state.store.events(branch).await.unwrap();
     let check = live::check_of(&evs).expect("a check");
     check.final_saves.unwrap()["retail"].clone()
@@ -334,9 +257,9 @@ fn live_compare_diffs_the_final_saves_of_two_runs() {
 
 /// The differing rows are exactly the part's `diff` of the two final saves, each side's doc read
 /// from its save.
-async fn assert_rows_are_the_parts_diff(fx: &Fx, v: &Value, a: &str, b: &str) {
+async fn assert_rows_are_the_parts_diff(fx: &AppFx, v: &Value, a: &str, b: &str) {
     let (sa, sb) = (final_save(fx, a).await, final_save(fx, b).await);
-    let mut want = fx._hub.diff(json!({"save": sa}), json!({"save": sb})).await;
+    let mut want = fx.hub.diff(json!({"save": sa}), json!({"save": sb})).await;
     want.sort();
     let rows = v["differing_rows"].as_array().unwrap();
     let mut keys: Vec<String> = rows
@@ -347,8 +270,8 @@ async fn assert_rows_are_the_parts_diff(fx: &Fx, v: &Value, a: &str, b: &str) {
     assert_eq!(keys, want);
     for r in rows {
         let key = r["key"].as_str().unwrap();
-        let doc_a = &fx._hub.inspect_save(&sa, &[key]).await[key];
-        let doc_b = &fx._hub.inspect_save(&sb, &[key]).await[key];
+        let doc_a = &fx.hub.inspect_save(&sa, &[key]).await[key];
+        let doc_b = &fx.hub.inspect_save(&sb, &[key]).await[key];
         assert_eq!((&r["a"], &r["b"]), (doc_a, doc_b), "{key}");
     }
 }
@@ -378,7 +301,7 @@ fn rows_path(b: &str, seq: i64, keys: &str, extra: &str) -> String {
 }
 
 /// Unknown part, malformed key, too many keys and unknown step are 400; unknown branch 404.
-async fn bad_rows_requests(fx: &Fx, b: &str, seq: i64) {
+async fn bad_rows_requests(fx: &AppFx, b: &str, seq: i64) {
     let many: Vec<String> = (0..51).map(|i| format!("users/u{i}")).collect();
     for (path, want) in [
         (rows_path(b, seq, "users/x", "&part=nope"), 400),
@@ -404,7 +327,7 @@ fn live_rows_read_each_steps_save() {
 }
 
 /// The rows of what step `e` wrote, read at it, are what its save holds.
-async fn assert_rows_read_the_save(fx: &Fx, b: &str, e: &Event) {
+async fn assert_rows_read_the_save(fx: &AppFx, b: &str, e: &Event) {
     let save = e.payload["saves"]["retail"].as_str().unwrap();
     let written: Vec<String> =
         serde_json::from_value(e.payload["writes"].clone()).unwrap_or_default();
@@ -412,7 +335,7 @@ async fn assert_rows_read_the_save(fx: &Fx, b: &str, e: &Event) {
         let q = key.replace('#', "%23");
         let (st, v) = fx.get(&rows_path(b, e.seq, &q, "&part=retail")).await;
         assert_eq!(st, 200, "{v}");
-        let saved = fx._hub.inspect_save(save, &[key]).await;
+        let saved = fx.hub.inspect_save(save, &[key]).await;
         assert_eq!(v["rows"][key], saved[key], "{key} at {}", e.seq);
     }
 }
@@ -426,7 +349,7 @@ async fn rows_read_each_steps_save(live: Live) {
     let (st, v) = fx.get(&rows_path(&b, 1, keys, "")).await;
     assert_eq!((st, &v["seq"]), (200, &json!(1)), "{v}");
     let base = fx
-        ._hub
+        .hub
         .inspect_save("base_retail_0_1_0_retail", &[&order])
         .await;
     assert_eq!(v["rows"][&order], base[&order], "{v}");
@@ -443,7 +366,7 @@ async fn rows_read_each_steps_save(live: Live) {
 
 /// A bad step, an unknown agent in the changes and a malformed body are 400; an unknown branch
 /// is 404.
-async fn assert_fork_errors(fx: &Fx, url: &str, at: i64) {
+async fn assert_fork_errors(fx: &AppFx, url: &str, at: i64) {
     assert_eq!(fx.post(url, json!({"at_seq": 9999})).await.0, 400);
     assert_eq!(
         fx.post(
@@ -500,10 +423,10 @@ async fn fork_over_http_maps_errors_and_starts_a_branch(live: Live) {
 #[test]
 fn open_mode_is_rejected_without_a_key() {
     run(async {
-        let fx = setup_with("nokey", |c| {
-            c.providers = ProviderConfig::default();
-        })
-        .await;
+        let fx = AppFx::idle("api", "nokey")
+            .providers(ProviderConfig::default())
+            .start()
+            .await;
         let (_, h) = fx.get("/api/health").await;
         assert_eq!(h["open_available"], false);
         let (st, v) = fx
@@ -620,9 +543,8 @@ fn api_rejects_foreign_host_headers() {
 /// An app whose hub also has the toy integration `toy-<tag>`, for branches recorded by hand (no
 /// agent ran them: their events are written to the store as data, to read back).
 struct Toy {
-    fx: Fx,
+    fx: AppFx,
     part: String,
-    _root: packages::ToyRoot,
 }
 
 async fn toy(tag: &str) -> Toy {
@@ -632,14 +554,9 @@ async fn toy(tag: &str) -> Toy {
 /// `toy` with the toy integration started with `part_args`.
 async fn toy_with(tag: &str, part_args: &[&str]) -> Toy {
     let root = packages::toy_world(tag, part_args, &[]);
-    let hub = TestHub::new(std::slice::from_ref(&root.0));
-    let fx = setup_on(tag, hub, false, |_| {}).await;
+    let fx = AppFx::idle("api", tag).root(root).start().await;
     let part = format!("toy-{tag}");
-    Toy {
-        fx,
-        part,
-        _root: root,
-    }
+    Toy { fx, part }
 }
 
 impl Toy {
@@ -766,7 +683,7 @@ fn delete_treats_an_unknown_save_as_gone() {
         let b = t.branch(&["box"], json!({"box": "s_d1"}), events).await;
         let run_id = t.fx.state.store.branch(&b).await.unwrap().run_id;
         let url = format!("{}/api/runs/{run_id}", t.fx.base);
-        let (st, v) = app_support::send(t.fx.http.delete(url)).await;
+        let (st, v) = app::send(t.fx.http.delete(url)).await;
         assert_eq!((st, &v["dropped"]), (200, &json!(1)), "{v}");
         let calls = std::fs::read_to_string(&log).unwrap();
         assert_eq!(
@@ -811,7 +728,7 @@ fn run_names_are_optional_validated_metadata() {
     });
 }
 
-async fn invalid_run_names(fx: &Fx, url: &str) {
+async fn invalid_run_names(fx: &AppFx, url: &str) {
     for name in ["".to_string(), "x".repeat(301)] {
         let response = fx
             .http

@@ -1,56 +1,17 @@
 //! What a run's saves cost and how they go: deleting a run, the saves limit, the cleanup at
 //! start. `live_`: runs on a real model make the saves (see `support/live.rs`).
-#[path = "support/app.rs"]
-mod app_support;
-#[path = "support/live.rs"]
-mod live;
-#[path = "support/packages.rs"]
-mod packages;
-#[path = "support/pg.rs"]
-mod pg;
+mod support;
 
-use std::{
-    future::Future,
-    sync::{Arc, LazyLock},
-};
+use std::sync::Arc;
 
-use arenad::{
-    app::{AppState, Config},
-    model::*,
-};
-use live::Live;
-use packages::TestHub;
-use pg::Cleanup;
+use arenad::{app::Config, model::*};
 use serde_json::{json, Value};
-
-static RT: LazyLock<tokio::runtime::Runtime> =
-    LazyLock::new(|| tokio::runtime::Runtime::new().unwrap());
-
-fn run<F: Future>(f: F) -> F::Output {
-    RT.block_on(f)
-}
-
-/// Runs `body` on the live model, when there is one (else the test was skipped, said why).
-fn run_live<F: Future<Output = ()>>(live: Option<Live>, body: impl FnOnce(Live) -> F) {
-    if let Some(live) = live {
-        run(body(live));
-    }
-}
+use support::{app, live, live::Live, packages, run, run_live, AppFx};
 
 fn agent(id: &str) -> AgentSpec {
-    AgentSpec {
-        tools: Vec::new(),
-        id: id.into(),
-        name: id.into(),
-        kind: AgentKind::Open,
-        model: Some("m".into()),
-        prompt: format!("You are {id}."),
-        provider: None,
-        read_only: false,
-        lead: false,
-        url: None,
-        headers: Default::default(),
-    }
+    AgentSpec::new(id, AgentKind::Open)
+        .with_model("m")
+        .with_prompt(format!("You are {id}."))
 }
 
 fn team() -> Team {
@@ -61,51 +22,14 @@ fn team() -> Team {
     }
 }
 
-struct Fx {
-    state: Arc<AppState>,
-    _hub: TestHub,
-    base: String,
-    http: reqwest::Client,
-    _clean: Cleanup,
-}
-
 /// An app that runs no agent; `tweak` adjusts its config.
-async fn setup_with(tag: &str, tweak: impl FnOnce(&mut Config)) -> Fx {
-    setup_on(tag, false, tweak).await
+async fn setup_with(tag: &str, tweak: impl FnOnce(&mut Config) + Send + 'static) -> AppFx {
+    AppFx::idle("disk", tag).config(tweak).start().await
 }
 
 /// An app on the configured providers and Claude Code, for live tests.
-async fn live_setup(tag: &str) -> Fx {
-    setup_on(tag, true, |_| {}).await
-}
-
-async fn setup_on(tag: &str, live: bool, tweak: impl FnOnce(&mut Config)) -> Fx {
-    let hub = TestHub::new(&[]);
-    let (store, clean) = app_support::meta_store("disk", tag).await;
-    let (state, base) = match live {
-        true => app_support::app_for(store, hub.hub.clone(), Some("retail"), tweak).await,
-        false => app_support::idle_app(store, hub.hub.clone(), None, tweak).await,
-    };
-    Fx {
-        state,
-        _hub: hub,
-        base,
-        http: reqwest::Client::new(),
-        _clean: clean,
-    }
-}
-
-impl Fx {
-    async fn get(&self, path: &str) -> (u16, Value) {
-        app_support::send(self.http.get(format!("{}{path}", self.base))).await
-    }
-    async fn post(&self, path: &str, body: Value) -> (u16, Value) {
-        let req = self.http.post(format!("{}{path}", self.base)).json(&body);
-        app_support::send(req).await
-    }
-    async fn delete(&self, path: &str) -> (u16, Value) {
-        app_support::send(self.http.delete(format!("{}{path}", self.base))).await
-    }
+async fn live_setup(tag: &str) -> AppFx {
+    AppFx::configured("disk", tag).bench("retail").start().await
 }
 
 fn solo(live: &Live) -> Team {
@@ -114,7 +38,7 @@ fn solo(live: &Live) -> Team {
 }
 
 /// A finished solo run of task 27 on `live`: its run and branch ids.
-async fn live_run(fx: &Fx, live: &Live) -> (String, String) {
+async fn live_run(fx: &AppFx, live: &Live) -> (String, String) {
     let (run_id, b) = arenad::runner::start_run(&fx.state, "27", solo(live))
         .await
         .unwrap();
@@ -123,7 +47,7 @@ async fn live_run(fx: &Fx, live: &Live) -> (String, String) {
 }
 
 /// Every save a branch's events name, except the shared base and gold saves.
-async fn run_saves(fx: &Fx, branch: &str) -> Vec<String> {
+async fn run_saves(fx: &AppFx, branch: &str) -> Vec<String> {
     let mut out = vec![];
     for e in fx.state.store.events(branch).await.unwrap() {
         for key in ["saves", "final_saves"] {
@@ -139,7 +63,7 @@ async fn run_saves(fx: &Fx, branch: &str) -> Vec<String> {
 }
 
 /// True when the postgres integration still has `save`.
-async fn save_exists(fx: &Fx, save: &str) -> bool {
+async fn save_exists(fx: &AppFx, save: &str) -> bool {
     let c = fx.state.hub.client("postgres").await.unwrap();
     let r = c
         .call::<Value>(
@@ -154,7 +78,7 @@ async fn save_exists(fx: &Fx, save: &str) -> bool {
     }
 }
 
-async fn disk_bytes(fx: &Fx) -> i64 {
+async fn disk_bytes(fx: &AppFx) -> i64 {
     let (_, h) = fx.get("/api/health").await;
     h["disk"]["bytes"].as_i64().unwrap()
 }
@@ -165,7 +89,7 @@ fn shared_saves() -> [&'static str; 2] {
 }
 
 /// Asserts that each of `saves` exists (or not).
-async fn assert_saves(fx: &Fx, saves: &[String], exist: bool) {
+async fn assert_saves(fx: &AppFx, saves: &[String], exist: bool) {
     for s in saves {
         assert_eq!(save_exists(fx, s).await, exist, "{s}");
     }
@@ -173,7 +97,7 @@ async fn assert_saves(fx: &Fx, saves: &[String], exist: bool) {
 
 /// A live run forked at its agent's start (the child runs again); `(run, saves)` with the saves
 /// both branches' events name.
-async fn run_with_fork(fx: &Fx, live: &Live) -> (String, Vec<String>) {
+async fn run_with_fork(fx: &AppFx, live: &Live) -> (String, Vec<String>) {
     let (run_id, b) = live_run(fx, live).await;
     let evs = fx.state.store.events(&b).await.unwrap();
     let at = live::first_of(&evs, EventKind::AgentStart, "resolver").unwrap();
@@ -222,7 +146,7 @@ async fn delete_run_drops_all_part_saves(live: Live) {
 }
 
 /// A run of task 27 with one root branch that has not ended.
-async fn new_branch(fx: &Fx) -> (String, String) {
+async fn new_branch(fx: &AppFx) -> (String, String) {
     let t = team();
     let run_id = fx.state.store.create_run("27", &t).await.unwrap();
     let b = fx
@@ -236,7 +160,7 @@ async fn new_branch(fx: &Fx) -> (String, String) {
 
 /// With the limit exceeded, forking a missing branch is 404 and a running one is 409, and only a
 /// finished branch gets the 507. Leaves one root branch behind.
-async fn assert_fork_errors_before_limit(fx: &Fx) {
+async fn assert_fork_errors_before_limit(fx: &AppFx) {
     assert_eq!(
         fx.post("/api/branches/whatever/fork", json!({"at_seq": 1}))
             .await
@@ -312,7 +236,7 @@ fn limit_refuses_new_runs() {
 }
 
 /// Makes the save `save` from the base save, which no event names.
-async fn orphan_save(fx: &Fx, save: &str) {
+async fn orphan_save(fx: &AppFx, save: &str) {
     let c = fx.state.hub.client("postgres").await.unwrap();
     let start = json!({"instance": "orphan", "config": {}, "seed": 0, "clock_ms": 0,
                        "from": {"save": shared_saves()[0], "mode": "exact"}});
@@ -341,7 +265,7 @@ async fn startup_gc_keeps_named_saves(live: Live) {
     let mut kept = run_saves(&fx, &b).await;
     kept.extend(shared_saves().map(String::from));
     orphan_save(&fx, "s_orphan").await;
-    let folder = |s: &str| fx._hub.saves.join("postgres").join(s);
+    let folder = |s: &str| fx.hub.saves.join("postgres").join(s);
     assert!(save_exists(&fx, "s_orphan").await && folder("s_orphan").is_dir());
 
     let r = arenad::gc::run_startup_gc(&fx.state.store, &fx.state.hub, "retail")
@@ -363,8 +287,8 @@ fn delete_run_without_events_needs_no_benchmark() {
             std::env::temp_dir().join(format!("arenad-saves-t8empty{}", std::process::id()));
         let registry = parts::Registry::scan(&[]).unwrap();
         let hub = Arc::new(parts::Hub::new(registry, packages::bin_dir(), saves));
-        let (store, _clean) = app_support::meta_store("disk", "noevents").await;
-        let (state, base) = app_support::idle_app(store, hub, None, |_| {}).await;
+        let (store, _clean) = app::meta_store("disk", "noevents").await;
+        let (state, base) = app::idle_app(store, hub, None, |_| {}).await;
         let run_id = state.store.create_run("27", &team()).await.unwrap();
         let b = state
             .store
@@ -378,7 +302,7 @@ fn delete_run_without_events_needs_no_benchmark() {
             .await
             .unwrap();
         let req = reqwest::Client::new().delete(format!("{base}/api/runs/{run_id}"));
-        let (st, v) = app_support::send(req).await;
+        let (st, v) = app::send(req).await;
         assert_eq!((st, v["dropped"].as_u64()), (200, Some(0)), "{v}");
         assert!(state.store.runs().await.unwrap().is_empty());
     })

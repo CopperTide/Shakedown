@@ -7,8 +7,8 @@ use std::{path::PathBuf, process::Command, sync::Arc, time::Duration};
 
 use arenad::{app::AppState, model::*, runner, scenario::Scenario};
 
-use crate::packages::arena;
-use crate::pg::pg_url;
+use super::packages::arena;
+use super::pg::pg_url;
 
 /// The ERPNext stack and server, the saves and the sites of this test; removed on drop.
 pub struct Stack {

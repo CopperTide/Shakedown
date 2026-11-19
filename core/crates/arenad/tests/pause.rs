@@ -2,51 +2,16 @@
 //! (the test makes the agent's calls through its MCP endpoint and gateway, as its client would);
 //! the gateway's provider is a closed port, so a model call that goes through fails to connect.
 //! No model answers anything here: these tests check the holding, not an agent.
-#[path = "support/app.rs"]
-mod app_support;
-#[path = "support/packages.rs"]
-mod packages;
-#[path = "support/pg.rs"]
-mod pg;
+mod support;
 
-use std::{
-    future::Future,
-    sync::{Arc, LazyLock},
-    time::Duration,
-};
+use std::time::Duration;
 
-use app_support::send;
-use arenad::{app::AppState, model::*};
-use packages::{gold_action_args, TestHub};
-use pg::Cleanup;
+use arenad::model::*;
 use serde_json::{json, Value};
+use support::{app::send, packages::gold_action_args, run, AppFx};
 
-static RT: LazyLock<tokio::runtime::Runtime> =
-    LazyLock::new(|| tokio::runtime::Runtime::new().unwrap());
-
-fn run<F: Future>(f: F) -> F::Output {
-    RT.block_on(f)
-}
-
-struct Fx {
-    state: Arc<AppState>,
-    _hub: TestHub,
-    _clean: Cleanup,
-    base: String,
-    http: reqwest::Client,
-}
-
-async fn setup(tag: &str) -> Fx {
-    let hub = TestHub::new(&[]);
-    let (store, clean) = app_support::meta_store("pause", tag).await;
-    let (state, base) = app_support::idle_app(store, hub.hub.clone(), None, |_| {}).await;
-    Fx {
-        state,
-        _hub: hub,
-        _clean: clean,
-        base,
-        http: reqwest::Client::new(),
-    }
+async fn setup(tag: &str) -> AppFx {
+    AppFx::idle("pause", tag).start().await
 }
 
 /// An agent's endpoints on a live branch.
@@ -55,7 +20,7 @@ struct Agent {
     chat: String,
 }
 
-impl Fx {
+impl AppFx {
     /// `POST /api/branches/{branch}/{what}` (pause or resume) answers `{paused, changed}`.
     async fn flow(&self, branch: &str, what: &str, paused: bool, changed: bool) {
         let (status, v) = self.on(branch, what).await;
@@ -107,7 +72,7 @@ impl Fx {
 
 /// The gold write of task 27 through the agent's MCP endpoint, on its own task: the call's
 /// `tools/call` result.
-fn tool_call(fx: &Fx, agent: &Agent) -> tokio::task::JoinHandle<Value> {
+fn tool_call(fx: &AppFx, agent: &Agent) -> tokio::task::JoinHandle<Value> {
     let req = json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
                      "params": {"name": "exchange_delivered_order_items",
                                 "arguments": gold_action_args("27", "exchange_delivered_order_items")}});
@@ -116,7 +81,7 @@ fn tool_call(fx: &Fx, agent: &Agent) -> tokio::task::JoinHandle<Value> {
 }
 
 /// A model call through the agent's gateway, on its own task: its HTTP status.
-fn model_call(fx: &Fx, agent: &Agent) -> tokio::task::JoinHandle<u16> {
+fn model_call(fx: &AppFx, agent: &Agent) -> tokio::task::JoinHandle<u16> {
     let body = json!({"model": "m", "messages": [{"role": "user", "content": "hi"}]});
     let post = fx.http.post(&agent.chat).json(&body);
     tokio::spawn(async move { post.send().await.unwrap().status().as_u16() })
@@ -126,7 +91,7 @@ const HELD: Duration = Duration::from_millis(400);
 
 /// `Pause` and `Resume` are recorded around the held call, with the pause's length, which is
 /// no part of the run's estimate in production.
-async fn pause_is_recorded(fx: &Fx, branch: &str) {
+async fn pause_is_recorded(fx: &AppFx, branch: &str) {
     let evs = fx.state.store.events(branch).await.unwrap();
     let at = |k| evs.iter().position(|e| e.kind == k).unwrap();
     use EventKind::*;

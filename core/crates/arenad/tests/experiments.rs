@@ -4,72 +4,35 @@
 //! (the run stays running until it is stopped). What is refused, the order the runs are made in,
 //! the shapes the API answers, suites made on their own shown as one-setup experiments, stopping,
 //! and an experiment left running when arenad stopped.
-#[path = "support/app.rs"]
-mod app_support;
-#[path = "support/packages.rs"]
-mod packages;
-#[path = "support/pg.rs"]
-mod pg;
+mod support;
 
-use std::{
-    future::Future,
-    sync::{Arc, LazyLock},
-    time::Duration,
-};
+use std::time::Duration;
 
-use app_support::send;
 use arenad::{
-    app::AppState,
     model::*,
     providers::ProviderConfig,
     store::{NewExperiment, NewSetup, NewSuite, Store},
 };
-use packages::{toy_world, TestHub, ToyRoot};
-use pg::Cleanup;
 use serde_json::{json, Value};
-
-static RT: LazyLock<tokio::runtime::Runtime> =
-    LazyLock::new(|| tokio::runtime::Runtime::new().unwrap());
-
-fn run<F: Future>(f: F) -> F::Output {
-    RT.block_on(f)
-}
+use support::{app, packages::toy_world, pg, pg::Cleanup, run, AppFx};
 
 /// How long a poll waits for the experiment to get where the test expects.
 const WAIT: Duration = Duration::from_secs(60);
 
-struct Fx {
-    base: String,
-    http: reqwest::Client,
-    state: Arc<AppState>,
-    _hub: TestHub,
-    _root: ToyRoot,
-    _clean: Cleanup,
-}
-
 /// An app on the toy benchmark (tasks t1 and t2) whose open agents call `upstream`.
-async fn setup(tag: &str, upstream: &str) -> Fx {
+async fn setup(tag: &str, upstream: &str) -> AppFx {
     let root = toy_world(tag, &[], &["--scored", "--two-tasks", "--safety"]);
-    let hub = TestHub::new(std::slice::from_ref(&root.0));
-    let (store, clean) = app_support::meta_store("experiments", tag).await;
-    let providers = ProviderConfig::with_upstream(upstream);
-    let (state, base) = app_support::idle_app(store, hub.hub.clone(), Some("toybench"), |c| {
-        c.providers = providers;
-    })
-    .await;
-    Fx {
-        base,
-        http: reqwest::Client::new(),
-        state,
-        _hub: hub,
-        _root: root,
-        _clean: clean,
-    }
+    AppFx::idle("experiments", tag)
+        .root(root)
+        .bench("toybench")
+        .providers(ProviderConfig::with_upstream(upstream))
+        .start()
+        .await
 }
 
 /// A provider that accepts connections and never answers: a run on it stays running.
 async fn silent_provider() -> String {
-    let (listener, base) = app_support::bind().await;
+    let (listener, base) = app::bind().await;
     tokio::spawn(async move {
         let mut held = vec![];
         while let Ok((socket, _)) = listener.accept().await {
@@ -79,15 +42,7 @@ async fn silent_provider() -> String {
     base
 }
 
-impl Fx {
-    async fn post(&self, path: &str, body: Value) -> (u16, Value) {
-        send(self.http.post(format!("{}{path}", self.base)).json(&body)).await
-    }
-
-    async fn get(&self, path: &str) -> (u16, Value) {
-        send(self.http.get(format!("{}{path}", self.base))).await
-    }
-
+impl AppFx {
     /// Creates an experiment: its detail.
     async fn experiment(&self, body: Value) -> Value {
         let (status, v) = self.post("/api/experiments", body).await;
@@ -126,7 +81,7 @@ fn setup_of(name: Option<&str>, team_id: &str) -> Value {
 }
 
 /// A request that must be refused (400), naming `says` in its error.
-async fn refused(fx: &Fx, body: Value, says: &str) {
+async fn refused(fx: &AppFx, body: Value, says: &str) {
     let (status, v) = fx.post("/api/experiments", body).await;
     assert_eq!(status, 400, "{v}");
     let error = v["error"].as_str().unwrap();
@@ -135,7 +90,7 @@ async fn refused(fx: &Fx, body: Value, says: &str) {
 
 /// Refused: too few or many setups, setups with one name, an external runner, a team that
 /// can't run.
-async fn refuse_bad_setups(fx: &Fx) {
+async fn refuse_bad_setups(fx: &AppFx) {
     refused(fx, json!({"task": "t1", "setups": []}), "1 to 4 setups").await;
     let five: Vec<Value> = (0..5).map(|i| setup_of(None, &format!("t{i}"))).collect();
     refused(fx, json!({"task": "t1", "setups": five}), "1 to 4 setups").await;
@@ -152,7 +107,7 @@ async fn refuse_bad_setups(fx: &Fx) {
 #[test]
 fn experiments_refuse_what_they_cannot_run() {
     run(async {
-        let fx = setup("xrefuse", app_support::NOWHERE).await;
+        let fx = setup("xrefuse", app::NOWHERE).await;
         let one = || vec![setup_of(None, "a")];
         refuse_bad_setups(&fx).await;
         refused(&fx, json!({"task": "t9", "setups": one()}), "t9").await;
@@ -203,7 +158,7 @@ fn assert_created(v: &Value) {
 }
 
 /// Each run's branch with its setup and repeat, in the order the runs were made.
-async fn made_in_order(fx: &Fx, v: &Value) -> Vec<(String, i64)> {
+async fn made_in_order(fx: &AppFx, v: &Value) -> Vec<(String, i64)> {
     let mut made = vec![];
     for s in v["setups"].as_array().unwrap() {
         for row in s["runs"].as_array().unwrap() {
@@ -225,7 +180,7 @@ async fn made_in_order(fx: &Fx, v: &Value) -> Vec<(String, i64)> {
 #[test]
 fn an_experiment_interleaves_its_setups_runs() {
     run(async {
-        let fx = setup("xorder", app_support::NOWHERE).await;
+        let fx = setup("xorder", app::NOWHERE).await;
         let setups = [setup_of(None, "a"), setup_of(Some(" Rules "), "b")];
         let v = fx
             .experiment(json!({"task": "t1", "runs": 2, "setups": setups}))
@@ -365,7 +320,7 @@ fn assert_experiment_line(e: &Value, exp: &str) {
 #[test]
 fn experiments_list_with_suites_made_on_their_own() {
     run(async {
-        let fx = setup("xlist", app_support::NOWHERE).await;
+        let fx = setup("xlist", app::NOWHERE).await;
         let (legacy, exp) = stored(&fx.state.store).await;
         let (status, list) = fx.get("/api/experiments").await;
         assert_eq!(status, 200, "{list}");
@@ -387,7 +342,7 @@ fn experiments_list_with_suites_made_on_their_own() {
 }
 
 /// A suite made on its own reads as a one-setup experiment, which can't be stopped.
-async fn assert_legacy_detail(fx: &Fx, legacy: &str) {
+async fn assert_legacy_detail(fx: &AppFx, legacy: &str) {
     let (status, old) = fx.get(&format!("/api/experiments/{legacy}")).await;
     assert_eq!(status, 200, "{old}");
     assert_eq!(
@@ -401,12 +356,12 @@ async fn assert_legacy_detail(fx: &Fx, legacy: &str) {
 }
 
 /// The experiment's first run, once it is running.
-async fn first_running(fx: &Fx, id: &str) -> Value {
+async fn first_running(fx: &AppFx, id: &str) -> Value {
     fx.until(id, |v| v["setups"][0]["runs"][0]["status"] == "running")
         .await
 }
 
-impl Fx {
+impl AppFx {
     /// Stops the experiment: its detail.
     async fn stop(&self, id: &str) -> Value {
         let (status, v) = self
