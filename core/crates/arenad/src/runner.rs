@@ -13,6 +13,5 @@ pub use lifecycle::{
 pub use score::NOTHING_CHECKED;
 pub(crate) use score::{check, freeze};
 pub use start::{
-    begin_run, setup_failed, setup_or_infra_error, start_run, start_run_capped, start_run_in,
-    start_run_with, RunError, MAX_SEED,
+    begin_run, setup_failed, setup_or_infra_error, start_run, RunError, RunOptions, MAX_SEED,
 };

@@ -7,7 +7,6 @@ use anyhow::{anyhow, Result};
 use parts::proto::BenchDescribe;
 use serde_json::json;
 
-use super::lifecycle::{spawn_branch, StartPoint};
 use crate::{
     app::AppState,
     exec::{BranchCtx, ToolExec},
@@ -43,44 +42,62 @@ pub async fn start_run(
     task_id: &str,
     team: Team,
 ) -> Result<(RunId, BranchId), RunError> {
-    start_run_with(state, task_id, team, Runner::Chain).await
+    RunOptions::new(Runner::Chain)
+        .start(state, task_id, team)
+        .await
 }
 
-/// `start_run` with the agents run by `runner`.
-pub async fn start_run_with(
-    state: &Arc<AppState>,
-    task_id: &str,
-    team: Team,
+/// How a run on arenad's own runners starts: its runner, its scenario (else the task as it is)
+/// and its model-spend limit (else `ARENA_MAX_COST_USD`, else none).
+#[derive(Debug, Clone, Copy)]
+pub struct RunOptions<'a> {
     runner: Runner,
-) -> Result<(RunId, BranchId), RunError> {
-    start_run_in(state, task_id, team, runner, &Scenario::default()).await
-}
-
-/// `start_run_with` in `scenario` (its disruptions added to the task's setup).
-pub async fn start_run_in(
-    state: &Arc<AppState>,
-    task_id: &str,
-    team: Team,
-    runner: Runner,
-    scenario: &Scenario,
-) -> Result<(RunId, BranchId), RunError> {
-    start_run_capped(state, task_id, team, runner, scenario, None).await
-}
-
-/// `start_run_in` with a model-spend limit (`None`: `ARENA_MAX_COST_USD`, else no limit).
-pub async fn start_run_capped(
-    state: &Arc<AppState>,
-    task_id: &str,
-    team: Team,
-    runner: Runner,
-    scenario: &Scenario,
+    scenario: Option<&'a Scenario>,
     max_cost_usd: Option<f64>,
-) -> Result<(RunId, BranchId), RunError> {
-    let rules = Rules::new(runner).with_max_cost(max_cost_usd);
-    let (run_id, ctx) = begin_run(state, task_id, team, rules, scenario).await?;
-    let branch_id = ctx.branch_id.clone();
-    spawn_branch(state, Arc::new(ctx), StartPoint::default());
-    Ok((run_id, branch_id))
+}
+
+impl<'a> RunOptions<'a> {
+    pub fn new(runner: Runner) -> RunOptions<'a> {
+        RunOptions {
+            runner,
+            scenario: None,
+            max_cost_usd: None,
+        }
+    }
+
+    /// The run in `scenario` (its disruptions added to the task's setup).
+    pub fn scenario(self, scenario: &'a Scenario) -> RunOptions<'a> {
+        RunOptions {
+            scenario: Some(scenario),
+            ..self
+        }
+    }
+
+    /// The run with the spend limit `max` (`None` keeps the env default).
+    pub fn max_cost(self, max: Option<f64>) -> RunOptions<'a> {
+        RunOptions {
+            max_cost_usd: max,
+            ..self
+        }
+    }
+
+    /// Starts the run (see [`launch`](crate::launch::launch)): its ids.
+    pub async fn start(
+        self,
+        state: &Arc<AppState>,
+        task_id: &str,
+        team: Team,
+    ) -> Result<(RunId, BranchId), RunError> {
+        let none = Scenario::default();
+        let spec = crate::launch::LaunchSpec {
+            task_id,
+            team,
+            scenario: self.scenario.unwrap_or(&none),
+            rules: Rules::new(self.runner).with_max_cost(self.max_cost_usd),
+        };
+        let started = crate::launch::launch(state, spec).await?;
+        Ok((started.run_id, started.branch_id))
+    }
 }
 
 /// Creates a run and its first branch, starts its world from the base save, records `RunStart`

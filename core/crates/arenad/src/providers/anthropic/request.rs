@@ -401,8 +401,14 @@ mod tests {
             {"role": "tool", "tool_call_id": "t1", "content": [{"type": "input_audio"}]},
         ])));
         let user = &req["messages"][0]["content"];
-        assert_eq!(user[1]["text"], "[image omitted: Shakedown sends text only]");
-        assert_eq!(user[2]["content"], "[audio omitted: Shakedown sends text only]");
+        assert_eq!(
+            user[1]["text"],
+            "[image omitted: Shakedown sends text only]"
+        );
+        assert_eq!(
+            user[2]["content"],
+            "[audio omitted: Shakedown sends text only]"
+        );
     }
 
     #[test]

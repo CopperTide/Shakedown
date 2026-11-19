@@ -424,8 +424,8 @@ async fn create_run(
     let (run_id, branch_id) = detached(async move {
         let _permit = permit;
         let (task, team) = (&req.task_id, req.team);
-        let run = runner::start_run_capped(&state, task, team, req.runner, &scenario, max);
-        Ok(run.await?)
+        let run = runner::RunOptions::new(req.runner).scenario(&scenario);
+        Ok(run.max_cost(max).start(&state, task, team).await?)
     })
     .await?;
     Ok(Json(json!({"run_id": run_id, "branch_id": branch_id})))

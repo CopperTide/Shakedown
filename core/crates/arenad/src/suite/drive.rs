@@ -71,7 +71,8 @@ pub(crate) async fn start_builtin(
     let (task, team) = (&slot.task_id, suite.team.clone());
     let scenario = suite.scenario_of(slot);
     let max = suite.max_cost_usd;
-    match runner::start_run_capped(state, task, team, suite.runner, scenario, max).await {
+    let run = runner::RunOptions::new(suite.runner).scenario(scenario);
+    match run.max_cost(max).start(state, task, team).await {
         Ok((run, branch)) => {
             state
                 .store

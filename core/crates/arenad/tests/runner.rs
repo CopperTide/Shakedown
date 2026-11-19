@@ -483,7 +483,7 @@ async fn the_concurrent_runner_runs_every_agent_at_once(live: Live) {
         live.agent("triage", &say("resolver")),
         live.agent("resolver", &say("triage")),
     ]);
-    let started = runner::start_run_with(&fx.state, "27", team, Runner::Concurrent);
+    let started = runner::RunOptions::new(Runner::Concurrent).start(&fx.state, "27", team);
     let (_run, branch) = started.await.unwrap();
     let (b, evs) = live::ended_ok(&fx.state, &branch).await;
     live::assert_recorded(&b, &evs, &live);

@@ -84,7 +84,7 @@ fn a_lead_that_cant_reach_its_model_ends_the_run_infra_error() {
             spec("lead", AgentKind::Open),
             spec("helper", AgentKind::Open),
         ]);
-        let started = runner::start_run_with(&fx.state, "27", t, Runner::Dispatch);
+        let started = runner::RunOptions::new(Runner::Dispatch).start(&fx.state, "27", t);
         let (_run, branch) = started.await.unwrap();
         let b = live::ended(&fx.state, &branch).await;
         assert_eq!(b.status, BranchStatus::InfraError, "{:?}", b.error);
@@ -181,7 +181,7 @@ async fn a_lead_dispatches(live: Live) {
         lead,
         live.agent("customer", MEMBER),
     ]);
-    let started = runner::start_run_with(&fx.state, "27", t, Runner::Dispatch);
+    let started = runner::RunOptions::new(Runner::Dispatch).start(&fx.state, "27", t);
     let (_run, branch) = started.await.unwrap();
     let (b, evs) = live::ended_ok(&fx.state, &branch).await;
     live::assert_recorded(&b, &evs, &live);

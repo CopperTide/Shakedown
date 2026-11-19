@@ -129,7 +129,9 @@ pub async fn walk_in(
     scenario: &Scenario,
     polls: usize,
 ) -> (Branch, CheckPayload, Vec<Event>) {
-    let started = runner::start_run_in(state, task, team, Runner::Chain, scenario);
+    let started = runner::RunOptions::new(Runner::Chain)
+        .scenario(scenario)
+        .start(state, task, team);
     let (_run, id) = started.await.unwrap();
     for _ in 0..polls {
         let b = state.store.branch(&id).await.unwrap();
