@@ -67,7 +67,7 @@ function useSetup() {
   const teamRunner = team.team?.runner ?? 'chain';
   useEffect(() => { setRunner(teamRunner); }, [team.team?.id, teamRunner]);
   const task = tasks.tasks?.find((t) => t.id === taskId) ?? tasks.tasks?.[0] ?? null;
-  const scenario = useScenario(true, task ? [task.id] : []);
+  const scenario = useScenario(task ? [task.id] : []);
   const nameOf = useTaskNames();
   useConnected(team.replace);
   return { tasks, team, suggested, task, setTaskId, runner, setRunner, scenario, nameOf };

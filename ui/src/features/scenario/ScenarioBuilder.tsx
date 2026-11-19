@@ -1,28 +1,22 @@
-import { useEffect, useState } from 'react';
-import { scenarioOptions as fetchOptions } from '@/api/benchmark';
+import { useMemo, useState } from 'react';
 import { Checkbox, Field, Input, NativeSelect } from '@/components/ui/input';
 import { Tag } from '@/components/ui/status';
+import { useBenchmark } from '@/hooks/useBenchmark';
 import { cn } from '@/lib/cn';
-import { errorMessage } from '@/lib/errors';
 import type { DisruptionOption, ParamSpec, ParamValue, ScenarioOptions } from '@/model/scenario';
 import { type Selection, chosen, initialSelection, optionWords, paramProblem, previewText, scenarioOf, scenarioProblem, toggled, withParam } from './scenario';
 
-/** The benchmark's `scenario_options`, loaded when a dialog opens; the selection starts at their defaults. */
-export function useScenario(open: boolean, tasks: string[]) {
-  const [options, setOptions] = useState<ScenarioOptions | null>(null);
-  const [sel, setSel] = useState<Selection>({});
-  const [error, setError] = useState<string | null>(null);
-  useEffect(() => {
-    if (!open) return;
-    let alive = true;
-    fetchOptions().then((o) => { if (alive) { setOptions(o); setSel(initialSelection(o)); } })
-      .catch((e) => { if (alive) setError(errorMessage(e)); });
-    return () => { alive = false; };
-  }, [open]);
+/** The benchmark's `scenario_options`; the selection starts at their defaults until it is changed. */
+export function useScenario(tasks: string[]) {
+  const { data: bench, error } = useBenchmark();
+  const options: ScenarioOptions | null = bench?.scenario_options ?? null;
+  const initial = useMemo<Selection>(() => (bench ? initialSelection(bench.scenario_options ?? null) : {}), [bench]);
+  const [edited, setEdited] = useState<Selection | null>(null);
+  const sel = edited ?? initial;
   return {
     options, sel, error,
-    toggle: (id: string, on: boolean) => setSel((s) => toggled(s, id, on)),
-    setParam: (id: string, spec: ParamSpec, raw: string) => setSel((s) => withParam(s, id, spec, raw)),
+    toggle: (id: string, on: boolean) => setEdited((s) => toggled(s ?? initial, id, on)),
+    setParam: (id: string, spec: ParamSpec, raw: string) => setEdited((s) => withParam(s ?? initial, id, spec, raw)),
     scenario: scenarioOf(options, sel),
     problem: scenarioProblem(options, sel, tasks),
   };

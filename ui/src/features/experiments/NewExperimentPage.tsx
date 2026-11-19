@@ -96,7 +96,7 @@ function useNewExperiment(health: Health | null) {
   const [name, setName] = useState(kept.name);
   const [runs, setRuns] = useState<number>(kept.runs);
   const task = tasks?.find((t) => t.id === taskId) ?? tasks?.[0] ?? null;
-  const scenario = useScenario(true, task ? [task.id] : []);
+  const scenario = useScenario(task ? [task.id] : []);
   const built = drafts.drafts.map((x) => { const base = teams.choices.find((c) => c.key === x.teamId)?.team; return base ? setupTeam(base, x) : null; });
   const missing = built.flatMap((t) => (t ? setupMissing(t, health) : []));
   const problem = setupsProblem(drafts.drafts) ?? scenario.problem ?? missing[0] ?? null;
