@@ -1,8 +1,8 @@
 import { useParams } from 'react-router-dom';
 import { StatusChip } from '@/components/marks';
-import { PageBody, PageHeader } from '@/components/ui/page';
+import { PageBody, PageGate, PageHeader } from '@/components/ui/page';
 import { Panel } from '@/components/ui/panel';
-import { EmptyState, ErrorState, LoadingState } from '@/components/ui/state';
+import { EmptyState } from '@/components/ui/state';
 import RunMenu from '@/features/run/RunMenu';
 import { taskOf } from '@/features/run/runStats';
 import { useBranch } from '@/features/run/useBranch';
@@ -37,9 +37,7 @@ export default function World() {
   const { runId = '', branchId = '' } = useParams();
   const { detail, error, reload } = useBranch(branchId, runId);
   const { views, error: viewError } = useViews(branchId, detail);
-  if (!detail) {
-    return <><PageHeader title="World" /><PageBody>{error ? <ErrorState error={error} onRetry={reload} /> : <Panel><LoadingState label="Loading the world…" rows={6} /></Panel>}</PageBody></>;
-  }
+  if (!detail) return <PageGate title="World" label="Loading the world…" rows={6} error={error} onRetry={reload} />;
   if (!views.length) {
     return (
       <><PageHeader title="World" status={<StatusChip status={detail.status} />} actions={<RunMenu runId={runId} d={detail} page="world" step={null} />} />
