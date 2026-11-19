@@ -45,15 +45,12 @@ def get_issue(call):
 def update_issue(call):
     repo, row = the_issue(call)
     b = call.body()
-    fields = {k: b[k] for k in ("title", "body") if k in b}
-    if fields:
-        records.touch(call.db, row["id"], call.now(), **fields)
+    changes = {k: b[k] for k in ("title", "body", "state", "state_reason") if k in b}
     if "labels" in b:
-        records.set_labels(call.db, repo["id"], row["id"], [x if isinstance(x, str) else x["name"] for x in b["labels"]])
+        changes["labels"] = [x if isinstance(x, str) else x["name"] for x in b["labels"]]
     if "assignees" in b:
-        records.set_assignees(call.db, row["id"], b["assignees"] or [])
-    if b.get("state") in ("open", "closed"):
-        issue_rules.set_state(call, repo, row, b["state"], call.login, b.get("state_reason") or "completed")
+        changes["assignees"] = b["assignees"] or []
+    issue_rules.edit(call, repo, row, call.login, changes)
     return issue_shapes.issue(call, repo, records.issue(call.db, repo["id"], row["number"]))
 
 

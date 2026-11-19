@@ -1,0 +1,9 @@
+# Sent by gh 2.45.0 (github.com/cli/cli, MIT, LICENSE-cli.txt)
+mutation PullRequestCreate($input: CreatePullRequestInput!) {
+			createPullRequest(input: $input) {
+				pullRequest {
+					id
+					url
+				}
+			}
+	}

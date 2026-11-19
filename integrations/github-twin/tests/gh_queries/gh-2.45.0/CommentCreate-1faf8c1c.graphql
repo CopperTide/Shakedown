@@ -1,0 +1,2 @@
+# Sent by gh 2.45.0 (github.com/cli/cli, MIT, LICENSE-cli.txt)
+mutation CommentCreate($input:AddCommentInput!){addComment(input: $input){commentEdge{node{url}}}}

@@ -1,0 +1,2506 @@
+interface Actor {
+  avatarUrl(size: Int): URI!
+  login: String!
+  resourcePath: URI!
+  url: URI!
+}
+
+type ActorConnection {
+  edges: [ActorEdge]
+  nodes: [Actor]
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type ActorEdge {
+  cursor: String!
+  node: Actor
+}
+
+type AddCommentPayload {
+  clientMutationId: String
+  commentEdge: IssueCommentEdge
+  subject: Node
+}
+
+type AddLabelsToLabelablePayload {
+  clientMutationId: String
+  labelable: Labelable
+}
+
+type AddPullRequestReviewPayload {
+  clientMutationId: String
+  pullRequestReview: PullRequestReview
+  reviewEdge: PullRequestReviewEdge
+}
+
+type App implements Node {
+  clientId: String
+  createdAt: DateTime!
+  databaseId: Int
+  description: String
+  id: ID!
+  logoBackgroundColor: String!
+  logoUrl(size: Int): URI!
+  name: String!
+  slug: String!
+  updatedAt: DateTime!
+  url: URI!
+}
+
+interface Assignable {
+  assignedActors(after: String, before: String, first: Int, last: Int): AssigneeConnection!
+  assignees(after: String, before: String, first: Int, last: Int): UserConnection!
+  suggestedActors(after: String, before: String, first: Int, last: Int, query: String): AssigneeConnection!
+}
+
+union Assignee = Bot | Mannequin | Organization | User
+
+type AssigneeConnection {
+  edges: [AssigneeEdge]
+  nodes: [Assignee]
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type AssigneeEdge {
+  cursor: String!
+  node: Assignee
+}
+
+type AutoMergeRequest {
+  authorEmail: String
+  commitBody: String
+  commitHeadline: String
+  enabledAt: DateTime
+  enabledBy: Actor
+  mergeMethod: PullRequestMergeMethod!
+  pullRequest: PullRequest!
+}
+
+type Bot implements Actor & Node & UniformResourceLocatable {
+  avatarUrl(size: Int): URI!
+  createdAt: DateTime!
+  databaseId: Int
+  id: ID!
+  login: String!
+  resourcePath: URI!
+  updatedAt: DateTime!
+  url: URI!
+}
+
+type BranchProtectionRule implements Node {
+  allowsDeletions: Boolean!
+  allowsForcePushes: Boolean!
+  blocksCreations: Boolean!
+  creator: Actor
+  databaseId: Int
+  dismissesStaleReviews: Boolean!
+  id: ID!
+  isAdminEnforced: Boolean!
+  lockAllowsFetchAndMerge: Boolean!
+  lockBranch: Boolean!
+  matchingRefs(after: String, before: String, first: Int, last: Int, query: String): RefConnection!
+  pattern: String!
+  repository: Repository
+  requireLastPushApproval: Boolean!
+  requiredApprovingReviewCount: Int
+  requiredDeploymentEnvironments: [String]
+  requiredStatusCheckContexts: [String]
+  requiresApprovingReviews: Boolean!
+  requiresCodeOwnerReviews: Boolean!
+  requiresCommitSignatures: Boolean!
+  requiresConversationResolution: Boolean!
+  requiresDeployments: Boolean!
+  requiresLinearHistory: Boolean!
+  requiresStatusChecks: Boolean!
+  requiresStrictStatusChecks: Boolean!
+  restrictsPushes: Boolean!
+  restrictsReviewDismissals: Boolean!
+}
+
+type BranchProtectionRuleConnection {
+  edges: [BranchProtectionRuleEdge]
+  nodes: [BranchProtectionRule]
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type BranchProtectionRuleEdge {
+  cursor: String!
+  node: BranchProtectionRule
+}
+
+type CheckRun implements Node & RequirableByPullRequest & UniformResourceLocatable {
+  checkSuite: CheckSuite!
+  completedAt: DateTime
+  conclusion: CheckConclusionState
+  databaseId: Int
+  detailsUrl: URI
+  externalId: String
+  id: ID!
+  isRequired(pullRequestId: ID, pullRequestNumber: Int): Boolean!
+  name: String!
+  permalink: URI!
+  repository: Repository!
+  resourcePath: URI!
+  startedAt: DateTime
+  status: CheckStatusState!
+  summary: String
+  text: String
+  title: String
+  url: URI!
+}
+
+type CheckRunConnection {
+  edges: [CheckRunEdge]
+  nodes: [CheckRun]
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type CheckRunEdge {
+  cursor: String!
+  node: CheckRun
+}
+
+type CheckSuite implements Node {
+  app: App
+  branch: Ref
+  checkRuns(after: String, before: String, filterBy: CheckRunFilter, first: Int, last: Int): CheckRunConnection
+  commit: Commit!
+  conclusion: CheckConclusionState
+  createdAt: DateTime!
+  creator: User
+  databaseId: Int
+  id: ID!
+  matchingPullRequests(after: String, baseRefName: String, before: String, first: Int, headRefName: String, labels: [String!], last: Int, orderBy: IssueOrder, states: [PullRequestState!]): PullRequestConnection
+  repository: Repository!
+  resourcePath: URI!
+  status: CheckStatusState!
+  updatedAt: DateTime!
+  url: URI!
+  workflowRun: WorkflowRun
+}
+
+type CheckSuiteConnection {
+  edges: [CheckSuiteEdge]
+  nodes: [CheckSuite]
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type CheckSuiteEdge {
+  cursor: String!
+  node: CheckSuite
+}
+
+interface Closable {
+  closed: Boolean!
+  closedAt: DateTime
+  viewerCanClose: Boolean!
+  viewerCanReopen: Boolean!
+}
+
+type CloseIssuePayload {
+  clientMutationId: String
+  issue: Issue
+}
+
+type ClosePullRequestPayload {
+  clientMutationId: String
+  pullRequest: PullRequest
+}
+
+interface Comment {
+  author: Actor
+  authorAssociation: CommentAuthorAssociation!
+  body: String!
+  bodyHTML: HTML!
+  bodyText: String!
+  createdAt: DateTime!
+  createdViaEmail: Boolean!
+  editor: Actor
+  id: ID!
+  includesCreatedEdit: Boolean!
+  lastEditedAt: DateTime
+  publishedAt: DateTime
+  updatedAt: DateTime!
+  viewerDidAuthor: Boolean!
+}
+
+type Commit implements GitObject & Node & UniformResourceLocatable {
+  abbreviatedOid: String!
+  additions: Int!
+  associatedPullRequests(after: String, before: String, first: Int, last: Int, orderBy: PullRequestOrder = { field: CREATED_AT, direction: ASC }): PullRequestConnection
+  author: GitActor
+  authoredByCommitter: Boolean!
+  authoredDate: DateTime!
+  authors(after: String, before: String, first: Int, last: Int): GitActorConnection!
+  changedFiles: Int! @deprecated(reason: "`changedFiles` will be removed. Use `changedFilesIfAvailable` instead. Removal on 2023-01-01 UTC.")
+  changedFilesIfAvailable: Int
+  checkSuites(after: String, before: String, filterBy: CheckSuiteFilter, first: Int, last: Int): CheckSuiteConnection
+  commitResourcePath: URI!
+  commitUrl: URI!
+  committedDate: DateTime!
+  committedViaWeb: Boolean!
+  committer: GitActor
+  deletions: Int!
+  history(after: String, author: CommitAuthor, before: String, first: Int, last: Int, path: String, since: GitTimestamp, until: GitTimestamp): CommitHistoryConnection!
+  id: ID!
+  message: String!
+  messageBody: String!
+  messageBodyHTML: HTML!
+  messageHeadline: String!
+  messageHeadlineHTML: HTML!
+  oid: GitObjectID!
+  onBehalfOf: Organization
+  parents(after: String, before: String, first: Int, last: Int): CommitConnection!
+  pushedDate: DateTime @deprecated(reason: "`pushedDate` is no longer supported. Removal on 2023-07-01 UTC.")
+  repository: Repository!
+  resourcePath: URI!
+  statusCheckRollup: StatusCheckRollup
+  tarballUrl: URI!
+  treeResourcePath: URI!
+  treeUrl: URI!
+  url: URI!
+  viewerCanSubscribe: Boolean!
+  viewerSubscription: SubscriptionState
+  zipballUrl: URI!
+}
+
+type CommitConnection {
+  edges: [CommitEdge]
+  nodes: [Commit]
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type CommitEdge {
+  cursor: String!
+  node: Commit
+}
+
+type CommitHistoryConnection {
+  edges: [CommitEdge]
+  nodes: [Commit]
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type ComparisonCommitConnection {
+  authorCount: Int!
+  edges: [CommitEdge]
+  nodes: [Commit]
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type CreateIssuePayload {
+  clientMutationId: String
+  issue: Issue
+}
+
+type CreatePullRequestPayload {
+  clientMutationId: String
+  pullRequest: PullRequest
+}
+
+type EnterpriseAdministratorConnection {
+  edges: [EnterpriseAdministratorEdge]
+  nodes: [User]
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type EnterpriseAdministratorEdge {
+  cursor: String!
+  node: User
+  role: EnterpriseAdministratorRole!
+}
+
+type EnterpriseOrganizationMembershipConnection {
+  edges: [EnterpriseOrganizationMembershipEdge]
+  nodes: [Organization]
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type EnterpriseOrganizationMembershipEdge {
+  cursor: String!
+  node: Organization
+  role: EnterpriseUserAccountMembershipRole!
+}
+
+type EnterpriseOutsideCollaboratorConnection {
+  edges: [EnterpriseOutsideCollaboratorEdge]
+  nodes: [User]
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type EnterpriseOutsideCollaboratorEdge {
+  cursor: String!
+  node: User
+}
+
+type FollowerConnection {
+  edges: [UserEdge]
+  nodes: [User]
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type FollowingConnection {
+  edges: [UserEdge]
+  nodes: [User]
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type GitActor {
+  avatarUrl(size: Int): URI!
+  date: GitTimestamp
+  email: String
+  name: String
+  user: User
+}
+
+type GitActorConnection {
+  edges: [GitActorEdge]
+  nodes: [GitActor]
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type GitActorEdge {
+  cursor: String!
+  node: GitActor
+}
+
+interface GitObject {
+  abbreviatedOid: String!
+  commitResourcePath: URI!
+  commitUrl: URI!
+  id: ID!
+  oid: GitObjectID!
+  repository: Repository!
+}
+
+type Issue implements Assignable & Closable & Comment & Labelable & Lockable & Node & Reactable & RepositoryNode & UniformResourceLocatable & Updatable & UpdatableComment {
+  activeLockReason: LockReason
+  assignedActors(after: String, before: String, first: Int, last: Int): AssigneeConnection!
+  assignees(after: String, before: String, first: Int, last: Int): UserConnection!
+  author: Actor
+  authorAssociation: CommentAuthorAssociation!
+  body: String!
+  bodyHTML: HTML!
+  bodyResourcePath: URI!
+  bodyText: String!
+  bodyUrl: URI!
+  closed: Boolean!
+  closedAt: DateTime
+  closedByPullRequestsReferences(after: String, before: String, first: Int, includeClosedPrs: Boolean = false, last: Int, orderByState: Boolean = false, userLinkedOnly: Boolean = false): PullRequestConnection
+  comments(after: String, before: String, first: Int, last: Int, orderBy: IssueCommentOrder): IssueCommentConnection!
+  createdAt: DateTime!
+  createdViaEmail: Boolean!
+  databaseId: Int
+  duplicateOf: Issue
+  editor: Actor
+  fullDatabaseId: BigInt
+  id: ID!
+  includesCreatedEdit: Boolean!
+  isPinned: Boolean
+  isReadByViewer: Boolean
+  labels(after: String, before: String, first: Int, last: Int, orderBy: LabelOrder = { field: CREATED_AT, direction: ASC }): LabelConnection
+  lastEditedAt: DateTime
+  locked: Boolean!
+  milestone: Milestone
+  number: Int!
+  parent: Issue
+  participants(after: String, before: String, first: Int, last: Int): UserConnection!
+  projectCards(after: String, archivedStates: [ProjectCardArchivedState] = [ARCHIVED, NOT_ARCHIVED], before: String, first: Int, last: Int): ProjectCardConnection! @deprecated(reason: "Projects (classic) is being deprecated in favor of the new Projects experience, see: https://github.blog/changelog/2024-05-23-sunset-notice-projects-classic/. Removal on 2025-04-01 UTC.")
+  projectItems(after: String, before: String, first: Int, includeArchived: Boolean = true, last: Int): ProjectV2ItemConnection!
+  projectV2(number: Int!): ProjectV2
+  projectsV2(after: String, before: String, first: Int, last: Int, minPermissionLevel: ProjectV2PermissionLevel = READ, orderBy: ProjectV2Order = { field: NUMBER, direction: DESC }, query: String): ProjectV2Connection!
+  publishedAt: DateTime
+  reactionGroups: [ReactionGroup!]
+  repository: Repository!
+  resourcePath: URI!
+  state: IssueState!
+  stateReason(enableDuplicate: Boolean = false): IssueStateReason
+  subIssues(after: String, before: String, first: Int, last: Int): IssueConnection!
+  suggestedActors(after: String, before: String, first: Int, last: Int, query: String): AssigneeConnection!
+  title: String!
+  titleHTML: String!
+  updatedAt: DateTime!
+  url: URI!
+  viewerCanClose: Boolean!
+  viewerCanDelete: Boolean!
+  viewerCanLabel: Boolean!
+  viewerCanReact: Boolean!
+  viewerCanReopen: Boolean!
+  viewerCanSetFields: Boolean
+  viewerCanSubscribe: Boolean!
+  viewerCanUpdate: Boolean!
+  viewerCannotUpdateReasons: [CommentCannotUpdateReason!]!
+  viewerDidAuthor: Boolean!
+  viewerSubscription: SubscriptionState
+  viewerThreadSubscriptionFormAction: ThreadSubscriptionFormAction
+  viewerThreadSubscriptionStatus: ThreadSubscriptionState
+}
+
+type IssueComment implements Comment & Node & Reactable & RepositoryNode & Updatable & UpdatableComment {
+  author: Actor
+  authorAssociation: CommentAuthorAssociation!
+  body: String!
+  bodyHTML: HTML!
+  bodyText: String!
+  createdAt: DateTime!
+  createdViaEmail: Boolean!
+  databaseId: Int
+  editor: Actor
+  fullDatabaseId: BigInt
+  id: ID!
+  includesCreatedEdit: Boolean!
+  isMinimized: Boolean!
+  issue: Issue!
+  lastEditedAt: DateTime
+  minimizedReason: String
+  publishedAt: DateTime
+  pullRequest: PullRequest
+  reactionGroups: [ReactionGroup!]
+  repository: Repository!
+  resourcePath: URI!
+  updatedAt: DateTime!
+  url: URI!
+  viewerCanDelete: Boolean!
+  viewerCanMinimize: Boolean!
+  viewerCanReact: Boolean!
+  viewerCanUnminimize: Boolean!
+  viewerCanUpdate: Boolean!
+  viewerCannotUpdateReasons: [CommentCannotUpdateReason!]!
+  viewerDidAuthor: Boolean!
+}
+
+type IssueCommentConnection {
+  edges: [IssueCommentEdge]
+  nodes: [IssueComment]
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type IssueCommentEdge {
+  cursor: String!
+  node: IssueComment
+}
+
+type IssueConnection {
+  edges: [IssueEdge]
+  nodes: [Issue]
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type IssueEdge {
+  cursor: String!
+  node: Issue
+}
+
+union IssueOrPullRequest = Issue | PullRequest
+
+type Label implements Node {
+  color: String!
+  createdAt: DateTime
+  description: String
+  id: ID!
+  isDefault: Boolean!
+  issues(after: String, before: String, filterBy: IssueFilters, first: Int, labels: [String!], last: Int, orderBy: IssueOrder, states: [IssueState!]): IssueConnection!
+  name: String!
+  pullRequests(after: String, baseRefName: String, before: String, first: Int, headRefName: String, labels: [String!], last: Int, orderBy: IssueOrder, states: [PullRequestState!]): PullRequestConnection!
+  repository: Repository!
+  resourcePath: URI!
+  updatedAt: DateTime
+  url: URI!
+}
+
+type LabelConnection {
+  edges: [LabelEdge]
+  nodes: [Label]
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type LabelEdge {
+  cursor: String!
+  node: Label
+}
+
+interface Labelable {
+  labels(after: String, before: String, first: Int, last: Int, orderBy: LabelOrder = { field: CREATED_AT, direction: ASC }): LabelConnection
+  viewerCanLabel: Boolean!
+}
+
+interface Lockable {
+  activeLockReason: LockReason
+  locked: Boolean!
+}
+
+type Mannequin implements Actor & Node & UniformResourceLocatable {
+  avatarUrl(size: Int): URI!
+  claimant: User
+  createdAt: DateTime!
+  databaseId: Int
+  email: String
+  id: ID!
+  login: String!
+  name: String
+  resourcePath: URI!
+  updatedAt: DateTime!
+  url: URI!
+}
+
+type MannequinConnection {
+  edges: [MannequinEdge]
+  nodes: [Mannequin]
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type MannequinEdge {
+  cursor: String!
+  node: Mannequin
+}
+
+type MarkPullRequestReadyForReviewPayload {
+  clientMutationId: String
+  pullRequest: PullRequest
+}
+
+type MergePullRequestPayload {
+  actor: Actor
+  clientMutationId: String
+  pullRequest: PullRequest
+}
+
+type Milestone implements Closable & Node & UniformResourceLocatable {
+  closed: Boolean!
+  closedAt: DateTime
+  closedIssueCount: Int!
+  createdAt: DateTime!
+  creator: Actor
+  description: String
+  descriptionHTML: String
+  dueOn: DateTime
+  id: ID!
+  issues(after: String, before: String, filterBy: IssueFilters, first: Int, labels: [String!], last: Int, orderBy: IssueOrder, states: [IssueState!]): IssueConnection!
+  number: Int!
+  openIssueCount: Int!
+  progressPercentage: Float!
+  pullRequests(after: String, baseRefName: String, before: String, first: Int, headRefName: String, labels: [String!], last: Int, orderBy: IssueOrder, states: [PullRequestState!]): PullRequestConnection!
+  repository: Repository!
+  resourcePath: URI!
+  state: MilestoneState!
+  title: String!
+  updatedAt: DateTime!
+  url: URI!
+  viewerCanClose: Boolean!
+  viewerCanReopen: Boolean!
+}
+
+type MilestoneConnection {
+  edges: [MilestoneEdge]
+  nodes: [Milestone]
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type MilestoneEdge {
+  cursor: String!
+  node: Milestone
+}
+
+type Mutation {
+  addComment(input: AddCommentInput!): AddCommentPayload
+  addLabelsToLabelable(input: AddLabelsToLabelableInput!): AddLabelsToLabelablePayload
+  addPullRequestReview(input: AddPullRequestReviewInput!): AddPullRequestReviewPayload
+  closeIssue(input: CloseIssueInput!): CloseIssuePayload
+  closePullRequest(input: ClosePullRequestInput!): ClosePullRequestPayload
+  createIssue(input: CreateIssueInput!): CreateIssuePayload
+  createPullRequest(input: CreatePullRequestInput!): CreatePullRequestPayload
+  markPullRequestReadyForReview(input: MarkPullRequestReadyForReviewInput!): MarkPullRequestReadyForReviewPayload
+  mergePullRequest(input: MergePullRequestInput!): MergePullRequestPayload
+  removeLabelsFromLabelable(input: RemoveLabelsFromLabelableInput!): RemoveLabelsFromLabelablePayload
+  reopenIssue(input: ReopenIssueInput!): ReopenIssuePayload
+  reopenPullRequest(input: ReopenPullRequestInput!): ReopenPullRequestPayload
+  requestReviews(input: RequestReviewsInput!): RequestReviewsPayload
+  updateIssue(input: UpdateIssueInput!): UpdateIssuePayload
+  updatePullRequest(input: UpdatePullRequestInput!): UpdatePullRequestPayload
+}
+
+interface Node {
+  id: ID!
+}
+
+type Organization implements Actor & Node & RepositoryOwner & UniformResourceLocatable {
+  anyPinnableItems(type: PinnableItemType): Boolean!
+  archivedAt: DateTime
+  avatarUrl(size: Int): URI!
+  createdAt: DateTime!
+  databaseId: Int
+  description: String
+  descriptionHTML: String
+  email: String
+  enterpriseOwners(after: String, before: String, first: Int, last: Int, orderBy: OrgEnterpriseOwnerOrder = { field: LOGIN, direction: ASC }, organizationRole: RoleInOrganization, query: String): OrganizationEnterpriseOwnerConnection!
+  id: ID!
+  ipAllowListEnabledSetting: IpAllowListEnabledSettingValue!
+  ipAllowListForInstalledAppsEnabledSetting: IpAllowListForInstalledAppsEnabledSettingValue!
+  isVerified: Boolean!
+  location: String
+  login: String!
+  mannequins(after: String, before: String, first: Int, last: Int, login: String, orderBy: MannequinOrder = { field: CREATED_AT, direction: ASC }): MannequinConnection!
+  membersCanForkPrivateRepositories: Boolean!
+  membersWithRole(after: String, before: String, first: Int, last: Int): OrganizationMemberConnection!
+  name: String
+  newTeamResourcePath: URI!
+  newTeamUrl: URI!
+  notificationDeliveryRestrictionEnabledSetting: NotificationRestrictionSettingValue!
+  organizationBillingEmail: String
+  pendingMembers(after: String, before: String, first: Int, last: Int): UserConnection!
+  pinnedItemsRemaining: Int!
+  project(number: Int!): Project @deprecated(reason: "Projects (classic) is being deprecated in favor of the new Projects experience, see: https://github.blog/changelog/2024-05-23-sunset-notice-projects-classic/. Removal on 2025-04-01 UTC.")
+  projectV2(number: Int!): ProjectV2
+  projects(after: String, before: String, first: Int, last: Int, orderBy: ProjectOrder, search: String, states: [ProjectState!]): ProjectConnection! @deprecated(reason: "Projects (classic) is being deprecated in favor of the new Projects experience, see: https://github.blog/changelog/2024-05-23-sunset-notice-projects-classic/. Removal on 2025-04-01 UTC.")
+  projectsResourcePath: URI!
+  projectsUrl: URI!
+  projectsV2(after: String, before: String, first: Int, last: Int, minPermissionLevel: ProjectV2PermissionLevel = READ, orderBy: ProjectV2Order = { field: NUMBER, direction: DESC }, query: String): ProjectV2Connection!
+  recentProjects(after: String, before: String, first: Int, last: Int): ProjectV2Connection!
+  repositories(affiliations: [RepositoryAffiliation], after: String, before: String, first: Int, hasIssuesEnabled: Boolean, isArchived: Boolean, isFork: Boolean, isLocked: Boolean, last: Int, orderBy: RepositoryOrder, ownerAffiliations: [RepositoryAffiliation] = [OWNER, COLLABORATOR], privacy: RepositoryPrivacy, visibility: RepositoryVisibility): RepositoryConnection!
+  repository(followRenames: Boolean = true, name: String!): Repository
+  requiresTwoFactorAuthentication: Boolean
+  resourcePath: URI!
+  team(slug: String!): Team
+  teams(after: String, before: String, first: Int, last: Int, ldapMapped: Boolean, notificationSetting: TeamNotificationSetting, orderBy: TeamOrder, privacy: TeamPrivacy, query: String, role: TeamRole, rootTeamsOnly: Boolean = false, userLogins: [String!]): TeamConnection!
+  teamsResourcePath: URI!
+  teamsUrl: URI!
+  twitterUsername: String
+  updatedAt: DateTime!
+  url: URI!
+  viewerCanAdminister: Boolean!
+  viewerCanChangePinnedItems: Boolean!
+  viewerCanCreateProjects: Boolean! @deprecated(reason: "Projects (classic) is being deprecated in favor of the new Projects experience, see: https://github.blog/changelog/2024-05-23-sunset-notice-projects-classic/. Removal on 2025-04-01 UTC.")
+  viewerCanCreateRepositories: Boolean!
+  viewerCanCreateTeams: Boolean!
+  viewerIsAMember: Boolean!
+  viewerIsFollowing: Boolean!
+  webCommitSignoffRequired: Boolean!
+  websiteUrl: URI
+}
+
+type OrganizationConnection {
+  edges: [OrganizationEdge]
+  nodes: [Organization]
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type OrganizationEdge {
+  cursor: String!
+  node: Organization
+}
+
+type OrganizationEnterpriseOwnerConnection {
+  edges: [OrganizationEnterpriseOwnerEdge]
+  nodes: [User]
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type OrganizationEnterpriseOwnerEdge {
+  cursor: String!
+  node: User
+  organizationRole: RoleInOrganization!
+}
+
+type OrganizationMemberConnection {
+  edges: [OrganizationMemberEdge]
+  nodes: [User]
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type OrganizationMemberEdge {
+  cursor: String!
+  hasTwoFactorEnabled: Boolean
+  node: User
+  role: OrganizationMemberRole
+}
+
+type PageInfo {
+  endCursor: String
+  hasNextPage: Boolean!
+  hasPreviousPage: Boolean!
+  startCursor: String
+}
+
+type Project implements Closable & Node & Updatable {
+  body: String @deprecated(reason: "Projects (classic) is being deprecated in favor of the new Projects experience, see: https://github.blog/changelog/2024-05-23-sunset-notice-projects-classic/. Removal on 2025-04-01 UTC.")
+  bodyHTML: HTML! @deprecated(reason: "Projects (classic) is being deprecated in favor of the new Projects experience, see: https://github.blog/changelog/2024-05-23-sunset-notice-projects-classic/. Removal on 2025-04-01 UTC.")
+  closed: Boolean!
+  closedAt: DateTime
+  columns(after: String, before: String, first: Int, last: Int): ProjectColumnConnection! @deprecated(reason: "Projects (classic) is being deprecated in favor of the new Projects experience, see: https://github.blog/changelog/2024-05-23-sunset-notice-projects-classic/. Removal on 2025-04-01 UTC.")
+  createdAt: DateTime! @deprecated(reason: "Projects (classic) is being deprecated in favor of the new Projects experience, see: https://github.blog/changelog/2024-05-23-sunset-notice-projects-classic/. Removal on 2025-04-01 UTC.")
+  creator: Actor @deprecated(reason: "Projects (classic) is being deprecated in favor of the new Projects experience, see: https://github.blog/changelog/2024-05-23-sunset-notice-projects-classic/. Removal on 2025-04-01 UTC.")
+  databaseId: Int @deprecated(reason: "Projects (classic) is being deprecated in favor of the new Projects experience, see: https://github.blog/changelog/2024-05-23-sunset-notice-projects-classic/. Removal on 2025-04-01 UTC.")
+  id: ID!
+  name: String! @deprecated(reason: "Projects (classic) is being deprecated in favor of the new Projects experience, see: https://github.blog/changelog/2024-05-23-sunset-notice-projects-classic/. Removal on 2025-04-01 UTC.")
+  number: Int! @deprecated(reason: "Projects (classic) is being deprecated in favor of the new Projects experience, see: https://github.blog/changelog/2024-05-23-sunset-notice-projects-classic/. Removal on 2025-04-01 UTC.")
+  pendingCards(after: String, archivedStates: [ProjectCardArchivedState] = [ARCHIVED, NOT_ARCHIVED], before: String, first: Int, last: Int): ProjectCardConnection! @deprecated(reason: "Projects (classic) is being deprecated in favor of the new Projects experience, see: https://github.blog/changelog/2024-05-23-sunset-notice-projects-classic/. Removal on 2025-04-01 UTC.")
+  resourcePath: URI! @deprecated(reason: "Projects (classic) is being deprecated in favor of the new Projects experience, see: https://github.blog/changelog/2024-05-23-sunset-notice-projects-classic/. Removal on 2025-04-01 UTC.")
+  state: ProjectState! @deprecated(reason: "Projects (classic) is being deprecated in favor of the new Projects experience, see: https://github.blog/changelog/2024-05-23-sunset-notice-projects-classic/. Removal on 2025-04-01 UTC.")
+  updatedAt: DateTime! @deprecated(reason: "Projects (classic) is being deprecated in favor of the new Projects experience, see: https://github.blog/changelog/2024-05-23-sunset-notice-projects-classic/. Removal on 2025-04-01 UTC.")
+  url: URI! @deprecated(reason: "Projects (classic) is being deprecated in favor of the new Projects experience, see: https://github.blog/changelog/2024-05-23-sunset-notice-projects-classic/. Removal on 2025-04-01 UTC.")
+  viewerCanClose: Boolean!
+  viewerCanReopen: Boolean!
+  viewerCanUpdate: Boolean!
+}
+
+type ProjectCard implements Node {
+  column: ProjectColumn @deprecated(reason: "Projects (classic) is being deprecated in favor of the new Projects experience, see: https://github.blog/changelog/2024-05-23-sunset-notice-projects-classic/. Removal on 2025-04-01 UTC.")
+  content: ProjectCardItem @deprecated(reason: "Projects (classic) is being deprecated in favor of the new Projects experience, see: https://github.blog/changelog/2024-05-23-sunset-notice-projects-classic/. Removal on 2025-04-01 UTC.")
+  createdAt: DateTime! @deprecated(reason: "Projects (classic) is being deprecated in favor of the new Projects experience, see: https://github.blog/changelog/2024-05-23-sunset-notice-projects-classic/. Removal on 2025-04-01 UTC.")
+  creator: Actor @deprecated(reason: "Projects (classic) is being deprecated in favor of the new Projects experience, see: https://github.blog/changelog/2024-05-23-sunset-notice-projects-classic/. Removal on 2025-04-01 UTC.")
+  databaseId: Int @deprecated(reason: "Projects (classic) is being deprecated in favor of the new Projects experience, see: https://github.blog/changelog/2024-05-23-sunset-notice-projects-classic/. Removal on 2025-04-01 UTC.")
+  id: ID!
+  isArchived: Boolean! @deprecated(reason: "Projects (classic) is being deprecated in favor of the new Projects experience, see: https://github.blog/changelog/2024-05-23-sunset-notice-projects-classic/. Removal on 2025-04-01 UTC.")
+  note: String @deprecated(reason: "Projects (classic) is being deprecated in favor of the new Projects experience, see: https://github.blog/changelog/2024-05-23-sunset-notice-projects-classic/. Removal on 2025-04-01 UTC.")
+  project: Project! @deprecated(reason: "Projects (classic) is being deprecated in favor of the new Projects experience, see: https://github.blog/changelog/2024-05-23-sunset-notice-projects-classic/. Removal on 2025-04-01 UTC.")
+  resourcePath: URI! @deprecated(reason: "Projects (classic) is being deprecated in favor of the new Projects experience, see: https://github.blog/changelog/2024-05-23-sunset-notice-projects-classic/. Removal on 2025-04-01 UTC.")
+  state: ProjectCardState @deprecated(reason: "Projects (classic) is being deprecated in favor of the new Projects experience, see: https://github.blog/changelog/2024-05-23-sunset-notice-projects-classic/. Removal on 2025-04-01 UTC.")
+  updatedAt: DateTime! @deprecated(reason: "Projects (classic) is being deprecated in favor of the new Projects experience, see: https://github.blog/changelog/2024-05-23-sunset-notice-projects-classic/. Removal on 2025-04-01 UTC.")
+  url: URI! @deprecated(reason: "Projects (classic) is being deprecated in favor of the new Projects experience, see: https://github.blog/changelog/2024-05-23-sunset-notice-projects-classic/. Removal on 2025-04-01 UTC.")
+}
+
+type ProjectCardConnection {
+  edges: [ProjectCardEdge]
+  nodes: [ProjectCard]
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type ProjectCardEdge {
+  cursor: String!
+  node: ProjectCard
+}
+
+union ProjectCardItem = Issue | PullRequest
+
+type ProjectColumn implements Node {
+  cards(after: String, archivedStates: [ProjectCardArchivedState] = [ARCHIVED, NOT_ARCHIVED], before: String, first: Int, last: Int): ProjectCardConnection! @deprecated(reason: "Projects (classic) is being deprecated in favor of the new Projects experience, see: https://github.blog/changelog/2024-05-23-sunset-notice-projects-classic/. Removal on 2025-04-01 UTC.")
+  createdAt: DateTime! @deprecated(reason: "Projects (classic) is being deprecated in favor of the new Projects experience, see: https://github.blog/changelog/2024-05-23-sunset-notice-projects-classic/. Removal on 2025-04-01 UTC.")
+  databaseId: Int @deprecated(reason: "Projects (classic) is being deprecated in favor of the new Projects experience, see: https://github.blog/changelog/2024-05-23-sunset-notice-projects-classic/. Removal on 2025-04-01 UTC.")
+  id: ID!
+  name: String! @deprecated(reason: "Projects (classic) is being deprecated in favor of the new Projects experience, see: https://github.blog/changelog/2024-05-23-sunset-notice-projects-classic/. Removal on 2025-04-01 UTC.")
+  project: Project! @deprecated(reason: "Projects (classic) is being deprecated in favor of the new Projects experience, see: https://github.blog/changelog/2024-05-23-sunset-notice-projects-classic/. Removal on 2025-04-01 UTC.")
+  purpose: ProjectColumnPurpose @deprecated(reason: "Projects (classic) is being deprecated in favor of the new Projects experience, see: https://github.blog/changelog/2024-05-23-sunset-notice-projects-classic/. Removal on 2025-04-01 UTC.")
+  resourcePath: URI! @deprecated(reason: "Projects (classic) is being deprecated in favor of the new Projects experience, see: https://github.blog/changelog/2024-05-23-sunset-notice-projects-classic/. Removal on 2025-04-01 UTC.")
+  updatedAt: DateTime! @deprecated(reason: "Projects (classic) is being deprecated in favor of the new Projects experience, see: https://github.blog/changelog/2024-05-23-sunset-notice-projects-classic/. Removal on 2025-04-01 UTC.")
+  url: URI! @deprecated(reason: "Projects (classic) is being deprecated in favor of the new Projects experience, see: https://github.blog/changelog/2024-05-23-sunset-notice-projects-classic/. Removal on 2025-04-01 UTC.")
+}
+
+type ProjectColumnConnection {
+  edges: [ProjectColumnEdge]
+  nodes: [ProjectColumn]
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type ProjectColumnEdge {
+  cursor: String!
+  node: ProjectColumn
+}
+
+type ProjectConnection {
+  edges: [ProjectEdge]
+  nodes: [Project]
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type ProjectEdge {
+  cursor: String!
+  node: Project
+}
+
+type ProjectV2 implements Closable & Node & Updatable {
+  closed: Boolean!
+  closedAt: DateTime
+  createdAt: DateTime!
+  creator: Actor
+  databaseId: Int @deprecated(reason: "`databaseId` will be removed because it does not support 64-bit signed integer identifiers. Use `fullDatabaseId` instead. Removal on 2025-04-01 UTC.")
+  fullDatabaseId: BigInt
+  id: ID!
+  items(after: String, before: String, first: Int, last: Int, orderBy: ProjectV2ItemOrder = { field: POSITION, direction: ASC }, query: String = ""): ProjectV2ItemConnection!
+  number: Int!
+  public: Boolean!
+  readme: String
+  repositories(after: String, before: String, first: Int, last: Int, orderBy: RepositoryOrder = { field: CREATED_AT, direction: DESC }): RepositoryConnection!
+  resourcePath: URI!
+  shortDescription: String
+  teams(after: String, before: String, first: Int, last: Int, orderBy: TeamOrder = { field: NAME, direction: ASC }): TeamConnection!
+  template: Boolean!
+  title: String!
+  updatedAt: DateTime!
+  url: URI!
+  viewerCanClose: Boolean!
+  viewerCanReopen: Boolean!
+  viewerCanUpdate: Boolean!
+}
+
+type ProjectV2Connection {
+  edges: [ProjectV2Edge]
+  nodes: [ProjectV2]
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type ProjectV2Edge {
+  cursor: String!
+  node: ProjectV2
+}
+
+type ProjectV2Item implements Node {
+  content: ProjectV2ItemContent
+  createdAt: DateTime!
+  creator: Actor
+  databaseId: Int @deprecated(reason: "`databaseId` will be removed because it does not support 64-bit signed integer identifiers. Use `fullDatabaseId` instead. Removal on 2025-04-01 UTC.")
+  fieldValueByName(name: String!): ProjectV2ItemFieldValue
+  fieldValues(after: String, before: String, first: Int, last: Int, orderBy: ProjectV2ItemFieldValueOrder = { field: POSITION, direction: ASC }): ProjectV2ItemFieldValueConnection!
+  fullDatabaseId: BigInt
+  id: ID!
+  isArchived: Boolean!
+  project: ProjectV2!
+  type: ProjectV2ItemType!
+  updatedAt: DateTime!
+}
+
+type ProjectV2ItemConnection {
+  edges: [ProjectV2ItemEdge]
+  nodes: [ProjectV2Item]
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+union ProjectV2ItemContent = Issue | PullRequest
+
+type ProjectV2ItemEdge {
+  cursor: String!
+  node: ProjectV2Item
+}
+
+type ProjectV2ItemFieldSingleSelectValue implements Node {
+  color: ProjectV2SingleSelectFieldOptionColor!
+  createdAt: DateTime!
+  creator: Actor
+  databaseId: Int
+  description: String
+  descriptionHTML: String
+  id: ID!
+  item: ProjectV2Item!
+  name: String
+  nameHTML: String
+  optionId: String
+  updatedAt: DateTime!
+}
+
+union ProjectV2ItemFieldValue = ProjectV2ItemFieldSingleSelectValue
+
+type ProjectV2ItemFieldValueConnection {
+  edges: [ProjectV2ItemFieldValueEdge]
+  nodes: [ProjectV2ItemFieldValue]
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type ProjectV2ItemFieldValueEdge {
+  cursor: String!
+  node: ProjectV2ItemFieldValue
+}
+
+type PullRequest implements Assignable & Closable & Comment & Labelable & Lockable & Node & Reactable & RepositoryNode & UniformResourceLocatable & Updatable & UpdatableComment {
+  activeLockReason: LockReason
+  additions: Int!
+  assignedActors(after: String, before: String, first: Int, last: Int): AssigneeConnection!
+  assignees(after: String, before: String, first: Int, last: Int): UserConnection!
+  author: Actor
+  authorAssociation: CommentAuthorAssociation!
+  autoMergeRequest: AutoMergeRequest
+  baseRef: Ref
+  baseRefName: String!
+  baseRefOid: GitObjectID!
+  baseRepository: Repository
+  body: String!
+  bodyHTML: HTML!
+  bodyText: String!
+  canBeRebased: Boolean!
+  changedFiles: Int!
+  checksResourcePath: URI!
+  checksUrl: URI!
+  closed: Boolean!
+  closedAt: DateTime
+  closingIssuesReferences(after: String, before: String, first: Int, last: Int, orderBy: IssueOrder, userLinkedOnly: Boolean = false): IssueConnection
+  comments(after: String, before: String, first: Int, last: Int, orderBy: IssueCommentOrder): IssueCommentConnection!
+  commits(after: String, before: String, first: Int, last: Int): PullRequestCommitConnection!
+  createdAt: DateTime!
+  createdViaEmail: Boolean!
+  databaseId: Int
+  deletions: Int!
+  editor: Actor
+  files(after: String, before: String, first: Int, last: Int): PullRequestChangedFileConnection
+  fullDatabaseId: BigInt
+  headRef: Ref
+  headRefName: String!
+  headRefOid: GitObjectID!
+  headRepository: Repository
+  headRepositoryOwner: RepositoryOwner
+  id: ID!
+  includesCreatedEdit: Boolean!
+  isCrossRepository: Boolean!
+  isDraft: Boolean!
+  isReadByViewer: Boolean
+  labels(after: String, before: String, first: Int, last: Int, orderBy: LabelOrder = { field: CREATED_AT, direction: ASC }): LabelConnection
+  lastEditedAt: DateTime
+  latestOpinionatedReviews(after: String, before: String, first: Int, last: Int, writersOnly: Boolean = false): PullRequestReviewConnection
+  latestReviews(after: String, before: String, first: Int, last: Int): PullRequestReviewConnection
+  locked: Boolean!
+  maintainerCanModify: Boolean!
+  mergeCommit: Commit
+  mergeStateStatus: MergeStateStatus!
+  mergeable: MergeableState!
+  merged: Boolean!
+  mergedAt: DateTime
+  mergedBy: Actor
+  milestone: Milestone
+  number: Int!
+  participants(after: String, before: String, first: Int, last: Int): UserConnection!
+  permalink: URI!
+  potentialMergeCommit: Commit
+  projectCards(after: String, archivedStates: [ProjectCardArchivedState] = [ARCHIVED, NOT_ARCHIVED], before: String, first: Int, last: Int): ProjectCardConnection! @deprecated(reason: "Projects (classic) is being deprecated in favor of the new Projects experience, see: https://github.blog/changelog/2024-05-23-sunset-notice-projects-classic/. Removal on 2025-04-01 UTC.")
+  projectItems(after: String, before: String, first: Int, includeArchived: Boolean = true, last: Int): ProjectV2ItemConnection!
+  projectV2(number: Int!): ProjectV2
+  projectsV2(after: String, before: String, first: Int, last: Int, minPermissionLevel: ProjectV2PermissionLevel = READ, orderBy: ProjectV2Order = { field: NUMBER, direction: DESC }, query: String): ProjectV2Connection!
+  publishedAt: DateTime
+  reactionGroups: [ReactionGroup!]
+  repository: Repository!
+  resourcePath: URI!
+  revertResourcePath: URI!
+  revertUrl: URI!
+  reviewDecision: PullRequestReviewDecision
+  reviewRequests(after: String, before: String, first: Int, last: Int): ReviewRequestConnection
+  reviews(after: String, author: String, before: String, first: Int, last: Int, states: [PullRequestReviewState!]): PullRequestReviewConnection
+  state: PullRequestState!
+  statusCheckRollup: StatusCheckRollup
+  suggestedActors(after: String, before: String, first: Int, last: Int, query: String): AssigneeConnection!
+  title: String!
+  titleHTML: HTML!
+  totalCommentsCount: Int
+  updatedAt: DateTime!
+  url: URI!
+  viewerCanApplySuggestion: Boolean!
+  viewerCanClose: Boolean!
+  viewerCanDeleteHeadRef: Boolean!
+  viewerCanDisableAutoMerge: Boolean!
+  viewerCanEditFiles: Boolean!
+  viewerCanEnableAutoMerge: Boolean!
+  viewerCanLabel: Boolean!
+  viewerCanMergeAsAdmin: Boolean!
+  viewerCanReact: Boolean!
+  viewerCanReopen: Boolean!
+  viewerCanSubscribe: Boolean!
+  viewerCanUpdate: Boolean!
+  viewerCanUpdateBranch: Boolean!
+  viewerCannotUpdateReasons: [CommentCannotUpdateReason!]!
+  viewerDidAuthor: Boolean!
+  viewerLatestReview: PullRequestReview
+  viewerLatestReviewRequest: ReviewRequest
+  viewerMergeBodyText(mergeType: PullRequestMergeMethod): String!
+  viewerMergeHeadlineText(mergeType: PullRequestMergeMethod): String!
+  viewerSubscription: SubscriptionState
+}
+
+type PullRequestChangedFile {
+  additions: Int!
+  changeType: PatchStatus!
+  deletions: Int!
+  path: String!
+  viewerViewedState: FileViewedState!
+}
+
+type PullRequestChangedFileConnection {
+  edges: [PullRequestChangedFileEdge]
+  nodes: [PullRequestChangedFile]
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type PullRequestChangedFileEdge {
+  cursor: String!
+  node: PullRequestChangedFile
+}
+
+type PullRequestCommit implements Node & UniformResourceLocatable {
+  commit: Commit!
+  id: ID!
+  pullRequest: PullRequest!
+  resourcePath: URI!
+  url: URI!
+}
+
+type PullRequestCommitConnection {
+  edges: [PullRequestCommitEdge]
+  nodes: [PullRequestCommit]
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type PullRequestCommitEdge {
+  cursor: String!
+  node: PullRequestCommit
+}
+
+type PullRequestConnection {
+  edges: [PullRequestEdge]
+  nodes: [PullRequest]
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type PullRequestEdge {
+  cursor: String!
+  node: PullRequest
+}
+
+type PullRequestReview implements Comment & Node & Reactable & RepositoryNode & Updatable & UpdatableComment {
+  author: Actor
+  authorAssociation: CommentAuthorAssociation!
+  authorCanPushToRepository: Boolean!
+  body: String!
+  bodyHTML: HTML!
+  bodyText: String!
+  commit: Commit
+  createdAt: DateTime!
+  createdViaEmail: Boolean!
+  databaseId: Int
+  editor: Actor
+  fullDatabaseId: BigInt
+  id: ID!
+  includesCreatedEdit: Boolean!
+  isMinimized: Boolean!
+  lastEditedAt: DateTime
+  minimizedReason: String
+  onBehalfOf(after: String, before: String, first: Int, last: Int): TeamConnection!
+  publishedAt: DateTime
+  pullRequest: PullRequest!
+  reactionGroups: [ReactionGroup!]
+  repository: Repository!
+  resourcePath: URI!
+  state: PullRequestReviewState!
+  submittedAt: DateTime
+  updatedAt: DateTime!
+  url: URI!
+  viewerCanDelete: Boolean!
+  viewerCanMinimize: Boolean!
+  viewerCanReact: Boolean!
+  viewerCanUnminimize: Boolean!
+  viewerCanUpdate: Boolean!
+  viewerCannotUpdateReasons: [CommentCannotUpdateReason!]!
+  viewerDidAuthor: Boolean!
+}
+
+type PullRequestReviewConnection {
+  edges: [PullRequestReviewEdge]
+  nodes: [PullRequestReview]
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type PullRequestReviewEdge {
+  cursor: String!
+  node: PullRequestReview
+}
+
+type Query implements Node {
+  id: ID!
+  node(id: ID!): Node
+  nodes(ids: [ID!]!): [Node]!
+  organization(login: String!): Organization
+  repository(followRenames: Boolean = true, name: String!, owner: String!): Repository
+  repositoryOwner(login: String!): RepositoryOwner
+  search(after: String, before: String, first: Int, last: Int, query: String!, type: SearchType!): SearchResultItemConnection!
+  user(login: String!): User
+  viewer: User!
+}
+
+interface Reactable {
+  databaseId: Int
+  id: ID!
+  reactionGroups: [ReactionGroup!]
+  viewerCanReact: Boolean!
+}
+
+type ReactingUserConnection {
+  edges: [ReactingUserEdge]
+  nodes: [User]
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type ReactingUserEdge {
+  cursor: String!
+  node: User!
+  reactedAt: DateTime!
+}
+
+type ReactionGroup {
+  content: ReactionContent!
+  createdAt: DateTime
+  subject: Reactable!
+  users(after: String, before: String, first: Int, last: Int): ReactingUserConnection! @deprecated(reason: "Reactors can now be mannequins, bots, and organizations. Use the `reactors` field instead. Removal on 2021-10-01 UTC.")
+  viewerHasReacted: Boolean!
+}
+
+type Ref implements Node {
+  associatedPullRequests(after: String, baseRefName: String, before: String, first: Int, headRefName: String, labels: [String!], last: Int, orderBy: IssueOrder, states: [PullRequestState!]): PullRequestConnection!
+  branchProtectionRule: BranchProtectionRule
+  id: ID!
+  name: String!
+  prefix: String!
+  repository: Repository!
+  target: GitObject
+}
+
+type RefConnection {
+  edges: [RefEdge]
+  nodes: [Ref]
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type RefEdge {
+  cursor: String!
+  node: Ref
+}
+
+type RemoveLabelsFromLabelablePayload {
+  clientMutationId: String
+  labelable: Labelable
+}
+
+type ReopenIssuePayload {
+  clientMutationId: String
+  issue: Issue
+}
+
+type ReopenPullRequestPayload {
+  clientMutationId: String
+  pullRequest: PullRequest
+}
+
+type Repository implements Node & UniformResourceLocatable {
+  allowUpdateBranch: Boolean!
+  archivedAt: DateTime
+  assignableUsers(after: String, before: String, first: Int, last: Int, query: String): UserConnection!
+  branchProtectionRules(after: String, before: String, first: Int, last: Int): BranchProtectionRuleConnection!
+  collaborators(affiliation: CollaboratorAffiliation, after: String, before: String, first: Int, last: Int, login: String, query: String): RepositoryCollaboratorConnection
+  createdAt: DateTime!
+  databaseId: Int
+  defaultBranchRef: Ref
+  deleteBranchOnMerge: Boolean!
+  description: String
+  descriptionHTML: HTML!
+  diskUsage: Int
+  forkCount: Int!
+  forkingAllowed: Boolean!
+  forks(affiliations: [RepositoryAffiliation], after: String, before: String, first: Int, hasIssuesEnabled: Boolean, isLocked: Boolean, last: Int, orderBy: RepositoryOrder, ownerAffiliations: [RepositoryAffiliation] = [OWNER, COLLABORATOR], privacy: RepositoryPrivacy, visibility: RepositoryVisibility): RepositoryConnection!
+  hasAnonymousAccessEnabled: Boolean!
+  hasDiscussionsEnabled: Boolean!
+  hasIssuesEnabled: Boolean!
+  hasProjectsEnabled: Boolean!
+  hasVulnerabilityAlertsEnabled: Boolean!
+  hasWikiEnabled: Boolean!
+  homepageUrl: URI
+  id: ID!
+  isArchived: Boolean!
+  isBlankIssuesEnabled: Boolean!
+  isDisabled: Boolean!
+  isEmpty: Boolean!
+  isFork: Boolean!
+  isInOrganization: Boolean!
+  isLocked: Boolean!
+  isMirror: Boolean!
+  isPrivate: Boolean!
+  isSecurityPolicyEnabled: Boolean
+  isTemplate: Boolean!
+  isUserConfigurationRepository: Boolean!
+  issue(number: Int!): Issue
+  issueOrPullRequest(number: Int!): IssueOrPullRequest
+  issues(after: String, before: String, filterBy: IssueFilters, first: Int, labels: [String!], last: Int, orderBy: IssueOrder, states: [IssueState!]): IssueConnection!
+  label(name: String!): Label
+  labels(after: String, before: String, first: Int, last: Int, orderBy: LabelOrder = { field: CREATED_AT, direction: ASC }, query: String): LabelConnection
+  lockReason: RepositoryLockReason
+  mentionableUsers(after: String, before: String, first: Int, last: Int, query: String): UserConnection!
+  mergeCommitAllowed: Boolean!
+  mergeCommitMessage: MergeCommitMessage!
+  mergeCommitTitle: MergeCommitTitle!
+  milestone(number: Int!): Milestone
+  milestones(after: String, before: String, first: Int, last: Int, orderBy: MilestoneOrder, query: String, states: [MilestoneState!]): MilestoneConnection
+  mirrorUrl: URI
+  name: String!
+  nameWithOwner: String!
+  object(expression: String, oid: GitObjectID): GitObject
+  openGraphImageUrl: URI!
+  owner: RepositoryOwner!
+  parent: Repository
+  project(number: Int!): Project @deprecated(reason: "Projects (classic) is being deprecated in favor of the new Projects experience, see: https://github.blog/changelog/2024-05-23-sunset-notice-projects-classic/. Removal on 2025-04-01 UTC.")
+  projectV2(number: Int!): ProjectV2
+  projects(after: String, before: String, first: Int, last: Int, orderBy: ProjectOrder, search: String, states: [ProjectState!]): ProjectConnection! @deprecated(reason: "Projects (classic) is being deprecated in favor of the new Projects experience, see: https://github.blog/changelog/2024-05-23-sunset-notice-projects-classic/. Removal on 2025-04-01 UTC.")
+  projectsResourcePath: URI!
+  projectsUrl: URI!
+  projectsV2(after: String, before: String, first: Int, last: Int, minPermissionLevel: ProjectV2PermissionLevel = READ, orderBy: ProjectV2Order = { field: NUMBER, direction: DESC }, query: String): ProjectV2Connection!
+  pullRequest(number: Int!): PullRequest
+  pullRequests(after: String, baseRefName: String, before: String, first: Int, headRefName: String, labels: [String!], last: Int, orderBy: IssueOrder, states: [PullRequestState!]): PullRequestConnection!
+  pushedAt: DateTime
+  rebaseMergeAllowed: Boolean!
+  recentProjects(after: String, before: String, first: Int, last: Int): ProjectV2Connection!
+  ref(qualifiedName: String!): Ref
+  refs(after: String, before: String, direction: OrderDirection, first: Int, last: Int, orderBy: RefOrder, query: String, refPrefix: String!): RefConnection
+  resourcePath: URI!
+  securityPolicyUrl: URI
+  shortDescriptionHTML(limit: Int = 200): HTML!
+  squashMergeAllowed: Boolean!
+  squashMergeCommitMessage: SquashMergeCommitMessage!
+  squashMergeCommitTitle: SquashMergeCommitTitle!
+  squashPrTitleUsedAsDefault: Boolean! @deprecated(reason: "`squashPrTitleUsedAsDefault` will be removed. Use `Repository.squashMergeCommitTitle` instead. Removal on 2023-04-01 UTC.")
+  sshUrl: GitSSHRemote!
+  stargazerCount: Int!
+  stargazers(after: String, before: String, first: Int, last: Int, orderBy: StarOrder): StargazerConnection!
+  suggestedActors(after: String, before: String, capabilities: [RepositorySuggestedActorFilter!]!, first: Int, last: Int, loginNames: String, query: String): ActorConnection!
+  tempCloneToken: String
+  templateRepository: Repository
+  updatedAt: DateTime!
+  url: URI!
+  usesCustomOpenGraphImage: Boolean!
+  viewerCanAdminister: Boolean!
+  viewerCanCreateProjects: Boolean! @deprecated(reason: "Projects (classic) is being deprecated in favor of the new Projects experience, see: https://github.blog/changelog/2024-05-23-sunset-notice-projects-classic/. Removal on 2025-04-01 UTC.")
+  viewerCanSeeIssueFields: Boolean!
+  viewerCanSubscribe: Boolean!
+  viewerCanUpdateTopics: Boolean!
+  viewerDefaultCommitEmail: String
+  viewerDefaultMergeMethod: PullRequestMergeMethod!
+  viewerHasStarred: Boolean!
+  viewerPermission: RepositoryPermission
+  viewerPossibleCommitEmails: [String!]
+  viewerSubscription: SubscriptionState
+  visibility: RepositoryVisibility!
+  watchers(after: String, before: String, first: Int, last: Int): UserConnection!
+  webCommitSignoffRequired: Boolean!
+}
+
+type RepositoryCollaboratorConnection {
+  edges: [RepositoryCollaboratorEdge]
+  nodes: [User]
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type RepositoryCollaboratorEdge {
+  cursor: String!
+  node: User!
+  permission: RepositoryPermission!
+}
+
+type RepositoryConnection {
+  edges: [RepositoryEdge]
+  nodes: [Repository]
+  pageInfo: PageInfo!
+  totalCount: Int!
+  totalDiskUsage: Int!
+}
+
+type RepositoryEdge {
+  cursor: String!
+  node: Repository
+}
+
+interface RepositoryNode {
+  repository: Repository!
+}
+
+interface RepositoryOwner {
+  avatarUrl(size: Int): URI!
+  id: ID!
+  login: String!
+  repositories(affiliations: [RepositoryAffiliation], after: String, before: String, first: Int, hasIssuesEnabled: Boolean, isArchived: Boolean, isFork: Boolean, isLocked: Boolean, last: Int, orderBy: RepositoryOrder, ownerAffiliations: [RepositoryAffiliation] = [OWNER, COLLABORATOR], privacy: RepositoryPrivacy, visibility: RepositoryVisibility): RepositoryConnection!
+  repository(followRenames: Boolean = true, name: String!): Repository
+  resourcePath: URI!
+  url: URI!
+}
+
+type RequestReviewsPayload {
+  actor: Actor
+  clientMutationId: String
+  pullRequest: PullRequest
+  requestedReviewersEdge: UserEdge
+}
+
+union RequestedReviewer = Bot | Mannequin | Team | User
+
+type RequestedReviewerConnection {
+  edges: [RequestedReviewerEdge]
+  nodes: [RequestedReviewer]
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type RequestedReviewerEdge {
+  cursor: String!
+  node: RequestedReviewer
+}
+
+interface RequirableByPullRequest {
+  isRequired(pullRequestId: ID, pullRequestNumber: Int): Boolean!
+}
+
+type ReviewRequest implements Node {
+  asCodeOwner: Boolean!
+  databaseId: Int
+  id: ID!
+  pullRequest: PullRequest!
+  requestedReviewer: RequestedReviewer
+}
+
+type ReviewRequestConnection {
+  edges: [ReviewRequestEdge]
+  nodes: [ReviewRequest]
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type ReviewRequestEdge {
+  cursor: String!
+  node: ReviewRequest
+}
+
+union SearchResultItem = App | Issue | Organization | PullRequest | Repository | User
+
+type SearchResultItemConnection {
+  codeCount: Int!
+  discussionCount: Int!
+  edges: [SearchResultItemEdge]
+  issueCount: Int!
+  nodes: [SearchResultItem]
+  pageInfo: PageInfo!
+  repositoryCount: Int!
+  userCount: Int!
+  wikiCount: Int!
+}
+
+type SearchResultItemEdge {
+  cursor: String!
+  node: SearchResultItem
+}
+
+type StargazerConnection {
+  edges: [StargazerEdge]
+  nodes: [User]
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type StargazerEdge {
+  cursor: String!
+  node: User!
+  starredAt: DateTime!
+}
+
+type StarredRepositoryConnection {
+  edges: [StarredRepositoryEdge]
+  isOverLimit: Boolean!
+  nodes: [Repository]
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type StarredRepositoryEdge {
+  cursor: String!
+  node: Repository!
+  starredAt: DateTime!
+}
+
+type StatusCheckRollup implements Node {
+  commit: Commit
+  contexts(after: String, before: String, first: Int, last: Int): StatusCheckRollupContextConnection!
+  id: ID!
+  state: StatusState!
+}
+
+union StatusCheckRollupContext = CheckRun | StatusContext
+
+type StatusCheckRollupContextConnection {
+  edges: [StatusCheckRollupContextEdge]
+  nodes: [StatusCheckRollupContext]
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type StatusCheckRollupContextEdge {
+  cursor: String!
+  node: StatusCheckRollupContext
+}
+
+type StatusContext implements Node & RequirableByPullRequest {
+  avatarUrl(size: Int = 40): URI
+  commit: Commit
+  context: String!
+  createdAt: DateTime!
+  creator: Actor
+  description: String
+  id: ID!
+  isRequired(pullRequestId: ID, pullRequestNumber: Int): Boolean!
+  state: StatusState!
+  targetUrl: URI
+}
+
+type Team implements Node {
+  ancestors(after: String, before: String, first: Int, last: Int): TeamConnection!
+  avatarUrl(size: Int = 400): URI
+  childTeams(after: String, before: String, first: Int, immediateOnly: Boolean = true, last: Int, orderBy: TeamOrder, userLogins: [String!]): TeamConnection!
+  combinedSlug: String!
+  createdAt: DateTime!
+  databaseId: Int
+  description: String
+  discussionsResourcePath: URI!
+  discussionsUrl: URI!
+  editTeamResourcePath: URI!
+  editTeamUrl: URI!
+  id: ID!
+  members(after: String, before: String, first: Int, last: Int, membership: TeamMembershipType = ALL, orderBy: TeamMemberOrder, query: String, role: TeamMemberRole): TeamMemberConnection!
+  membersResourcePath: URI!
+  membersUrl: URI!
+  name: String!
+  newTeamResourcePath: URI!
+  newTeamUrl: URI!
+  notificationSetting: TeamNotificationSetting!
+  organization: Organization!
+  parentTeam: Team
+  privacy: TeamPrivacy!
+  projectV2(number: Int!): ProjectV2
+  projectsV2(after: String, before: String, filterBy: ProjectV2Filters = {  }, first: Int, last: Int, minPermissionLevel: ProjectV2PermissionLevel = READ, orderBy: ProjectV2Order = { field: NUMBER, direction: DESC }, query: String = ""): ProjectV2Connection!
+  repositories(after: String, before: String, first: Int, last: Int, orderBy: TeamRepositoryOrder, query: String): TeamRepositoryConnection!
+  repositoriesResourcePath: URI!
+  repositoriesUrl: URI!
+  resourcePath: URI!
+  reviewRequestDelegationAlgorithm: TeamReviewAssignmentAlgorithm
+  reviewRequestDelegationEnabled: Boolean!
+  reviewRequestDelegationMemberCount: Int
+  reviewRequestDelegationNotifyTeam: Boolean!
+  slug: String!
+  teamsResourcePath: URI!
+  teamsUrl: URI!
+  updatedAt: DateTime!
+  url: URI!
+  viewerCanAdminister: Boolean!
+  viewerCanSubscribe: Boolean!
+  viewerSubscription: SubscriptionState
+}
+
+type TeamConnection {
+  edges: [TeamEdge]
+  nodes: [Team]
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type TeamEdge {
+  cursor: String!
+  node: Team
+}
+
+type TeamMemberConnection {
+  edges: [TeamMemberEdge]
+  nodes: [User]
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type TeamMemberEdge {
+  cursor: String!
+  memberAccessResourcePath: URI!
+  memberAccessUrl: URI!
+  node: User!
+  role: TeamMemberRole!
+}
+
+type TeamRepositoryConnection {
+  edges: [TeamRepositoryEdge]
+  nodes: [Repository]
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type TeamRepositoryEdge {
+  cursor: String!
+  node: Repository!
+  permission: RepositoryPermission!
+}
+
+interface UniformResourceLocatable {
+  resourcePath: URI!
+  url: URI!
+}
+
+interface Updatable {
+  viewerCanUpdate: Boolean!
+}
+
+interface UpdatableComment {
+  viewerCannotUpdateReasons: [CommentCannotUpdateReason!]!
+}
+
+type UpdateIssuePayload {
+  actor: Actor
+  clientMutationId: String
+  issue: Issue
+}
+
+type UpdatePullRequestPayload {
+  actor: Actor
+  clientMutationId: String
+  pullRequest: PullRequest
+}
+
+type User implements Actor & Node & RepositoryOwner & UniformResourceLocatable {
+  anyPinnableItems(type: PinnableItemType): Boolean!
+  avatarUrl(size: Int): URI!
+  bio: String
+  bioHTML: HTML!
+  canReceiveOrganizationEmailsWhenNotificationsRestricted(login: String!): Boolean!
+  company: String
+  companyHTML: HTML!
+  createdAt: DateTime!
+  databaseId: Int
+  email: String!
+  followers(after: String, before: String, first: Int, last: Int): FollowerConnection!
+  following(after: String, before: String, first: Int, last: Int): FollowingConnection!
+  id: ID!
+  isBountyHunter: Boolean!
+  isCampusExpert: Boolean!
+  isDeveloperProgramMember: Boolean!
+  isEmployee: Boolean!
+  isFollowingViewer: Boolean!
+  isGitHubStar: Boolean!
+  isHireable: Boolean!
+  isSiteAdmin: Boolean!
+  isViewer: Boolean!
+  issueComments(after: String, before: String, first: Int, last: Int, orderBy: IssueCommentOrder): IssueCommentConnection!
+  issues(after: String, before: String, filterBy: IssueFilters, first: Int, labels: [String!], last: Int, orderBy: IssueOrder, states: [IssueState!]): IssueConnection!
+  location: String
+  login: String!
+  name: String
+  organization(login: String!): Organization
+  organizationVerifiedDomainEmails(login: String!): [String!]!
+  organizations(after: String, before: String, first: Int, last: Int, orderBy: OrganizationOrder = null): OrganizationConnection!
+  pinnedItemsRemaining: Int!
+  project(number: Int!): Project @deprecated(reason: "Projects (classic) is being deprecated in favor of the new Projects experience, see: https://github.blog/changelog/2024-05-23-sunset-notice-projects-classic/. Removal on 2025-04-01 UTC.")
+  projectV2(number: Int!): ProjectV2
+  projects(after: String, before: String, first: Int, last: Int, orderBy: ProjectOrder, search: String, states: [ProjectState!]): ProjectConnection! @deprecated(reason: "Projects (classic) is being deprecated in favor of the new Projects experience, see: https://github.blog/changelog/2024-05-23-sunset-notice-projects-classic/. Removal on 2025-04-01 UTC.")
+  projectsResourcePath: URI!
+  projectsUrl: URI!
+  projectsV2(after: String, before: String, first: Int, last: Int, minPermissionLevel: ProjectV2PermissionLevel = READ, orderBy: ProjectV2Order = { field: NUMBER, direction: DESC }, query: String): ProjectV2Connection!
+  pronouns: String
+  pullRequests(after: String, baseRefName: String, before: String, first: Int, headRefName: String, labels: [String!], last: Int, orderBy: IssueOrder, states: [PullRequestState!]): PullRequestConnection!
+  recentProjects(after: String, before: String, first: Int, last: Int): ProjectV2Connection!
+  repositories(affiliations: [RepositoryAffiliation], after: String, before: String, first: Int, hasIssuesEnabled: Boolean, isArchived: Boolean, isFork: Boolean, isLocked: Boolean, last: Int, orderBy: RepositoryOrder, ownerAffiliations: [RepositoryAffiliation] = [OWNER, COLLABORATOR], privacy: RepositoryPrivacy, visibility: RepositoryVisibility): RepositoryConnection!
+  repositoriesContributedTo(after: String, before: String, contributionTypes: [RepositoryContributionType], first: Int, hasIssues: Boolean, includeUserRepositories: Boolean, isLocked: Boolean, last: Int, orderBy: RepositoryOrder, privacy: RepositoryPrivacy): RepositoryConnection!
+  repository(followRenames: Boolean = true, name: String!): Repository
+  resourcePath: URI!
+  starredRepositories(after: String, before: String, first: Int, last: Int, orderBy: StarOrder, ownedByViewer: Boolean): StarredRepositoryConnection!
+  suspendedAt: DateTime
+  topRepositories(after: String, before: String, first: Int, last: Int, orderBy: RepositoryOrder!, since: DateTime): RepositoryConnection!
+  twitterUsername: String
+  updatedAt: DateTime!
+  url: URI!
+  userViewType: UserViewType!
+  viewerCanChangePinnedItems: Boolean!
+  viewerCanCreateProjects: Boolean! @deprecated(reason: "Projects (classic) is being deprecated in favor of the new Projects experience, see: https://github.blog/changelog/2024-05-23-sunset-notice-projects-classic/. Removal on 2025-04-01 UTC.")
+  viewerCanFollow: Boolean!
+  viewerCopilotAgentCreatesChannel: String
+  viewerCopilotAgentLogUpdatesChannel: String
+  viewerCopilotAgentUpdatesChannel: String
+  viewerIsFollowing: Boolean!
+  watching(affiliations: [RepositoryAffiliation], after: String, before: String, first: Int, hasIssuesEnabled: Boolean, isLocked: Boolean, last: Int, orderBy: RepositoryOrder, ownerAffiliations: [RepositoryAffiliation] = [OWNER, COLLABORATOR], privacy: RepositoryPrivacy, visibility: RepositoryVisibility): RepositoryConnection!
+  websiteUrl: URI
+}
+
+type UserConnection {
+  edges: [UserEdge]
+  nodes: [User]
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type UserEdge {
+  cursor: String!
+  node: User
+}
+
+type Workflow implements Node & UniformResourceLocatable {
+  createdAt: DateTime!
+  databaseId: Int
+  id: ID!
+  name: String!
+  resourcePath: URI!
+  runs(after: String, before: String, first: Int, last: Int, orderBy: WorkflowRunOrder = { field: CREATED_AT, direction: DESC }): WorkflowRunConnection!
+  state: WorkflowState!
+  updatedAt: DateTime!
+  url: URI!
+}
+
+type WorkflowRun implements Node & UniformResourceLocatable {
+  checkSuite: CheckSuite!
+  createdAt: DateTime!
+  databaseId: Int
+  id: ID!
+  resourcePath: URI!
+  runNumber: Int!
+  updatedAt: DateTime!
+  url: URI!
+  workflow: Workflow!
+}
+
+type WorkflowRunConnection {
+  edges: [WorkflowRunEdge]
+  nodes: [WorkflowRun]
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type WorkflowRunEdge {
+  cursor: String!
+  node: WorkflowRun
+}
+
+input AddCommentInput {
+  body: String!
+  clientMutationId: String
+  subjectId: ID!
+}
+
+input AddLabelsToLabelableInput {
+  clientMutationId: String
+  labelIds: [ID!]!
+  labelableId: ID!
+}
+
+input AddPullRequestReviewInput {
+  body: String
+  clientMutationId: String
+  comments: [DraftPullRequestReviewComment]
+  commitOID: GitObjectID
+  event: PullRequestReviewEvent
+  pullRequestId: ID!
+  threads: [DraftPullRequestReviewThread]
+}
+
+scalar BigInt
+
+enum CheckConclusionState {
+  ACTION_REQUIRED
+  CANCELLED
+  FAILURE
+  NEUTRAL
+  SKIPPED
+  STALE
+  STARTUP_FAILURE
+  SUCCESS
+  TIMED_OUT
+}
+
+input CheckRunFilter {
+  appId: Int
+  checkName: String
+  checkType: CheckRunType
+  conclusions: [CheckConclusionState!]
+  status: CheckStatusState
+  statuses: [CheckStatusState!]
+}
+
+enum CheckRunType {
+  ALL
+  LATEST
+}
+
+enum CheckStatusState {
+  COMPLETED
+  IN_PROGRESS
+  PENDING
+  QUEUED
+  REQUESTED
+  WAITING
+}
+
+input CheckSuiteFilter {
+  appId: Int
+  checkName: String
+}
+
+input CloseIssueInput {
+  clientMutationId: String
+  duplicateIssueId: ID
+  issueId: ID!
+  stateReason: IssueClosedStateReason
+}
+
+input ClosePullRequestInput {
+  clientMutationId: String
+  pullRequestId: ID!
+}
+
+enum CollaboratorAffiliation {
+  ALL
+  DIRECT
+  OUTSIDE
+}
+
+enum CommentAuthorAssociation {
+  COLLABORATOR
+  CONTRIBUTOR
+  FIRST_TIMER
+  FIRST_TIME_CONTRIBUTOR
+  MANNEQUIN
+  MEMBER
+  NONE
+  OWNER
+}
+
+enum CommentCannotUpdateReason {
+  ARCHIVED
+  DENIED
+  INSUFFICIENT_ACCESS
+  LOCKED
+  LOGIN_REQUIRED
+  MAINTENANCE
+  VERIFIED_EMAIL_REQUIRED
+}
+
+input CommitAuthor {
+  emails: [String!]
+  id: ID
+}
+
+input CreateIssueInput {
+  assigneeIds: [ID!]
+  body: String
+  clientMutationId: String
+  issueTemplate: String
+  issueTypeId: ID
+  labelIds: [ID!]
+  milestoneId: ID
+  parentIssueId: ID
+  projectIds: [ID!]
+  projectV2Ids: [ID!]
+  repositoryId: ID!
+  title: String!
+}
+
+input CreatePullRequestInput {
+  baseRefName: String!
+  body: String
+  clientMutationId: String
+  draft: Boolean = false
+  headRefName: String!
+  headRepositoryId: ID
+  maintainerCanModify: Boolean = true
+  repositoryId: ID!
+  title: String!
+}
+
+scalar DateTime
+
+enum DiffSide {
+  LEFT
+  RIGHT
+}
+
+input DraftPullRequestReviewComment {
+  body: String!
+  path: String!
+  position: Int!
+}
+
+input DraftPullRequestReviewThread {
+  body: String!
+  line: Int
+  path: String
+  side: DiffSide = RIGHT
+  startLine: Int
+  startSide: DiffSide = RIGHT
+}
+
+enum EnterpriseAdministratorRole {
+  BILLING_MANAGER
+  OWNER
+  UNAFFILIATED
+}
+
+enum EnterpriseUserAccountMembershipRole {
+  MEMBER
+  OWNER
+}
+
+enum FileViewedState {
+  DISMISSED
+  UNVIEWED
+  VIEWED
+}
+
+scalar GitObjectID
+
+scalar GitSSHRemote
+
+scalar GitTimestamp
+
+scalar HTML
+
+enum IpAllowListEnabledSettingValue {
+  DISABLED
+  ENABLED
+}
+
+enum IpAllowListForInstalledAppsEnabledSettingValue {
+  DISABLED
+  ENABLED
+}
+
+enum IssueClosedStateReason {
+  COMPLETED
+  DUPLICATE
+  NOT_PLANNED
+}
+
+input IssueCommentOrder {
+  direction: OrderDirection!
+  field: IssueCommentOrderField!
+}
+
+enum IssueCommentOrderField {
+  UPDATED_AT
+}
+
+input IssueFilters {
+  assignee: String
+  createdBy: String
+  labels: [String!]
+  mentioned: String
+  milestone: String
+  milestoneNumber: String
+  since: DateTime
+  states: [IssueState!]
+  type: String
+  viewerSubscribed: Boolean = false
+}
+
+input IssueOrder {
+  direction: OrderDirection!
+  field: IssueOrderField!
+}
+
+enum IssueOrderField {
+  COMMENTS
+  CREATED_AT
+  UPDATED_AT
+}
+
+enum IssueState {
+  CLOSED
+  OPEN
+}
+
+enum IssueStateReason {
+  COMPLETED
+  DUPLICATE
+  NOT_PLANNED
+  REOPENED
+}
+
+input LabelOrder {
+  direction: OrderDirection!
+  field: LabelOrderField!
+}
+
+enum LabelOrderField {
+  CREATED_AT
+  ISSUE_COUNT
+  NAME
+}
+
+enum LockReason {
+  OFF_TOPIC
+  RESOLVED
+  SPAM
+  TOO_HEATED
+}
+
+input MannequinOrder {
+  direction: OrderDirection!
+  field: MannequinOrderField!
+}
+
+enum MannequinOrderField {
+  CREATED_AT
+  LOGIN
+}
+
+input MarkPullRequestReadyForReviewInput {
+  clientMutationId: String
+  pullRequestId: ID!
+}
+
+enum MergeCommitMessage {
+  BLANK
+  PR_BODY
+  PR_TITLE
+}
+
+enum MergeCommitTitle {
+  MERGE_MESSAGE
+  PR_TITLE
+}
+
+input MergePullRequestInput {
+  authorEmail: String
+  clientMutationId: String
+  commitBody: String
+  commitHeadline: String
+  expectedHeadOid: GitObjectID
+  mergeMethod: PullRequestMergeMethod = MERGE
+  pullRequestId: ID!
+}
+
+enum MergeStateStatus {
+  BEHIND
+  BLOCKED
+  CLEAN
+  DIRTY
+  DRAFT @deprecated(reason: "DRAFT state will be removed from this enum and `isDraft` should be used instead Use PullRequest.isDraft instead. Removal on 2021-01-01 UTC.")
+  HAS_HOOKS
+  UNKNOWN
+  UNSTABLE
+}
+
+enum MergeableState {
+  CONFLICTING
+  MERGEABLE
+  UNKNOWN
+}
+
+input MilestoneOrder {
+  direction: OrderDirection!
+  field: MilestoneOrderField!
+}
+
+enum MilestoneOrderField {
+  CREATED_AT
+  DUE_DATE
+  NUMBER
+  UPDATED_AT
+}
+
+enum MilestoneState {
+  CLOSED
+  OPEN
+}
+
+enum NotificationRestrictionSettingValue {
+  DISABLED
+  ENABLED
+}
+
+enum OrderDirection {
+  ASC
+  DESC
+}
+
+input OrgEnterpriseOwnerOrder {
+  direction: OrderDirection!
+  field: OrgEnterpriseOwnerOrderField!
+}
+
+enum OrgEnterpriseOwnerOrderField {
+  LOGIN
+}
+
+enum OrganizationMemberRole {
+  ADMIN
+  MEMBER
+}
+
+input OrganizationOrder {
+  direction: OrderDirection!
+  field: OrganizationOrderField!
+}
+
+enum OrganizationOrderField {
+  CREATED_AT
+  LOGIN
+}
+
+enum PatchStatus {
+  ADDED
+  CHANGED
+  COPIED
+  DELETED
+  MODIFIED
+  RENAMED
+}
+
+enum PinnableItemType {
+  GIST
+  ISSUE
+  ORGANIZATION
+  PROJECT
+  PULL_REQUEST
+  REPOSITORY
+  TEAM
+  USER
+}
+
+enum ProjectCardArchivedState {
+  ARCHIVED @deprecated(reason: "Projects (classic) is being deprecated in favor of the new Projects experience, see: https://github.blog/changelog/2024-05-23-sunset-notice-projects-classic/. Removal on 2025-04-01 UTC.")
+  NOT_ARCHIVED @deprecated(reason: "Projects (classic) is being deprecated in favor of the new Projects experience, see: https://github.blog/changelog/2024-05-23-sunset-notice-projects-classic/. Removal on 2025-04-01 UTC.")
+}
+
+enum ProjectCardState {
+  CONTENT_ONLY
+  NOTE_ONLY
+  REDACTED
+}
+
+enum ProjectColumnPurpose {
+  DONE
+  IN_PROGRESS
+  TODO
+}
+
+input ProjectOrder {
+  direction: OrderDirection!
+  field: ProjectOrderField!
+}
+
+enum ProjectOrderField {
+  CREATED_AT
+  NAME
+  UPDATED_AT
+}
+
+enum ProjectState {
+  CLOSED
+  OPEN
+}
+
+input ProjectV2Filters {
+  state: ProjectV2State
+}
+
+input ProjectV2ItemFieldValueOrder {
+  direction: OrderDirection!
+  field: ProjectV2ItemFieldValueOrderField!
+}
+
+enum ProjectV2ItemFieldValueOrderField {
+  POSITION
+}
+
+input ProjectV2ItemOrder {
+  direction: OrderDirection!
+  field: ProjectV2ItemOrderField!
+}
+
+enum ProjectV2ItemOrderField {
+  POSITION
+}
+
+enum ProjectV2ItemType {
+  DRAFT_ISSUE
+  ISSUE
+  PULL_REQUEST
+  REDACTED
+}
+
+input ProjectV2Order {
+  direction: OrderDirection!
+  field: ProjectV2OrderField!
+}
+
+enum ProjectV2OrderField {
+  CREATED_AT
+  NUMBER
+  TITLE
+  UPDATED_AT
+}
+
+enum ProjectV2PermissionLevel {
+  ADMIN
+  READ
+  WRITE
+}
+
+enum ProjectV2SingleSelectFieldOptionColor {
+  BLUE
+  GRAY
+  GREEN
+  ORANGE
+  PINK
+  PURPLE
+  RED
+  YELLOW
+}
+
+enum ProjectV2State {
+  CLOSED
+  OPEN
+}
+
+enum PullRequestMergeMethod {
+  MERGE
+  REBASE
+  SQUASH
+}
+
+input PullRequestOrder {
+  direction: OrderDirection!
+  field: PullRequestOrderField!
+}
+
+enum PullRequestOrderField {
+  CREATED_AT
+  UPDATED_AT
+}
+
+enum PullRequestReviewDecision {
+  APPROVED
+  CHANGES_REQUESTED
+  REVIEW_REQUIRED
+}
+
+enum PullRequestReviewEvent {
+  APPROVE
+  COMMENT
+  DISMISS
+  REQUEST_CHANGES
+}
+
+enum PullRequestReviewState {
+  APPROVED
+  CHANGES_REQUESTED
+  COMMENTED
+  DISMISSED
+  PENDING
+}
+
+enum PullRequestState {
+  CLOSED
+  MERGED
+  OPEN
+}
+
+enum PullRequestUpdateState {
+  CLOSED
+  OPEN
+}
+
+enum ReactionContent {
+  CONFUSED
+  EYES
+  HEART
+  HOORAY
+  LAUGH
+  ROCKET
+  THUMBS_DOWN
+  THUMBS_UP
+}
+
+input RefOrder {
+  direction: OrderDirection!
+  field: RefOrderField!
+}
+
+enum RefOrderField {
+  ALPHABETICAL
+  TAG_COMMIT_DATE
+}
+
+input RemoveLabelsFromLabelableInput {
+  clientMutationId: String
+  labelIds: [ID!]!
+  labelableId: ID!
+}
+
+input ReopenIssueInput {
+  clientMutationId: String
+  issueId: ID!
+}
+
+input ReopenPullRequestInput {
+  clientMutationId: String
+  pullRequestId: ID!
+}
+
+enum RepositoryAffiliation {
+  COLLABORATOR
+  ORGANIZATION_MEMBER
+  OWNER
+}
+
+enum RepositoryContributionType {
+  COMMIT
+  ISSUE
+  PULL_REQUEST
+  PULL_REQUEST_REVIEW
+  REPOSITORY
+}
+
+enum RepositoryLockReason {
+  BILLING
+  MIGRATING
+  MOVING
+  RENAME
+  TRADE_RESTRICTION
+  TRANSFERRING_OWNERSHIP
+}
+
+input RepositoryOrder {
+  direction: OrderDirection!
+  field: RepositoryOrderField!
+}
+
+enum RepositoryOrderField {
+  CREATED_AT
+  NAME
+  PUSHED_AT
+  STARGAZERS
+  UPDATED_AT
+}
+
+enum RepositoryPermission {
+  ADMIN
+  MAINTAIN
+  READ
+  TRIAGE
+  WRITE
+}
+
+enum RepositoryPrivacy {
+  PRIVATE
+  PUBLIC
+}
+
+enum RepositorySuggestedActorFilter {
+  CAN_BE_ASSIGNED
+  CAN_BE_AUTHOR
+}
+
+enum RepositoryVisibility {
+  INTERNAL
+  PRIVATE
+  PUBLIC
+}
+
+input RequestReviewsInput {
+  botIds: [ID!]
+  clientMutationId: String
+  pullRequestId: ID!
+  teamIds: [ID!]
+  union: Boolean = false
+  userIds: [ID!]
+}
+
+enum RoleInOrganization {
+  DIRECT_MEMBER
+  OWNER
+  UNAFFILIATED
+}
+
+enum SearchType {
+  DISCUSSION
+  ISSUE
+  REPOSITORY
+  USER
+}
+
+enum SquashMergeCommitMessage {
+  BLANK
+  COMMIT_MESSAGES
+  PR_BODY
+}
+
+enum SquashMergeCommitTitle {
+  COMMIT_OR_PR_TITLE
+  PR_TITLE
+}
+
+input StarOrder {
+  direction: OrderDirection!
+  field: StarOrderField!
+}
+
+enum StarOrderField {
+  STARRED_AT
+}
+
+enum StatusState {
+  ERROR
+  EXPECTED
+  FAILURE
+  PENDING
+  SUCCESS
+}
+
+enum SubscriptionState {
+  IGNORED
+  SUBSCRIBED
+  UNSUBSCRIBED
+}
+
+input TeamMemberOrder {
+  direction: OrderDirection!
+  field: TeamMemberOrderField!
+}
+
+enum TeamMemberOrderField {
+  CREATED_AT
+  LOGIN
+}
+
+enum TeamMemberRole {
+  MAINTAINER
+  MEMBER
+}
+
+enum TeamMembershipType {
+  ALL
+  CHILD_TEAM
+  IMMEDIATE
+}
+
+enum TeamNotificationSetting {
+  NOTIFICATIONS_DISABLED
+  NOTIFICATIONS_ENABLED
+}
+
+input TeamOrder {
+  direction: OrderDirection!
+  field: TeamOrderField!
+}
+
+enum TeamOrderField {
+  NAME
+}
+
+enum TeamPrivacy {
+  SECRET
+  VISIBLE
+}
+
+input TeamRepositoryOrder {
+  direction: OrderDirection!
+  field: TeamRepositoryOrderField!
+}
+
+enum TeamRepositoryOrderField {
+  CREATED_AT
+  NAME
+  PERMISSION
+  PUSHED_AT
+  STARGAZERS
+  UPDATED_AT
+}
+
+enum TeamReviewAssignmentAlgorithm {
+  LOAD_BALANCE
+  ROUND_ROBIN
+}
+
+enum TeamRole {
+  ADMIN
+  MEMBER
+}
+
+enum ThreadSubscriptionFormAction {
+  NONE
+  SUBSCRIBE
+  UNSUBSCRIBE
+}
+
+enum ThreadSubscriptionState {
+  DISABLED
+  IGNORING_LIST
+  IGNORING_THREAD
+  NONE
+  SUBSCRIBED_TO_LIST
+  SUBSCRIBED_TO_THREAD
+  SUBSCRIBED_TO_THREAD_EVENTS
+  SUBSCRIBED_TO_THREAD_TYPE
+  UNAVAILABLE
+}
+
+scalar URI
+
+input UpdateIssueInput {
+  assigneeIds: [ID!]
+  body: String
+  clientMutationId: String
+  id: ID!
+  issueTypeId: ID
+  labelIds: [ID!]
+  milestoneId: ID
+  projectIds: [ID!]
+  state: IssueState
+  title: String
+}
+
+input UpdatePullRequestInput {
+  assigneeIds: [ID!]
+  baseRefName: String
+  body: String
+  clientMutationId: String
+  labelIds: [ID!]
+  maintainerCanModify: Boolean
+  milestoneId: ID
+  projectIds: [ID!]
+  pullRequestId: ID!
+  state: PullRequestUpdateState
+  title: String
+}
+
+enum UserViewType {
+  PRIVATE
+  PUBLIC
+}
+
+input WorkflowRunOrder {
+  direction: OrderDirection!
+  field: WorkflowRunOrderField!
+}
+
+enum WorkflowRunOrderField {
+  CREATED_AT
+}
+
+enum WorkflowState {
+  ACTIVE
+  DELETED
+  DISABLED_FORK
+  DISABLED_INACTIVITY
+  DISABLED_MANUALLY
+}

@@ -1,0 +1,2 @@
+# cli/cli acee710547dcf7dfb6490afea77972187e74b819 internal/featuredetection/feature_detection.go
+query Repository_fields{Repository: __type(name: "Repository"){fields(includeDeprecated: true){name}}}

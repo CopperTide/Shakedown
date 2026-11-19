@@ -1,0 +1,2 @@
+# Sent by gh 2.45.0 (github.com/cli/cli, MIT, LICENSE-cli.txt)
+query OrganizationTeamList($endCursor:String$owner:String!){organization(login: $owner){teams(first: 100, orderBy: {field: NAME, direction: ASC}, after: $endCursor){nodes{id,slug},pageInfo{hasNextPage,endCursor}}}}

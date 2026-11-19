@@ -50,3 +50,19 @@ def comment(v, repo, row, by: str, body: str):
     webhooks.fire(v, repo, "issue_comment", by, "created", issue=issue_shapes.issue(v, repo, row),
                   comment=issue_shapes.comment(v, repo, row, c))
     return c
+
+
+def edit(v, repo, row, by: str, changes: dict) -> None:
+    """Apply what `changes` holds of title, body, labels, assignees, state and state_reason, as REST's
+    PATCH and GraphQL's updates do."""
+    fields = {k: changes[k] for k in ("title", "body") if k in changes}
+    if fields:
+        records.touch(v.db, row["id"], v.now(), **fields)
+    if "labels" in changes:
+        records.set_labels(v.db, repo["id"], row["id"], changes["labels"])
+    if "assignees" in changes:
+        records.set_assignees(v.db, row["id"], changes["assignees"])
+        for login in changes["assignees"]:
+            users.ensure(v.db, login, v.now())
+    if changes.get("state") in ("open", "closed"):
+        set_state(v, repo, row, changes["state"], by, changes.get("state_reason") or "completed")
