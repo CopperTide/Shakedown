@@ -7,7 +7,7 @@ import { actionsOf } from '@/model/actions';
 import { isWorldActor } from '@/model/lanes';
 import type { BranchView } from '@/model/twin';
 import type { Event, Team } from '@/model/types';
-import { isViewEvent } from './twin';
+import { isBookkeeping } from './twin';
 
 export type TrackMarkKind = 'disruption' | 'refusal' | 'fork';
 
@@ -44,7 +44,7 @@ export function trackMarks(events: Event[], startSeq: number | null): TrackMark[
 
 /** The track over the branch's steps (views and world views aside) and its views' steps. */
 export function buildTrack(events: Event[], views: BranchView[], startSeq: number | null): Track {
-  const seqs = [...events.filter((e) => !isViewEvent(e) && e.kind !== 'run_start').map((e) => e.seq), ...views.map((v) => v.seq)];
+  const seqs = [...events.filter((e) => !isBookkeeping(e) && e.kind !== 'run_start').map((e) => e.seq), ...views.map((v) => v.seq)];
   const min = seqs.length ? Math.min(...seqs) : 0;
   const max = seqs.length ? Math.max(...seqs) : 0;
   return { min, max, stops: views.map((v) => v.seq), marks: trackMarks(events, startSeq) };

@@ -69,7 +69,9 @@ export type EventKind =
   | 'finish'
   /** What an agent thought or said it would do (`payload: {text, kind: 'thinking'|'step'|'plan', source:
    *  'agent'|'gateway'|'claude_code', model_call_seq?, truncated?}`); not a step of its own. */
-  | 'reasoning';
+  | 'reasoning'
+  /** arenad saved the parts that save at points (`payload: {reason, saves, error?, paused_ms}`); not a step. */
+  | 'save_point';
 
 export type RestoreMode = 'exact' | 'approximate';
 /** How one part of a rerun's world is (or was) restored (`model.rs` `RestoredHow`). */
@@ -295,6 +297,14 @@ export interface IdlePayload {
   error?: string;
 }
 
+/** The parts that save at points, saved before a model call or when a driver asked. */
+export interface SavePointPayload {
+  reason: 'model_call' | 'asked';
+  saves: Saves;
+  error?: string;
+  paused_ms: number;
+}
+
 /** The branch goes on after a pause. */
 export interface ResumePayload {
   paused_ms: number;
@@ -330,6 +340,7 @@ export interface Payloads {
   idle: IdlePayload;
   finish: FinishPayload;
   reasoning: ReasoningPayload;
+  save_point: SavePointPayload;
 }
 
 export interface CheckPayload {
