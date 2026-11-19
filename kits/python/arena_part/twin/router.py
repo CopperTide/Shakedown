@@ -34,6 +34,7 @@ class Request:
     agent: str | None
     base: str
     params: dict[str, str] = field(default_factory=dict)
+    readonly: bool = False
 
     def json(self):
         """The body as JSON; an empty body is `{}`."""

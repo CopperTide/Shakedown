@@ -158,3 +158,27 @@ def test_a_path_param_takes_the_rest_of_the_path_even_when_empty():
     req = lambda p: Request("GET", p, {}, {}, b"", None, "http://x")
     assert r.dispatch(req("/files/a/b%2Fc"), None).body == {"path": "a/b/c"}
     assert r.dispatch(req("/files/"), None).body == {"path": ""}
+
+
+def test_a_request_knows_it_comes_from_a_read_only_agent(notes):
+    from notes_twin import router
+
+    @router.route("GET", "/whoami")
+    def whoami(req, ctx):
+        return Response(200, {"agent": req.agent, "readonly": req.readonly})
+
+    try:
+        r = http(up(notes), "GET", "/whoami", headers={"X-Arena-Agent": "auditor", "X-Arena-Readonly": "1"})
+        assert r.json() == {"agent": "auditor", "readonly": True}
+        assert http(up(notes), "GET", "/whoami").json()["readonly"] is False
+    finally:
+        del router.routes[-1]
+
+
+def test_routes_say_when_the_twin_honours_read_only(notes):
+    assert "honours_readonly" not in notes.http_routes("i")["routes"][0]
+    notes.HONOURS_READONLY = True
+    try:
+        assert notes.http_routes("i")["routes"][0]["honours_readonly"] is True
+    finally:
+        del notes.HONOURS_READONLY

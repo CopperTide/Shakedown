@@ -62,12 +62,14 @@ def _wall_ms() -> int:
 class HttpTwin(DocsPart):
     """Subclass and set `NAME` (the package name), `SYSTEM` (names the `<SYSTEM>_act` tool and
     notices), `VERSION`, `SCHEMA_SQL`; give `router()`, `seed`, `docs`, `act`; override
-    `is_immutable(path)` for files that never change in place, `route_env`, `READS`."""
+    `is_immutable(path)` for files that never change in place, `route_env`, `READS`; set
+    `HONOURS_READONLY` when the twin refuses the writes of a request marked `req.readonly`."""
     NAME = ""
     SYSTEM = ""
     VERSION = "0.1.0"
     SCHEMA_SQL = ""
     READS: list = []
+    HONOURS_READONLY = False
 
     def __init__(self, clock: Callable[[], int] | None = None):
         super().__init__()
@@ -158,6 +160,8 @@ class HttpTwin(DocsPart):
                 route["env"] = env
             if self.READS:
                 route["reads"] = list(self.READS)
+            if self.HONOURS_READONLY:
+                route["honours_readonly"] = True
             out.append(route)
         return {"routes": out}
 

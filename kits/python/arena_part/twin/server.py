@@ -6,7 +6,7 @@ import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
 
-from ..forwarded import agent_of, public_base
+from ..forwarded import agent_of, public_base, readonly_of
 from .router import Headers, Request, Response
 
 EFFECT_HEADER = "X-Arena-Effect"
@@ -43,7 +43,8 @@ def _request(handler, fallback: str) -> Request:
     url = urlsplit(handler.path)
     headers = Headers(handler.headers.items())
     return Request(handler.command, url.path, parse_qs(url.query, keep_blank_values=True), headers,
-                   _read_body(handler), agent_of(headers), public_base(headers, fallback))
+                   _read_body(handler), agent_of(headers), public_base(headers, fallback),
+                   readonly=readonly_of(headers))
 
 
 def _handle(twin_server, req: Request) -> Response:

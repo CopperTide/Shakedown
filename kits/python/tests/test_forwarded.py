@@ -18,3 +18,12 @@ def test_agent_of_reads_the_agent_header():
     assert agent_of({"X-Arena-Agent": "coder"}) == "coder"
     assert agent_of({"x-arena-agent": ""}) is None
     assert agent_of({}) is None
+
+
+def test_readonly_of_reads_the_readonly_header():
+    from arena_part.forwarded import READONLY_HEADER, readonly_of
+
+    assert READONLY_HEADER == "x-arena-readonly"
+    assert readonly_of({"X-Arena-Readonly": "1"}) is True
+    assert readonly_of({"x-arena-readonly": "0"}) is False
+    assert readonly_of({}) is False
