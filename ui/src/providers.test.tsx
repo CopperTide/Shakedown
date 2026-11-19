@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { modesLine } from './components';
 import { ProviderSelect, ProviderStatusLine } from './ProviderFields';
 import {
-  agentModelLine, bestProviders, checkProviders, modelProblem, providerLine, providerOptions, providerSummary, resetProviders,
+  agentModelLine, bestProviders, checkProviders, modelProblem, providerOptions, providerSummary, resetProviders,
 } from './providers';
 import { AgentFields } from './pages/Team';
 import { AgentEdit, applied, forkProblem } from './run/ForkPanel';
@@ -57,12 +57,6 @@ describe('health line', () => {
     expect(t).toContain('? ollama (local, 127.0.0.1:11434) not checked');
     expect(t).not.toContain('GET /api/providers asks');
     expect(html).toMatch(/<button[^>]*>Check<\/button>/);
-    expect(HEALTH.map(providerLine)).toEqual([
-      '✓ OpenRouter ready',
-      '✕ OpenAI unavailable: OPENAI_API_KEY is not set',
-      '✕ Anthropic (Claude) unavailable: ANTHROPIC_API_KEY is not set',
-      '? ollama (local, 127.0.0.1:11434) not checked',
-    ]);
   });
 
   it('once /api/providers answers, the local server shows what it said', async () => {
@@ -76,8 +70,6 @@ describe('health line', () => {
     expect(text(html)).toContain('✓ ollama (local, 127.0.0.1:11434) ready');
     expect(html).toMatch(/<button[^>]*>Check again<\/button>/);
     expect(text(html)).not.toContain('not checked');
-    const down = { ...HEALTH[3], checked: true, why: 'ollama (127.0.0.1:11434) did not answer within 3 s' };
-    expect(providerLine(down)).toBe('✕ ollama (local, 127.0.0.1:11434) unavailable: ollama (127.0.0.1:11434) did not answer within 3 s');
   });
 
   it('the old single OpenRouter entry is gone from the modes line', () => {

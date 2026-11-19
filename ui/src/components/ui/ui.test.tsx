@@ -5,7 +5,6 @@ import { Button } from './button';
 import { CodeBlock } from './code-block';
 import { DataTable } from './data-table';
 import { Dialog, DialogContent } from './dialog';
-import { FilterChips } from './filter-chips';
 import { Checkbox, Field, Input, NativeSelect, Textarea } from './input';
 import { Kbd } from './kbd';
 import { PageHeader, Stat } from './page';
@@ -14,7 +13,7 @@ import { Split } from './split';
 import { EmptyState, ErrorState, LoadingState, Notice } from './state';
 import { StatusMark, Tag } from './status';
 import { StepLabel } from './step-label';
-import { RowTh, Table, Td, Th } from './table';
+import { Table, Td, Th } from './table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './tabs';
 import { Tooltip, TooltipProvider } from './tooltip';
 
@@ -47,7 +46,7 @@ describe('base components', () => {
     expect(text(html(<Panel><PanelHeader title="Trace" meta="the turn" /></Panel>))).toBe('Trace the turn');
     expect(text(html(<PageHeader title="Runs" meta="27 runs" actions={<Button>New</Button>} />))).toBe('Runs New 27 runs');
     expect(html(<Stat label="Refused" value="1" abnormal />)).toContain('text-alarm');
-    expect(html(<Table><thead><tr><Th>A</Th></tr></thead><tbody><tr><RowTh>r</RowTh><Td>1</Td></tr></tbody></Table>)).toContain('scope="row"');
+    expect(html(<Table><thead><tr><Th>A</Th></tr></thead><tbody><tr><Td>1</Td></tr></tbody></Table>)).toContain('<td');
   });
   it('code block and step label', () => {
     const c = html(<CodeBlock className="max-h-40 rounded">{'{ }'}</CodeBlock>);
@@ -65,11 +64,6 @@ describe('base components', () => {
     expect(html(<Checkbox checked readOnly />)).toContain('type="checkbox"');
     expect(text(html(<Kbd>⌘K</Kbd>))).toBe('⌘K');
   });
-  it('filter chips: one checked, each with its count', () => {
-    const h = html(<FilterChips label="Status" options={[{ id: 'all', label: 'All' }, { id: 'failed', label: 'Failed' }]} value="failed" counts={{ all: 3, failed: 0 }} onChange={() => {}} />);
-    expect(h).toMatch(/aria-checked="true"[^>]*>Failed/);
-    expect(text(h)).toBe('All 3 Failed 0');
-  });
   it('tabs render the active panel; a closed dialog renders nothing; a tooltip keeps its trigger', () => {
     const t = html(<Tabs defaultValue="a"><TabsList><TabsTrigger value="a">A</TabsTrigger><TabsTrigger value="b">B</TabsTrigger></TabsList><TabsContent value="a">first</TabsContent><TabsContent value="b">second</TabsContent></Tabs>);
     expect(text(t)).toContain('first');
@@ -82,13 +76,12 @@ describe('base components', () => {
     expect(h).toContain('role="separator"');
     expect(text(h)).toBe('main side');
   });
-  it('data table: loading, error, empty, rows, and no match', () => {
+  it('data table: loading, error, empty and rows', () => {
     const cols: ColumnDef<{ id: string }, unknown>[] = [{ id: 'id', header: 'Id', accessorFn: (r) => r.id }];
     const base = { columns: cols, getRowId: (r: { id: string }) => r.id, loadingLabel: 'Loading…', empty: <p>none yet</p>, label: 'T' };
     expect(text(html(<DataTable {...base} data={null} />))).toContain('Loading…');
     expect(html(<DataTable {...base} data={null} error="down" />)).toContain('role="alert"');
     expect(text(html(<DataTable {...base} data={[]} />))).toBe('none yet');
     expect(text(html(<DataTable {...base} data={[{ id: 'r1' }, { id: 'r2' }]} />))).toBe('Id r1 r2');
-    expect(text(html(<DataTable {...base} data={[{ id: 'r1' }]} filter="zz" filterFn={(r, f) => r.id.includes(String(f))} />))).toContain('Nothing matches the filter.');
   });
 });

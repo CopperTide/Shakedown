@@ -104,13 +104,6 @@ export const stateGlyph = (st: ProviderState) => GLYPH[st];
 export const stateReason = (s: ProviderStatus): string | null =>
   providerState(s) === 'not checked' ? null : s.why ?? null;
 
-/** "✕ OpenAI unavailable: OPENAI_API_KEY is not set". */
-export function providerLine(s: ProviderStatus): string {
-  const st = providerState(s);
-  const why = stateReason(s);
-  return `${GLYPH[st]} ${s.label} ${st}${why ? `: ${why}` : ''}`;
-}
-
 /** The status bar's one line about API mode: how many providers are ready, and the shared reason when none is. */
 export function providerSummary(list: ProviderStatus[]): { glyph: string; text: string } | null {
   if (!list.length) return null;

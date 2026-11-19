@@ -22,7 +22,7 @@ export interface ConnectForm {
   env: string;
 }
 
-export const DEFAULT_REGION = 'us-east-1';
+const DEFAULT_REGION = 'us-east-1';
 
 export const emptyForm = (kind: ConnectKind = 'http'): ConnectForm => ({ kind, url: '', headers: '', model: '', region: DEFAULT_REGION, name: '', command: '', workdir: '', env: '' });
 

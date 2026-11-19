@@ -16,7 +16,3 @@ export function PanelHeader({ title, meta, children, className }: { title: React
     </header>
   );
 }
-
-export function PanelBody({ className, ...props }: ComponentProps<'div'>) {
-  return <div className={cn('p-3', className)} {...props} />;
-}

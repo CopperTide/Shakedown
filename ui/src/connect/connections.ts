@@ -102,11 +102,6 @@ export function codeTeam(c: Connection): Team {
   return { id: `code-${c.id}`, name: c.name, agents: [], runner: 'external', connection: c.id };
 }
 
-/** An experiment setup that runs the connection's driver. */
-export function codeSetup(c: Connection): NewSetup {
-  return { name: c.name, runner: 'external', connection: c.id, team: { id: `code-${c.id}`, name: c.name, agents: [] } };
-}
-
 /** The saved Code connections as teams to pick, with `first` (one just made) among them; none while arenad can't say. */
 export function useCodeTeams(first?: Team): Team[] {
   const [teams, setTeams] = useState<Team[]>(() => (first?.connection ? [first] : []));

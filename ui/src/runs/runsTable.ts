@@ -1,5 +1,4 @@
-// The history as table rows: every branch of every run, forks under their parent, and the text
-// filter the page applies.
+// The history as table rows: every branch of every run, forks under their parent.
 import type { Branch, RunSummary } from '../types';
 import { branchTree } from './tree';
 
@@ -14,12 +13,6 @@ export interface BranchRow {
 export function branchRows(runs: RunSummary[]): BranchRow[] {
   const newest = [...runs].sort((a, b) => b.created_at.localeCompare(a.created_at));
   return newest.flatMap((run) => branchTree(run.branches).map(({ branch, depth }) => ({ run, branch, depth })));
-}
-
-/** True when every word of `text` appears in the row's name, team, result, task, ids or note (`name`: the run's name in words). */
-export function rowMatches(r: BranchRow, text: string, name = runTitle(r.run)): boolean {
-  const hay = [name, r.branch.team.name, r.run.task_id, r.run.id, r.branch.id, r.branch.fork_note ?? '', r.branch.status].join(' ').toLowerCase();
-  return text.toLowerCase().split(/\s+/).filter(Boolean).every((w) => hay.includes(w));
 }
 
 /** True while some branch of the run is running (the run can't be deleted then). */

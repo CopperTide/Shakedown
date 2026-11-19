@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { teamForRun } from '../team';
 import { checkBody, emptyForm, formProblem } from './connect';
-import { type Connection, codeBody, codeSetup, codeTeam, parseEnv, splitCommand, testLine } from './connections';
+import { type Connection, codeBody, codeTeam, parseEnv, splitCommand, testLine } from './connections';
 
 const conn: Connection = {
   id: 'c1', name: 'LangGraph team', kind: 'code', command: ['uv', 'run', 'python', 'driver.py'], workdir: '/work', env: { MODE: 'fast' }, created_at: '2026-11-17T12:00:00Z',
@@ -29,8 +29,7 @@ describe('Code connections', () => {
     expect(codeBody({ ...f, command: 'python driver.py', workdir: ' /work ', env: 'MODE=fast' })).toEqual({ name: 'Team', command: ['python', 'driver.py'], workdir: '/work', env: { MODE: 'fast' } });
   });
 
-  it('makes an experiment setup and a team that post the connection', () => {
-    expect(codeSetup(conn)).toEqual({ name: 'LangGraph team', runner: 'external', connection: 'c1', team: { id: 'code-c1', name: 'LangGraph team', agents: [] } });
+  it('makes a team that posts the connection', () => {
     const t = codeTeam(conn);
     expect(t).toMatchObject({ connection: 'c1', runner: 'external', agents: [] });
     expect(teamForRun(t, 'external')).not.toHaveProperty('connection');
