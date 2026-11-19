@@ -1,6 +1,8 @@
 // Mirrors arenad's model.rs / fork.rs / compare.rs / recorded.rs (serde snake_case).
 import type { Board } from '@/features/team/board';
+import type { SystemInfo, ToolInfo } from './report';
 import type { RecordedScenario, ScenarioOptions } from './scenario';
+import type { WorldViewPayload } from './twin';
 
 /** `http`: an agent someone deployed, reached at its URL (`arena-agent/1`); arenad doesn't run it, it calls it. */
 export type AgentKind = 'claude_code' | 'codex' | 'open' | 'external' | 'http';
@@ -114,6 +116,13 @@ export interface RunStartPayload {
   handoff?: 'required' | 'optional';
   /** The scenario the run was started with, as arenad expanded it (absent: none chosen). */
   scenario?: RecordedScenario;
+  /** Each part's kind of system, and each tool's effect and part (absent in runs recorded before they were kept). */
+  systems?: Record<string, SystemInfo>;
+  tools?: Record<string, ToolInfo>;
+  /** The run's cost cap, when it has one. */
+  max_cost_usd?: number;
+  /** The Code connection whose driver drives the run. */
+  connection?: string;
 }
 
 export interface AgentSpec {
@@ -157,14 +166,18 @@ export interface Change {
   read_only?: boolean | null;
 }
 
-export interface Event {
+interface EventBase {
   branch_id: string;
   seq: number;
   at: string;
   agent: string | null;
-  kind: EventKind;
-  payload: unknown;
 }
+
+/** An event whose payload has the shape arenad writes for its kind (`Payloads`). */
+export type TypedEvent = { [K in EventKind]: EventBase & { kind: K; payload: Payloads[K] } }[EventKind];
+
+/** A recorded event. Until every reader narrows by `kind`, an event may also be read as untyped. */
+export type Event = TypedEvent | (EventBase & { kind: EventKind; payload: unknown });
 
 export interface ToolCallPayload {
   name: string;
@@ -184,6 +197,10 @@ export interface ToolCallPayload {
   /** The world clock when the call ran. */
   clock_ms?: number;
   paused_ms?: number;
+  /** Keys the call changed for its part's own bookkeeping: saved like a write, but not one. */
+  internal?: string[];
+  /** How long the tool ran in the world (absent when it reached no part, and in older runs). */
+  duration_ms?: number;
 }
 
 export interface ModelCallPayload {
@@ -196,12 +213,17 @@ export interface ModelCallPayload {
   provider?: string;
   /** The provider's own response, when it differs from the canonical `response`. */
   provider_response?: unknown;
+  /** Set on a call that compacted the conversation (Claude Code). */
+  compaction?: unknown;
 }
 
 export interface AgentEndPayload {
   ok: boolean;
   error: string | null;
   tokens: number | null;
+  /** The input and output tokens of `tokens` (absent in runs recorded before they were kept). */
+  prompt_tokens?: number | null;
+  completion_tokens?: number | null;
   cost_usd: number | null;
   cost_source: string | null;
   seconds: number | null;
@@ -209,6 +231,105 @@ export interface AgentEndPayload {
 
 export interface HandoffPayload {
   note: string;
+  /** The agent the note is for; absent: for whoever comes next. */
+  to?: string;
+}
+
+/** `runner.rs` / `external.rs` / `dispatch` `AgentStart`. */
+export interface AgentStartPayload {
+  name: string;
+  kind: AgentKind;
+  model: string | null;
+  provider?: string;
+  /** An agent an external system started (joined over the API). */
+  external?: boolean;
+}
+
+/** One agent's message to another, or to everyone (`to` = `*`). */
+export interface MessagePayload {
+  to: string;
+  text: string;
+}
+
+/** Something a part reported as its clock advanced (a disruption, a decision, the driver's exit). */
+export interface WorldEventPayload {
+  part: string;
+  kind: string;
+  text: string;
+  data: unknown;
+  /** Absent on the driver's exit. */
+  clock_ms?: number;
+}
+
+/** A dispatch run's lead gives agent `to` its `task`. */
+export interface DelegationPayload {
+  to: string;
+  task: string;
+}
+
+/** An agent's report to the lead; `turn_end` when arenad passed on what it said at the end of its turn. */
+export interface ReportPayload {
+  to: string;
+  text: string;
+  turn_end?: boolean;
+}
+
+/** The lead's summary of the run. */
+export interface FinishPayload {
+  summary: string;
+}
+
+/** Why a dispatch run woke an agent, the steps whose mail it got, and its input. */
+export interface WakePayload {
+  reason: 'start' | 'mail' | 'idle' | 'resume';
+  mail: number[];
+  input: string;
+  /** Which wake of a waiting team this is (`reason: idle`). */
+  idle_wake?: number;
+}
+
+/** An agent of a dispatch run ended its turn and waits. */
+export interface IdlePayload {
+  ok: boolean;
+  text: string;
+  error?: string;
+}
+
+/** The branch goes on after a pause. */
+export interface ResumePayload {
+  paused_ms: number;
+}
+
+/** What an agent thought or said it would do (`reasoning.rs`). */
+export interface ReasoningPayload {
+  text: string;
+  kind: 'thinking' | 'step' | 'plan';
+  source: 'agent' | 'gateway' | 'claude_code';
+  model_call_seq?: number;
+  /** Cut at 32,768 characters. */
+  truncated?: boolean;
+}
+
+/** Each event kind's payload as arenad writes it. */
+export interface Payloads {
+  run_start: RunStartPayload;
+  agent_start: AgentStartPayload;
+  model_call: ModelCallPayload;
+  tool_call: ToolCallPayload;
+  handoff: HandoffPayload;
+  message: MessagePayload;
+  agent_end: AgentEndPayload;
+  check: CheckPayload;
+  world_event: WorldEventPayload;
+  world_view: WorldViewPayload;
+  pause: Record<string, never>;
+  resume: ResumePayload;
+  delegation: DelegationPayload;
+  report: ReportPayload;
+  wake: WakePayload;
+  idle: IdlePayload;
+  finish: FinishPayload;
+  reasoning: ReasoningPayload;
 }
 
 export interface CheckPayload {
