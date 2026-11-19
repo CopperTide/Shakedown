@@ -1,6 +1,7 @@
 //! The agents' tools, on Twenty's REST API. A refusal or a bad argument is the tool's error; only
 //! Twenty not answering fails the call.
 use anyhow::Error;
+use arena_part::helpers::args::{self, given};
 use arena_part::proto::ToolOutput;
 use arena_part::PartError;
 use serde_json::{json, Value};
@@ -23,19 +24,12 @@ impl From<Error> for Failure {
 
 type Out = Result<ToolOutput, Failure>;
 
-fn given<'a>(args: &'a Value, name: &str) -> Option<&'a str> {
-    args[name].as_str().filter(|s| !s.trim().is_empty())
-}
-
 fn required<'a>(args: &'a Value, name: &str) -> Result<&'a str, Failure> {
-    given(args, name).ok_or_else(|| Failure::Refused(format!("{name} is required")))
+    args::required(args, name).map_err(Failure::Refused)
 }
 
 fn accepted(reply: Reply) -> Result<Value, Failure> {
-    match reply {
-        Reply::Ok(data) => Ok(data),
-        Reply::Refused(message) => Err(Failure::Refused(message)),
-    }
+    reply.accepted().map_err(Failure::Refused)
 }
 
 /// A value in a Twenty filter: quoted, so without quotes of its own.
