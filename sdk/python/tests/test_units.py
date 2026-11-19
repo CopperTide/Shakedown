@@ -178,6 +178,34 @@ def test_branch_and_suite_wait_read_until_ended(monkeypatch):
     with pytest.raises(TimeoutError, match="^suite s1 still running after -1 s$"):
         Suite(_Answers({"id": "s1", "status": "running"}), {"id": "s1"}).wait(timeout=-1)
 
+def test_agent_endpoint_reads_proxy_and_env():
+    from arena import Arena
+    from arena.client import AgentEndpoint
+
+    proxy = "http://arena:t@127.0.0.1:5"
+    d = {"agent": "a", "mcp_url": "http://x/mcp/b1/a", "gateway_url": "http://x/gateway/b1/a/v1",
+         "proxy_url": proxy, "env": {"HTTPS_PROXY": proxy, "TOY_URL": "https://toy.test"}}
+    a = AgentEndpoint.from_answer(Branch(Arena("http://127.0.0.1:1"), "b1", "r1"), d)
+    assert a.proxy_url == proxy
+    assert a.env == {"HTTPS_PROXY": proxy, "TOY_URL": "https://toy.test"}
+
+
+def test_agent_endpoint_without_proxy():
+    from arena import Arena
+    from arena.client import AgentEndpoint
+
+    d = {"agent": "a", "mcp_url": "http://x/mcp/b1/a", "gateway_url": "http://x/gateway/b1/a/v1"}
+    a = AgentEndpoint.from_answer(Branch(Arena("http://127.0.0.1:1"), "b1", "r1"), d)
+    assert (a.proxy_url, a.env) == (None, {})
+
+
+def test_branch_clock_gets_the_route():
+    clock = {"clock_ms": 5, "speed": 1.0, "paused": False, "world_epoch_ms": 1_000, "world_ms": 1_005}
+    arena = _Answers(clock)
+    assert Branch(arena, "b1", "r1").clock() == clock
+    assert arena.paths == ["/api/branches/b1/clock"]
+
+
 # ---------------------------------------------------------------- drivers
 
 def _fake_arenad(monkeypatch, calls: list):

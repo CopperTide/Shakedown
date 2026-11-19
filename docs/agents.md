@@ -75,6 +75,37 @@ JSON, or from another origin). Any program on this computer can still reach it, 
 connections only on a computer whose other accounts you trust. A driver that drives its run longer than
 `ARENA_CODE_RUN_SECS` (default 900) has its run ended `failed`, scored.
 
+### The world's time
+
+Every driver Shakedown launches gets `ARENA_WORLD_EPOCH_MS` (the unix ms of the world clock's 0: the task's
+`clock_start` read as UTC, else the run's start; a fork keeps its run's) and `ARENA_CLOCK_SPEED` (world ms per wall
+ms). `GET /api/branches/{id}/clock` (SDK: `Branch.clock()`) answers `{clock_ms, speed, paused, world_epoch_ms,
+world_ms}` for a live branch (409 once it ended). Simulated traffic and twins stamp what they emit with
+`world_epoch_ms + clock_ms` (the kits' `WorldTime`), so dashboards follow the world clock and its pauses.
+
+### Reaching the world's services
+
+In a world whose parts serve HTTP (a code host, an issue tracker: see `docs/protocol.md`, "Serving HTTP"), your
+agents' own clients (`git`, `gh`, `curl`, SDKs) reach those services through Shakedown's recording proxy, and each
+request is recorded as an `http` step of the part that serves its host: inspectable and forkable like a tool call.
+
+- A driver Shakedown launches gets `HTTP_PROXY`, `HTTPS_PROXY` (and their lower-case forms), `ARENA_PROXY`,
+  `NO_PROXY=127.0.0.1,localhost,::1`, `NODE_USE_ENV_PROXY=1`, and the variables the parts' routes name (a
+  base URL such as `GITHUB_API_URL`). Set them in the environment of the clients your agents run.
+- An agent's register answer (`POST /api/branches/{id}/agents`) has its own `proxy_url` and `env`; the SDK gives them
+  as `AgentEndpoint.proxy_url` and `AgentEndpoint.env`. Requests with an agent's proxy are recorded as that agent's;
+  requests with the driver's are recorded as the agent whose model call through the gateway came last
+  (`args.attributed: "latest model call"`), else as no agent's.
+- The proxy listens on 127.0.0.1 only (`ARENA_PROXY_PORT`, default a free port). Its URL carries a ticket of the
+  run; a request without one is answered 407. A request to a host no part serves is refused (403) and recorded. A
+  read-only agent's writes are refused. Requests wait while the run is paused and are answered 409 once it ended.
+- HTTPS to a served host goes through the proxy too (`CONNECT host:443`): the proxy terminates TLS with a CA of the
+  run's branch, and the same variables give `SSL_CERT_FILE`, `REQUESTS_CA_BUNDLE`, `CURL_CA_BUNDLE`,
+  `NODE_EXTRA_CA_CERTS` and `GIT_SSL_CAINFO` naming its certificate. Shakedown never installs it in a system trust
+  store; a client that keeps its own trust store and ignores these variables fails TLS. A fork's branch has its
+  own CA. `CONNECT` to another host, or to a served host on another port, is refused (403) and recorded.
+- A world that serves no HTTP gives none of these variables: drivers reach their providers as before.
+
 ## HTTP agents (`arena-agent/1`)
 
 **Run.** When the agent's turn starts, arenad sends one `POST` to its URL, with its headers:

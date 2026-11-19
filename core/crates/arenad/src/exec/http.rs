@@ -18,6 +18,8 @@ use crate::{
 
 /// The answer to a request on a branch that isn't running (not recorded).
 pub const NOT_RUNNING: &str = "the run is not running";
+/// `args.attributed` of a driver's request recorded as the latest model caller's.
+pub const ATTRIBUTED: &str = "latest model call";
 const READ_ONLY: &str =
     "Write requests are not available to this agent: its team made it read-only";
 
@@ -36,9 +38,12 @@ pub struct HttpCall {
 
 impl HttpCall {
     /// The URL the client asked for (`http://toy.test/hello`), the port only when it isn't the
-    /// scheme's.
+    /// scheme's (always for a `CONNECT`: `https://toy.test:443`).
     pub fn url(&self) -> String {
         let (scheme, host, pq) = (self.scheme, &self.host, &self.path_and_query);
+        if self.method == "CONNECT" {
+            return format!("{scheme}://{host}:{}", self.port);
+        }
         match (scheme, self.port) {
             ("http", 80) | ("https", 443) => format!("{scheme}://{host}{pq}"),
             (_, port) => format!("{scheme}://{host}:{port}{pq}"),
@@ -100,7 +105,8 @@ impl Exchanged {
 }
 
 impl ToolExec {
-    /// Runs `call` as a step of `agent` (None: not known) on `branch`, and records it.
+    /// Runs `call` as a step of `agent` on `branch`, and records it. A request with no agent (the
+    /// driver's ticket) is the agent's whose model call came last, when one did.
     pub async fn http(
         &self,
         branch: &BranchCtx,
@@ -136,13 +142,19 @@ impl ToolExec {
         if branch.lifecycle.is_closed() {
             return HttpAnswer::text(409, NOT_RUNNING);
         }
+        let attributed = agent.map_or_else(|| branch.roster.last_model_caller(), |_| None);
+        let agent = agent.or(attributed.as_deref());
         let done = match refused {
             Some((status, why)) => {
                 Exchanged::refused(status, why.to_string(), CallFacts::default())
             }
             None => self.exchange(branch, agent, &call).await,
         };
-        self.record_http(branch, agent, &call, done.outcome, done.facts)
+        let mut args = call.args();
+        if attributed.is_some() {
+            args["attributed"] = json!(ATTRIBUTED);
+        }
+        self.record_http(branch, agent, args, done.outcome, done.facts)
             .await;
         done.answer
     }
@@ -185,12 +197,12 @@ impl ToolExec {
         &self,
         branch: &BranchCtx,
         agent: Option<&str>,
-        call: &HttpCall,
+        args: Value,
         outcome: Result<Value, String>,
         facts: CallFacts,
     ) {
         let wrote = facts.wrote_world();
-        let payload = tool_call_payload(HTTP_TOOL, call.args(), &outcome, None, facts);
+        let payload = tool_call_payload(HTTP_TOOL, args, &outcome, None, facts);
         match self
             .record_seq(branch, agent, EventKind::ToolCall, &payload)
             .await

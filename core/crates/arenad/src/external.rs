@@ -5,32 +5,47 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use std::sync::Arc;
+use std::{collections::BTreeMap, sync::Arc};
 
 use crate::{
     app::AppState,
     exec::BranchCtx,
     model::*,
+    proxy::env::env_for,
     runner,
     store::{BranchId, RunId, Store},
 };
 
 /// Where an agent reaches the world's tools (MCP, streamable HTTP) and its models (an
 /// OpenAI-compatible base URL: `{gateway_url}/chat/completions`).
+/// In a world whose parts serve HTTP, also the recording proxy its own clients go through and
+/// the variables to start them with (see `proxy::env`).
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Endpoints {
     pub agent: String,
     pub mcp_url: String,
     pub gateway_url: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub proxy_url: Option<String>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub env: BTreeMap<String, String>,
 }
 
-/// The endpoints of `agent` on `branch`, on the arenad at `self_base`.
-pub fn endpoints(self_base: &str, branch: &str, agent: &str) -> Endpoints {
+/// The endpoints of `agent` on `branch`, on the arenad at `self_base`, with the variables `env`
+/// (`proxy_url` is its `ARENA_PROXY`).
+pub fn endpoints(
+    self_base: &str,
+    branch: &str,
+    agent: &str,
+    env: BTreeMap<String, String>,
+) -> Endpoints {
     let base = self_base.trim_end_matches('/');
     Endpoints {
         agent: agent.to_string(),
         mcp_url: format!("{base}/mcp/{branch}/{agent}"),
         gateway_url: format!("{base}/gateway/{branch}/{agent}/v1"),
+        proxy_url: env.get("ARENA_PROXY").cloned(),
+        env,
     }
 }
 
@@ -60,7 +75,13 @@ pub(crate) async fn go(state: &AppState, ctx: &Arc<BranchCtx>) -> anyhow::Result
     for spec in &ctx.roster.team.agents {
         ctx.record(&state.store, Some(&spec.id), &start_payload(spec))
             .await?;
-        agents.push(endpoints(&state.config.self_base, &ctx.branch_id, &spec.id));
+        let env = env_for(state, ctx, Some(&spec.id));
+        agents.push(endpoints(
+            &state.config.self_base,
+            &ctx.branch_id,
+            &spec.id,
+            env,
+        ));
     }
     Ok(agents)
 }
@@ -301,7 +322,7 @@ pub fn resumables(
     team.agents
         .iter()
         .map(|spec| Resumable {
-            endpoints: endpoints(self_base, branch, &spec.id),
+            endpoints: endpoints(self_base, branch, &spec.id, BTreeMap::new()),
             spec: spec.clone(),
             history: before
                 .iter()

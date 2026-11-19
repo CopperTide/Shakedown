@@ -3,7 +3,7 @@
 //! keep no saves (only replay) are never saved; parts with replay are not in the shared saves,
 //! so they are not compared with them.
 
-use parts::proto::{DiffParams, Differing, SaveParams, Target};
+use parts::proto::{DiffParams, Differing, SaveAt, SaveParams, Target};
 use serde_json::Value;
 
 use super::{new_save_id, request, Part, Saves, World, WorldError};
@@ -48,21 +48,60 @@ impl World {
     }
 
     /// The parts to save after a step: the part written to, and every clock part that changed
-    /// since its last save; only parts that keep saves.
+    /// since its last save; only parts that keep saves and save after each step.
     fn changed_parts(&self, written_part: Option<&str>) -> Vec<&Part> {
         let t = self.track.lock().unwrap();
         self.parts
             .iter()
             .filter(|p| written_part == Some(p.name.as_str()) || t.changed.contains(&p.name))
-            .filter(|p| p.keeps_saves())
+            .filter(|p| p.keeps_saves() && p.describe.save_at == SaveAt::Step)
             .collect()
     }
 
-    /// Saves the parts that changed with a step (see `changed_parts`). A part whose save fails
-    /// stays unsaved until its next one.
+    /// The parts that save at points and changed (or failed to save) since their last save.
+    fn unsaved_points(&self) -> Vec<&Part> {
+        let t = self.track.lock().unwrap();
+        let unsaved = |p: &&Part| t.changed.contains(&p.name) || t.dirty.contains(&p.name);
+        let points = self
+            .parts
+            .iter()
+            .filter(|p| p.describe.save_at == SaveAt::Points);
+        points.filter(|p| p.keeps_saves()).filter(unsaved).collect()
+    }
+
+    /// True when a part that saves at points changed since its last save.
+    pub fn has_unsaved_points(&self) -> bool {
+        !self.unsaved_points().is_empty()
+    }
+
+    /// Saves the parts that save at points and changed since their last save (a save point).
+    pub async fn save_points(&self) -> StepSaves {
+        self.save_each(self.unsaved_points()).await
+    }
+
+    /// Saves the parts that changed with a step (see `changed_parts`); a part that saves at
+    /// points and was written is only marked changed, for the next save point. A part whose save
+    /// fails stays unsaved until its next one.
     pub async fn save_changed(&self, written_part: Option<&str>) -> StepSaves {
+        self.mark_points_written(written_part);
+        self.save_each(self.changed_parts(written_part)).await
+    }
+
+    /// Marks `written_part` changed when it saves at points.
+    fn mark_points_written(&self, written_part: Option<&str>) {
+        let written = self
+            .parts
+            .iter()
+            .find(|p| Some(p.name.as_str()) == written_part);
+        if let Some(p) = written.filter(|p| p.describe.save_at == SaveAt::Points) {
+            self.track.lock().unwrap().changed.insert(p.name.clone());
+        }
+    }
+
+    /// Saves each of `parts` under a new id; the new saves and the first failure.
+    async fn save_each(&self, parts: Vec<&Part>) -> StepSaves {
         let mut out = StepSaves::default();
-        for p in self.changed_parts(written_part) {
+        for p in parts {
             match self.save_new(p).await {
                 Ok(save) => {
                     out.saves.insert(p.name.clone(), save);

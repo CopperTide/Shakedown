@@ -32,6 +32,9 @@ pub const REASON_AGENT_RESTART: &str = "the agent restarts from its first start"
 pub const REASON_LAST_MODEL_CALL: &str =
     "the step is redone from the agent's last model call before it";
 
+/// The world was not saved where the fork was asked (a part that saves at points changed since).
+pub const REASON_SAVED: &str =
+    "the world was last saved before an earlier step, so the fork starts there";
 pub const REASON_NO_MODEL_CALL: &str =
     "the agent made no model call to resume from, so it restarts from its start";
 
@@ -367,7 +370,10 @@ pub fn plan_fork(
     plan_fork_with(events, team, at_seq, changes, &BTreeSet::new())
 }
 
-/// `plan_fork` for a world whose `replayed` parts are restored by replay: they need no save.
+/// `plan_fork` for a world whose `replayed` parts are restored by replay: they need no save. A
+/// fork whose start has no save of some part (a part that saves at points, written since its last
+/// save point) is planned again at the latest model call or agent start before that write
+/// (`REASON_SAVED`); the run's start always restores, from the base.
 pub fn plan_fork_with(
     events: &[Event],
     team: &Team,
@@ -379,39 +385,90 @@ pub fn plan_fork_with(
         return Err(ForkError::UnknownAgent(String::new()));
     }
     let changed = changed_agents(team, changes)?;
-    let at = events
-        .iter()
-        .find(|e| e.seq == at_seq)
-        .ok_or(ForkError::UnknownSeq)?;
-    let planner = Planner {
-        events,
-        team,
-        at_seq,
-        at,
-    };
     let rules = recorded::rules(events);
-    let mut start = planner.start_under(rules.clone(), changes, &changed)?;
-    let a = start.agent;
-    if start.seq == planner.first_start(a).unwrap_or(i64::MIN) {
-        start.resume = None;
+    let mut asked = at_seq;
+    loop {
+        let planner = Planner::at(events, team, asked)?;
+        let start = planner.start_with(rules.clone(), changes, &changed)?;
+        let base = run_info(events).base;
+        match saves_at_except(events, start.seq - 1, &base, replayed) {
+            Ok(restore) => {
+                let notes = match rules.handoff_required {
+                    true => planner.handoff_notes(start.agent, start.seq)?,
+                    // An agent's input then has the notes recorded before its start.
+                    false => vec![],
+                };
+                let saved = (asked != at_seq).then_some(REASON_SAVED);
+                return Ok(finish_plan(start, at_seq, restore, notes, saved));
+            }
+            Err(n) if save_failed(events, n.seq) => {
+                return Err(ForkError::NoRestorePoint { seq: n.seq })
+            }
+            Err(n) => asked = saved_point_before(events, n.seq, asked)?,
+        }
     }
-    // 5. The world just before the start: per part, the save of its last write before it.
-    let restore = saves_at_except(events, start.seq - 1, &run_info(events).base, replayed)
-        .map_err(|n| ForkError::NoRestorePoint { seq: n.seq })?;
-    let notes = match rules.handoff_required {
-        true => planner.handoff_notes(a, start.seq)?,
-        // An agent's input then has the notes recorded before its start, copied with the prefix.
-        false => vec![],
-    };
-    Ok(finish_plan(start, at_seq, restore, notes))
 }
 
-fn finish_plan(start: Start, at_seq: i64, restore: Saves, notes: Vec<String>) -> ForkPlan {
+/// True when the write at `seq` was to be saved with its step and the save failed: no earlier
+/// point stands in for it (a write to a part that saves at points has no save and no error).
+fn save_failed(events: &[Event], seq: i64) -> bool {
+    let at = events.iter().find(|e| e.seq == seq);
+    at.is_some_and(|e| !e.payload["snapshot_error"].is_null())
+}
+
+/// The latest model call, agent start or run start before `seq` (the write that has no save),
+/// earlier than the point `asked` already tried.
+fn saved_point_before(events: &[Event], seq: i64, asked: i64) -> Result<i64, ForkError> {
+    let point = |e: &&Event| {
+        let kind = matches!(e.kind, EventKind::ModelCall | EventKind::AgentStart);
+        e.seq < seq.min(asked) && (kind || e.kind == EventKind::RunStart)
+    };
+    let found = events.iter().rev().find(point).map(|e| e.seq);
+    found.ok_or(ForkError::NoRestorePoint { seq })
+}
+
+impl<'a> Planner<'a> {
+    /// The planner of a fork at `at_seq` of `events`.
+    fn at(events: &'a [Event], team: &'a Team, at_seq: i64) -> Result<Planner<'a>, ForkError> {
+        let at = events.iter().find(|e| e.seq == at_seq);
+        let at = at.ok_or(ForkError::UnknownSeq)?;
+        Ok(Planner {
+            events,
+            team,
+            at_seq,
+            at,
+        })
+    }
+
+    /// Where the fork starts under `rules`, with no resume when that is the agent's first start.
+    fn start_with(
+        &self,
+        rules: Rules,
+        changes: &HashMap<String, Change>,
+        changed: &[usize],
+    ) -> Result<Start, ForkError> {
+        let mut start = self.start_under(rules, changes, changed)?;
+        if start.seq == self.first_start(start.agent).unwrap_or(i64::MIN) {
+            start.resume = None;
+        }
+        Ok(start)
+    }
+}
+
+/// The plan of a fork asked at `at_seq` that starts at `start`; `saved` overrides the reason it
+/// moved (it moved back to a save).
+fn finish_plan(
+    start: Start,
+    at_seq: i64,
+    restore: Saves,
+    notes: Vec<String>,
+    saved: Option<&'static str>,
+) -> ForkPlan {
     let moved = start.seq != at_seq;
     ForkPlan {
         start_seq: start.seq,
         moved_from: moved.then_some(at_seq),
-        reason: start.reason.filter(|_| moved).map(str::to_string),
+        reason: saved.or(start.reason).filter(|_| moved).map(str::to_string),
         agent_index: start.agent,
         restore,
         resume: start.resume,

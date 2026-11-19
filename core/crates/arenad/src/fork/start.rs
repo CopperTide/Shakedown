@@ -135,7 +135,12 @@ async fn live_child(
     events: &[Event],
 ) -> ForkResponse {
     let (branch_id, base) = (ctx.branch_id.clone(), &state.config.self_base);
-    let agents = external::resumables(base, &branch_id, &ctx.roster.team, events, plan.start_seq);
+    let mut agents =
+        external::resumables(base, &branch_id, &ctx.roster.team, events, plan.start_seq);
+    for a in &mut agents {
+        let env = crate::proxy::env::env_for(state, &ctx, Some(&a.spec.id));
+        a.endpoints = external::endpoints(base, &branch_id, &a.spec.id, env);
+    }
     runner::go_live(state, Arc::new(ctx)).await;
     ForkResponse {
         branch_id,

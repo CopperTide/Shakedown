@@ -6,6 +6,29 @@ const team: Team = { id: 't', name: 'T', agents: [{ id: 'quality', name: 'Qualit
 const ev = (seq: number, kind: Event['kind'], payload: unknown, agent: string | null = 'quality'): Event => ({ branch_id: 'b', seq, at: '2026-11-07T12:00:00Z', agent, kind, payload }) as Event;
 const start = ev(1, 'run_start', { systems: { erp: { kind: 'erp', product: 'ERPNext' } }, tools: { erp_insert: { effect: 'write', part: 'erp' }, erp_query: { effect: 'read', part: 'erp' } } }, null);
 
+const planners: Team = { id: 't', name: 'T', agents: [{ id: 'planner', name: 'Planner', kind: 'open', model: 'm', prompt: '' }] };
+const httpStep = (o: { method: string; url: string; status?: number; part?: string; error?: string }): Event =>
+  ev(20, 'tool_call', { name: 'http', part: o.part, args: { method: o.method, url: o.url }, result: o.status == null ? null : { status: o.status }, error: o.error ?? null }, 'planner');
+
+describe('http steps', () => {
+  it('says what an http step sent and got', () => {
+    const e = httpStep({ method: 'POST', url: 'https://github.acme.test/api/v3/repos/acme/app/pulls', status: 201, part: 'github' });
+    const s = stepSummary(e, [start, e], planners);
+    expect(s.text).toBe('Planner sent POST https://github.acme.test/api/v3/repos/acme/app/pulls to github: 201.');
+    expect(s.abnormal).toBe(false);
+    expect(s.title).toBe('Planner · HTTP POST');
+  });
+
+  it('marks a refused http step', () => {
+    const e = httpStep({ method: 'GET', url: 'http://x.test/', error: 'the host x.test is not part of this world' });
+    const s = stepSummary(e, [start, e], planners);
+    expect(s.abnormal).toBe(true);
+    expect(s.text.endsWith('It was refused: the host x.test is not part of this world')).toBe(true);
+    const down = httpStep({ method: 'GET', url: 'http://toy.test/', part: 'box', error: 'the box part did not answer at toy.test: closed' });
+    expect(stepSummary(down, [start, down], planners).text).toBe('Planner sent GET http://toy.test/ to box. It failed: the box part did not answer at toy.test: closed');
+  });
+});
+
 describe('step summary', () => {
   it('says who did what on which system, and how it went', () => {
     const ok = ev(2, 'tool_call', { name: 'erp_insert', part: 'erp', error: null, duration_ms: 120 });

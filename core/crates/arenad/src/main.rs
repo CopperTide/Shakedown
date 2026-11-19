@@ -93,6 +93,7 @@ fn available_modes(state: &AppState) -> Vec<&'static str> {
 async fn shutdown_on_ctrl_c(state: Arc<AppState>) {
     let _ = tokio::signal::ctrl_c().await;
     let _ = state.shutdown.send(true);
+    state.proxy.cas.clear();
     tokio::spawn(async {
         tokio::time::sleep(std::time::Duration::from_secs(5)).await;
         std::process::exit(0);

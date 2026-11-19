@@ -17,6 +17,9 @@ export function viewPayload(e: Event): WorldViewPayload | null {
 /** True for an event that is a view of the world, not a step. */
 export const isViewEvent = (e: Event) => e.kind === 'world_view';
 
+/** True for arenad's own records that are no step: the world's views and save points. */
+export const isBookkeeping = (e: Event) => e.kind === 'world_view' || e.kind === 'save_point';
+
 /** The views a branch's own events carry, keyed by the step each shows. */
 export function viewsFromEvents(events: Event[]): BranchView[] {
   const out: BranchView[] = [];

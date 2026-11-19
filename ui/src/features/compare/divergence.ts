@@ -1,7 +1,7 @@
 // The divergence strip: both branches on one step axis, where they first diverge, where each
 // one's disruptions fired and its calls were refused.
 import { type TrackMark, trackMarks } from '@/features/world/scrub';
-import { isViewEvent } from '@/features/world/twin';
+import { isBookkeeping } from '@/features/world/twin';
 import type { Event } from '@/model/types';
 
 export interface StripRow {
@@ -20,7 +20,7 @@ export interface Strip {
   ticks: number[];
 }
 
-const steps = (events: Event[]) => events.filter((e) => e.kind !== 'run_start' && !isViewEvent(e)).map((e) => e.seq);
+const steps = (events: Event[]) => events.filter((e) => e.kind !== 'run_start' && !isBookkeeping(e)).map((e) => e.seq);
 
 /** Round tick steps (1, 2, 5, 10, ...) for about `want` labels from `min` to `max`. */
 export function axisTicks(min: number, max: number, want = 6): number[] {

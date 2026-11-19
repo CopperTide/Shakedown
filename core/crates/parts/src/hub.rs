@@ -162,16 +162,45 @@ impl Hub {
     }
 }
 
-/// Bytes of the files under `p`, recursively (0 when it doesn't exist).
+/// Bytes of the files under `p`, recursively (0 when it doesn't exist). A file with several hard
+/// links (saves that share unchanged files) is counted once.
 fn dir_bytes(p: &Path) -> u64 {
+    dir_bytes_seen(p, &mut std::collections::HashSet::new())
+}
+
+/// `dir_bytes`, skipping files whose `(device, inode)` is in `seen` (and adding the ones it counts).
+fn dir_bytes_seen(p: &Path, seen: &mut std::collections::HashSet<(u64, u64)>) -> u64 {
+    use std::os::unix::fs::MetadataExt;
     let Ok(rd) = std::fs::read_dir(p) else {
         return 0;
     };
-    rd.filter_map(Result::ok)
-        .map(|e| match e.metadata() {
-            Ok(m) if m.is_dir() => dir_bytes(&e.path()),
+    let mut bytes = 0;
+    for e in rd.filter_map(Result::ok) {
+        bytes += match e.metadata() {
+            Ok(m) if m.is_dir() => dir_bytes_seen(&e.path(), seen),
+            Ok(m) if m.nlink() > 1 && !seen.insert((m.dev(), m.ino())) => 0,
             Ok(m) => m.len(),
             Err(_) => 0,
-        })
-        .sum()
+        };
+    }
+    bytes
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hard_links_are_counted_once() {
+        let dir = std::env::temp_dir().join(format!("arena_hub_links_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("s1")).unwrap();
+        std::fs::create_dir_all(dir.join("s2")).unwrap();
+        std::fs::write(dir.join("s1/f"), vec![b'x'; 1000]).unwrap();
+        std::fs::hard_link(dir.join("s1/f"), dir.join("s2/f")).unwrap();
+        std::fs::write(dir.join("s2/g"), vec![b'y'; 10]).unwrap();
+        let bytes = dir_bytes(&dir);
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(bytes, 1010);
+    }
 }

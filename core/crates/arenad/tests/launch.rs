@@ -114,3 +114,104 @@ fn an_external_suites_runs_take_no_spend_limit() {
         assert_eq!(fx.post(&finish, json!({})).await.0, 200);
     })
 }
+
+/// The environment a Code connection's driver gets in a run of task `t1` of a toy world whose
+/// part `box` is started with `part_args`.
+async fn dumped_env(tag: &str, part_args: &[&str]) -> serde_json::Value {
+    let root = support::packages::toy_world(tag, part_args, &[]);
+    let fx = AppFx::idle("launch", tag)
+        .root(root)
+        .bench("toybench")
+        .start()
+        .await;
+    let out = std::env::temp_dir().join(format!("arenad-env-{tag}-{}.json", std::process::id()));
+    let _ = std::fs::remove_file(&out);
+    let script =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/drivers/env_dump.py");
+    let command = json!(["python3", script, out]);
+    let (status, conn) = fx
+        .post(
+            "/api/connections",
+            json!({"name": "env", "command": command}),
+        )
+        .await;
+    assert_eq!(status, 200, "{conn}");
+    let team = json!({"id": "own", "name": "Own", "agents": []});
+    let body = json!({"task_id": "t1", "team": team, "connection": conn["id"]});
+    let (status, v) = fx.post("/api/runs", body).await;
+    assert_eq!(status, 200, "{v}");
+    read_when_written(&out).await
+}
+
+/// The JSON in `out` once it exists (removed then), waiting up to 10 s.
+async fn read_when_written(out: &std::path::Path) -> serde_json::Value {
+    for _ in 0..100 {
+        if let Ok(text) = std::fs::read_to_string(out) {
+            let _ = std::fs::remove_file(out);
+            return serde_json::from_str(&text).unwrap();
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    panic!("the driver wrote no environment");
+}
+
+#[test]
+fn a_driver_in_a_world_that_serves_http_gets_the_proxy_and_the_hosts() {
+    run(async {
+        let args = [
+            "--http-route",
+            "toy.test=http://127.0.0.1:9",
+            "--route-env",
+            "TOY_URL=https://toy.test",
+        ];
+        let env = dumped_env("envrouted", &args).await;
+        let proxy = env["HTTP_PROXY"].as_str().unwrap();
+        assert!(
+            proxy.starts_with("http://arena:") && proxy.contains("@127.0.0.1:"),
+            "{proxy}"
+        );
+        assert_eq!(
+            (
+                &env["HTTPS_PROXY"],
+                &env["https_proxy"],
+                &env["ARENA_PROXY"]
+            ),
+            (&env["HTTP_PROXY"], &env["HTTP_PROXY"], &env["HTTP_PROXY"])
+        );
+        assert_eq!(env["NO_PROXY"], "127.0.0.1,localhost,::1");
+        assert_eq!(env["NODE_USE_ENV_PROXY"], "1");
+        assert_eq!(env["TOY_URL"], "https://toy.test");
+    })
+}
+
+#[test]
+fn a_driver_in_a_world_without_http_gets_no_proxy() {
+    run(async {
+        let env = dumped_env("envplain", &[]).await;
+        for k in [
+            "HTTP_PROXY",
+            "HTTPS_PROXY",
+            "NO_PROXY",
+            "ARENA_PROXY",
+            "SSL_CERT_FILE",
+        ] {
+            assert!(env.get(k).is_none(), "{k}");
+        }
+        assert!(env["ARENA_BRANCH"].is_string());
+    })
+}
+
+#[test]
+fn every_driver_gets_the_worlds_epoch_and_clock_speed() {
+    run(async {
+        let env = dumped_env("envtime", &[]).await;
+        let epoch: i64 = env["ARENA_WORLD_EPOCH_MS"]
+            .as_str()
+            .unwrap()
+            .parse()
+            .unwrap();
+        assert!(epoch > 1_700_000_000_000, "{epoch}");
+        let speed: f64 = env["ARENA_CLOCK_SPEED"].as_str().unwrap().parse().unwrap();
+        assert!(speed > 0.0);
+    })
+}

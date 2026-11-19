@@ -112,6 +112,7 @@ async fn leave_live(state: &AppState, ctx: &BranchCtx) {
     ctx.stop_ticker().await;
     ctx.world.stop().await;
     state.live.remove(&ctx.branch_id);
+    state.proxy.cas.drop_branch(&ctx.branch_id);
 }
 
 /// How a branch ended: its status and error.

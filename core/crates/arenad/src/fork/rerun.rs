@@ -230,10 +230,14 @@ pub async fn start_world(
 ) -> Result<World, ForkError> {
     let from = WorldFrom::Saves(start_saves(rerun)?);
     let (hub, seed) = (state.hub.clone(), rerun.run.seed);
-    let planned = match rerun.world.take() {
+    let mut planned = match rerun.world.take() {
         Some(p) => p,
         None => world::plan(&hub, &rerun.bench).await?,
     };
+    planned.world_time = Some(parts::proto::WorldTimeParams {
+        epoch_ms: crate::recorded::world_epoch_ms(events),
+        speed: crate::clock::speed_from_env(),
+    });
     let world = World::start_planned(hub, &rerun.bench, planned, new_id, seed, from)
         .await
         .map_err(start_error)?;

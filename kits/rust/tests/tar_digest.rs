@@ -55,3 +55,15 @@ fn digest_ignores_order_and_sees_changes() {
         digest(&tar(&t.0, "e.tar", &["b"])).unwrap().hash
     );
 }
+
+#[test]
+fn digest_reader_matches_digest() {
+    use arena_part::helpers::tar_digest::digest_reader;
+    let t = Tmp(std::env::temp_dir().join(format!("arena_kit_tar_reader_{}", std::process::id())));
+    fs::create_dir_all(t.0.join("src")).unwrap();
+    fs::write(t.0.join("src/a"), "aaaa").unwrap();
+    let path = tar(&t.0, "a.tar", &["a"]);
+    let from_reader = digest_reader(fs::File::open(&path).unwrap()).unwrap();
+    assert_eq!(from_reader, digest(&path).unwrap());
+    assert_eq!(from_reader.files, 1);
+}

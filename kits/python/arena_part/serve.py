@@ -5,6 +5,7 @@ import sys
 
 from . import errors
 from .errors import PartError
+from .world_time import WorldTime
 
 _ID = re.compile(r"[a-z0-9_]{1,63}")
 _ID_MSG = "instance and save ids must match [a-z0-9_]{1,63}"
@@ -49,6 +50,10 @@ class Part:
 
     def connect(self, instance):
         raise errors.method_not_found("connect")
+
+    def world_time(self, instance):
+        """The instance's world time (a `WorldTime`), when arenad gave one at `start`; else None."""
+        return getattr(self, "_world_times", {}).get(instance)
 
     def http_routes(self, instance):
         """The hosts the instance serves through arenad's proxy: `{"routes": [{host, upstream,
@@ -101,13 +106,36 @@ def _need(params, *names):
     return [params[n] for n in names]
 
 
+def _keep_world_time(part, instance, given, clock_ms):
+    """Keeps the instance's world time from `start` (None: forgotten), at `clock_ms`."""
+    times = part.__dict__.setdefault("_world_times", {})
+    times.pop(instance, None)
+    if isinstance(given, dict) and "epoch_ms" in given:
+        times[instance] = WorldTime(given["epoch_ms"], given.get("speed", 1.0))
+        times[instance].observe(clock_ms)
+
+
+def _observe(part, params):
+    """Tells the instance's world time the clock a call carries."""
+    w = part.world_time(params.get("instance")) if isinstance(params, dict) else None
+    if w is not None and isinstance(params.get("clock_ms"), int):
+        w.observe(params["clock_ms"])
+
+
 def _start(part, params):
     instance, config, seed, clock_ms = _need(params, "instance", "config", "seed", "clock_ms")
     part.start(instance, config, seed, clock_ms, params.get("from"))
+    _keep_world_time(part, instance, params.get("world_time"), clock_ms)
     return {}
 
 
+def _advance(part, params):
+    _observe(part, params)
+    return part.advance(*_need(params, "instance", "clock_ms"))
+
+
 def _call_tool(part, params):
+    _observe(part, params)
     out = dict(part.call_tool(*_need(params, "instance", "name", "args", "clock_ms")))
     out.setdefault("reads", [])
     out.setdefault("writes", [])
@@ -133,7 +161,7 @@ _METHODS = {
     "describe": lambda part, params: part.describe(),
     "start": _start,
     "call_tool": _call_tool,
-    "advance": _plain("advance", "instance", "clock_ms"),
+    "advance": _advance,
     "save": _plain("save", "instance", "save", "dir"),
     "inspect": _plain("inspect", "target", "keys"),
     "diff": _plain("diff", "a", "b"),

@@ -66,6 +66,7 @@ pub struct AppFx {
     pub hub: TestHub,
     root: Option<ToyRoot>,
     _clean: Cleanup,
+    _cas: CaCleanup,
 }
 
 type Tweak = Box<dyn FnOnce(&mut Config) + Send>;
@@ -114,6 +115,16 @@ impl AppFx {
 
     pub async fn delete(&self, path: &str) -> (u16, Value) {
         app::send(self.http.delete(format!("{}{path}", self.base))).await
+    }
+}
+
+/// The app's state outlives the test (its servers run on the shared runtime): its branches' CA
+/// folders are removed when the fixture drops.
+struct CaCleanup(Arc<AppState>);
+
+impl Drop for CaCleanup {
+    fn drop(&mut self) {
+        self.0.proxy.cas.clear();
     }
 }
 
@@ -166,6 +177,7 @@ impl AppSetup {
             false => app::idle_app(store, h, bench, self.tweak).await,
         };
         AppFx {
+            _cas: CaCleanup(state.clone()),
             state,
             base,
             http: reqwest::Client::new(),

@@ -70,13 +70,10 @@ fn signature(e: &Event) -> Signature<'_> {
     )
 }
 
-/// Each step's seq and signature, the world's views and pauses left out.
+/// Each step's seq and signature, bookkeeping (views, save points) and pauses left out.
 fn steps(evs: &[Event]) -> Vec<(i64, Signature<'_>)> {
     let step = |e: &&Event| {
-        !matches!(
-            e.kind,
-            EventKind::WorldView | EventKind::Pause | EventKind::Resume
-        )
+        !e.kind.is_bookkeeping() && !matches!(e.kind, EventKind::Pause | EventKind::Resume)
     };
     (evs.iter().filter(step))
         .map(|e| (e.seq, signature(e)))
@@ -229,6 +226,20 @@ mod tests {
         ];
         assert_eq!(first_divergent_seq(&a, &viewed), None);
         assert_eq!(first_divergent_seq(&viewed, &b), Some(3));
+    }
+
+    #[test]
+    fn a_save_point_is_no_step() {
+        let without = vec![call(1, "x", json!({"k": 1})), call(2, "y", json!({}))];
+        let point = crate::testkit::event(
+            2,
+            None,
+            EventKind::SavePoint,
+            json!({"reason": "model_call", "saves": {"box": "s"}, "paused_ms": 5}),
+        );
+        let with = vec![without[0].clone(), point, call(3, "y", json!({}))];
+        assert_eq!(first_divergent_seq(&with, &without), None);
+        assert_eq!(first_divergent_seq(&without, &with), None);
     }
 
     fn branch() -> Branch {

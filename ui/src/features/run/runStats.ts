@@ -3,6 +3,7 @@ import { type Mark, passMark } from '@/lib/mark';
 import { actionsOf } from '@/model/actions';
 import { runStartOf } from '@/model/events';
 import { lastPayload } from '@/model/events';
+import { isBookkeeping } from '@/features/world/twin';
 import type { Event } from '@/model/types';
 
 export interface RunStats {
@@ -17,7 +18,7 @@ export interface RunStats {
 }
 
 export function runStats(events: Event[], startSeq: number | null): RunStats {
-  const own = events.filter((e) => e.kind !== 'run_start' && e.kind !== 'world_view' && (startSeq == null || e.seq >= startSeq));
+  const own = events.filter((e) => e.kind !== 'run_start' && !isBookkeeping(e) && (startSeq == null || e.seq >= startSeq));
   const actions = actionsOf(events, startSeq).filter((a) => !a.inherited);
   const check = lastPayload(events, 'check');
   const list = Array.isArray(check?.checks) ? check.checks : [];

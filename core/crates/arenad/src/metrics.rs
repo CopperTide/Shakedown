@@ -414,6 +414,24 @@ as_of = "2026-11-04""#,
     }
 
     #[test]
+    fn a_save_point_is_no_step() {
+        let without = vec![
+            ev(1, None, EventKind::RunStart, json!({})),
+            start(2, "a", "open", "m", Some("anthropic")),
+            end(3, "a", Some((1_000, 100)), None),
+        ];
+        let point = json!({"reason": "model_call", "saves": {"box": "s"}, "paused_ms": 5});
+        let mut with = without.clone();
+        with.insert(2, ev(3, None, EventKind::SavePoint, point));
+        with[3].seq = 4;
+        let (b, now) = (branch(None, 10), Utc::now());
+        assert_eq!(
+            metrics(&b, &with, &table(), now),
+            metrics(&b, &without, &table(), now)
+        );
+    }
+
+    #[test]
     fn the_estimate_is_measured_time_minus_overhead() {
         let evs = vec![
             ev(
