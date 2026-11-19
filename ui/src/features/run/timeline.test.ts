@@ -10,7 +10,7 @@ const team: Team = {
   ],
 };
 const ev = (seq: number, agent: string | null, kind: EventKind, payload: unknown = {}): Event =>
-  ({ branch_id: 'b', seq, at: '', agent, kind, payload });
+  ({ branch_id: 'b', seq, at: '', agent, kind, payload }) as Event;
 
 
 describe('jsonDiff', () => {

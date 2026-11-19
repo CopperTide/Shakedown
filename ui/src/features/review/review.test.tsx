@@ -17,7 +17,7 @@ const team = { id: 't', name: 'Team', agents: [
 ] };
 
 const ev = (seq: number, kind: Event['kind'], agent: string | null): Event =>
-  ({ branch_id: 'b', seq, at: '2026-11-08T00:00:00Z', agent, kind, payload: {} });
+  ({ branch_id: 'b', seq, at: '2026-11-08T00:00:00Z', agent, kind, payload: {} }) as Event;
 
 const events: Event[] = [ev(1, 'run_start', null), ev(3, 'agent_start', 'quality'), ev(5, 'tool_call', 'quality'), ev(212, 'agent_start', 'production'), ev(215, 'tool_call', 'production'), ev(304, 'check', null)];
 

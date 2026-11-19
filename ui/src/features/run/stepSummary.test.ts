@@ -3,7 +3,7 @@ import type { Event, Team } from '@/model/types';
 import { stepSummary } from './stepSummary';
 
 const team: Team = { id: 't', name: 'T', agents: [{ id: 'quality', name: 'Quality assurance', kind: 'claude_code', model: 'haiku', prompt: '' }] };
-const ev = (seq: number, kind: Event['kind'], payload: unknown, agent: string | null = 'quality'): Event => ({ branch_id: 'b', seq, at: '2026-11-07T12:00:00Z', agent, kind, payload });
+const ev = (seq: number, kind: Event['kind'], payload: unknown, agent: string | null = 'quality'): Event => ({ branch_id: 'b', seq, at: '2026-11-07T12:00:00Z', agent, kind, payload }) as Event;
 const start = ev(1, 'run_start', { systems: { erp: { kind: 'erp', product: 'ERPNext' } }, tools: { erp_insert: { effect: 'write', part: 'erp' }, erp_query: { effect: 'read', part: 'erp' } } }, null);
 
 describe('step summary', () => {

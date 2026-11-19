@@ -31,14 +31,14 @@ describe('api', () => {
     const es = FakeEventSource.last;
     expect(es.url).toBe('/api/branches/b1/stream');
 
-    const ev: Event = {
+    const ev = {
       branch_id: 'b1',
       seq: 3,
       at: '2026-10-30T00:00:00Z',
       agent: 'a1',
       kind: 'tool_call',
       payload: { name: 'find_user' },
-    };
+    } as Event;
     es.emit('event', ev);
     es.emit('status', { status: 'passed', error: null });
     es.listeners.get('event')?.({ data: 'not json' } as MessageEvent); // ignored, no throw

@@ -210,7 +210,7 @@ function record(branch: string, steps: Step[], start: TwinView, from: number): {
   const views: BranchView[] = [];
   let view = start;
   let seq = from;
-  const push = (agentId: string | null, kind: EventKind, payload: unknown) => { events.push({ branch_id: branch, seq, at: at(seq), agent: agentId, kind, payload }); seq += 1; };
+  const push = (agentId: string | null, kind: EventKind, payload: unknown) => { events.push({ branch_id: branch, seq, at: at(seq), agent: agentId, kind, payload } as Event); seq += 1; };
   for (const s of steps) {
     const stepSeq = seq;
     push(s.agent, s.kind, s.payload ?? {});

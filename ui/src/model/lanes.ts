@@ -87,7 +87,7 @@ export function reasoningWord(kind: unknown): string {
 }
 
 /** Why a dispatch run woke an agent, in a few words. */
-export function wakeWord(p: Payload): string {
+export function wakeWord(p: { reason?: unknown; idle_wake?: unknown; mail?: unknown }): string {
   switch (p.reason) {
     case 'start': return 'Started with the ticket';
     case 'idle': return `Woken: the team was waiting (${String(p.idle_wake ?? '')})`;

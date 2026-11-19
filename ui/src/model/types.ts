@@ -176,8 +176,8 @@ interface EventBase {
 /** An event whose payload has the shape arenad writes for its kind (`Payloads`). */
 export type TypedEvent = { [K in EventKind]: EventBase & { kind: K; payload: Payloads[K] } }[EventKind];
 
-/** A recorded event. Until every reader narrows by `kind`, an event may also be read as untyped. */
-export type Event = TypedEvent | (EventBase & { kind: EventKind; payload: unknown });
+/** A recorded event: `kind` says the shape of its payload. */
+export type Event = TypedEvent;
 
 export interface ToolCallPayload {
   name: string;

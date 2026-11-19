@@ -4,7 +4,7 @@ import type { CompareSide, Event } from '@/model/types';
 import { axisTicks, divergenceStrip } from './divergence';
 import { agentCost, escalations, lastView, leadingNumber, ordersOnTime, outcomeRows, safetyViolations, transportCost, validPlan, verdict } from './outcomes';
 
-const ev = (seq: number, kind: Event['kind'], payload: unknown, agent: string | null = null): Event => ({ branch_id: 'b', seq, at: '', agent, kind, payload });
+const ev = (seq: number, kind: Event['kind'], payload: unknown, agent: string | null = null): Event => ({ branch_id: 'b', seq, at: '', agent, kind, payload }) as Event;
 
 describe('outcome comparison', () => {
   const rows = outcomeRows({ detail: v1Detail, side: comparison.a }, { detail: v2Detail, side: comparison.b });

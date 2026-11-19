@@ -13,7 +13,7 @@ const metrics = (over: Partial<Metrics> = {}): Metrics => ({
   ...over,
 });
 
-const runStart = (payload: object): Event[] => [{ branch_id: 'b', seq: 1, at: '', agent: null, kind: 'run_start', payload }];
+const runStart = (payload: object): Event[] => [{ branch_id: 'b', seq: 1, at: '', agent: null, kind: 'run_start', payload } as Event];
 
 describe('metrics', () => {
   it('lists the overhead that took time, largest first', () => {

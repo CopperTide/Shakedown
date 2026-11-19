@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { swapChanges, forkChoiceOf, singleTeam, teamSwapProblem, ARCHITECTURES } from '@/features/run/architecture';
 import { parseStep, withStep } from '@/features/run/useStepParam';
 import { withRules } from '@/model/team';
-import type { Event } from '@/model/types';
+import type { Event, Runner } from '@/model/types';
 import { FORK_SEQ, V1, baseView, team, v1Detail, v2Detail, views } from './fixtures';
 import { BUS_LANE, roundedPath, MIN_TILE_W, PROCESS_ORDER, TILE_H, TILE_H_CHANGED, arrowBetween, fitsSideBySide, splitAreas, twinLayout } from './layout';
 import { drivenLine, stepHeadline, worldState } from './page';
@@ -177,7 +177,7 @@ describe('scrubber', () => {
     const lastShared = v1Views.filter((v) => v.seq < FORK_SEQ).at(-1)!.seq;
     expect(rewindSeq(v1Detail.events, lastShared)).toBe(FORK_SEQ);
     expect(rewindSeq(v1Detail.events, 10_000)).toBeNull();
-    const evs: Event[] = [{ branch_id: 'b', seq: 4, at: '', agent: 'link', kind: 'tool_call', payload: {} }, { branch_id: 'b', seq: 5, at: '', agent: null, kind: 'world_view', payload: {} }, { branch_id: 'b', seq: 6, at: '', agent: 'a', kind: 'tool_call', payload: {} }];
+    const evs = [{ branch_id: 'b', seq: 4, at: '', agent: 'link', kind: 'tool_call', payload: {} }, { branch_id: 'b', seq: 5, at: '', agent: null, kind: 'world_view', payload: {} }, { branch_id: 'b', seq: 6, at: '', agent: 'a', kind: 'tool_call', payload: {} }] as Event[];
     expect(rewindSeq(evs, 3)).toBe(6);
   });
 });
@@ -199,7 +199,7 @@ describe('swap architecture', () => {
     const t = singleTeam(team, single.rules);
     expect(t.agents.map((a) => [a.id, a.kind, a.read_only])).toEqual([['operator', team.agents[0].kind, false]]);
     expect(t.agents[0].prompt).toContain("every role's work");
-    const start = (runner: string): Event[] => [{ branch_id: 'b', seq: 1, at: '', agent: null, kind: 'run_start', payload: { runner } }];
+    const start = (runner: Runner): Event[] => [{ branch_id: 'b', seq: 1, at: '', agent: null, kind: 'run_start', payload: { runner } } as Event];
     expect(teamSwapProblem(start('external'))).toBeNull();
     expect(teamSwapProblem(start('chain'))).toContain('Team v2');
   });
@@ -228,10 +228,10 @@ describe('world view state', () => {
 
   it('says when a run made no model call', () => {
     expect(drivenLine([])).toBe('No model calls');
-    expect(drivenLine([{ branch_id: 'b', seq: 2, at: '', agent: 'a', kind: 'model_call', payload: {} }])).toBe('');
+    expect(drivenLine([{ branch_id: 'b', seq: 2, at: '', agent: 'a', kind: 'model_call', payload: {} } as Event])).toBe('');
     // A CLI agent: no model_call events, but its end reports the tokens it used.
-    expect(drivenLine([{ branch_id: 'b', seq: 9, at: '', agent: 'a', kind: 'agent_end', payload: { tokens: 573562 } }])).toBe('');
-    expect(drivenLine([{ branch_id: 'b', seq: 9, at: '', agent: 'a', kind: 'agent_end', payload: { tokens: 0 } }])).toBe('No model calls');
+    expect(drivenLine([{ branch_id: 'b', seq: 9, at: '', agent: 'a', kind: 'agent_end', payload: { tokens: 573562 } } as Event])).toBe('');
+    expect(drivenLine([{ branch_id: 'b', seq: 9, at: '', agent: 'a', kind: 'agent_end', payload: { tokens: 0 } } as Event])).toBe('No model calls');
     expect(stepHeadline(v1Detail.events, team, 1)).toBe('Step 1 · after setup');
     expect(stepHeadline(v1Detail.events, team, null)).toBe('No step');
   });

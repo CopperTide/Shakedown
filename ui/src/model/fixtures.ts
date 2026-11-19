@@ -14,7 +14,7 @@ const t0 = Date.parse('2026-11-05T12:00:00Z');
 export const at = (s: number) => new Date(t0 + s * 1000).toISOString();
 
 export const ev = (seq: number, s: number, agent: string | null, kind: EventKind, payload: unknown = {}): Event =>
-  ({ branch_id: 'b', seq, at: at(s), agent, kind, payload });
+  ({ branch_id: 'b', seq, at: at(s), agent, kind, payload }) as Event;
 
 export const runStart = ev(1, 0, null, 'run_start', {
   task_id: 'base',

@@ -3,7 +3,7 @@ import type { Event } from '@/model/types';
 import { clockText, flowMark, flowOf, pausedIn, pausesOf } from './flow';
 import { humanize, resultOf } from './result';
 
-const ev = (seq: number, kind: Event['kind'], at: string, payload: unknown = {}): Event => ({ branch_id: 'b', seq, at, agent: null, kind, payload });
+const ev = (seq: number, kind: Event['kind'], at: string, payload: unknown = {}): Event => ({ branch_id: 'b', seq, at, agent: null, kind, payload }) as Event;
 const t = (s: number) => new Date(Date.UTC(2026, 10, 7, 12, 0, s)).toISOString();
 
 describe('run flow', () => {

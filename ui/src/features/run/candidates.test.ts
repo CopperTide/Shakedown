@@ -3,7 +3,7 @@ import type { Event, EventKind } from '@/model/types';
 import { objectiveText, studyOf, ticks } from './candidates';
 
 let seq = 0;
-const ev = (kind: EventKind, payload: unknown): Event => ({ branch_id: 'b', seq: ++seq, at: '', agent: 'optimiser', kind, payload });
+const ev = (kind: EventKind, payload: unknown): Event => ({ branch_id: 'b', seq: ++seq, at: '', agent: 'optimiser', kind, payload }) as Event;
 
 const sim = (n: number, value: number, over: Record<string, unknown> = {}) => ev('tool_call', {
   name: 'run_simulation', args: {}, error: null, reads: [], writes: [], snapshot: null, tool_call_id: null,

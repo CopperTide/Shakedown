@@ -15,10 +15,8 @@ import { reasoningWord, wakeWord } from '@/model/lanes';
 import { missingPermit, permitOf } from '@/model/permit';
 import { costIsUnknown, providerId, providerName, providerOf } from '@/model/providers';
 import { notComparedLine, savedLine } from '@/model/restore';
-import type { Event, Team } from '@/model/types';
+import type { AgentEndPayload, CheckPayload, Event, ModelCallPayload, ReasoningPayload, Team, WakePayload } from '@/model/types';
 import { formatCost, rowKeys } from './timeline';
-
-type Payload = Record<string, unknown>;
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -106,8 +104,8 @@ function PermitLine({ events, event }: { events: Event[]; event: Event }) {
   );
 }
 
-function ToolCall({ branchId, event, events, auto }: { branchId: string; event: Event; events: Event[]; auto?: boolean }) {
-  const p = asRecord(event.payload);
+function ToolCall({ branchId, event, events, auto }: { branchId: string; event: Event & { kind: 'tool_call' }; events: Event[]; auto?: boolean }) {
+  const p = event.payload;
   const reads = keysOf(p.reads), writes = keysOf(p.writes);
   const { keys, more } = rowKeys(writes, reads);
   return (
@@ -137,11 +135,11 @@ export function modelCallLine(p: { provider?: string; request?: unknown }): stri
   return `${providerName(providerId(p.provider))}${typeof model === 'string' && model ? ` · ${model}` : ''}`;
 }
 
-function ModelCall({ p }: { p: Payload }) {
+function ModelCall({ p }: { p: ModelCallPayload }) {
   const msgs: unknown[] = Array.isArray(asRecord(p.request).messages) ? (asRecord(p.request).messages as unknown[]) : [];
   return (
     <>
-      <Section title="Provider"><span className="font-mono text-xs">{modelCallLine(p as { provider?: string; request?: unknown })}</span></Section>
+      <Section title="Provider"><span className="font-mono text-xs">{modelCallLine(p)}</span></Section>
       <Section title={`Messages (${msgs.length})`}>
         {msgs.length === 0 && <span className="text-xs text-faint">The request was not recorded.</span>}
         {msgs.map((m, i) => (
@@ -153,14 +151,14 @@ function ModelCall({ p }: { p: Payload }) {
       </Section>
       <Block title="Response" value={p.response} />
       <Block title="Usage" value={p.usage} />
-      <Section title="Cost"><span className="text-xs">{formatCost(p.cost_usd as number | null, p.cost_source as string | null, costIsUnknown(providerId(p.provider as string | undefined)))}</span></Section>
+      <Section title="Cost"><span className="text-xs">{formatCost(p.cost_usd, p.cost_source, costIsUnknown(providerId(p.provider)))}</span></Section>
       {p.provider_response !== undefined && <Block title="Provider's own response" value={p.provider_response} />}
     </>
   );
 }
 
-function Check({ p }: { p: Payload }) {
-  const checks = Array.isArray(p.checks) ? (p.checks as { name: string; passed: boolean; safety?: boolean; detail?: string }[]) : [];
+function Check({ p }: { p: CheckPayload }) {
+  const checks = Array.isArray(p.checks) ? p.checks : [];
   const diff = keysOf(p.differing_rows);
   return (
     <>
@@ -189,10 +187,10 @@ function agentCostUnknown(team: Team | undefined, agent: string | null): boolean
   return !!a && a.kind === 'open' && costIsUnknown(providerOf(a));
 }
 
-function AgentEnd({ p, team, agent }: { p: Payload; team?: Team; agent: string | null }) {
+function AgentEnd({ p, team, agent }: { p: AgentEndPayload; team?: Team; agent: string | null }) {
   const ok = p.ok !== false;
   const bits = [p.seconds != null ? `${Number(p.seconds).toFixed(1)} s` : '', p.tokens != null ? `${p.tokens} tokens` : '',
-    formatCost(p.cost_usd as number | null, p.cost_source as string | null, agentCostUnknown(team, agent))].filter(Boolean);
+    formatCost(p.cost_usd, p.cost_source, agentCostUnknown(team, agent))].filter(Boolean);
   return (
     <Section title="Outcome">
       <span className="flex flex-wrap items-center gap-2 text-xs">
@@ -205,25 +203,28 @@ function AgentEnd({ p, team, agent }: { p: Payload; team?: Team; agent: string |
 }
 
 /** Why a dispatch run woke the agent, the steps whose mail it got, and the input it was given. */
-function Wake({ p }: { p: Record<string, unknown> }) {
+function Wake({ p }: { p: WakePayload }) {
   const mail = Array.isArray(p.mail) ? p.mail.map(String) : [];
   const title = `${wakeWord(p)}${mail.length ? ` (step ${mail.join(', ')})` : ''}: its input`;
   return <Block title={title} value={p.input} />;
 }
 
-/** A dispatch run's steps in words: delegations, reports, wakes, waits and the lead's finish. */
-const DISPATCH: Partial<Record<Event['kind'], (p: Payload) => ReactElement>> = {
-  delegation: (p) => <Block title={`Work given to ${String(p.to)}`} value={p.task} />,
-  report: (p) => <Block title={p.turn_end ? `What it said at the end of its turn, passed on to ${String(p.to)} as its report` : `Report to ${String(p.to)}`} value={p.text} />,
-  wake: (p) => <Wake p={p} />,
-  idle: (p) => <Block title={p.ok === false ? `Its turn failed; it waits: ${String(p.error ?? '')}` : 'Ended its turn and waits for work; it said'} value={p.text} />,
-  finish: (p) => <Block title="Finished the run (only the lead can): every agent stopped and the world was scored" value={p.summary} />,
-};
+/** A dispatch run's steps in words: delegations, reports, wakes, waits and the lead's finish; null for other kinds. */
+function dispatchStep(e: Event): ReactElement | null {
+  switch (e.kind) {
+    case 'delegation': return <Block title={`Work given to ${String(e.payload.to)}`} value={e.payload.task} />;
+    case 'report': return <Block title={e.payload.turn_end ? `What it said at the end of its turn, passed on to ${String(e.payload.to)} as its report` : `Report to ${String(e.payload.to)}`} value={e.payload.text} />;
+    case 'wake': return <Wake p={e.payload} />;
+    case 'idle': return <Block title={e.payload.ok === false ? `Its turn failed; it waits: ${String(e.payload.error ?? '')}` : 'Ended its turn and waits for work; it said'} value={e.payload.text} />;
+    case 'finish': return <Block title="Finished the run (only the lead can): every agent stopped and the world was scored" value={e.payload.summary} />;
+    default: return null;
+  }
+}
 
 const SOURCE: Record<string, string> = { agent: 'reported by its code', gateway: "from the model's answer", claude_code: "from Claude Code's stream" };
 
 /** An agent's reasoning in full, where it came from, and the model call it belongs to. */
-function Reasoning({ p }: { p: Payload }) {
+function Reasoning({ p }: { p: ReasoningPayload }) {
   const call = typeof p.model_call_seq === 'number' ? `, model call at step ${p.model_call_seq}` : '';
   const from = SOURCE[String(p.source)] ?? String(p.source ?? '');
   return (
@@ -244,16 +245,15 @@ export interface InspectorProps {
 }
 
 function Body({ branchId, event, team, autoRows, events = [] }: InspectorProps & { event: Event }) {
-  const p = asRecord(event.payload);
   switch (event.kind) {
     case 'tool_call': return <ToolCall branchId={branchId} event={event} events={events} auto={autoRows} />;
-    case 'model_call': return <ModelCall p={p} />;
-    case 'handoff': return <Block title={p.to ? `Handoff note for ${String(p.to)}` : 'Handoff note'} value={p.note} />;
-    case 'message': return <Block title={`Message to ${p.to === '*' ? 'everyone' : String(p.to)}`} value={p.text} />;
-    case 'check': return <Check p={p} />;
-    case 'reasoning': return <Reasoning p={p} />;
-    case 'agent_end': return <AgentEnd p={p} team={team} agent={event.agent} />;
-    default: return DISPATCH[event.kind]?.(p) ?? <Block title="Payload" value={p} />;
+    case 'model_call': return <ModelCall p={event.payload} />;
+    case 'handoff': return <Block title={event.payload.to ? `Handoff note for ${String(event.payload.to)}` : 'Handoff note'} value={event.payload.note} />;
+    case 'message': return <Block title={`Message to ${event.payload.to === '*' ? 'everyone' : String(event.payload.to)}`} value={event.payload.text} />;
+    case 'check': return <Check p={event.payload} />;
+    case 'reasoning': return <Reasoning p={event.payload} />;
+    case 'agent_end': return <AgentEnd p={event.payload} team={team} agent={event.agent} />;
+    default: return dispatchStep(event) ?? <Block title="Payload" value={asRecord(event.payload)} />;
   }
 }
 

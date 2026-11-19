@@ -50,7 +50,7 @@ describe('saved after a step', () => {
 });
 
 describe('worldParts', () => {
-  const start = (payload: unknown): Event[] => [{ branch_id: 'b', seq: 1, at: '', agent: null, kind: 'run_start', payload }];
+  const start = (payload: unknown): Event[] => [{ branch_id: 'b', seq: 1, at: '', agent: null, kind: 'run_start', payload } as Event];
   it('lists the world parts with what their fingerprints pin', () => {
     const evs = start({
       task_id: 't1',
