@@ -2,7 +2,7 @@ use std::{sync::Arc, time::Instant};
 
 use axum::{
     extract::{Path, State},
-    http::StatusCode,
+    http::{header::AUTHORIZATION, HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     routing::post,
     Json, Router,
@@ -183,25 +183,39 @@ async fn record(
     Ok(())
 }
 
-/// The live `branch` and the provider of its `agent` (`None`: the default one); `None` when the
-/// branch isn't live or has no such agent.
+/// Why a call is turned away before it reaches a provider: its status and message.
+type Refused = (StatusCode, &'static str);
+
+/// The live `branch` and the provider of its `agent` (`None`: the default one): 404 when the
+/// branch isn't live or has no such agent, 401 when the agent was given a token (as its MCP
+/// endpoint wants) and the call doesn't carry it.
 fn live_agent(
     state: &AppState,
     branch: &str,
     agent: &str,
-) -> Option<(Arc<BranchCtx>, Option<String>)> {
-    let ctx = state.live.read().unwrap().get(branch)?.clone();
-    let provider = ctx.provider_of(agent)?;
-    Some((ctx, provider))
+    headers: &HeaderMap,
+) -> Result<(Arc<BranchCtx>, Option<String>), Refused> {
+    let unknown = (StatusCode::NOT_FOUND, "unknown branch or agent");
+    let ctx = state.live.read().unwrap().get(branch).cloned();
+    let ctx = ctx.ok_or(unknown)?;
+    let provider = ctx.provider_of(agent).ok_or(unknown)?;
+    let authorization = headers.get(AUTHORIZATION).and_then(|v| v.to_str().ok());
+    if !ctx.token_ok(agent, authorization) {
+        let why = "this endpoint wants the run's bearer token";
+        return Err((StatusCode::UNAUTHORIZED, why));
+    }
+    Ok((ctx, provider))
 }
 
 async fn handle(
     State(state): State<Arc<AppState>>,
     Path((branch, agent)): Path<(String, String)>,
+    headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> Response {
-    let Some((ctx, provider)) = live_agent(&state, &branch, &agent) else {
-        return error_response(StatusCode::NOT_FOUND, "unknown branch or agent");
+    let (ctx, provider) = match live_agent(&state, &branch, &agent, &headers) {
+        Ok(found) => found,
+        Err((status, why)) => return error_response(status, why),
     };
     // A paused branch holds the call until it resumes; that wait is no part of the gateway's.
     if ctx.flow.go().await.is_err() {

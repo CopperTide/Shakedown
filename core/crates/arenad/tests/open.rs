@@ -190,6 +190,39 @@ fn gateway_refuses_unknown_branch_or_agent_without_calling_a_provider() {
     })
 }
 
+/// An agent given a bearer token (an `http` agent while arenad waits for it) has its model calls
+/// refused without that token, and nothing is recorded; with it the call goes on as before.
+#[test]
+fn gateway_wants_the_agents_bearer_token_once_it_has_one() {
+    run(async {
+        let fx = setup("gwtoken", vec![agent("solo", Some("m"))], nowhere()).await;
+        let token = fx.ctx.issue_token("solo");
+        let body = json!({"model": "m", "messages": [{"role": "user", "content": "x"}]});
+        let url = gateway_url(&fx, &fx.ctx.branch_id, "solo");
+        for bearer in [None, Some("wrong")] {
+            let mut req = reqwest::Client::new().post(&url).json(&body);
+            if let Some(b) = bearer {
+                req = req.bearer_auth(b);
+            }
+            let r = req.send().await.unwrap();
+            assert_eq!(r.status(), 401, "bearer {bearer:?}");
+            let v: Value = r.json().await.unwrap();
+            assert_eq!(v["error"], "this endpoint wants the run's bearer token");
+        }
+        assert!(events(&fx).await.is_empty(), "nothing was recorded");
+        let r = reqwest::Client::new()
+            .post(&url)
+            .bearer_auth(&token)
+            .json(&body)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(r.status(), 502, "the call reached the (closed) provider");
+        assert_eq!(events(&fx).await.len(), 1);
+        teardown(fx).await;
+    })
+}
+
 /// A provider the configuration doesn't know is recorded as a failed call, with no provider.
 #[test]
 fn an_unknown_provider_is_recorded_as_a_failed_call() {
