@@ -7,7 +7,6 @@
 //! running instance's config is kept in `.live/<instance>.json`, so a restarted program still
 //! knows its instances. Live volumes are not counted by `usage`: `stop` removes them.
 mod config;
-mod live;
 mod view;
 mod volumes;
 
@@ -15,21 +14,22 @@ use std::path::{Path, PathBuf};
 
 use arena_part::helpers::blocking;
 use arena_part::helpers::compose::Project;
+use arena_part::helpers::instances::LiveRecords;
 use arena_part::helpers::save_dirs::SaveDirs;
 use arena_part::helpers::temp_dir::TempDir;
 use arena_part::proto::*;
 use arena_part::{Part, PartError};
 use async_trait::async_trait;
 use config::Config;
-use live::Live;
-use serde_json::json;
+use serde_json::{json, Value};
 use volumes::Instance;
 
 const PACKAGE: &str = "service";
 
 pub struct Service {
     saves: SaveDirs,
-    live: Live,
+    /// The config each running instance started with, in `.live/<instance>.json`.
+    live: LiveRecords<Value>,
 }
 
 impl Service {
@@ -47,7 +47,7 @@ impl Service {
 
     fn with(saves: SaveDirs) -> Service {
         Service {
-            live: Live::new(saves.root().join(".live")),
+            live: LiveRecords::files(saves.root().join(".live")),
             saves,
         }
     }
@@ -56,7 +56,7 @@ impl Service {
     fn instance(&self, id: &str) -> Result<Instance, PartError> {
         let config = self
             .live
-            .config(id)
+            .get(id)
             .ok_or_else(|| PartError::unknown(format!("no instance {id}")))?;
         new_instance(id, &Config::parse(&config)?)
     }
