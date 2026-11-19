@@ -5,11 +5,7 @@ use serde_json::Value;
 use tokio::sync::{broadcast, Mutex as AsyncMutex};
 use tokio_postgres::{Client, NoTls, Row};
 
-use crate::{
-    model::*,
-    overhead::{self, Cat},
-    pg::Admin,
-};
+use crate::{model::*, overhead::Overhead, pg::Admin};
 use parts::proto::Mode;
 
 mod connections;
@@ -216,33 +212,45 @@ impl Store {
         Ok(())
     }
 
-    /// Records `payload` as an event of its kind on a branch (see `append`).
+    /// Records `payload` as an event of its kind on a branch, with `overhead` (see `append_with`).
     pub async fn record<P: crate::model::EventPayload>(
         &self,
         branch_id: &str,
         agent: Option<&str>,
         payload: &P,
+        overhead: Option<Overhead>,
     ) -> Result<Event> {
         let payload = serde_json::to_value(payload)?;
-        self.append(branch_id, agent, P::KIND, payload).await
+        self.append_with(branch_id, agent, P::KIND, payload, overhead)
+            .await
     }
 
-    /// Records an event of a branch; an object payload also gets the branch's `overhead_ms` built
-    /// up since its last event. The time this takes is overhead of the kind `record`.
+    /// Records an event of a branch.
     pub async fn append(
         &self,
         branch_id: &str,
         agent: Option<&str>,
         kind: EventKind,
-        mut payload: Value,
+        payload: Value,
     ) -> Result<Event> {
-        let since = std::time::Instant::now();
-        if let (Some(o), Some(obj)) = (overhead::take(branch_id), payload.as_object_mut()) {
+        self.append_with(branch_id, agent, kind, payload, None)
+            .await
+    }
+
+    /// Records an event of a branch; an object payload also gets `overhead`, the arena's time
+    /// since the branch's last event, as `overhead_ms`.
+    pub async fn append_with(
+        &self,
+        branch_id: &str,
+        agent: Option<&str>,
+        kind: EventKind,
+        mut payload: Value,
+        overhead: Option<Overhead>,
+    ) -> Result<Event> {
+        if let (Some(o), Some(obj)) = (overhead, payload.as_object_mut()) {
             obj.insert("overhead_ms".into(), serde_json::to_value(o)?);
         }
-        let ev = self.insert_event(branch_id, agent, kind, payload).await;
-        overhead::add_since(branch_id, Cat::Record, since);
-        ev
+        self.insert_event(branch_id, agent, kind, payload).await
     }
 
     async fn insert_event(
@@ -287,10 +295,6 @@ impl Store {
         status: BranchStatus,
         error: Option<String>,
     ) -> Result<()> {
-        if status != BranchStatus::Running {
-            // What built up after the branch's last event has no event to go on.
-            overhead::take(branch_id);
-        }
         self.client
             .execute(
                 "UPDATE branches SET status = $2, error = $3,

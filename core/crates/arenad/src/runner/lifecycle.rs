@@ -26,12 +26,11 @@ pub fn spawn_branch(state: &Arc<AppState>, ctx: Arc<BranchCtx>, from: StartPoint
     let state = state.clone();
     state.live.insert(ctx.clone());
     tokio::spawn(async move {
-        let branch_id = ctx.branch_id.clone();
         let inner = tokio::spawn(run_branch(state.clone(), ctx.clone(), from));
         if let Err(e) = inner.await {
             leave_live(&state, &ctx).await;
             let ending = Ending::infra(format!("runner crashed: {e}"));
-            record_ending(&state, &branch_id, ending).await;
+            record_ending(&state, &ctx, ending).await;
         }
     });
 }
@@ -103,7 +102,7 @@ async fn conclude(state: &AppState, ctx: &BranchCtx, outcome: Result<Ending>) ->
         (None, Ok(v)) => v,
         (None, Err(e)) => Ending::infra(format!("{e:#}")),
     };
-    record_ending(state, &ctx.branch_id, ending.clone()).await;
+    record_ending(state, ctx, ending.clone()).await;
     ending
 }
 
@@ -151,8 +150,11 @@ impl Ending {
 }
 
 /// Records how a branch ended, trying once more when the store fails; a failure is logged (the
-/// branch then stays `running` in the store).
-async fn record_ending(state: &AppState, branch_id: &str, Ending { status, error }: Ending) {
+/// branch then stays `running` in the store). What overhead built up after its last event has no
+/// event to go on, and is dropped.
+async fn record_ending(state: &AppState, ctx: &BranchCtx, Ending { status, error }: Ending) {
+    ctx.overhead.take();
+    let branch_id = &ctx.branch_id;
     for attempt in 1..=2 {
         let set = state.store.set_status(branch_id, status, error.clone());
         match set.await {

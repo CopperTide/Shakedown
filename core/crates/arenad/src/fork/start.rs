@@ -69,10 +69,12 @@ pub async fn fork_with(
     let task_id = task_of(state, &events, &parent).await?;
     let team = new_team(&parent.team, &events, &req)?;
     let new_id = create_child(state, &parent, &rerun, &team, &req).await?;
-    let world = start_child_world(state, &events, &parent.id, &new_id, &mut rerun).await?;
+    let (world, restore_ms) =
+        start_child_world(state, &events, &parent.id, &new_id, &mut rerun).await?;
     let ctx = BranchCtx::new(new_id, Arc::new(world), team, task_id.clone())
         .with_rules(recorded::rules(&events))
         .with_clock(BranchClock::from_env(rerun.clock_ms));
+    ctx.overhead.add(Cat::Restore, restore_ms);
     if ctx.rules.runner == Runner::External {
         let conn = ctx.rules.connection.clone();
         let mut res = live_child(state, ctx, rerun.plan, &events).await;
@@ -244,22 +246,21 @@ async fn task_of(state: &AppState, events: &[Event], parent: &Branch) -> anyhow:
 }
 
 /// Copies the parent's events before the fork point and starts the new branch's world as the
-/// rerun plans it, with the run's benchmark and seed. A failure ends the new branch
-/// `infra_error` with its message.
+/// rerun plans it, with the run's benchmark and seed: the world, and how long restoring it took.
+/// A failure ends the new branch `infra_error` with its message.
 async fn start_child_world(
     state: &AppState,
     events: &[Event],
     parent: &str,
     new_id: &str,
     rerun: &mut Rerun,
-) -> Result<crate::world::World, ForkError> {
+) -> Result<(crate::world::World, f64), ForkError> {
     let started = async {
         let start = rerun.plan.start_seq;
         state.store.copy_prefix(parent, new_id, start).await?;
         let since = std::time::Instant::now();
         let world = rerun::start_world(state, events, new_id, rerun).await?;
-        overhead::add_since(new_id, Cat::Restore, since);
-        Ok(world)
+        Ok((world, overhead::ms_since(since)))
     }
     .await;
     if let Err(e) = &started {

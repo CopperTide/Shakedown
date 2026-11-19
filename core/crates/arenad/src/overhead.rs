@@ -1,14 +1,10 @@
 //! Arena's own time, kept apart from the agents' and the world's so a run's numbers can estimate
-//! production. Each piece of arena's work adds its milliseconds to the branch's ledger; the next
-//! event the store records for the branch carries what built up since the one before, as
-//! `overhead_ms`, and the ledger starts again. Summing `overhead_ms` over a branch's events gives
-//! the time arena added to it.
+//! production. Each piece of arena's work adds its milliseconds to the branch's ledger (its
+//! `BranchCtx::overhead`); the next event recorded for the branch carries what built up since the
+//! one before, as `overhead_ms`, and the ledger starts again. Summing `overhead_ms` over a
+//! branch's events gives the time arena added to it.
 
-use std::{
-    collections::HashMap,
-    sync::{LazyLock, Mutex},
-    time::Instant,
-};
+use std::{sync::Mutex, time::Instant};
 
 use serde::{Deserialize, Serialize};
 
@@ -116,6 +112,13 @@ impl Overhead {
     pub fn is_empty(&self) -> bool {
         self.total() == 0.0
     }
+
+    /// `ms` of kind `cat`; None when that is no time.
+    pub fn of(cat: Cat, ms: f64) -> Option<Overhead> {
+        let mut o = Overhead::default();
+        o.add(cat, ms);
+        (!o.is_empty()).then_some(o)
+    }
 }
 
 /// Milliseconds since `since`, with the fraction kept.
@@ -123,41 +126,33 @@ pub fn ms_since(since: Instant) -> f64 {
     since.elapsed().as_secs_f64() * 1000.0
 }
 
-/// The overhead built up per branch and not yet recorded.
-#[derive(Default)]
+/// The overhead built up on one branch and not yet recorded.
+#[derive(Debug, Default)]
 pub struct Ledger {
-    pending: Mutex<HashMap<String, Overhead>>,
+    pending: Mutex<Overhead>,
 }
 
 impl Ledger {
-    pub fn add(&self, branch: &str, cat: Cat, ms: f64) {
-        let mut p = self.pending.lock().unwrap();
-        p.entry(branch.to_string()).or_default().add(cat, ms);
+    /// Adds `ms` of arena work of kind `cat` to the branch's next recorded event.
+    pub fn add(&self, cat: Cat, ms: f64) {
+        self.pending.lock().unwrap().add(cat, ms);
     }
 
-    /// What built up for `branch` since the last take; None when nothing did.
-    pub fn take(&self, branch: &str) -> Option<Overhead> {
-        let taken = self.pending.lock().unwrap().remove(branch);
-        taken.filter(|o| !o.is_empty())
+    /// Adds the time since `since`, of kind `cat`.
+    pub fn add_since(&self, cat: Cat, since: Instant) {
+        self.add(cat, ms_since(since));
     }
-}
 
-/// The one ledger of this process. Branch ids are unique, so branches of every store share it.
-static LEDGER: LazyLock<Ledger> = LazyLock::new(Ledger::default);
+    /// Adds the time since `since` but the `besides_ms` of it spent on other work, of kind `cat`.
+    pub fn add_besides(&self, cat: Cat, since: Instant, besides_ms: f64) {
+        self.add(cat, ms_since(since) - besides_ms);
+    }
 
-/// Adds `ms` of arena work of kind `cat` to `branch`'s next recorded event.
-pub fn add(branch: &str, cat: Cat, ms: f64) {
-    LEDGER.add(branch, cat, ms);
-}
-
-/// Adds the time since `since` to `branch`, of kind `cat`.
-pub fn add_since(branch: &str, cat: Cat, since: Instant) {
-    add(branch, cat, ms_since(since));
-}
-
-/// What built up for `branch` since its last recorded event (None when nothing did).
-pub fn take(branch: &str) -> Option<Overhead> {
-    LEDGER.take(branch)
+    /// What built up since the last take; None when nothing did.
+    pub fn take(&self) -> Option<Overhead> {
+        let taken = std::mem::take(&mut *self.pending.lock().unwrap());
+        (!taken.is_empty()).then_some(taken)
+    }
 }
 
 #[cfg(test)]
@@ -166,16 +161,16 @@ mod tests {
 
     #[test]
     fn a_ledger_hands_out_what_built_up_once() {
-        let l = Ledger::default();
-        assert_eq!(l.take("b"), None);
-        l.add("b", Cat::Save, 2.0);
-        l.add("b", Cat::Save, 1.5);
-        l.add("b", Cat::Record, 0.25);
-        l.add("other", Cat::Mcp, 9.0);
-        let o = l.take("b").unwrap();
+        let (l, other) = (Ledger::default(), Ledger::default());
+        assert_eq!(l.take(), None);
+        l.add(Cat::Save, 2.0);
+        l.add(Cat::Save, 1.5);
+        l.add(Cat::Record, 0.25);
+        other.add(Cat::Mcp, 9.0);
+        let o = l.take().unwrap();
         assert_eq!((o.save, o.record, o.total()), (3.5, 0.25, 3.75));
-        assert_eq!(l.take("b"), None);
-        assert_eq!(l.take("other").unwrap().mcp, 9.0);
+        assert_eq!(l.take(), None);
+        assert_eq!(other.take().unwrap().mcp, 9.0);
     }
 
     #[test]

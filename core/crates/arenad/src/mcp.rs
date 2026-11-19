@@ -12,7 +12,7 @@ use serde_json::{json, Value};
 use crate::{
     app::AppState,
     exec::{tool_schemas, BranchCtx, ToolExec},
-    overhead::{self, ms_since, Cat},
+    overhead::{ms_since, Cat},
 };
 
 pub fn router() -> Router<Arc<AppState>> {
@@ -94,7 +94,7 @@ async fn handle(
     let mut ran_ms = 0.0;
     let reply = reply_to(&state, &ctx, &agent, &req, &mut ran_ms).await;
     // The endpoint's own handling: everything but running the tool.
-    overhead::add(&ctx.branch_id, Cat::Mcp, ms_since(since) - ran_ms);
+    ctx.overhead.add_besides(Cat::Mcp, since, ran_ms);
     match reply {
         Some(reply) => Json(reply).into_response(),
         // Notification (or stray response): nothing to answer.

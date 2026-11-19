@@ -11,7 +11,7 @@ use crate::{
     app::AppState,
     exec::{BranchCtx, ToolExec},
     model::*,
-    overhead::{self, Cat},
+    overhead::{self, Cat, Overhead},
     scenario::{self, Scenario},
     store::{BranchId, RunId},
     world::{self, Plan, World, WorldFrom},
@@ -129,9 +129,10 @@ pub async fn begin_run(
         scenario,
     };
     let started = start_world(state, &bench, planned, start).await;
-    let (world, start_seq) = setup_or_infra_error(state, &branch_id, started).await?;
+    let (world, start_seq, record_ms) = setup_or_infra_error(state, &branch_id, started).await?;
     let ctx = BranchCtx::new(branch_id, Arc::new(world), team, task_id.to_string());
     let ctx = ctx.with_rules(rules);
+    ctx.overhead.add(Cat::Record, record_ms);
     set_up_task(state, &bench, &ctx, scenario, start_seq).await?;
     Ok((run_id, ctx))
 }
@@ -198,22 +199,24 @@ pub async fn setup_failed(state: &AppState, branch_id: &str, error: String) {
 /// systems, tools, scenario?}` (`saves` names only the parts that keep saves; `base_seed` is the
 /// seed the base save was made with; `runner` and `handoff` are the run's rules; `systems` and
 /// `tools` are what `World::systems` and `World::tool_info` say; `scenario` the expanded scenario,
-/// when the run has one). The world, and `RunStart`'s seq.
+/// when the run has one), with the world's restore as its overhead. The world, `RunStart`'s seq
+/// and how long recording it took (overhead for the branch's next event).
 async fn start_world(
     state: &AppState,
     bench: &BenchDescribe,
     planned: Plan,
     of: RunStartOf<'_>,
-) -> Result<(World, i64)> {
+) -> Result<(World, i64, f64)> {
     let branch_id = of.branch_id;
     let seed = of.scenario.seed.unwrap_or_else(new_seed);
     let hub = state.hub.clone();
     let since = Instant::now();
     let world = World::start_planned(hub, bench, planned, branch_id, seed, WorldFrom::Base).await?;
-    overhead::add_since(branch_id, Cat::Restore, since);
+    let restored = Overhead::of(Cat::Restore, overhead::ms_since(since));
     let start = run_start(bench, &world, seed, &of);
-    match state.store.record(branch_id, None, &start).await {
-        Ok(e) => Ok((world, e.seq)),
+    let since = Instant::now();
+    match state.store.record(branch_id, None, &start, restored).await {
+        Ok(e) => Ok((world, e.seq, overhead::ms_since(since))),
         Err(e) => {
             world.stop().await;
             Err(e)

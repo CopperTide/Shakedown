@@ -8,10 +8,7 @@ use std::time::Duration;
 use serde_json::json;
 
 use super::{BranchCtx, ToolExec};
-use crate::{
-    model::EventKind,
-    overhead::{self, Cat},
-};
+use crate::{model::EventKind, overhead::Cat};
 
 /// How long the benchmark gets to draw one view.
 const VIEW_TIMEOUT: Duration = Duration::from_secs(10);
@@ -25,7 +22,7 @@ impl ToolExec {
         }
         let paused = branch.clock.paused();
         let drawn = tokio::time::timeout(VIEW_TIMEOUT, branch.world.view()).await;
-        overhead::add(&branch.branch_id, Cat::Record, paused.elapsed_ms_f64());
+        branch.overhead.add(Cat::Record, paused.elapsed_ms_f64());
         drop(paused);
         let view = match drawn {
             Ok(Ok(view)) => view,

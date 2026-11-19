@@ -240,11 +240,12 @@ async fn exited(state: &Arc<AppState>, branch: &str, status: Option<ExitStatus>,
         "text": words,
         "data": {"stderr_tail": stderr, "stdout_tail": l.stdout_tail()},
     });
-    if let Err(e) = state
-        .store
-        .append(branch, None, EventKind::WorldEvent, ev)
-        .await
-    {
+    let kind = EventKind::WorldEvent;
+    let recorded = match state.live.get(branch) {
+        Some(ctx) => ctx.append_now(&state.store, None, kind, ev).await,
+        None => state.store.append(branch, None, kind, ev).await,
+    };
+    if let Err(e) = recorded {
         eprintln!("branch {branch}: recording the driver's exit: {e:#}");
     }
     let how = match status.and_then(|s| s.code()) {

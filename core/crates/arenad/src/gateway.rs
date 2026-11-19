@@ -13,7 +13,7 @@ use crate::{
     app::AppState,
     exec::BranchCtx,
     model::*,
-    overhead::{self, ms_since, Cat},
+    overhead::{ms_since, Cat},
     providers::{Provider, Upstream},
     reasoning,
     store::Store,
@@ -232,9 +232,8 @@ async fn handle(
     let upstream = send_upstream(&state, &provider, &body).await;
     let upstream_ms = ms_since(asked);
     let (status, payload) = model_call_payload(body, &provider, &upstream);
-    // The gateway's own handling: everything but the provider's answer (and the record's time,
-    // which the store counts).
-    overhead::add(&branch, Cat::Gateway, ms_since(since) - upstream_ms);
+    // The gateway's own handling: all but the provider's answer and the time recording takes.
+    ctx.overhead.add_besides(Cat::Gateway, since, upstream_ms);
     charge(&ctx, &agent, &provider, &payload);
     if let Err(e) = record(&ctx, &state.store, &agent, &payload).await {
         return error_response(

@@ -5,13 +5,7 @@ use std::time::Instant;
 use anyhow::Result;
 
 use super::lifecycle::Ending;
-use crate::{
-    app::AppState,
-    exec::BranchCtx,
-    model::*,
-    overhead::{self, Cat},
-    world,
-};
+use crate::{app::AppState, exec::BranchCtx, model::*, overhead::Cat, world};
 
 /// Once the agents are done the world stands still: no tick and no clock while it is scored.
 /// Freezing twice is freezing once.
@@ -24,7 +18,7 @@ pub(crate) async fn freeze(ctx: &BranchCtx) {
 pub(crate) async fn check(state: &AppState, ctx: &BranchCtx) -> Result<Ending> {
     let since = Instant::now();
     let check = score(state, ctx).await?;
-    overhead::add_since(&ctx.branch_id, Cat::Score, since);
+    ctx.overhead.add_since(Cat::Score, since);
     let ending = verdict(&check, &ctx.world.part_names());
     let payload = serde_json::to_value(&check)?;
     ctx.append(&state.store, None, EventKind::Check, payload)

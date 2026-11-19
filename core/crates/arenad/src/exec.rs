@@ -13,7 +13,7 @@ use crate::{
     clock::BranchClock,
     flow::{FlowControl, STOPPED},
     model::*,
-    overhead::{self, Cat},
+    overhead::{Cat, Ledger},
     recorded::LEGACY_PART,
     store::Store,
     ticker::Ticker,
@@ -58,6 +58,8 @@ pub struct BranchCtx {
     /// agent id -> the bearer token its MCP endpoint wants, for an agent given one (an `http`
     /// agent, while arenad waits for it). Kept in memory only.
     tokens: Mutex<HashMap<String, String>>,
+    /// The arena's time on this branch since its last event (see [`crate::overhead`]).
+    pub overhead: Ledger,
 }
 
 impl BranchCtx {
@@ -82,6 +84,7 @@ impl BranchCtx {
             tap: Mutex::new(None),
             closed: Default::default(),
             tokens: Default::default(),
+            overhead: Ledger::default(),
         }
     }
 
@@ -264,7 +267,24 @@ impl BranchCtx {
         payload: Value,
     ) -> anyhow::Result<Event> {
         let _paused = self.clock.paused();
-        store.append(&self.branch_id, agent, kind, payload).await
+        self.append_now(store, agent, kind, payload).await
+    }
+
+    /// Records an event of this branch, the world clock running on (for what happens outside the
+    /// agents' and the world's work, like a driver's exit). It carries the overhead built up since
+    /// the branch's last event; the time it takes is overhead of the kind `record`.
+    pub async fn append_now(
+        &self,
+        store: &Store,
+        agent: Option<&str>,
+        kind: EventKind,
+        payload: Value,
+    ) -> anyhow::Result<Event> {
+        let since = std::time::Instant::now();
+        let (id, built_up) = (&self.branch_id, self.overhead.take());
+        let ev = store.append_with(id, agent, kind, payload, built_up).await;
+        self.overhead.add_since(Cat::Record, since);
+        ev
     }
 
     /// Pauses the branch: new tool calls and model calls wait and the world clock stands still
@@ -286,7 +306,7 @@ impl BranchCtx {
             return Ok(false);
         };
         let ms = lasted.as_secs_f64() * 1000.0;
-        overhead::add(&self.branch_id, Cat::Pause, ms);
+        self.overhead.add(Cat::Pause, ms);
         self.clock.resume();
         let resumed = ResumePayload {
             paused_ms: ms.round() as i64,
@@ -299,7 +319,7 @@ impl BranchCtx {
     async fn gate_timed(&self) -> tokio::sync::MutexGuard<'_, ()> {
         let since = std::time::Instant::now();
         let guard = self.gate.lock().await;
-        overhead::add_since(&self.branch_id, Cat::Wait, since);
+        self.overhead.add_since(Cat::Wait, since);
         guard
     }
 
@@ -470,7 +490,7 @@ async fn save_step(branch: &BranchCtx, written: Option<&str>, facts: &mut CallFa
     let step = branch.world.save_changed(written).await;
     if !step.saves.is_empty() || step.error.is_some() {
         facts.paused_ms = Some(paused.elapsed_ms());
-        overhead::add(&branch.branch_id, Cat::Save, paused.elapsed_ms_f64());
+        branch.overhead.add(Cat::Save, paused.elapsed_ms_f64());
     }
     facts.saves = (!step.saves.is_empty()).then_some(step.saves);
     facts.save_error = step.error.map(|e| failure(branch, e));
@@ -553,7 +573,7 @@ impl ToolExec {
         };
         let gate_ms = called.gate_ms;
         facts.duration_ms = Some((since.elapsed().as_secs_f64() * 1000.0 - gate_ms).max(0.0));
-        overhead::add(&branch.branch_id, Cat::Gate, gate_ms);
+        branch.overhead.add(Cat::Gate, gate_ms);
         let outcome = outcome_of(&called.output);
         let Called { output, part, .. } = called;
         facts = CallFacts {
