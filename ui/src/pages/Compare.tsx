@@ -14,6 +14,8 @@ import { PageBody, PageHeader } from '../components/ui/page';
 import { Panel, PanelHeader } from '../components/ui/panel';
 import { ErrorState, LoadingState, Notice } from '../components/ui/state';
 import { Tag } from '../components/ui/status';
+import { CodeBlock } from '../components/ui/code-block';
+import { StepLabel } from '../components/ui/step-label';
 import { cn } from '@/lib/cn';
 import { agentModelLine, costIsUnknown, teamProviders } from '../providers';
 import { APPROXIMATE_NOTE, isApproximate, notComparedLine } from '../restore';
@@ -32,10 +34,10 @@ function StepView({ label, id, run, ev }: { label: string; id: string; run?: str
       {!ev ? <p className="p-3 text-sm text-muted">No step: this branch had ended.</p> : (
         <div className="flex flex-col gap-2 p-3">
           <div className="flex flex-wrap items-center gap-1.5 text-xs">
-            <span className="font-mono font-semibold">step {ev.seq}</span><span className="text-muted">{ev.agent ?? 'run'}</span>
-            <Tag>{ev.kind.replace('_', ' ')}</Tag>{typeof p.name === 'string' && <span className="font-mono">{p.name}</span>}
+            <StepLabel seq={ev.seq} kind={ev.kind}><span className="text-muted">{ev.agent ?? 'run'}</span></StepLabel>
+            {typeof p.name === 'string' && <span className="font-mono">{p.name}</span>}
           </div>
-          <pre className="max-h-64 overflow-auto rounded-md border border-line bg-sunken p-2 font-mono text-2xs whitespace-pre-wrap break-all">{pretty(ev.kind === 'tool_call' ? p.args : p)}</pre>
+          <CodeBlock className="max-h-64 whitespace-pre-wrap break-all">{pretty(ev.kind === 'tool_call' ? p.args : p)}</CodeBlock>
         </div>
       )}
     </Panel>
@@ -68,13 +70,13 @@ function RowDoc({ r, open }: { r: RowDiff; open: boolean }) {
         <span className="min-w-0 truncate">{r.key}</span>{!r.a && <Tag>only in B</Tag>}{!r.b && <Tag>only in A</Tag>}
         <span className="ml-auto shrink-0 text-2xs text-muted">−{n.removed} +{n.added}</span>
       </summary>
-      <pre className="mt-1 mb-1 max-h-72 overflow-auto rounded-md border border-line bg-sunken py-1 font-mono text-2xs leading-4">
+      <CodeBlock className="mt-1 mb-1 max-h-72 p-0 py-1 leading-4">
         {d.map((l, i) => (
           <div key={i} className={cn('px-2 whitespace-pre-wrap break-all', l.op === '+' && 'bg-accent-soft font-semibold', l.op === '-' && 'text-muted line-through decoration-faint')}>
             <span aria-hidden="true" className="inline-block w-3 text-faint">{l.op === '-' ? '−' : l.op}</span>{l.text}
           </div>
         ))}
-      </pre>
+      </CodeBlock>
     </details>
   );
 }

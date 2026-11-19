@@ -1,8 +1,10 @@
 import { type ReactElement, useEffect, useState } from 'react';
 import { rows } from '../api';
 import { Button } from '../components/ui/button';
+import { CodeBlock } from '../components/ui/code-block';
 import { StatusMark, Tag } from '../components/ui/status';
 import { EmptyState, ErrorState } from '../components/ui/state';
+import { StepLabel } from '../components/ui/step-label';
 import { actionWord, classify, systemLine, worldInfo } from '../control/actions';
 import { reasoningWord, wakeWord } from '../control/lanes';
 import { missingPermit, permitOf } from '../control/permit';
@@ -10,6 +12,7 @@ import { notComparedLine, savedLine } from '../restore';
 import { costIsUnknown, providerId, providerName, providerOf } from '../providers';
 import type { Event, Team } from '../types';
 import { formatCost, rowKeys } from './timeline';
+import { cn } from '@/lib/cn';
 import { MARK, alarmMark, mark, passMark } from '@/lib/mark';
 import { asRecord } from '@/lib/record';
 import { errorMessage } from '@/lib/errors';
@@ -28,7 +31,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 function Json({ value, error = false }: { value: unknown; error?: boolean }) {
-  return <pre className={`max-h-72 overflow-auto rounded-md border border-line bg-sunken p-2 font-mono text-2xs leading-4 whitespace-pre-wrap break-all ${error ? 'text-alarm' : ''}`}>{pretty(value)}</pre>;
+  return <CodeBlock className={cn('max-h-72 leading-4 whitespace-pre-wrap break-all', error && 'text-alarm')}>{pretty(value)}</CodeBlock>;
 }
 
 function Block({ title, value }: { title: string; value: unknown }) {
@@ -261,8 +264,7 @@ function Head({ event, events = [] }: { event: Event; events?: Event[] }) {
   return (
     <div className="flex flex-col gap-1 px-3 py-2">
       <div className="flex flex-wrap items-center gap-1.5">
-        <span className="font-mono text-sm font-semibold">step {event.seq}</span>
-        <Tag>{event.kind.replace('_', ' ')}</Tag>
+        <StepLabel seq={event.seq} kind={event.kind} className="text-sm" />
         {event.agent && <span className="text-xs text-muted">{event.agent}</span>}
         {a && <span className="font-mono text-xs">{a.tool}</span>}
         {a && a.outcome !== 'ok' && <StatusMark mark={alarmMark(a.outcome)} />}

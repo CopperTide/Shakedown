@@ -3,6 +3,7 @@ import { type FormEvent, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { checkAgent } from '../api';
 import { Button } from '../components/ui/button';
+import { CodeBlock } from '../components/ui/code-block';
 import { Field, Input, Textarea } from '../components/ui/input';
 import { PageBody } from '../components/ui/page';
 import { Segmented } from '../components/ui/segmented';
@@ -52,7 +53,7 @@ function CodeTestLine({ t }: { t: ConnectionTest }) {
   return (
     <div role="status" className="flex flex-col gap-1 text-sm">
       <p className="font-medium break-words text-alarm">⚠ {t.error ?? 'The test run did not work.'} <span className="font-normal text-muted">· {testLine(t)}</span></p>
-      {t.stderr_tail.trim() && <pre className="max-h-40 overflow-auto rounded border border-line bg-sunken p-2 font-mono text-2xs whitespace-pre-wrap">{t.stderr_tail.trim().slice(-2000)}</pre>}
+      {t.stderr_tail.trim() && <CodeBlock className="max-h-40 rounded whitespace-pre-wrap">{t.stderr_tail.trim().slice(-2000)}</CodeBlock>}
     </div>
   );
 }

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { ColumnDef } from '@tanstack/react-table';
 import { Button } from './button';
+import { CodeBlock } from './code-block';
 import { DataTable } from './data-table';
 import { Dialog, DialogContent } from './dialog';
 import { FilterChips } from './filter-chips';
@@ -12,6 +13,7 @@ import { Panel, PanelHeader } from './panel';
 import { Split } from './split';
 import { EmptyState, ErrorState, LoadingState, Notice } from './state';
 import { StatusMark, Tag } from './status';
+import { StepLabel } from './step-label';
 import { RowTh, Table, Td, Th } from './table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './tabs';
 import { Tooltip, TooltipProvider } from './tooltip';
@@ -46,6 +48,14 @@ describe('base components', () => {
     expect(text(html(<PageHeader title="Runs" meta="27 runs" actions={<Button>New</Button>} />))).toBe('Runs New 27 runs');
     expect(html(<Stat label="Refused" value="1" abnormal />)).toContain('text-alarm');
     expect(html(<Table><thead><tr><Th>A</Th></tr></thead><tbody><tr><RowTh>r</RowTh><Td>1</Td></tr></tbody></Table>)).toContain('scope="row"');
+  });
+  it('code block and step label', () => {
+    const c = html(<CodeBlock className="max-h-40 rounded">{'{ }'}</CodeBlock>);
+    expect(c).toMatch(/^<pre class="[^"]*bg-sunken[^"]*">\{ \}<\/pre>$/);
+    const classes = c.match(/class="([^"]*)"/)![1].split(' ');
+    expect(classes).toContain('rounded');
+    expect(classes).not.toContain('rounded-md');
+    expect(text(html(<StepLabel seq={12} kind="tool_call"><i>lead</i></StepLabel>))).toBe('step 12 lead tool call');
   });
   it('form controls carry their label', () => {
     const f = html(<Field label="Task" hint="pick one"><NativeSelect><option>a</option></NativeSelect></Field>);
