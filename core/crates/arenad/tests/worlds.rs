@@ -495,8 +495,8 @@ fn an_experiment_keeps_its_world_when_another_is_chosen() {
     });
 }
 
-/// The current `toybench` and the opt-in `acme` over one toy part `box`; only `acme` offers a
-/// disruption (`jam`, after `{after}` calls). Open agents call a provider that never answers.
+/// The current `toybench` and the opt-in `acme` over one toy part `box`; only `acme` has task `t2`
+/// and offers a disruption (`jam`, after `{after}` calls). Open agents call a provider that never answers.
 async fn asked_for(tag: &str) -> AppFx {
     let part = toy(&format!("toy-{tag}"), "integration", &["part"]);
     let after =
@@ -517,7 +517,7 @@ async fn asked_for(tag: &str) -> AppFx {
         toy(name, "benchmark", &args)
     };
     let toybench = bench("toybench", &[]);
-    let acme = bench("acme", &["--scenario-options", &options]);
+    let acme = bench("acme", &["--two-tasks", "--scenario-options", &options]);
     let root = package_root(tag, &[toybench, acme, part]);
     AppFx::idle("worlds", tag)
         .root(root)
@@ -629,6 +629,23 @@ fn a_suite_runs_on_the_benchmark_it_asks_for_in_scenarios_of_that_benchmark() {
             (status, &v["error"]),
             (409, &json!("no benchmark named nope is installed"))
         );
+    });
+}
+
+/// A run is reviewed with the ticket of its own benchmark's task, whatever is current since.
+#[test]
+fn a_run_is_reviewed_with_the_ticket_of_its_own_benchmark() {
+    run(async {
+        let fx = asked_for("wreview").await;
+        let (status, v) = external_run(&fx, "t2", Some("acme"), json!(null)).await;
+        assert_eq!(status, 200, "{v}");
+        let events = fx
+            .state
+            .store
+            .events(v["branch_id"].as_str().unwrap())
+            .await;
+        let ticket = arenad::review::ticket(&fx.state, &events.unwrap()).await;
+        assert_eq!(ticket.as_deref(), Some("# Ticket\n\nPoke the box twice.\n"));
     });
 }
 
