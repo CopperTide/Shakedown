@@ -694,12 +694,217 @@
               "$ref": "#/$defs/include"
             },
             {
-              "type": "array",
-              "items": {
-                "type": "object"
-              }
+              "$ref": "#/$defs/checks"
             }
           ]
+        }
+      }
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/namedCheck"
+      },
+      "$comment": "the expected end state format (docs/protocol.md, Scoring by named checks)"
+    },
+    "namedCheck": {
+      "type": "object",
+      "required": [
+        "name",
+        "check"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/text"
+        },
+        "says": {
+          "type": "string"
+        },
+        "safety": {
+          "type": "boolean"
+        },
+        "measure": {
+          "type": "object",
+          "required": [
+            "label"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "label": {
+              "$ref": "#/$defs/text"
+            },
+            "unit": {
+              "type": "string"
+            },
+            "better": {
+              "enum": [
+                "higher",
+                "lower"
+              ]
+            },
+            "target": {
+              "type": [
+                "number",
+                "string"
+              ]
+            }
+          }
+        },
+        "check": {
+          "$ref": "#/$defs/check"
+        }
+      }
+    },
+    "check": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/keyCheck"
+        },
+        {
+          "$ref": "#/$defs/findCheck"
+        },
+        {
+          "$ref": "#/$defs/allCheck"
+        },
+        {
+          "$ref": "#/$defs/anyCheck"
+        }
+      ]
+    },
+    "op": {
+      "enum": [
+        "=",
+        "!=",
+        "<",
+        "<=",
+        ">",
+        ">=",
+        "in",
+        "contains",
+        "exists",
+        "absent"
+      ]
+    },
+    "keyCheck": {
+      "type": "object",
+      "required": [
+        "part",
+        "key"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "part": {
+          "$ref": "#/$defs/text"
+        },
+        "key": {
+          "$ref": "#/$defs/text"
+        },
+        "field": {
+          "$ref": "#/$defs/text"
+        },
+        "op": {
+          "$ref": "#/$defs/op"
+        },
+        "value": true,
+        "ref": {
+          "type": "object",
+          "required": [
+            "part",
+            "key"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "part": {
+              "$ref": "#/$defs/text"
+            },
+            "key": {
+              "$ref": "#/$defs/text"
+            },
+            "field": {
+              "$ref": "#/$defs/text"
+            }
+          }
+        }
+      },
+      "not": {
+        "required": [
+          "value",
+          "ref"
+        ]
+      }
+    },
+    "findCheck": {
+      "type": "object",
+      "required": [
+        "part",
+        "find"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "part": {
+          "$ref": "#/$defs/text"
+        },
+        "find": {
+          "$ref": "#/$defs/text"
+        },
+        "where": {
+          "type": "object",
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "not": {
+                  "type": "object"
+                }
+              },
+              {
+                "type": "object",
+                "minProperties": 1,
+                "maxProperties": 1,
+                "propertyNames": {
+                  "$ref": "#/$defs/op"
+                }
+              }
+            ]
+          }
+        },
+        "count": {
+          "type": [
+            "integer",
+            "string"
+          ]
+        }
+      }
+    },
+    "allCheck": {
+      "type": "object",
+      "required": [
+        "all"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "all": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/check"
+          }
+        }
+      }
+    },
+    "anyCheck": {
+      "type": "object",
+      "required": [
+        "any"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "any": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/check"
+          }
         }
       }
     }

@@ -88,16 +88,22 @@ def inside(base: Path, rel: str, path: str) -> Path:
     return target
 
 
-def _include(rel: str, ctx: Context, base: Path, files: list, path: str) -> Any:
+def read_include(rel: str, base: Path, path: str) -> Any:
+    """The file `@rel` of the template in `base`, parsed (.yaml, .yml, .json) or as text, not yet filled."""
     target = inside(base, rel, path)
-    if rel.endswith("/"):
-        return _folder(rel, target, base, files, path)
     if not target.is_file():
         raise TemplateError(path, f"no file {rel}")
-    text, inner = target.read_text(), f"{path}@{rel}"
-    if target.suffix in _TEXT:
-        return fill(text, ctx, inner)
-    return expand(_parse(text, target.suffix, inner), ctx, base, files, inner)
+    text = target.read_text()
+    return text if target.suffix in _TEXT else _parse(text, target.suffix, f"{path}@{rel}")
+
+
+def _include(rel: str, ctx: Context, base: Path, files: list, path: str) -> Any:
+    if rel.endswith("/"):
+        return _folder(rel, inside(base, rel, path), base, files, path)
+    value, inner = read_include(rel, base, path), f"{path}@{rel}"
+    if Path(rel).suffix in _TEXT:
+        return fill(value, ctx, inner)
+    return expand(value, ctx, base, files, inner)
 
 
 def _folder(rel: str, target: Path, base: Path, files: list, path: str) -> str:

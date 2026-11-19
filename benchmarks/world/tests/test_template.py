@@ -56,3 +56,42 @@ def test_list_templates_sorts_by_id_and_skips_bad_ones(fixtures, tmp_path, capsy
     ids = [t.id for t in list_templates([fixtures, tmp_path, tmp_path / "missing"])]
     assert ids == ["bad-include", "bad-placeholder", "shop"]
     assert "shop" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("check, path", [
+    ({"part": "alpha", "key": "order/1", "op": "~", "value": 1}, "tasks[1].checks[0].check"),
+    ({"part": "alpha", "key": "order/1", "feild": "status"}, "tasks[1].checks[0].check"),
+    ({"all": []}, "tasks[1].checks[0].check"),
+    ({"part": "alpha", "find": "order/*", "where": {"status": {"~": 1}}}, "tasks[1].checks[0].check"),
+    ({"key": "order/1"}, "tasks[1].checks[0].check"),
+])
+def test_a_malformed_inline_check_is_refused_at_load(fixtures, tmp_path, check, path):
+    with pytest.raises(TemplateError) as e:
+        load_template(copy_with(fixtures / "shop", tmp_path, {"tasks.1.checks": [{"name": "c", "check": check}]}))
+    assert e.value.path.startswith(path), e.value
+
+
+def test_a_check_without_a_name_is_refused_at_load(fixtures, tmp_path):
+    with pytest.raises(TemplateError) as e:
+        load_template(copy_with(fixtures / "shop", tmp_path, {"tasks.1.checks": [{"check": {"all": [{"any": [
+            {"part": "alpha", "key": "k"}]}]}}]}))
+    assert e.value.path == "tasks[1].checks[0]"
+
+
+def test_a_malformed_included_check_is_refused_at_load(fixtures, tmp_path):
+    dst = copy_with(fixtures / "shop", tmp_path, {})
+    (dst / "checks" / "alpha.yaml").write_text("- {name: c, check: {any: [{part: alpha, key: k, op: '~'}]}}\n",
+                                               encoding="utf-8")
+    with pytest.raises(TemplateError) as e:
+        load_template(dst)
+    assert e.value.path.startswith("tasks[0].checks@checks/alpha.yaml[0].check"), e.value
+
+
+def test_well_formed_checks_load_in_every_form(fixtures, tmp_path):
+    checks = [{"name": "k", "says": "s", "safety": True, "check": {"part": "alpha", "key": "k", "field": "a.b", "op": "!=",
+                                                                    "ref": {"part": "beta", "key": "k", "field": "c"}}},
+              {"name": "f", "measure": {"label": "n", "unit": "", "better": "lower", "target": 1},
+               "check": {"part": "alpha", "find": "o/*", "where": {"a": None, "b": {">": 1}, "c": {"=": {"d": 1}}},
+                         "count": "<= {size}"}},
+              {"name": "a", "check": {"all": [{"any": [{"part": "alpha", "key": "k", "op": "exists"}]}]}}]
+    load_template(copy_with(fixtures / "shop", tmp_path, {"tasks.1.checks": checks}))

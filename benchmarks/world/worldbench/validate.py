@@ -7,19 +7,25 @@ from pathlib import Path
 import jsonschema
 
 from .errors import TemplateError, key_path
+from .expand import read_include
 
 SCHEMA = Path(__file__).resolve().parent / "schema" / "template.schema.json"
 RESERVED_FIELDS = {"id", "name", "login", "role", "added"}
 
 
 @cache
-def _validator() -> jsonschema.Draft202012Validator:
-    return jsonschema.Draft202012Validator(json.loads(SCHEMA.read_text()))
+def _validator(definition: str | None = None) -> jsonschema.Draft202012Validator:
+    """The template's schema, or one of its `$defs` (`checks`) on its own."""
+    schema = json.loads(SCHEMA.read_text())
+    if definition is not None:
+        schema = {"$schema": schema["$schema"], "$defs": schema["$defs"], "$ref": f"#/$defs/{definition}"}
+    return jsonschema.Draft202012Validator(schema)
 
 
 def check(data, folder: Path) -> None:
     """Raises the first TemplateError of `data`, the parsed template.yaml of `folder`."""
     _schema(data)
+    _included_checks(data, folder)
     _unique_ids(data)
     _known_systems(data)
     _ranges(data)
@@ -27,13 +33,21 @@ def check(data, folder: Path) -> None:
     _names_and_fields(data)
 
 
-def _schema(data) -> None:
-    error = jsonschema.exceptions.best_match(_validator().iter_errors(data))
+def _schema(data, definition: str | None = None, path: str = "") -> None:
+    error = jsonschema.exceptions.best_match(_validator(definition).iter_errors(data))
     if error is not None:
-        path = ""
         for k in error.absolute_path:
             path = key_path(path, k)
         raise TemplateError(path, error.message)
+
+
+def _included_checks(data, folder: Path) -> None:
+    """A task's checks in their own file are held to the same schema as checks written in place."""
+    for i, task in enumerate(data["tasks"]):
+        if isinstance(task["checks"], str):
+            path = f"tasks[{i}].checks"
+            rel = task["checks"][1:]
+            _schema(read_include(rel, folder, path), "checks", f"{path}@{rel}")
 
 
 def _first_repeat(items, key: str, path: str) -> None:
