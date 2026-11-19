@@ -10,7 +10,9 @@ _PROJECT = "${ARENA_DIR}/benchmarks/world"
 
 
 def _toml(s: str) -> str:
-    return json.dumps(s)  # a JSON string with ASCII escapes is a TOML basic string
+    """`s` as a TOML basic string: JSON's escapes are TOML's except the surrogate pairs it writes for an emoji, so
+    characters beyond ASCII stay as they are; DEL is the one control character JSON leaves bare and TOML refuses."""
+    return json.dumps(s, ensure_ascii=False).replace("\x7f", "\\u007f")
 
 
 def manifest(world: dict, t, version: str) -> str:

@@ -137,3 +137,10 @@ def test_a_preview_with_problems_still_lists_the_people_it_drew(builder):
     low = call(builder, "preview", {"id": "shop", "choices": {"people": {"counts": {"clerk": 0}}}})
     assert low["problems"][0]["path"] == "people.counts.clerk" and len(low["people"]) == 9
 
+
+
+def test_a_company_name_beyond_ascii_is_kept_in_the_package_manifest(builder, tmp_path):
+    name = "Café 🚀 \"Tools\"\x7f"
+    call(builder, "generate", {"id": "shop", "choices": {"company": {"name": name}}, "dir": str(tmp_path / "w")})
+    toml = tomllib.loads((tmp_path / "w" / "arena-package.toml").read_text(encoding="utf-8"))
+    assert toml["world"]["title"] == name
