@@ -52,7 +52,6 @@ dependencies = [
  "anyhow",
  "arena-part",
  "async-trait",
- "reqwest",
  "serde_json",
  "tokio",
 ]
@@ -106,7 +105,6 @@ dependencies = [
  "anyhow",
  "arena-part",
  "async-trait",
- "reqwest",
  "serde",
  "serde_json",
  "tokio",
