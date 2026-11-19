@@ -101,9 +101,9 @@ export default function Team() {
   const openOk = list.some((s) => s.available || (s.kind === 'local' && !s.checked));
   return (
     <>
-      <PageHeader title={<span title="Agents run in order, each handing off to the next; any agent may write unless you make it read-only. New runs and suites use this team. Edits are saved in this browser.">Team</span>} className="mx-auto w-full max-w-5xl"
+      <PageHeader title={<span title="Agents run in order, each handing off to the next; any agent may write unless you make it read-only. New runs and suites use this team. Edits are saved in this browser.">Team</span>} width="default"
         actions={<><Button variant="ghost" className="text-muted" onClick={ed.reset}><RotateCcw />Reset</Button><Button variant="primary" onClick={ed.add} disabled={!ed.team}><Plus />Add agent</Button></>} />
-      <PageBody className="mx-auto w-full max-w-5xl">
+      <PageBody width="default">
         {ed.error && <ErrorState error={ed.error} />}
         {!ed.team && !ed.error && <Panel><LoadingState label="Loading your team…" /></Panel>}
         {ed.team?.agents.map((a, i) => <AgentCard key={i} a={a} i={i} count={ed.team!.agents.length} openOk={openOk} list={list} ed={ed} />)}

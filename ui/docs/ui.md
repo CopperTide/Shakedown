@@ -102,7 +102,7 @@ Tailwind names and never raw colours.
   the timeline axis. The scale is `text-2xs` 11 px (labels), `text-xs` 12, `text-sm` 13 (body),
   `text-base` 14, `text-lg` 16, `text-xl` 20 (page titles), `text-2xl` 28 and `text-3xl` 40 (a result's headline).
 - **Spacing.** Tailwind's 4 px scale. Pages use a 16 px gutter on phones and 24 px from `sm`, and one
-  of four widths (`PageHeader`/`PageBody` `width`: narrow 768, default 1024, wide 1280, full). Panels
+  of five widths (`PageHeader`/`PageBody` `width`: narrow 768, default 1024, broad 1152, wide 1280, full). Panels
   are spaced 16 px apart. Table rows are 32 px tall.
 - **Radii.** `sm` 3 px for chips, `md` 4 px for controls, `lg` 6 px for panels and dialogs.
 - **Theme.** System, light or dark, chosen with the top bar button or the palette and kept in

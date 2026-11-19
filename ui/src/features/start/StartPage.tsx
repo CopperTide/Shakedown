@@ -118,7 +118,7 @@ function SetupView({ s, health, start }: { s: Setup; health: Health | null; star
   const loadError = s.tasks.error ?? s.team.error;
   const benchmark = preview.bench?.name ?? health?.benchmark?.name ?? '';
   return (
-    <PageBody className="mx-auto w-full max-w-3xl gap-8 py-10">
+    <PageBody width="narrow" className="gap-8 py-10">
       {loadError && <ErrorState error={loadError} />}
       <WorldCard benchmark={benchmark} title={preview.twin?.title} tasks={s.tasks.tasks} task={s.task}
         onTask={s.setTaskId} scenario={s.scenario} busy={start.starting} />

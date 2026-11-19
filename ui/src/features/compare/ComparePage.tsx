@@ -174,8 +174,8 @@ export default function Compare() {
   const { got, error, retry } = useCompare(a, b);
   return (
     <>
-      <PageHeader title={<span title={`Branch ${a.slice(0, 8)} (A) against ${b.slice(0, 8)} (B)`}>Compare</span>} className="mx-auto w-full max-w-6xl" />
-      <PageBody className="mx-auto w-full max-w-6xl">
+      <PageHeader title={<span title={`Branch ${a.slice(0, 8)} (A) against ${b.slice(0, 8)} (B)`}>Compare</span>} width="broad" />
+      <PageBody width="broad">
         {error && <ErrorState error={error} onRetry={retry} hint="Both branches must have finished and kept their final saves." />}
         {!got && !error && <LoadingState label="Comparing the two final worlds…" rows={4} />}
         {got && <Comparison got={got} a={a} b={b} />}

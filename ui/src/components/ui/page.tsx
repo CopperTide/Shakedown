@@ -3,9 +3,11 @@ import { cn } from '@/lib/cn';
 import { Panel } from './panel';
 import { ErrorState, LoadingState } from './state';
 
-/** The page widths: a form, a list, results side by side, or the whole window (a timeline, a twin). */
-export type Width = 'narrow' | 'default' | 'wide' | 'full';
-const WIDTH: Record<Width, string> = { narrow: 'mx-auto w-full max-w-3xl', default: 'mx-auto w-full max-w-5xl', wide: 'mx-auto w-full max-w-7xl', full: '' };
+/** The page widths: a form, a list, two branches side by side, results side by side, or the whole window (a timeline, a twin). */
+export type Width = 'narrow' | 'default' | 'broad' | 'wide' | 'full';
+const WIDTH: Record<Width, string> = {
+  narrow: 'mx-auto w-full max-w-3xl', default: 'mx-auto w-full max-w-5xl', broad: 'mx-auto w-full max-w-6xl', wide: 'mx-auto w-full max-w-7xl', full: '',
+};
 
 /** A page's title row: the title and its state on the left, actions on the right, a meta line under. */
 export function PageHeader({ title, status, meta, actions, children, width = 'full', className }: {
