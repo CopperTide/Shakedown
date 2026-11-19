@@ -38,6 +38,13 @@ pub fn is_hop(name: &str) -> bool {
     name.starts_with("proxy-") || HOP_BY_HOP.contains(&name.as_str())
 }
 
+/// True for a header the proxy sets itself (`x-forwarded-*`, `forwarded`, `x-arena-*`): a client's
+/// own copy is dropped, so an upstream can trust what it reads there.
+fn is_set_by_proxy(name: &str) -> bool {
+    let name = name.to_ascii_lowercase();
+    name == "forwarded" || name.starts_with("x-forwarded-") || name.starts_with("x-arena-")
+}
+
 /// What the upstream answered, and the effect it said the request had.
 pub struct Forwarded {
     pub status: u16,
@@ -58,7 +65,8 @@ fn host_header(route: &HostRoute, call: &HttpCall) -> String {
 pub async fn forward(route: &HostRoute, call: &HttpCall) -> Result<Forwarded, String> {
     let method = reqwest::Method::from_bytes(call.method.as_bytes()).map_err(|e| e.to_string())?;
     let mut req = CLIENT.request(method, route.target(&call.path_and_query));
-    for (k, v) in call.headers.iter().filter(|(k, _)| !is_hop(k)) {
+    let passed = |(k, _): &&(String, String)| !is_hop(k) && !is_set_by_proxy(k);
+    for (k, v) in call.headers.iter().filter(passed) {
         req = req.header(k, v);
     }
     let host = host_header(route, call);

@@ -23,6 +23,9 @@ async fn echo_host(h: HeaderMap) -> axum::Json<Value> {
         "x-forwarded-host",
         "x-forwarded-proto",
         "x-forwarded-port",
+        "x-forwarded-for",
+        "forwarded",
+        "x-arena-effect",
     ];
     let got: HashMap<&str, &str> = (names.iter())
         .filter_map(|n| Some((*n, h.get(*n)?.to_str().ok()?)))
@@ -139,6 +142,25 @@ async fn get_text(c: &reqwest::Client, url: &str) -> (u16, String) {
 fn sha256_hex(b: &[u8]) -> String {
     let d = ring::digest::digest(&ring::digest::SHA256, b);
     d.as_ref().iter().map(|x| format!("{x:02x}")).collect()
+}
+
+#[test]
+fn a_client_cannot_set_the_forwarding_headers() {
+    run(async {
+        let fx = ProxyFx::new("spoof", &upstream().await, &[]).await;
+        let r = (fx.client("planner").get("http://toy.test/echo-host"))
+            .header("x-forwarded-host", "evil.test")
+            .header("X-Forwarded-Proto", "https")
+            .header("x-forwarded-for", "10.0.0.1")
+            .header("forwarded", "host=evil.test")
+            .header("x-arena-effect", "read")
+            .send()
+            .await;
+        let v: Value = r.unwrap().json().await.unwrap();
+        let want = json!({"host": "toy.test", "x-forwarded-host": "toy.test",
+                          "x-forwarded-proto": "http", "x-forwarded-port": "80"});
+        assert_eq!(v, want);
+    })
 }
 
 #[test]
