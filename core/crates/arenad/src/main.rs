@@ -13,6 +13,7 @@
 //!   (default `<arena>/integrations:<arena>/benchmarks`);
 //! - `ARENA_BIN_DIR`: substituted for `${ARENA_BIN_DIR}` in package commands
 //!   (default `<arena>/core/target/release`; build with `cargo build --release` in `<arena>`);
+//!   `${ARENA_DIR}` stands for `<arena>`;
 //! - `ARENA_SAVES`: save storage (default `<arena>/core/saves`).
 //! - `ARENA_RUN_<PACKAGE>`: a command line (`/bin/sh -c`) run in place of a package's `run`,
 //!   e.g. `ssh <host> -- <command>` for a part on another machine (`docs/protocol.md`).
@@ -53,6 +54,7 @@ fn hub(pg_url: &str) -> anyhow::Result<Hub> {
     std::fs::create_dir_all(&saves)?;
     let registry = Registry::scan(&roots)?;
     Ok(Hub::new(registry, bin_dir, saves)
+        .with_arena_dir(arena)
         .with_env(vec![("ARENA_PG_URL".into(), pg_url.to_string())]))
 }
 

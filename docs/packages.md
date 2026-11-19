@@ -87,7 +87,6 @@ which serves the world and scores each task by its checks (`arena_part.expect`).
 - `ARENA_WORLDS`: where built worlds are written (default `<arena>/core/worlds`, git-ignored), scanned at start like
   `ARENA_PACKAGES`. A built world's command names `${ARENA_DIR}`, the arena folder.
 
-Status: the builder program, the world benchmark and the kit's `expect` are built and tested in Python
-(`benchmarks/world/tests`, `kits/python/tests/test_expect.py`). arenad does not yet read `kind = "builder"`,
-`ARENA_WORLDS` or `${ARENA_DIR}` (stage 3 plan, Tasks 6 and 7), so the builder ships without its manifest until
-then.
+Status: arenad reads `kind = "builder"` (`benchmarks/world/arena-package.toml`), the `[world]` table and
+`${ARENA_DIR}`, and can install a package while it runs (`parts`: `Registry::builders`, `Hub::install`). It does not
+yet build worlds or scan `ARENA_WORLDS` (stage 3 plan, Task 7).

@@ -168,7 +168,7 @@ impl AppState {
 
 /// Why no benchmark is chosen: none is installed, or several are and `ARENA_BENCHMARK` names none.
 fn no_benchmark_chosen(hub: &Hub) -> String {
-    let installed: Vec<&str> = hub.registry().benchmarks().map(|m| &*m.name).collect();
+    let installed: Vec<String> = hub.registry().benchmarks().map(|m| m.name.clone()).collect();
     if installed.is_empty() {
         return "no benchmark is installed: no folder in ARENA_PACKAGES holds a benchmark package"
             .into();
@@ -181,8 +181,8 @@ fn no_benchmark_chosen(hub: &Hub) -> String {
 
 /// The name of the one installed benchmark; empty when there are none or several.
 fn only_benchmark(hub: &Hub) -> String {
-    let benchmarks = hub.registry().benchmarks().filter(|m| !m.opt_in);
-    let mut names = benchmarks.map(|m| m.name.clone());
+    let registry = hub.registry();
+    let mut names = registry.benchmarks().filter(|m| !m.opt_in).map(|m| m.name.clone());
     match (names.next(), names.next()) {
         (Some(one), None) => one,
         _ => String::new(),

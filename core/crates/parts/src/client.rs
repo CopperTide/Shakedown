@@ -22,7 +22,12 @@ const DEFAULT_TIMEOUT: Duration = Duration::from_secs(600);
 pub enum CallError {
     /// The part answered with a JSON-RPC error.
     #[error("{message} ({code})")]
-    Part { code: i64, message: String },
+    Part {
+        code: i64,
+        message: String,
+        /// The error's `data`, when it gave one.
+        data: Option<Value>,
+    },
     /// The program is gone; carries the last 20 stderr lines.
     #[error("stopped: {0}")]
     Stopped(String),
@@ -69,8 +74,24 @@ fn kill_group(pid: u32) {
     }
 }
 
-fn substitute(arg: &str, bin_dir: &Path) -> String {
-    arg.replace("${ARENA_BIN_DIR}", &bin_dir.to_string_lossy())
+/// The folders a program is started with: `${ARENA_BIN_DIR}` and `${ARENA_DIR}` in its command,
+/// and its save storage.
+#[derive(Debug, Clone, Copy)]
+pub struct ProgramDirs<'a> {
+    pub bin: &'a Path,
+    /// Left unsubstituted when empty.
+    pub arena: &'a Path,
+    pub saves: &'a Path,
+}
+
+/// A command argument with `${ARENA_BIN_DIR}` and `${ARENA_DIR}` replaced (`${ARENA_DIR}` only
+/// when `arena_dir` is set).
+fn expand_arg(arg: &str, bin_dir: &Path, arena_dir: &Path) -> String {
+    let arg = arg.replace("${ARENA_BIN_DIR}", &bin_dir.to_string_lossy());
+    match arena_dir.as_os_str().is_empty() {
+        true => arg,
+        false => arg.replace("${ARENA_DIR}", &arena_dir.to_string_lossy()),
+    }
 }
 
 /// Env vars a command-mode part inherits; everything else is cleared.
@@ -85,8 +106,7 @@ const PASSED_ENV: [&str; 6] = [
 
 fn command_for(
     m: &Manifest,
-    bin_dir: &Path,
-    saves_root: &Path,
+    dirs: ProgramDirs,
     env: &[(String, String)],
 ) -> Result<(Command, Option<String>)> {
     if let Some(line) = run_override::from_env(&m.name) {
@@ -96,12 +116,12 @@ fn command_for(
             run_override::var_name(&m.name)
         );
         let argv = run_override::argv(&line);
-        return Ok((program_command(m, &argv, bin_dir, saves_root, env), None));
+        return Ok((program_command(m, &argv, dirs, env), None));
     }
     match &m.run {
-        Run::Command(argv) => Ok((program_command(m, argv, bin_dir, saves_root, env), None)),
+        Run::Command(argv) => Ok((program_command(m, argv, dirs, env), None)),
         Run::Image(image) => {
-            let (c, name) = container_command(m, image, saves_root)?;
+            let (c, name) = container_command(m, image, dirs.saves)?;
             Ok((c, Some(name)))
         }
     }
@@ -111,11 +131,11 @@ fn command_for(
 fn program_command(
     m: &Manifest,
     argv: &[String],
-    bin_dir: &Path,
-    saves_root: &Path,
+    dirs: ProgramDirs,
     env: &[(String, String)],
 ) -> Command {
-    let mut args: Vec<String> = argv.iter().map(|a| substitute(a, bin_dir)).collect();
+    let expand = |a: &String| expand_arg(a, dirs.bin, dirs.arena);
+    let mut args: Vec<String> = argv.iter().map(expand).collect();
     if args[0].contains('/') && Path::new(&args[0]).is_relative() {
         args[0] = m.dir.join(&args[0]).to_string_lossy().into_owned();
     }
@@ -126,7 +146,7 @@ fn program_command(
             c.env(k, v);
         }
     }
-    c.env("ARENA_SAVES", saves_root);
+    c.env("ARENA_SAVES", dirs.saves);
     for (k, v) in env {
         c.env(k, v);
     }
@@ -207,6 +227,7 @@ fn parse_reply(line: &str) -> Option<(u64, Reply)> {
                 .and_then(Value::as_str)
                 .unwrap_or("")
                 .to_string(),
+            data: e.get("data").cloned(),
         }),
         None => Ok(v.get("result").cloned().unwrap_or(Value::Null)),
     };
@@ -261,6 +282,16 @@ impl Client {
         Client::spawn_with_env(m, bin_dir, saves_root, &[]).await
     }
 
+    /// Like `spawn_with_env`, with `${ARENA_DIR}` substituted too.
+    pub async fn spawn_in(
+        m: &Manifest,
+        dirs: ProgramDirs<'_>,
+        env: &[(String, String)],
+    ) -> Result<Client> {
+        let (cmd, container) = command_for(m, dirs, env)?;
+        Client::spawn_command(m, cmd, container)
+    }
+
     /// Like `spawn`, with extra environment variables for command mode (they override the ones
     /// passed through). Image mode ignores them: a container gets no environment from arenad.
     pub async fn spawn_with_env(
@@ -269,7 +300,17 @@ impl Client {
         saves_root: &Path,
         env: &[(String, String)],
     ) -> Result<Client> {
-        let (mut cmd, container) = command_for(m, bin_dir, saves_root, env)?;
+        let arena = Path::new("");
+        let dirs = ProgramDirs {
+            bin: bin_dir,
+            arena,
+            saves: saves_root,
+        };
+        Client::spawn_in(m, dirs, env).await
+    }
+
+    /// Starts `cmd` with piped stdio in a process group of its own.
+    fn spawn_command(m: &Manifest, mut cmd: Command, container: Option<String>) -> Result<Client> {
         cmd.stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -380,6 +421,7 @@ impl Client {
         serde_json::from_value(v).map_err(|e| CallError::Part {
             code: -32603,
             message: format!("bad result: {e}"),
+            data: None,
         })
     }
 
@@ -427,5 +469,30 @@ impl Drop for Client {
                 });
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn arena_dir_is_substituted_in_commands() {
+        let (bin, arena) = (Path::new("/b"), Path::new("/a"));
+        let got = expand_arg("${ARENA_DIR}/benchmarks/world", bin, arena);
+        assert_eq!(got, "/a/benchmarks/world");
+        assert_eq!(expand_arg("${ARENA_BIN_DIR}/x", bin, arena), "/b/x");
+    }
+
+    #[test]
+    fn an_error_reply_keeps_its_data() {
+        let line = r#"{"id": 3, "error": {"code": -32602, "message": "no", "data": {"problems": []}}}"#;
+        let (id, reply) = parse_reply(line).unwrap();
+        let Err(CallError::Part { code, data, .. }) = reply else {
+            panic!("an error reply")
+        };
+        assert_eq!((id, code, data), (3, -32602, Some(json!({"problems": []}))));
+        let plain = parse_reply(r#"{"id": 4, "error": {"code": 1, "message": "m"}}"#).unwrap();
+        assert!(matches!(plain.1, Err(CallError::Part { data: None, .. })));
     }
 }
