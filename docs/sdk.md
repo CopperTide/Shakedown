@@ -127,7 +127,11 @@ with driver.run() as run:                        # or driver.run(task="27", url=
 ```
 
 If the block raises, the run is still scored, but it ends `failed` with `driver raised <Type>: <message>`
-(`branch.finish(error=...)` does the same from your own code). When Shakedown starts a driver it sets
+(`branch.finish(error=...)` does the same from your own code). If the run had already ended when the block
+ends (its world time window or its spend limit ended it), the driver says
+`shakedown: the run had already ended (…)` on stderr and the block ends normally.
+`run.agent(id, read_only=True)` registers an agent whose writes are refused, `run.agents` lists the agents
+registered so far, and `run.clock()` is the run's clock and world time (`Branch.clock()`). When Shakedown starts a driver it sets
 `ARENA_URL`, `ARENA_RUN`, `ARENA_BRANCH`, `ARENA_TASK` and, on a fork, `ARENA_FORK_OF`; on a fork
 `run.history(agent_id)` gives what that agent did before the fork point. The adapters in `arena.adapters`
 turn an agent's tools and gateway into your framework's own objects (see [agents](agents.md)).
