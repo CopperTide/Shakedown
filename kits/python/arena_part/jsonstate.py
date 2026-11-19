@@ -17,8 +17,8 @@ from pathlib import Path
 from typing import Callable
 
 from . import disruptions, errors, saves
+from .docspart import DocsPart, pick
 from .params import Refusal, input_schema, normalize, refused
-from .serve import Part
 
 FILE = "state.json"
 
@@ -56,14 +56,14 @@ def event(kind: str, text: str, data: dict) -> dict:
     return {"kind": kind, "text": text, "data": data}
 
 
-class JsonStatePart(Part):
+class JsonStatePart(DocsPart):
     NAME = ""
     TOOLS: dict = {}
     DISRUPTIONS: dict = {}
     WORLD_TOOLS: frozenset = frozenset()
 
     def __init__(self):
-        self.instances: dict[str, Instance] = {}
+        super().__init__()  # self.instances: {id: Instance}
 
     def describe_fields(self) -> dict:
         raise NotImplementedError("describe_fields")
@@ -78,12 +78,6 @@ class JsonStatePart(Part):
         fixed = {"name": self.NAME, "protocol": 1, "restore": {"exact": "save", "approximate": False},
                  "uses_clock": False}
         return {**fixed, **self.describe_fields(), "tools": [t.schema() for t in self.TOOLS.values()]}
-
-    def _instance(self, instance) -> Instance:
-        try:
-            return self.instances[instance]
-        except KeyError:
-            raise errors.unknown(f"unknown instance {instance}") from None
 
     def start(self, instance, config, seed, clock_ms, from_=None):
         config = config or {}
@@ -134,34 +128,16 @@ class JsonStatePart(Part):
         (Path(dir) / FILE).write_text(body)
         return {"bytes": len(body.encode()), "exact": True}
 
-    def _docs_of(self, target) -> dict:
-        if "instance" in target:
-            inst = self._instance(target["instance"])
-            return self.docs(inst.config, inst.state)
-        if "save" in target:
-            saved = _read(saves.root(self.NAME) / target["save"])
-            return self.docs(saved["config"], saved["state"])
-        raise errors.invalid("invalid params: target needs instance or save")
+    def live_docs(self, instance) -> dict:
+        inst = self._instance(instance)
+        return self.docs(inst.config, inst.state)
+
+    def saved_docs(self, save_dir) -> dict:
+        saved = _read(save_dir)
+        return self.docs(saved["config"], saved["state"])
 
     def inspect(self, target, keys):
-        docs = json.loads(json.dumps(self._docs_of(target)))
-        return {"docs": {k: docs.get(k) for k in keys} if keys else docs}
-
-    def diff(self, a, b):
-        da, db = self._docs_of(a), self._docs_of(b)
-        return {"differing": sorted(k for k in da.keys() | db.keys() if da.get(k) != db.get(k))}
-
-    def drop_save(self, save):
-        saves.drop(self.NAME, save)
-
-    def stop(self, instance):
-        self.instances.pop(instance, None)
-
-    def usage(self):
-        return {"bytes": 0}  # every save lives under ARENA_SAVES, which arenad measures itself
-
-    def gc(self, keep):
-        return saves.gc(self.NAME, keep)
+        return {"docs": pick(json.loads(json.dumps(self.docs_of(target))), keys)}
 
 
 def set_scenario(config, state, args, known, overlay, kinds, tools) -> Done:

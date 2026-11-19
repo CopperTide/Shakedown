@@ -20,7 +20,7 @@ def _camera_names(cfg):
 
 
 class IsaacSim(DocsPart):
-    name = NAME
+    NAME = NAME
 
     def __init__(self, backend):
         super().__init__()
@@ -101,5 +101,5 @@ class IsaacSim(DocsPart):
         del dir
         return {"bytes": state.write(saves.root(NAME) / save, self._instance(instance)), "exact": False}
 
-    def _live_docs(self, instance) -> dict:
+    def live_docs(self, instance) -> dict:
         return views.docs_of(self._instance(instance).state())
