@@ -7,6 +7,7 @@ use std::sync::Arc;
 
 use crate::{
     app::AppState,
+    external::{self, Endpoints},
     model::*,
     runner::{self, RunError, StartPoint},
     scenario::Scenario,
@@ -21,15 +22,17 @@ pub struct LaunchSpec<'a> {
     pub rules: Rules,
 }
 
-/// A run just started: its ids.
+/// A run just started: its ids, and each agent's endpoints when an external system drives it.
 #[derive(Debug, Clone)]
 pub struct Launched {
     pub run_id: RunId,
     pub branch_id: BranchId,
+    pub agents: Vec<Endpoints>,
 }
 
 /// Starts the run `spec` describes. arenad's own runners run its team on a spawned task, one
-/// agent after another (or as the runner says).
+/// agent after another (or as the runner says); a run an external system drives goes live, its
+/// team's agents (there may be none yet) started.
 pub async fn launch(state: &Arc<AppState>, spec: LaunchSpec<'_>) -> Result<Launched, RunError> {
     let LaunchSpec {
         task_id,
@@ -38,7 +41,17 @@ pub async fn launch(state: &Arc<AppState>, spec: LaunchSpec<'_>) -> Result<Launc
         rules,
     } = spec;
     let (run_id, ctx) = runner::begin_run(state, task_id, team, rules, scenario).await?;
-    let branch_id = ctx.branch_id.clone();
-    runner::spawn_branch(state, Arc::new(ctx), StartPoint::default());
-    Ok(Launched { run_id, branch_id })
+    let (branch_id, ctx) = (ctx.branch_id.clone(), Arc::new(ctx));
+    let agents = match ctx.rules.runner {
+        Runner::External => external::go(state, &ctx).await?,
+        _ => {
+            runner::spawn_branch(state, ctx, StartPoint::default());
+            vec![]
+        }
+    };
+    Ok(Launched {
+        run_id,
+        branch_id,
+        agents,
+    })
 }

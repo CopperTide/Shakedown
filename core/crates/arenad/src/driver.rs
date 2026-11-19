@@ -267,7 +267,7 @@ pub fn rules_for(conn_id: &str, max_cost_usd: Option<f64>) -> Rules {
 /// do): `None` when it couldn't start (recorded on the slot). Saves over the limit stop the
 /// experiment, as they stop a built-in suite.
 async fn start_run(
-    state: &AppState,
+    state: &Arc<AppState>,
     suite: &Suite,
     slot: &Slot,
     conn_id: &str,

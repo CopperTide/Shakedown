@@ -42,17 +42,33 @@ pub struct Started {
     pub agents: Vec<Endpoints>,
 }
 
-/// Starts a run of `task_id` whose agents an external system drives: its world started, its
-/// clock ticking, the team's agents (there may be none yet) started.
+/// Starts a run of `task_id` whose agents an external system drives (see
+/// [`launch`](crate::launch::launch)): its world started, its clock ticking, the team's agents
+/// (there may be none yet) started.
 pub async fn start(
-    state: &AppState,
+    state: &Arc<AppState>,
     task_id: &str,
     team: Team,
     scenario: &crate::scenario::Scenario,
     rules: Rules,
 ) -> Result<Started, runner::RunError> {
-    let (run_id, ctx) = runner::begin_run(state, task_id, team, rules, scenario).await?;
-    let ctx = Arc::new(ctx);
+    let spec = crate::launch::LaunchSpec {
+        task_id,
+        team,
+        scenario,
+        rules,
+    };
+    let l = crate::launch::launch(state, spec).await?;
+    Ok(Started {
+        run_id: l.run_id,
+        branch_id: l.branch_id,
+        agents: l.agents,
+    })
+}
+
+/// Makes the new branch of an external run live and records its team's agents' starts: each
+/// agent's endpoints.
+pub(crate) async fn go(state: &AppState, ctx: &Arc<BranchCtx>) -> anyhow::Result<Vec<Endpoints>> {
     runner::go_live(state, ctx.clone()).await;
     let mut agents = vec![];
     for spec in &ctx.team.agents {
@@ -60,12 +76,7 @@ pub async fn start(
             .await?;
         agents.push(endpoints(&state.config.self_base, &ctx.branch_id, &spec.id));
     }
-    let branch_id = ctx.branch_id.clone();
-    Ok(Started {
-        run_id,
-        branch_id,
-        agents,
-    })
+    Ok(agents)
 }
 
 /// An agent an external system registers. Only `id` is needed; `kind` defaults to `external`.
