@@ -103,6 +103,27 @@ Shakedown scores the end state of production (error rate, incidents, broken cont
 
 Each stage gets its own plan when the previous one lands.
 
+## Calls made after the builder check (author's calls, correctable)
+
+- **Scoring** uses part 4 of the any-agent project (expected end state: deterministic checks over start and end
+  `inspect` state, confirmed once). The template's data seeds the tasks *and* the traps that make the world hard:
+  a change that passes its own tests but breaks another service's contract, a flaky test, a dependency upgrade
+  with a breaking API, a migration that locks a hot table, an error spike after deploy. Checks score production
+  (error rate and incidents from the observability stack, contract tests across services, tickets done, nothing
+  merged without review) — never the diff. Traps live in template data, not code.
+- **Critical path**: stage 2 starts after Track R of the refactor lands (same core files). Tracks U and K overlap.
+- **Proxy routing**: drivers and agents get `HTTP(S)_PROXY` and base-URL env vars (`GITHUB_API_URL`, `GH_HOST`,
+  Jira base URL…); git uses smart HTTP through the GitHub twin (no SSH); TLS through a per-world CA the driver
+  trusts. Sandboxes (any-agent part 3) are not a dependency. Each proxied request is a step owned by the part whose
+  host it targets; requests to unknown hosts are refused and recorded.
+- **Saves**: `service` gains per-volume save strategies (database: dump/template; files: hard-link copy;
+  stateless: skipped) and saves at fork points and run end only. Observability data is saved with the stack —
+  it is the evidence a comparison cites.
+- **Twin depth**: the endpoints the common clients use (`gh`, PyGithub, Octokit core; `jira` Python client), each
+  covered endpoint tested against the vendor's published OpenAPI schema. Not every endpoint.
+- **Model**: gpt-oss-120b supports tool calls under vLLM; both designs share one pod, run one after the other.
+- **Builder UI**: mockups shown to the user before it is built, in the existing Shakedown look.
+
 ## Left to the builder
 
 Exact REST subsets of the GitHub and Jira twins (driven by what `gh`, PyGithub, and the Jira Python client call in
