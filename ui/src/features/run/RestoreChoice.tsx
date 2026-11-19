@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
 import { restorePlan } from '@/api/branches';
 import { ApiError } from '@/api/client';
+import { useQuery } from '@/hooks/useQuery';
 import { errorMessage } from '@/lib/errors';
 import { REPLAY_NOTE, planLine } from '@/model/restore';
 import type { PartPlan, RestoreMode } from '@/model/types';
@@ -31,15 +31,10 @@ export async function loadPlan(branchId: string, seq: number, mode: RestoreMode)
 
 /** The plan for the current mode, reloaded when it changes. */
 export function useRestorePlan(branchId: string, seq: number, mode: RestoreMode): Plan {
-  const [plan, setPlan] = useState<Plan>({ state: 'loading' });
-  useEffect(() => {
-    let alive = true;
-    setPlan({ state: 'loading' });
-    loadPlan(branchId, seq, mode).then((p) => alive && setPlan(p));
-    return () => { alive = false; };
-  }, [branchId, seq, mode]);
-  return plan;
+  return useQuery(`${branchId}@${seq}:${mode}`, () => loadPlan(branchId, seq, mode)).data ?? LOADING;
 }
+
+const LOADING: Plan = { state: 'loading' };
 
 /** Why the rerun can't start: the branch is running, or the restore is refused; null when it can. */
 export function blockedReason(plan: Plan, running: boolean): string | null {
