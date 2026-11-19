@@ -721,3 +721,14 @@ stage 4's world. Demoable points:
   - `Ledger` (7, 8).
 - **Proportion.** Signatures, tests and data only. No function bodies beyond the fake's answer shape and the data
   files.
+
+## Owner rulings (2026-11-19, delegated: "$50 … don't use it all … do whatever you think is best")
+
+- **Repetitions:** 3 runs per design (about $30 estimated), not 5.
+- **Pod starts:**
+  - The hourly rate is told to the owner just before each start.
+  - The start then goes ahead, provided the spend ledger plus the quoted rate × planned hours stays within $50 total.
+  - No per-start approval wait.
+  - The CLI refuses to start a pod that would cross the cap.
+- **Development runs:** use OpenRouter's gpt-oss only if an OpenRouter key is already configured, counted in the same ledger. Otherwise use short windows on the same RunPod pod.
+- **Account settings:** the RunPod balance and auto-reload belong to the owner. The CLI reads the balance and warns when it exceeds what's left of the budget.
