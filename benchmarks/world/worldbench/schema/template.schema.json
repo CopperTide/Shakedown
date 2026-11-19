@@ -71,13 +71,15 @@
         },
         "max": {
           "type": "integer",
-          "minimum": 0
+          "minimum": 0,
+          "maximum": 1000
         },
         "presets": {
           "type": "array",
           "items": {
             "type": "integer"
-          }
+          },
+          "maxItems": 12
         }
       }
     },
@@ -87,20 +89,7 @@
           "$ref": "#/$defs/include"
         },
         {
-          "type": "object",
-          "required": [
-            "first",
-            "last"
-          ],
-          "additionalProperties": false,
-          "properties": {
-            "first": {
-              "$ref": "#/$defs/nameList"
-            },
-            "last": {
-              "$ref": "#/$defs/nameList"
-            }
-          }
+          "$ref": "#/$defs/namePools"
         }
       ]
     },
@@ -109,26 +98,30 @@
       "minItems": 1,
       "items": {
         "$ref": "#/$defs/system"
-      }
+      },
+      "maxItems": 50
     },
     "roles": {
       "type": "array",
       "items": {
         "$ref": "#/$defs/role"
-      }
+      },
+      "maxItems": 20
     },
     "events": {
       "type": "array",
       "items": {
         "$ref": "#/$defs/event"
-      }
+      },
+      "maxItems": 100
     },
     "tasks": {
       "type": "array",
       "minItems": 1,
       "items": {
         "$ref": "#/$defs/task"
-      }
+      },
+      "maxItems": 100
     },
     "links": {
       "type": "array",
@@ -190,7 +183,8 @@
       "minItems": 1,
       "items": {
         "$ref": "#/$defs/text"
-      }
+      },
+      "maxItems": 200
     },
     "ids": {
       "type": "array",
@@ -361,7 +355,8 @@
               "properties": {
                 "fixed": {
                   "type": "integer",
-                  "minimum": 0
+                  "minimum": 0,
+                  "maximum": 1000
                 }
               }
             }
@@ -705,7 +700,8 @@
       "items": {
         "$ref": "#/$defs/namedCheck"
       },
-      "$comment": "the expected end state format (docs/protocol.md, Scoring by named checks)"
+      "$comment": "the expected end state format (docs/protocol.md, Scoring by named checks)",
+      "maxItems": 500
     },
     "namedCheck": {
       "type": "object",
@@ -920,6 +916,23 @@
         }
       ],
       "$comment": "people the user adds are <role>-added-001…, so no role may end in -added"
+    },
+    "namePools": {
+      "type": "object",
+      "required": [
+        "first",
+        "last"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "first": {
+          "$ref": "#/$defs/nameList"
+        },
+        "last": {
+          "$ref": "#/$defs/nameList"
+        }
+      }
     }
-  }
+  },
+  "$comment": "Sizes and list lengths are bounded so that no template can stall the builder (worldbench/limits.py bounds its files and what they expand to)"
 }

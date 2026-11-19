@@ -25,7 +25,7 @@ def _validator(definition: str | None = None) -> jsonschema.Draft202012Validator
 def check(data, folder: Path) -> None:
     """Raises the first TemplateError of `data`, the parsed template.yaml of `folder`."""
     _schema(data)
-    _included_checks(data, folder)
+    _included(data, folder)
     _unique_ids(data)
     _known_systems(data)
     _ranges(data)
@@ -41,13 +41,18 @@ def _schema(data, definition: str | None = None, path: str = "") -> None:
         raise TemplateError(path, error.message)
 
 
-def _included_checks(data, folder: Path) -> None:
-    """A task's checks in their own file are held to the same schema as checks written in place."""
+def _included(data, folder: Path) -> None:
+    """Name pools and a task's checks in their own file are held to the same schema as when written in place."""
+    if isinstance(data.get("names"), str):
+        _included_file(data["names"], folder, "names", "namePools")
     for i, task in enumerate(data["tasks"]):
         if isinstance(task["checks"], str):
-            path = f"tasks[{i}].checks"
-            rel = task["checks"][1:]
-            _schema(read_include(rel, folder, path), "checks", f"{path}@{rel}")
+            _included_file(task["checks"], folder, f"tasks[{i}].checks", "checks")
+
+
+def _included_file(include: str, folder: Path, path: str, definition: str) -> None:
+    rel = include[1:]
+    _schema(read_include(rel, folder, path), definition, f"{path}@{rel}")
 
 
 def _first_repeat(items, key: str, path: str) -> None:

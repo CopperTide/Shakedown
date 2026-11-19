@@ -1,9 +1,11 @@
 """A built world written as a benchmark package: world.json, its copied folders, and arena-package.toml."""
 import hashlib
 import json
+import os
 import shutil
 from pathlib import Path
 
+from .errors import TemplateError
 from .generate import Result, world_json
 
 _PROJECT = "${ARENA_DIR}/benchmarks/world"
@@ -35,6 +37,14 @@ def manifest(world: dict, t, version: str) -> str:
     ])
 
 
+def _no_links(folder: str, names: list) -> list:
+    """copytree's `ignore`: a link in a copied folder (made after the preview checked it) is refused, not followed."""
+    for n in names:
+        if os.path.islink(os.path.join(folder, n)):
+            raise TemplateError("", f"{os.path.join(folder, n)} is a link")
+    return []
+
+
 def write_package(result: Result, t, dir: Path) -> dict:
     """Writes the package into `dir` (which must not exist; nothing is left behind on failure) and answers
     `{name, title, version}`; the version is the template's plus the first 8 hex of world.json's sha256."""
@@ -44,7 +54,7 @@ def write_package(result: Result, t, dir: Path) -> dict:
     try:
         (dir / "world.json").write_text(text)
         for src, dst in result.files:
-            shutil.copytree(src, dir / dst)
+            shutil.copytree(src, dir / dst, ignore=_no_links)
         (dir / "arena-package.toml").write_text(manifest(result.world, t, version))
     except BaseException:
         shutil.rmtree(dir, ignore_errors=True)

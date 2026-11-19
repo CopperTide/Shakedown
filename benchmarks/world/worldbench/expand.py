@@ -1,13 +1,11 @@
 """Filling a template's values for one world: placeholders and includes (the template format, "Placeholders" and
 "Includes")."""
-import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-import yaml
-
+from . import limits
 from .errors import TemplateError, key_path
 
 WORLD_DIR = "${WORLD_DIR}"
@@ -27,14 +25,25 @@ class Context:
     params: dict
 
 
-def expand(value, ctx: Context, base: Path, files: list, path: str = "") -> Any:
+@dataclass
+class _Budget:
+    """What one expansion may still produce (`limits.MAX_EXPANDED` values), and the includes it is inside."""
+    left: int
+    chain: list = field(default_factory=list)
+
+
+def expand(value, ctx: Context, base: Path, files: list, path: str = "", budget: _Budget | None = None) -> Any:
     """`value` with every string filled; folder includes are appended to `files` as `(source, "files/<path>")`."""
+    budget = budget or _Budget(limits.MAX_EXPANDED)
+    budget.left -= 1
+    if budget.left < 0:
+        raise TemplateError(path, f"expands to more than {limits.MAX_EXPANDED} values")
     if isinstance(value, dict):
-        return {k: expand(v, ctx, base, files, key_path(path, k)) for k, v in value.items()}
+        return {k: expand(v, ctx, base, files, key_path(path, k), budget) for k, v in value.items()}
     if isinstance(value, list):
-        return [expand(v, ctx, base, files, key_path(path, i)) for i, v in enumerate(value)]
+        return [expand(v, ctx, base, files, key_path(path, i), budget) for i, v in enumerate(value)]
     if isinstance(value, str):
-        return _include(value[1:], ctx, base, files, path) if is_include(value) else fill(value, ctx, path)
+        return _include(value[1:], ctx, base, files, path, budget) if is_include(value) else fill(value, ctx, path)
     return value
 
 
@@ -93,30 +102,41 @@ def read_include(rel: str, base: Path, path: str) -> Any:
     target = inside(base, rel, path)
     if not target.is_file():
         raise TemplateError(path, f"no file {rel}")
-    text = target.read_text()
-    return text if target.suffix in _TEXT else _parse(text, target.suffix, f"{path}@{rel}")
+    text = limits.read_text(target, rel, path)
+    return text if target.suffix in _TEXT else limits.parse(text, target.suffix, rel, f"{path}@{rel}")
 
 
-def _include(rel: str, ctx: Context, base: Path, files: list, path: str) -> Any:
+def _include(rel: str, ctx: Context, base: Path, files: list, path: str, budget: _Budget) -> Any:
+    target = inside(base, rel, path)
     if rel.endswith("/"):
-        return _folder(rel, inside(base, rel, path), base, files, path)
+        return _folder(rel, target, base, files, path)
+    if target in budget.chain:
+        raise TemplateError(path, f"@{rel} includes itself")
+    if len(budget.chain) >= limits.MAX_INCLUDE_DEPTH:
+        raise TemplateError(path, f"includes nest deeper than {limits.MAX_INCLUDE_DEPTH}")
     value, inner = read_include(rel, base, path), f"{path}@{rel}"
-    if Path(rel).suffix in _TEXT:
+    if target.suffix in _TEXT:
         return fill(value, ctx, inner)
-    return expand(value, ctx, base, files, inner)
+    budget.chain.append(target)
+    try:
+        return expand(value, ctx, base, files, inner, budget)
+    finally:
+        budget.chain.pop()
 
 
 def _folder(rel: str, target: Path, base: Path, files: list, path: str) -> str:
+    """`${WORLD_DIR}/files/<the folder's place in the template>/`; the folder is copied there, so its place is the
+    resolved one (`a/../b/` is `b/`), and no two folders copied may hold one another."""
     if not target.is_dir():
         raise TemplateError(path, f"no folder {rel}")
-    entry = (base / rel.rstrip("/"), f"files/{rel}")
-    if entry not in files:
-        files.append(entry)
-    return f"{WORLD_DIR}/files/{rel}"
-
-
-def _parse(text: str, suffix: str, path: str) -> Any:
-    try:
-        return json.loads(text) if suffix == ".json" else yaml.safe_load(text)
-    except (ValueError, yaml.YAMLError) as e:
-        raise TemplateError(path, f"can't parse: {e}") from None
+    place = target.relative_to(base.resolve()).as_posix()
+    if place == ".":
+        raise TemplateError(path, f"@{rel} is the whole template folder")
+    dest = f"files/{place}/"
+    for _, other in files:
+        if other != dest and (other.startswith(dest) or dest.startswith(other)):
+            raise TemplateError(path, f"@{place}/ overlaps @{other.removeprefix('files/')}")
+    limits.check_folder(target, f"{place}/", path)
+    if (base / place, dest) not in files:
+        files.append((base / place, dest))
+    return f"{WORLD_DIR}/{dest}"

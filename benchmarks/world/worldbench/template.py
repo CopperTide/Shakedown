@@ -4,9 +4,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-import yaml
-
-from . import validate
+from . import limits, validate
 from .errors import TemplateError
 
 __all__ = ["Template", "TemplateError", "form", "list_templates", "load_template"]
@@ -44,10 +42,7 @@ def load_template(folder: Path) -> Template:
     file = folder / "template.yaml"
     if not file.is_file():
         raise TemplateError("", f"no template.yaml in {folder}")
-    try:
-        data = yaml.safe_load(file.read_text())
-    except yaml.YAMLError as e:
-        raise TemplateError("", f"template.yaml can't be parsed: {e}") from None
+    data = limits.parse(limits.read_text(file, "template.yaml", ""), ".yaml", "template.yaml", "")
     validate.check(data, folder)
     return Template(id=data["id"], version=data["version"], name=data["name"], summary=data["summary"],
                     dir=folder, data=data)
@@ -55,12 +50,12 @@ def load_template(folder: Path) -> Template:
 
 def list_templates(roots: list[Path]) -> list[Template]:
     """Every loadable template under `roots`, sorted by id; a bad one (or a second of one id) is logged and
-    skipped."""
+    skipped, whatever is wrong with it."""
     found: dict[str, Template] = {}
     for folder in _folders(roots):
         try:
             t = load_template(folder)
-        except TemplateError as e:
+        except Exception as e:  # noqa: BLE001 - one template, however broken, never hides the others
             print(f"worldbench: skipping the template in {folder}: {e}", file=sys.stderr)
             continue
         if t.id in found:
@@ -72,8 +67,12 @@ def list_templates(roots: list[Path]) -> list[Template]:
 
 def _folders(roots: list[Path]):
     for root in roots:
-        if root.is_dir():
-            yield from (d for d in sorted(root.iterdir()) if (d / "template.yaml").is_file())
+        try:
+            folders = sorted(root.iterdir()) if root.is_dir() else []
+        except OSError as e:
+            print(f"worldbench: skipping the templates in {root}: {e}", file=sys.stderr)
+            continue
+        yield from (d for d in folders if (d / "template.yaml").is_file())
 
 
 def form(t: Template) -> dict:
