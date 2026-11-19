@@ -1,5 +1,6 @@
 """Issues and comments: what the REST API and the people's acts do to them, in one place."""
 from . import notices, records, users, webhooks
+from .actions import runs
 from .errors import invalid
 from .repos import full_name
 from .rest import issue_shapes, pull_shapes
@@ -36,6 +37,8 @@ def set_state(v, repo, row, state: str, by: str, reason: str | None = None) -> N
         records.reopen(v.db, row["id"], v.now())
     records.touch(v.db, row["id"], v.now(), state_reason=reason if state == "closed" else "reopened")
     _hook(v, repo, records.issue(v.db, repo["id"], row["number"]), "closed" if state == "closed" else "reopened", by)
+    if row["is_pull"] and state == "open":
+        runs.on_pull_request(v, repo, records.pull(v.db, repo["id"], row["number"]), by)
 
 
 def comment(v, repo, row, by: str, body: str):

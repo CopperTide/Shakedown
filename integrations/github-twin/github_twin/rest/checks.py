@@ -7,6 +7,7 @@ from ..errors import invalid, not_found
 from ..repos import full_name
 from ..times import iso
 from ..users import node_id
+from . import shapes
 from .api import created
 
 TIMES = ("started_at", "completed_at")
@@ -19,9 +20,7 @@ def _ms(value: str | None) -> int | None:
 def run_json(call, repo, r) -> dict:
     fn = full_name(repo)
     api = call.urls.repo_api(fn, f"/check-runs/{r['id']}")
-    prs = [{"id": p["id"], "number": p["number"], "url": call.urls.repo_api(fn, f"/pulls/{p['number']}"),
-            "head": {"ref": p["head_ref"], "sha": p["head_sha"], "repo": _mini(call, repo)},
-            "base": {"ref": p["base_ref"], "sha": p["base_sha"], "repo": _mini(call, repo)}}
+    prs = [shapes.pr_minimal(call, repo, p)
            for p in records.pulls(call.db, repo["id"], "i.state = 'open' AND p.head_sha = ?", (r["head_sha"],))]
     return {"id": r["id"], "node_id": node_id("CheckRun", r["id"]), "head_sha": r["head_sha"], "name": r["name"],
             "external_id": r["external_id"], "url": api, "html_url": call.urls.repo_html(fn, f"/runs/{r['id']}"),
@@ -33,14 +32,14 @@ def run_json(call, repo, r) -> dict:
             "check_suite": {"id": r["suite_id"]}, "app": None, "pull_requests": prs}
 
 
-def _mini(call, repo) -> dict:
-    return {"id": repo["id"], "url": call.urls.repo_api(full_name(repo)), "name": repo["name"]}
-
-
 def _suite(call, repo, sha: str) -> int:
-    call.db.execute("INSERT OR IGNORE INTO check_suites(repo_id, head_sha, created_ms) VALUES (?, ?, ?)",
-                    (repo["id"], sha, call.now()))
-    return call.db.execute("SELECT id FROM check_suites WHERE repo_id = ? AND head_sha = ?", (repo["id"], sha)).fetchone()[0]
+    """The commit's suite for check runs made through the API (Actions runs have one each)."""
+    row = call.db.execute("SELECT id FROM check_suites WHERE repo_id = ? AND head_sha = ? AND kind = 'api'",
+                          (repo["id"], sha)).fetchone()
+    if row is not None:
+        return row[0]
+    return call.db.execute("INSERT INTO check_suites(repo_id, head_sha, created_ms) VALUES (?, ?, ?)",
+                           (repo["id"], sha, call.now())).lastrowid
 
 
 def _fields(call, b: dict) -> dict:
@@ -55,6 +54,22 @@ def _fields(call, b: dict) -> dict:
     return out
 
 
+def insert(v, repo, suite_id: int, sha: str, fields: dict):
+    """A new check run on `sha` in suite `suite_id`; its row."""
+    cols = ", ".join(fields)
+    cur = v.db.execute(f"INSERT INTO check_runs(repo_id, suite_id, head_sha, {cols}) VALUES (?, ?, ?{', ?' * len(fields)})",
+                       (repo["id"], suite_id, sha, *fields.values()))
+    return _run(v, repo, cur.lastrowid)
+
+
+def update(v, repo, run_id: int, fields: dict):
+    """Set `fields` of a check run; its row before and after."""
+    before = _run(v, repo, run_id)
+    if fields:
+        v.db.execute(f"UPDATE check_runs SET {', '.join(f'{k} = ?' for k in fields)} WHERE id = ?", (*fields.values(), run_id))
+    return before, _run(v, repo, run_id)
+
+
 def _run(call, repo, run_id) -> dict:
     r = call.db.execute("SELECT * FROM check_runs WHERE id = ? AND repo_id = ?", (int(run_id), repo["id"])).fetchone()
     if r is None:
@@ -62,15 +77,17 @@ def _run(call, repo, run_id) -> dict:
     return r
 
 
-def _completed(call, repo, before, after) -> None:
-    webhooks.fire(call, repo, "check_run", call.login, "completed" if after["status"] == "completed" else "created",
-                  check_run=run_json(call, repo, after))
+def changed(v, repo, before, after, sender: str) -> None:
+    """What follows a check run made or changed by `sender`: its webhook, and when it was the last on
+    its commit to complete, the people told."""
+    webhooks.fire(v, repo, "check_run", sender, "completed" if after["status"] == "completed" else "created",
+                  check_run=run_json(v, repo, after))
     if after["status"] != "completed" or (before is not None and before["status"] == "completed"):
         return
-    conclusion = ci.runs_conclusion(ci.runs(call.db, repo["id"], after["head_sha"]))
+    conclusion = ci.runs_conclusion(ci.runs(v.db, repo["id"], after["head_sha"]))
     if conclusion is not None:
-        prs = [p["number"] for p in records.pulls(call.db, repo["id"], "i.state = 'open' AND p.head_sha = ?", (after["head_sha"],))]
-        notices.checks_completed(call.ctx, full_name(repo), after["head_sha"], conclusion, sorted(prs))
+        prs = [p["number"] for p in records.pulls(v.db, repo["id"], "i.state = 'open' AND p.head_sha = ?", (after["head_sha"],))]
+        notices.checks_completed(v.ctx, full_name(repo), after["head_sha"], conclusion, sorted(prs))
 
 
 def create_run(call):
@@ -78,23 +95,15 @@ def create_run(call):
     sha = call.repos.ref(full_name(repo), b.get("head_sha", ""))
     if not b.get("name") or sha is None:
         raise invalid("Validation Failed", [{"resource": "CheckRun", "code": "invalid", "field": "head_sha"}])
-    f = {"status": "queued", **_fields(call, b)}
-    cols = ", ".join(f)
-    cur = call.db.execute(f"INSERT INTO check_runs(repo_id, suite_id, head_sha, {cols}) VALUES (?, ?, ?{', ?' * len(f)})",
-                          (repo["id"], _suite(call, repo, sha), sha, *f.values()))
-    r = _run(call, repo, cur.lastrowid)
-    _completed(call, repo, None, r)
+    r = insert(call, repo, _suite(call, repo, sha), sha, {"status": "queued", **_fields(call, b)})
+    changed(call, repo, None, r, call.login)
     return created(run_json(call, repo, r))
 
 
 def update_run(call):
     repo = call.repo()
-    before = _run(call, repo, call.req.params["check_run_id"])
-    f = _fields(call, call.body())
-    if f:
-        call.db.execute(f"UPDATE check_runs SET {', '.join(f'{k} = ?' for k in f)} WHERE id = ?", (*f.values(), before["id"]))
-    after = _run(call, repo, before["id"])
-    _completed(call, repo, before, after)
+    before, after = update(call, repo, _run(call, repo, call.req.params["check_run_id"])["id"], _fields(call, call.body()))
+    changed(call, repo, before, after, call.login)
     return run_json(call, repo, after)
 
 

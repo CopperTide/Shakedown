@@ -4,6 +4,7 @@ that is merged, and what counted is recorded at merge."""
 import json
 
 from . import ci, events, merging, notices, records, users, webhooks
+from .actions import runs
 from .errors import GithubError, invalid
 from .repos import full_name
 from .rest import pull_shapes
@@ -51,6 +52,7 @@ def open_pull(v, repo, by: str, head: str, base: str | None, title: str, body: s
     notices.pr_opened(v.ctx, full_name(repo), pr)
     notices.mentions(v.ctx, full_name(repo), pr["number"], by, body)
     _hook(v, repo, pr, "opened", by)
+    runs.on_pull_request(v, repo, pr, by)
     return pr
 
 

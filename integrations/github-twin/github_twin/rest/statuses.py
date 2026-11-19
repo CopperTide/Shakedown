@@ -30,13 +30,19 @@ def create_status(call):
     repo, b = call.repo(), call.body()
     if b.get("state") not in STATES:
         raise invalid("Validation Failed", [{"resource": "Status", "field": "state", "code": "custom"}])
-    sha = _sha(call, repo)
-    cur = call.db.execute("INSERT INTO statuses(repo_id, sha, state, context, description, target_url, creator, created_ms) "
-                          "VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (repo["id"], sha, b["state"], b.get("context") or "default",
-                                                              b.get("description"), b.get("target_url"), call.login, call.now()))
-    row = call.db.execute("SELECT * FROM statuses WHERE id = ?", (cur.lastrowid,)).fetchone()
-    webhooks.fire(call, repo, "status", call.login, None, sha=sha, **{k: row[k] for k in ("state", "context", "description", "target_url")})
+    row = post(call, repo, _sha(call, repo), b["state"], b.get("context") or "default", b.get("description"),
+               b.get("target_url"), call.login)
     return created(status_json(call, repo, row))
+
+
+def post(v, repo, sha: str, state: str, context: str, description: str | None, target_url: str | None, creator: str):
+    """A new status on `sha` by `creator`, and its webhook; its row."""
+    cur = v.db.execute("INSERT INTO statuses(repo_id, sha, state, context, description, target_url, creator, created_ms) "
+                       "VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (repo["id"], sha, state, context, description, target_url,
+                                                           creator, v.now()))
+    row = v.db.execute("SELECT * FROM statuses WHERE id = ?", (cur.lastrowid,)).fetchone()
+    webhooks.fire(v, repo, "status", creator, None, sha=sha, **{k: row[k] for k in ("state", "context", "description", "target_url")})
+    return row
 
 
 def combined(call):

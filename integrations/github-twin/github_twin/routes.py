@@ -2,6 +2,7 @@
 from arena_part.twin import Response, Router
 
 from . import auth, events, git_http, rest, users
+from .actions import logs
 from .graphql import endpoint as graphql
 from .repos import Repos
 from .rest.api import not_found_response
@@ -46,6 +47,8 @@ def build() -> GithubRouter:
     router = GithubRouter()
     rest.register(router)
     router.add("POST", "/api/graphql", graphql.handle)
+    router.add("GET", "/_logs/jobs/{id}", logs.serve_job)
+    router.add("GET", "/_logs/runs/{id}", logs.serve_run)
     router.add("GET", "/{owner}/{repo}/info/refs", _git("info/refs"))
     router.add("POST", "/{owner}/{repo}/git-upload-pack", _git("git-upload-pack"))
     router.add("POST", "/{owner}/{repo}/git-receive-pack", _git("git-receive-pack"))

@@ -7,8 +7,11 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
+import time
+
 import pytest
 
+from fake_docker import FakeDocker
 from github_twin.part import GithubTwin
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -17,9 +20,12 @@ TOKEN = "t0ken-for-tests"
 START_MS = 1_773_122_400_000
 
 
+ACTIONS = {"enabled": True, "runners": {"ubuntu-latest": "base:1"}, "image_prefix": "shakedown"}
+
+
 def config(**extra):
     c = {"hosts": [{"host": HOST}], "org": "acme", "token": TOKEN, "default_user": "coder",
-         "installed_version": "3.20.0",
+         "installed_version": "3.20.0", "actions": dict(ACTIONS),
          "repos": [{"name": "app", "source": str(FIXTURES / "repos" / "app"), "default_branch": "main",
                     "description": "A sample service", "private": True}]}
     c.update(extra)
@@ -63,11 +69,19 @@ class Twin:
         return self.part.inspect({"instance": self.instance}, [])["docs"]
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *args, **kwargs):
+        return None   # a redirect is the answer the test reads
+
+
+OPENER = urllib.request.build_opener(_NoRedirect)
+
+
 def raw(up, method, path, body=None, headers=None) -> Answer:
     data = body if isinstance(body, (bytes, type(None))) else json.dumps(body).encode()
     req = urllib.request.Request(up + path, data=data, method=method, headers=dict(headers or {}))
     try:
-        with urllib.request.urlopen(req, timeout=30) as r:
+        with OPENER.open(req, timeout=30) as r:
             return Answer(r.status, {k.lower(): v for k, v in r.headers.items()}, r.read())
     except urllib.error.HTTPError as e:
         return Answer(e.code, {k.lower(): v for k, v in e.headers.items()}, e.read())
@@ -135,7 +149,7 @@ def saves_root(monkeypatch, tmp_path):
 
 
 def started(cfg=None) -> Twin:
-    part = GithubTwin(clock=Clock())
+    part = GithubTwin(clock=Clock(), docker=FakeDocker())
     part.start("i", cfg or config(), 1, 0)
     return Twin(part)
 
@@ -227,3 +241,89 @@ def front(twin, tmp_path):
     f.ca, f.twin = ca, twin
     yield f
     f.close()
+
+
+# --- Actions ------------------------------------------------------------------------------
+
+
+class ManualClock:
+    """World time that moves only when a test moves it."""
+
+    def __init__(self):
+        self.ms = START_MS
+
+    def __call__(self):
+        return self.ms
+
+
+def actions_config(**actions):
+    c = config()
+    c["repos"][0]["source"] = str(FIXTURES / "repos" / "ci-app")
+    c["actions"] = {**ACTIONS, **actions}
+    return c
+
+
+def actions_twin(tmp_path, docker=None, cfg=None) -> Twin:
+    """acme/app with a CI workflow, Actions on a fake Docker, a clone at `t.clone`, world time `t.clock`."""
+    clock, docker = ManualClock(), docker or FakeDocker()
+    part = GithubTwin(clock=clock, docker=docker)
+    part.start("i", cfg or actions_config(), 1, 0)
+    t = Twin(part)
+    t.docker, t.clock = docker, clock
+    git(tmp_path, "clone", "-q", t.git_url("acme", "app"), "app", creds=t.token)
+    t.clone = tmp_path / "app"
+    return t
+
+
+@pytest.fixture
+def twin_fake_docker(tmp_path):
+    t = actions_twin(tmp_path)
+    yield t
+    t.part.stop("i")
+
+
+def runs_of(t: Twin, instance: str = "i") -> list:
+    return api(Twin(t.part, instance), "GET", "/api/v3/repos/acme/app/actions/runs?per_page=100")["workflow_runs"]
+
+
+def drain(t: Twin, instance: str = "i", timeout_s: float = 15) -> list:
+    """Wait until every run is completed; the runs."""
+    deadline = time.monotonic() + timeout_s
+    while True:
+        runs = runs_of(t, instance)
+        if all(r["status"] == "completed" for r in runs) or time.monotonic() > deadline:
+            assert all(r["status"] == "completed" for r in runs), [(r["id"], r["status"]) for r in runs]
+            return runs
+        time.sleep(0.05)
+
+
+def wait_for(cond, timeout_s: float = 15, what: str = "condition"):
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        out = cond()
+        if out:
+            return out
+        time.sleep(0.05)
+    raise AssertionError(f"timed out waiting for {what}")
+
+
+def push_commit(t: Twin, branch: str, name: str, text: str, message=None) -> str:
+    """A commit on `branch` (made from origin's, or main's when new), pushed; its sha."""
+    git(t.clone, "fetch", "-q", "origin", creds=t.token)
+    start = f"origin/{branch}" if git(t.clone, "rev-parse", "--verify", "-q", f"origin/{branch}", check=False).returncode == 0 \
+        else "origin/main"
+    git(t.clone, "checkout", "-q", "-B", branch, start)
+    sha = commit(t.clone, name, text, message)
+    push(t.clone, t.token, f"HEAD:refs/heads/{branch}")
+    return sha
+
+
+# --- live Docker tests --------------------------------------------------------------------
+def pytest_collection_modifyitems(config, items):
+    """Tests under `live/` run real Docker: only when asked with `-m live`, so the default gate needs none."""
+    if "live" in (config.option.markexpr or ""):
+        return
+    skip = pytest.mark.skip(reason="runs real Docker: run with -m live")
+    for item in items:
+        if "/tests/live/" in str(item.path):
+            item.add_marker(skip)

@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS statuses (
   context TEXT NOT NULL, description TEXT, target_url TEXT, creator TEXT NOT NULL, created_ms INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS check_suites (
   id INTEGER PRIMARY KEY, repo_id INTEGER NOT NULL REFERENCES repos(id), head_sha TEXT NOT NULL,
-  created_ms INTEGER NOT NULL, UNIQUE (repo_id, head_sha));
+  kind TEXT NOT NULL DEFAULT 'api', created_ms INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS check_runs (
   id INTEGER PRIMARY KEY, repo_id INTEGER NOT NULL REFERENCES repos(id), suite_id INTEGER NOT NULL REFERENCES check_suites(id),
   head_sha TEXT NOT NULL, name TEXT NOT NULL, status TEXT NOT NULL, conclusion TEXT, started_ms INTEGER,
@@ -55,3 +55,20 @@ CREATE TABLE IF NOT EXISTS hooks (
 CREATE TABLE IF NOT EXISTS deliveries (
   id INTEGER PRIMARY KEY, hook_id INTEGER NOT NULL, event TEXT NOT NULL, guid TEXT NOT NULL, payload TEXT NOT NULL,
   state TEXT NOT NULL DEFAULT 'pending', status_code INTEGER, error TEXT, created_ms INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS workflows (
+  id INTEGER PRIMARY KEY, repo_id INTEGER NOT NULL REFERENCES repos(id), path TEXT NOT NULL, name TEXT NOT NULL,
+  state TEXT NOT NULL DEFAULT 'active', created_ms INTEGER NOT NULL, updated_ms INTEGER NOT NULL, UNIQUE (repo_id, path));
+CREATE TABLE IF NOT EXISTS workflow_runs (
+  id INTEGER PRIMARY KEY, repo_id INTEGER NOT NULL REFERENCES repos(id), workflow_id INTEGER NOT NULL REFERENCES workflows(id),
+  suite_id INTEGER NOT NULL REFERENCES check_suites(id), name TEXT NOT NULL, path TEXT NOT NULL, run_number INTEGER NOT NULL, run_attempt INTEGER NOT NULL DEFAULT 1,
+  event TEXT NOT NULL, head_branch TEXT NOT NULL, head_sha TEXT NOT NULL, actor TEXT NOT NULL, triggering_actor TEXT NOT NULL,
+  display_title TEXT NOT NULL, status TEXT NOT NULL, conclusion TEXT, spec TEXT, error TEXT, pr_numbers TEXT NOT NULL DEFAULT '[]',
+  cancel_requested INTEGER NOT NULL DEFAULT 0, created_ms INTEGER NOT NULL, updated_ms INTEGER NOT NULL, run_started_ms INTEGER);
+CREATE TABLE IF NOT EXISTS jobs (
+  id INTEGER PRIMARY KEY REFERENCES check_runs(id), run_id INTEGER NOT NULL REFERENCES workflow_runs(id),
+  attempt INTEGER NOT NULL, job_key TEXT NOT NULL, name TEXT NOT NULL, image TEXT NOT NULL, labels TEXT NOT NULL,
+  status TEXT NOT NULL, conclusion TEXT, created_ms INTEGER NOT NULL, started_ms INTEGER, completed_ms INTEGER,
+  deploy_state TEXT, deploy_started_ms INTEGER, deploy_ok INTEGER, deploy_error TEXT);
+CREATE TABLE IF NOT EXISTS job_steps (
+  job_id INTEGER NOT NULL REFERENCES jobs(id), number INTEGER NOT NULL, name TEXT NOT NULL, status TEXT NOT NULL,
+  conclusion TEXT, started_ms INTEGER, completed_ms INTEGER, log TEXT NOT NULL DEFAULT '', PRIMARY KEY (job_id, number));

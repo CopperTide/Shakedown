@@ -4,8 +4,12 @@ from pathlib import Path
 from arena_part.twin import HttpTwin
 
 from . import act, docs, routes, users
+from .actions import runs
+from .actions.runner import RealDocker
+from .actions.worker import Worker
 from .hooks_delivery import Deliverer
 from .repos import Repos, is_immutable
+from .view import View
 
 SCHEMA_SQL = (Path(__file__).parent / "schema.sql").read_text()
 
@@ -22,12 +26,15 @@ def route_env(config: dict, host: str) -> dict:
 def _seed_repo(ctx, spec: dict) -> None:
     owner, now = ctx.config["org"], ctx.now_ms()
     author = users.person(ctx.config, ctx.config["default_user"], now)
-    Repos(ctx.files).init_from(Path(spec["source"]), f"{owner}/{spec['name']}", spec.get("default_branch", "main"), author)
+    sha = Repos(ctx.files).init_from(Path(spec["source"]), f"{owner}/{spec['name']}", spec.get("default_branch", "main"),
+                                     author)
     ctx.store.conn.execute(
         "INSERT INTO repos(owner, name, description, private, default_branch, created_ms, updated_ms, pushed_ms) "
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         (owner, spec["name"], spec.get("description"), int(spec.get("private", True)),
          spec.get("default_branch", "main"), now, now, now))
+    repo = ctx.store.conn.execute("SELECT * FROM repos WHERE owner = ? AND name = ?", (owner, spec["name"])).fetchone()
+    runs.register(View(ctx), repo, sha)
 
 
 class GithubTwin(HttpTwin):
@@ -38,21 +45,31 @@ class GithubTwin(HttpTwin):
     READS = ["POST */git-upload-pack"]
     HONOURS_READONLY = True
 
-    def __init__(self, clock=None):
+    def __init__(self, clock=None, docker=None):
         super().__init__(clock)
         self._deliverers: dict = {}
+        self._workers: dict = {}
+        self.docker = docker or RealDocker()
 
     def router(self):
         return routes.build()
 
     def start(self, instance, config, seed, clock_ms, from_=None):
         super().start(instance, config, seed, clock_ms, from_)
-        self._deliverers[instance] = Deliverer(self.ctx(instance)).start()
+        ctx = self.ctx(instance)
+        self._deliverers[instance] = Deliverer(ctx).start()
+        if runs.enabled(ctx.config):
+            if from_ is not None:
+                with ctx.lock, ctx.atomic():
+                    runs.restart_interrupted(View(ctx))
+                ctx.changed = True
+            self._workers[instance] = Worker(ctx, self.docker).start()
 
     def stop(self, instance):
-        deliverer = self._deliverers.pop(instance, None)
-        if deliverer is not None:
-            deliverer.stop()
+        for workers in (self._workers, self._deliverers):
+            worker = workers.pop(instance, None)
+            if worker is not None:
+                worker.stop()
         super().stop(instance)
 
     def act(self, ctx, person, action, args):

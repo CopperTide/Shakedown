@@ -1,6 +1,7 @@
 """The docs `inspect` reads (and checks score): repositories, branches, pull requests, issues,
-checks and hooks."""
+checks, workflow runs and hooks."""
 from . import ci, records
+from .actions import jobs
 from .repos import Repos, full_name
 
 
@@ -34,6 +35,14 @@ def _checks(db, repo) -> dict:
         for sha in shas for runs in [ci.runs(db, repo["id"], sha)]}
 
 
+def _runs(db, repo) -> dict:
+    rows = db.execute("SELECT * FROM workflow_runs WHERE repo_id = ? ORDER BY id", (repo["id"],)).fetchall()
+    return {f"run/{full_name(repo)}/{r['id']}": {
+        "workflow": r["name"], "event": r["event"], "head_branch": r["head_branch"], "head_sha": r["head_sha"],
+        "status": r["status"], "conclusion": r["conclusion"], "attempt": r["run_attempt"], "error": r["error"],
+        "jobs": {j["name"]: j["conclusion"] for j in jobs.jobs_of(db, r["id"], r["run_attempt"])}} for r in rows}
+
+
 def _hooks(db) -> dict:
     rows = db.execute("SELECT h.id, COUNT(d.id) FILTER (WHERE d.state != 'pending') AS done, "
                       "COUNT(d.id) FILTER (WHERE d.state = 'failed') AS failed FROM hooks h "
@@ -46,7 +55,7 @@ def build(ctx) -> dict:
     for repo in db.execute("SELECT * FROM repos ORDER BY id").fetchall():
         out[f"repo/{full_name(repo)}"] = {"default_branch": repo["default_branch"], "private": bool(repo["private"]),
                                           "description": repo["description"]}
-        for part in (_branches(repos, db, repo), _pulls(db, repo), _issues(db, repo), _checks(db, repo)):
+        for part in (_branches(repos, db, repo), _pulls(db, repo), _issues(db, repo), _checks(db, repo), _runs(db, repo)):
             out.update(part)
     out.update(_hooks(db))
     return out

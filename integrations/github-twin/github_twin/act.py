@@ -6,6 +6,7 @@ import tempfile
 from arena_part.twin import Done
 
 from . import events, issue_rules, pull_rules, records, users
+from .actions import jobs
 from .errors import GithubError, not_found
 from .gitcmd import attempt
 from .repos import full_name
@@ -85,7 +86,20 @@ def _key(repo, row) -> str:
     return f"{'pull' if row['is_pull'] else 'issue'}/{full_name(repo)}/{row['number']}"
 
 
-ACTIONS = {"open_pr": open_pr, "review": review, "merge": merge, "comment": comment, "close": close}
+def deploy_result(v: View, person: str, args: dict) -> Done:
+    """The world's answer to a deploy step (`{job_id, ok, error?}`); the job waiting for it goes on."""
+    job_id = str(args.get("job_id", ""))
+    if not job_id.isdigit():
+        raise GithubError(422, "deploy_result needs the job_id of the deploy")
+    refused = jobs.deploy_result(v, int(job_id), bool(args.get("ok")), args.get("error"))
+    if refused is not None:
+        raise GithubError(422, refused)
+    run = jobs.run_row(v.db, jobs.job_row(v.db, int(job_id))["run_id"])
+    repo = v.db.execute("SELECT * FROM repos WHERE id = ?", (run["repo_id"],)).fetchone()
+    return Done({"job_id": job_id}, writes=[f"run/{full_name(repo)}/{run['id']}"])
+
+
+ACTIONS = {"deploy_result": deploy_result, "open_pr": open_pr, "review": review, "merge": merge, "comment": comment, "close": close}
 
 
 def run(ctx, person: str, action: str, args: dict) -> Done:
