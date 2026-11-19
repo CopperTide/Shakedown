@@ -60,10 +60,8 @@ pub fn resumed(events: &[Event], team: &Team) -> Option<Resumed> {
 }
 
 fn idle_wakes(events: &[Event]) -> u32 {
-    let idle = events
-        .iter()
-        .filter(|e| e.kind == EventKind::Wake && str_of(e, "reason") == "idle");
-    idle.count() as u32
+    let wakes = events.iter().filter_map(Event::decode::<WakePayload>);
+    wakes.filter(|w| w.reason == "idle").count() as u32
 }
 
 /// True when `agent`'s last wake has no idle after it.
@@ -109,12 +107,12 @@ fn recipients(e: &Event, ids: &[&str]) -> Vec<String> {
 
 /// The seqs of the mail each agent's wakes took.
 fn delivered(events: &[Event]) -> HashSet<(String, i64)> {
-    let wakes = events.iter().filter(|e| e.kind == EventKind::Wake);
-    let each = wakes.flat_map(|e| {
+    let wakes = events
+        .iter()
+        .filter_map(|e| Some((e, e.decode::<WakePayload>()?)));
+    let each = wakes.flat_map(|(e, wake)| {
         let agent = e.agent.clone().unwrap_or_default();
-        let seqs = e.payload["mail"].as_array().cloned().unwrap_or_default();
-        seqs.into_iter()
-            .filter_map(move |s| Some((agent.clone(), s.as_i64()?)))
+        wake.mail.into_iter().map(move |seq| (agent.clone(), seq))
     });
     each.collect()
 }
@@ -165,12 +163,7 @@ fn call_line(e: &Event) -> String {
 fn line(e: &Event) -> Option<String> {
     let p = &e.payload;
     Some(match e.kind {
-        EventKind::Wake if str_of(e, "reason") == "start" => "## Your first turn began".into(),
-        EventKind::Wake => format!(
-            "## You were woken ({}) with:\n{}",
-            str_of(e, "reason"),
-            str_of(e, "input").trim()
-        ),
+        EventKind::Wake => wake_line(e.decode()?),
         EventKind::ToolCall => call_line(e),
         EventKind::Delegation => format!(
             "- You gave `{}` work: {}",
@@ -187,12 +180,25 @@ fn line(e: &Event) -> Option<String> {
             str_of(e, "to"),
             str_of(e, "text")
         ),
-        EventKind::Idle if p["ok"] == false => {
-            format!("- Your turn failed: {}", str_of(e, "error"))
-        }
-        EventKind::Idle => format!("- You ended your turn saying: {}", str_of(e, "text")),
+        EventKind::Idle => idle_line(e.decode()?),
         _ => return None,
     })
+}
+
+/// A wake in a history: the first, or why the agent was woken and with what.
+fn wake_line(wake: WakePayload) -> String {
+    match wake.reason.as_str() {
+        "start" => "## Your first turn began".into(),
+        reason => format!("## You were woken ({reason}) with:\n{}", wake.input.trim()),
+    }
+}
+
+/// An idle in a history: the turn failed (with why), or what the agent ended it saying.
+fn idle_line(idle: IdlePayload) -> String {
+    match idle.ok {
+        Some(false) => format!("- Your turn failed: {}", idle.error.unwrap_or_default()),
+        _ => format!("- You ended your turn saying: {}", idle.text),
+    }
 }
 
 fn history(events: &[Event], agent: &str) -> String {
