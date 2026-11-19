@@ -255,6 +255,21 @@ fn run_start_records_these_keys() {
     })
 }
 
+/// The arena's own time is recorded on the events: `RunStart` carries the world's restore, the
+/// next event the time `RunStart` took to record, and the check the time scoring took.
+#[test]
+fn a_runs_overhead_goes_on_its_events() {
+    run(async {
+        let fx = setup("overhead", world("overhead", &[])).await;
+        let (_, evs) = fx.external_run(Value::Null).await;
+        let ms = |e: &Event, cat: &str| e.payload["overhead_ms"][cat].as_f64().unwrap_or(0.0);
+        assert!(ms(&evs[0], "restore") > 0.0, "{}", evs[0].payload);
+        assert!(ms(&evs[1], "record") > 0.0, "{:?}", evs[1]);
+        let check = evs.iter().find(|e| e.kind == EventKind::Check).unwrap();
+        assert!(ms(check, "score") > 0.0, "{}", check.payload);
+    })
+}
+
 /// A view after the setup and after each step that wrote (not after a read), and a fork has the
 /// views before its fork point, then its own.
 #[test]
