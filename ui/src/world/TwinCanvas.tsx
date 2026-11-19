@@ -4,7 +4,7 @@ import { cn } from '@/lib/cn';
 import { type TwinLayout, type ZoneBox, fitsSideBySide, splitAreas, stableHeight, twinLayout } from './layout';
 import { TwinTile, ZoneGlyph } from './TwinTile';
 import { type ViewChanges, itemsById, statusMark } from './twin';
-import type { TwinArea, TwinFlow, TwinView } from './types';
+import type { TwinArea, TwinFlow, TwinView } from '@/model/twin';
 import { useWidth } from './useWorld';
 
 function ZoneHead({ area, className }: { area: TwinArea; className?: string }) {

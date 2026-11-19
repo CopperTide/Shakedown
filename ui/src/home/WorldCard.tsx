@@ -2,7 +2,7 @@ import { NativeSelect } from '../components/ui/input';
 import type { ScenarioState } from '../scenario/ScenarioBuilder';
 import { chosen, optionWords } from '../scenario/scenario';
 import { taskName, ticketTitle, worldName } from './summary';
-import type { Task } from '../types';
+import type { Task } from '@/model/types';
 
 /** The task by its plain name; the ticket heading is its tooltip. */
 export function TaskPicker({ tasks, task, onTask, busy }: { tasks: Task[] | null; task: Task | null; onTask: (id: string) => void; busy: boolean }) {

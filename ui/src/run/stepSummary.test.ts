@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Event, Team } from '../types';
+import type { Event, Team } from '@/model/types';
 import { stepSummary } from './stepSummary';
 
 const team: Team = { id: 't', name: 'T', agents: [{ id: 'quality', name: 'Quality assurance', kind: 'claude_code', model: 'haiku', prompt: '' }] };

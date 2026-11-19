@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { type Target, getReview, startReview } from './api';
-import type { CompareReview, RunReview, StoredReview } from './types';
+import type { CompareReview, RunReview, StoredReview } from '@/model/review';
 import { errorMessage } from '@/lib/errors';
 
 /** How often a running review is asked about. */

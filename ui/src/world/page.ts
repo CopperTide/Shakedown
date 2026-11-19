@@ -1,9 +1,9 @@
 // The world view's words: who drove the agents, and what the step on screen was.
-import { isWorldActor } from '../control/lanes';
-import type { Event, Team } from '../types';
+import { isWorldActor } from '@/model/lanes';
+import type { Event, Team } from '@/model/types';
 import { type Happening, type Track, buildTrack, happenings } from './scrub';
 import { type ViewChanges, diffViews, viewIndexAt } from './twin';
-import type { BranchView, TwinView } from './types';
+import type { BranchView, TwinView } from '@/model/twin';
 import { asRecord } from '@/lib/record';
 
 

@@ -2,8 +2,8 @@
 // next model call. Time runs left to right; a step's bar ends when it was recorded and starts
 // that long before when its duration is known; arena's own work in a step (gate checks,
 // recording, saves) is listed under it. Gaps are waiting or unseen work.
-import { type WorldInfo, actionWord, classify, worldInfo } from '../control/actions';
-import type { Event } from '../types';
+import { type WorldInfo, actionWord, classify, worldInfo } from '@/model/actions';
+import type { Event } from '@/model/types';
 import { asRecord } from '@/lib/record';
 
 export type SpanKind = 'turn' | 'step' | 'overhead';

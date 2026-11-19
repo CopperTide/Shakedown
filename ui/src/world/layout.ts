@@ -1,7 +1,7 @@
 // Where the twin's overview draws things: areas as zones left to right in process order
 // (fill line, QC lab, warehouse, carriers, customers, then any other kind), approvals as a rail on
 // the right, items as tiles in their zone, and flows as arrows from tile to tile.
-import type { AreaKind, TwinArea, TwinFlow, TwinView } from './types';
+import type { AreaKind, TwinArea, TwinFlow, TwinView } from '@/model/twin';
 
 export const PROCESS_ORDER: AreaKind[] = ['plant', 'lab', 'warehouse', 'carriers', 'customers'];
 export const RAIL_KINDS: AreaKind[] = ['approvals'];

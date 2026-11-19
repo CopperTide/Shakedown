@@ -1,6 +1,6 @@
 // A state as a glyph and a word; `abnormal` is the only thing that adds colour (ISA-101).
-import type { SuiteStatus } from '../control/types';
-import type { BranchStatus } from '../types';
+import type { SuiteStatus } from '@/model/report';
+import type { BranchStatus } from '@/model/types';
 
 export interface Mark {
   glyph: string;

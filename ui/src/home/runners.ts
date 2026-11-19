@@ -1,6 +1,6 @@
 // How each runner is named where a run is set up: the Advanced choice on the Run screen, the
 // suite dialog and the team picker.
-import type { Runner } from '../types';
+import type { Runner } from '@/model/types';
 
 /** The runners a person picks from, in the order offered; `chain` is the plain one. */
 export const RUNNERS: { id: Runner; label: string }[] = [

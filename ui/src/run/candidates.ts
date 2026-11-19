@@ -2,7 +2,7 @@
 // (`{label, value, ci95?, unit?, better}`, docs/protocol.md "Optimisation studies") is one candidate
 // evaluated, in step order, with the best feasible value so far. The check's measure with the same
 // label gives the target and the recommendation's verified value. Pure functions only.
-import type { CheckPayload, Event, Measure, ToolCallPayload } from '../types';
+import type { CheckPayload, Event, Measure, ToolCallPayload } from '@/model/types';
 
 export interface Objective {
   label: string;

@@ -1,4 +1,4 @@
-import type { Branch } from '../types';
+import type { Branch } from '@/model/types';
 
 /** Branches in tree order with their depth (parent before children, oldest first). */
 export function branchTree(branches: Branch[]): { branch: Branch; depth: number }[] {

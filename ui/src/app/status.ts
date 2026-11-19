@@ -1,5 +1,5 @@
 // The status bar's lines: disk use and the agent CLIs found.
-import type { Health } from '@/types';
+import type { Health } from '@/model/types';
 
 const gb = (n: number) => {
   const v = n / 2 ** 30;

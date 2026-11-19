@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Event } from '../types';
+import type { Event } from '@/model/types';
 import { clockText, flowMark, flowOf, pausedIn, pausesOf } from './flow';
 import { humanize, resultOf } from './result';
 

@@ -1,12 +1,12 @@
 // The twin's scrubber: a track over the branch's steps, a stop at every view, marks where a
 // disruption fired, a call was refused and the branch forked; what happened at a step; and where
 // a rewind (the run's ⋯) forks.
-import { isWorldActor } from '../control/lanes';
+import { isWorldActor } from '@/model/lanes';
 import { type Nav, moveIn } from '@/lib/keys';
-import { actionsOf } from '../control/actions';
-import type { Event, Team } from '../types';
+import { actionsOf } from '@/model/actions';
+import type { Event, Team } from '@/model/types';
 import { isViewEvent } from './twin';
-import type { BranchView } from './types';
+import type { BranchView } from '@/model/twin';
 import { asRecord } from '@/lib/record';
 
 export type TrackMarkKind = 'disruption' | 'refusal' | 'fork';

@@ -1,6 +1,6 @@
 // The result banner of a finished run: Passed or Failed (or Stopped, or an error) and one plain
 // sentence on why: the first safety violation, else the first failed check, in words.
-import type { BranchDetail, CheckPayload } from '../types';
+import type { BranchDetail, CheckPayload } from '@/model/types';
 import { type Flow, flowOf } from './flow';
 
 export interface Result {

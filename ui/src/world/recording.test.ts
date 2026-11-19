@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Event } from '../types';
+import type { Event } from '@/model/types';
 import { arenaSecondAt, clockText } from './recording';
 
 const ev = (seq: number, payload: unknown) => ({ seq, kind: 'tool_call', payload } as unknown as Event);

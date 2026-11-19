@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Branch, RunSummary } from '../types';
+import type { Branch, RunSummary } from '@/model/types';
 import { branchRows, runIsRunning, runTitle } from './runsTable';
 
 const branch = (id: string, run: string, status: Branch['status'], parent: string | null = null, at = '2026-11-06T10:00:00Z'): Branch =>

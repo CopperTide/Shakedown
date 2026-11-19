@@ -8,7 +8,7 @@ import { Field, Input, Textarea } from '../components/ui/input';
 import { PageBody } from '../components/ui/page';
 import { Segmented } from '../components/ui/segmented';
 import { cn } from '@/lib/cn';
-import type { AgentSpec } from '../types';
+import type { AgentSpec } from '@/model/types';
 import {
   type ConnectForm, type ConnectFrom, type ConnectKind, type ConnectReturn, checkBody, connectedAgent, connectedTeam, emptyForm, formProblem, saveConnected,
 } from './connect';

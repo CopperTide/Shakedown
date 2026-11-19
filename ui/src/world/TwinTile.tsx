@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react';
 import { StatusMark } from '../components/ui/status';
 import { cn } from '@/lib/cn';
 import { isIdLike, itemFactParts, itemFacts, statusMark } from './twin';
-import type { AreaKind, TwinItem } from './types';
+import type { AreaKind, TwinItem } from '@/model/twin';
 
 /** A simple equipment shape per kind of area, in the process view's style. */
 export function ZoneGlyph({ kind }: { kind: AreaKind }) {

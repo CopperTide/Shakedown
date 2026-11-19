@@ -4,9 +4,9 @@ import { useHealth } from '@/hooks/useHealth';
 import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover';
 import { ProviderStatusLine } from '../ProviderFields';
 import { bestProviders, checkProviders, useCheckedProviders } from '@/hooks/useProviders';
-import { providerSummary } from '@/providers';
+import { providerSummary } from '@/model/providers';
 import { cn } from '@/lib/cn';
-import type { Health, ProviderStatus } from '../types';
+import type { Health, ProviderStatus } from '@/model/types';
 
 /** API mode in one calm line; the full list (each provider, why, and Check) one click away. */
 function ApiMode({ statuses }: { statuses: ProviderStatus[] }) {

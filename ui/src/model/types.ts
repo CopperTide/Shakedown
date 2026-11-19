@@ -1,6 +1,6 @@
 // Mirrors arenad's model.rs / fork.rs / compare.rs / recorded.rs (serde snake_case).
-import type { Board } from './board/board';
-import type { RecordedScenario, ScenarioOptions } from './scenario/types';
+import type { Board } from '@/board/board';
+import type { RecordedScenario, ScenarioOptions } from './scenario';
 
 /** `http`: an agent someone deployed, reached at its URL (`arena-agent/1`); arenad doesn't run it, it calls it. */
 export type AgentKind = 'claude_code' | 'codex' | 'open' | 'external' | 'http';

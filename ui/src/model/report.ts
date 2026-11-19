@@ -1,6 +1,6 @@
 // Mirrors arenad's suite/ (report.rs, outcome.rs) and world/systems.rs (serde snake_case).
-import type { RecordedScenario } from '../scenario/types';
-import type { BranchStatus, NamedCheck, Runner, Team } from '../types';
+import type { RecordedScenario } from './scenario';
+import type { BranchStatus, NamedCheck, Runner, Team } from './types';
 
 /** What kind of system a part is (`describe.system`); absent when its integration does not say. */
 export interface SystemInfo {

@@ -1,6 +1,6 @@
 // The scenario builder's model: which disruptions are on, their parameters, the templates filled
 // in, the plain-words preview and the `scenario` a run or suite is started with.
-import type { Disruption, DisruptionOption, ParamSpec, ParamValue, RecordedScenario, ScenarioChoice, ScenarioOptions } from './types';
+import type { Disruption, DisruptionOption, ParamSpec, ParamValue, RecordedScenario, ScenarioChoice, ScenarioOptions } from '@/model/scenario';
 
 /** Per offered disruption: on or off, and its parameter values. */
 export type Selection = Record<string, { on: boolean; params: Record<string, ParamValue> }>;

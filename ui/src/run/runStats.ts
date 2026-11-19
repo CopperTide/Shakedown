@@ -1,7 +1,7 @@
 // The run header's figures: steps, reads and writes, abnormal actions, and the check.
-import { actionsOf } from '../control/actions';
+import { actionsOf } from '@/model/actions';
 import { type Mark, passMark } from '@/lib/mark';
-import type { Event } from '../types';
+import type { Event } from '@/model/types';
 
 export interface RunStats {
   steps: number;

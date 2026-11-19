@@ -1,8 +1,8 @@
 // A run's state on any page: its status and whether its world was restored approximately.
 import { StatusMark, Tag } from '@/components/ui/status';
 import { runMark } from '@/lib/mark';
-import { APPROXIMATE_LABEL, isApproximate, planLine } from '@/restore';
-import type { BranchStatus, RestoredPart } from '@/types';
+import { APPROXIMATE_LABEL, isApproximate, planLine } from '@/model/restore';
+import type { BranchStatus, RestoredPart } from '@/model/types';
 
 /** A branch's status: shape + word, then colour (only when abnormal). */
 export function StatusChip({ status }: { status: BranchStatus }) {

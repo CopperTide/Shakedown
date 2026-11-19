@@ -7,9 +7,9 @@ import { Split } from '../components/ui/split';
 import { ErrorState, LoadingState, Notice } from '../components/ui/state';
 import { StatusMark } from '../components/ui/status';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
-import { buildLanes, spanOf } from '../control/lanes';
-import { costIsUnknown, teamProviders } from '@/providers';
-import { worldLine } from '../restore';
+import { buildLanes, spanOf } from '@/model/lanes';
+import { costIsUnknown, teamProviders } from '@/model/providers';
+import { worldLine } from '@/model/restore';
 import ActionTimeline from '../run/ActionTimeline';
 import EventLog from '../run/EventLog';
 import ForkPanel from '../run/ForkPanel';
@@ -32,7 +32,7 @@ import BestSoFar from '../run/BestSoFar';
 import { studyOf } from '../run/candidates';
 import { RunReview } from '../review/RunReview';
 import RunMenu from '../run/RunMenu';
-import type { Branch, BranchDetail, Event, RunStartPayload } from '../types';
+import type { Branch, BranchDetail, Event, RunStartPayload } from '@/model/types';
 import { forkNotice } from '../run/forkNotice';
 
 /** How the run's agents ran, from its `run_start` (old runs: a chain with a handoff required). */

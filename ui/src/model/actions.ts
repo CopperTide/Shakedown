@@ -1,9 +1,9 @@
 // Which system each step touched and how: read from the run's own record (`run_start.systems`,
 // `run_start.tools`, each tool call's `part`), never guessed. Runs recorded before Arena kept this
 // say "unknown".
-import { savedParts } from '../restore';
-import type { Event } from '../types';
-import type { Effect, SystemInfo, ToolInfo } from './types';
+import { savedParts } from './restore';
+import type { Event } from './types';
+import type { Effect, SystemInfo, ToolInfo } from './report';
 import { asRecord } from '@/lib/record';
 
 export interface WorldInfo {

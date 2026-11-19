@@ -1,6 +1,6 @@
 import { cn } from '@/lib/cn';
 import { EmptyState } from '../components/ui/state';
-import type { Event } from '../types';
+import type { Event } from '@/model/types';
 import { type Trace, type TraceSpan, spanLength, traceOf } from './waterfall';
 
 /** A bar's fill: the turn neutral, a step in the alarm colour when abnormal, writes darker than reads, arena's own work lightest. */

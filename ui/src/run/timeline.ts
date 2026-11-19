@@ -1,5 +1,5 @@
-import { LOCAL_COST_SOURCE, providerId } from '@/providers';
-import type { AgentKind, AgentSpec, Branch, Change, Event } from '../types';
+import { LOCAL_COST_SOURCE, providerId } from '@/model/providers';
+import type { AgentKind, AgentSpec, Branch, Change, Event } from '@/model/types';
 
 export function costLabel(source: string | null | undefined): string {
   if (source === 'api_equivalent_estimate') return 'API-equivalent estimate';

@@ -1,10 +1,10 @@
 import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { views as fetchViews } from '../api';
 import { hasModifier, isTyping, navOf } from '@/lib/keys';
-import type { BranchDetail } from '../types';
+import type { BranchDetail } from '@/model/types';
 import { moveStop, snapStop } from './scrub';
 import { normalizeViews, viewsFromEvents } from './twin';
-import type { BranchView } from './types';
+import type { BranchView } from '@/model/twin';
 import { errorMessage } from '@/lib/errors';
 
 /**

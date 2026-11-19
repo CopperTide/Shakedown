@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { Rows, Side } from './Compare';
-import type { CompareResponse, CompareSide } from '../types';
+import type { CompareResponse, CompareSide } from '@/model/types';
 
 const text = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
 

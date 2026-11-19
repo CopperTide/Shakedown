@@ -1,4 +1,4 @@
-import type { StoredReview } from './types';
+import type { StoredReview } from '@/model/review';
 
 /** The reviewer as a person reads it: "Claude Code sonnet", "openrouter deepseek/…". */
 export function modelName(label: string): string {

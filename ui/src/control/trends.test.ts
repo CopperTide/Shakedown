@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { actionsOf } from './actions';
-import { events } from './fixtures';
+import { actionsOf } from '@/model/actions';
+import { events } from '@/model/fixtures';
 import { actionsPerBucket, bucketFor, cumulative, latencies, modelCalls, perMinute } from './trends';
 
 describe('trends', () => {

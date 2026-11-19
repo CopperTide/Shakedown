@@ -2,7 +2,7 @@ import { ChevronDown, ChevronUp, RotateCcw, Sparkles } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { Button } from '../components/ui/button';
 import { ErrorState } from '../components/ui/state';
-import type { CompareReview, RunReview, StoredReview } from './types';
+import type { CompareReview, RunReview, StoredReview } from '@/model/review';
 
 /** "Reviewing…": a calm line while the model reads the record. */
 export function Reviewing({ what }: { what: string }) {

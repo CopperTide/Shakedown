@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { actionsOf } from './actions';
-import { events, team } from './fixtures';
+import { actionsOf } from '@/model/actions';
+import { events, team } from '@/model/fixtures';
 import { abnormal, countsLine, processView } from './process';
 
 describe('process view', () => {

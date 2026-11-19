@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { RunOutcome, RunRow, SuiteReport } from '../control/types';
-import type { NamedCheck } from '../types';
+import type { RunOutcome, RunRow, SuiteReport } from '@/model/report';
+import type { NamedCheck } from '@/model/types';
 import { dodge, measureRows, measureText, position } from './measures';
 
 const OEE = { label: 'Line 2 OEE', unit: '%', better: 'higher' as const, target: 85, reference: { label: 'Random search, 30 simulations', value: 77.2 } };

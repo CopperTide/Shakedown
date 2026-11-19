@@ -1,6 +1,6 @@
 // A small recorded run for the control views' tests: a coordinator asks quality to open a
 // deviation; quality reads the LIMS, writes the QMS, asks for an approval, and has one write refused.
-import type { Event, EventKind, Team } from '../types';
+import type { Event, EventKind, Team } from './types';
 
 export const team: Team = {
   id: 't', name: 'T',

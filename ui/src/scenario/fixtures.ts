@@ -1,6 +1,6 @@
 // The pharma benchmark's `scenario_options` as the contract (section B) describes them, for tests
 // and the dev fixture API.
-import type { ScenarioOptions } from './types';
+import type { ScenarioOptions } from '@/model/scenario';
 
 export const scenarioOptions: ScenarioOptions = {
   base: ['cvx-2611-em-excursion', 'short-dated-alternate', 'reallocation-rejected'],

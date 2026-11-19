@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { duration, fmt } from '@/lib/format';
-import type { RunOutcome, RunRow, Spread, SuiteReport } from '../control/types';
-import type { Team } from '../types';
+import type { RunOutcome, RunRow, Spread, SuiteReport } from '@/model/report';
+import type { Team } from '@/model/types';
 import { METRICS, bestOf, checkLabel, checkMatrix, columnOf, settleDrafts, setupTeam, setupsProblem, wilson } from './model';
 
 const outcome = (passed: boolean, over: Partial<RunOutcome> = {}): RunOutcome => ({

@@ -2,7 +2,7 @@ import { useEffect, useSyncExternalStore } from 'react';
 import { providers as fetchProviders } from '@/api';
 import { useHealth } from '@/hooks/useHealth';
 import { errorMessage } from '@/lib/errors';
-import type { ProviderStatus } from '@/types';
+import type { ProviderStatus } from '@/model/types';
 
 /** The last `/api/providers` answer, shared by every page (and the status line). */
 let checked: ProviderStatus[] | null = null;

@@ -1,8 +1,8 @@
 // The figures some checks measure (a study's verified objective, the simulations it used), per setup:
 // each scored run's value as a dot on a scale every setup shares, and a headline — the best run when
 // the measure says which way is better, else the mean. Pure functions only.
-import type { SuiteReport } from '../control/types';
-import type { Measure } from '../types';
+import type { SuiteReport } from '@/model/report';
+import type { Measure } from '@/model/types';
 
 export interface MeasureDot {
   value: number;

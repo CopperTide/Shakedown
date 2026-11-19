@@ -1,6 +1,6 @@
-import { agentModelLine } from '@/providers';
+import { agentModelLine } from '@/model/providers';
 import { Table, Td, Th, Tr } from '../components/ui/table';
-import type { Cost, Metrics, Overhead } from '../types';
+import type { Cost, Metrics, Overhead } from '@/model/types';
 
 /** What each kind of arena overhead is, in the order they are shown. */
 export const OVERHEAD_KINDS: [keyof Overhead, string][] = [

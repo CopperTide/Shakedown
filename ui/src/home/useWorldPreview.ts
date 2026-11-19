@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { call, runs as fetchRuns, views as fetchViews } from '@/api';
-import type { BenchmarkDescription } from '@/types';
-import type { TwinView } from '@/world/types';
+import type { BenchmarkDescription } from '@/model/types';
+import type { TwinView } from '@/model/twin';
 
 /**
  * The world before a run: the benchmark's name, and its digital twin as the newest run first saw it

@@ -2,12 +2,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ReactElement, ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { modesLine } from '@/app/status';
-import { ProviderSelect, ProviderStatusLine } from './ProviderFields';
+import { ProviderSelect, ProviderStatusLine } from '@/ProviderFields';
 import { agentModelLine, modelProblem, providerOptions, providerSummary } from './providers';
 import { bestProviders, checkProviders, resetProviders } from '@/hooks/useProviders';
-import { AgentFields } from './pages/Team';
-import { AgentEdit, applied, forkProblem } from './run/ForkPanel';
-import { changedFields, formatCost } from './run/timeline';
+import { AgentFields } from '@/pages/Team';
+import { AgentEdit, applied, forkProblem } from '@/run/ForkPanel';
+import { changedFields, formatCost } from '@/run/timeline';
 import { teamForRun } from './team';
 import type { AgentSpec, ProviderStatus } from './types';
 

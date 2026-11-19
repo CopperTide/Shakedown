@@ -1,6 +1,6 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { reviewSettings } from './api';
-import type { ReviewSettings } from './types';
+import type { ReviewSettings } from '@/model/review';
 import { errorMessage } from '@/lib/errors';
 
 /** This browser's choice (⋯ → AI review): on unless turned off. */

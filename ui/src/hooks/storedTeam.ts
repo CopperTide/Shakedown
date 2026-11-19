@@ -1,7 +1,7 @@
 // The team new runs use, kept in this browser (`arena.team.v1`), else the benchmark's default.
 import { defaultTeam, suggestedTeams } from '@/api';
-import { isUntouched } from '@/team';
-import type { Team } from '@/types';
+import { isUntouched } from '@/model/team';
+import type { Team } from '@/model/types';
 
 export const TEAM_KEY = 'arena.team.v1';
 

@@ -2,7 +2,7 @@
 // groups, with "hands work to" arrows. A team from CopperTide keeps its own places; any other is
 // laid out from how it runs (in order: left to right in rows, with an arrow to the next; at once:
 // one row; a lead dispatching: the lead above its team, an arrow to each). Each card says, in a line, what the agent does and what it runs on.
-import type { AgentSpec, Runner, Team } from '../types';
+import type { AgentSpec, Runner, Team } from '@/model/types';
 
 export const CARD_W = 216;
 export const CARD_H = 112;

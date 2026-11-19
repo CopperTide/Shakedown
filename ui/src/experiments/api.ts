@@ -1,5 +1,5 @@
 import { call, post } from '../api';
-import type { Experiment, ListedExperiment, NewExperiment } from './types';
+import type { Experiment, ListedExperiment, NewExperiment } from '@/model/experiment';
 
 const id = encodeURIComponent;
 

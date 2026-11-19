@@ -8,9 +8,9 @@ import { ModelHint, ModelInput, ProviderSelect } from '../ProviderFields';
 import { Button } from '../components/ui/button';
 import { Field, NativeSelect, Textarea } from '../components/ui/input';
 import { ErrorState } from '../components/ui/state';
-import { MODE_LABEL, modelProblem, providerId, providerOf } from '@/providers';
+import { MODE_LABEL, modelProblem, providerId, providerOf } from '@/model/providers';
 import { useProviderList } from '@/hooks/useProviders';
-import type { AgentKind, AgentSpec, BranchDetail, Change, ForkResponse, ProviderStatus, RestoreMode, Team } from '../types';
+import type { AgentKind, AgentSpec, BranchDetail, Change, ForkResponse, ProviderStatus, RestoreMode, Team } from '@/model/types';
 import { errorMessage } from '@/lib/errors';
 
 const MODES: AgentKind[] = ['claude_code', 'codex', 'open'];

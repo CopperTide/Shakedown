@@ -6,7 +6,7 @@ import { Dialog, DialogContent } from '../components/ui/dialog';
 import { Textarea } from '../components/ui/input';
 import { ErrorState } from '../components/ui/state';
 import { cn } from '@/lib/cn';
-import type { Team } from '../types';
+import type { Team } from '@/model/types';
 import { importTeam } from './importTeam';
 
 /** Import a team: a CopperTide design or an Arena team, picked, dropped or pasted. */

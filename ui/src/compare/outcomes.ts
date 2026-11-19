@@ -1,10 +1,10 @@
 // The compare page's outcome table: what each branch achieved, read from what the API already
 // returns (the check's named checks, the metrics, the events and the last view of the twin).
-import { actionsOf } from '../control/actions';
+import { actionsOf } from '@/model/actions';
 import { costLabel } from '../run/timeline';
-import type { BranchDetail, CompareSide, Event, NamedCheck } from '../types';
+import type { BranchDetail, CompareSide, Event, NamedCheck } from '@/model/types';
 import { viewsFromEvents } from '../world/twin';
-import type { TwinView } from '../world/types';
+import type { TwinView } from '@/model/twin';
 import { asRecord } from '@/lib/record';
 
 

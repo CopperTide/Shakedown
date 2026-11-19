@@ -8,7 +8,7 @@ import { Button } from '../components/ui/button';
 import WhatMatters from '../review/WhatMatters';
 import { stepHref } from '../review/present';
 import { normalizeViews } from '../world/twin';
-import type { BranchView, TwinView } from '../world/types';
+import type { BranchView, TwinView } from '@/model/twin';
 import { ApproximateMark, StatusChip } from '@/components/marks';
 import { PageBody, PageHeader } from '../components/ui/page';
 import { Panel, PanelHeader } from '../components/ui/panel';
@@ -17,11 +17,11 @@ import { Tag } from '../components/ui/status';
 import { CodeBlock } from '../components/ui/code-block';
 import { StepLabel } from '../components/ui/step-label';
 import { cn } from '@/lib/cn';
-import { agentModelLine, costIsUnknown, teamProviders } from '@/providers';
-import { APPROXIMATE_NOTE, isApproximate, notComparedLine } from '../restore';
+import { agentModelLine, costIsUnknown, teamProviders } from '@/model/providers';
+import { APPROXIMATE_NOTE, isApproximate, notComparedLine } from '@/model/restore';
 import { pretty } from '../run/Inspector';
 import { diffCounts, formatCost, jsonDiff } from '../run/timeline';
-import type { BranchDetail, CompareResponse, CompareSide, Event, RowDiff, Team } from '../types';
+import type { BranchDetail, CompareResponse, CompareSide, Event, RowDiff, Team } from '@/model/types';
 import { errorMessage } from '@/lib/errors';
 
 function StepView({ label, id, run, ev }: { label: string; id: string; run?: string; ev: Event | undefined }) {

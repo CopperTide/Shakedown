@@ -6,10 +6,10 @@ import RunMenu from '../run/RunMenu';
 import { EmptyState, ErrorState, LoadingState } from '../components/ui/state';
 import { useBranch } from '../run/useBranch';
 import { recordedLine } from '../scenario/scenario';
-import type { BranchDetail, RunStartPayload } from '../types';
+import type { BranchDetail, RunStartPayload } from '@/model/types';
 import { drivenLine } from '../world/page';
 import TwinView, { useWorldView } from '../world/TwinView';
-import type { BranchView } from '../world/types';
+import type { BranchView } from '@/model/twin';
 import { useViews } from '../world/useWorld';
 import { taskOf } from '../run/runStats';
 

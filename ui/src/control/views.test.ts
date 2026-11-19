@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import type { Event } from '../types';
-import { actionsOf } from './actions';
-import { ev, events, runStart, team } from './fixtures';
+import type { Event } from '@/model/types';
+import { actionsOf } from '@/model/actions';
+import { ev, events, runStart, team } from '@/model/fixtures';
 import { equipShape, flowGraph, flowLabel, flowStroke } from './flowLayout';
-import { missingPermit, permitOf } from './permit';
+import { missingPermit, permitOf } from '@/model/permit';
 import { processView } from './process';
 
 describe('flow graph', () => {

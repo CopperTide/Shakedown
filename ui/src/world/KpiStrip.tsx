@@ -1,5 +1,5 @@
 import { cn } from '@/lib/cn';
-import type { TwinKpi } from './types';
+import type { TwinKpi } from '@/model/twin';
 
 /** The twin's KPIs in a strip: big mono figures, alarm colour only when abnormal, and the value before when it just changed. */
 export default function KpiStrip({ kpis, before, clock }: { kpis: TwinKpi[]; before: Map<string, string>; clock?: string }) {

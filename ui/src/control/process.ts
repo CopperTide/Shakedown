@@ -1,9 +1,9 @@
 // The process view (L2): the team's agents as units, the world's systems as equipment, and the
 // action flows between them, each counted as reads and writes with abnormal ones (errors,
 // refusals) apart.
-import type { Event, Team } from '../types';
-import { type Action, worldInfo } from './actions';
-import type { SystemInfo } from './types';
+import type { Event, Team } from '@/model/types';
+import { type Action, worldInfo } from '@/model/actions';
+import type { SystemInfo } from '@/model/report';
 
 export type UnitState = 'idle' | 'running' | 'done' | 'failed' | 'automatic';
 

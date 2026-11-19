@@ -16,7 +16,7 @@ import { PageBody, PageHeader } from '../components/ui/page';
 import { Panel } from '../components/ui/panel';
 import { EmptyState, ErrorState } from '../components/ui/state';
 import { type BranchRow, branchRows, runIsRunning, runTitle } from '../runs/runsTable';
-import type { RunSummary } from '../types';
+import type { RunSummary } from '@/model/types';
 import { usePolled } from '@/lib/usePolled';
 import { errorMessage } from '@/lib/errors';
 

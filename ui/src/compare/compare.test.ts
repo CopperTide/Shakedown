@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { CompareSide, Event } from '../types';
+import type { CompareSide, Event } from '@/model/types';
 import { FORK_SEQ, comparison, v1Detail, v2Detail } from '../world/fixtures';
 import { axisTicks, divergenceStrip } from './divergence';
 import { agentCost, escalations, lastView, leadingNumber, ordersOnTime, outcomeRows, safetyViolations, transportCost, validPlan, verdict } from './outcomes';

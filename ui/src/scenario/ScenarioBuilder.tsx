@@ -4,7 +4,7 @@ import { Checkbox, Field, Input, NativeSelect } from '../components/ui/input';
 import { Tag } from '../components/ui/status';
 import { cn } from '@/lib/cn';
 import { type Selection, chosen, initialSelection, optionWords, paramProblem, previewText, scenarioOf, scenarioProblem, toggled, withParam } from './scenario';
-import type { DisruptionOption, ParamSpec, ParamValue, ScenarioOptions } from './types';
+import type { DisruptionOption, ParamSpec, ParamValue, ScenarioOptions } from '@/model/scenario';
 import { errorMessage } from '@/lib/errors';
 
 /** The benchmark's `scenario_options`, loaded when a dialog opens; the selection starts at their defaults. */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { AgentSpec, Health, Team } from '../types';
+import type { AgentSpec, Health, Team } from '@/model/types';
 import { missingFor, partWord, restoringLine, runLine, taskName, ticketTitle, worldName } from './summary';
 
 const agent = (id: string, more: Partial<AgentSpec> = {}): AgentSpec => ({ id, name: id, kind: 'claude_code', model: 'sonnet', prompt: '', ...more });

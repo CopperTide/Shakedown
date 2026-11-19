@@ -18,8 +18,8 @@ import { useTaskNames, useTasks } from '@/hooks/useTasks';
 import { useWorldPreview } from '@/home/useWorldPreview';
 import WorldCard from '../home/WorldCard';
 import { useScenario } from '../scenario/ScenarioBuilder';
-import { teamForRun } from '@/team';
-import type { Health, Runner, Team } from '../types';
+import { teamForRun } from '@/model/team';
+import type { Health, Runner, Team } from '@/model/types';
 import { errorMessage } from '@/lib/errors';
 
 /** The runner and the disruptions, behind Options. */

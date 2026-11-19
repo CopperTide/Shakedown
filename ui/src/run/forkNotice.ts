@@ -1,6 +1,6 @@
 // What the run page says once a rerun starts: where it really started, and whether Shakedown
 // started the team's own driver again (a run a Code connection drove).
-import type { ForkResponse } from '../types';
+import type { ForkResponse } from '@/model/types';
 
 export function forkNotice(r: ForkResponse): string | null {
   const parts: string[] = [];

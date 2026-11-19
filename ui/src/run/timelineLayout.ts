@@ -2,7 +2,7 @@
 // connectors of messages, handoffs, delegations and reports between lanes, each lane's active span
 // (with the times a dispatch run's agent waited for work as faint gaps), the time ticks,
 // and which marks have room for their label (system kind and read/write).
-import { type LaneRow, type Span, type TimelineMark, position } from '../control/lanes';
+import { type LaneRow, type Span, type TimelineMark, position } from '@/model/lanes';
 import type { Pause } from './flow';
 
 export const LANE_H = 36;

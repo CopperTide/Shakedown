@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Panel } from '../components/ui/panel';
-import type { Event } from '../types';
+import type { Event } from '@/model/types';
 import { type Recording, arenaSecondAt, clockText, recording } from './recording';
 
 /** "Plant (Isaac Sim)": the branch's recorded plant, held at the arena second of the step on screen. Nothing when the

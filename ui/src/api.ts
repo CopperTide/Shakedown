@@ -1,11 +1,11 @@
 import type { CheckAnswer, CheckBody } from './connect/connect';
 import { api } from './core';
-import type { ScenarioChoice } from './scenario/types';
-import type { BranchView } from './world/types';
+import type { ScenarioChoice } from '@/model/scenario';
+import type { BranchView } from '@/model/twin';
 import type {
   BenchmarkDescription, Branch, BranchDetail, Change, CompareResponse, Event, ForkResponse, Health, NewRunResponse,
   ProviderStatus, RestoreMode, RestorePlan, RowsResponse, RunSummary, Runner, StatusEvent, Task, Team,
-} from './types';
+} from '@/model/types';
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {

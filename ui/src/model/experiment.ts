@@ -1,8 +1,8 @@
 // Mirrors arenad's experiments API (`api/experiments.rs`): an experiment is one scenario run by
 // 1–4 agent setups, N times each; each setup is stored as a suite, so its report is a SuiteReport.
-import type { SuiteReport, SuiteStatus } from '../control/types';
-import type { ScenarioChoice } from '../scenario/types';
-import type { Runner, Team } from '../types';
+import type { SuiteReport, SuiteStatus } from './report';
+import type { ScenarioChoice } from './scenario';
+import type { Runner, Team } from './types';
 
 /** A setup's line in the list: its suite, name, team and how many of its runs ended and passed. */
 export interface SetupLine {

@@ -1,8 +1,8 @@
 // The digital twin's model: the branch's views in step order, the view at a step, what changed
 // since the view before, and each item's status as a glyph and a word.
 import type { Mark } from '@/lib/mark';
-import type { Event } from '../types';
-import type { BranchView, TwinFlow, TwinItem, TwinView, WorldViewPayload } from './types';
+import type { Event } from '@/model/types';
+import type { BranchView, TwinFlow, TwinItem, TwinView, WorldViewPayload } from '@/model/twin';
 import { asRecord } from '@/lib/record';
 
 

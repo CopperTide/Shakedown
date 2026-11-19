@@ -15,7 +15,7 @@ import { columnOf } from './model';
 import { measureRows } from './measures';
 import { Checks, Setups } from './Results';
 import { SuiteWhatMatters } from '../review/WhatMatters';
-import type { Experiment } from './types';
+import type { Experiment } from '@/model/experiment';
 import { errorMessage } from '@/lib/errors';
 
 /** While an experiment runs, it is read again this often. */

@@ -1,8 +1,8 @@
 // "Swap architecture" in the fork panel: another deployment of the same work. Team v2 keeps the
 // team's shape and gives every agent its rules (prompt changes); the single agent replaces the
 // whole team, which a fork can do only for a run an external system drives.
-import type { Change, Event, RunStartPayload, Team } from '../types';
-import { withRules } from '@/team';
+import type { Change, Event, RunStartPayload, Team } from '@/model/types';
+import { withRules } from '@/model/team';
 
 export interface Architecture {
   id: string;

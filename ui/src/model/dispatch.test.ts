@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { layoutTimeline } from '../run/timelineLayout';
+import { layoutTimeline } from '@/run/timelineLayout';
 import { buildLanes, gapsOf, spanOf } from './lanes';
 import { ev, runStart, team } from './fixtures';
 

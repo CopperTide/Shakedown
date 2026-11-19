@@ -1,8 +1,8 @@
 import { useMemo } from 'react';
 import { LineChart, Sparkline } from '../components/ui/chart';
 import { EmptyState } from '../components/ui/state';
-import type { Event } from '../types';
-import type { Action } from './actions';
+import type { Event } from '@/model/types';
+import type { Action } from '@/model/actions';
 import { fmt } from '@/lib/format';
 import { actionsPerBucket, bucketFor, cumulative, latencies, modelCalls, perMinute, secondsFrom } from './trends';
 

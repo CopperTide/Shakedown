@@ -3,7 +3,7 @@ import { useMemo } from 'react';
 import { StatusMark, Tag } from '../components/ui/status';
 import { cn } from '@/lib/cn';
 import { MARK, type Mark, alarmMark, mark } from '@/lib/mark';
-import { kindWord, systemLine } from './actions';
+import { kindWord, systemLine } from '@/model/actions';
 import { EQUIP_W, type EquipNode, type EquipShape, UNIT_W, type UnitNode, equipShape, flowGraph } from './flowLayout';
 import { type Counts, type ProcessView, type UnitState, abnormal, countsLine } from './process';
 

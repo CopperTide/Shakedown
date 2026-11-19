@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Event, EventKind } from '../types';
+import type { Event, EventKind } from '@/model/types';
 import { objectiveText, studyOf, ticks } from './candidates';
 
 let seq = 0;

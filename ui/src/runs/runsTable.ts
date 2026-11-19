@@ -1,5 +1,5 @@
 // The history as table rows: every branch of every run, forks under their parent.
-import type { Branch, RunSummary } from '../types';
+import type { Branch, RunSummary } from '@/model/types';
 import { branchTree } from './tree';
 
 export interface BranchRow {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { ListedExperiment } from '../experiments/types';
-import type { Branch, RunSummary } from '../types';
+import type { ListedExperiment } from '@/model/experiment';
+import type { Branch, RunSummary } from '@/model/types';
 import { hereOf, itemsFor, placeholderOf } from './palette';
 import { nextPref, parsePref, resolveTheme } from './themeModel';
 

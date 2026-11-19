@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { BranchDetail, BranchStatus as Status } from '../types';
+import type { BranchDetail, BranchStatus as Status } from '@/model/types';
 import ReviewCard from './ReviewCard';
 
 /** True once the branch was seen running here: its end is then reviewed at once. */

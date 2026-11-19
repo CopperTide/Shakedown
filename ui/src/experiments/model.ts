@@ -3,9 +3,9 @@
 // experiment is started with. Pure functions only; the pages draw what these return.
 import { duration, fmt } from '@/lib/format';
 import { runLine } from '../home/summary';
-import type { CheckRate, RunRow, SuiteReport } from '../control/types';
-import { withRules } from '@/team';
-import type { Team } from '../types';
+import type { CheckRate, RunRow, SuiteReport } from '@/model/report';
+import { withRules } from '@/model/team';
+import type { Team } from '@/model/types';
 
 export type RunState = 'passed' | 'failed' | 'running' | 'pending' | 'unscored';
 

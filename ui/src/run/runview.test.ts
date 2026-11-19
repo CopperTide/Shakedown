@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { buildLanes, spanOf } from '../control/lanes';
-import { ev, events, runStart, team } from '../control/fixtures';
+import { buildLanes, spanOf } from '@/model/lanes';
+import { ev, events, runStart, team } from '@/model/fixtures';
 import { checkMark, runStats, safetyLine } from './runStats';
 import { diffCounts, jsonDiff } from './timeline';
 import { layoutTimeline, shapeOf, shortLabel, stepOrder, ticksOf } from './timelineLayout';

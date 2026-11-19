@@ -16,12 +16,12 @@ import { useSuggestedTeams, useTeam } from '@/hooks/useTeam';
 import { useTasks } from '@/hooks/useTasks';
 import { useWorldPreview } from '@/home/useWorldPreview';
 import { useScenario } from '../scenario/ScenarioBuilder';
-import { teamForRun } from '@/team';
-import type { Health, Team } from '../types';
+import { teamForRun } from '@/model/team';
+import type { Health, Team } from '@/model/types';
 import { createExperiment } from './api';
 import { DEFAULT_RUNS, MAX_SETUPS, RUN_CHOICES, type SetupDraft, newDraft, settleDrafts, setupTeam, setupsProblem } from './model';
 import SetupCard, { type TeamChoices } from './SetupCard';
-import type { NewExperiment } from './types';
+import type { NewExperiment } from '@/model/experiment';
 import { errorMessage } from '@/lib/errors';
 
 function Section({ title, children }: { title: string; children: ReactNode }) {

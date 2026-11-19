@@ -1,7 +1,7 @@
 // Where a run stands in plain words (Starting, Running, Paused, Passed, Failed, Stopped), and the
 // pauses it had, from its record: `pause` and `resume` events, and its status.
 import { MARK, type Mark, alarmMark } from '@/lib/mark';
-import type { BranchDetail, Event } from '../types';
+import type { BranchDetail, Event } from '@/model/types';
 
 export type Flow = 'starting' | 'running' | 'paused' | 'passed' | 'failed' | 'stopped' | 'error' | 'interrupted';
 

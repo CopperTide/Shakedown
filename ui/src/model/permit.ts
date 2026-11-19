@@ -1,6 +1,6 @@
 // Interlocks: the permit a write ran under. A write that names a change (in its arguments) is
 // matched with the approvals system's record of that change: who decided it, and how.
-import type { Event } from '../types';
+import type { Event } from './types';
 import { asRecord } from '@/lib/record';
 
 export interface Permit {

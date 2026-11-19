@@ -13,7 +13,7 @@ import { useTaskNames } from '@/hooks/useTasks';
 import { cn } from '@/lib/cn';
 import { usePolled } from '@/lib/usePolled';
 import { experiments as fetchExperiments } from './api';
-import type { ListedExperiment, SetupLine } from './types';
+import type { ListedExperiment, SetupLine } from '@/model/experiment';
 
 /** While any experiment runs, the list is read again this often. */
 const POLL_MS = 3000;

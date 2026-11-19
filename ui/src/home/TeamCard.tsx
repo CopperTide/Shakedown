@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import ImportDialog from '../board/ImportDialog';
 import { type ConnectFrom, connectedTeams } from '../connect/connect';
 import { useCodeTeams } from '../connect/connections';
-import { agentModelLine } from '@/providers';
+import { agentModelLine } from '@/model/providers';
 import TeamBoard from '../board/TeamBoard';
 import { Button } from '../components/ui/button';
 import { SidePanel } from '../components/ui/side-panel';
@@ -13,7 +13,7 @@ import { Dialog, DialogContent } from '../components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '../components/ui/dropdown-menu';
 import { RUNNER_WORDS } from './runners';
 import { cn } from '@/lib/cn';
-import type { Runner, Team } from '../types';
+import type { Runner, Team } from '@/model/types';
 
 /** The board with the picked card's prompt over its right side. */
 function BoardView({ team, runner, onExpand, className }: { team: Team; runner: Runner; onExpand?: () => void; className?: string }) {

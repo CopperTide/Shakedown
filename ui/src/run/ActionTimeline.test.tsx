@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import ActionTimeline from './ActionTimeline';
 import { modelCallLine } from './Inspector';
-import { buildLanes, spanOf } from '../control/lanes';
-import { events, team as fixtureTeam } from '../control/fixtures';
-import type { Team } from '../types';
+import { buildLanes, spanOf } from '@/model/lanes';
+import { events, team as fixtureTeam } from '@/model/fixtures';
+import type { Team } from '@/model/types';
 
 const text = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
 
