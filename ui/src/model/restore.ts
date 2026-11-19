@@ -1,6 +1,7 @@
 // How a rerun restores the world, in plain words: the per-part plan lines, the approximate mark,
 // the parts a comparison or check left out, what a step saved and the run's world.
-import type { Event, PartPlan, RestoredPart, RunStartPayload, ToolCallPayload } from './types';
+import { runStartOf } from './events';
+import type { Event, PartPlan, RestoredPart, ToolCallPayload } from './types';
 
 /** The mark on a branch some part of which was restored approximately. */
 export const APPROXIMATE_LABEL = 'Approximate restore';
@@ -63,7 +64,7 @@ export interface WorldPartLine {
 
 /** The run's world from its `run_start`; empty for a run recorded before integrations. */
 export function worldParts(events: Event[]): WorldPartLine[] {
-  const start = events.find((e) => e.kind === 'run_start')?.payload as RunStartPayload | undefined;
+  const start = runStartOf(events);
   return (start?.world ?? []).map((w) => ({
     part: w.part,
     integration: w.integration,

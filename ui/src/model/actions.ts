@@ -2,6 +2,7 @@
 // `run_start.tools`, each tool call's `part`), never guessed. Runs recorded before Arena kept this
 // say "unknown".
 import { asRecord } from '@/lib/record';
+import { runStartOf } from './events';
 import type { Effect, SystemInfo, ToolInfo } from './report';
 import { savedParts } from './restore';
 import type { Event } from './types';
@@ -39,13 +40,12 @@ export interface Action {
 
 
 export function worldInfo(events: Event[]): WorldInfo {
-  const start = asRecord(events.find((e) => e.kind === 'run_start')?.payload);
-  const world = Array.isArray(start.world) ? start.world : [];
+  const start = runStartOf(events);
   return {
-    systems: asRecord(start.systems) as Record<string, SystemInfo>,
-    tools: asRecord(start.tools) as Record<string, ToolInfo>,
-    parts: world.map((p) => String(asRecord(p).part ?? '')).filter(Boolean),
-    known: 'tools' in start,
+    systems: start?.systems ?? {},
+    tools: start?.tools ?? {},
+    parts: (start?.world ?? []).map((p) => p.part).filter(Boolean),
+    known: !!start && 'tools' in start,
   };
 }
 

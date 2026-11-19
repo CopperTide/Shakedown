@@ -12,9 +12,10 @@ import { recordedLine } from '@/features/scenario/scenario';
 import { drivenLine } from '@/features/world/page';
 import { useTaskNames } from '@/hooks/useTasks';
 import { duration } from '@/lib/format';
+import { runStartOf } from '@/model/events';
 import { costIsUnknown, teamProviders } from '@/model/providers';
 import { worldLine } from '@/model/restore';
-import type { Branch, BranchDetail, Event, RunStartPayload } from '@/model/types';
+import type { Branch, BranchDetail, Event } from '@/model/types';
 import ActionTimeline from './ActionTimeline';
 import { type ForkChoice, forkChoiceOf } from './architecture';
 import BestSoFar from './BestSoFar';
@@ -37,7 +38,7 @@ import Waterfall from './Waterfall';
 
 /** How the run's agents ran, from its `run_start` (old runs: a chain with a handoff required). */
 export function runnerLine(events: Event[]): string {
-  const rs = events.find((e) => e.kind === 'run_start')?.payload as RunStartPayload | undefined;
+  const rs = runStartOf(events);
   if (!rs) return '';
   if (!rs.runner) return 'Agents ran one after another, each handing off to the next (recorded before runners).';
   return {
@@ -68,7 +69,7 @@ function Stats({ detail }: { detail: BranchDetail }) {
 function More({ detail }: { detail: BranchDetail }) {
   const sm = summarize(detail, detail.events);
   const st = runStats(detail.events, detail.start_seq);
-  const scenario = recordedLine((detail.events.find((e) => e.kind === 'run_start')?.payload as RunStartPayload | undefined)?.scenario);
+  const scenario = recordedLine(runStartOf(detail.events)?.scenario);
   const lines = [detail.fork_note, worldLine(detail.events), runnerLine(detail.events), drivenLine(detail.events), scenario && `▼ ${scenario}`, sm.scope].filter(Boolean);
   return (
     <details className="group rounded-lg bg-surface">

@@ -1,8 +1,9 @@
 // "Swap architecture" in the fork panel: another deployment of the same work. Team v2 keeps the
 // team's shape and gives every agent its rules (prompt changes); the single agent replaces the
 // whole team, which a fork can do only for a run an external system drives.
+import { runStartOf } from '@/model/events';
 import { withRules } from '@/model/team';
-import type { Change, Event, RunStartPayload, Team } from '@/model/types';
+import type { Change, Event, Team } from '@/model/types';
 
 export interface Architecture {
   id: string;
@@ -57,6 +58,6 @@ export function singleTeam(team: Team, rules: string): Team {
 
 /** Why the branch's run can't take a whole new team, or null when it can (an external run). */
 export function teamSwapProblem(events: Event[]): string | null {
-  const rs = events.find((e) => e.kind === 'run_start')?.payload as RunStartPayload | undefined;
+  const rs = runStartOf(events);
   return rs?.runner === 'external' ? null : 'Only a run an external system drives can swap its whole team; pick Team v2.';
 }

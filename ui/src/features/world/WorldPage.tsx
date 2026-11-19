@@ -7,8 +7,9 @@ import RunMenu from '@/features/run/RunMenu';
 import { taskOf } from '@/features/run/runStats';
 import { useBranch } from '@/features/run/useBranch';
 import { recordedLine } from '@/features/scenario/scenario';
+import { runStartOf } from '@/model/events';
 import type { BranchView } from '@/model/twin';
-import type { BranchDetail, RunStartPayload } from '@/model/types';
+import type { BranchDetail } from '@/model/types';
 import { drivenLine } from './page';
 import TwinView, { useWorldView } from './TwinView';
 import { useViews } from './useWorld';
@@ -16,7 +17,7 @@ import { useViews } from './useWorld';
 /** The twin's title and the run's status; the task, the disruption and the rest are its tooltip, the run's other views under ⋯. */
 function Header({ runId, d, title, step }: { runId: string; d: BranchDetail; title: string; step: number | null }) {
   const driven = drivenLine(d.events);
-  const scenario = recordedLine((d.events.find((e) => e.kind === 'run_start')?.payload as RunStartPayload | undefined)?.scenario);
+  const scenario = recordedLine(runStartOf(d.events)?.scenario);
   const tip = [`Digital twin · task ${taskOf(d.events)}`, driven, d.fork_note, scenario && `▼ ${scenario}`].filter(Boolean).join('\n');
   return <PageHeader title={<span title={tip}>{title}</span>} status={<StatusChip status={d.status} />} actions={<RunMenu runId={runId} d={d} page="world" step={step} />} />;
 }

@@ -1,6 +1,7 @@
 // The run header's figures: steps, reads and writes, abnormal actions, and the check.
 import { type Mark, passMark } from '@/lib/mark';
 import { actionsOf } from '@/model/actions';
+import { runStartOf } from '@/model/events';
 import type { Event } from '@/model/types';
 
 export interface RunStats {
@@ -43,4 +44,4 @@ export function safetyLine(s: NonNullable<RunStats['safety']>): string {
 }
 
 /** The task a branch's run is of, from its `run_start`. */
-export const taskOf = (events: Event[]) => (events.find((e) => e.kind === 'run_start')?.payload as { task_id?: string } | undefined)?.task_id ?? '';
+export const taskOf = (events: Event[]) => runStartOf(events)?.task_id ?? '';
