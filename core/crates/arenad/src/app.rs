@@ -50,6 +50,9 @@ pub struct Config {
     /// How long a request through the recording proxy may take, answer read whole, before it is
     /// answered 504 (recorded) and the branch goes on: env `ARENA_PROXY_TIMEOUT_SECS`.
     pub proxy_timeout: Duration,
+    /// The benchmark to start on (`ARENA_BENCHMARK`); it wins over the one remembered in
+    /// `worlds_dir`. None: the remembered one, else the only one installed.
+    pub start_benchmark: Option<String>,
 }
 
 pub const DEFAULT_DRIVER_GRACE: Duration = Duration::from_secs(30);
@@ -93,6 +96,9 @@ impl Config {
                 .ok()
                 .and_then(|v| v.trim().parse().ok())
                 .map_or(DEFAULT_PROXY_TIMEOUT, Duration::from_secs),
+            start_benchmark: std::env::var("ARENA_BENCHMARK")
+                .ok()
+                .filter(|b| !b.is_empty()),
         }
     }
 
@@ -109,8 +115,9 @@ pub struct AppState {
     /// The benchmark chosen at start: env `ARENA_BENCHMARK`, else the only one installed; empty
     /// when neither names one. New runs use [`AppState::benchmark`], which may since have changed.
     pub benchmark: String,
-    /// The benchmark new runs use: the one remembered in `worlds_dir`, else `benchmark`; changed
-    /// by [`AppState::use_benchmark`].
+    /// The benchmark new runs use: env `ARENA_BENCHMARK`, else the one remembered in
+    /// `worlds_dir`, else `benchmark` (also when the remembered one can't describe itself at
+    /// start); changed by [`AppState::use_benchmark`].
     current: std::sync::RwLock<String>,
     /// Built worlds whose base is being prepared, or was since arenad started.
     pub builds: crate::worlds::Builds,
@@ -137,19 +144,17 @@ impl AppState {
             .timeout(std::time::Duration::from_secs(300))
             .build()
             .expect("http client");
-        let benchmark = std::env::var("ARENA_BENCHMARK")
-            .ok()
-            .filter(|b| !b.is_empty())
-            .unwrap_or_else(|| only_benchmark(&hub));
-        let remembered = crate::worlds::remembered(&hub, config.worlds_dir.as_deref());
-        if let Some(r) = remembered
-            .as_ref()
-            .filter(|r| !benchmark.is_empty() && **r != benchmark)
-        {
-            eprintln!("arenad: using the remembered benchmark {r}, not {benchmark}");
+        let named = config.start_benchmark.clone();
+        let benchmark = named.clone().unwrap_or_else(|| only_benchmark(&hub));
+        let remembered = || crate::worlds::remembered(&hub, config.worlds_dir.as_deref());
+        let current = named
+            .or_else(remembered)
+            .unwrap_or_else(|| benchmark.clone());
+        if current != benchmark {
+            eprintln!("arenad: using the remembered benchmark {current}");
         }
         AppState {
-            current: remembered.unwrap_or_else(|| benchmark.clone()).into(),
+            current: current.into(),
             builds: Default::default(),
             store,
             hub,
@@ -196,6 +201,27 @@ impl AppState {
     /// The `describe` of the benchmark new runs use: its world, tasks, instructions and tools.
     pub async fn bench(&self) -> anyhow::Result<BenchDescribe> {
         self.bench_named(&self.benchmark()).await
+    }
+
+    /// The `describe` of the benchmark arenad starts on: arenad doesn't start without one (none
+    /// chosen, its package missing or not built).
+    pub async fn startup_bench(&self) -> anyhow::Result<BenchDescribe> {
+        let name = self.benchmark();
+        let described = match self.bench_named(&name).await {
+            Err(e) if name != self.benchmark => {
+                eprintln!(
+                    "arenad: the remembered benchmark {name} can't be used ({e:#}); using {:?}",
+                    self.benchmark
+                );
+                *self.current.write().unwrap() = self.benchmark.clone();
+                self.bench_named(&self.benchmark).await
+            }
+            described => described,
+        };
+        described.map_err(|e| match self.benchmark().as_str() {
+            "" => e,
+            name => anyhow::anyhow!("benchmark {name}: {e:#}"),
+        })
     }
 
     /// The `describe` of the benchmark `name` (empty: none is chosen, which is an error saying

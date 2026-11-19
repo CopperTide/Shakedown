@@ -82,7 +82,9 @@ Environment variables, read once at startup by arenad:
 - `ARENA_BENCHMARK`: the benchmark new runs use, by package name (default: the only installed benchmark,
   not counting those whose manifest says `opt_in = true`; required when several are installed).
   A benchmark chosen with `POST /api/worlds/{name}/use` (or a world made current when it was built) is
-  remembered in `ARENA_WORLDS/.current` and wins over it at the next start.
+  remembered in `ARENA_WORLDS/.current`; at the next start `ARENA_BENCHMARK`, when set, wins over it, and it wins
+  over the only installed benchmark. A remembered benchmark that can't describe itself at start is logged and
+  passed over.
 - `ARENA_WORLDS`: where built worlds are written; scanned at start like `ARENA_PACKAGES` (default `core/worlds`,
   ignored by git).
 - `ARENA_TEMPLATES`: `:`-separated folders of more world templates, passed on to the world builder.

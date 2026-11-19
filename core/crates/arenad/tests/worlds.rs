@@ -351,6 +351,84 @@ fn a_built_world_survives_a_restart() {
     });
 }
 
+/// The packages arenad starts over, alone: `toybench` (the only one not opt-in), the opt-in toy
+/// benchmark `acme` and the opt-in `broken` (its program exits at once, so it can't describe
+/// itself); `.current` in its worlds folder names `remembered`.
+struct Start {
+    toys: ToyRoot,
+    saves: ToyRoot,
+}
+
+impl Start {
+    fn new(tag: &str, remembered: &str) -> Start {
+        let part = toy(&format!("toy-{tag}"), "integration", &["part"]);
+        let bench = |name: &str| {
+            toy(
+                name,
+                "benchmark",
+                &["bench", "--name", name, "--integration", &part.name],
+            )
+        };
+        let (toybench, acme) = (bench("toybench"), bench("acme"));
+        let broken = Package {
+            name: "broken".into(),
+            kind: "benchmark",
+            command: vec!["false".into()],
+        };
+        let toys = package_root(tag, &[toybench, acme, broken, part]);
+        for opt_in in ["acme", "broken"] {
+            let manifest = toys.0.join(opt_in).join("arena-package.toml");
+            let text = std::fs::read_to_string(&manifest).unwrap();
+            std::fs::write(&manifest, format!("{text}opt_in = true\n")).unwrap();
+        }
+        std::fs::write(toys.0.join(".current"), format!("{remembered}\n")).unwrap();
+        let saves = ToyRoot(toys.0.with_extension("saves"));
+        Start { toys, saves }
+    }
+
+    /// arenad's state as it starts over these packages, `ARENA_BENCHMARK` being `env`.
+    async fn state(&self, env: Option<&str>) -> (support::pg::Cleanup, arenad::app::AppState) {
+        let registry = Registry::scan(std::slice::from_ref(&self.toys.0)).unwrap();
+        let hub = Arc::new(Hub::new(registry, bin_dir(), self.saves.0.clone()));
+        let (store, clean) = app::meta_store("worlds", "wstart").await;
+        let mut config = arenad::app::Config::new();
+        config.worlds_dir = Some(self.toys.0.clone());
+        config.start_benchmark = env.map(str::to_string);
+        (clean, arenad::app::AppState::new(store, hub, config))
+    }
+}
+
+#[test]
+fn arena_benchmark_wins_over_the_remembered_world() {
+    run(async {
+        let start = Start::new("wenv", "acme");
+        let (_clean, state) = start.state(Some("toybench")).await;
+        assert_eq!(state.benchmark(), "toybench");
+        assert_eq!(state.startup_bench().await.unwrap().name, "toybench");
+    });
+}
+
+#[test]
+fn the_remembered_world_wins_over_the_only_benchmark_installed() {
+    run(async {
+        let start = Start::new("wrem", "acme");
+        let (_clean, state) = start.state(None).await;
+        assert_eq!(state.benchmark(), "acme");
+        assert_eq!(state.startup_bench().await.unwrap().name, "acme");
+    });
+}
+
+#[test]
+fn a_remembered_world_that_cant_describe_itself_is_left_for_the_only_one_installed() {
+    run(async {
+        let start = Start::new("wbroken", "broken");
+        let (_clean, state) = start.state(None).await;
+        let bench = state.startup_bench().await;
+        assert_eq!(bench.map(|b| b.name).unwrap(), "toybench");
+        assert_eq!(state.benchmark(), "toybench");
+    });
+}
+
 /// A provider that accepts connections and never answers: a run on it stays running.
 async fn silent_provider() -> String {
     let (listener, base) = app::bind().await;

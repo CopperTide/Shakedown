@@ -9,7 +9,9 @@
 //! `providers::ProviderConfig`),
 //! `ARENA_UI_DIST` (serve the built UI at `/`),
 //! `ARENA_MAX_DB_BYTES` (default 5 GiB: new runs and forks are refused above it),
-//! `ARENA_BENCHMARK` (default: the only installed benchmark), and where the parts are:
+//! `ARENA_BENCHMARK` (default: the benchmark remembered in `ARENA_WORLDS`, else the only installed
+//! benchmark; a remembered one that can't describe itself is logged and passed over), and where the
+//! parts are:
 //! - `ARENA_PACKAGES`: `:`-separated folders whose subfolders hold `arena-package.toml`
 //!   (default `<arena>/integrations:<arena>/benchmarks`);
 //! - `ARENA_BIN_DIR`: substituted for `${ARENA_BIN_DIR}` in package commands
@@ -129,18 +131,6 @@ async fn shutdown_on_ctrl_c(state: Arc<AppState>) {
     });
 }
 
-/// The benchmark's `describe`: arenad doesn't start without one (none chosen, its package missing
-/// or not built).
-async fn startup_bench(state: &AppState) -> anyhow::Result<BenchDescribe> {
-    state
-        .bench()
-        .await
-        .map_err(|e| match state.benchmark().as_str() {
-            "" => e,
-            name => anyhow::anyhow!("benchmark {name}: {e:#}"),
-        })
-}
-
 /// `arenad base`: makes the benchmark's base world, the saves every run starts from, unless it
 /// exists, and exits.
 async fn build_base(state: &AppState, bench: &BenchDescribe) -> anyhow::Result<()> {
@@ -184,7 +174,7 @@ async fn main() -> anyhow::Result<()> {
     let ui_dist = ui_dist_from_env();
 
     let state = app_state(&url, port).await?;
-    let bench = startup_bench(&state).await?;
+    let bench = state.startup_bench().await?;
     if std::env::args().nth(1).as_deref() == Some("base") {
         return build_base(&state, &bench).await;
     }

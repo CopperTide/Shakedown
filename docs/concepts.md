@@ -325,8 +325,9 @@ The world builder (`benchmarks/world`, a package of `kind = "builder"`) generate
 and a seed, the same way every time, and arenad writes it to `ARENA_WORLDS` as a benchmark package, installs it,
 makes its base saves in the background and then makes it the current benchmark (new runs use it). Runs, suites
 and experiments keep the benchmark they were created with, so choosing another world never changes a run that is
-going. Run once and New experiment have a world picker; the choice is remembered across a restart. A built world
-is never changed or deleted: a change is a new world under another name. See `docs/reference.md` (`/api/worlds`)
+going. Run once and New experiment have a world picker; the choice is remembered across a restart (unless
+`ARENA_BENCHMARK` names another). A built world is never changed or deleted: a change is a new world under another
+name. See `docs/reference.md` (`/api/worlds`)
 and `docs/packages.md` ("Templates and built worlds").
 
 ## Test suites
