@@ -188,10 +188,7 @@ impl Crew {
             .iter()
             .filter(|a| agents.contains(&a.id))
         {
-            let mut start = json!({"name": spec.name, "kind": spec.kind, "model": spec.model});
-            if let Some(p) = &spec.provider {
-                start["provider"] = json!(p);
-            }
+            let start = serde_json::to_value(AgentStartPayload::of(spec))?;
             self.record(&spec.id, EventKind::AgentStart, start).await?;
         }
         Ok(())

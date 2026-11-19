@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use anyhow::{anyhow, Result};
-use serde_json::{json, Value};
+use serde_json::Value;
 
 use super::{
     lifecycle::{Ending, StartPoint},
@@ -203,13 +203,8 @@ async fn run_agent(
     let spec = ctx.team.agents[idx].clone();
     let input = agent_input(state, ctx, idx, brief).await?;
     let driver = driver_for(state, spec.kind)?;
-    let mut start = json!({"name": spec.name, "kind": spec.kind, "model": spec.model});
-    if let Some(p) = &spec.provider {
-        start["provider"] = json!(p);
-    }
-    let id = Some(spec.id.as_str());
-    ctx.append(&state.store, id, EventKind::AgentStart, start)
-        .await?;
+    let start = AgentStartPayload::of(&spec);
+    ctx.record(&state.store, Some(&spec.id), &start).await?;
     let run = AgentRun {
         branch: ctx.clone(),
         spec: spec.clone(),

@@ -56,8 +56,7 @@ pub async fn start(
     runner::go_live(state, ctx.clone()).await;
     let mut agents = vec![];
     for spec in &ctx.team.agents {
-        let start = start_payload(spec);
-        ctx.append(&state.store, Some(&spec.id), EventKind::AgentStart, start)
+        ctx.record(&state.store, Some(&spec.id), &start_payload(spec))
             .await?;
         agents.push(endpoints(&state.config.self_base, &ctx.branch_id, &spec.id));
     }
@@ -101,13 +100,11 @@ impl Join {
 }
 
 /// The `AgentStart` of an agent an external system (re)started.
-pub fn start_payload(spec: &AgentSpec) -> Value {
-    let mut start = json!({"name": spec.name, "kind": spec.kind, "model": spec.model,
-                           "external": true});
-    if let Some(p) = &spec.provider {
-        start["provider"] = json!(p);
+pub fn start_payload(spec: &AgentSpec) -> AgentStartPayload {
+    AgentStartPayload {
+        external: true,
+        ..AgentStartPayload::of(spec)
     }
-    start
 }
 
 /// Registers `join` on the live external `ctx` and records its `AgentStart`. An agent the branch
@@ -124,8 +121,7 @@ pub async fn register(store: &Store, ctx: &BranchCtx, join: &Join) -> anyhow::Re
             spec
         }
     };
-    let start = start_payload(&spec);
-    ctx.append(store, Some(&spec.id), EventKind::AgentStart, start)
+    ctx.record(store, Some(&spec.id), &start_payload(&spec))
         .await?;
     Ok(spec)
 }
@@ -404,7 +400,7 @@ mod tests {
     /// An external agent's `AgentStart` (golden): `provider` only when it has one.
     #[test]
     fn an_external_start_has_these_keys() {
-        let plain = start_payload(&join().spec());
+        let plain = serde_json::to_value(start_payload(&join().spec())).unwrap();
         let want = json!({"name": "x", "kind": "external", "model": null, "external": true});
         assert_eq!(plain, want);
         let on = Join {
@@ -414,7 +410,8 @@ mod tests {
         };
         let want = json!({"name": "x", "kind": "external", "model": "m", "external": true,
                           "provider": "bedrock:us-east-1"});
-        assert_eq!(start_payload(&on.spec()), want);
+        let on = serde_json::to_value(start_payload(&on.spec())).unwrap();
+        assert_eq!(on, want);
     }
 
     #[test]
