@@ -54,8 +54,12 @@ need their own dependencies there. Build it on the image the world's CI uses for
 uv run --with pytest pytest -q
 ```
 
-The tests never call a model or Docker. They run against `tests/fake_model.py`, a scripted server in the shape
+No test calls a model, and only the `live` one runs Docker. The others run against `tests/fake_model.py`, a scripted server in the shape
 vLLM v0.32.0 answers for gpt-oss, which records each request, and a fake Docker that records each `docker run`.
 
-Verified on 2026-11-19, on Linux with Python 3.14: the test suite. Not yet verified: a run against a live
-arenad, the image build, and the designs on a real model.
+Verified on 2026-11-19, on Linux with Python 3.14 and Docker: the test suite; the image build (gh 2.45.0 and
+the clients import); and `tests/test_live_workbench.py` (marked `live`, skipped without Docker or the image),
+where a command in the container reaches a stand-in proxy through the bridge with the agent's ticket as
+`Proxy-Authorization`, cannot reach the network directly, and cannot write its root. `curl` reads only the
+lower-case `http_proxy`; arenad gives both forms. Not yet verified: a run against a live arenad, and the
+designs on a real model.
