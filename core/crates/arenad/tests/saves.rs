@@ -208,3 +208,16 @@ fn a_step_part_is_still_saved_after_each_write() {
         assert!(fx.of_kind(EventKind::SavePoint).await.is_empty());
     })
 }
+
+#[test]
+fn with_nothing_to_save_a_save_point_never_waits_for_the_gate() {
+    run(async {
+        let fx = SavesFx::new("nogatewait", &[]).await;
+        let ctx = fx.fx.state.live.get(&fx.branch).unwrap();
+        let _held = ctx.gate().await; // a long step holds the gate
+        let exec = arenad::exec::ToolExec::new(fx.fx.state.store.clone());
+        let point = exec.save_point(&ctx, "model_call");
+        let made = tokio::time::timeout(std::time::Duration::from_secs(2), point).await;
+        assert!(matches!(made, Ok(Ok(None))), "{made:?}");
+    })
+}
