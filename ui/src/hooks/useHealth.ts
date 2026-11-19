@@ -1,21 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { health } from '@/api/health';
 import type { Health } from '@/model/types';
+import { useQuery } from './useQuery';
 
 /** Pages dispatch this after they change how much disk the arena uses (e.g. delete a run). */
 export const DISK_CHANGED = 'arena:disk-changed';
 
+/** arenad's health, read once per page and again after `DISK_CHANGED`; a failed read keeps the last one. */
 export function useHealth(): Health | null {
-  const [h, setH] = useState<Health | null>(null);
+  const { data, reload } = useQuery('health', health, { shared: true, keepOnError: true });
   useEffect(() => {
-    let alive = true;
-    const load = () => health().then((v) => alive && setH(v)).catch(() => {});
-    load();
-    window.addEventListener(DISK_CHANGED, load);
-    return () => {
-      alive = false;
-      window.removeEventListener(DISK_CHANGED, load);
-    };
-  }, []);
-  return h;
+    window.addEventListener(DISK_CHANGED, reload);
+    return () => window.removeEventListener(DISK_CHANGED, reload);
+  }, [reload]);
+  return data;
 }

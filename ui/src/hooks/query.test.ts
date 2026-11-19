@@ -207,6 +207,17 @@ describe('shared queries', () => {
     expect(load).toHaveBeenCalledTimes(2);
   });
 
+  it('after a failure, a new reader asks again even while another still reads', async () => {
+    const { load, calls } = loads<string>();
+    sharedQuery('review', load).subscribe(() => {});
+    calls[0].reject(new Error('down'));
+    await flush();
+    sharedQuery('review', load).subscribe(() => {});
+    expect(load).toHaveBeenCalledTimes(2);
+    sharedQuery('review', load).subscribe(() => {});
+    expect(load).toHaveBeenCalledTimes(2);
+  });
+
   it('a reload reaches every reader', async () => {
     const { load, calls } = loads<number>();
     const q = sharedQuery('disk', load);

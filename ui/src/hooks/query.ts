@@ -17,8 +17,8 @@ export interface QueryOptions<T> {
 }
 
 /**
- * One value and its readers. The first reader starts a load (unless an answer is already in), the
- * last one to leave stops polling, and only the newest request's answer ever lands.
+ * One value and its readers. A reader that finds no answer (none yet, or a failure) and nothing
+ * asking starts a load; the last one to leave stops polling; only the newest request's answer lands.
  */
 export class Query<T> {
   private state: QueryState<T>;
@@ -39,7 +39,7 @@ export class Query<T> {
 
   subscribe = (reader: () => void): (() => void) => {
     this.readers.add(reader);
-    if (this.readers.size === 1 && !this.loaded) this.fetch();
+    if (!this.loaded && !this.state.loading) this.fetch();
     return () => {
       this.readers.delete(reader);
       if (this.readers.size === 0) this.stop();

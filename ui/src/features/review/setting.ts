@@ -1,6 +1,6 @@
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useSyncExternalStore } from 'react';
 import { reviewSettings } from '@/api/reviews';
-import { errorMessage } from '@/lib/errors';
+import { useQuery } from '@/hooks/useQuery';
 import type { ReviewSettings } from '@/model/review';
 
 /** This browser's choice (⋯ → AI review): on unless turned off. */
@@ -35,26 +35,10 @@ const subscribe = (f: () => void) => { listeners.add(f); return () => { listener
 /** This browser's choice, kept in step across the page. */
 export const useReviewOn = () => useSyncExternalStore(subscribe, () => on, () => on);
 
-let server: Promise<ReviewSettings> | null = null;
-
-/** arenad's settings, asked once per page (a failure counts as off, and is asked again next time). */
-function serverSettings(): Promise<ReviewSettings> {
-  server ??= reviewSettings().catch((e) => {
-    server = null;
-    return { enabled: false, model: '', why: errorMessage(e) };
-  });
-  return server;
-}
-
-/** arenad's settings: null while asking. */
+/** arenad's settings, asked once per page: null while asking; a failure counts as off, and is asked again next time. */
 export function useServerReview(): ReviewSettings | null {
-  const [s, setS] = useState<ReviewSettings | null>(null);
-  useEffect(() => {
-    let live = true;
-    serverSettings().then((x) => { if (live) setS(x); });
-    return () => { live = false; };
-  }, []);
-  return s;
+  const { data, error } = useQuery('review-settings', reviewSettings, { shared: true });
+  return data ?? (error != null ? { enabled: false, model: '', why: error } : null);
 }
 
 /** Whether review cards show: on in this browser and in arenad. */
