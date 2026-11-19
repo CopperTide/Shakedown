@@ -6,6 +6,9 @@ Subclass `JsonStatePart` and give it `NAME` (the package name, which names its s
 (`{name: Tool}`), `describe_fields()` (`version`, `fingerprint`, optionally `system`), `new_state(config)`
 (a fresh state; validate the config there) and `docs(config, state)` (`{key: doc}`).
 
+A tool that a hard limit refuses raises `Denied`: the part records it in `state["denials"]` (which `new_state`
+starts empty) and `denials_doc(state)` is its `_audit/denials` document.
+
 A part with scheduled disruptions (`disruptions`) also gives `DISRUPTIONS` (`{do.kind: Kind}`) and
 `WORLD_TOOLS` (the tools a task's setup or a link calls: they are not agents' calls, so they count
 for no disruption). Its scenario tool arms them with `disruptions.arm`.
@@ -21,6 +24,7 @@ from .docspart import DocsPart, pick
 from .params import Refusal, input_schema, normalize, refused
 
 FILE = "state.json"
+DENIALS = "_audit/denials"
 
 
 @dataclass
@@ -49,6 +53,26 @@ class Tool:
 class Instance:
     config: dict
     state: dict
+
+
+class Denied(Refusal):
+    """A call a hard limit refuses: the agent gets `body` (structured, as JSON) as the tool's error, and the
+    world gets a `denial` event with `text`. The part keeps a record of it in `state["denials"]`."""
+
+    def __init__(self, body: dict, text: str):
+        super().__init__(json.dumps(body))
+        self.body = body
+        self.text = text
+
+
+def denial(state: dict, fields: dict) -> dict:
+    """The record of the next denial on `state["denials"]`: numbered from 1, then `fields`."""
+    return {"n": len(state["denials"]) + 1, **fields}
+
+
+def denials_doc(state: dict) -> dict:
+    """The `_audit/denials` document: every denial recorded."""
+    return {DENIALS: {"denials": state["denials"]}}
 
 
 def event(kind: str, text: str, data: dict) -> dict:
@@ -108,9 +132,15 @@ class JsonStatePart(DocsPart):
         return disruptions.merged(out, before)
 
     def on_refused(self, inst, name, args, error) -> dict:
-        """The answer to a call the tool refused. A part that records refusals (a denial by a hard
-        limit) overrides it: it may change `inst.state`, name the keys in `writes` and give `events`."""
-        return refused(str(error))
+        """The answer to a call the tool refused. A `Denied` is recorded on the state (its `denials`) and
+        reported as a `denial` event; other refusals change nothing. A part may override it: it may change
+        `inst.state`, name the keys in `writes` and give `events`."""
+        if not isinstance(error, Denied):
+            return refused(str(error))
+        record = denial(inst.state, {"tool": name, "args": args, **error.body})
+        inst.state = {**inst.state, "denials": [*inst.state["denials"], record]}
+        return {"error": str(error), "reads": [], "writes": [DENIALS],
+                "events": [event("denial", error.text, record)]}
 
     def _scheduled(self, inst, name) -> disruptions.Fired:
         """Fires and counts the disruptions an agent's call of `name` sets off, on the state itself."""

@@ -4,13 +4,12 @@ nodes on its own port, and the bridge tools reach it over opc.tcp like any OPC U
 `endpoint` in the config, the bridge talks to that server instead (a real plant), and no simulation starts."""
 import copy
 
-from arena_part.jsonstate import Done, JsonStatePart, Tool, event
+from arena_part.jsonstate import DENIALS, Done, JsonStatePart, Tool, denial, denials_doc, event
 from arena_part.params import Param, Refusal
 
 from . import opcua, sim, tags
 
 VERSION = "0.2.0"
-DENIALS = "_audit/denials"
 BRIDGE = {
     "opcua_browse": {"description": "Browse the plant's OPC UA address space: the child nodes of `path` (empty: the "
                                     "plant's root, Plant2), each a folder or a tag with its value, whether it is "
@@ -102,8 +101,8 @@ class PlantOpcua(JsonStatePart):
         try:
             tags.apply(inst.config, work, path, value)
         except tags.Refused as r:
-            rec = {"n": len(inst.state["denials"]) + 1, "node": path, "value": value, "refused": r.kind,
-                   "status": r.status, "reason": r.reason}
+            rec = denial(inst.state, {"node": path, "value": value, "refused": r.kind, "status": r.status,
+                                      "reason": r.reason})
             inst.state["denials"].append(rec)
             self._outcome = rec
             return r.status
@@ -178,6 +177,6 @@ class PlantOpcua(JsonStatePart):
                "plant/setpoints": {"lines": state["lines"], "overtime": state["overtime"], "cell": state["cell"],
                                    "material_on_hand": state["material_on_hand"]},
                "plant/projection": p, "log/writes": {"entries": state["log"]},
-               DENIALS: {"denials": state["denials"]}}
+               **denials_doc(state)}
         out.update({f"order/{o['id']}": o for o in p["orders"]})
         return out

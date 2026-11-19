@@ -3,13 +3,12 @@
 denials. A config over a hard limit, or a simulation past the budget, is refused with a structured
 denial, recorded, and reported to the world as a `denial` event."""
 from arena_part import errors
-from arena_part.jsonstate import JsonStatePart, event
+from arena_part.jsonstate import JsonStatePart, denials_doc
 
 from .backend import backend_for
-from .tools import TOOLS, Denied
+from .tools import TOOLS
 
 VERSION = "0.1.0"
-DENIALS = "_audit/denials"
 STUDY = ("max_simulations", "replications", "verify_replications", "verify_from", "objective")
 
 
@@ -32,19 +31,10 @@ class LineSim(JsonStatePart):
         backend_for(config)
         return {"simulations": [], "recommendation": None, "denials": []}
 
-    def on_refused(self, inst, name, args, error) -> dict:
-        """A denial is recorded on the state and reported as a `denial` event; other refusals as usual."""
-        if not isinstance(error, Denied):
-            return super().on_refused(inst, name, args, error)
-        record = {"n": len(inst.state["denials"]) + 1, "tool": name, "args": args, **error.body}
-        inst.state = {**inst.state, "denials": [*inst.state["denials"], record]}
-        return {"error": str(error), "reads": [], "writes": [DENIALS],
-                "events": [event("denial", error.text, record)]}
-
     def docs(self, config, state):
         s = config["study"]
         out = {"study/budget": {"used": len(state["simulations"]), "limit": s["max_simulations"]},
                "recommendation/final": state["recommendation"] or {"submitted": False},
-               DENIALS: {"denials": state["denials"]}}
+               **denials_doc(state)}
         out.update({f"simulation/{r['simulation']}": r for r in state["simulations"]})
         return out

@@ -1,22 +1,11 @@
 """The simulation study's tools: the model's decisions, limits and KPIs; run a simulation of a config;
 the history of every simulation; and submit one simulated config as the recommendation, which is
 verified by re-simulating it on replications the study never used."""
-import json
-
-from arena_part.jsonstate import Done, Tool, event
+from arena_part.jsonstate import Denied, Done, Tool, event
 from arena_part.params import Param, Refusal
 
 from . import kpis, plant
 from .backend import backend_for
-
-
-class Denied(Refusal):
-    """A call a hard limit refuses: the agent gets `body` as JSON; the world gets a `denial` event."""
-
-    def __init__(self, body: dict, text: str):
-        super().__init__(json.dumps(body))
-        self.body = body
-        self.text = text
 
 
 def _study(config) -> dict:
