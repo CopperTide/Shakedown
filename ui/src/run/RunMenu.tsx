@@ -1,7 +1,7 @@
 import { MoreHorizontal } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { openPalette } from '../app/palette';
-import { StatusChip } from '../components';
+import { StatusChip } from '@/components/marks';
 import { Button } from '../components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '../components/ui/dropdown-menu';
 import { branchTree } from '../runs/tree';

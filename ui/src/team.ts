@@ -1,39 +1,4 @@
-import { defaultTeam, suggestedTeams } from './api';
 import type { AgentSpec, Runner, Team } from './types';
-
-export const TEAM_KEY = 'arena.team.v1';
-
-function valid(t: unknown): t is Team {
-  const x = t as Team | null;
-  return !!x && typeof x.id === 'string' && typeof x.name === 'string' && Array.isArray(x.agents) && x.agents.length > 0;
-}
-
-export function readStoredTeam(): Team | null {
-  try {
-    const raw = localStorage.getItem(TEAM_KEY);
-    if (!raw) return null;
-    const t = JSON.parse(raw);
-    return valid(t) ? t : null;
-  } catch {
-    return null;
-  }
-}
-
-export function saveTeam(team: Team): void {
-  try {
-    localStorage.setItem(TEAM_KEY, JSON.stringify(team));
-  } catch {
-    /* storage unavailable: the team lives for this page only */
-  }
-}
-
-export function clearStoredTeam(): void {
-  try {
-    localStorage.removeItem(TEAM_KEY);
-  } catch {
-    /* ignore */
-  }
-}
 
 /** What makes two teams the same for `isUntouched`: their agents as arenad runs them. */
 const sameAgents = (a: Team, b: Team) =>
@@ -46,22 +11,6 @@ const sameAgents = (a: Team, b: Team) =>
  */
 export function isUntouched(stored: Team, suggested: Team[]): boolean {
   return !stored.picked && suggested.some((t) => t.id === stored.id && t.name === stored.name && sameAgents(t, stored));
-}
-
-/**
- * The stored team, else the server's default. A stored team that is an untouched suggestion other
- * than the default (an old default the browser kept) gives way to the default.
- */
-export async function loadTeam(): Promise<Team> {
-  const stored = readStoredTeam();
-  if (!stored) return defaultTeam();
-  const suggested = await suggestedTeams().catch(() => [] as Team[]);
-  const first = suggested[0];
-  if (first && stored.id !== first.id && isUntouched(stored, suggested.slice(1))) {
-    clearStoredTeam();
-    return first;
-  }
-  return stored;
 }
 
 /**

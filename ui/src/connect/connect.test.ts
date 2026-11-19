@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { missingFor, runLine, runnerProblem } from '../home/summary';
-import { agentModelLine, agentModelTip, modelProblem, providerOptions } from '../providers';
-import { teamForRun } from '../team';
+import { agentModelLine, agentModelTip, modelProblem, providerOptions } from '@/providers';
+import { teamForRun } from '@/team';
 import type { AgentSpec, Health, Team } from '../types';
 import { checkAnswer } from '../dev/fixtureApi';
 import {

@@ -1,7 +1,7 @@
 import { FlaskConical, GitCompare, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ago, formatTime } from '../components';
+import { ago, formatTime } from '@/lib/time';
 import { Button } from '../components/ui/button';
 import { Checkbox } from '../components/ui/input';
 import { PageBody, PageHeader } from '../components/ui/page';
@@ -9,7 +9,7 @@ import { Panel } from '../components/ui/panel';
 import { ErrorState, LoadingState } from '../components/ui/state';
 import { StatusMark } from '../components/ui/status';
 import { experimentMark } from '@/lib/mark';
-import { useTaskNames } from '../home/useHome';
+import { useTaskNames } from '@/hooks/useTasks';
 import { cn } from '@/lib/cn';
 import { usePolled } from '@/lib/usePolled';
 import { experiments as fetchExperiments } from './api';

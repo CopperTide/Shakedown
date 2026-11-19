@@ -9,7 +9,7 @@ import { actionWord, classify, systemLine, worldInfo } from '../control/actions'
 import { reasoningWord, wakeWord } from '../control/lanes';
 import { missingPermit, permitOf } from '../control/permit';
 import { notComparedLine, savedLine } from '../restore';
-import { costIsUnknown, providerId, providerName, providerOf } from '../providers';
+import { costIsUnknown, providerId, providerName, providerOf } from '@/providers';
 import type { Event, Team } from '../types';
 import { formatCost, rowKeys } from './timeline';
 import { cn } from '@/lib/cn';

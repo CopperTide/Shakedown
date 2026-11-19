@@ -4,7 +4,7 @@
 import { duration, fmt } from '@/lib/format';
 import { runLine } from '../home/summary';
 import type { CheckRate, RunRow, SuiteReport } from '../control/types';
-import { withRules } from '../team';
+import { withRules } from '@/team';
 import type { Team } from '../types';
 
 export type RunState = 'passed' | 'failed' | 'running' | 'pending' | 'unscored';

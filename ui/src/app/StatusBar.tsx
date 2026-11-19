@@ -1,8 +1,10 @@
 import { ChevronUp } from 'lucide-react';
-import { diskFill, diskLine, modesLine, useHealth } from '../components';
+import { diskFill, diskLine, modesLine } from './status';
+import { useHealth } from '@/hooks/useHealth';
 import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover';
 import { ProviderStatusLine } from '../ProviderFields';
-import { bestProviders, checkProviders, providerSummary, useCheckedProviders } from '../providers';
+import { bestProviders, checkProviders, useCheckedProviders } from '@/hooks/useProviders';
+import { providerSummary } from '@/providers';
 import { cn } from '@/lib/cn';
 import type { Health, ProviderStatus } from '../types';
 

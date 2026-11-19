@@ -1,4 +1,4 @@
-import { agentModelLine } from '../providers';
+import { agentModelLine } from '@/providers';
 import { Table, Td, Th, Tr } from '../components/ui/table';
 import type { Cost, Metrics, Overhead } from '../types';
 

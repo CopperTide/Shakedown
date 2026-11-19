@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { parseStep, withStep } from '../run/useStepParam';
 import { drivenLine, stepHeadline, worldState } from './page';
 import { swapChanges, forkChoiceOf, singleTeam, teamSwapProblem, ARCHITECTURES } from '../run/architecture';
-import { withRules } from '../team';
+import { withRules } from '@/team';
 import type { Event } from '../types';
 import { FORK_SEQ, V1, baseView, team, v1Detail, v2Detail, views } from './fixtures';
 import { BUS_LANE, roundedPath, MIN_TILE_W, PROCESS_ORDER, TILE_H, TILE_H_CHANGED, arrowBetween, fitsSideBySide, splitAreas, twinLayout } from './layout';

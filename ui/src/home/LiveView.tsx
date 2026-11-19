@@ -25,7 +25,7 @@ import TwinView, { useWorldView } from '../world/TwinView';
 import RunMenu from '../run/RunMenu';
 import { useViews } from '../world/useWorld';
 import { taskOf } from '../run/runStats';
-import { useNow } from './useHome';
+import { useNow } from '@/hooks/useNow';
 import { RunReview } from '../review/RunReview';
 import { errorMessage } from '@/lib/errors';
 

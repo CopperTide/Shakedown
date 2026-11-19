@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { teamForRun } from '../team';
+import { teamForRun } from '@/team';
 import { checkBody, emptyForm, formProblem } from './connect';
 import { type Connection, codeBody, codeTeam, parseEnv, splitCommand, testLine } from './connections';
 

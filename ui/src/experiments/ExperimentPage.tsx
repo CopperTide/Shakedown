@@ -8,7 +8,7 @@ import { Panel } from '../components/ui/panel';
 import { ErrorState, LoadingState } from '../components/ui/state';
 import { StatusMark } from '../components/ui/status';
 import { experimentMark } from '@/lib/mark';
-import { useTaskNames } from '../home/useHome';
+import { useTaskNames } from '@/hooks/useTasks';
 import { usePolled } from '@/lib/usePolled';
 import { experiment as fetchExperiment, stopExperiment } from './api';
 import { columnOf } from './model';

@@ -5,7 +5,7 @@ import { Button } from '../components/ui/button';
 import { Checkbox } from '../components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover';
 import { cn } from '@/lib/cn';
-import { agentModelLine } from '../providers';
+import { agentModelLine } from '@/providers';
 import type { Team } from '../types';
 import type { Pause } from './flow';
 import { LANE_H, type Layout, type Placed, type Shape, layoutTimeline, shapeOf, shortLabel } from './timelineLayout';

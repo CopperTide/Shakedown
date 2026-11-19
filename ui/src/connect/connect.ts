@@ -2,7 +2,7 @@
 // (`POST /api/agents/check`), the one-agent team made of its answer, and the connected agents
 // this browser keeps. A header value is a secret: it goes to arenad once, in the check, and only
 // the reference arenad answers with is ever kept or sent again.
-import { hostOf, isBedrock, modelOf } from '../providers';
+import { hostOf, isBedrock, modelOf } from '@/providers';
 import type { AgentSpec, SecretRef, Team } from '../types';
 import { codeProblem } from './connections';
 

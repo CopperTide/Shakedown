@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import ImportDialog from '../board/ImportDialog';
 import { type ConnectFrom, connectedTeams } from '../connect/connect';
 import { useCodeTeams } from '../connect/connections';
-import { agentModelLine } from '../providers';
+import { agentModelLine } from '@/providers';
 import TeamBoard from '../board/TeamBoard';
 import { Button } from '../components/ui/button';
 import { SidePanel } from '../components/ui/side-panel';

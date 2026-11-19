@@ -1,8 +1,6 @@
 import { Field, Input, NativeSelect } from './components/ui/input';
 import { Button } from './components/ui/button';
-import {
-  modelPlaceholder, modelProblem, providerOptions, providerState, stateGlyph, stateReason,
-} from './providers';
+import { modelPlaceholder, modelProblem, providerOptions, providerState, stateGlyph, stateReason } from './providers';
 import type { ProviderStatus } from './types';
 
 /** The provider select of an API-mode agent; unavailable providers are disabled and say why. */

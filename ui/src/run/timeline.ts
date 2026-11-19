@@ -1,4 +1,4 @@
-import { LOCAL_COST_SOURCE, providerId } from '../providers';
+import { LOCAL_COST_SOURCE, providerId } from '@/providers';
 import type { AgentKind, AgentSpec, Branch, Change, Event } from '../types';
 
 export function costLabel(source: string | null | undefined): string {

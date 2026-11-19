@@ -1,12 +1,12 @@
 import { useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { StatusChip } from '../components';
+import { StatusChip } from '@/components/marks';
 import { PageBody, PageHeader } from '../components/ui/page';
 import { Panel, PanelHeader } from '../components/ui/panel';
 import { Split } from '../components/ui/split';
 import { ErrorState, LoadingState } from '../components/ui/state';
 import { taskOf } from '../run/runStats';
-import { useTaskNames } from '../home/useHome';
+import { useTaskNames } from '@/hooks/useTasks';
 import ActionTimeline from '../run/ActionTimeline';
 import Inspector from '../run/Inspector';
 import { stepOrder } from '../run/timelineLayout';

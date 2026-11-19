@@ -1,5 +1,5 @@
 import { useParams } from 'react-router-dom';
-import { StatusChip } from '../components';
+import { StatusChip } from '@/components/marks';
 import { PageBody, PageHeader } from '../components/ui/page';
 import { Panel } from '../components/ui/panel';
 import RunMenu from '../run/RunMenu';

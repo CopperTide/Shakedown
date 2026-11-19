@@ -2,7 +2,7 @@
 // team's shape and gives every agent its rules (prompt changes); the single agent replaces the
 // whole team, which a fork can do only for a run an external system drives.
 import type { Change, Event, RunStartPayload, Team } from '../types';
-import { withRules } from '../team';
+import { withRules } from '@/team';
 
 export interface Architecture {
   id: string;

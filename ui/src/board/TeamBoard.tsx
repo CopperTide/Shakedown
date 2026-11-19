@@ -5,7 +5,7 @@ import { Button } from '../components/ui/button';
 import { Tag } from '../components/ui/status';
 import { cn } from '@/lib/cn';
 import type { AgentSpec, Runner, Team } from '../types';
-import { agentModelLine, agentModelTip } from '../providers';
+import { agentModelLine, agentModelTip } from '@/providers';
 import { type BoardGroup, CARD_H, CARD_W, boardSize, jobLine, layoutBoard, openingView } from './board';
 
 type CardData = { agent: AgentSpec; decides: string[]; selected: boolean };

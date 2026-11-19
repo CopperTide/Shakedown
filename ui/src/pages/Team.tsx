@@ -7,8 +7,10 @@ import { Checkbox, Field, Input, NativeSelect, Textarea } from '../components/ui
 import { PageBody, PageHeader } from '../components/ui/page';
 import { Panel } from '../components/ui/panel';
 import { ErrorState, LoadingState } from '../components/ui/state';
-import { MODE_LABEL, agentModelLine, agentModelTip, providerOf, useProviderList } from '../providers';
-import { clearStoredTeam, loadTeam, saveTeam, slug, withSlugIds } from '../team';
+import { MODE_LABEL, agentModelLine, agentModelTip, providerOf } from '@/providers';
+import { useProviderList } from '@/hooks/useProviders';
+import { clearStoredTeam, loadTeam, saveTeam } from '@/hooks/storedTeam';
+import { slug, withSlugIds } from '@/team';
 import type { AgentKind, AgentSpec, ProviderStatus, Team as TeamT } from '../types';
 import { errorMessage } from '@/lib/errors';
 

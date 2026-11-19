@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { StatusChip } from '../components';
+import { StatusChip } from '@/components/marks';
 import { Panel } from '../components/ui/panel';
 import { cn } from '@/lib/cn';
 import type { BranchDetail } from '../types';

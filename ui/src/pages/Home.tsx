@@ -2,7 +2,7 @@ import { Play } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { startRun } from '../api';
-import { useHealth } from '../components';
+import { useHealth } from '@/hooks/useHealth';
 import { Button } from '../components/ui/button';
 import { Field, NativeSelect } from '../components/ui/input';
 import { PageBody } from '../components/ui/page';
@@ -13,10 +13,12 @@ import { missingFor, restoringLine, runLine, runnerProblem, taskName } from '../
 import TeamCard, { TeamActions } from '../home/TeamCard';
 import DisruptionPicker from '../home/DisruptionPicker';
 import { RUNNER_WORDS, RUNNERS } from '../home/runners';
-import { useSuggestedTeams, useTaskNames, useTasks, useTeam, useWorldPreview } from '../home/useHome';
+import { useSuggestedTeams, useTeam } from '@/hooks/useTeam';
+import { useTaskNames, useTasks } from '@/hooks/useTasks';
+import { useWorldPreview } from '@/home/useWorldPreview';
 import WorldCard from '../home/WorldCard';
 import { useScenario } from '../scenario/ScenarioBuilder';
-import { teamForRun } from '../team';
+import { teamForRun } from '@/team';
 import type { Health, Runner, Team } from '../types';
 import { errorMessage } from '@/lib/errors';
 
