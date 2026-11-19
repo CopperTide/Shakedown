@@ -1,22 +1,22 @@
 // Where a run stands in plain words (Starting, Running, Paused, Passed, Failed, Stopped), and the
 // pauses it had, from its record: `pause` and `resume` events, and its status.
-import type { Mark } from '@/lib/mark';
+import { MARK, type Mark, alarmMark } from '@/lib/mark';
 import type { BranchDetail, Event } from '../types';
 
 export type Flow = 'starting' | 'running' | 'paused' | 'passed' | 'failed' | 'stopped' | 'error' | 'interrupted';
 
-const MARK: Record<Flow, Mark> = {
-  starting: { glyph: '◔', word: 'Starting', abnormal: false },
-  running: { glyph: '◐', word: 'Running', abnormal: false },
-  paused: { glyph: '‖', word: 'Paused', abnormal: false },
-  passed: { glyph: '✓', word: 'Passed', abnormal: false },
-  failed: { glyph: '✕', word: 'Failed', abnormal: true },
-  stopped: { glyph: '■', word: 'Stopped', abnormal: false },
-  error: { glyph: '⚠', word: 'Error', abnormal: true },
-  interrupted: { glyph: '■', word: 'Interrupted', abnormal: true },
+const FLOW: Record<Flow, Mark> = {
+  starting: MARK.starting,
+  running: MARK.running,
+  paused: MARK.paused,
+  passed: MARK.passed,
+  failed: MARK.failed,
+  stopped: MARK.stopped,
+  error: alarmMark('Error'),
+  interrupted: MARK.interrupted,
 };
 
-export const flowMark = (f: Flow): Mark => MARK[f];
+export const flowMark = (f: Flow): Mark => FLOW[f];
 
 /** True when the last of the branch's `pause` and `resume` events is a pause. */
 export function pausedIn(events: Event[]): boolean {

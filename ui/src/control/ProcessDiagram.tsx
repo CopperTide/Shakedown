@@ -2,22 +2,23 @@ import { Handle, type NodeProps, Position, ReactFlow, ReactFlowProvider } from '
 import { useMemo } from 'react';
 import { StatusMark, Tag } from '../components/ui/status';
 import { cn } from '@/lib/cn';
+import { MARK, type Mark, alarmMark, mark } from '@/lib/mark';
 import { kindWord, systemLine } from './actions';
 import { EQUIP_W, type EquipNode, type EquipShape, UNIT_W, type UnitNode, equipShape, flowGraph } from './flowLayout';
 import { type Counts, type ProcessView, type UnitState, abnormal, countsLine } from './process';
 
-const STATE: Record<UnitState, { glyph: string; word: string; abnormal: boolean }> = {
-  idle: { glyph: '○', word: 'Idle', abnormal: false },
-  running: { glyph: '◐', word: 'Running', abnormal: false },
-  done: { glyph: '■', word: 'Done', abnormal: false },
-  failed: { glyph: '✕', word: 'Failed', abnormal: true },
-  automatic: { glyph: '⟳', word: 'Run by Shakedown', abnormal: false },
+const STATE: Record<UnitState, Mark> = {
+  idle: mark('○', 'Idle'),
+  running: MARK.running,
+  done: mark('■', 'Done'),
+  failed: MARK.failed,
+  automatic: mark('⟳', 'Run by Shakedown'),
 };
 
 function Alarm({ c }: { c: Counts }) {
   if (!abnormal(c)) return null;
   const bits = [c.errors && `${c.errors} error${c.errors > 1 ? 's' : ''}`, c.refused && `${c.refused} refused`].filter(Boolean);
-  return <StatusMark mark={{ glyph: '⚠', word: bits.join(', '), abnormal: true }} />;
+  return <StatusMark mark={alarmMark(bits.join(', '))} />;
 }
 
 /** The equipment's simple shape: a cylinder for data stores, a box for applications, a diamond for approvals. */

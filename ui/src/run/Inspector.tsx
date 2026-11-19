@@ -10,6 +10,7 @@ import { notComparedLine, savedLine } from '../restore';
 import { costIsUnknown, providerId, providerName, providerOf } from '../providers';
 import type { Event, Team } from '../types';
 import { formatCost, rowKeys } from './timeline';
+import { MARK, alarmMark, mark, passMark } from '@/lib/mark';
 import { asRecord } from '@/lib/record';
 import { errorMessage } from '@/lib/errors';
 
@@ -82,6 +83,10 @@ function KeyList({ label, keys }: { label: string; keys: string[] }) {
   );
 }
 
+/** A permit's decision: rejected, granted, or not yet decided. */
+const permitMark = (approved: boolean | null) =>
+  approved === false ? mark('✕', 'Rejected', true) : approved ? mark('◆', 'Granted') : mark('◇', 'Pending');
+
 /** The permit a write ran under (an interlock), or the change it named that approvals never recorded. */
 function PermitLine({ events, event }: { events: Event[]; event: Event }) {
   const permit = permitOf(events, event);
@@ -91,10 +96,10 @@ function PermitLine({ events, event }: { events: Event[]; event: Event }) {
     <Section title="Permit">
       {permit
         ? <div className="flex flex-wrap items-center gap-1.5 text-xs">
-          <StatusMark mark={permit.approved === false ? { glyph: '✕', word: 'Rejected', abnormal: true } : permit.approved ? { glyph: '◆', word: 'Granted', abnormal: false } : { glyph: '◇', word: 'Pending', abnormal: false }} />
+          <StatusMark mark={permitMark(permit.approved)} />
           <span className="font-mono text-2xs">{permit.id}</span><span className="text-muted">{permit.decision || permit.action}</span>
         </div>
-        : <StatusMark mark={{ glyph: '◇', word: `no permit: ${missing} is not in approvals`, abnormal: true }} />}
+        : <StatusMark mark={mark('◇', `no permit: ${missing} is not in approvals`, true)} />}
     </Section>
   );
 }
@@ -157,12 +162,12 @@ function Check({ p }: { p: Payload }) {
   const diff = keysOf(p.differing_rows);
   return (
     <>
-      <Section title="Outcome"><StatusMark mark={p.passed ? { glyph: '✓', word: 'Passed', abnormal: false } : { glyph: '✕', word: 'Failed', abnormal: true }} /></Section>
+      <Section title="Outcome"><StatusMark mark={passMark(!!p.passed)} /></Section>
       {checks.length > 0 && (
         <Section title={`Checks (${checks.filter((c) => c.passed).length}/${checks.length})`}>
           <ul className="flex flex-col gap-0.5">{checks.map((c) => (
             <li key={c.name} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs" title={c.detail}>
-              <StatusMark mark={c.passed ? { glyph: '✓', word: 'Pass', abnormal: false } : { glyph: '✕', word: 'Fail', abnormal: true }} />
+              <StatusMark mark={passMark(c.passed, ['Pass', 'Fail'])} />
               <span className="font-mono text-2xs">{c.name}</span>{c.safety && <Tag tone={c.passed ? undefined : 'alarm'}>◆ safety</Tag>}
               {!c.passed && c.detail && <span className="w-full pl-6 text-2xs text-muted">{c.detail}</span>}
             </li>
@@ -189,7 +194,7 @@ function AgentEnd({ p, team, agent }: { p: Payload; team?: Team; agent: string |
   return (
     <Section title="Outcome">
       <span className="flex flex-wrap items-center gap-2 text-xs">
-        <StatusMark mark={ok ? { glyph: '■', word: 'Finished', abnormal: false } : { glyph: '✕', word: 'Failed', abnormal: true }} />
+        <StatusMark mark={ok ? MARK.finished : MARK.failed} />
         {typeof p.error === 'string' && p.error && <span className="text-alarm">{p.error}</span>}
       </span>
       <span className="text-xs text-muted">{bits.join(' · ')}</span>
@@ -260,7 +265,7 @@ function Head({ event, events = [] }: { event: Event; events?: Event[] }) {
         <Tag>{event.kind.replace('_', ' ')}</Tag>
         {event.agent && <span className="text-xs text-muted">{event.agent}</span>}
         {a && <span className="font-mono text-xs">{a.tool}</span>}
-        {a && a.outcome !== 'ok' && <StatusMark mark={{ glyph: '⚠', word: a.outcome, abnormal: true }} />}
+        {a && a.outcome !== 'ok' && <StatusMark mark={alarmMark(a.outcome)} />}
       </div>
       {a && (
         <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted">

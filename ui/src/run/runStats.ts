@@ -1,6 +1,6 @@
 // The run header's figures: steps, reads and writes, abnormal actions, and the check.
 import { actionsOf } from '../control/actions';
-import type { Mark } from '@/lib/mark';
+import { type Mark, passMark } from '@/lib/mark';
 import type { Event } from '../types';
 
 export interface RunStats {
@@ -34,7 +34,7 @@ export function runStats(events: Event[], startSeq: number | null): RunStats {
 /** "✓ passed 13/13", "✕ failed 11/13": the check as a mark. */
 export function checkMark(c: NonNullable<RunStats['check']>): Mark {
   const count = c.total ? ` ${c.ok}/${c.total}` : '';
-  return c.passed ? { glyph: '✓', word: `Passed${count}`, abnormal: false } : { glyph: '✕', word: `Failed${count}`, abnormal: true };
+  return passMark(c.passed, [`Passed${count}`, `Failed${count}`]);
 }
 
 /** "◆ 1 of 4 violated", "0 of 4 violated". */

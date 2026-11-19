@@ -8,22 +8,45 @@ export interface Mark {
   abnormal: boolean;
 }
 
+/** A mark from its parts; plain unless `abnormal`. */
+export const mark = (glyph: string, word: string, abnormal = false): Mark => ({ glyph, word, abnormal });
+
+/** The marks the pages share. */
+export const MARK = {
+  starting: mark('◔', 'Starting'),
+  running: mark('◐', 'Running'),
+  paused: mark('‖', 'Paused'),
+  passed: mark('✓', 'Passed'),
+  failed: mark('✕', 'Failed', true),
+  finished: mark('■', 'Finished'),
+  stopped: mark('■', 'Stopped'),
+  interrupted: mark('■', 'Interrupted', true),
+  infraError: mark('⚠', 'Infra error', true),
+} as const;
+
+/** ✓ when it passed, ✕ (abnormal) when not, each with its word. */
+export const passMark = (ok: boolean, [pass, fail]: [string, string] = ['Passed', 'Failed']): Mark =>
+  ok ? mark('✓', pass) : mark('✕', fail, true);
+
+/** ⚠ and a word: something went wrong (a refusal, an error). */
+export const alarmMark = (word: string): Mark => mark('⚠', word, true);
+
 const RUN: Record<BranchStatus, Mark> = {
-  running: { glyph: '◐', word: 'Running', abnormal: false },
-  passed: { glyph: '✓', word: 'Passed', abnormal: false },
-  failed: { glyph: '✕', word: 'Failed', abnormal: true },
-  infra_error: { glyph: '⚠', word: 'Infra error', abnormal: true },
-  interrupted: { glyph: '■', word: 'Interrupted', abnormal: true },
-  stopped: { glyph: '■', word: 'Stopped', abnormal: false },
+  running: MARK.running,
+  passed: MARK.passed,
+  failed: MARK.failed,
+  infra_error: MARK.infraError,
+  interrupted: MARK.interrupted,
+  stopped: MARK.stopped,
 };
 
 /** A run's status. */
-export const runMark = (status: BranchStatus): Mark => RUN[status] ?? { glyph: '?', word: status, abnormal: false };
+export const runMark = (status: BranchStatus): Mark => RUN[status] ?? mark('?', status);
 
 const EXPERIMENT: Record<SuiteStatus, Mark> = {
-  running: { glyph: '◐', word: 'Running', abnormal: false },
-  finished: { glyph: '■', word: 'Finished', abnormal: false },
-  stopped: { glyph: '■', word: 'Stopped', abnormal: false },
+  running: MARK.running,
+  finished: MARK.finished,
+  stopped: MARK.stopped,
 };
 
 /** An experiment's status (a stopped one ended early, by choice or because arenad stopped). */

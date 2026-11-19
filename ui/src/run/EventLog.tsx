@@ -3,6 +3,7 @@ import { type LaneRow, type Span, formatDuration } from '../control/lanes';
 import { StatusMark } from '../components/ui/status';
 import { Table, Td, Th } from '../components/ui/table';
 import { cn } from '@/lib/cn';
+import { alarmMark } from '@/lib/mark';
 
 const offset = (at: number, span: Span | null) => (span && !Number.isNaN(at) ? `+${((at - span.start) / 1000).toFixed(1)} s` : '–');
 
@@ -26,7 +27,7 @@ export default function EventLog({ lanes, span, selected, onSelect, models }: {
             <Td className="h-7 max-w-[28ch] truncate font-mono text-2xs text-muted" title={m.detail}>{m.detail}</Td>
             <Td className="h-7 text-right font-mono text-muted">{formatDuration(m.durationMs)}</Td>
             <Td className="h-7 text-center text-muted">{m.saved && <span title="saved after this step">◉</span>}</Td>
-            <Td className="h-7">{m.outcome === 'ok' ? <span className="text-faint">ok</span> : <StatusMark mark={{ glyph: '⚠', word: m.outcome, abnormal: true }} />}</Td>
+            <Td className="h-7">{m.outcome === 'ok' ? <span className="text-faint">ok</span> : <StatusMark mark={alarmMark(m.outcome)} />}</Td>
           </tr>
         ))}</tbody>
       </Table>
