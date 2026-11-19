@@ -12,7 +12,7 @@ name = "arena-sculptured"
 path = "src/main.rs"
 
 [dependencies]
-arena-part = { path = "../../kits/rust" }
+arena-part = { path = "../../kits/rust", features = ["http"] }
 reqwest = { version = "0.12", default-features = false, features = ["json"] }
 rusqlite = { version = "0.40", features = ["bundled", "backup"] }
 tokio.workspace = true

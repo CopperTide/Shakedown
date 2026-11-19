@@ -6,7 +6,7 @@ use reqwest::Method;
 use serde_json::{json, Value};
 
 use super::{wrote, Outcome, Team};
-use crate::api::{Api, Reply};
+use crate::api::{Api, Expect, Reply};
 use crate::changes;
 use crate::poll;
 

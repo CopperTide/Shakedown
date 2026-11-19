@@ -17,7 +17,7 @@ use arena_part::helpers::blocking;
 use arena_part::helpers::process_group::{self, Identity};
 use serde::{Deserialize, Serialize};
 
-use crate::api::Api;
+use crate::api::{Api, Expect};
 use crate::poll;
 
 /// How long a stop waits for the killed processes to go.

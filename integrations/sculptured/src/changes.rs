@@ -7,7 +7,7 @@ use anyhow::Result;
 use arena_part::proto::Docs;
 use serde_json::{json, Map, Value};
 
-use crate::api::Api;
+use crate::api::{Api, Expect};
 
 /// The key of change `id`.
 pub fn key(id: &str) -> String {

@@ -6,7 +6,7 @@ use anyhow::{bail, Result};
 use reqwest::Method;
 use serde_json::json;
 
-use crate::api::Api;
+use crate::api::{Api, Expect};
 
 /// How many changes may wait for a decision at once.
 pub const MAX_WAITING: usize = 8;
