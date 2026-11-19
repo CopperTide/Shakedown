@@ -6,37 +6,42 @@ use std::{collections::BTreeSet, future::Future, time::Duration};
 
 use anyhow::{Context, Result};
 use parts::{
-    proto::{kept, Differing, Docs, GcResult, Usage, WorldPart},
-    CallError, Hub,
+    proto::{
+        kept, DiffParams, Differing, Docs, GcParams, GcResult, InspectParams, SaveId, Target,
+        Usage, WorldPart,
+    },
+    request::{GetUsage, Stop},
+    CallError, Hub, Request,
 };
 use serde::de::DeserializeOwned;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value};
 
 use crate::{model::Event, recorded::run_info};
 
-async fn call<T: DeserializeOwned>(
+async fn request<T: DeserializeOwned, R: Request>(
     hub: &Hub,
     integration: &str,
-    method: &str,
-    params: Value,
+    r: &R,
 ) -> Result<T> {
     let client = hub.client(integration).await?;
-    in_context(client.call(method, params).await, integration, method)
+    in_context(client.request(r).await, integration, R::METHOD)
 }
 
-/// `call` without the client's deadline: waits until the integration answers or exits.
-async fn call_until_done<T: DeserializeOwned>(
+/// `request` without the client's deadline: waits until the integration answers or exits.
+async fn request_until_done<T: DeserializeOwned, R: Request>(
     hub: &Hub,
     integration: &str,
-    method: &str,
-    params: Value,
+    r: &R,
 ) -> Result<T> {
     let client = hub.client(integration).await?;
-    in_context(
-        client.call_until_done(method, params).await,
-        integration,
-        method,
-    )
+    in_context(client.request_until_done(r).await, integration, R::METHOD)
+}
+
+/// `save`, as `inspect` and `diff` name it.
+fn saved(save: &str) -> Target {
+    Target::Save {
+        save: save.to_string(),
+    }
 }
 
 /// A call's result, its error saying which integration and method failed.
@@ -68,22 +73,31 @@ pub async fn inspect(
     if keys.is_empty() {
         return Ok(Map::new());
     }
-    let params = json!({"target": {"save": save}, "keys": keys});
-    let d: Docs = call(hub, integration, "inspect", params).await?;
+    let params = InspectParams {
+        target: saved(save),
+        keys: keys.to_vec(),
+    };
+    let d: Docs = request(hub, integration, &params).await?;
     Ok(d.docs)
 }
 
 /// The keys that differ between two saves of one integration.
 pub async fn diff(hub: &Hub, integration: &str, a: &str, b: &str) -> Result<Vec<String>> {
-    let params = json!({"a": {"save": a}, "b": {"save": b}});
-    let d: Differing = call(hub, integration, "diff", params).await?;
+    let params = DiffParams {
+        a: saved(a),
+        b: saved(b),
+    };
+    let d: Differing = request(hub, integration, &params).await?;
     Ok(d.differing)
 }
 
 /// True when the integration has `save` (probed with `inspect` of a key no part has).
 pub async fn save_exists(hub: &Hub, integration: &str, save: &str) -> Result<bool> {
-    let params = json!({"target": {"save": save}, "keys": ["arena/probe"]});
-    match call::<Value>(hub, integration, "inspect", params).await {
+    let params = InspectParams {
+        target: saved(save),
+        keys: vec!["arena/probe".into()],
+    };
+    match request::<Value, _>(hub, integration, &params).await {
         Ok(_) => Ok(true),
         Err(e) if part_code(&e) == Some(-32002) => Ok(false),
         Err(e) => Err(e),
@@ -93,7 +107,10 @@ pub async fn save_exists(hub: &Hub, integration: &str, save: &str) -> Result<boo
 /// Drops `save` and the folder arenad made for it; false when the integration answers that it
 /// has no such save (-32002: already gone, which counts as dropped).
 pub async fn drop_save(hub: &Hub, integration: &str, save: &str) -> Result<bool> {
-    let existed = match call::<Value>(hub, integration, "drop_save", json!({"save": save})).await {
+    let params = SaveId {
+        save: save.to_string(),
+    };
+    let existed = match request::<Value, _>(hub, integration, &params).await {
         Ok(_) => true,
         Err(e) if part_code(&e) == Some(-32002) => false,
         Err(e) => return Err(e),
@@ -104,13 +121,13 @@ pub async fn drop_save(hub: &Hub, integration: &str, save: &str) -> Result<bool>
 
 /// Stops `instance` (a no-op for an instance that is not running).
 pub async fn stop(hub: &Hub, integration: &str, instance: &str) -> Result<()> {
-    let _: Value = call(hub, integration, "stop", json!({"instance": instance})).await?;
+    let _: Value = request(hub, integration, &Stop::instance(instance)).await?;
     Ok(())
 }
 
 /// Bytes the integration keeps.
 pub async fn usage(hub: &Hub, integration: &str) -> Result<u64> {
-    let u: Usage = call(hub, integration, "usage", json!({})).await?;
+    let u: Usage = request(hub, integration, &GetUsage {}).await?;
     Ok(u.bytes)
 }
 
@@ -119,7 +136,10 @@ pub async fn usage(hub: &Hub, integration: &str) -> Result<u64> {
 /// has no `gc`. Waits as long as the integration's gc takes: it may stop instances, so it must
 /// be over before anything starts new ones.
 pub async fn gc(hub: &Hub, integration: &str, keep: &[String]) -> Result<Option<GcResult>> {
-    let r = match call_until_done(hub, integration, "gc", json!({"keep": keep})).await {
+    let params = GcParams {
+        keep: keep.to_vec(),
+    };
+    let r = match request_until_done(hub, integration, &params).await {
         Ok(r) => r,
         Err(e) if part_code(&e) == Some(-32601) => return Ok(None),
         Err(e) => return Err(e),

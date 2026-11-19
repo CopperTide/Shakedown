@@ -21,13 +21,15 @@ use std::{
 use anyhow::{anyhow, bail, Result};
 use parts::{
     proto::{
-        BenchDescribe, BenchToolOutput, Describe, Effect, ExactKind, FromSave, Gate, Link, Mode,
-        ToolOutput, ToolSchema, ViewInfo, WorldPart,
+        BenchCallTool, BenchDescribe, BenchToolOutput, CallToolParams, Describe, Effect, ExactKind,
+        FromSave, Gate, Link, Mode, StartParams, Target, ToolOutput, ToolSchema, ViewInfo,
+        WorldPart,
     },
-    CallError, Client, Hub,
+    request::{Connect, Stop},
+    CallError, Client, Hub, Request,
 };
 use serde::de::DeserializeOwned;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value};
 
 use crate::restore::{in_shared_saves, keeps_saves};
 
@@ -164,6 +166,13 @@ impl Part {
         format!("the {} integration", self.name)
     }
 
+    /// The part's live instance, as `inspect` and `diff` name it.
+    fn target(&self) -> Target {
+        Target::Instance {
+            instance: self.instance.clone(),
+        }
+    }
+
     /// True when the part keeps saves (a part with only replay is never saved).
     fn keeps_saves(&self) -> bool {
         keeps_saves(&self.describe.restore)
@@ -181,9 +190,13 @@ impl Part {
         args: Value,
         clock_ms: i64,
     ) -> Result<ToolOutput, WorldError> {
-        let params =
-            json!({"instance": self.instance, "name": name, "args": args, "clock_ms": clock_ms});
-        call(&self.client, &self.label(), "call_tool", params).await
+        let params = CallToolParams {
+            instance: self.instance.clone(),
+            name: name.to_string(),
+            args,
+            clock_ms,
+        };
+        request(&self.client, &self.label(), &params).await
     }
 }
 
@@ -259,8 +272,7 @@ async fn begin_part(
         instance,
         describe: p.describe,
     };
-    let started: Result<Value, WorldError> =
-        call(&part.client, &part.label(), "start", params).await;
+    let started: Result<Value, WorldError> = request(&part.client, &part.label(), &params).await;
     started.map_err(|e| anyhow::Error::from(e).context(StartingPart(part.name.clone())))?;
     Ok((part, save))
 }
@@ -286,14 +298,14 @@ fn stopped_message(what: &str, tail: &str) -> String {
     }
 }
 
-/// A call to a program; a stopped program is a fatal `WorldError` naming `what`.
-async fn call<T: DeserializeOwned>(
+/// A request to a program; a stopped program is a fatal `WorldError` naming `what`.
+async fn request<T: DeserializeOwned, R: Request>(
     client: &Client,
     what: &str,
-    method: &str,
-    params: Value,
+    r: &R,
 ) -> Result<T, WorldError> {
-    client.call(method, params).await.map_err(|e| match e {
+    let method = R::METHOD;
+    client.request(r).await.map_err(|e| match e {
         CallError::Stopped(tail) => WorldError {
             message: stopped_message(what, &tail),
             fatal: true,
@@ -514,14 +526,13 @@ impl World {
     }
 
     async fn call_bench_tool(&self, name: &str, args: Value) -> Result<Called, WorldError> {
-        let params = json!({"name": name, "args": args, "connections": self.connections});
-        let o: BenchToolOutput = call(
-            self.bench_client()?,
-            &self.bench_label(),
-            "call_tool",
-            params,
-        )
-        .await?;
+        let params = BenchCallTool {
+            name: name.to_string(),
+            args,
+            connections: self.connections.clone(),
+        };
+        let o: BenchToolOutput =
+            request(self.bench_client()?, &self.bench_label(), &params).await?;
         if let Some(error) = self.bench_part_error(&o) {
             return Ok(Called::error(error));
         }
@@ -593,14 +604,19 @@ fn start_params(
     instance: &str,
     seed: u64,
     from: Option<&StartSaves>,
-) -> Result<(Value, Option<String>)> {
+) -> Result<(StartParams, Option<String>)> {
     let part: &WorldPart = &p.part;
-    let mut params =
-        json!({"instance": instance, "config": part.config, "seed": seed, "clock_ms": 0});
+    let mut params = StartParams {
+        instance: instance.to_string(),
+        config: part.config.clone(),
+        seed,
+        clock_ms: 0,
+        from: None,
+    };
     let Some(f) = part_start(p, from)? else {
         return Ok((params, None));
     };
-    params["from"] = json!(f);
+    params.from = Some(f.clone());
     Ok((params, Some(f.save.clone())))
 }
 
@@ -611,7 +627,7 @@ async fn connect(part: &Part) -> Result<Option<Value>> {
     }
     match part
         .client
-        .call::<Value>("connect", json!({"instance": part.instance}))
+        .request::<Value>(&Connect::instance(&part.instance))
         .await
     {
         Ok(info) => Ok(Some(info)),
@@ -636,7 +652,7 @@ async fn stop_instances(hub: &Hub, instances: Vec<Instance>) {
         let r = async {
             hub.client(&integration)
                 .await?
-                .call::<Value>("stop", json!({"instance": instance}))
+                .request::<Value>(&Stop::instance(&instance))
                 .await
                 .map_err(anyhow::Error::from)
         };

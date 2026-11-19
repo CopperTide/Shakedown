@@ -1,10 +1,10 @@
 //! A world's gates: a tool an agent calls goes through only if a document of another part allows
 //! it. Declared by the benchmark and read with `inspect`, so neither part knows of the other.
 
-use parts::proto::{Docs, Gate, ToolOutput};
-use serde_json::{json, Value};
+use parts::proto::{Docs, Gate, InspectParams, ToolOutput};
+use serde_json::Value;
 
-use super::{call, World, WorldError};
+use super::{request, World, WorldError};
 
 /// `template` with each `{arg}` replaced by the call's argument; an error names what is missing.
 fn fill(template: &str, args: &Value) -> Result<String, String> {
@@ -93,8 +93,11 @@ impl World {
             Err(why) => return Ok(Some(refusal(gate, &why, vec![]))),
         };
         let p = self.part(&gate.part)?;
-        let params = json!({"target": {"instance": p.instance}, "keys": [key]});
-        let read: Result<Docs, WorldError> = call(&p.client, &p.label(), "inspect", params).await;
+        let params = InspectParams {
+            target: p.target(),
+            keys: vec![key.clone()],
+        };
+        let read: Result<Docs, WorldError> = request(&p.client, &p.label(), &params).await;
         let docs = match read {
             Ok(docs) => docs,
             Err(e) if e.fatal => return Err(e),
@@ -109,6 +112,8 @@ impl World {
 
 #[cfg(test)]
 mod tests {
+    use serde_json::json;
+
     use super::*;
 
     fn gate(require: Value) -> Gate {

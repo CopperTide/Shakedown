@@ -3,10 +3,10 @@
 //! keep no saves (only replay) are never saved; parts with replay are not in the shared saves,
 //! so they are not compared with them.
 
-use parts::proto::Differing;
-use serde_json::{json, Value};
+use parts::proto::{DiffParams, Differing, SaveParams, Target};
+use serde_json::Value;
 
-use super::{call, new_save_id, Part, Saves, World, WorldError};
+use super::{new_save_id, request, Part, Saves, World, WorldError};
 
 /// What saving after a step gave: the new saves, and the first failure (the other parts are
 /// still saved).
@@ -19,13 +19,12 @@ pub struct StepSaves {
 impl World {
     async fn save_as(&self, p: &Part, save: &str) -> Result<(), WorldError> {
         let dir = self.hub.save_dir(&p.integration, save);
-        let _: Value = call(
-            &p.client,
-            &p.label(),
-            "save",
-            json!({"instance": p.instance, "save": save, "dir": dir}),
-        )
-        .await?;
+        let params = SaveParams {
+            instance: p.instance.clone(),
+            save: save.to_string(),
+            dir: dir.to_string_lossy().into_owned(),
+        };
+        let _: Value = request(&p.client, &p.label(), &params).await?;
         Ok(())
     }
 
@@ -120,9 +119,12 @@ impl World {
                     p.name
                 ))
             })?;
-            let params = json!({"a": {"instance": p.instance}, "b": {"save": save}});
+            let params = DiffParams {
+                a: p.target(),
+                b: Target::Save { save: save.clone() },
+            };
             // A malformed answer is an error, never "nothing differs".
-            let d: Differing = call(&p.client, &p.label(), "diff", params).await?;
+            let d: Differing = request(&p.client, &p.label(), &params).await?;
             out.extend(d.differing.into_iter().map(|k| {
                 if many {
                     format!("{}:{k}", p.name)

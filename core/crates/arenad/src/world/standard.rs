@@ -10,18 +10,18 @@ use std::{
 
 use anyhow::{bail, Context, Result};
 use parts::{
-    proto::{Action, BenchDescribe, GoldActions, SetupCall},
+    proto::{Action, BenchDescribe, GoldActions, GoldParams, SeedParams, SetupCall},
     Hub,
 };
-use serde_json::{json, Value};
+use serde_json::Value;
 
 use crate::{restore::in_shared_saves, saves::save_exists};
 
 use super::{
-    call, from_shared,
+    from_shared,
     ids::{base_names, gold_names, temp_branch_id},
     plan::{plan, Plan},
-    Saves, StartSaves, World,
+    request, Saves, StartSaves, World,
 };
 
 /// One lock per name for this process: a save is made once even when two runs start together.
@@ -114,13 +114,10 @@ async fn build_saves(
 /// The base save of each part, made once (empty instances, the benchmark's `seed`, save).
 pub async fn ensure_base(hub: &Arc<Hub>, bench: &BenchDescribe) -> Result<Saves> {
     let seed = async |w: &World| -> Result<()> {
-        let _: Value = call(
-            w.bench_client()?,
-            &w.bench_label(),
-            "seed",
-            json!({"connections": w.connections}),
-        )
-        .await?;
+        let params = SeedParams {
+            connections: w.connections.clone(),
+        };
+        let _: Value = request(w.bench_client()?, &w.bench_label(), &params).await?;
         Ok(())
     };
     ensure_saves(hub, bench, base_names(bench), None, seed)
@@ -157,14 +154,10 @@ async fn set_up(world: &World, calls: &[SetupCall]) -> Result<()> {
 /// Runs the task's gold actions. At least one gold write must succeed (a failing gold action
 /// changes nothing, as upstream).
 async fn apply_gold(world: &World, task: &str) -> Result<()> {
-    let params = json!({"task": task});
-    let gold: GoldActions = call(
-        world.bench_client()?,
-        &world.bench_label(),
-        "gold_actions",
-        params,
-    )
-    .await?;
+    let params = GoldParams {
+        task: task.to_string(),
+    };
+    let gold: GoldActions = request(world.bench_client()?, &world.bench_label(), &params).await?;
     let mut wrote = false;
     for Action { name, args } in gold.actions {
         let c = world.call_tool(&name, args, 0).await?;

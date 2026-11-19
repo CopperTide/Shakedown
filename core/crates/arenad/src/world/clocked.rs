@@ -1,10 +1,9 @@
 //! Moving a world's clock parts (`uses_clock`) to a time with `advance`, remembering which ones
 //! changed (to save them after the next step) and collecting the events they report.
 
-use parts::proto::{Advanced, WorldEvent};
-use serde_json::json;
+use parts::proto::{AdvanceParams, Advanced, WorldEvent};
 
-use super::{call, Part, World, WorldError};
+use super::{request, Part, World, WorldError};
 
 /// An event a part reported while its clock advanced.
 #[derive(Debug, Clone, PartialEq)]
@@ -15,8 +14,11 @@ pub struct PartEvent {
 }
 
 async fn advance(p: &Part, clock_ms: i64) -> Result<Advanced, WorldError> {
-    let params = json!({"instance": p.instance, "clock_ms": clock_ms});
-    call(&p.client, &p.label(), "advance", params).await
+    let params = AdvanceParams {
+        instance: p.instance.clone(),
+        clock_ms,
+    };
+    request(&p.client, &p.label(), &params).await
 }
 
 impl World {
