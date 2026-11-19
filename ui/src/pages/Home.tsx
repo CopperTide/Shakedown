@@ -8,7 +8,7 @@ import { Field, NativeSelect } from '../components/ui/input';
 import { PageBody } from '../components/ui/page';
 import { ErrorState } from '../components/ui/state';
 import { LiveRun, StartingRun } from '../home/LiveView';
-import type { ConnectReturn } from '../connect/connect';
+import type { ConnectReturn } from '@/features/connect/connect';
 import { missingFor, restoringLine, runLine, runnerProblem, taskName } from '../home/summary';
 import TeamCard, { TeamActions } from '../home/TeamCard';
 import DisruptionPicker from '../home/DisruptionPicker';

@@ -17,7 +17,7 @@ const NewExperimentPage = lazy(() => import('@/features/experiments/NewExperimen
 const Home = lazy(() => import('./pages/Home'));
 const ProcessPage = lazy(() => import('@/features/process/ProcessPage'));
 const Compare = lazy(() => import('@/features/compare/ComparePage'));
-const ConnectPage = lazy(() => import('./connect/ConnectPage'));
+const ConnectPage = lazy(() => import('@/features/connect/ConnectPage'));
 const Run = lazy(() => import('@/features/run/RunPage'));
 const Runs = lazy(() => import('@/features/runs/RunsPage'));
 const Team = lazy(() => import('./pages/Team'));

@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { missingFor, runLine, runnerProblem } from '../home/summary';
+import { missingFor, runLine, runnerProblem } from '@/home/summary';
 import { agentModelLine, agentModelTip, modelProblem, providerOptions } from '@/model/providers';
 import { teamForRun } from '@/model/team';
 import type { AgentSpec, Health, Team } from '@/model/types';
-import { checkAnswer } from '../dev/fixtureApi';
+import { checkAnswer } from '@/dev/fixtureApi';
 import {
   CONNECTED_KEY, type CheckAnswer, checkBody, connectedAgent, connectedLabel, connectedTeam, connectedTeams, emptyForm, formProblem, parseHeaders, readConnected, saveConnected,
 } from './connect';

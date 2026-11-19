@@ -40,7 +40,7 @@ describe('Code connections', () => {
     expect(testLine({ ok: false, branch_id: 'b', status: 'failed', agents: ['a'], tool_calls: 1, error: 'the driver exited with code 3', exit: 'exit 3', stderr_tail: 'boom' })).toBe('1 agent · 1 tool call · failed');
   });
   it("describes a Code team as its driver, not as 0 agents", async () => {
-    const { runLine } = await import('../home/summary');
+    const { runLine } = await import('@/home/summary');
     expect(runLine(codeTeam(conn))).toBe('Your code · its driver registers the agents');
     expect(runLine({ id: 'code-c1', name: 'x', agents: [] })).toBe('Your code · its driver registers the agents');
   });
