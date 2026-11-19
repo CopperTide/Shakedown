@@ -91,17 +91,6 @@ async fn volume_strategies_that_lack_what_they_need_are_refused() {
         e.message,
         "volume pg saves by postgres, which needs service (the compose service running the database)"
     );
-    let files = json!({"compose_file": here, "volumes": [{"name": "files", "save": "hardlink"}]});
-    let e = p.start(start("a", files)).await.unwrap_err();
-    assert_eq!(
-        e.message,
-        "volume files saves by hardlink, which needs rsync_image (an image with rsync)"
-    );
-    let unpinned = json!({"compose_file": here, "rsync_image": "rsync:latest",
-                          "volumes": [{"name": "files", "save": "hardlink"}]});
-    let e = p.start(start("a", unpinned)).await.unwrap_err();
-    assert_eq!(e.code, -32602);
-    assert!(e.message.contains("pinned"), "{}", e.message);
     let bad_way = json!({"compose_file": here, "volumes": [{"name": "x", "save": "zip"}]});
     assert_eq!(p.start(start("a", bad_way)).await.unwrap_err().code, -32602);
 }

@@ -174,49 +174,35 @@ impl Project {
         run(cmd, &format!("{service}: {}", args.first().unwrap_or(&"")))
     }
 
-    /// A throwaway container of `image` (pulled the first time it is missing) running `args`,
-    /// with no network and each `(source, target, read_only)` mounted (a source is a host path
-    /// or one of the project's volumes); its stdout.
-    pub fn run_helper(
-        &self,
-        image: &str,
-        mounts: &[(String, String, bool)],
-        args: &[&str],
-    ) -> Result<String> {
-        let cmd = self.helper_command(image, mounts, args)?;
+    /// A throwaway container of the helper image (never pulled) running `args`, with no network
+    /// and each `(source, target, read_only)` mounted (a source is a host path or one of the
+    /// project's volumes); its stdout.
+    pub fn run_helper(&self, mounts: &[(String, String, bool)], args: &[&str]) -> Result<String> {
+        let mut cmd = self.helper_run("", mounts, false);
+        cmd.args(args);
         run_out(cmd, &format!("helper {}", args.first().unwrap_or(&"")))
     }
 
-    /// [`run_helper`](Self::run_helper), its stdout written to `dest`.
-    pub fn run_helper_into(
+    /// `docker run` of a throwaway helper container (never pulled, no network; stdin open when
+    /// `interactive`) with `entrypoint` and `mounts`, up to its image.
+    fn helper_run(
         &self,
-        image: &str,
+        entrypoint: &str,
         mounts: &[(String, String, bool)],
-        args: &[&str],
-        dest: &Path,
-    ) -> Result<()> {
-        let mut cmd = self.helper_command(image, mounts, args)?;
-        cmd.stdout(File::create(dest)?);
-        run(cmd, &format!("helper {}", args.first().unwrap_or(&"")))
-    }
-
-    fn helper_command(
-        &self,
-        image: &str,
-        mounts: &[(String, String, bool)],
-        args: &[&str],
-    ) -> Result<Command> {
-        if !valid_image(image) {
-            bail!("{image:?} is not an image name");
-        }
+        interactive: bool,
+    ) -> Command {
         let mut cmd = self.docker();
-        cmd.args(["run", "--rm", "--pull", "missing", "--network", "none"]);
+        cmd.args(["run", "--rm", "--pull", "never", "--network", "none"]);
+        if interactive {
+            cmd.arg("-i");
+        }
+        cmd.args(["--entrypoint", entrypoint]);
         for (source, target, read_only) in mounts {
             let mode = if *read_only { ":ro" } else { "" };
             cmd.args(["-v", &format!("{source}:{target}{mode}")]);
         }
-        cmd.args(["--entrypoint=", image]).args(args);
-        Ok(cmd)
+        cmd.arg(&self.helper);
+        cmd
     }
 
     /// Docker's name for the project's volume `volume`, to mount it in a helper.
@@ -277,30 +263,39 @@ impl Project {
         Ok(format!("{}_{volume}", self.name))
     }
 
-    fn helper_tar(&self, volume: &str, flags: &[&str], interactive: bool) -> Result<Command> {
-        let mount = format!("{}:/v", self.volume_name(volume)?);
-        let mut cmd = self.docker();
-        cmd.args(["run", "--rm", "--pull", "never", "--network", "none"]);
-        if interactive {
-            cmd.arg("-i");
-        }
-        cmd.args(["--entrypoint", "tar", "-v", &mount, &self.helper]);
+    /// The helper's `tar -C /v <flags>` with `mount` at `/v`.
+    fn helper_tar(&self, mount: (String, bool), flags: &[&str], interactive: bool) -> Command {
+        let mounts = [(mount.0, "/v".to_string(), mount.1)];
+        let mut cmd = self.helper_run("tar", &mounts, interactive);
         cmd.args(["-C", "/v"]).args(flags);
-        Ok(cmd)
+        cmd
     }
 
-    /// Writes the volume to the tar archive `dest`, as streamed by the helper: owners (numeric),
-    /// modes and mtimes are kept.
-    pub fn export_volume(&self, volume: &str, dest: &Path) -> Result<()> {
-        let mut cmd = self.helper_tar(volume, &["-cpf", "-", "--numeric-owner", "."], false)?;
+    /// `tar` of what is mounted at `/v` (read-only when `read_only`) to the archive `dest`, as
+    /// streamed by the helper: owners (numeric), modes and mtimes are kept.
+    fn export(&self, source: String, read_only: bool, dest: &Path) -> Result<()> {
+        let flags = ["-cpf", "-", "--numeric-owner", "."];
+        let mut cmd = self.helper_tar((source, read_only), &flags, false);
         cmd.stdout(File::create(dest)?);
         run(cmd, "export volume")
+    }
+
+    /// Writes the volume to the tar archive `dest` (see `export`).
+    pub fn export_volume(&self, volume: &str, dest: &Path) -> Result<()> {
+        self.export(self.volume_name(volume)?, false, dest)
+    }
+
+    /// Writes the folder `dir` (a host path, mounted read-only) to the tar archive `dest` with
+    /// the same helper and `tar` as `export_volume`, so a copy of a volume archives as it does.
+    pub fn export_dir(&self, dir: &Path, dest: &Path) -> Result<()> {
+        self.export(dir.to_string_lossy().into_owned(), true, dest)
     }
 
     /// Fills the volume from the tar archive `src` (made by `export_volume`), as root, so files
     /// keep their original owners.
     pub fn import_volume(&self, volume: &str, src: &Path) -> Result<()> {
-        let mut cmd = self.helper_tar(volume, &["-xpf", "-", "--numeric-owner"], true)?;
+        let mount = (self.volume_name(volume)?, false);
+        let mut cmd = self.helper_tar(mount, &["-xpf", "-", "--numeric-owner"], true);
         cmd.stdin(File::open(src)?);
         run(cmd, "import volume")
     }

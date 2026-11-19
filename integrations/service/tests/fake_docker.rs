@@ -7,10 +7,10 @@ use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 
-/// The fake: logs its arguments, and fails where the environment says so. `port` answers the
+/// The fake: logs its arguments (one line a call), and fails where the environment says so. `port` answers the
 /// n-th of `FAKE_PORTS` after the n-th `up` or `start` (a restarted service gets a new port).
 const FAKE: &str = r#"#!/bin/sh
-echo "$@" >> "$FAKE_LOG"
+{ printf '%s' "$*" | tr '\n' ' '; echo; } >> "$FAKE_LOG"
 case "$*" in
   *" stop") [ -n "$FAKE_STOP_FAIL" ] && { echo no stop >&2; exit 1; } ;;
   *" up "*) [ -n "$FAKE_UP_FAIL" ] && { echo no up >&2; exit 1; } ;;
@@ -233,9 +233,6 @@ fn log_since(f: &Fake, from: usize) -> Vec<String> {
     f.log().lines().skip(from).map(str::to_string).collect()
 }
 
-const RSYNC: &str =
-    "example/rsync:3.2@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
-
 #[tokio::test]
 async fn plain_volume_names_save_as_before() {
     let f = Fake::new("plainnames");
@@ -330,12 +327,12 @@ async fn a_skipped_volume_is_neither_saved_nor_restored() {
     assert!(!log.contains("_cache:/v"), "{log}");
 }
 
-/// The logged `rsync` runs.
-fn rsync_lines(f: &Fake) -> Vec<String> {
+/// The logged copies of hard-linked trees.
+fn tree_copies(f: &Fake) -> Vec<String> {
     let lines = f.log().lines().map(str::to_string).collect::<Vec<_>>();
     lines
         .into_iter()
-        .filter(|l| l.contains(" rsync "))
+        .filter(|l| l.contains(" sh -c set -eu"))
         .collect()
 }
 
@@ -344,29 +341,55 @@ async fn a_hardlink_volume_links_against_the_previous_save() {
     let f = Fake::new("hardlink");
     let p = f.part();
     let volumes = json!([{"name": "files", "save": "hardlink"}]);
-    p.start(start(
-        "a",
-        config_with(&f, volumes, json!({"rsync_image": RSYNC})),
-    ))
-    .await
-    .unwrap();
+    p.start(start("a", config_with(&f, volumes, json!({}))))
+        .await
+        .unwrap();
     p.save(save_as(&f, "a", "s1")).await.unwrap();
     p.save(save_as(&f, "a", "s2")).await.unwrap();
-    let rsyncs = rsync_lines(&f);
-    assert_eq!(rsyncs.len(), 2, "{rsyncs:?}");
+    let copies = tree_copies(&f);
+    assert_eq!(copies.len(), 2, "{copies:?}");
+    let helper = "--pull never --network none --entrypoint  -v arena_a_files:/v:ro";
+    assert!(copies.iter().all(|l| l.contains(helper)), "{copies:?}");
     assert!(
-        rsyncs
+        copies
             .iter()
-            .all(|l| l.contains("--pull missing") && l.contains(RSYNC)),
-        "{rsyncs:?}"
+            .all(|l| l.contains(" redis:6.2-alpine sh -c ")),
+        "{copies:?}"
     );
-    assert!(!rsyncs[0].contains("--link-dest"), "{}", rsyncs[0]);
-    assert!(
-        rsyncs[1].contains("--link-dest=/saves/s1/files/"),
-        "{}",
-        rsyncs[1]
-    );
-    assert!(rsyncs[1].ends_with("/v/ /saves/s2/files/"), "{}", rsyncs[1]);
+    assert!(copies[0].ends_with(" sh s1  files"), "{}", copies[0]);
+    assert!(copies[1].ends_with(" sh s2 s1 files"), "{}", copies[1]);
+}
+
+#[tokio::test]
+async fn a_hardlink_tree_is_archived_by_the_same_helper_and_tar_as_a_live_volume() {
+    let f = Fake::new("treetar");
+    let p = f.part();
+    let volumes = json!([{"name": "files", "save": "hardlink"}]);
+    p.start(start("a", config_with(&f, volumes, json!({}))))
+        .await
+        .unwrap();
+    p.save(save_as(&f, "a", "s1")).await.unwrap();
+    for target in [
+        Target::Instance {
+            instance: "a".into(),
+        },
+        Target::Save { save: "s1".into() },
+    ] {
+        let keys = vec![];
+        p.inspect(InspectParams { target, keys }).await.unwrap();
+    }
+    let tars: Vec<String> = (f.log().lines())
+        .filter(|l| l.contains(" -cpf "))
+        .map(str::to_string)
+        .collect();
+    let tar = "redis:6.2-alpine -C /v -cpf - --numeric-owner .";
+    assert_eq!(tars.len(), 2, "{tars:?}");
+    let live = format!("--entrypoint tar -v arena_a_files:/v {tar}");
+    assert!(tars[0].ends_with(&live), "{tars:?}");
+    let tree = f.0.join("saves/service/s1/files");
+    let tree = format!("--entrypoint tar -v {}:/v:ro {tar}", tree.display());
+    assert!(tars[1].ends_with(&tree), "{tars:?}");
+    assert!(!f.log().contains("rsync"), "{}", f.log());
 }
 
 #[tokio::test]
@@ -375,12 +398,9 @@ async fn file_volumes_that_name_their_services_stop_only_those() {
     let p = f.part();
     let volumes = json!([{"name": "prom", "services": ["prom"]},
                          {"name": "logs", "save": "hardlink", "services": ["loki"]}]);
-    p.start(start(
-        "a",
-        config_with(&f, volumes, json!({"rsync_image": RSYNC})),
-    ))
-    .await
-    .unwrap();
+    p.start(start("a", config_with(&f, volumes, json!({}))))
+        .await
+        .unwrap();
     p.save(save_params(&f, "a")).await.unwrap();
     let log = f.log();
     assert!(log.lines().any(|l| l.ends_with(" stop prom loki")), "{log}");
@@ -463,12 +483,9 @@ async fn a_hardlink_save_is_dropped_through_the_helper() {
     let f = Fake::new("droplink");
     let p = f.part();
     let volumes = json!([{"name": "files", "save": "hardlink"}]);
-    p.start(start(
-        "a",
-        config_with(&f, volumes, json!({"rsync_image": RSYNC})),
-    ))
-    .await
-    .unwrap();
+    p.start(start("a", config_with(&f, volumes, json!({}))))
+        .await
+        .unwrap();
     p.save(save_as(&f, "a", "s1")).await.unwrap();
     p.drop_save(SaveId { save: "s1".into() }).await.unwrap();
     assert!(f.log().contains("rm -rf /saves/s1"), "{}", f.log());

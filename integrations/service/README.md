@@ -37,17 +37,19 @@ is `{name, save: "tar"}` and saves exactly as above). `save` is one of:
   the database runs (nothing stops). `service` is required; `database` and `user` default to `postgres`. A start from
   the save brings up the database services, waits for `pg_isready` (60 s), loads the dump with `psql`, then brings up
   the rest. Its digest is the SHA-256 of the dump's lines that are no `--` comment.
-- `hardlink`: `rsync -a --delete --numeric-ids` of the volume into the tree `<save>/<volume>/`, with `--link-dest` to
-  the instance's previous save (or the save it started from), so unchanged files are hard links and cost nothing.
-  It needs `rsync_image`: an image with `rsync`, `tar`, `cp` and `rm`, **pinned by digest** (`name:tag@sha256:…`) in
-  the config (never named in code), pulled the first time a save needs it. The trees belong to the container's
-  users, so they are restored (`cp -a`), digested (`tar -c`) and removed (`rm -rf`) through that image too.
+- `hardlink`: the volume copied into the tree `<save>/<volume>/` by the helper image (the one that archives every
+  volume, default `redis:6.2-alpine`, never pulled): the instance's previous save (or the save it started from) is
+  hard-linked whole (`cp -al`), and every entry whose type, size, mtime (seconds), mode or owner differs, or that was
+  modified at or after the second that save was written, is copied afresh; so unchanged files are hard links and cost
+  nothing. The trees belong to the container's users, so they are restored (`cp -a`), archived for digests (the same
+  `tar -c` as a live volume) and removed (`rm -rf`) through that image too.
 - `skip`: not saved; a start from a save creates it empty (a cache).
 
-Each save has `save.json` (`{volumes: [{name, save}], rsync_image?, compose_file?, env?}`). The last save of each
+Each save has `save.json` (`{volumes: [{name, save}], helper_image?, compose_file?, env?}`). The last save of each
 instance is kept in `.last/<instance>.json`. `describe.save_at` is `points`: arenad saves the part at save points
 (before a model call, on request, at run end), not after every request. `http: [{host, service, port, env?,
 reads?}]` makes `http_routes` answer each host with the port Docker published for `service` (`docker compose port`),
 once that port accepts connections (at most 60 s), so agents reach it through arenad's proxy. A save that stops a
 service restarts it on a new port; arenad asks `http_routes` again after each save. The live test `live_service_strategies` (Postgres, a hard-linked volume
-and a cache; `ARENA_TEST_RSYNC_IMAGE` names the rsync image) is written but has not been run.
+and a cache) passed on Docker 29.1 with `postgres:17-alpine` and `redis:6.2-alpine`: an unchanged file is one inode
+in two saves, the live instance's digests equal its last save's, and a start from the first save has its row and file.

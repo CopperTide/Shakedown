@@ -1,5 +1,5 @@
-//! `save.json`: which volumes a save holds and how, and the image its hard-linked trees need
-//! (for digests and for dropping it). A save made before strategies has none: its volumes are the
+//! `save.json`: which volumes a save holds and how, and the helper image its hard-linked trees
+//! are read and removed with (for digests and for dropping it). A save made before strategies has none: its volumes are the
 //! `.tar` archives in it.
 
 use std::collections::BTreeMap;
@@ -22,8 +22,13 @@ pub struct SavedVolume {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Manifest {
     pub volumes: Vec<SavedVolume>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub rsync_image: Option<String>,
+    /// The helper image (saves made before it was the helper name their rsync image).
+    #[serde(
+        default,
+        alias = "rsync_image",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub helper_image: Option<String>,
     /// The compose file and environment of the instance that made the save: how to run the
     /// helper that reads or removes its trees once that instance is gone.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -49,18 +54,20 @@ impl Manifest {
         (self.volumes.iter()).any(|v| v.name == volume && v.save == SaveHow::Hardlink)
     }
 
-    /// A project to run the trees' helper with (never brought up), and its image; None when the
-    /// save has no trees.
-    pub fn tree_helper(&self) -> Result<Option<(Project, &str)>> {
+    /// A project to run the trees' helper with (never brought up); None when the save has no
+    /// trees.
+    pub fn tree_helper(&self) -> Result<Option<Project>> {
         let (Some(image), Some(file)) = (self.tree_image(), &self.compose_file) else {
             return Ok(None);
         };
-        Ok(Some((Project::new("arena_saves", file, &self.env)?, image)))
+        Ok(Some(
+            Project::new("arena_saves", file, &self.env)?.with_helper(image)?,
+        ))
     }
 
     /// The image that handles its trees, when it has any.
     pub fn tree_image(&self) -> Option<&str> {
         let trees = self.volumes.iter().any(|v| v.save == SaveHow::Hardlink);
-        self.rsync_image.as_deref().filter(|_| trees)
+        self.helper_image.as_deref().filter(|_| trees)
     }
 }

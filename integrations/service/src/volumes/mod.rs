@@ -16,13 +16,13 @@ pub use manifest::{Manifest, SavedVolume};
 pub use postgres::{digest as dump_digest, sql_path};
 pub use tar::tar_path;
 
-/// A running instance: its project, the volumes a save holds and the image hard-linked volumes
-/// are copied with.
+/// A running instance: its project, the volumes a save holds and the helper image that copies
+/// them.
 #[derive(Debug, Clone)]
 pub struct Instance {
     pub project: Project,
     pub volumes: Vec<VolumeSpec>,
-    pub rsync_image: Option<String>,
+    pub helper_image: String,
     /// The manifest fields that let a helper reach the save's trees later.
     pub compose_file: std::path::PathBuf,
     pub env: std::collections::BTreeMap<String, String>,
@@ -31,13 +31,6 @@ pub struct Instance {
 impl Instance {
     fn of(&self, how: SaveHow) -> impl Iterator<Item = &VolumeSpec> {
         self.volumes.iter().filter(move |v| v.save == how)
-    }
-
-    fn rsync(&self) -> Result<&str> {
-        match self.rsync_image.as_deref() {
-            Some(i) => Ok(i),
-            None => bail!("hardlink volumes need rsync_image"),
-        }
     }
 
     /// The compose services to stop while files are copied: every file volume's `services`
@@ -65,7 +58,7 @@ impl Instance {
             .collect();
         Manifest {
             volumes,
-            rsync_image: self.rsync_image.clone(),
+            helper_image: Some(self.helper_image.clone()),
             compose_file: Some(self.compose_file.clone()),
             env: self.env.clone(),
         }
@@ -133,7 +126,7 @@ fn copy_each(inst: &Instance, dir: &Path, prev: Option<&str>) -> Result<u64> {
         match v.save {
             SaveHow::Hardlink => {
                 let prev = prev.filter(|p| has_tree(dir, p, &v.name));
-                hardlink::save(&inst.project, inst.rsync()?, &v.name, dir, prev)?
+                hardlink::save(&inst.project, &v.name, dir, prev)?
             }
             _ => bytes += tar::save(&inst.project, &v.name, dir)?,
         }
@@ -149,10 +142,8 @@ fn has_tree(dir: &Path, prev: &str, volume: &str) -> bool {
 
 /// Removes a failed save's folder (its trees through the helper).
 fn discard(inst: &Instance, dir: &Path) {
-    if let Ok(image) = inst.rsync() {
-        if inst.of(SaveHow::Hardlink).next().is_some() {
-            let _ = hardlink::remove(&inst.project, image, dir);
-        }
+    if inst.of(SaveHow::Hardlink).next().is_some() {
+        let _ = hardlink::remove(&inst.project, dir);
     }
     folder::discard(dir);
 }
@@ -165,7 +156,7 @@ pub fn restore_all(inst: &Instance, save: &Path) -> Result<()> {
     for v in &inst.volumes {
         match v.save {
             SaveHow::Tar => tar::restore(&inst.project, &v.name, save)?,
-            SaveHow::Hardlink => hardlink::restore(&inst.project, inst.rsync()?, &v.name, save)?,
+            SaveHow::Hardlink => hardlink::restore(&inst.project, &v.name, save)?,
             SaveHow::Postgres | SaveHow::Skip => {}
         }
     }
@@ -204,7 +195,7 @@ pub fn remove_trees(dir: &Path) -> Result<()> {
         return Ok(());
     };
     match m.tree_helper()? {
-        Some((project, image)) => hardlink::remove(&project, image, dir),
+        Some(project) => hardlink::remove(&project, dir),
         None => Ok(()),
     }
 }
@@ -215,7 +206,7 @@ pub fn archive_tree(dir: &Path, volume: &str, dest: &Path) -> Result<()> {
         bail!("the save has no manifest for the tree {volume}");
     };
     match m.tree_helper()? {
-        Some((project, image)) => hardlink::archive(&project, image, volume, dir, dest),
+        Some(project) => project.export_dir(&dir.join(volume), dest),
         None => bail!("the save has no helper for the tree {volume}"),
     }
 }
