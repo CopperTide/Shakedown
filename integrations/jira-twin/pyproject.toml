@@ -1,0 +1,21 @@
+[project]
+name = "jira-twin"
+version = "0.1.0"
+description = "arena-part/1 integration: a Jira-compatible twin (Cloud or Server mode) with a JQL subset and agile boards"
+requires-python = ">=3.10"
+dependencies = ["arena-part"]
+
+[dependency-groups]
+dev = ["jsonschema>=4.18", "jira>=3.10"]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+arena-part = { path = "../../kits/python", editable = true }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+norecursedirs = [".*", "fixtures", "schemas", "__pycache__"]
+pythonpath = [".", "tests/fixtures/clients"]
+markers = ["live: needs services or hardware not always present"]

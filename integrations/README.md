@@ -30,6 +30,7 @@ The table is in the main `README.md`, with what was verified. Each folder has a 
 | `ot-network` | a simulated plant OT network and IT/OT remote-access gateway |
 | `shift-roster` | a simulated shift roster with certifications |
 | `github-twin` | a GitHub-compatible code host (GHES mode) over real git repositories |
+| `jira-twin` | a Jira-compatible tracker (Cloud or Server mode): issues, JQL, boards and sprints |
 
 Examples to copy: `kits/rust/examples/counter.rs` and `kits/python/examples/counter.py`.
 
