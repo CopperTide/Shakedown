@@ -2,8 +2,7 @@
 // Larchmont Biologics, batch CVX-2611 on hold, the usual courier loses capacity after its first
 // quote (the agents are not told). Team v1 books before approval (refused) and ships a short-dated
 // lot; v2, forked at step 13, books only after approval and checks shelf life.
-import type { NamedCheck } from '../control/types';
-import type { BranchDetail, CompareResponse, Event, EventKind, RunSummary, Team } from '../types';
+import type { BranchDetail, CompareResponse, Event, EventKind, NamedCheck, RunSummary, Team } from '../types';
 import type { BranchView, TwinArea, TwinItem, TwinView } from './types';
 
 export const RUN_ID = 'run-cvx-2611';

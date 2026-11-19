@@ -2,8 +2,7 @@
 // returns (the check's named checks, the metrics, the events and the last view of the twin).
 import { actionsOf } from '../control/actions';
 import { costLabel } from '../run/timeline';
-import type { NamedCheck } from '../control/types';
-import type { BranchDetail, CompareSide, Event } from '../types';
+import type { BranchDetail, CompareSide, Event, NamedCheck } from '../types';
 import { viewsFromEvents } from '../world/twin';
 import type { TwinView } from '../world/types';
 import { asRecord } from '@/lib/record';

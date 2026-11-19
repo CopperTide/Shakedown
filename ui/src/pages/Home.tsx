@@ -13,7 +13,7 @@ import { missingFor, restoringLine, runLine, runnerProblem, taskName } from '../
 import TeamCard, { TeamActions } from '../home/TeamCard';
 import DisruptionPicker from '../home/DisruptionPicker';
 import { RUNNER_WORDS, RUNNERS } from '../home/runners';
-import { type Task, useSuggestedTeams, useTaskNames, useTasks, useTeam, useWorldPreview } from '../home/useHome';
+import { useSuggestedTeams, useTaskNames, useTasks, useTeam, useWorldPreview } from '../home/useHome';
 import WorldCard from '../home/WorldCard';
 import { useScenario } from '../scenario/ScenarioBuilder';
 import { teamForRun } from '../team';
@@ -64,7 +64,7 @@ function useSetup() {
   // A team comes with the runner its prompts are written for (a suggested team); others run in a chain.
   const teamRunner = team.team?.runner ?? 'chain';
   useEffect(() => { setRunner(teamRunner); }, [team.team?.id, teamRunner]);
-  const task: Task | null = tasks.tasks?.find((t) => t.id === taskId) ?? tasks.tasks?.[0] ?? null;
+  const task = tasks.tasks?.find((t) => t.id === taskId) ?? tasks.tasks?.[0] ?? null;
   const scenario = useScenario(true, task ? [task.id] : []);
   const nameOf = useTaskNames();
   useConnected(team.replace);

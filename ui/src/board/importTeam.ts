@@ -86,11 +86,17 @@ function fromSculptured(d: Json): Imported {
   return { team, from: 'Sculptured' };
 }
 
+/** True when an agent has what Shakedown runs it with: an id, a name, a kind it can run and a prompt. */
+const isAgent = (a: Json) => !!str(a.id) && !!str(a.name) && ARENA_KINDS.includes(a.kind as AgentKind) && typeof a.prompt === 'string';
+
+/** True when the file is a Shakedown team as it is: an id, a name and agents Shakedown can run. */
+const isTeam = (d: Json): d is Json & Team =>
+  typeof d.id === 'string' && typeof d.name === 'string' && list(d.agents).every((a) => isAgent(obj(a)));
+
 function fromArena(d: Json): Imported {
-  const agents = list(d.agents).map(obj);
-  const bad = agents.find((a) => !str(a.id) || !str(a.name) || !ARENA_KINDS.includes(a.kind as AgentKind) || typeof a.prompt !== 'string');
-  if (bad) return { error: `The agent ${str(bad.name) ?? str(bad.id) ?? '(unnamed)'} needs an id, a name, a kind (claude_code, codex or open) and a prompt.` };
-  return { team: d as unknown as Team, from: 'Arena' };
+  if (isTeam(d)) return { team: d, from: 'Arena' };
+  const bad = list(d.agents).map(obj).find((a) => !isAgent(a));
+  return { error: `The agent ${str(bad?.name) ?? str(bad?.id) ?? '(unnamed)'} needs an id, a name, a kind (claude_code, codex or open) and a prompt.` };
 }
 
 /** A team from a file's text, or what is wrong with it. */

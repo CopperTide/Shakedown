@@ -361,6 +361,14 @@ export interface TaskSummary {
   reason: string;
 }
 
+/** One of `GET /api/tasks` (`api.rs` `tasks`): a task with its ticket and the benchmark's instructions. */
+export interface Task extends TaskSummary {
+  ticket: string;
+  instructions: string;
+  /** The world's date and time at clock 0 (`YYYY-MM-DDTHH:MM:SS`), for a world whose clock is not today's. */
+  clock_start?: string;
+}
+
 export interface NewRunResponse {
   run_id: string;
   branch_id: string;

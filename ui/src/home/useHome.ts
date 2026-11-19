@@ -2,19 +2,15 @@ import { useCallback, useEffect, useState } from 'react';
 import { call, runs as fetchRuns, suggestedTeams, tasks as fetchTasks, views as fetchViews } from '../api';
 import { loadTeam, saveTeam } from '../team';
 import { taskName } from './summary';
-import type { BenchmarkDescription, TaskSummary, Team } from '../types';
+import type { BenchmarkDescription, Task, Team } from '../types';
 import type { TwinView } from '../world/types';
 import { errorMessage } from '@/lib/errors';
-
-export interface Task extends TaskSummary {
-  ticket: string;
-}
 
 /** The benchmark's tasks, with their tickets. */
 export function useTasks() {
   const [tasks, setTasks] = useState<Task[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  useEffect(() => { fetchTasks().then((t) => setTasks(t as Task[])).catch((e) => setError(errorMessage(e))); }, []);
+  useEffect(() => { fetchTasks().then(setTasks).catch((e) => setError(errorMessage(e))); }, []);
   return { tasks, error };
 }
 

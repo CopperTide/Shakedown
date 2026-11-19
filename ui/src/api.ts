@@ -4,7 +4,7 @@ import type { ScenarioChoice } from './scenario/types';
 import type { BranchView } from './world/types';
 import type {
   BenchmarkDescription, Branch, BranchDetail, Change, CompareResponse, Event, ForkResponse, Health, NewRunResponse,
-  ProviderStatus, RestoreMode, RestorePlan, RowsResponse, RunSummary, Runner, StatusEvent, TaskSummary, Team,
+  ProviderStatus, RestoreMode, RestorePlan, RowsResponse, RunSummary, Runner, StatusEvent, Task, Team,
 } from './types';
 
 export class ApiError extends Error {
@@ -38,7 +38,7 @@ export const deleteRun = (id: string) =>
 export const health = () => call<Health>('/api/health');
 /** Every model provider; asks local servers (and OpenAI/Anthropic when keyed) for their models, 3 s each. */
 export const providers = () => call<ProviderStatus[]>('/api/providers');
-export const tasks = () => call<TaskSummary[]>('/api/tasks');
+export const tasks = () => call<Task[]>('/api/tasks');
 export const defaultTeam = () => call<Team>('/api/team/default');
 /** Every team the benchmark suggests, the default first, each with the runner it is written for. */
 export const suggestedTeams = () => call<Team[]>('/api/teams');
