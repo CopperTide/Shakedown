@@ -3,14 +3,14 @@
 import type { Mark } from '@/lib/mark';
 import type { Event } from '../types';
 import type { BranchView, TwinFlow, TwinItem, TwinView, WorldViewPayload } from './types';
+import { asRecord } from '@/lib/record';
 
-const obj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' ? (v as Record<string, unknown>) : {});
 
-const isView = (v: unknown): v is TwinView => Array.isArray(obj(v).areas);
+const isView = (v: unknown): v is TwinView => Array.isArray(asRecord(v).areas);
 
 /** A `world_view` event's payload, or null for any other event. */
 export function viewPayload(e: Event): WorldViewPayload | null {
-  const p = obj(e.payload);
+  const p = asRecord(e.payload);
   if (e.kind !== 'world_view' || !isView(p.view)) return null;
   return { seq_of: typeof p.seq_of === 'number' ? p.seq_of : e.seq, view: p.view };
 }

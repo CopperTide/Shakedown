@@ -20,6 +20,7 @@ import { APPROXIMATE_NOTE, isApproximate, notComparedLine } from '../restore';
 import { pretty } from '../run/Inspector';
 import { diffCounts, formatCost, jsonDiff } from '../run/timeline';
 import type { BranchDetail, CompareResponse, CompareSide, Event, RowDiff, Team } from '../types';
+import { errorMessage } from '@/lib/errors';
 
 function StepView({ label, id, run, ev }: { label: string; id: string; run?: string; ev: Event | undefined }) {
   const p = (ev?.payload ?? {}) as Record<string, unknown>;
@@ -118,7 +119,7 @@ function useCompare(a: string, b: string) {
     setGot(null); setError(null);
     Promise.all([compare(a, b), fetchBranch(a), fetchBranch(b), endView(a), endView(b)])
       .then(([data, x, y, rx, ry]) => { if (!cancelled) setGot({ data, a: x, b: y, va: lastOf(rx), vb: lastOf(ry) }); })
-      .catch((e) => { if (!cancelled) setError(String(e.message ?? e)); });
+      .catch((e) => { if (!cancelled) setError(errorMessage(e)); });
     return () => { cancelled = true; };
   }, [a, b, attempt]);
   return { got, error, retry: () => setAttempt((n) => n + 1) };

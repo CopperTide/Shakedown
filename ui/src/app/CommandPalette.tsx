@@ -12,6 +12,7 @@ import { hasModifier } from '@/lib/keys';
 import { type Action, type Item, type Mode, hereOf, itemsFor, placeholderOf } from './palette';
 import { setThemePref, useTheme } from './theme';
 import { nextPref } from './themeModel';
+import { errorMessage } from '@/lib/errors';
 
 /** ⌘K / Ctrl+K anywhere toggles the palette. */
 export function usePaletteShortcut(toggle: () => void) {
@@ -31,8 +32,8 @@ function useLists(open: boolean) {
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     if (!open) return;
-    fetchRuns().then(setRuns).catch((e) => setError(String(e.message ?? e)));
-    fetchExperiments().then(setExperiments).catch((e) => setError(String(e.message ?? e)));
+    fetchRuns().then(setRuns).catch((e) => setError(errorMessage(e)));
+    fetchExperiments().then(setExperiments).catch((e) => setError(errorMessage(e)));
   }, [open]);
   return { runs, experiments, error };
 }

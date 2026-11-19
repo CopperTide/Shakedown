@@ -4,6 +4,7 @@ import { type Action, actionWord, classify, kindWord, worldInfo } from '../contr
 import { formatDuration, isWorldActor, reasoningWord } from '../control/lanes';
 import type { Event, Team } from '../types';
 import { clockText } from './flow';
+import { asRecord } from '@/lib/record';
 
 export interface StepSummary {
   title: string;
@@ -12,7 +13,6 @@ export interface StepSummary {
 }
 
 type Payload = Record<string, unknown>;
-const obj = (v: unknown): Payload => (v && typeof v === 'object' ? (v as Payload) : {});
 const clip = (s: string, n = 180) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s);
 const quote = (s: unknown) => `“${clip(String(s ?? '').replace(/\s+/g, ' ').trim())}”`;
 
@@ -39,8 +39,8 @@ function toolStep(e: Event, events: Event[], who: string): StepSummary {
 }
 
 function modelStep(p: Payload, who: string): StepSummary {
-  const model = obj(p.request).model ?? p.model;
-  const usage = obj(p.usage);
+  const model = asRecord(p.request).model ?? p.model;
+  const usage = asRecord(p.usage);
   const tin = usage.prompt_tokens ?? p.input_tokens;
   const tout = usage.completion_tokens ?? p.output_tokens;
   const tokens = typeof tin === 'number' && typeof tout === 'number' ? ` ${tin.toLocaleString()} tokens in, ${tout.toLocaleString()} out.` : '';
@@ -111,5 +111,5 @@ const WORDS: Partial<Record<Event['kind'], Words>> = {
 export function stepSummary(e: Event, events: Event[], team: Team): StepSummary {
   const to = (v: unknown) => (v == null ? 'the agents after it' : v === '*' ? 'everyone' : nameIn(team, String(v)));
   const words = WORDS[e.kind];
-  return words ? words(obj(e.payload), nameIn(team, e.agent), to, e, events) : { title: 'World view', text: "The world's view after a step.", abnormal: false };
+  return words ? words(asRecord(e.payload), nameIn(team, e.agent), to, e, events) : { title: 'World view', text: "The world's view after a step.", abnormal: false };
 }

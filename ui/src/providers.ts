@@ -3,6 +3,7 @@ import { providers as fetchProviders } from './api';
 import { useHealth } from './components';
 import { DEFAULT_OPENROUTER_MODEL, DEFAULT_PROVIDER } from './types';
 import type { AgentKind, AgentSpec, ProviderKind, ProviderStatus, Team } from './types';
+import { errorMessage } from '@/lib/errors';
 
 /** The cost source of a local server's calls (`providers/mod.rs` `LOCAL_COST_SOURCE`). */
 export const LOCAL_COST_SOURCE = 'local (no API charge)';
@@ -191,7 +192,7 @@ export function checkProviders(): Promise<ProviderStatus[]> {
   if (pending) return pending;
   pending = fetchProviders()
     .then((v) => { checked = v; failure = null; return v; })
-    .catch((e) => { failure = e instanceof Error ? e.message : String(e); throw e; })
+    .catch((e) => { failure = errorMessage(e); throw e; })
     .finally(() => { pending = null; refreshSnapshot(); });
   refreshSnapshot();
   return pending;

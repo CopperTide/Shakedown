@@ -4,6 +4,7 @@ import { loadTeam, saveTeam } from '../team';
 import { taskName } from './summary';
 import type { BenchmarkDescription, TaskSummary, Team } from '../types';
 import type { TwinView } from '../world/types';
+import { errorMessage } from '@/lib/errors';
 
 export interface Task extends TaskSummary {
   ticket: string;
@@ -13,7 +14,7 @@ export interface Task extends TaskSummary {
 export function useTasks() {
   const [tasks, setTasks] = useState<Task[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  useEffect(() => { fetchTasks().then((t) => setTasks(t as Task[])).catch((e) => setError(String(e.message ?? e))); }, []);
+  useEffect(() => { fetchTasks().then((t) => setTasks(t as Task[])).catch((e) => setError(errorMessage(e))); }, []);
   return { tasks, error };
 }
 
@@ -27,7 +28,7 @@ export function useTaskNames(): (id: string) => string {
 export function useTeam() {
   const [team, setTeam] = useState<Team | null>(null);
   const [error, setError] = useState<string | null>(null);
-  useEffect(() => { loadTeam().then(setTeam).catch((e) => setError(String(e.message ?? e))); }, []);
+  useEffect(() => { loadTeam().then(setTeam).catch((e) => setError(errorMessage(e))); }, []);
   const replace = useCallback((t: Team) => { saveTeam(t); setTeam(t); }, []);
   return { team, error, replace };
 }

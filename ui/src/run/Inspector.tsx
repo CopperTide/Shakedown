@@ -10,11 +10,12 @@ import { notComparedLine, savedLine } from '../restore';
 import { costIsUnknown, providerId, providerName, providerOf } from '../providers';
 import type { Event, Team } from '../types';
 import { formatCost, rowKeys } from './timeline';
+import { asRecord } from '@/lib/record';
+import { errorMessage } from '@/lib/errors';
 
 export const pretty = (v: unknown) => (typeof v === 'string' ? v : JSON.stringify(v ?? null, null, 2));
 
 type Payload = Record<string, unknown>;
-const obj = (v: unknown): Payload => (v && typeof v === 'object' ? (v as Payload) : {});
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -43,7 +44,7 @@ function useRows(branchId: string, seq: number, keys: string[], auto?: boolean) 
   const [busy, setBusy] = useState(false);
   const load = async () => {
     setBusy(true); setErr(null);
-    try { setData((await rows(branchId, seq, keys)).rows); } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    try { setData((await rows(branchId, seq, keys)).rows); } catch (e) { setErr(errorMessage(e)); }
     setBusy(false);
   };
   useEffect(() => { setData(null); setErr(null); }, [branchId, seq]);
@@ -99,7 +100,7 @@ function PermitLine({ events, event }: { events: Event[]; event: Event }) {
 }
 
 function ToolCall({ branchId, event, events, auto }: { branchId: string; event: Event; events: Event[]; auto?: boolean }) {
-  const p = obj(event.payload);
+  const p = asRecord(event.payload);
   const reads = keysOf(p.reads), writes = keysOf(p.writes);
   const { keys, more } = rowKeys(writes, reads);
   return (
@@ -130,7 +131,7 @@ export function modelCallLine(p: { provider?: string; request?: unknown }): stri
 }
 
 function ModelCall({ p }: { p: Payload }) {
-  const msgs: unknown[] = Array.isArray(obj(p.request).messages) ? (obj(p.request).messages as unknown[]) : [];
+  const msgs: unknown[] = Array.isArray(asRecord(p.request).messages) ? (asRecord(p.request).messages as unknown[]) : [];
   return (
     <>
       <Section title="Provider"><span className="font-mono text-xs">{modelCallLine(p as { provider?: string; request?: unknown })}</span></Section>
@@ -236,7 +237,7 @@ export interface InspectorProps {
 }
 
 function Body({ branchId, event, team, autoRows, events = [] }: InspectorProps & { event: Event }) {
-  const p = obj(event.payload);
+  const p = asRecord(event.payload);
   switch (event.kind) {
     case 'tool_call': return <ToolCall branchId={branchId} event={event} events={events} auto={autoRows} />;
     case 'model_call': return <ModelCall p={p} />;

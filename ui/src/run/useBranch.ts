@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { branch as fetchBranch, runs as fetchRuns, stream } from '../api';
 import type { Branch, BranchDetail, Event } from '../types';
+import { errorMessage } from '@/lib/errors';
 
 /** Adds a streamed event to the branch on screen, once. */
 export function withEvent(d: BranchDetail | null, id: string, e: Event): BranchDetail | null {
@@ -19,7 +20,7 @@ export function useBranch(branchId: string, runId?: string) {
     const id = branchId;
     current.current = id;
     fetchBranch(id).then((d) => { if (current.current === id) { setDetail(d); setError(null); } })
-      .catch((e) => { if (current.current === id) setError(String(e.message ?? e)); });
+      .catch((e) => { if (current.current === id) setError(errorMessage(e)); });
     if (runId) fetchRuns().then((r) => { if (current.current === id) setSiblings(r.find((x) => x.id === runId)?.branches ?? []); }).catch(() => {});
   }, [branchId, runId]);
   useEffect(() => { setDetail(null); load(); }, [load]);

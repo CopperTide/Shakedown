@@ -16,6 +16,7 @@ import { measureRows } from './measures';
 import { Checks, Setups } from './Results';
 import { SuiteWhatMatters } from '../review/WhatMatters';
 import type { Experiment } from './types';
+import { errorMessage } from '@/lib/errors';
 
 /** While an experiment runs, it is read again this often. */
 const POLL_MS = 2000;
@@ -43,7 +44,7 @@ function ScenarioLine({ e }: { e: Experiment }) {
 function StopButton({ id, onStopped }: { id: string; onStopped: () => void }) {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const stop = () => { setOpen(false); stopExperiment(id).then(onStopped, (e) => setError(String(e.message ?? e))); };
+  const stop = () => { setOpen(false); stopExperiment(id).then(onStopped, (e) => setError(errorMessage(e))); };
   return (
     <>
       <Button variant="ghost" onClick={() => setOpen(true)} title={error ?? undefined}><CircleStop />Stop</Button>

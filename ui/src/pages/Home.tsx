@@ -18,6 +18,7 @@ import WorldCard from '../home/WorldCard';
 import { useScenario } from '../scenario/ScenarioBuilder';
 import { teamForRun } from '../team';
 import type { Health, Runner, Team } from '../types';
+import { errorMessage } from '@/lib/errors';
 
 /** The runner and the disruptions, behind Options. */
 function Options({ s, busy }: { s: Setup; busy: boolean }) {
@@ -95,7 +96,7 @@ function useStart(s: Setup, open: (run: string, branch: string) => void, back: (
     try {
       const r = await startRun(s.task.id, teamForRun(team, s.runner), s.runner, s.scenario.scenario, team.connection);
       open(r.run_id, r.branch_id);
-    } catch (e) { setError(e instanceof Error ? e.message : String(e)); back(); }
+    } catch (e) { setError(errorMessage(e)); back(); }
     setStarting(false);
   };
   return { starting, error, run };

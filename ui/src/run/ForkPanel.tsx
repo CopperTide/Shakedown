@@ -10,6 +10,7 @@ import { Field, NativeSelect, Textarea } from '../components/ui/input';
 import { ErrorState } from '../components/ui/state';
 import { MODE_LABEL, modelProblem, providerId, providerOf, useProviderList } from '../providers';
 import type { AgentKind, AgentSpec, BranchDetail, Change, ForkResponse, ProviderStatus, RestoreMode, Team } from '../types';
+import { errorMessage } from '@/lib/errors';
 
 const MODES: AgentKind[] = ['claude_code', 'codex', 'open'];
 
@@ -141,7 +142,7 @@ function useFork(branch: BranchDetail, seq: number, onForked: (r: ForkResponse) 
   const changes = team ? {} : swap ? swapChanges(branch.team, architecture.rules) : changedFields(branch.team.agents, edits);
   const go = async () => {
     setBusy(true); setErr(null);
-    try { onForked(await fork(branch.id, seq, changes, restore, team)); } catch (e) { setErr(e instanceof Error ? e.message : String(e)); setBusy(false); }
+    try { onForked(await fork(branch.id, seq, changes, restore, team)); } catch (e) { setErr(errorMessage(e)); setBusy(false); }
   };
   const teamProblem = team ? teamSwapProblem(branch.events) : null;
   const blocked = blockedReason(plan, branch.status === 'running') ?? teamProblem ?? forkProblem(branch.team.agents, changes, list);

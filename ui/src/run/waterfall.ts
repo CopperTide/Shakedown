@@ -4,6 +4,7 @@
 // recording, saves) is listed under it. Gaps are waiting or unseen work.
 import { type WorldInfo, actionWord, classify, worldInfo } from '../control/actions';
 import type { Event } from '../types';
+import { asRecord } from '@/lib/record';
 
 export type SpanKind = 'turn' | 'step' | 'overhead';
 
@@ -35,7 +36,6 @@ const OVERHEAD_WORDS: Record<string, string> = {
   mcp: 'MCP endpoint', restore: 'restore', gateway: 'gateway hop', score: 'scoring',
 };
 
-const obj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' ? (v as Record<string, unknown>) : {});
 
 /** The agent's steps cut into turns: each model call starts one; steps before the first form turn 0. */
 export function turnsOf(events: Event[], agent: string): Event[][] {
@@ -51,7 +51,7 @@ export function turnsOf(events: Event[], agent: string): Event[][] {
 function stepLabel(e: Event, info: WorldInfo): { label: string; detail: string; abnormal: boolean; write: boolean } {
   const a = classify(e, info);
   if (a) return { label: `${actionWord(a)} · ${a.tool}`, detail: a.error ?? '', abnormal: a.outcome !== 'ok', write: a.effect === 'write' };
-  const p = obj(e.payload);
+  const p = asRecord(e.payload);
   if (e.kind === 'model_call') return { label: 'Model call', detail: typeof p.model === 'string' ? p.model : '', abnormal: false, write: false };
   if (['message', 'handoff', 'delegation', 'report'].includes(e.kind)) return { label: `${e.kind} → ${String(p.to ?? 'next')}`, detail: '', abnormal: false, write: false };
   if (e.kind === 'agent_end') return { label: p.ok === false ? 'Ended: failed' : 'Ended', detail: String(p.error ?? ''), abnormal: p.ok === false, write: false };
@@ -59,7 +59,7 @@ function stepLabel(e: Event, info: WorldInfo): { label: string; detail: string; 
 }
 
 const durationOf = (e: Event) => {
-  const d = obj(e.payload).duration_ms;
+  const d = asRecord(e.payload).duration_ms;
   return typeof d === 'number' ? d : 0;
 };
 
@@ -72,11 +72,11 @@ function turnTitle(turns: Event[][], index: number): string {
 
 /** A step's bar and, under it, one row per kind of arena overhead it recorded. */
 function stepSpans(e: Event, t0: number, info: WorldInfo): TraceSpan[] {
-  const p = obj(e.payload);
+  const p = asRecord(e.payload);
   const end = Date.parse(e.at) - t0;
   const dur = durationOf(e);
   const step: TraceSpan = { seq: e.seq, kind: 'step', ...stepLabel(e, info), start: end - dur, end, depth: 1 };
-  const over = Object.entries(obj(p.overhead_ms)).filter(([, v]) => typeof v === 'number' && v > 0.05) as [string, number][];
+  const over = Object.entries(asRecord(p.overhead_ms)).filter(([, v]) => typeof v === 'number' && v > 0.05) as [string, number][];
   const rows = over.map(([k, ms]): TraceSpan => ({
     seq: null, kind: 'overhead', label: `Shakedown · ${OVERHEAD_WORDS[k] ?? k}`, detail: '', start: step.start, end: step.start + ms, depth: 2, abnormal: false, write: false,
   }));

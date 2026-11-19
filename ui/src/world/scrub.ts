@@ -7,6 +7,7 @@ import { actionsOf } from '../control/actions';
 import type { Event, Team } from '../types';
 import { isViewEvent } from './twin';
 import type { BranchView } from './types';
+import { asRecord } from '@/lib/record';
 
 export type TrackMarkKind = 'disruption' | 'refusal' | 'fork';
 
@@ -24,14 +25,13 @@ export interface Track {
   marks: TrackMark[];
 }
 
-const obj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' ? (v as Record<string, unknown>) : {});
 
 /** A world event a part reported as a disruption (contract A: `{kind: "disruption", text, data}`). */
 export function isDisruption(e: Event): boolean {
-  return e.kind === 'world_event' && obj(e.payload).kind === 'disruption';
+  return e.kind === 'world_event' && asRecord(e.payload).kind === 'disruption';
 }
 
-export const disruptionText = (e: Event) => String(obj(e.payload).text ?? 'disruption');
+export const disruptionText = (e: Event) => String(asRecord(e.payload).text ?? 'disruption');
 
 /** Disruptions and refused calls, in step order; the fork point of a forked branch. */
 export function trackMarks(events: Event[], startSeq: number | null): TrackMark[] {

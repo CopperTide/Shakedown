@@ -5,6 +5,7 @@ import type { BranchDetail } from '../types';
 import { moveStop, snapStop } from './scrub';
 import { normalizeViews, viewsFromEvents } from './twin';
 import type { BranchView } from './types';
+import { errorMessage } from '@/lib/errors';
 
 /**
  * The branch's views: `GET /api/branches/{id}/views` (inherited views included), refetched as a
@@ -18,7 +19,7 @@ export function useViews(branchId: string, detail: BranchDetail | null) {
     let alive = true;
     fetchViews(branchId)
       .then((v) => { if (alive) { setRaw(v); setError(null); } })
-      .catch((e) => { if (alive) { setRaw(null); setError(String(e.message ?? e)); } });
+      .catch((e) => { if (alive) { setRaw(null); setError(errorMessage(e)); } });
     return () => { alive = false; };
   }, [branchId, count]);
   const views = useMemo(() => {

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { type Target, getReview, startReview } from './api';
 import type { CompareReview, RunReview, StoredReview } from './types';
+import { errorMessage } from '@/lib/errors';
 
 /** How often a running review is asked about. */
 export const POLL_MS = 3000;
@@ -21,7 +22,7 @@ export function useReview<R extends RunReview | CompareReview>(target: Target | 
     if (current.current === k) { setStored(r); setLoaded(true); setError(null); }
   }, []);
   const fail = useCallback((k: string, e: unknown) => {
-    if (current.current === k) { setError(e instanceof Error ? e.message : String(e)); setLoaded(true); }
+    if (current.current === k) { setError(errorMessage(e)); setLoaded(true); }
   }, []);
   const start = useCallback((again = false) => {
     if (!target) return;

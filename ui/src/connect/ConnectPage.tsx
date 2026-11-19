@@ -12,6 +12,7 @@ import {
   type ConnectForm, type ConnectFrom, type ConnectKind, type ConnectReturn, checkBody, connectedAgent, connectedTeam, emptyForm, formProblem, saveConnected,
 } from './connect';
 import { type Connection, type ConnectionTest, codeBody, codeTeam, createConnection, deleteConnection, testConnection, testLine } from './connections';
+import { errorMessage } from '@/lib/errors';
 
 /** Where the test stands: not run (or the form changed since), running, connected, or why not. */
 export type TestState =
@@ -181,7 +182,7 @@ function useConnect() {
     try {
       next = await check();
     } catch (e) {
-      next = { state: 'error', error: e instanceof Error ? e.message : String(e) };
+      next = { state: 'error', error: errorMessage(e) };
     }
     if (mine === seq.current) setTest(next ?? { state: 'idle' });
   };

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { ApiError, restorePlan } from '../api';
 import { REPLAY_NOTE, planLine } from '../restore';
 import type { PartPlan, RestoreMode } from '../types';
+import { errorMessage } from '@/lib/errors';
 
 /** What the restore plan for the panel's step says: loading, the parts, a refusal (409) or a failure. */
 export type Plan =
@@ -23,7 +24,7 @@ export async function loadPlan(branchId: string, seq: number, mode: RestoreMode)
     return { state: 'ready', parts: (await restorePlan(branchId, seq, mode)).parts };
   } catch (e) {
     if (e instanceof ApiError && e.status === 409) return { state: 'refused', reason: e.message };
-    return { state: 'failed', error: e instanceof Error ? e.message : String(e) };
+    return { state: 'failed', error: errorMessage(e) };
   }
 }
 

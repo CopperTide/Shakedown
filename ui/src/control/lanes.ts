@@ -5,6 +5,7 @@
 import type { Event, Team } from '../types';
 import { type Action, type Outcome, actionWord, classify, kindWord, worldInfo } from './actions';
 import type { Effect } from './types';
+import { asRecord } from '@/lib/record';
 
 export type MarkKind = 'action' | 'interlock' | 'message' | 'model' | 'start' | 'end' | 'check' | 'world';
 
@@ -49,7 +50,6 @@ export const WORLD_LANE = 'world';
 export const isWorldActor = (agent: string | null) => agent == null || agent === 'link' || agent === 'setup';
 export const CHECK_LANE = 'check';
 
-const obj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' ? (v as Record<string, unknown>) : {});
 
 const APPROVALS = 'approvals';
 
@@ -123,7 +123,7 @@ const MARKS: Partial<Record<Event['kind'], (e: Event, p: Payload, base: Base) =>
 function stepMark(e: Event, inherited: boolean): Mark | null {
   const make = MARKS[e.kind];
   if (!make) return null;
-  return make(e, obj(e.payload), { seq: e.seq, at: Date.parse(e.at), outcome: 'ok', durationMs: null, inherited, saved: false });
+  return make(e, asRecord(e.payload), { seq: e.seq, at: Date.parse(e.at), outcome: 'ok', durationMs: null, inherited, saved: false });
 }
 
 function laneOf(e: Event): string {

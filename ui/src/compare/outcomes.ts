@@ -6,8 +6,8 @@ import type { NamedCheck } from '../control/types';
 import type { BranchDetail, CompareSide, Event } from '../types';
 import { viewsFromEvents } from '../world/twin';
 import type { TwinView } from '../world/types';
+import { asRecord } from '@/lib/record';
 
-const obj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' ? (v as Record<string, unknown>) : {});
 
 /** One figure of a branch: the text shown, a number to compare (null: not comparable) and whether it is abnormal. */
 export interface Figure {
@@ -33,7 +33,7 @@ const NONE: Figure = { text: '–', value: null, abnormal: false };
 export function namedChecks(events: Event[]): { passed: boolean; checks: NamedCheck[] } | null {
   const check = [...events].reverse().find((e) => e.kind === 'check');
   if (!check) return null;
-  const p = obj(check.payload);
+  const p = asRecord(check.payload);
   return { passed: !!p.passed, checks: Array.isArray(p.checks) ? (p.checks as NamedCheck[]) : [] };
 }
 

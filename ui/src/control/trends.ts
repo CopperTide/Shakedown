@@ -2,6 +2,7 @@
 // and cost as they build up.
 import type { Event } from '../types';
 import { type Action, kindWord } from './actions';
+import { asRecord } from '@/lib/record';
 
 export interface Series {
   name: string;
@@ -45,7 +46,6 @@ export interface CallPoint {
   costUsd: number | null;
 }
 
-const obj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' ? (v as Record<string, unknown>) : {});
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 
 /** Every model call with a known context size (compactions and calls without usage are left out). */
@@ -53,8 +53,8 @@ export function modelCalls(events: Event[]): CallPoint[] {
   const out: CallPoint[] = [];
   for (const e of events) {
     if (e.kind !== 'model_call') continue;
-    const p = obj(e.payload);
-    const usage = obj(p.usage);
+    const p = asRecord(e.payload);
+    const usage = asRecord(p.usage);
     const context = num(usage.prompt_tokens);
     if (context == null) continue;
     const tokens = num(usage.total_tokens) ?? context + (num(usage.completion_tokens) ?? 0);

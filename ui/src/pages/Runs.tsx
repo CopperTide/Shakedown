@@ -16,6 +16,7 @@ import { EmptyState, ErrorState } from '../components/ui/state';
 import { type BranchRow, branchRows, runIsRunning, runTitle } from '../runs/runsTable';
 import type { RunSummary } from '../types';
 import { usePolled } from '@/lib/usePolled';
+import { errorMessage } from '@/lib/errors';
 
 /** The runs, read again every 3 s while any of them runs. */
 function useRuns() {
@@ -83,7 +84,7 @@ function DeleteRunDialog({ run, onClose, onDone }: { run: RunSummary | null; onC
       window.dispatchEvent(new Event(DISK_CHANGED));
       toast(`Deleted ${runTitle(run)}`, { description: `${r.dropped} saved world${r.dropped === 1 ? '' : 's'} dropped.` });
       onDone(); onClose();
-    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    } catch (e) { setError(errorMessage(e)); }
     setBusy(false);
   };
   return (

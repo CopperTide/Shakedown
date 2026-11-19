@@ -5,6 +5,7 @@ import { Tag } from '../components/ui/status';
 import { cn } from '@/lib/cn';
 import { type Selection, chosen, initialSelection, optionWords, paramProblem, previewText, scenarioOf, scenarioProblem, toggled, withParam } from './scenario';
 import type { DisruptionOption, ParamSpec, ParamValue, ScenarioOptions } from './types';
+import { errorMessage } from '@/lib/errors';
 
 /** The benchmark's `scenario_options`, loaded when a dialog opens; the selection starts at their defaults. */
 export function useScenario(open: boolean, tasks: string[]) {
@@ -15,7 +16,7 @@ export function useScenario(open: boolean, tasks: string[]) {
     if (!open) return;
     let alive = true;
     fetchOptions().then((o) => { if (alive) { setOptions(o); setSel(initialSelection(o)); } })
-      .catch((e) => { if (alive) setError(String(e.message ?? e)); });
+      .catch((e) => { if (alive) setError(errorMessage(e)); });
     return () => { alive = false; };
   }, [open]);
   return {

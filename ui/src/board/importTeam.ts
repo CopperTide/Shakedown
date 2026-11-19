@@ -3,12 +3,14 @@
 // model: Claude agents become Claude Code, Codex agents Codex; a kind Arena can't run is refused
 // by name, never swapped for something else.
 import type { AgentKind, AgentSpec, Team } from '../types';
+import { type JsonObject, asRecord } from '@/lib/record';
 import type { Board, BoardLink } from './board';
 
 export type Imported = { team: Team; from: 'Sculptured' | 'Arena' } | { error: string };
 
-type Json = Record<string, unknown>;
-const obj = (v: unknown): Json => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Json) : {});
+type Json = JsonObject;
+/** A file's object fields; an array where an object belongs reads as empty. */
+const obj = (v: unknown): Json => (Array.isArray(v) ? {} : asRecord(v));
 const str = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v.trim() : null);
 const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
 const list = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);

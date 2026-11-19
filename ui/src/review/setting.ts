@@ -1,6 +1,7 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { reviewSettings } from './api';
 import type { ReviewSettings } from './types';
+import { errorMessage } from '@/lib/errors';
 
 /** This browser's choice (⋯ → AI review): on unless turned off. */
 export const REVIEW_KEY = 'arena.review';
@@ -40,7 +41,7 @@ let server: Promise<ReviewSettings> | null = null;
 function serverSettings(): Promise<ReviewSettings> {
   server ??= reviewSettings().catch((e) => {
     server = null;
-    return { enabled: false, model: '', why: String(e?.message ?? e) };
+    return { enabled: false, model: '', why: errorMessage(e) };
   });
   return server;
 }

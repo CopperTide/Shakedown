@@ -10,6 +10,7 @@ import { ErrorState, LoadingState } from '../components/ui/state';
 import { MODE_LABEL, agentModelLine, agentModelTip, providerOf, useProviderList } from '../providers';
 import { clearStoredTeam, loadTeam, saveTeam, slug, withSlugIds } from '../team';
 import type { AgentKind, AgentSpec, ProviderStatus, Team as TeamT } from '../types';
+import { errorMessage } from '@/lib/errors';
 
 const KINDS: AgentKind[] = ['claude_code', 'codex', 'open'];
 
@@ -63,7 +64,7 @@ function useTeamEditor() {
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   useEffect(() => {
-    loadTeam().then((t) => { setTeam(t); setLoaded(true); }).catch((e) => setError(String(e.message ?? e)));
+    loadTeam().then((t) => { setTeam(t); setLoaded(true); }).catch((e) => setError(errorMessage(e)));
   }, []);
   useEffect(() => { if (loaded && team) saveTeam(team); }, [loaded, team]);
   const setAgents = (fn: (a: AgentSpec[]) => AgentSpec[]) => setTeam((t) => (t ? { ...t, agents: withSlugIds(fn(t.agents)) } : t));
@@ -74,7 +75,7 @@ function useTeamEditor() {
     add: () => setAgents((as) => [...as, { id: slug('agent', new Set(as.map((a) => a.id))), name: `Agent ${as.length + 1}`, kind: 'claude_code', model: null, prompt: '' }]),
     reset: async () => {
       clearStoredTeam();
-      try { setTeam(await defaultTeam()); } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+      try { setTeam(await defaultTeam()); } catch (e) { setError(errorMessage(e)); }
     },
   };
   return { team, error, ...ops };

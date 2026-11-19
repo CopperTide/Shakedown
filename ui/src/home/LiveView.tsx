@@ -27,6 +27,7 @@ import { useViews } from '../world/useWorld';
 import { taskOf } from '../run/runStats';
 import { useNow } from './useHome';
 import { RunReview } from '../review/RunReview';
+import { errorMessage } from '@/lib/errors';
 
 type Main = 'timeline' | 'twin';
 
@@ -134,7 +135,7 @@ function useControls(branchId: string, reload: () => void) {
   const [stopping, setStopping] = useState(false);
   const act = (f: () => Promise<unknown>) => {
     setBusy(true); setError(null);
-    f().then(reload, (e) => setError(e instanceof Error ? e.message : String(e))).finally(() => setBusy(false));
+    f().then(reload, (e) => setError(errorMessage(e))).finally(() => setBusy(false));
   };
   return { busy, error, stopping, setStopping, pause: (p: boolean) => act(() => setPaused(branchId, p)), stop: () => { setStopping(false); act(() => stopBranch(branchId)); } };
 }

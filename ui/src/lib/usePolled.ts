@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { errorMessage } from '@/lib/errors';
 
 /**
  * Loads `load()` when `key` changes, and again every `ms` while `again(value)` holds (something
@@ -17,7 +18,7 @@ export function usePolled<T>(load: () => Promise<T>, again: (v: T) => boolean, m
       if (!alive) return;
       setData(v); setError(null);
       if (fns.current.again(v)) timer = setTimeout(go, ms);
-    }).catch((e) => alive && setError(String(e?.message ?? e)));
+    }).catch((e) => alive && setError(errorMessage(e)));
     go();
     return () => { alive = false; clearTimeout(timer); };
   }, [key, tick, ms]);

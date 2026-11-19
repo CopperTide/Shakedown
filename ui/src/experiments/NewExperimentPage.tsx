@@ -20,6 +20,7 @@ import { createExperiment } from './api';
 import { DEFAULT_RUNS, MAX_SETUPS, RUN_CHOICES, type SetupDraft, newDraft, settleDrafts, setupTeam, setupsProblem } from './model';
 import SetupCard, { type TeamChoices } from './SetupCard';
 import type { NewExperiment } from './types';
+import { errorMessage } from '@/lib/errors';
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -131,7 +132,7 @@ function useStart() {
   const start = async (body: NewExperiment | null) => {
     if (!body) return;
     setBusy(true); setError(null);
-    try { nav(`/experiments/${(await createExperiment(body)).id}`); } catch (e) { setError(e instanceof Error ? e.message : String(e)); setBusy(false); }
+    try { nav(`/experiments/${(await createExperiment(body)).id}`); } catch (e) { setError(errorMessage(e)); setBusy(false); }
   };
   return { busy, error, start };
 }

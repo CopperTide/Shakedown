@@ -4,6 +4,7 @@
 import { savedParts } from '../restore';
 import type { Event } from '../types';
 import type { Effect, SystemInfo, ToolInfo } from './types';
+import { asRecord } from '@/lib/record';
 
 export interface WorldInfo {
   /** Per part, what kind of system it is (parts whose integration does not say are absent). */
@@ -36,15 +37,14 @@ export interface Action {
   saved: boolean;
 }
 
-const obj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' ? (v as Record<string, unknown>) : {});
 
 export function worldInfo(events: Event[]): WorldInfo {
-  const start = obj(events.find((e) => e.kind === 'run_start')?.payload);
+  const start = asRecord(events.find((e) => e.kind === 'run_start')?.payload);
   const world = Array.isArray(start.world) ? start.world : [];
   return {
-    systems: obj(start.systems) as Record<string, SystemInfo>,
-    tools: obj(start.tools) as Record<string, ToolInfo>,
-    parts: world.map((p) => String(obj(p).part ?? '')).filter(Boolean),
+    systems: asRecord(start.systems) as Record<string, SystemInfo>,
+    tools: asRecord(start.tools) as Record<string, ToolInfo>,
+    parts: world.map((p) => String(asRecord(p).part ?? '')).filter(Boolean),
     known: 'tools' in start,
   };
 }
@@ -82,7 +82,7 @@ const numberOr = (v: unknown): number | null => (typeof v === 'number' ? v : nul
 /** A tool call event as an action; null for any other event. */
 export function classify(e: Event, info: WorldInfo, startSeq: number | null = null): Action | null {
   if (e.kind !== 'tool_call') return null;
-  const p = obj(e.payload);
+  const p = asRecord(e.payload);
   const tool = String(p.name ?? 'tool');
   const known = toolInfo(info, tool);
   const part = partOf(p, known);
