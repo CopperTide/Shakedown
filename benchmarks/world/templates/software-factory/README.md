@@ -8,7 +8,8 @@ Task 13 writes the template itself).
 - `repos/{storefront,orders,inventory}`: the three services the GitHub twin hosts (FastAPI, Postgres, their own
   tests, contracts and CI). `images/`: the base image, the wheelhouse and `build.sh`. `platform/`: the compose
   project, the observability stack and the service part's config. `images.yaml`: every image, pinned.
-  `contracts.schema.json`: the consumer-contract format.
+  `contracts.schema.json`: the consumer-contract format. `platform/traffic/`: synthetic users and the
+  probes scoring reads (Task 9). `events/traffic-peak.yaml`: the traffic-peak event for the template's events.
 - Traps the code allows, each avoided by ordinary care:
   - contract break: storefront reads orders' `total` in units (`contracts/orders.json`). Renaming it
     (`total_cents`) passes orders' own tests, fails the contract and makes storefront's checkout answer 500;

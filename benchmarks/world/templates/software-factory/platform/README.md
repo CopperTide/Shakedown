@@ -16,6 +16,9 @@ containers with the CI job and the traffic service, under 2600).
 - GlitchTip 6.2.6, web and worker in one process (lean) or two containers (full), no Valkey; `glitchtip/init.sh`
   makes the organisation, the three projects with the apps' DSN keys and the probes' API token, then starts it.
 - `seed/`: the catalog and `PROD_ORDERS_ROWS` (default 300000) past orders, loaded once the services have migrated.
+- `traffic/`: seeded synthetic users against production on the world clock, and the probes `slo/production`,
+  `traffic/stats` and `contracts` (port 9100) run on `contracts/`, a copy of the consumers' contracts agents
+  cannot change (see `traffic/README.md`).
 
 ## Verified (2026-11-19, Linux x86_64, Docker Compose 5.0.2)
 
@@ -34,5 +37,9 @@ containers with the CI job and the traffic service, under 2600).
   Prometheus has the three rules, Grafana the three datasources and four dashboards, GlitchTip's init made the
   projects storefront, orders and inventory (ids 1 to 3) and an event sent with orders' DSN is taken.
 
-Not verified: the whole platform together (the apps, the seeds, the collector and the world-time gateway, whose
-image Task 7 builds), the full profile's containers, telemetry reaching the stores, and memory under traffic.
+- `test_live_traffic.py` (live): production's apps, prod-db, prod-seed, the collector and the traffic from this
+  compose file (see `traffic/README.md`).
+
+Not verified: the whole platform together (with the observability stack and the world-time gateway, whose image
+Task 7 builds), the full profile's containers, telemetry reaching the stores, and the stack's memory under
+traffic.

@@ -146,7 +146,7 @@ def test_volumes_are_saved_as_planned_and_probes_read_production(platform):
     assert {"alerts", "glitchtip/issues", "version/storefront", "version/orders", "version/inventory",
             "slo/production"} <= keys
     compose = load_yaml(platform / "compose.yaml")["services"]
-    assert {p["service"] for p in part["probes"]} - set(compose) == {"traffic"}  # Task 9 adds it
+    assert {p["service"] for p in part["probes"]} <= set(compose)
     assert {w["probe"] for w in part["watches"]} == {"alerts/paging"} <= keys
 
 

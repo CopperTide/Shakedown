@@ -1,0 +1,9 @@
+{
+  "consumer": "storefront",
+  "provider": "inventory",
+  "calls": [
+    {"method": "GET", "path": "/stock", "fields": {"items": "array"}},
+    {"method": "GET", "path": "/stock/LAMP-01",
+     "fields": {"sku": "string", "name": "string", "unit_price": "number", "currency": "string", "available": "number"}}
+  ]
+}
