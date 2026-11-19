@@ -216,6 +216,17 @@ impl Store {
         Ok(())
     }
 
+    /// Records `payload` as an event of its kind on a branch (see `append`).
+    pub async fn record<P: crate::model::EventPayload>(
+        &self,
+        branch_id: &str,
+        agent: Option<&str>,
+        payload: &P,
+    ) -> Result<Event> {
+        let payload = serde_json::to_value(payload)?;
+        self.append(branch_id, agent, P::KIND, payload).await
+    }
+
     /// Records an event of a branch; an object payload also gets the branch's `overhead_ms` built
     /// up since its last event. The time this takes is overhead of the kind `record`.
     pub async fn append(

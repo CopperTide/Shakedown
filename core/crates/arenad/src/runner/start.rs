@@ -5,7 +5,7 @@ use std::{sync::Arc, time::Instant};
 
 use anyhow::{anyhow, Result};
 use parts::proto::BenchDescribe;
-use serde_json::{json, Value};
+use serde_json::json;
 
 use super::lifecycle::{spawn_branch, StartPoint};
 use crate::{
@@ -197,11 +197,7 @@ async fn start_world(
     let world = World::start_planned(hub, bench, planned, branch_id, seed, WorldFrom::Base).await?;
     overhead::add_since(branch_id, Cat::Restore, since);
     let start = run_start(bench, &world, seed, &of);
-    match state
-        .store
-        .append(branch_id, None, EventKind::RunStart, start)
-        .await
-    {
+    match state.store.record(branch_id, None, &start).await {
         Ok(e) => Ok((world, e.seq)),
         Err(e) => {
             world.stop().await;
@@ -211,29 +207,28 @@ async fn start_world(
 }
 
 /// The payload of `RunStart` (see `start_world`).
-fn run_start(bench: &BenchDescribe, world: &World, seed: u64, of: &RunStartOf<'_>) -> Value {
-    let mut start = json!({
-        "task_id": of.task_id,
-        "team": of.team,
-        "benchmark": bench.name,
-        "world": bench.world,
-        "seed": seed,
-        "base_seed": world::SHARED_SEED,
-        "fingerprints": world.fingerprints(),
-        "saves": world.saves(),
-        "runner": of.rules.runner,
-        "handoff": of.rules.handoff_word(),
-        "systems": world.systems(),
-        "tools": world.tool_info(),
-    });
-    if !of.scenario.is_empty() {
-        start["scenario"] = json!(of.scenario);
+fn run_start(
+    bench: &BenchDescribe,
+    world: &World,
+    seed: u64,
+    of: &RunStartOf<'_>,
+) -> RunStartPayload {
+    let scenario = (!of.scenario.is_empty()).then(|| json!(of.scenario));
+    RunStartPayload {
+        task_id: Some(of.task_id.to_string()),
+        team: Some(of.team.clone()),
+        benchmark: Some(bench.name.clone()),
+        world: Some(bench.world.clone()),
+        seed,
+        base_seed: world::SHARED_SEED,
+        fingerprints: world.fingerprints(),
+        saves: Some(world.saves()),
+        runner: Some(of.rules.runner),
+        handoff: Some(of.rules.handoff_word().to_string()),
+        systems: world.systems(),
+        tools: world.tool_info(),
+        scenario,
+        max_cost_usd: of.rules.max_cost_usd,
+        connection: of.rules.connection.clone(),
     }
-    if let Some(max) = of.rules.max_cost_usd {
-        start["max_cost_usd"] = json!(max);
-    }
-    if let Some(c) = &of.rules.connection {
-        start["connection"] = json!(c);
-    }
-    start
 }

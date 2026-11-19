@@ -244,6 +244,17 @@ impl BranchCtx {
         self.gate.lock().await
     }
 
+    /// Records `payload` as an event of its kind on this branch (see `append`).
+    pub async fn record<P: EventPayload>(
+        &self,
+        store: &Store,
+        agent: Option<&str>,
+        payload: &P,
+    ) -> anyhow::Result<Event> {
+        let payload = serde_json::to_value(payload)?;
+        self.append(store, agent, P::KIND, payload).await
+    }
+
     /// Records an event of this branch with the world clock paused: recording is arena's work.
     pub async fn append(
         &self,

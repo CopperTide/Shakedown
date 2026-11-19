@@ -6,6 +6,9 @@ use serde_json::Value;
 pub use crate::secrets::Headers;
 
 mod agent_in;
+mod payloads;
+
+pub use payloads::*;
 
 /// A fieldless enum whose variants each have one name, used everywhere it is written or read:
 /// in serde, `as_str`, `parse`, and the store. `ALL` lists the variants in order.
