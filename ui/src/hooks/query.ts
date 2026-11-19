@@ -46,24 +46,29 @@ export class Query<T> {
     };
   };
 
-  /** Ask now; an answer to an earlier request no longer lands. */
-  fetch = (): void => {
+  /** Ask now; an answer to an earlier request no longer lands. `clear`: start over, no value or error meanwhile. */
+  fetch = ({ clear = false }: { clear?: boolean } = {}): void => {
     const id = ++this.request;
     clearTimeout(this.timer);
-    this.set({ ...this.state, loading: true });
+    this.set(clear ? { data: null, error: null, loading: true } : { ...this.state, loading: true });
     this.load().then(
       (data) => {
         if (id !== this.request) return;
         this.loaded = true;
         this.set({ data, error: null, loading: false });
         const poll = this.options().poll;
-        if (poll?.while(data) && this.readers.size) this.timer = setTimeout(this.fetch, poll.ms);
+        if (poll?.while(data) && this.readers.size) this.timer = setTimeout(() => this.fetch(), poll.ms);
       },
       (e) => {
         if (id !== this.request) return;
         this.set({ data: this.options().keepOnError ? this.state.data : null, error: errorMessage(e), loading: false });
       },
     );
+  };
+
+  /** Change the value on screen (a streamed event); the next answer replaces it. */
+  update = (fn: (data: T | null) => T | null): void => {
+    this.set({ ...this.state, data: fn(this.state.data) });
   };
 
   private stop() {
@@ -83,10 +88,10 @@ export class Query<T> {
 const shared = new Map<string, Query<unknown>>();
 
 /** The page-wide query for `key` (the tasks, the health, the review settings): one load, every reader. */
-export function sharedQuery<T>(key: string, load: () => Promise<T>): Query<T> {
+export function sharedQuery<T>(key: string, load: () => Promise<T>, options: QueryOptions<T> = {}): Query<T> {
   let q = shared.get(key) as Query<T> | undefined;
   if (!q) {
-    q = new Query(load);
+    q = new Query(load, () => options);
     shared.set(key, q as Query<unknown>);
   }
   return q;

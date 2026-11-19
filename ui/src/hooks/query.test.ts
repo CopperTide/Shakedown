@@ -86,6 +86,31 @@ describe('Query', () => {
   });
 });
 
+describe('changing the answer on screen', () => {
+  it('update changes the value in place (a streamed event), and the next answer replaces it', async () => {
+    const { load, calls } = loads<number[]>();
+    const q = new Query(load);
+    q.subscribe(() => {});
+    calls[0].resolve([1]);
+    await flush();
+    q.update((d) => (d ? [...d, 2] : d));
+    expect(q.get().data).toEqual([1, 2]);
+    q.fetch();
+    calls[1].resolve([1, 2, 3]);
+    await flush();
+    expect(q.get().data).toEqual([1, 2, 3]);
+  });
+  it('a retry from scratch clears the value and the error while it asks', async () => {
+    const { load, calls } = loads<number>();
+    const q = new Query(load);
+    q.subscribe(() => {});
+    calls[0].reject(new Error('down'));
+    await flush();
+    q.fetch({ clear: true });
+    expect(q.get()).toMatchObject({ data: null, error: null, loading: true });
+  });
+});
+
 describe('polling', () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
@@ -158,6 +183,18 @@ describe('shared queries', () => {
     sharedQuery('health', load).subscribe(() => {});
     expect(load).toHaveBeenCalledTimes(1);
     expect(sharedQuery('health', load).get().data).toBe('ok');
+  });
+
+  it('takes options from whoever made it (a health read that keeps its last value)', async () => {
+    const { load, calls } = loads<string>();
+    const q = sharedQuery('h', load, { keepOnError: true });
+    q.subscribe(() => {});
+    calls[0].resolve('ok');
+    await flush();
+    q.fetch();
+    calls[1].reject(new Error('down'));
+    await flush();
+    expect(q.get().data).toBe('ok');
   });
 
   it('a failed load is not kept: the next reader asks again', async () => {

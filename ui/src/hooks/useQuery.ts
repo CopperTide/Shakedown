@@ -4,7 +4,7 @@ import { Query, type QueryOptions, type QueryState, sharedQuery } from './query'
 export interface UseQueryOptions<T> extends QueryOptions<T> {
   /** One answer for the whole page, read by every component that asks for this key. */
   shared?: boolean;
-  /** Show the previous key's answer until the new key's lands (a refresh, not a different thing). */
+  /** Show the previous key's answer (skipping keys that read nothing) until the new key's lands: a refresh, not a different thing. */
   keepPrevious?: boolean;
 }
 
@@ -28,12 +28,18 @@ export function useQuery<T>(key: string | null, load: () => Promise<T>, options:
   const query = useMemo(() => {
     if (key == null) return null;
     const run = () => latest.current.load();
-    if (shared) return sharedQuery(key, run);
+    if (shared) return sharedQuery(key, run, latest.current.options);
     return new Query(run, () => latest.current.options, keepPrevious ? previous.current : null);
   }, [key, shared, keepPrevious]);
   const state = useSyncExternalStore(query?.subscribe ?? none, query?.get ?? idle, query?.get ?? idle);
-  previous.current = state.data;
-  return { ...state, reload: query?.fetch ?? noop };
+  if (query) previous.current = state.data;
+  const actions = useMemo(() => ({
+    /** Ask again, keeping what is on screen meanwhile. */
+    reload: () => query?.fetch(),
+    /** Ask again from scratch: no value or error while it asks. */
+    retry: () => query?.fetch({ clear: true }),
+    /** Change the value on screen (a streamed event); the next answer replaces it. */
+    update: (fn: (data: T | null) => T | null) => query?.update(fn),
+  }), [query]);
+  return { ...state, ...actions };
 }
-
-function noop() {}
