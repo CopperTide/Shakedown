@@ -1,8 +1,9 @@
 # github-twin
 
 **A twin.** Puts a GitHub-compatible code host in the world, in GitHub Enterprise Server mode: real bare git
-repositories served over smart HTTP (`git http-backend`), and the REST API under `/api/v3` that `gh`, PyGithub and
-Octokit call. Agents reach it only through arenad's recording proxy, on the host names its config gives
+repositories served over smart HTTP (`git http-backend`), the REST API under `/api/v3` that `gh`, PyGithub and
+Octokit call, and the GraphQL API at `/api/graphql` that `gh pr` and `gh issue` call. Agents reach it only
+through arenad's recording proxy, on the host names its config gives
 (`docs/protocol.md`, "Serving HTTP"). `describe.system` is `{kind: "code", product: "GitHub twin (GHES mode)",
 stands_in_for: "GitHub Enterprise Server", simulated: true}`. Restore: exact from a save (the SQLite store, and the
 repositories with their git objects hard-linked between saves); saved at save points; `uses_clock`: true.
@@ -37,6 +38,20 @@ integration"}` with `X-Arena-Effect: read`. The proxy does not send either heade
 - Rules: an author cannot approve or request changes on their own pull request; at merge the twin records who
   approved the merged head (an approval of an older head does not count). `protection: {<repo>: {required_reviews}}`
   blocks a merge without them; there is none by default.
+- GraphQL: `POST /api/graphql` over GitHub's GHES 3.20 schema pruned to what gh uses (`github_twin/graphql/schema.graphql`,
+  written by `scripts/prune_sdl.py`; checked against GitHub's own definitions in `tests/schemas/`): the roots
+  `viewer`, `repository` (pull requests, issues, labels, assignable users, refs), `node(s)`, `search` (issues and
+  pull requests, the REST search subset plus `review-requested:` and `@me`), `organization`, `user` and `__type`;
+  the mutations `createPullRequest`, `updatePullRequest`, `mergePullRequest`, `closePullRequest`,
+  `reopenPullRequest`, `markPullRequestReadyForReview`, `addPullRequestReview`, `requestReviews`, `addComment`,
+  `createIssue`, `updateIssue`, `closeIssue`, `reopenIssue`, `addLabelsToLabelable`, `removeLabelsFromLabelable`,
+  each by the same rules as REST. A field the twin does not model answers its type's empty value (null, an empty
+  connection, `false`, `""`), so any field of the schema may be asked for. The fields gh probes for optional code
+  paths (`isInMergeQueue`, `checkRunCount`, `blockedBy`, `WorkflowRun.event`, `pullRequestTemplates`,
+  `autoMergeAllowed`, `SearchType.ISSUE_ADVANCED`) are left out. Validation errors are in graphql-ruby's words
+  (`Field 'x' doesn't exist on type 'Y'`), execution errors carry GitHub's `type` (`NOT_FOUND`, `FORBIDDEN`,
+  `UNPROCESSABLE`). Queries answer `X-Arena-Effect: read`, a mutation that changed something `write`; a read-only
+  agent's mutation gets `FORBIDDEN` `Resource not accessible by integration` and changes nothing.
 - Webhooks are sent after the request commits, signed with `X-Hub-Signature-256` when the hook has a secret, and
   only to `127.0.0.1`, `localhost` or `::1`; any other URL is recorded failed, `outside the world`.
 
@@ -61,5 +76,14 @@ At the next `advance` the twin reports `notice` events, `data = {system: "github
 
 `uv run --with pytest pytest -q` here: clone, fetch and push with git 2.43 against the twin's own server on
 127.0.0.1 (with `X-Forwarded-*`, `X-Arena-Agent` and `X-Arena-Readonly` set as the proxy will set them),
-webhooks to a receiver on 127.0.0.1, and every covered operation's answer against the schema. No GraphQL yet
-(stage 4 Task 4), so `gh pr`/`gh issue` do not work yet. Not yet verified through arenad's proxy, nor with `gh` or PyGithub (stage 4 Task 4).
+webhooks to a receiver on 127.0.0.1, every covered REST operation's answer against the schema, and every GraphQL
+query and mutation gh sent (`tests/gh_queries/`) validated and run over the twin.
+
+`tests/test_clients.py`, over HTTPS on 127.0.0.1 through a TLS front with a test CA that sets the headers as the
+proxy will (one listener per agent): PyGithub 2.10 with `base_url` (branch, file, pull request, the author's own
+approval refused, the reviewer's approval, squash merge); and, marked `live`, gh 2.45.0 in GHES mode
+(`GH_HOST`, `GH_ENTERPRISE_TOKEN`, `SSL_CERT_FILE`): `auth status`, `repo clone`, `git push`, `pr create`,
+`pr view --json`, `pr review --approve` as the author (refused) and as the reviewer, `pr merge --squash
+--delete-branch`; a read-only agent's `pr list` served and `pr merge` refused. Because the front listens on a
+port (not 443), gh cannot match the clone's remote to `GH_HOST`, so the tests pass `-R <host:port>/acme/app`.
+Not yet verified through arenad's proxy (it does not send `X-Arena-Agent` yet).
