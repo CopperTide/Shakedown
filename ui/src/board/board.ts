@@ -1,5 +1,5 @@
-// A team drawn as a Sculptured-style board: agents as cards, grouped by role when the team has
-// groups, with "hands work to" arrows. A team from Sculptured keeps its own places; any other is
+// A team drawn as a CopperTide-style board: agents as cards, grouped by role when the team has
+// groups, with "hands work to" arrows. A team from CopperTide keeps its own places; any other is
 // laid out from how it runs (in order: left to right in rows, with an arrow to the next; at once:
 // one row; a lead dispatching: the lead above its team, an arrow to each). Each card says, in a line, what the agent does and what it runs on.
 import type { AgentSpec, Runner, Team } from '../types';
@@ -25,13 +25,13 @@ export interface BoardLink {
   to: string;
 }
 
-/** A Sculptured design's board, kept with the team in this browser (arenad ignores it). */
+/** A CopperTide design's board, kept with the team in this browser (arenad ignores it). */
 export interface Board {
   groups: BoardGroup[];
   /** Each card's top-left corner, by agent id. */
   at: Record<string, { x: number; y: number }>;
   links: BoardLink[];
-  /** The decisions each agent owns, in plain words (Sculptured's `authority`). */
+  /** The decisions each agent owns, in plain words (CopperTide's `authority`). */
   decides?: Record<string, string[]>;
 }
 

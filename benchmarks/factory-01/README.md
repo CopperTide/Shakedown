@@ -66,4 +66,4 @@ ARENA_BENCHMARK=factory-01 cargo run -p arenad      # from core/; the parts run 
 (cd benchmarks/factory-01 && uv run --with pytest pytest -q)
 ```
 
-The recorded experiment (real Claude Code runs) and the demo around it are in `Arena-Examples/automation-fair`.
+The recorded experiment (real Claude Code runs) and the demo around it are in `Shakedown-Examples/automation-fair`.

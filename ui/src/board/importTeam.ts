@@ -1,4 +1,4 @@
-// Import a team from a file: a Sculptured design (`TeamDraft`: groups, agents with a job and a
+// Import a team from a file: a CopperTide design (`TeamDraft`: groups, agents with a job and a
 // place on the board, "hands work to" connections), or an Arena team. Every agent stays a real
 // model: Claude agents become Claude Code, Codex agents Codex; a kind Arena can't run is refused
 // by name, never swapped for something else.
@@ -17,7 +17,7 @@ const KIND: Record<string, AgentKind> = { claude: 'claude_code', codex: 'codex' 
 const SCULPTURED_KIND_NAME: Record<string, string> = { opencode: 'OpenCode' };
 const ARENA_KINDS: AgentKind[] = ['claude_code', 'codex', 'open', 'external'];
 
-/** A Sculptured agent id as an Arena one (`^[a-z0-9_-]+$`), unique in `taken`. */
+/** A CopperTide agent id as an Arena one (`^[a-z0-9_-]+$`), unique in `taken`. */
 function arenaId(id: string, taken: Set<string>): string {
   const base = id.toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || 'agent';
   let out = base;
@@ -52,7 +52,7 @@ function fromSculptured(d: Json): Imported {
   const unsupported = raw.filter((a) => !KIND[String(a.kind)]);
   if (unsupported.length) {
     const kinds = [...new Set(unsupported.map((a) => SCULPTURED_KIND_NAME[String(a.kind)] ?? String(a.kind)))].join(', ');
-    return { error: `Shakedown can't run ${kinds} agents yet: ${unsupported.map((a) => str(a.name) ?? str(a.id)).join(', ')}. Change them to Claude or Codex in Sculptured and export again.` };
+    return { error: `Shakedown can't run ${kinds} agents yet: ${unsupported.map((a) => str(a.name) ?? str(a.id)).join(', ')}. Change them to Claude or Codex in CopperTide and export again.` };
   }
   const groups = new Map(list(d.groups).map(obj).map((g) => [String(g.id), g]));
   const taken = new Set<string>();
@@ -97,12 +97,12 @@ export function importTeam(text: string): Imported {
   try {
     d = obj(JSON.parse(text));
   } catch {
-    return { error: "This isn't a JSON file. Import a Sculptured design (.json) or a Shakedown team." };
+    return { error: "This isn't a JSON file. Import a CopperTide design (.json) or a Shakedown team." };
   }
-  if ('madl' in d) return { error: 'This is a MADL file. Open it in Sculptured and import the team design Sculptured saves instead.' };
+  if ('madl' in d) return { error: 'This is a MADL file. Open it in CopperTide and import the team design CopperTide saves instead.' };
   const agents = list(d.agents).map(obj);
   if (!agents.length) return { error: 'There are no agents in this file.' };
   if (agents.some((a) => 'job' in a) && 'connections' in d) return fromSculptured(d);
   if (str(d.id) && str(d.name)) return fromArena(d);
-  return { error: 'This file is neither a Sculptured design nor a Shakedown team.' };
+  return { error: 'This file is neither a CopperTide design nor a Shakedown team.' };
 }

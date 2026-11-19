@@ -56,6 +56,7 @@ export default function TopBar({ onPalette }: { onPalette: (start?: Mode) => voi
           <path d="M4 17H7.6C9.4 17 9.3 5.8 11.3 5.8C13.1 5.8 13 13.2 14.7 13.2C16.1 13.2 16.2 9.4 17.5 9.4C18.6 9.4 18.8 11 20 11" fill="none" stroke="var(--bg)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
         <span className="hidden sm:inline">Shakedown</span>
+        <span className="hidden text-[0.75em] font-normal text-muted sm:inline">by CopperTide</span>
       </Link>
       <nav className="flex items-center gap-1" aria-label="Main">
         {NAV.map((n) => {

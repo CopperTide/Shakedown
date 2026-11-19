@@ -7,7 +7,7 @@ factory hub's `Market` running on the Shakedown clock. Restore: exact from a sav
 container is involved. No arenad test or run has used it.
 
 **The factory example this package wraps is not public yet.** Its default `hub_path` points into a private
-`Sculptured-Examples` checkout next to the `Arena` checkout; without one the package can't start and every test in
+`Sculptured-Examples` checkout next to the `Shakedown` checkout; without one the package can't start and every test in
 `tests/` is skipped (pytest says why). Outside contributors can read and change the code, but can't run it.
 
 The simulated outside companies of the Ridgeline factory demo (suppliers, carriers, the insurer and
@@ -19,7 +19,7 @@ customers) as an `arena-part/1` integration, running on the Shakedown clock. It 
 
 | key | default |
 |---|---|
-| `hub_path` | `Sculptured-Examples/factory/hub`, next to the `Arena` checkout |
+| `hub_path` | `Sculptured-Examples/factory/hub`, next to the `Shakedown` checkout |
 | `data_path` | `<hub_path>/../data/ridgeline.json` (its `suppliers` list) |
 | `plant_start` | `2026-03-10T06:00:00` (the plant clock at Shakedown time 0) |
 | `inbound` | none. Raw-material trucks on their way: `[{id, material, supplier, carrier, eta_hours, line?, line_stock_hours?, ...}]` (see below) |

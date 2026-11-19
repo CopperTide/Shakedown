@@ -189,7 +189,7 @@ export const runStart: Event = {
       erp: { kind: 'erp', product: 'ERPNext', stands_in_for: 'SAP S/4HANA' },
       lims: { kind: 'lims', product: 'Shakedown LIMS', stands_in_for: 'LabWare', simulated: true },
       logistics: { kind: 'logistics', product: 'Shakedown carriers', simulated: true },
-      approvals: { kind: 'approvals', product: 'Sculptured approvals' },
+      approvals: { kind: 'approvals', product: 'CopperTide approvals' },
     },
     tools: {
       affected_orders: { effect: 'read' }, eligible_lots: { effect: 'read' }, erp_insert: { effect: 'write', part: 'erp' }, erp_update: { effect: 'write', part: 'erp' },

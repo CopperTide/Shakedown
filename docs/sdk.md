@@ -17,7 +17,7 @@ Code, Codex, or an API model does the work, and Shakedown records, restores and 
 
 ```bash
 cd sdk/python && uv sync          # or, from another project:
-uv add "arena-sdk @ git+https://github.com/Sculptured/Arena#subdirectory=sdk/python"
+uv add "arena-sdk @ git+https://github.com/CopperTide/Shakedown#subdirectory=sdk/python"
 ```
 
 Python 3.10 or newer; one dependency, `httpx`. You also need a core: a running arenad, or a build of this
@@ -267,7 +267,7 @@ A typed Rust client crate is not written yet. Write integrations and benchmarks 
 ## Core and UI are separate
 
 The core (arenad, the protocol, the kits, the integrations and benchmarks) depends on no UI. The web UI (`ui/`)
-is one client of the HTTP API, as Sculptured's Shakedown control and this SDK are. arenad can serve a built UI
+is one client of the HTTP API, as CopperTide's Shakedown control and this SDK are. arenad can serve a built UI
 (`ARENA_UI_DIST`) as a convenience; it is not required. A UI served from another origin can call the API when
 arenad lists that origin in `ARENA_CORS_ORIGIN` ([reference.md](reference.md#configuration)); the API still
 answers only a loopback `Host`.
@@ -279,9 +279,9 @@ If Shakedown helps your research, cite it (see [CITATION.cff](../CITATION.cff)):
 ```bibtex
 @software{shakedown,
   title  = {Shakedown: a rewindable staging environment for multi-agent systems},
-  author = {{Sculptured}},
+  author = {{CopperTide}},
   year   = {2026},
-  url    = {https://github.com/Sculptured/Arena},
+  url    = {https://github.com/CopperTide/Shakedown},
   license = {Apache-2.0}
 }
 ```

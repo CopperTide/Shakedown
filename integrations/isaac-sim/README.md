@@ -9,7 +9,7 @@ package `isaac-sim-mirror` (see `integrations/isaac-sim-mirror/README.md`)
 only follows a live plant.
 
 **The factory example this package wraps is not public yet.** Its default `isaac_path` points into a private
-`Sculptured-Examples` checkout next to the `Arena` checkout; without one the package can't start and every test in
+`Sculptured-Examples` checkout next to the `Shakedown` checkout; without one the package can't start and every test in
 `tests/` is skipped (pytest says why). Outside contributors can read and change the code, but can't run it.
 
 The Ridgeline factory as an `arena-part/1` integration, on the Shakedown clock. In the factory demo
@@ -45,7 +45,7 @@ changes the fingerprint.
 
 | key | default |
 |---|---|
-| `isaac_path` | `Sculptured-Examples/factory/isaac`, next to the `Arena` checkout |
+| `isaac_path` | `Sculptured-Examples/factory/isaac`, next to the `Shakedown` checkout |
 | `data_path` | `<isaac_path>/../data/ridgeline.json`, passed to `press_model.load_data` |
 | `plant_start` | `2026-03-10T06:00:00`, the plant clock at Shakedown time 0 |
 | `physics_hz` | the factory's `press_model.PHYSICS_HZ` (360) |
@@ -348,7 +348,7 @@ export ARENA_RUN_ISAAC_SIM="exec ssh -p <port> -i <key> -o BatchMode=yes isaac@<
   - the image `nvcr.io/nvidia/isaac-sim:6.2.0`, whose `plant/sim.isaac_version` reads `6.2.0.rc.14.6`;
   - a 40 GB container disk and no volume.
 - Everything else ran on a Linux workstation: arenad (`live_factory_gold_path_report`), the factory benchmark with
-  `--backend isaac`, ERPNext (`frappe/erpnext:v16.53.0`), `ridgeline-hub` and Sculptured.
+  `--backend isaac`, ERPNext (`frappe/erpnext:v16.53.0`), `ridgeline-hub` and CopperTide.
 - arenad started the part over `ssh` (`ARENA_RUN_ISAAC_SIM`, `remote/sshd.py` on the pod), with
   `ARENA_CLOCK_SPEED=0.1` and `{"record": "factory-gold.mp4", "camera": "auto", "record_fps": 10}`.
 - The team was the scripted, no-model team, on the gold path. Shakedown no longer has that team: the factory's live

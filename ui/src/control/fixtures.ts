@@ -22,7 +22,7 @@ export const runStart = ev(1, 0, null, 'run_start', {
   systems: {
     erp: { kind: 'erp', product: 'ERPNext', stands_in_for: 'SAP S/4HANA', simulated: false },
     lims: { kind: 'lims', product: 'Shakedown LIMS', stands_in_for: 'LabWare', simulated: true },
-    gate: { kind: 'approvals', product: 'Sculptured approvals', simulated: false },
+    gate: { kind: 'approvals', product: 'CopperTide approvals', simulated: false },
   },
   tools: {
     get_result: { effect: 'read', part: 'lims' },

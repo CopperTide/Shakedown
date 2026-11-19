@@ -3,8 +3,8 @@ message: "If you use Shakedown in your research, please cite it as below."
 title: "Shakedown: a rewindable staging environment for multi-agent systems"
 type: software
 authors:
-  - name: "Sculptured"
-repository-code: "https://github.com/Sculptured/Arena"
+  - name: "CopperTide"
+repository-code: "https://github.com/CopperTide/Shakedown"
 license: Apache-2.0
 version: 0.1.0
 date-released: 2026-11-07

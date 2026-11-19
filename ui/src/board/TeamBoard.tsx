@@ -75,7 +75,7 @@ function Controls({ onExpand }: { onExpand?: () => void }) {
 }
 
 /**
- * A team as a read-only Sculptured-style board: cards grouped by role, "hands work to" arrows.
+ * A team as a read-only CopperTide-style board: cards grouped by role, "hands work to" arrows.
  * It opens readable (a big board from its corner, to pan); the wheel pans, Ctrl/⌘ + wheel or a
  * pinch zooms, a drag pans. Clicking a card picks it.
  */

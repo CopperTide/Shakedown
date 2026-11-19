@@ -28,7 +28,7 @@ pub async fn propose(api: &Api, team: &str, args: &Value) -> Result<Outcome> {
     let id = match api.send(Method::POST, &segments, body(args)).await? {
         Reply::Ok(v) => v["proposal_id"]
             .as_str()
-            .context("Sculptured gave no proposal id")?
+            .context("CopperTide gave no proposal id")?
             .to_string(),
         Reply::Refused { message, .. } => return Ok(Err(message)),
     };

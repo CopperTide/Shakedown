@@ -1,10 +1,10 @@
 # arena-sdk
 
-Build, drive, observe and export [Shakedown](https://github.com/Sculptured/Arena) environments from Python.
+Build, drive, observe and export [Shakedown](https://github.com/CopperTide/Shakedown) environments from Python.
 Shakedown's core (arenad) is headless; this SDK talks to its HTTP API. No UI needed.
 
 ```bash
-uv add "arena-sdk @ git+https://github.com/Sculptured/Arena#subdirectory=sdk/python"   # or: uv pip install -e sdk/python
+uv add "arena-sdk @ git+https://github.com/CopperTide/Shakedown#subdirectory=sdk/python"   # or: uv pip install -e sdk/python
 ```
 
 ```python

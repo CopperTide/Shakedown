@@ -37,7 +37,7 @@ async fn create(api: &Api, team: &str) -> Result<()> {
     let made = api.send(Method::POST, &["teams"], new).await?;
     let draft = made.expect("making the team")?["draft"].take();
     if draft["id"] != team {
-        bail!("Sculptured named team {team:?} {}", draft["id"]);
+        bail!("CopperTide named team {team:?} {}", draft["id"]);
     }
     let segments = ["teams", team, "settings"];
     let mut settings = api

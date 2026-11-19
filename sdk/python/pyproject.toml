@@ -18,8 +18,8 @@ crewai = ["crewai>=0.80"]
 openai-agents = ["openai-agents>=0.0.17"]
 
 [project.urls]
-Homepage = "https://github.com/Sculptured/Arena"
-Documentation = "https://github.com/Sculptured/Arena/blob/main/docs/sdk.md"
+Homepage = "https://github.com/CopperTide/Shakedown"
+Documentation = "https://github.com/CopperTide/Shakedown/blob/main/docs/sdk.md"
 
 [dependency-groups]
 dev = ["pytest>=8"]

@@ -22,7 +22,7 @@ where
         }
         if Instant::now() >= deadline {
             bail!(
-                "Sculptured did not get there in {} s: {what}",
+                "CopperTide did not get there in {} s: {what}",
                 LIMIT.as_secs()
             );
         }

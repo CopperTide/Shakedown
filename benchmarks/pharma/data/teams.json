@@ -1,5 +1,5 @@
 {
- "note": "The deployments this benchmark suggests (the first, the single agent, is arenad's default team; `runner` names the arenad runner a team's prompts are written for), as data a design (a Sculptured board, an external runner) can use: each role's short prompt, the tools its decisions need and the change actions it proposes. Arena itself imposes none of it: arenad's built-in team gets every role's prompt and keeps read_only roles to read tools. No agent decides a change; the simulated QA head and supply chain director do.",
+ "note": "The deployments this benchmark suggests (the first, the single agent, is arenad's default team; `runner` names the arenad runner a team's prompts are written for), as data a design (a CopperTide board, an external runner) can use: each role's short prompt, the tools its decisions need and the change actions it proposes. Arena itself imposes none of it: arenad's built-in team gets every role's prompt and keeps read_only roles to read tools. No agent decides a change; the simulated QA head and supply chain director do.",
  "tools": {
   "erp_query": ["get_doc", "list_docs"],
   "erp_write": ["insert_doc", "update_doc"],

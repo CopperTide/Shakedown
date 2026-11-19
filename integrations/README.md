@@ -22,7 +22,7 @@ The table is in the main `README.md`, with what was verified. Each folder has a 
 | `mariadb` | a MariaDB database per instance |
 | `erpnext` | an ERPNext site per instance |
 | `twenty-crm` | a Twenty CRM server per instance, on its own database |
-| `sculptured` | a Sculptured server (approvals) per instance |
+| `sculptured` | a CopperTide server (approvals) per instance |
 | `ridgeline-hub` | the factory's outside companies, on the arena clock |
 | `isaac-sim` | the factory plant on Isaac Sim, or a stand-in |
 | `isaac-sim-mirror` | a read-only view of a running plant |

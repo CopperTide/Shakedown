@@ -8,7 +8,7 @@
         print(event.summary())
     print(branch.check())
 
-See docs/sdk.md in the Shakedown repository (Sculptured/Arena).
+See docs/sdk.md in the Shakedown repository (CopperTide/Shakedown).
 """
 
 from .client import DEFAULT_URL, AgentEndpoint, Arena, Branch, Suite

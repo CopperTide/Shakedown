@@ -1,18 +1,18 @@
 # sculptured integration
 
-Puts Sculptured's approvals in the world: one `sculptured serve` per instance, with changes proposed and decided
+Puts CopperTide's approvals in the world: one `sculptured serve` per instance, with changes proposed and decided
 through tools. Restore: exact from a save (SQLite backups plus a data folder); approximate: no. `uses_clock`:
-false. **The Sculptured program is not published yet**, so outside contributors cannot run this integration
-or its live test; the rest of the repository does not need it. It needs a Sculptured with the
-route for outside proposers (`POST /api/teams/{id}/changes`, Sculptured `platform` from 2026-11-07).
+false. **The CopperTide program is not published yet**, so outside contributors cannot run this integration
+or its live test; the rest of the repository does not need it. It needs a CopperTide with the
+route for outside proposers (`POST /api/teams/{id}/changes`, CopperTide `platform` from 2026-11-07).
 Verified live on 2026-11-07: `live_sculptured_roundtrip` (propose, save, decide, restore, re-raise, diff)
 and `arena-part-check` (passed) ran against a local build of `sculptured` on the maintainer's machine,
 by hand (no routine test runs them). The test is skipped, and says so, when no
-Sculptured program is found. A save restores only with the same Sculptured build.
+CopperTide program is found. A save restores only with the same CopperTide build.
 
-Sculptured's approvals in the Shakedown world: changes proposed to a business system and the decisions on
-them. No agent of Sculptured's runs for it: the tools propose through Sculptured's route for outside
-systems. Each instance is a `sculptured serve` of its own; the tools reach it only through Sculptured's HTTP
+CopperTide's approvals in the Shakedown world: changes proposed to a business system and the decisions on
+them. No agent of CopperTide's runs for it: the tools propose through CopperTide's route for outside
+systems. Each instance is a `sculptured serve` of its own; the tools reach it only through CopperTide's HTTP
 API.
 
 - **Config:** `{binary?, team?}`. `binary` is the sculptured program (default: the
@@ -31,15 +31,15 @@ API.
 - **Team:** made on the first start of a fresh server: `POST /api/teams` `{template: "blank", name}` (its id
   is its name; no agents) and `PUT /api/teams/{team}/settings` with `question_timeout_min: 1440`. A
   restored server already has it. The team has no rules, so every change waits for a person's decision.
-  After a day (wall clock) unanswered, Sculptured records the change not approved, by `nobody-in-time`.
+  After a day (wall clock) unanswered, CopperTide records the change not approved, by `nobody-in-time`.
   No agent runs in the team: the tools propose as an outside system.
-- **Where changes come from:** Sculptured's route for outside proposers, `POST /api/teams/{team}/changes`
+- **Where changes come from:** CopperTide's route for outside proposers, `POST /api/teams/{team}/changes`
   (`crates/controld/src/changes.rs`, `seat_tools/propose.rs::propose_external`). It records
   `ChangeProposed` (proposer `external.arena@<team>`) and `ChangeChecked` on the team, then asks a person
   (an `approval` question in Needs you), and records `ChangeDecided` when the answer comes, exactly as for
   an agent's `propose_change`. So:
   - `propose_change {action, summary, payload, system?, reason?}` (write): `POST /api/teams/{team}/changes`
-    with the arguments and `proposer: "arena"`. Sculptured refusing the arguments (400) is the tool's
+    with the arguments and `proposer: "arena"`. CopperTide refusing the arguments (400) is the tool's
     error. It gives the change and writes `change/<id>`, and gives a world event `change_proposed` whose
     `data` is the change, so a benchmark's link can hand it to whoever decides it (a simulated person,
     say). While 8 changes wait, it refuses.
@@ -52,9 +52,9 @@ API.
     `approved: false`. For a change proposed again after a restore (below), the question answered is its
   copy's.
   - A change is `{id, action, system, summary, payload, reason, decision}`. `decision` is `{approved, by,
-    note}` (`by` is `person`, `mandate` or `nobody-in-time`), or null while it waits. Sculptured's times and
+    note}` (`by` is `person`, `mandate` or `nobody-in-time`), or null while it waits. CopperTide's times and
     proposing agent are left out.
-  - Refusals are the tool's `error` and change nothing (`reads` and `writes` empty): bad arguments, Sculptured
+  - Refusals are the tool's `error` and change nothing (`reads` and `writes` empty): bad arguments, CopperTide
     refusing a proposal, an unknown change, a change already decided, a change that can no longer be
     decided, 8 changes already waiting. An unknown tool is -32602. A server that can't be reached fails the
     call.
@@ -69,13 +69,13 @@ API.
   differs from `config.binary`'s `--version`, or when more than 8 changes waited in it (they could not all
   be proposed again). Otherwise `data/` is copied into the new instance's data folder and the server starts
   as above. The seed is ignored.
-- **Re-raised changes:** a restored Sculptured withdraws the questions its predecessor asked ("Sculptured
+- **Re-raised changes:** a restored CopperTide withdraws the questions its predecessor asked ("CopperTide
   restarted while the agent waited for an answer"), so a change that waited at the save could not be
   decided any more. The start therefore proposes every such change again (oldest first, with the same
   action, summary, payload, system and reason) and records `original → copy` in
   `.live/<instance>/aliases.json`, which saves carry in `meta.json`, so restores of restores compose (the
   latest copy counts). `list_changes`, `inspect` and `diff` show the latest copy under the original id
-  and hide every copy, and `decide_change(original id)` answers the copy's question. **Sculptured's own UI
+  and hide every copy, and `decide_change(original id)` answers the copy's question. **CopperTide's own UI
   and API show the copy under its new id**, next to the withdrawn original, which waits forever.
 - **inspect / diff:** keys `change/<id>`. A live instance's changes come from its server, a save's from
   `changes.json`. `diff` lists the changes whose doc differs, decisions included.

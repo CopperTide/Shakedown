@@ -18,7 +18,7 @@ people.
 | `erp` | `erpnext` | The company: items, BOM, workstations (MES), lots with expiry and QA status, stock in two warehouses, customers with a minimum remaining shelf life, sales and work orders, quality procedure; deviations (`Non Conformance`) | ERPNext, an open-source stand-in for an ERP such as SAP S/4HANA |
 | `lims` | `pharma-lims` | Environmental-monitoring samples, release tests, SOPs; the **QA head** who decides releases, holds and deviations | simulated, standing in for a LIMS such as LabWare |
 | `logistics` | `pharma-logistics` | Carrier lanes with their 2-8 C qualification, quotes, capacity, bookings, customer notices; the **supply chain director** who decides reallocations and shipments | simulated |
-| `approvals` | `sculptured` | The changes proposed and the decisions on them | Sculptured |
+| `approvals` | `sculptured` | The changes proposed and the decisions on them | CopperTide |
 | `crm` | `twenty-crm` | The same customers as accounts with contacts, an opportunity per order | Twenty, an open-source stand-in for a CRM such as Salesforce |
 
 **The data** (version 0.1.0, today 2026-11-09): 24 customers (12 US hospitals, 6 US wholesalers, 6 EU customers, two
@@ -39,7 +39,7 @@ CVX-2604, 3 EU orders committed against the EU lot, 28 in later weeks from the n
 - **Every proposed change goes to a simulated person.** The approvals part gives a `change_proposed` event; links hand
   it to the QA head (`qa_review`) and the director (`supply_review`), each deciding only its own actions, and their
   `decided` event is linked to the approvals part's `decide_change`. A tool a link calls is not offered to agents, so
-  **no agent can decide a change**: in Sculptured each shows as decided by a person.
+  **no agent can decide a change**: in CopperTide each shows as decided by a person.
 - **Shipping is gated**: `book_shipment` runs only on an approved `cold_chain_shipment` change with the same carrier,
   quote, order, batch and quantity. The director approves only lanes qualified for 2-8 C, and shipments of reserved
   stock only within the reallocations it approved.
@@ -114,7 +114,7 @@ named by its PO number or its ERP sales order.
 
 ## The deployments
 
-`data/teams.json` holds the three deployments the benchmark suggests, as data a design (a Sculptured board, an
+`data/teams.json` holds the three deployments the benchmark suggests, as data a design (a CopperTide board, an
 external runner) can use: each role's short prompt, the tool groups its decisions need, the change actions it proposes,
 and the arenad runner its prompts are written for. Shakedown imposes none of it. arenad offers the first as its default
 team and the others one click away (`teams` in `describe`; `arena-pharma --team dispatch` or `--team team` makes
@@ -137,7 +137,7 @@ export CARGO_TARGET_DIR=/path/target ARENA_BIN_DIR=/path/target/debug ARENA_SAVE
 cargo build -p arena-pharma -p arena-erpnext -p arena-twenty-crm -p arena-sculptured
 (cd core && ARENA_BENCHMARK=pharma cargo run -p arenad -- base)
 ```
-It needs the Postgres of `deploy/compose.yml`, `uv` (the simulated parts are Python), a Sculptured program on `PATH`,
+It needs the Postgres of `deploy/compose.yml`, `uv` (the simulated parts are Python), a CopperTide program on `PATH`,
 the ERPNext and Twenty images, and arenad stopped. It is `opt_in`.
 
 ## Tests
@@ -167,7 +167,7 @@ the ERPNext and Twenty images, and arenad stopped. It is `opt_in`.
 - `pharma-lims` and `pharma-logistics`: their pytest suites and `arena-part-check`.
 
 **Verified (Linux, 2026-11-07):** `cargo test -p arena-pharma` passes (32 tests, the twin's and the options' included).
-`live_pharma_a_disruption_shows_in_the_twin` (arenad's `tests/pharma.rs`, with the Sculptured build of 2026-11-04 as
+`live_pharma_a_disruption_shows_in_the_twin` (arenad's `tests/pharma.rs`, with the CopperTide build of 2026-11-04 as
 `ARENA_SCULPTURED_BINARY`; the one on `PATH` from 2026-10-24 lacks the changes route the approvals part needs) passed
 once: the base incident with Tundra full after its first quote, with the coordinated team scripted (each role's part
 written as code, no model; Shakedown no longer has that team, and the live tests with a real model have not run on this

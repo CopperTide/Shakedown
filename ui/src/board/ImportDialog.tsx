@@ -9,7 +9,7 @@ import { cn } from '@/lib/cn';
 import type { Team } from '../types';
 import { importTeam } from './importTeam';
 
-/** Import a team: a Sculptured design or an Arena team, picked, dropped or pasted. */
+/** Import a team: a CopperTide design or an Arena team, picked, dropped or pasted. */
 export default function ImportDialog({ open, onOpenChange, onImported }: { open: boolean; onOpenChange: (o: boolean) => void; onImported: (t: Team) => void }) {
   const [error, setError] = useState<string | null>(null);
   const [text, setText] = useState('');
@@ -21,12 +21,12 @@ export default function ImportDialog({ open, onOpenChange, onImported }: { open:
     setError(null); setText('');
     onImported(r.team);
     onOpenChange(false);
-    toast(`Imported ${r.team.name}`, { description: `${r.team.agents.length} agents from ${r.from === 'Sculptured' ? 'a Sculptured design' : 'a Shakedown team'}.` });
+    toast(`Imported ${r.team.name}`, { description: `${r.team.agents.length} agents from ${r.from === 'Sculptured' ? 'a CopperTide design' : 'a Shakedown team'}.` });
   };
   const read = (f: File | undefined) => { if (f) f.text().then(take, (e) => setError(String(e))); };
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) setError(null); onOpenChange(o); }}>
-      <DialogContent title="Import a team" description="A Sculptured design file (.json) or a Shakedown team. Claude agents run as Claude Code, Codex agents as Codex.">
+      <DialogContent title="Import a team" description="A CopperTide design file (.json) or a Shakedown team. Claude agents run as Claude Code, Codex agents as Codex.">
         <div className="flex flex-col gap-3 overflow-auto p-4">
           <button type="button" onClick={() => file.current?.click()}
             onDragOver={(e) => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)}
@@ -34,7 +34,7 @@ export default function ImportDialog({ open, onOpenChange, onImported }: { open:
             className={cn('flex flex-col items-center gap-1.5 rounded-lg border border-dashed px-4 py-6 text-sm text-muted hover:bg-hover', over ? 'border-accent bg-accent-soft' : 'border-line-strong')}>
             <FileUp className="size-5" aria-hidden="true" />
             <span className="font-medium text-fg">Choose a file, or drop it here</span>
-            <span className="text-xs">Sculptured saves designs like examples/teams/math-workbench.json</span>
+            <span className="text-xs">CopperTide saves designs like examples/teams/math-workbench.json</span>
           </button>
           <input ref={file} type="file" accept=".json,application/json" className="hidden" onChange={(e) => { read(e.target.files?.[0]); e.target.value = ''; }} />
           <Textarea rows={4} value={text} onChange={(e) => setText(e.target.value)} placeholder="Or paste the file's text here" aria-label="The team file's text" className="font-mono text-2xs" />
