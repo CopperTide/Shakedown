@@ -94,6 +94,7 @@ impl<'a> RunOptions<'a> {
             team,
             scenario: self.scenario.unwrap_or(&none),
             rules: Rules::new(self.runner).with_max_cost(self.max_cost_usd),
+            driver: None,
         };
         let started = crate::launch::launch(state, spec).await?;
         Ok((started.run_id, started.branch_id))

@@ -57,13 +57,20 @@ pub async fn start(
         team,
         scenario,
         rules,
+        driver: None,
     };
     let l = crate::launch::launch(state, spec).await?;
-    Ok(Started {
-        run_id: l.run_id,
-        branch_id: l.branch_id,
-        agents: l.agents,
-    })
+    Ok(Started::of(l.run_id, l.branch_id, l.agents))
+}
+
+impl Started {
+    pub fn of(run_id: RunId, branch_id: BranchId, agents: Vec<Endpoints>) -> Started {
+        Started {
+            run_id,
+            branch_id,
+            agents,
+        }
+    }
 }
 
 /// Makes the new branch of an external run live and records its team's agents' starts: each

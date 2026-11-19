@@ -17,8 +17,9 @@ use serde_json::{json, Value};
 use super::{detached, parse_body, providers_of, ApiError, ApiResult, StartPermit};
 use crate::{
     app::AppState,
-    driver::{self, Launched, RunIds},
-    external,
+    driver::{self, Launched},
+    external::Started,
+    launch::{launch, LaunchSpec},
     model::*,
     store::{Connection, NewConnection},
 };
@@ -196,16 +197,15 @@ pub(super) async fn start_code_run(
     permit.check_disk(&state).await?;
     detached(async move {
         let _permit = permit;
-        let rules = driver::rules_for(&conn.id, run.max_cost_usd);
-        let task = run.task_id;
-        let started = external::start(&state, &task, run.team, &run.scenario, rules).await?;
-        let ids = RunIds {
-            run_id: &started.run_id,
-            branch_id: &started.branch_id,
-            task_id: &task,
-            fork_of: None,
+        let spec = LaunchSpec {
+            task_id: &run.task_id,
+            team: run.team,
+            scenario: &run.scenario,
+            rules: driver::rules_for(&conn.id, run.max_cost_usd),
+            driver: Some(&conn),
         };
-        let launched = driver::launch_or_fail(&state, &conn, ids).await;
+        let l = launch(&state, spec).await?;
+        let (started, launched) = (Started::of(l.run_id, l.branch_id, l.agents), l.driver);
         let mut v = serde_json::to_value(&started)?;
         v["connection"] = json!(conn.id);
         v["driver"] = json!(match launched {
