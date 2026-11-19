@@ -69,8 +69,8 @@ def _write(call, repo, branch: str, head: str, edit: tuple, body: dict) -> str:
     """Commit `edit` (mode, blob or None, path) on `branch` from `head`; the new commit."""
     fn = full_name(repo)
     tree = call.repos.edit_tree(fn, call.repos.commit_info(fn, head).tree, [edit])
-    author = call.person(body.get("author"))
-    committer = call.person(body.get("committer") or body.get("author"))
+    author = call.author(body.get("author"))
+    committer = call.author(body.get("committer") or body.get("author"))
     sha = call.repos.commit_tree(fn, tree, [head], body.get("message", ""), author, committer)
     try:
         events.moved(call.ctx, repo, lambda: call.repos.update_ref(fn, f"refs/heads/{branch}", sha, head))

@@ -1,15 +1,11 @@
 """A repository and its branches."""
 from . import shapes
 from .api import not_found, paged
-
-
-def protection(call, repo) -> dict:
-    """The repo's protection from the config (`protection: {<repo>: {required_reviews}}`)."""
-    return (call.ctx.config.get("protection") or {}).get(repo["name"]) or {}
+from .pull_shapes import required_reviews
 
 
 def _protected(call, repo) -> bool:
-    return int(protection(call, repo).get("required_reviews", 0)) > 0
+    return required_reviews(call, repo) > 0
 
 
 def get_repo(call):

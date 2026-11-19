@@ -97,8 +97,8 @@ class Repos:
     def set_pull_ref(self, name: str, n: int, sha: str) -> None:
         self.update_ref(name, f"refs/pull/{n}/head", sha)
 
-    def refs_changed(self, name: str, before: dict) -> list:
-        after = self.refs(name)
+    def refs_changed(self, name: str, before: dict, prefix: str = "refs/") -> list:
+        after = self.refs(name, prefix)
         return [RefChange(r, before.get(r, ZERO), after.get(r, ZERO))
                 for r in sorted(before.keys() | after.keys()) if before.get(r) != after.get(r)]
 

@@ -50,6 +50,7 @@ class Twin:
     part: GithubTwin
     instance: str = "i"
     token: str = TOKEN
+    clone: Path | None = None
 
     @property
     def up(self):
@@ -163,3 +164,38 @@ def twin_with_45_commits(twin, clone):
         git(clone, "commit", "-q", "--allow-empty", "-m", f"Commit {i}")
     push(clone, twin.token, "HEAD:main")
     return twin
+
+
+def branch_from_main(t: Twin, branch: str, name: str, text: str, message=None) -> str:
+    """A commit on a new branch off main, pushed; its sha (the clone is left on main)."""
+    git(t.clone, "checkout", "-q", "-B", branch, "origin/main")
+    sha = commit(t.clone, name, text, message)
+    push(t.clone, t.token, f"HEAD:refs/heads/{branch}")
+    git(t.clone, "checkout", "-q", "main")
+    return sha
+
+
+def create_pr(t: Twin, head: str, base: str = "main", as_user: str = "coder", title=None) -> int:
+    body = {"title": title or f"Change {head}", "head": head, "base": base, "body": "Please review."}
+    r = api_raw(t, "POST", "/api/v3/repos/acme/app/pulls", body, as_user=as_user)
+    assert r.status == 201, r.body
+    return r.json()["number"]
+
+
+def advance_events(t: Twin) -> list:
+    t.ms = getattr(t, "ms", 0) + 100
+    return t.part.advance(t.instance, t.ms)["events"]
+
+
+@pytest.fixture
+def with_clone(twin, clone):
+    twin.clone = clone
+    return twin
+
+
+@pytest.fixture
+def twin_with_pr(with_clone):
+    branch_from_main(with_clone, "add-b", "b.txt", "two\n", "Add b")
+    assert create_pr(with_clone, "add-b", title="Add b") == 1
+    advance_events(with_clone)
+    return with_clone

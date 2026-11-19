@@ -132,9 +132,9 @@ def create_commit(call):
     parents = [p for p in body.get("parents", []) if call.repos.object_type(fn, p) == "commit"]
     if len(parents) != len(body.get("parents", [])):
         raise invalid("Parent SHA does not exist or is not a commit object")
-    author = call.person(body.get("author"))
+    author = call.author(body.get("author"))
     sha = call.repos.commit_tree(fn, tree, parents, body.get("message", ""), author,
-                                 call.person(body.get("committer") or body.get("author")))
+                                 call.author(body.get("committer") or body.get("author")))
     return created(shapes.git_commit(call, repo, call.repos.commit_info(fn, sha)))
 
 

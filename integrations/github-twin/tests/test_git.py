@@ -1,6 +1,6 @@
 import os
 
-from conftest import START_MS, commit, git, head, push, raw, raw_get, started
+from conftest import START_MS, Twin, commit, git, head, push, raw_get
 
 
 def test_clone_push_and_fetch_over_smart_http(twin, tmp_path):
@@ -85,13 +85,11 @@ def test_a_restored_instance_serves_the_saved_repos(twin, clone, saves_root, tmp
     twin.part.save("i", "s1", str(saves_root / "github-twin" / "s1"))
     commit(clone, "c.txt", "three")
     push(clone, twin.token, "HEAD:main")
-    other = started()
+    twin.part.start("j", twin.part.ctx("i").config, 1, 0, {"save": "s1", "mode": "exact"})
     try:
-        other.part.start("j", other.part.ctx("i").config, 1, 0, {"save": "s1", "mode": "exact"})
-        other.instance = "j"
+        other = Twin(twin.part, "j")
         assert other.docs()["branch/acme/app/main"]["sha"] == sha
         git(tmp_path, "clone", "-q", other.git_url("acme", "app"), "restored", creds=other.token)
         assert head(tmp_path / "restored") == sha
     finally:
-        other.part.stop("i")
-        other.part.stop("j")
+        twin.part.stop("j")

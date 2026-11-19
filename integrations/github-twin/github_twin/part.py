@@ -3,7 +3,8 @@ from pathlib import Path
 
 from arena_part.twin import HttpTwin
 
-from . import docs, routes, users
+from . import act, docs, routes, users
+from .hooks_delivery import Deliverer
 from .repos import Repos, is_immutable
 
 SCHEMA_SQL = (Path(__file__).parent / "schema.sql").read_text()
@@ -35,9 +36,27 @@ class GithubTwin(HttpTwin):
     VERSION = "0.1.0"
     SCHEMA_SQL = SCHEMA_SQL
     READS = ["POST */git-upload-pack"]
+    HONOURS_READONLY = True
+
+    def __init__(self, clock=None):
+        super().__init__(clock)
+        self._deliverers: dict = {}
 
     def router(self):
         return routes.build()
+
+    def start(self, instance, config, seed, clock_ms, from_=None):
+        super().start(instance, config, seed, clock_ms, from_)
+        self._deliverers[instance] = Deliverer(self.ctx(instance)).start()
+
+    def stop(self, instance):
+        deliverer = self._deliverers.pop(instance, None)
+        if deliverer is not None:
+            deliverer.stop()
+        super().stop(instance)
+
+    def act(self, ctx, person, action, args):
+        return act.run(ctx, person, action, args)
 
     def seed(self, ctx, config):
         db, now = ctx.store.conn, ctx.now_ms()

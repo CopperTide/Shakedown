@@ -1,8 +1,9 @@
 """The REST API under `/api/v3`, every operation listed in `covered.COVERED`."""
-from . import commits, contents, git, meta, repos
+from . import checks, commits, contents, git, hooks, issues, labels, meta, pulls, repos, reviews, search, statuses
 from .api import Api
 
-MODULES = (meta, repos, contents, commits, git)
+# Order matters where patterns overlap: `/commits/{ref}/status` and `/check-runs` before `/commits/{ref:path}`.
+MODULES = (meta, repos, contents, statuses, checks, commits, git, pulls, reviews, issues, labels, search, hooks)
 
 
 def register(router) -> None:

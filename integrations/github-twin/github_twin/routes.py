@@ -2,18 +2,15 @@
 from arena_part.twin import Response, Router
 
 from . import auth, events, git_http, rest, users
-from .headers import api_headers
 from .repos import Repos
-from .rest.api import not_found
+from .rest.api import not_found_response
 from .urls import API
 
 
 class GithubRouter(Router):
     def not_found(self, req) -> Response:
         if req.path.startswith(API):
-            resp = not_found().response()
-            resp.headers = {**api_headers(), **(resp.headers or {})}
-            return resp
+            return not_found_response()
         return Response(404, "Not Found\n")
 
 
@@ -21,6 +18,8 @@ def _git(tail: str):
     def handle(req, ctx):
         if auth.check(req.headers, ctx.config.get("token", "")) != "ok":
             return git_http.challenge()
+        if req.readonly and tail == "git-receive-pack":
+            return Response(403, "Read-only agents may not push.\n", effect="read")
         owner, repo = req.params["owner"], req.params["repo"].removesuffix(".git")
         user = users.ensure(ctx.store.conn, ctx.actor(req), ctx.now_ms())["login"]
         if tail != "git-receive-pack":
@@ -37,7 +36,7 @@ def _push(req, ctx, owner: str, repo: str, user: str) -> Response:
     repos = Repos(ctx.files)
     before = repos.refs(f"{owner}/{repo}")
     resp = git_http.read_whole(git_http.handle(req, ctx.files, owner, repo, "git-receive-pack", user))
-    events.after_push(ctx, row, repos.refs_changed(f"{owner}/{repo}", before))
+    events.after_push(ctx, row, repos.refs_changed(f"{owner}/{repo}", before), by=user)
     return resp
 
 

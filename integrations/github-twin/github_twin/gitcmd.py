@@ -31,17 +31,26 @@ def clean_env(extra: dict | None = None) -> dict:
     return env
 
 
+def _proc(git_dir: Path, args: tuple, input: bytes | None, env: dict | None) -> subprocess.CompletedProcess:
+    return subprocess.run(["git", f"--git-dir={git_dir}", *args], input=input, env=clean_env(env),
+                          capture_output=True, timeout=120)
+
+
 def run(git_dir: Path, *args: str, input: bytes | None = None, env: dict | None = None,
         check: bool = True) -> bytes:
     """`git --git-dir <git_dir> <args>`; its stdout. Raises GitError when it fails and `check`."""
-    r = subprocess.run(["git", f"--git-dir={git_dir}", *args], input=input, env=clean_env(env),
-                       capture_output=True, timeout=120)
+    r = _proc(git_dir, args, input, env)
     if check and r.returncode != 0:
         raise GitError(f"git {' '.join(args)}: {r.stderr.decode(errors='replace').strip()}")
     return r.stdout if r.returncode == 0 else b""
 
 
+def attempt(git_dir: Path, *args: str, input: bytes | None = None, env: dict | None = None) -> tuple[bool, bytes]:
+    """Whether `git <args>` exited 0, and its stdout either way (merge-tree prints a tree on a conflict)."""
+    r = _proc(git_dir, args, input, env)
+    return r.returncode == 0, r.stdout
+
+
 def ok(git_dir: Path, *args: str) -> bool:
     """True when `git <args>` exits 0 (a yes/no question such as `merge-base --is-ancestor`)."""
-    return subprocess.run(["git", f"--git-dir={git_dir}", *args], env=clean_env(), capture_output=True,
-                          timeout=120).returncode == 0
+    return attempt(git_dir, *args)[0]

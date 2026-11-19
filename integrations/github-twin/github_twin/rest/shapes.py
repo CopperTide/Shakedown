@@ -26,11 +26,12 @@ UNSIGNED = {"verified": False, "reason": "unsigned", "signature": None, "payload
 
 def repository(call, repo) -> dict:
     """The `full-repository` shape."""
-    fn, u = full_name(repo), call.urls
+    fn, u, n_open = full_name(repo), call.urls, open_issues(call, repo)
     owner = users.find(call.db, repo["owner"])
     counts = {k: 0 for k in ("forks", "forks_count", "stargazers_count", "watchers", "watchers_count", "size",
                              "network_count", "subscribers_count")}
     flags = {k: True for k in ("has_issues", "has_projects", "has_wiki")}
+    flags.update({"has_downloads": True})
     flags.update({k: False for k in ("has_pages", "has_discussions", "archived", "disabled", "fork", "is_template")})
     return {"id": repo["id"], "node_id": node_id("Repository", repo["id"]), "name": repo["name"], "full_name": fn,
             "owner": users.simple_user(u, owner), "private": bool(repo["private"]),
@@ -38,15 +39,15 @@ def repository(call, repo) -> dict:
             "url": u.repo_api(fn), "html_url": u.repo_html(fn), "clone_url": u.git(repo["owner"], repo["name"]),
             "git_url": f"git://{u.host}/{fn}.git", "ssh_url": f"git@{u.host}:{fn}.git", "svn_url": u.repo_html(fn),
             "mirror_url": None, "homepage": None, "language": None, "license": None,
-            "default_branch": repo["default_branch"], "open_issues": open_issues(call, repo),
-            "open_issues_count": open_issues(call, repo), "permissions": dict(PERMISSIONS),
+            "default_branch": repo["default_branch"], "open_issues": n_open,
+            "open_issues_count": n_open, "permissions": dict(PERMISSIONS),
             "created_at": iso(repo["created_ms"]), "updated_at": iso(repo["updated_ms"]),
             "pushed_at": iso(repo["pushed_ms"]), **counts, **flags,
             **{k: u.repo_api(fn, v) for k, v in REPO_TEMPLATES.items()}}
 
 
 def open_issues(call, repo) -> int:
-    return 0
+    return call.db.execute("SELECT COUNT(*) FROM issues WHERE repo_id = ? AND state = 'open'", (repo["id"],)).fetchone()[0]
 
 
 def _author_user(call, name: str):

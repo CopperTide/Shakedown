@@ -1,71 +1,43 @@
 """How every REST operation is served: the token checked, the caller made a user, the answer given
 GitHub's headers, and an `ApiError` rolled back to where the operation started."""
-from dataclasses import dataclass
-from functools import cached_property
-
 from arena_part.twin import Response
 
 from .. import auth, users
-from ..gitcmd import Person
+from ..errors import GithubError, invalid, not_found, read_only
 from ..headers import api_headers, etag
 from ..pagination import page
-from ..repos import Repos
-from ..urls import API, Urls
+from ..urls import API
+from ..view import View
 
 DOCS = "https://docs.github.com/enterprise-server@3.20/rest"
+READ_METHODS = ("GET", "HEAD", "OPTIONS")
 
 
-class ApiError(Exception):
-    def __init__(self, status: int, message: str, errors: list | None = None, headers: dict | None = None):
-        super().__init__(message)
-        self.status, self.message, self.errors, self.headers = status, message, errors, headers
-
-    def response(self) -> Response:
-        body = {"message": self.message, "documentation_url": DOCS}
-        if self.errors is not None:
-            body["errors"] = self.errors
-        return Response(self.status, body, headers=dict(self.headers or {}))
+class ApiError(GithubError):
+    """A REST refusal: GitHub's message and the documentation link."""
 
 
-def not_found() -> ApiError:
-    return ApiError(404, "Not Found")
+def _error_response(e: GithubError) -> Response:
+    body = {"message": e.message, "documentation_url": DOCS}
+    if e.errors is not None:
+        body["errors"] = e.errors
+    return Response(e.status, body, headers=dict(e.headers or {}))
 
 
-def invalid(message: str, errors: list | None = None) -> ApiError:
-    return ApiError(422, message, errors)
-
-
-@dataclass
-class Call:
+class Call(View):
     """One REST request: what its handler works with."""
-    req: object
-    ctx: object
-    user: object
 
-    @property
-    def db(self):
-        return self.ctx.store.conn
-
-    @cached_property
-    def urls(self) -> Urls:
-        return Urls(self.req.base)
-
-    @cached_property
-    def repos(self) -> Repos:
-        return Repos(self.ctx.files)
+    def __init__(self, req, ctx, user):
+        super().__init__(ctx, req.base)
+        self.req, self.user = req, user
 
     @property
     def login(self) -> str:
         return self.user["login"]
 
-    def now(self) -> int:
-        return self.ctx.now_ms()
-
-    def person(self, given: dict | None = None) -> Person:
-        """The caller as a commit's author (or the `{name, email}` a request gives), dated now."""
-        if given and given.get("name") and given.get("email"):
-            return Person(given["name"], given["email"], self.now())
-        return users.person(self.ctx.config, self.login, self.now())
+    def author(self, given: dict | None = None):
+        """The caller as a commit's author (or the `{name, email}` the request gives)."""
+        return super().person(self.login, given)
 
     def body(self) -> dict:
         try:
@@ -101,14 +73,26 @@ def _finish(resp, ctx) -> Response:
     return resp
 
 
+def refused_write(req) -> Response | None:
+    """A read-only agent's write, refused and marked a read (owner ruling, 2026-11-19); else None."""
+    if not req.readonly or req.method in READ_METHODS:
+        return None
+    resp = _error_response(read_only())
+    resp.effect = "read"
+    return resp
+
+
 def _serve(fn, req, ctx) -> Response:
+    refused = refused_write(req)
+    if refused is not None:
+        return _finish(refused, ctx)
     db = ctx.store.conn
     db.execute("SAVEPOINT api")
     try:
         resp = fn(Call(req, ctx, _caller(req, ctx)))
-    except ApiError as e:
+    except GithubError as e:
         db.execute("ROLLBACK TO api")
-        resp = e.response()
+        resp = _error_response(e)
     db.execute("RELEASE api")
     return _finish(resp, ctx)
 
@@ -128,8 +112,10 @@ class Api:
         return register
 
 
-def api_not_found(ctx) -> Response:
-    return _finish(not_found().response(), ctx)
+def not_found_response() -> Response:
+    resp = _error_response(not_found())
+    resp.headers = {**api_headers(), **(resp.headers or {})}
+    return resp
 
 
 def no_content() -> Response:
