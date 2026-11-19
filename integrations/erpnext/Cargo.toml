@@ -12,7 +12,7 @@ name = "arena-erpnext"
 path = "src/main.rs"
 
 [dependencies]
-arena-part = { path = "../../kits/rust", features = ["mariadb", "compose"] }
+arena-part = { path = "../../kits/rust", features = ["mariadb", "compose", "http"] }
 reqwest = { version = "0.12", default-features = false, features = ["json"] }
 tokio.workspace = true
 serde.workspace = true
