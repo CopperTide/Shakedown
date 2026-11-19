@@ -42,27 +42,6 @@ pub struct Started {
     pub agents: Vec<Endpoints>,
 }
 
-/// Starts a run of `task_id` whose agents an external system drives (see
-/// [`launch`](crate::launch::launch)): its world started, its clock ticking, the team's agents
-/// (there may be none yet) started.
-pub async fn start(
-    state: &Arc<AppState>,
-    task_id: &str,
-    team: Team,
-    scenario: &crate::scenario::Scenario,
-    rules: Rules,
-) -> Result<Started, runner::RunError> {
-    let spec = crate::launch::LaunchSpec {
-        task_id,
-        team,
-        scenario,
-        rules,
-        driver: None,
-    };
-    let l = crate::launch::launch(state, spec).await?;
-    Ok(Started::of(l.run_id, l.branch_id, l.agents))
-}
-
 impl Started {
     pub fn of(run_id: RunId, branch_id: BranchId, agents: Vec<Endpoints>) -> Started {
         Started {

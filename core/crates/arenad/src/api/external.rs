@@ -16,6 +16,7 @@ use crate::{
     app::AppState,
     exec::{tool_schemas, BranchCtx},
     external::{self, endpoints, AgentDone, Join, UsageReport},
+    launch::{launch, LaunchSpec},
     model::*,
     reasoning::{self, ReasoningReport},
     runner,
@@ -45,8 +46,15 @@ pub(super) async fn create_run(
     permit.check_disk(&state).await?;
     detached(async move {
         let _permit = permit;
-        let rules = Rules::new(Runner::External);
-        let started = external::start(&state, &task_id, team, &scenario, rules).await?;
+        let spec = LaunchSpec {
+            task_id: &task_id,
+            team,
+            scenario: &scenario,
+            rules: Rules::new(Runner::External),
+            driver: None,
+        };
+        let l = launch(&state, spec).await?;
+        let started = external::Started::of(l.run_id, l.branch_id, l.agents);
         Ok(Json(serde_json::to_value(started)?))
     })
     .await
