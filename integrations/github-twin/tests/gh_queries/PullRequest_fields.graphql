@@ -1,0 +1,2 @@
+# cli/cli acee710547dcf7dfb6490afea77972187e74b819 internal/featuredetection/feature_detection.go
+query PullRequest_fields{PullRequest: __type(name: "PullRequest"){fields(includeDeprecated: true){name}},StatusCheckRollupContextConnection: __type(name: "StatusCheckRollupContextConnection"){fields(includeDeprecated: true){name}}}

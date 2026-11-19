@@ -10,16 +10,20 @@ When Shakedown starts the driver itself (a Code connection), it sets ``ARENA_URL
 ``ARENA_BRANCH``, ``ARENA_TASK`` (and ``ARENA_FORK_OF`` on a fork) and :func:`run` joins that
 branch. Run by hand, it starts a run of its own. When the block ends the agents it registered are
 ended and the run is finished, so Shakedown scores the world. If the block raises, the run still
-gets scored, ends ``failed`` with the error, and the exception goes on up.
+gets scored, ends ``failed`` with the error, and the exception goes on up. If the run had already
+ended when the block ends (its world time window or its spend limit ended it), that is said on
+stderr and the block ends normally.
 """
 
 from __future__ import annotations
 
 import os
+import sys
 from contextlib import contextmanager
 from typing import Iterator, Optional
 
 from .client import DEFAULT_URL, AgentEndpoint, Arena, Branch
+from .errors import Conflict
 from .models import Event, Task
 
 
@@ -52,12 +56,24 @@ class DriverRun:
         provider: Optional[str] = None,
         model: Optional[str] = None,
         name: Optional[str] = None,
+        read_only: bool = False,
     ) -> AgentEndpoint:
-        """The agent ``id`` on this run: registered the first time, the same endpoint after."""
+        """The agent ``id`` on this run: registered the first time, the same endpoint after. A
+        ``read_only`` agent's writes are refused (its tools and its requests through the proxy)."""
         if id not in self._agents:
-            kw = {k: v for k, v in {"provider": provider, "model": model, "name": name}.items() if v}
+            kw = {k: v for k, v in {"provider": provider, "model": model, "name": name,
+                                    "read_only": read_only}.items() if v}
             self._agents[id] = self.branch.register(id, **kw)
         return self._agents[id]
+
+    @property
+    def agents(self) -> list[AgentEndpoint]:
+        """The agents registered so far, in order."""
+        return list(self._agents.values())
+
+    def clock(self) -> dict:
+        """The run's clock and the world's time (see :meth:`Branch.clock`)."""
+        return self.branch.clock()
 
     def history(self, agent_id: str) -> list[Event]:
         """On a fork, what ``agent_id`` did before the fork point; empty otherwise."""
@@ -101,7 +117,18 @@ def run(task: Optional[str] = None, url: Optional[str] = None) -> Iterator[Drive
             pass
         raise
     else:
-        dr._end_agents(ok=True)
-        branch.finish()
+        _finish(dr)
     finally:
         arena.close()
+
+
+def _finish(dr: DriverRun) -> None:
+    """Ends the agents and finishes the run; a run that had already ended is said on stderr."""
+    try:
+        dr._end_agents(ok=True)
+    except Conflict:
+        pass  # the run ended meanwhile: finishing says so
+    try:
+        dr.branch.finish()
+    except Conflict as e:
+        print(f"shakedown: the run had already ended ({e.message})", file=sys.stderr)

@@ -1,0 +1,16 @@
+# Sent by gh 2.45.0 (github.com/cli/cli, MIT, LICENSE-cli.txt)
+fragment label on Label{color,description,name}
+	query LabelList($owner: String!, $repo: String!, $limit: Int!, $endCursor: String, $query: String, $orderBy: LabelOrder) {
+		repository(owner: $owner, name: $repo) {
+			labels(first: $limit, after: $endCursor, query: $query, orderBy: $orderBy) {
+				totalCount,
+				nodes {
+					...label
+				}
+				pageInfo {
+					hasNextPage
+					endCursor
+				}
+			}
+		}
+	}

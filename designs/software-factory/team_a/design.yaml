@@ -1,0 +1,57 @@
+# Design A: a hierarchical team. A read-only planner plans the sprint, a coder opens a pull
+# request per work item, a reviewer approves or sends it back (at most review_rounds times),
+# and release merges, watches production and then stays on call until the window ends.
+roles:
+  planner:  {prompt: planner.md,  tools: [shell, read_file, wait_minutes], read_only: true,  max_turns: 40}
+  coder:    {prompt: coder.md,    tools: [shell, read_file, write_file, run_tests], read_only: false, max_turns: 80}
+  reviewer: {prompt: reviewer.md, tools: [shell, read_file, run_tests], read_only: false, max_turns: 40}
+  release:  {prompt: release.md,  tools: [shell, read_file, wait_minutes], read_only: false, max_turns: 80}
+review_rounds: 2
+# Graph steps one run may take (each role's turn is one step); far above a sprint's need.
+max_graph_steps: 1000
+
+# What each node says to its role. {ticket}, {item}, {pr} and {notes} come from the team's state.
+inputs:
+  plan: |
+    The sprint's ticket:
+
+    {ticket}
+  plan_retry: Answer with the JSON plan only.
+  code: |
+    The sprint's ticket:
+
+    {ticket}
+
+    Your work item:
+
+    {item}
+
+    Pull request so far: {pr}
+
+    Notes from the team so far:
+    {notes}
+  review: |
+    Review the pull request for this work item.
+
+    Work item:
+
+    {item}
+
+    Pull request: {pr}
+
+    Notes from the team so far:
+    {notes}
+  release: |
+    The reviewer approved this pull request. Release it.
+
+    Work item:
+
+    {item}
+
+    Pull request: {pr}
+  monitor: |
+    Every work item has been handled. Stay on call now (monitor): watch production, alerts,
+    incidents and the team's chat until the run's world time window ends.
+
+    Notes from the team:
+    {notes}

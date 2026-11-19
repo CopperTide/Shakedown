@@ -1,0 +1,26 @@
+# Developers open pull requests of their own and answer review comments within the hour.
+format: shakedown-people/1
+role: developer
+lines:
+  fixing: ["Good catch, fixing it now.", "Thanks, I'll push a fix shortly."]
+  titles: ["Tidy the request log", "Name the retry constant"]
+  patches:
+    - |
+      diff --git a/notes.txt b/notes.txt
+      new file mode 100644
+      --- /dev/null
+      +++ b/notes.txt
+      @@ -0,0 +1 @@
+      +A note.
+rules:
+  - id: answer-review
+    notice: {system: github, kind: review_submitted, to: /author, where: {/state: CHANGES_REQUESTED}}
+    after: {minutes: [5, 55]}
+    act: {system: github, action: comment, args: {repo: /repo, number: /number, body: "@{/reviewer} {pick:fixing}"}}
+  - id: open-own-pr
+    once: {minute: 30}
+    who: one
+    act:
+      system: github
+      action: open_pr
+      args: {repo: acme/app, branch: "{person:login}-notes", title: "{pick:titles}", body: "", patch: "{pick:patches}"}

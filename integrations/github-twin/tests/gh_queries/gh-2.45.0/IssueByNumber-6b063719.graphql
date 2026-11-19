@@ -1,0 +1,11 @@
+# Sent by gh 2.45.0 (github.com/cli/cli, MIT, LICENSE-cli.txt)
+query IssueByNumber($owner: String!, $repo: String!, $number: Int!) {
+		repository(owner: $owner, name: $repo) {
+			hasIssuesEnabled
+			issue: issueOrPullRequest(number: $number) {
+				__typename
+				...on Issue{number,url,state,createdAt,title,body,author{login,...on User{id,name}},milestone{number,title,description,dueOn},assignees(first:100){nodes{id,login,name},totalCount},labels(first:100){nodes{id,name,description,color},totalCount},projectCards(first:100){nodes{project{name}column{name}},totalCount},reactionGroups{content,users{totalCount}},stateReason,comments(first: 100) {nodes {id,author{login,...on User{id,name}},authorAssociation,body,createdAt,includesCreatedEdit,isMinimized,minimizedReason,reactionGroups{content,users{totalCount}},url,viewerDidAuthor},pageInfo{hasNextPage,endCursor},totalCount},id}
+				...on PullRequest{number,url,state,createdAt,title,body,author{login,...on User{id,name}},milestone{number,title,description,dueOn},assignees(first:100){nodes{id,login,name},totalCount},labels(first:100){nodes{id,name,description,color},totalCount},projectCards(first:100){nodes{project{name}column{name}},totalCount},reactionGroups{content,users{totalCount}},comments(first: 100) {nodes {id,author{login,...on User{id,name}},authorAssociation,body,createdAt,includesCreatedEdit,isMinimized,minimizedReason,reactionGroups{content,users{totalCount}},url,viewerDidAuthor},pageInfo{hasNextPage,endCursor},totalCount},id}
+			}
+		}
+	}

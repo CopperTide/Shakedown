@@ -1,0 +1,11 @@
+kind = "integration"
+name = "jira-twin"
+version = "0.1.0"
+protocol = 1
+run = { command = ["uv", "run", "--project", ".", "python", "-m", "jira_twin"] }
+needs = { gpu_vram_gb = 0, services = [] }
+config_schema = { type = "object", required = ["hosts", "token", "default_user", "projects"], properties = { hosts = { type = "array" }, deployment = { type = "string", enum = ["cloud", "server"] }, token = { type = "string" }, default_user = { type = "string" }, email_domain = { type = "string" }, projects = { type = "array" }, workflow = { type = "object" }, boards = { type = "array" }, sprints = { type = "array" }, issues = { type = "array" }, users = { type = "array" } } }
+
+[[example]]
+tool = "jira_act"
+args = { person = "dev", action = "comment", args = { key = "AC-1", body = "On it." } }

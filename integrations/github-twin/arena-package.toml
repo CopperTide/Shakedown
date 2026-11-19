@@ -1,0 +1,11 @@
+kind = "integration"
+name = "github-twin"
+version = "0.1.0"
+protocol = 1
+run = { command = ["uv", "run", "--project", ".", "python", "-m", "github_twin"] }
+needs = { gpu_vram_gb = 0, services = [] }
+config_schema = { type = "object", required = ["hosts", "org", "token", "default_user"], properties = { hosts = { type = "array" }, org = { type = "string" }, token = { type = "string" }, default_user = { type = "string" }, installed_version = { type = "string" }, repos = { type = "array" }, protection = { type = "object" } } }
+
+[[example]]
+tool = "github_act"
+args = { person = "coder", action = "comment", args = {} }

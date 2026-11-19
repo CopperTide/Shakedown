@@ -1,0 +1,22 @@
+[
+  {"gpuId": "NVIDIA H100 80GB HBM3", "displayName": "H100 SXM", "memoryInGb": 80,
+   "secureCloud": true, "securePricePerHr": 4.39, "communityCloud": true, "communityPricePerHr": 2.69,
+   "stockStatus": "Low", "available": true,
+   "dataCenterAvailability": [{"dataCenterId": "US-TX-3", "stockStatus": "Low"}, {"dataCenterId": "EU-RO-1", "stockStatus": "none"}]},
+  {"gpuId": "NVIDIA H100 NVL", "displayName": "H100 NVL", "memoryInGb": 94,
+   "secureCloud": true, "securePricePerHr": 3.07, "communityCloud": true, "communityPricePerHr": 2.59,
+   "stockStatus": "Low", "available": true,
+   "dataCenterAvailability": [{"dataCenterId": "US-KS-2", "stockStatus": "Low"}]},
+  {"gpuId": "NVIDIA A100-SXM4-80GB", "displayName": "A100 SXM", "memoryInGb": 80,
+   "secureCloud": true, "securePricePerHr": 1.49, "communityCloud": true, "communityPricePerHr": 1.39,
+   "stockStatus": "Medium", "available": true,
+   "dataCenterAvailability": [{"dataCenterId": "CA-MTL-1", "stockStatus": "Medium"}]},
+  {"gpuId": "NVIDIA L40S", "displayName": "L40S", "memoryInGb": 48,
+   "secureCloud": true, "securePricePerHr": 0.86, "communityCloud": true, "communityPricePerHr": 0.79,
+   "stockStatus": "High", "available": true,
+   "dataCenterAvailability": [{"dataCenterId": "EU-SE-1", "stockStatus": "High"}]},
+  {"gpuId": "NVIDIA B200", "displayName": "B200", "memoryInGb": 180,
+   "secureCloud": true, "securePricePerHr": 5.98, "communityCloud": false, "communityPricePerHr": null,
+   "stockStatus": "Low", "available": true,
+   "dataCenterAvailability": [{"dataCenterId": "US-CA-2", "stockStatus": "Low"}]}
+]

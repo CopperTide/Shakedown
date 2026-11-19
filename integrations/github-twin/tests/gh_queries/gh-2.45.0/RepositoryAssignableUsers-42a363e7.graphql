@@ -1,0 +1,2 @@
+# Sent by gh 2.45.0 (github.com/cli/cli, MIT, LICENSE-cli.txt)
+query RepositoryAssignableUsers($endCursor:String$name:String!$owner:String!){repository(owner: $owner, name: $name){assignableUsers(first: 100, after: $endCursor){nodes{id,login,name},pageInfo{hasNextPage,endCursor}}}}

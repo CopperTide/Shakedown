@@ -1,0 +1,8 @@
+# Sent by gh 2.45.0 (github.com/cli/cli, MIT, LICENSE-cli.txt)
+query PullRequestStatusChecks($id: ID!, $endCursor: String) {
+		node(id: $id) {
+			...on PullRequest {
+				statusCheckRollup: commits(last: 1) {nodes {commit {statusCheckRollup {contexts(first:100,after:$endCursor) {nodes {__typename...on StatusContext {context,state,targetUrl,createdAt,description,isRequired(pullRequestId: $id)},...on CheckRun {name,checkSuite{workflowRun{workflow{name}}},status,conclusion,startedAt,completedAt,detailsUrl,isRequired(pullRequestId: $id)}},pageInfo{hasNextPage,endCursor}}}}}}
+			}
+		}
+	}

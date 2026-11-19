@@ -208,8 +208,9 @@ def test_branch_clock_gets_the_route():
 
 # ---------------------------------------------------------------- drivers
 
-def _fake_arenad(monkeypatch, calls: list):
-    """An arenad that answers a driver's calls and keeps them in ``calls`` as (method, path, body)."""
+def _fake_arenad(monkeypatch, calls: list, ended: bool = False):
+    """An arenad that answers a driver's calls and keeps them in ``calls`` as (method, path, body).
+    With ``ended`` the branch has already ended: ending agents and finishing answer 409."""
     import httpx
 
     import arena.driver as driver
@@ -227,6 +228,11 @@ def _fake_arenad(monkeypatch, calls: list):
                                              "gateway_url": f"http://x/gateway/b1/{a}/v1", "tools": []})
         if p.endswith("/reasoning"):
             return httpx.Response(200, json={"seqs": list(range(len(body["items"])))})
+        if ended and (p.endswith("/end") or p.endswith("/finish")):
+            return httpx.Response(409, json={"error": "the branch already ended (passed)"})
+        if p.endswith("/clock"):
+            return httpx.Response(200, json={"clock_ms": 1500, "speed": 1.0, "paused": False,
+                                             "world_epoch_ms": 0, "world_ms": 1500})
         if p.endswith("/end"):
             return httpx.Response(200, json={"seq": 9})
         if p.endswith("/finish"):
@@ -294,3 +300,40 @@ def test_report_reasoning_posts_items(monkeypatch):
     bodies = [b for _, p, b in calls if p.endswith("/reasoning")]
     assert bodies == [{"items": [{"text": "Check stock first.", "kind": "plan"}]},
                       {"items": [{"text": "x"}, {"text": "y", "kind": "step"}]}]
+
+
+def test_agent_registers_read_only_when_asked(monkeypatch):
+    calls: list = []
+    driver = _fake_arenad(monkeypatch, calls)
+    with driver.run() as run:
+        run.agent("planner", read_only=True)
+        run.agent("coder")
+    bodies = {b["id"]: b for _, p, b in calls if p.endswith("/agents")}
+    assert bodies["planner"]["read_only"] is True
+    assert bodies["coder"]["read_only"] is False
+
+
+def test_driver_run_reads_the_clock(monkeypatch):
+    calls: list = []
+    driver = _fake_arenad(monkeypatch, calls)
+    with driver.run() as run:
+        assert run.clock()["clock_ms"] == 1500
+    assert ("GET", "/api/branches/b1/clock", None) in calls
+
+
+def test_finish_on_an_ended_branch_is_not_an_error(monkeypatch, capsys):
+    calls: list = []
+    driver = _fake_arenad(monkeypatch, calls, ended=True)
+    with driver.run() as run:
+        run.agent("a")
+    err = capsys.readouterr().err
+    assert "shakedown: the run had already ended (" in err
+    assert calls[-1][1] == "/api/branches/b1/finish"
+
+
+def test_driver_run_lists_the_agents_it_registered(monkeypatch):
+    calls: list = []
+    driver = _fake_arenad(monkeypatch, calls)
+    with driver.run() as run:
+        a, b = run.agent("a"), run.agent("b")
+        assert run.agents == [a, b]
