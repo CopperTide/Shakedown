@@ -76,7 +76,10 @@ async fn report(
 ) -> ApiResult<Value> {
     let r: Report = parse_body(&body)?;
     check(&r)?;
-    let ctx = state.live.get(&id).ok_or_else(|| ApiError::not_found(format!("no live branch \"{id}\"")))?;
+    let ctx = state
+        .live
+        .get(&id)
+        .ok_or_else(|| ApiError::not_found(format!("no live branch \"{id}\"")))?;
     if ctx.agent(&r.agent).is_none() {
         return Err(ApiError::bad(format!(
             "the branch has no agent \"{}\"",
