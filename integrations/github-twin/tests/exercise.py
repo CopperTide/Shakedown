@@ -1,6 +1,6 @@
 """One sample request per covered operation, for the schema test: `exercise(twin, op, tmp)`
 answers `(status, body)`."""
-from conftest import api, api_raw, b64
+from conftest import api, api_raw, b64, wait_for
 
 R = "/api/v3/repos/acme/app"
 
@@ -70,6 +70,24 @@ def _hook(t):
     api(t, "POST", f"{R}/hooks", {"name": "web", "events": ["push"], "config": {"url": "http://127.0.0.1:9/h", "secret": "s"}})
 
 
+CI_YML = "name: CI\non: push\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: python -m unittest\n"
+
+
+def _actions_run(t, hold=False):
+    """Run 1 of `ci.yml`, pushed to main; completed (the fake Docker says ok) unless `hold`."""
+    if hold:
+        t.part.docker.hold()
+    api(t, "PUT", f"{R}/contents/.github/workflows/ci.yml", {"message": "Add CI", "content": b64(CI_YML)})
+    want = "in_progress" if hold else "completed"
+    return wait_for(lambda: (r := api(t, "GET", f"{R}/actions/runs/1"))["status"] == want and r, what=want)
+
+
+def _job(t):
+    _actions_run(t)
+    return api(t, "GET", f"{R}/actions/runs/1/jobs")["jobs"][0]["id"]
+
+
+A = f"{R}/actions"
 P = f"{R}/pulls/1"
 SAMPLES = {
     ("GET", "/"): lambda t: ("GET", "/api/v3/", None),
@@ -156,6 +174,28 @@ SAMPLES = {
     ("GET", "/repos/{owner}/{repo}/commits/{ref}/check-runs"): lambda t: (_pr(t), _run(t), ("GET", f"{R}/commits/main/check-runs", None))[2],
     ("GET", "/repos/{owner}/{repo}/check-suites/{check_suite_id}/check-runs"): lambda t: (
         "GET", f"{R}/check-suites/{_run(t)['check_suite']['id']}/check-runs", None),
+    ("GET", "/repos/{owner}/{repo}/actions/workflows"): lambda t: (_actions_run(t), ("GET", f"{A}/workflows", None))[1],
+    ("GET", "/repos/{owner}/{repo}/actions/workflows/{workflow_id}"): lambda t: (
+        _actions_run(t), ("GET", f"{A}/workflows/ci.yml", None))[1],
+    ("GET", "/repos/{owner}/{repo}/actions/workflows/{workflow_id}/runs"): lambda t: (
+        _actions_run(t), ("GET", f"{A}/workflows/1/runs", None))[1],
+    ("GET", "/repos/{owner}/{repo}/actions/runs"): lambda t: (_actions_run(t), ("GET", f"{A}/runs", None))[1],
+    ("GET", "/repos/{owner}/{repo}/actions/runs/{run_id}"): lambda t: (_actions_run(t), ("GET", f"{A}/runs/1", None))[1],
+    ("GET", "/repos/{owner}/{repo}/actions/runs/{run_id}/attempts/{attempt_number}"): lambda t: (
+        _actions_run(t), ("GET", f"{A}/runs/1/attempts/1", None))[1],
+    ("GET", "/repos/{owner}/{repo}/actions/runs/{run_id}/jobs"): lambda t: (_actions_run(t), ("GET", f"{A}/runs/1/jobs", None))[1],
+    ("GET", "/repos/{owner}/{repo}/actions/runs/{run_id}/attempts/{attempt_number}/jobs"): lambda t: (
+        _actions_run(t), ("GET", f"{A}/runs/1/attempts/1/jobs", None))[1],
+    ("GET", "/repos/{owner}/{repo}/actions/runs/{run_id}/logs"): lambda t: (_actions_run(t), ("GET", f"{A}/runs/1/logs", None))[1],
+    ("GET", "/repos/{owner}/{repo}/actions/runs/{run_id}/artifacts"): lambda t: (
+        _actions_run(t), ("GET", f"{A}/runs/1/artifacts", None))[1],
+    ("POST", "/repos/{owner}/{repo}/actions/runs/{run_id}/rerun"): lambda t: (_actions_run(t), ("POST", f"{A}/runs/1/rerun", None))[1],
+    ("POST", "/repos/{owner}/{repo}/actions/runs/{run_id}/cancel"): lambda t: (
+        _actions_run(t, hold=True), ("POST", f"{A}/runs/1/cancel", None))[1],
+    ("GET", "/repos/{owner}/{repo}/actions/jobs/{job_id}"): lambda t: ("GET", f"{A}/jobs/{_job(t)}", None),
+    ("GET", "/repos/{owner}/{repo}/actions/jobs/{job_id}/logs"): lambda t: ("GET", f"{A}/jobs/{_job(t)}/logs", None),
+    ("GET", "/repos/{owner}/{repo}/check-runs/{check_run_id}/annotations"): lambda t: (
+        "GET", f"{R}/check-runs/{_job(t)}/annotations", None),
     ("POST", "/repos/{owner}/{repo}/hooks"): lambda t: ("POST", f"{R}/hooks", {"name": "web", "events": ["push"], "config": {"url": "http://127.0.0.1:9/h"}}),
     ("GET", "/repos/{owner}/{repo}/hooks"): lambda t: (_hook(t), ("GET", f"{R}/hooks", None))[1],
     ("GET", "/repos/{owner}/{repo}/hooks/{hook_id}"): lambda t: (_hook(t), ("GET", f"{R}/hooks/1", None))[1],

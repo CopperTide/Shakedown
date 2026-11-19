@@ -3,6 +3,7 @@ moved branch synchronised (head, `refs/pull/N/head`), and webhooks queued."""
 from typing import Callable
 
 from . import records, webhooks
+from .actions import runs
 from .rest import pull_shapes
 from .repos import ZERO, Repos, full_name
 from .view import View
@@ -29,6 +30,7 @@ def _synchronize(v: View, repo, branch: str, change, by: str) -> None:
         pr = records.pull(v.db, repo["id"], pr["number"])
         webhooks.fire(v, repo, "pull_request", by, "synchronize", number=pr["number"], before=change.old,
                       after=change.new, pull_request=pull_shapes.simple(v, repo, pr))
+        runs.on_pull_request(v, repo, pr, by)
 
 
 def _branch_moved(v: View, repo, change, by: str) -> None:
@@ -38,6 +40,8 @@ def _branch_moved(v: View, repo, change, by: str) -> None:
     if change.new != ZERO:
         _synchronize(v, repo, branch, change, by)
     webhooks.push(v, repo, change, by, forced)
+    if change.new != ZERO:
+        runs.on_push(v, repo, branch, change.new, by)
 
 
 def after_push(ctx, repo, changes: list, by: str | None = None) -> None:

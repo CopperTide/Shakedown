@@ -46,6 +46,14 @@ def repository(call, repo) -> dict:
             **{k: u.repo_api(fn, v) for k, v in REPO_TEMPLATES.items()}}
 
 
+def pr_minimal(v, repo, p) -> dict:
+    """The `pull-request-minimal` shape of a pulls row (check runs and workflow runs list them)."""
+    mini = {"id": repo["id"], "url": v.urls.repo_api(full_name(repo)), "name": repo["name"]}
+    return {"id": p["id"], "number": p["number"], "url": v.urls.repo_api(full_name(repo), f"/pulls/{p['number']}"),
+            "head": {"ref": p["head_ref"], "sha": p["head_sha"], "repo": mini},
+            "base": {"ref": p["base_ref"], "sha": p["base_sha"], "repo": mini}}
+
+
 def open_issues(call, repo) -> int:
     return call.db.execute("SELECT COUNT(*) FROM issues WHERE repo_id = ? AND state = 'open'", (repo["id"],)).fetchone()[0]
 

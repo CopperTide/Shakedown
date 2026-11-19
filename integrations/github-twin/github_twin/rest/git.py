@@ -33,7 +33,7 @@ def _move(call, repo, ref: str, new: str, old: str | None) -> None:
     fn = full_name(repo)
     move = (lambda: call.repos.delete_ref(fn, ref)) if new == ZERO else (lambda: call.repos.update_ref(fn, ref, new, old))
     try:
-        events.moved(call.ctx, repo, move)
+        events.moved(call.ctx, repo, move, by=call.login)
     except GitError as e:
         raise invalid(str(e)) from None
 
