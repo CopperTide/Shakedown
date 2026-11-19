@@ -4,9 +4,8 @@ import { useParams, useSearchParams } from 'react-router-dom';
 import { experiment as fetchExperiment, stopExperiment } from '@/api/experiments';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogActions, DialogContent } from '@/components/ui/dialog';
-import { PageBody, PageHeader, type Width } from '@/components/ui/page';
-import { Panel } from '@/components/ui/panel';
-import { ErrorState, LoadingState } from '@/components/ui/state';
+import { PageBody, PageGate, PageHeader, type Width } from '@/components/ui/page';
+import { ErrorState } from '@/components/ui/state';
 import { StatusMark } from '@/components/ui/status';
 import { SuiteWhatMatters } from '@/features/review/WhatMatters';
 import { useAction } from '@/hooks/useAction';
@@ -77,7 +76,7 @@ function Header({ list, reload, width }: { list: Experiment[]; reload: () => voi
 function View({ ids }: { ids: string[] }) {
   const { list, error, reload } = useExperiments(ids);
   if (!list) {
-    return <><PageHeader width="default" title={error ? 'Experiment' : <span className="block h-7 w-72 animate-pulse rounded-md bg-sunken" />} /><PageBody width="default">{error ? <ErrorState error={error} onRetry={reload} /> : <Panel><LoadingState label="Loading the results…" rows={7} /></Panel>}</PageBody></>;
+    return <PageGate width="default" title="Experiment" loadingTitle={<span className="block h-7 w-72 animate-pulse rounded-md bg-sunken" />} label="Loading the results…" rows={7} error={error} onRetry={reload} />;
   }
   const reports = list.flatMap((e) => e.setups);
   const width = widthFor(reports.length);
