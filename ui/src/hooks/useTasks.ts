@@ -3,9 +3,9 @@ import { tasks as fetchTasks } from '@/api/benchmark';
 import { taskName } from '@/model/summary';
 import { useQuery } from './useQuery';
 
-/** The benchmark's tasks, with their tickets: read once for the whole page. */
+/** The benchmark's tasks, with their tickets: read again by each page that shows them. */
 export function useTasks() {
-  const { data: tasks, error } = useQuery('tasks', fetchTasks, { shared: true });
+  const { data: tasks, error } = useQuery('tasks', fetchTasks, { shared: true, fresh: true });
   return { tasks, error };
 }
 

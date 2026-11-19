@@ -185,6 +185,28 @@ describe('shared queries', () => {
     expect(sharedQuery('health', load).get().data).toBe('ok');
   });
 
+  it('a fresh query asks again for each new reader, showing the last answer meanwhile', async () => {
+    const { load, calls } = loads<string>();
+    const stop = sharedQuery('health', load, { fresh: true }).subscribe(() => {});
+    calls[0].resolve('no claude');
+    await flush();
+    stop();
+    const q = sharedQuery('health', load, { fresh: true });
+    q.subscribe(() => {});
+    expect(load).toHaveBeenCalledTimes(2);
+    expect(q.get()).toMatchObject({ data: 'no claude', loading: true });
+    calls[1].resolve('claude found');
+    await flush();
+    expect(q.get().data).toBe('claude found');
+  });
+
+  it('readers of a fresh query that arrive while it asks share that ask', () => {
+    const { load } = loads<string>();
+    sharedQuery('tasks', load, { fresh: true }).subscribe(() => {});
+    sharedQuery('tasks', load, { fresh: true }).subscribe(() => {});
+    expect(load).toHaveBeenCalledTimes(1);
+  });
+
   it('takes options from whoever made it (a health read that keeps its last value)', async () => {
     const { load, calls } = loads<string>();
     const q = sharedQuery('h', load, { keepOnError: true });

@@ -22,7 +22,7 @@ export function useStoredTeam() {
   return { team, error, replace, update, reset };
 }
 
-/** The teams the benchmark suggests, the default first (empty until they load, or when they can't): read once per page. */
+/** The teams the benchmark suggests, the default first (empty until they load, or when they can't): read again by each page that shows them. */
 export function useSuggestedTeams(): Team[] {
-  return useQuery('suggested-teams', suggestedTeams, { shared: true }).data ?? [];
+  return useQuery('suggested-teams', suggestedTeams, { shared: true, fresh: true }).data ?? [];
 }

@@ -14,6 +14,8 @@ export interface QueryOptions<T> {
   poll?: { ms: number; while: (v: T) => boolean };
   /** Keep the last answer through a failed read, the error beside it. */
   keepOnError?: boolean;
+  /** Every new reader asks again (one ask for readers that arrive together), the last answer shown meanwhile: what can change while the tab is open (the health, the benchmark). */
+  fresh?: boolean;
 }
 
 /**
@@ -39,7 +41,7 @@ export class Query<T> {
 
   subscribe = (reader: () => void): (() => void) => {
     this.readers.add(reader);
-    if (!this.loaded && !this.state.loading) this.fetch();
+    if ((!this.loaded || this.options().fresh) && !this.state.loading) this.fetch();
     return () => {
       this.readers.delete(reader);
       if (this.readers.size === 0) this.stop();
@@ -87,7 +89,7 @@ export class Query<T> {
 
 const shared = new Map<string, Query<unknown>>();
 
-/** The page-wide query for `key` (the tasks, the health, the review settings): one load, every reader. */
+/** The page-wide query for `key` (the tasks, the health, the review settings): one answer, every reader. */
 export function sharedQuery<T>(key: string, load: () => Promise<T>, options: QueryOptions<T> = {}): Query<T> {
   let q = shared.get(key) as Query<T> | undefined;
   if (!q) {
