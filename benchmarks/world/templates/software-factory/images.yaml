@@ -1,0 +1,70 @@
+# Every image the software factory runs, pinned once. Pulled images are named by tag and digest (the multi-arch
+# index digest Docker Hub listed on 2026-11-19); built images are made on this machine by the script in `hint`.
+# Nothing is pulled at run time (`--pull never`); `services` are the platform's compose services that run each one
+# (the service part passes each as `IMAGE_<SERVICE>`).
+images:
+  - id: python
+    image: python:3.12.16-slim@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b
+    hint: docker pull python:3.12.16-slim@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b
+    services: []  # the base image is built from it
+  - id: base
+    image: shakedown-sf/base:1.0.0
+    build: true
+    hint: images/build.sh base
+    services: []  # what the app images and CI jobs run on
+  - id: storefront
+    image: shakedown-sf/storefront:seed
+    build: true
+    hint: images/build.sh apps
+    services: [prod-storefront, staging-storefront]
+  - id: orders
+    image: shakedown-sf/orders:seed
+    build: true
+    hint: images/build.sh apps
+    services: [prod-orders, staging-orders]
+  - id: inventory
+    image: shakedown-sf/inventory:seed
+    build: true
+    hint: images/build.sh apps
+    services: [prod-inventory, staging-inventory]
+  - id: worldclock-gateway
+    image: shakedown/worldclock-gateway:0.1.0
+    build: true
+    hint: tools/worldclock-gateway/build-image.sh
+    services: [worldclock-gateway]
+  - id: postgres
+    image: postgres:17.11-alpine@sha256:e5d2edd28b1f8d40a0a6c0c9cdc545b19b56a0d5d88f94bc11a97d970d4700d0
+    hint: docker pull postgres:17.11-alpine@sha256:e5d2edd28b1f8d40a0a6c0c9cdc545b19b56a0d5d88f94bc11a97d970d4700d0
+    services: [prod-db, staging-db, glitchtip-db, prod-seed, staging-seed]
+  - id: otel-collector
+    image: otel/opentelemetry-collector:0.164.0@sha256:28b6d41ac51bff6b41ba5e8fe503569ffb9d6a1ea90f7a78419e86f34e44f750
+    hint: docker pull otel/opentelemetry-collector:0.164.0@sha256:28b6d41ac51bff6b41ba5e8fe503569ffb9d6a1ea90f7a78419e86f34e44f750
+    services: [otel-collector]
+  - id: prometheus
+    image: prom/prometheus:v3.15.1@sha256:fa3302279710be2f21a8301ec17a8b4f2301fd829bd113839b3b6b02b6f191a2
+    hint: docker pull prom/prometheus:v3.15.1@sha256:fa3302279710be2f21a8301ec17a8b4f2301fd829bd113839b3b6b02b6f191a2
+    services: [prometheus]
+  - id: alertmanager
+    image: prom/alertmanager:v0.34.2@sha256:39d8bb3966c694a124428a3a88fbcffd40bd069129ecd47c059f8a3f17c55f3b
+    hint: docker pull prom/alertmanager:v0.34.2@sha256:39d8bb3966c694a124428a3a88fbcffd40bd069129ecd47c059f8a3f17c55f3b
+    services: [alertmanager]
+  - id: loki
+    image: grafana/loki:3.7.9@sha256:0db216b630ae1f348a1584c67f3cead8b4c1fc839169a39501db664744158e28
+    hint: docker pull grafana/loki:3.7.9@sha256:0db216b630ae1f348a1584c67f3cead8b4c1fc839169a39501db664744158e28
+    services: [loki]
+  - id: tempo
+    image: grafana/tempo:2.10.10@sha256:12b0820f13ffa10ce956b6e9acc3b03f3cffded99109be6cc09d106fe56e5d38
+    hint: docker pull grafana/tempo:2.10.10@sha256:12b0820f13ffa10ce956b6e9acc3b03f3cffded99109be6cc09d106fe56e5d38
+    services: [tempo]
+  - id: grafana
+    image: grafana/grafana:12.4.14@sha256:ae509d9ae8c1021ca32ec370a9ca975d40165eda9fccd1e1102d317ff8787cd7
+    hint: docker pull grafana/grafana:12.4.14@sha256:ae509d9ae8c1021ca32ec370a9ca975d40165eda9fccd1e1102d317ff8787cd7
+    services: [grafana]
+  - id: glitchtip
+    image: glitchtip/glitchtip:6.2.6@sha256:a3d8eb1b36c1e1603d55ab32711ea3dd8115874742a781a57391a62a16e0dff6
+    hint: docker pull glitchtip/glitchtip:6.2.6@sha256:a3d8eb1b36c1e1603d55ab32711ea3dd8115874742a781a57391a62a16e0dff6
+    services: [glitchtip, glitchtip-worker]
+  - id: rsync
+    image: instrumentisto/rsync-ssh:alpine3.23-r3@sha256:6cbad37c2fbdca4ac7ad9d1c1bb8990af9efd4dc76321b349935876cbb1e9e4a
+    hint: docker pull instrumentisto/rsync-ssh:alpine3.23-r3@sha256:6cbad37c2fbdca4ac7ad9d1c1bb8990af9efd4dc76321b349935876cbb1e9e4a
+    services: []  # the service part's rsync_image (hard-linked saves)
