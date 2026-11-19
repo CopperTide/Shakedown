@@ -5,15 +5,19 @@
 
 use std::{sync::Arc, time::Duration};
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use serde::Serialize;
 
-use super::{Slot, Suite};
+use super::{
+    slots::{self, SlotOutcome},
+    Slot, Suite,
+};
 use crate::{
     app::AppState,
-    external::{self, Started},
+    external::Started,
+    launch::{launch, LaunchSpec},
     model::{BranchStatus, Rules, Runner},
-    runner,
+    runner::RunError,
 };
 
 /// How often a built-in suite looks whether its current run has ended.
@@ -62,29 +66,23 @@ pub(crate) async fn start_builtin(
     suite: &Suite,
     slot: &Slot,
 ) -> Result<Option<String>> {
-    let _cleanup = state.cleanup.clone().read_owned().await;
-    if state.saves_over_limit().await? {
-        let why = crate::api::SAVES_FULL;
-        state.store.slot_failed(&suite.id, slot.ord, why).await?;
-        return Err(anyhow!(why));
+    let _permit = slots::permit(state, suite, slot).await?;
+    let rules = Rules::new(suite.runner).with_max_cost(suite.max_cost_usd);
+    let start = launch(state, slot_spec(suite, slot, rules));
+    match slots::run_slot(state, suite, slot, start).await? {
+        SlotOutcome::Filled(l) => Ok(Some(l.branch_id)),
+        SlotOutcome::Failed(_) => Ok(None),
     }
-    let (task, team) = (&slot.task_id, suite.team.clone());
-    let scenario = suite.scenario_of(slot);
-    let max = suite.max_cost_usd;
-    let run = runner::RunOptions::new(suite.runner).scenario(scenario);
-    match run.max_cost(max).start(state, task, team).await {
-        Ok((run, branch)) => {
-            state
-                .store
-                .fill_slot(&suite.id, slot.ord, &run, &branch)
-                .await?;
-            Ok(Some(branch))
-        }
-        Err(e) => {
-            let why = format!("{e:#}");
-            state.store.slot_failed(&suite.id, slot.ord, &why).await?;
-            Ok(None)
-        }
+}
+
+/// The run of `suite`'s `slot` under `rules`: its task, the suite's team, the slot's scenario.
+pub(crate) fn slot_spec<'a>(suite: &'a Suite, slot: &'a Slot, rules: Rules) -> LaunchSpec<'a> {
+    LaunchSpec {
+        task_id: &slot.task_id,
+        team: suite.team.clone(),
+        scenario: suite.scenario_of(slot),
+        rules,
+        driver: None,
     }
 }
 
@@ -115,30 +113,19 @@ pub struct ExternalClaim {
 pub async fn claim_external(
     state: &Arc<AppState>,
     suite: &Suite,
-) -> Result<Option<ExternalClaim>, runner::RunError> {
+) -> Result<Option<ExternalClaim>, RunError> {
     let Some(slot) = state.store.claim_slot(&suite.id).await? else {
         return Ok(None);
     };
-    let scenario = suite.scenario_of(&slot);
     let rules = Rules::new(Runner::External);
-    match external::start(state, &slot.task_id, suite.team.clone(), scenario, rules).await {
-        Ok(started) => {
-            let (run, branch) = (&started.run_id, &started.branch_id);
-            state
-                .store
-                .fill_slot(&suite.id, slot.ord, run, branch)
-                .await?;
-            Ok(Some(ExternalClaim {
-                task_id: slot.task_id,
-                variant: slot.variant,
-                repeat: slot.repeat,
-                started,
-            }))
-        }
-        Err(e) => {
-            let why = format!("{e:#}");
-            state.store.slot_failed(&suite.id, slot.ord, &why).await?;
-            Err(e)
-        }
+    let start = launch(state, slot_spec(suite, &slot, rules));
+    match slots::run_slot(state, suite, &slot, start).await? {
+        SlotOutcome::Filled(l) => Ok(Some(ExternalClaim {
+            task_id: slot.task_id,
+            variant: slot.variant,
+            repeat: slot.repeat,
+            started: Started::of(l.run_id, l.branch_id, l.agents),
+        })),
+        SlotOutcome::Failed(e) => Err(e),
     }
 }

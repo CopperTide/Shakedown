@@ -14,6 +14,7 @@ mod load;
 mod outcome;
 mod report;
 mod safety;
+pub mod slots;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -23,7 +24,7 @@ use crate::scenario::Scenario;
 
 pub use compare::{compare, CheckDelta, Comparison, Delta, Verdict};
 pub use drive::{claim_external, spawn_builtin, ExternalClaim};
-pub(crate) use drive::{shutting_down, start_builtin, wait_ended};
+pub(crate) use drive::{shutting_down, slot_spec, start_builtin, wait_ended};
 pub use load::{listed, load, Listed};
 pub use outcome::{outcome, RunOutcome, GOLD_CHECK};
 pub use report::{report, CheckRate, RunRow, Safety, Spread, SuiteReport};

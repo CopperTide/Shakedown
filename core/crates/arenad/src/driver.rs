@@ -24,10 +24,13 @@ use tokio::{io::AsyncReadExt, process::Child};
 
 use crate::{
     app::AppState,
-    external,
     model::*,
     store::Connection,
-    suite::{Slot, Suite},
+    suite::{
+        self,
+        slots::{self, SlotOutcome},
+        Slot, Suite,
+    },
 };
 
 /// How much of the driver's stdout and stderr is kept, from the end.
@@ -264,36 +267,26 @@ pub fn rules_for(conn_id: &str, max_cost_usd: Option<f64>) -> Rules {
 }
 
 /// Starts the external run of a Code setup's `slot` (waiting out a cleanup, as built-in runs
-/// do): `None` when it couldn't start (recorded on the slot). Saves over the limit stop the
+/// do), recorded on the slot: `None` when it couldn't start. Saves over the limit stop the
 /// experiment, as they stop a built-in suite.
 async fn start_run(
     state: &Arc<AppState>,
     suite: &Suite,
     slot: &Slot,
     conn_id: &str,
-) -> Result<Option<external::Started>> {
-    let _cleanup = state.cleanup.clone().read_owned().await;
-    if state.saves_over_limit().await? {
-        let why = crate::api::SAVES_FULL;
-        state.store.slot_failed(&suite.id, slot.ord, why).await?;
-        anyhow::bail!(why);
-    }
+) -> Result<Option<crate::launch::Launched>> {
+    let _permit = slots::permit(state, suite, slot).await?;
     let rules = rules_for(conn_id, suite.max_cost_usd);
-    let scenario = suite.scenario_of(slot);
-    let started = external::start(state, &slot.task_id, suite.team.clone(), scenario, rules).await;
-    match started {
-        Ok(s) => Ok(Some(s)),
-        Err(e) => {
-            let why = format!("{e:#}");
-            state.store.slot_failed(&suite.id, slot.ord, &why).await?;
-            Ok(None)
-        }
+    let start = crate::launch::launch(state, suite::slot_spec(suite, slot, rules));
+    match slots::run_slot(state, suite, slot, start).await? {
+        SlotOutcome::Filled(l) => Ok(Some(l)),
+        SlotOutcome::Failed(_) => Ok(None),
     }
 }
 
 /// Starts the run of a suite's claimed `slot` whose setup is a Code connection, and launches
-/// the driver for it: the branch id. `None` (the slot marked failed) when the connection is gone
-/// or the run couldn't start.
+/// the driver for it once the slot names the run: the branch id. `None` (the slot marked failed)
+/// when the connection is gone or the run couldn't start.
 pub async fn start_slot(
     state: &Arc<AppState>,
     suite: &Suite,
@@ -311,19 +304,14 @@ pub async fn start_slot(
     let Some(started) = start_run(state, suite, slot, id).await? else {
         return Ok(None);
     };
-    let (run, branch) = (&started.run_id, &started.branch_id);
-    state
-        .store
-        .fill_slot(&suite.id, slot.ord, run, branch)
-        .await?;
     let ids = RunIds {
-        run_id: run,
-        branch_id: branch,
+        run_id: &started.run_id,
+        branch_id: &started.branch_id,
         task_id: &slot.task_id,
         fork_of: None,
     };
     launch_or_fail(state, &conn, ids).await;
-    Ok(Some(branch.clone()))
+    Ok(Some(started.branch_id))
 }
 
 /// Launches the driver; when it can't start, its run ends `failed` (scored) saying why. The
