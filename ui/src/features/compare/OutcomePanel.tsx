@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { StatusChip } from '@/components/marks';
-import { Panel } from '../components/ui/panel';
+import { Panel } from '@/components/ui/panel';
 import { cn } from '@/lib/cn';
 import type { BranchDetail } from '@/model/types';
 import type { TrackMark } from '@/features/world/scrub';
