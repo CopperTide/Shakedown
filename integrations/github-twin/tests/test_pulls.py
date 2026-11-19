@@ -183,6 +183,17 @@ def test_a_mention_is_a_notice(twin_with_pr):
     assert n["data"]["data"] == {"user": "reviewer", "repo": "acme/app", "number": 1, "body": "@reviewer can you look?"}
 
 
+def test_a_submitted_review_notifies_the_author(twin_with_pr):
+    advance_events(twin_with_pr)
+    api(twin_with_pr, "POST", f"{R}/pulls/1/reviews", {"event": "REQUEST_CHANGES", "body": "Rename it"},
+        as_user="reviewer")
+    [n] = advance_events(twin_with_pr)
+    assert (n["text"], n["data"]["kind"]) == ("reviewer reviewed acme/app#1: CHANGES_REQUESTED", "review_submitted")
+    assert n["data"]["data"] == {"repo": "acme/app", "number": 1, "author": "coder", "reviewer": "reviewer",
+                                 "state": "CHANGES_REQUESTED", "body": "Rename it"}
+    api(twin_with_pr, "POST", f"{R}/pulls/1/reviews", {"body": "draft"}, as_user="reviewer")
+    assert advance_events(twin_with_pr) == []
+
 def test_review_comments_and_replies(twin_with_pr):
     head = api(twin_with_pr, "GET", f"{R}/pulls/1")["head"]["sha"]
     c = api_raw(twin_with_pr, "POST", f"{R}/pulls/1/comments",

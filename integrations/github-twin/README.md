@@ -63,7 +63,8 @@ patch applied with `git apply` and committed as the person), `review {repo, numb
 
 At the next `advance` the twin reports `notice` events, `data = {system: "github", kind, data}`:
 `review_requested {repo, number, reviewer, author, title, checks}`, `pr_opened`, `pr_merged {repo, number, by, sha}`,
-`checks_completed {repo, sha, conclusion, prs}`, `mentioned {user, repo, number, body}`.
+`checks_completed {repo, sha, conclusion, prs}`, `mentioned {user, repo, number, body}`,
+`review_submitted {repo, number, author, reviewer, state, body}` (a review leaving PENDING).
 
 ## Docs
 

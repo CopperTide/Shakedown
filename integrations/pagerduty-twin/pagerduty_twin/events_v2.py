@@ -31,8 +31,12 @@ def apply(ctx, service, action: str, dedup_key: str | None, payload: dict):
     if not dedup_key:
         raise EventError("'dedup_key' is required for acknowledge and resolve events.")
     row = records.open_incident(ctx.store.conn, service["id"], dedup_key)
+    if row is None:
+        return None, dedup_key
+    if action == "resolve":
+        incidents.cleared(ctx, row, service)
     target = "acknowledged" if action == "acknowledge" else "resolved"
-    return (incidents.change(ctx, row, target, f"service:{service['id']}") if row else None), dedup_key
+    return incidents.change(ctx, row, target, f"service:{service['id']}"), dedup_key
 
 
 def enqueue(req, ctx) -> Response:

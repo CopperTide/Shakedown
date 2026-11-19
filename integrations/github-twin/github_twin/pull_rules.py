@@ -79,6 +79,7 @@ def _submitted(v, repo, pr, r, by: str) -> None:
     v.db.execute("DELETE FROM review_requests WHERE issue_id = ? AND login = ?", (pr["id"], by))
     records.touch(v.db, pr["id"], v.now())
     notices.mentions(v.ctx, full_name(repo), pr["number"], by, r["body"])
+    notices.review_submitted(v.ctx, full_name(repo), pr, r)
     webhooks.fire(v, repo, "pull_request_review", by, "submitted", review=pull_shapes.review(v, repo, pr, r),
                   pull_request=pull_shapes.simple(v, repo, pr))
 

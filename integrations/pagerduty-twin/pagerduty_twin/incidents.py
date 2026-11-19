@@ -1,6 +1,6 @@
 """The writes, shared by REST, the Events API, `pagerduty_event` and `pagerduty_act`: an event
 triggers an incident (or adds an alert to the open one with its dedup key) paged to the on-call user,
-and acknowledges or resolves it; people acknowledge, resolve and write notes."""
+and acknowledges or resolves it (its alerts cleared, a notice); people acknowledge, resolve and write notes."""
 from . import ids, oncall, records
 from .errors import PagerDutyError
 
@@ -22,6 +22,13 @@ def trigger(ctx, service, dedup_key: str, summary: str, severity: str):
     ctx.notify("incident_triggered", f"pagerduty incident {incident_id} on {service['name']}",
                {"incident": incident_id, "service": service["name"], "assignee": assignee, "summary": summary})
     return records.incident(db, incident_id)
+
+
+def cleared(ctx, row, service) -> None:
+    """The notice that an open incident's alerts cleared (a resolve event on its dedup key)."""
+    ctx.notify("alerts_cleared", f"pagerduty alerts of {ids.incident(row['number'])} on {service['name']} cleared",
+               {"incident": ids.incident(row["number"]), "service": service["name"], "assignee": row["assignee"],
+                "summary": row["title"]})
 
 
 def change(ctx, row, status: str, by: str):

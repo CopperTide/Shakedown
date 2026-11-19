@@ -42,7 +42,8 @@ Found", "code": 2100}}`. Answers follow PagerDuty's descriptions (`tests/schemas
 `pagerduty_event {action, dedup_key, summary, service, severity, source?}` (called by the alert link; an enqueue
 body with `routing_key` also works), and `pagerduty_act {person, action, args}`: `ack {incident}`,
 `resolve {incident}`, `note {incident, text}`. At the next `advance` the twin reports `notice` events,
-`data = {system: "pagerduty", kind, data}`: `incident_triggered {incident, service, assignee, summary}`.
+`data = {system: "pagerduty", kind, data}`: `incident_triggered {incident, service, assignee, summary}`, and
+`alerts_cleared` (same fields) when a resolve event resolves an open incident (not when a person resolves it).
 
 ## Docs
 
@@ -50,7 +51,7 @@ body with `routing_key` also works), and `pagerduty_act {person, action, args}`:
 
 ## Verified
 
-`uv run --with pytest pytest -q` (25 tests): Events v2 dedup and resolve, the `From` rule, acknowledge, resolve and
+`uv run --with pytest pytest -q` (26 tests): Events v2 dedup and resolve (and its `alerts_cleared` notice), the `From` rule, acknowledge, resolve and
 notes, filters and paging, on-call rotation in world time, the world tool and acts, read-only agents, every covered
 answer against PagerDuty's descriptions (fetched and pinned), and the `pagerduty` client 7.2 (`RestApiV2Client`),
 unchanged, listing, acknowledging (`rput` on the incident's `self`) and writing notes against the twin through a

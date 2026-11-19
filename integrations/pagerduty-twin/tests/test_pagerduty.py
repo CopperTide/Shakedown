@@ -159,3 +159,15 @@ def test_the_pagerduty_client_lists_and_acknowledges(pd, client):
     assert client.rget("users/me")["email"] == "ops@acme.test"
     assert [o["user"]["summary"] for o in client.list_all("oncalls")][:1] == ["Dev Two"]
     assert pd.docs()["incident/P1"]["status"] == "acknowledged"
+
+
+def test_alerts_clearing_an_open_incident_is_a_notice(pd):
+    enqueue(pd, "trigger", "k1")
+    pd.notices()
+    enqueue(pd, "resolve", "k1")
+    assert pd.notices() == [{"system": "pagerduty", "kind": "alerts_cleared", "data": {
+        "incident": "P1", "service": "checkout", "assignee": "dev", "summary": "Checkout 5xx above 2%"}}]
+    enqueue(pd, "resolve", "k1")
+    enqueue(pd, "trigger", "k2")
+    pd.tool("pagerduty_act", {"person": "dev", "action": "resolve", "args": {"incident": "P2"}})
+    assert [n["kind"] for n in pd.notices()] == ["incident_triggered"]

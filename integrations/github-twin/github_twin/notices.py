@@ -10,6 +10,11 @@ def review_requested(ctx, repo: str, pr, reviewer: str, by: str, checks: str) ->
                 "title": pr["title"], "checks": checks})
 
 
+def review_submitted(ctx, repo: str, pr, review) -> None:
+    ctx.notify("review_submitted", f"{review['user']} reviewed {repo}#{pr['number']}: {review['state']}",
+               {"repo": repo, "number": pr["number"], "author": pr["user"], "reviewer": review["user"],
+                "state": review["state"], "body": review["body"]})
+
 def pr_opened(ctx, repo: str, pr) -> None:
     ctx.notify("pr_opened", f"{pr['user']} opened {repo}#{pr['number']}: {pr['title']}",
                {"repo": repo, "number": pr["number"], "author": pr["user"], "title": pr["title"],
