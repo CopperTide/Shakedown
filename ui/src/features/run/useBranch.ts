@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect } from 'react';
 import { branch as fetchBranch, stream } from '@/api/branches';
 import { runs as fetchRuns } from '@/api/runs';
-import { errorMessage } from '@/lib/errors';
+import { useQuery } from '@/hooks/useQuery';
 import type { Branch, BranchDetail, Event } from '@/model/types';
 
 /** Adds a streamed event to the branch on screen, once. */
@@ -12,23 +12,19 @@ export function withEvent(d: BranchDetail | null, id: string, e: Event): BranchD
 
 /** A branch with its events, live while it runs; with `runId`, its run's other branches too. */
 export function useBranch(branchId: string, runId?: string) {
-  const [detail, setDetail] = useState<BranchDetail | null>(null);
-  const [siblings, setSiblings] = useState<Branch[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const current = useRef(branchId);
-  // A response only lands if it is still for the branch on screen.
-  const load = useCallback(() => {
-    const id = branchId;
-    current.current = id;
-    fetchBranch(id).then((d) => { if (current.current === id) { setDetail(d); setError(null); } })
-      .catch((e) => { if (current.current === id) setError(errorMessage(e)); });
-    if (runId) fetchRuns().then((r) => { if (current.current === id) setSiblings(r.find((x) => x.id === runId)?.branches ?? []); }).catch(() => {});
-  }, [branchId, runId]);
-  useEffect(() => { setDetail(null); load(); }, [load]);
-  const running = detail?.status === 'running';
+  // A failed read keeps what is on screen; a response lands only if it is still for the branch on screen.
+  const branch = useQuery(branchId, () => fetchBranch(branchId), { keepOnError: true });
+  const others = useQuery(runId ? `${runId}/${branchId}` : null, async () => (await fetchRuns()).find((x) => x.id === runId)?.branches ?? [],
+    { keepOnError: true, keepPrevious: true });
+  const { reload: reloadBranch, update } = branch;
+  const { reload: reloadOthers } = others;
+  const reload = useCallback(() => { reloadBranch(); reloadOthers(); }, [reloadBranch, reloadOthers]);
+  const running = branch.data?.status === 'running';
   useEffect(() => {
     if (!running) return;
-    return stream(branchId, (e) => setDetail((d) => withEvent(d, branchId, e)), () => load());
-  }, [running, branchId, load]);
-  return { detail, siblings, error, reload: load };
+    return stream(branchId, (e) => update((d) => withEvent(d, branchId, e)), reload);
+  }, [running, branchId, update, reload]);
+  return { detail: branch.data, siblings: others.data ?? NO_BRANCHES, error: branch.error, reload };
 }
+
+const NO_BRANCHES: Branch[] = [];
