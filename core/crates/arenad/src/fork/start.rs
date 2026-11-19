@@ -93,29 +93,16 @@ async fn relaunch(
     (run_id, parent, task_id): (&str, &str, &str),
     branch_id: &str,
 ) -> &'static str {
-    let found = state.store.connection(conn_id).await;
-    let found = found.map_err(|e| format!("reading the Code connection: {e:#}"));
-    let gone = || format!("the Code connection {conn_id} was deleted");
-    let conn = match found.and_then(|c| c.ok_or_else(gone)) {
-        Ok(c) => c,
-        Err(why) => return driver_gone(state, branch_id, why).await,
-    };
     let ids = crate::driver::RunIds {
         run_id,
         branch_id,
         task_id,
         fork_of: Some(parent),
     };
-    match crate::driver::launch_or_fail(state, &conn, ids).await {
+    match crate::launch::launch_driver(state, conn_id, ids).await {
         Some(_) => "relaunched",
         None => "failed",
     }
-}
-
-/// Ends the new branch `failed` (scored) because its driver can't be started: `failed`.
-async fn driver_gone(state: &Arc<AppState>, branch_id: &str, why: String) -> &'static str {
-    state.live.fail_if_live(state, branch_id, why).await;
-    "failed"
 }
 
 /// The new branch's team: the one the request gives (a run an external system drives only, and

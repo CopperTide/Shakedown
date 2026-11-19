@@ -8,6 +8,7 @@ use std::sync::Arc;
 use crate::{
     app::AppState,
     driver::{self, RunIds},
+    exec::BranchCtx,
     external::{self, Endpoints},
     model::*,
     runner::{self, RunError, StartPoint},
@@ -35,20 +36,34 @@ pub struct Launched {
     pub driver: Option<driver::Launched>,
 }
 
-/// Launches `conn`'s driver for the new run `(run, branch, task)`; `None` when it couldn't start
-/// (the run then ended `failed`, saying why).
-async fn launch_driver(
+/// Launches the Code connection `conn_id`'s driver for the branch `ids` names (a new run's, or a
+/// fork's): `None` when it couldn't start, or the connection is gone (the branch then ended
+/// `failed`, saying why).
+pub async fn launch_driver(
     state: &Arc<AppState>,
-    conn: &Connection,
-    (run_id, branch_id, task_id): (&str, &str, &str),
+    conn_id: &str,
+    ids: RunIds<'_>,
 ) -> Option<driver::Launched> {
-    let ids = RunIds {
-        run_id,
-        branch_id,
-        task_id,
-        fork_of: None,
-    };
-    driver::launch_or_fail(state, conn, ids).await
+    let found = state.store.connection(conn_id).await;
+    let found = found.map_err(|e| format!("reading the Code connection: {e:#}"));
+    let gone = || format!("the Code connection {conn_id} was deleted");
+    match found.and_then(|c| c.ok_or_else(gone)) {
+        Ok(conn) => driver::launch_or_fail(state, &conn, ids).await,
+        Err(why) => {
+            state.live.fail_if_live(state, ids.branch_id, why).await;
+            None
+        }
+    }
+}
+
+/// Starts a new run's first branch the way its runner says: arenad's own runners on a spawned
+/// task; a run an external system drives made live, with its agents' starts (their endpoints).
+async fn go(state: &Arc<AppState>, ctx: Arc<BranchCtx>) -> anyhow::Result<Vec<Endpoints>> {
+    if ctx.rules.runner == Runner::External {
+        return external::go(state, &ctx).await;
+    }
+    runner::spawn_branch(state, ctx, StartPoint::default());
+    Ok(vec![])
 }
 
 /// Starts the run `spec` describes. arenad's own runners run its team on a spawned task, one
@@ -63,16 +78,16 @@ pub async fn launch(state: &Arc<AppState>, spec: LaunchSpec<'_>) -> Result<Launc
         driver,
     } = spec;
     let (run_id, ctx) = runner::begin_run(state, task_id, team, rules, scenario).await?;
-    let (branch_id, ctx) = (ctx.branch_id.clone(), Arc::new(ctx));
-    let agents = match ctx.rules.runner {
-        Runner::External => external::go(state, &ctx).await?,
-        _ => {
-            runner::spawn_branch(state, ctx, StartPoint::default());
-            vec![]
-        }
+    let branch_id = ctx.branch_id.clone();
+    let agents = go(state, Arc::new(ctx)).await?;
+    let ids = RunIds {
+        run_id: &run_id,
+        branch_id: &branch_id,
+        task_id,
+        fork_of: None,
     };
     let driver = match driver {
-        Some(conn) => launch_driver(state, conn, (&run_id, &branch_id, task_id)).await,
+        Some(conn) => driver::launch_or_fail(state, conn, ids).await,
         None => None,
     };
     Ok(Launched {
