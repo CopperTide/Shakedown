@@ -29,6 +29,7 @@ The table is in the main `README.md`, with what was verified. Each folder has a 
 | `utility` | a simulated electric utility and site meter, on the arena clock |
 | `ot-network` | a simulated plant OT network and IT/OT remote-access gateway |
 | `shift-roster` | a simulated shift roster with certifications |
+| `github-twin` | a GitHub-compatible code host (GHES mode) over real git repositories |
 
 Examples to copy: `kits/rust/examples/counter.rs` and `kits/python/examples/counter.py`.
 

@@ -148,3 +148,13 @@ def test_a_chunked_request_body_is_read_whole(notes):
     finally:
         conn.close()
     assert http(up(notes), "GET", "/notes/1").json()["text"] == "chunks"
+
+
+def test_a_path_param_takes_the_rest_of_the_path_even_when_empty():
+    from arena_part.twin import Request, Router
+
+    r = Router()
+    r.add("GET", "/files/{path:path}", lambda req, ctx: Response(200, req.params))
+    req = lambda p: Request("GET", p, {}, {}, b"", None, "http://x")
+    assert r.dispatch(req("/files/a/b%2Fc"), None).body == {"path": "a/b/c"}
+    assert r.dispatch(req("/files/"), None).body == {"path": ""}

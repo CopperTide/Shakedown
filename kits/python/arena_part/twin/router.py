@@ -67,11 +67,11 @@ Handler = Callable[[Request, object], Response]
 
 
 def _compile(pattern: str) -> re.Pattern:
-    """`{name}` matches one segment, `{name:path}` the rest of the path."""
+    """`{name}` matches one segment, `{name:path}` the rest of the path (maybe empty)."""
     out, pos = [], 0
     for m in re.finditer(r"\{(\w+)(:path)?\}", pattern):
         out.append(re.escape(pattern[pos:m.start()]))
-        out.append(f"(?P<{m.group(1)}>.+)" if m.group(2) else f"(?P<{m.group(1)}>[^/]+)")
+        out.append(f"(?P<{m.group(1)}>.*)" if m.group(2) else f"(?P<{m.group(1)}>[^/]+)")
         pos = m.end()
     out.append(re.escape(pattern[pos:]))
     return re.compile("".join(out))
