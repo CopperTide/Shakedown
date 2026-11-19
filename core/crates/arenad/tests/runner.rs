@@ -1,88 +1,44 @@
 //! The runners: a team on a task, one agent after another or all at once, to the check. Without a
 //! model: what is refused before a run, an agent whose provider can't be reached, and two
 //! branches' worlds on one program. `live_`: teams on a real model (see `support/live.rs`).
-#[path = "support/app.rs"]
-mod app_support;
-#[path = "support/live.rs"]
-mod live;
-#[path = "support/packages.rs"]
-mod packages;
-#[path = "support/pg.rs"]
-mod pg;
+mod support;
 
-use std::{
-    future::Future,
-    path::PathBuf,
-    sync::{Arc, LazyLock},
-};
+use std::{path::PathBuf, sync::Arc};
 
-use app_support::send;
 use arenad::{
-    app::AppState,
     exec::BranchCtx,
     model::*,
     providers::ProviderConfig,
     runner::{self, StartPoint},
 };
-use live::Live;
-use packages::TestHub;
-use pg::Cleanup;
 use serde_json::{json, Value};
-
-static RT: LazyLock<tokio::runtime::Runtime> =
-    LazyLock::new(|| tokio::runtime::Runtime::new().unwrap());
-
-fn run<F: Future>(f: F) -> F::Output {
-    RT.block_on(f)
-}
-
-/// Runs `body` on the live model, when there is one (else the test was skipped, said why).
-fn run_live<F: Future<Output = ()>>(live: Option<Live>, body: impl FnOnce(Live) -> F) {
-    if let Some(live) = live {
-        run(body(live));
-    }
-}
-
-struct Fx {
-    state: Arc<AppState>,
-    base: String,
-    hub: TestHub,
-    _clean: Cleanup,
-}
+use support::{app, app::send, live, live::Live, packages, run, run_live, AppFx};
 
 /// An app with the real drivers whose benchmark is `bench` (on the packages plus `extra`);
 /// `providers` replaces the environment's when given.
-async fn setup(tag: &str, extra: &[PathBuf], bench: &str, providers: Option<ProviderConfig>) -> Fx {
-    let hub = TestHub::new(extra);
-    let (store, clean) = app_support::meta_store("runner", tag).await;
-    let (state, base) = app_support::app_for(store, hub.hub.clone(), Some(bench), |c| {
-        if let Some(p) = providers {
-            c.providers = p;
-        }
-    })
-    .await;
-    Fx {
-        state,
-        base,
-        hub,
-        _clean: clean,
+async fn setup(
+    tag: &str,
+    extra: &[PathBuf],
+    bench: &str,
+    providers: Option<ProviderConfig>,
+) -> AppFx {
+    let app = AppFx::configured("runner", tag)
+        .packages(extra)
+        .bench(bench);
+    match providers {
+        Some(p) => app.providers(p),
+        None => app,
     }
+    .start()
+    .await
 }
 
 /// A team on no reachable model: open agents on the local server nothing answers on.
 fn unreachable_team() -> Team {
-    let agent = |id: &str| AgentSpec {
-        tools: Vec::new(),
-        id: id.into(),
-        name: id.into(),
-        kind: AgentKind::Open,
-        model: Some("m".into()),
-        prompt: format!("You are {id}."),
-        provider: None,
-        read_only: false,
-        lead: false,
-        url: None,
-        headers: Default::default(),
+    let agent = |id: &str| {
+        AgentSpec::new(id, AgentKind::Open)
+            .with_model("m")
+            .with_prompt(format!("You are {id}."))
     };
     Team {
         id: "t".into(),
@@ -104,7 +60,7 @@ fn kinds(evs: &[Event]) -> Vec<EventKind> {
 #[test]
 fn an_unreachable_provider_ends_the_branch_infra_error() {
     run(async {
-        let providers = ProviderConfig::with_upstream(app_support::NOWHERE);
+        let providers = ProviderConfig::with_upstream(app::NOWHERE);
         let fx = setup("infra", &[], "retail", Some(providers)).await;
         let (_run, branch) = runner::start_run(&fx.state, "27", unreachable_team())
             .await
@@ -150,7 +106,7 @@ fn tool_name_clash_refused() {
 
 /// A fresh branch of `task` with its world started, made live as `spawn_branch` does before it
 /// runs.
-async fn live_branch(fx: &Fx, team: Team, bench: &str, task: &str) -> (String, Arc<BranchCtx>) {
+async fn live_branch(fx: &AppFx, team: Team, bench: &str, task: &str) -> (String, Arc<BranchCtx>) {
     let run_id = fx.state.store.create_run(task, &team).await.unwrap();
     let branch = fx
         .state
@@ -171,7 +127,7 @@ async fn live_branch(fx: &Fx, team: Team, bench: &str, task: &str) -> (String, A
 const USER: &str = "isabella_johansson_2152";
 
 /// Arena's MCP endpoint for `agent` on `branch`: calls `name` with `args`, the tool's result.
-async fn mcp(fx: &Fx, branch: &str, agent: &str, name: &str, args: Value) -> Value {
+async fn mcp(fx: &AppFx, branch: &str, agent: &str, name: &str, args: Value) -> Value {
     let body = json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
                       "params": {"name": name, "arguments": args}});
     let url = format!("{}/mcp/{branch}/{agent}", fx.base);
@@ -182,20 +138,20 @@ async fn mcp(fx: &Fx, branch: &str, agent: &str, name: &str, args: Value) -> Val
 }
 
 /// The address line of `USER` in a save.
-async fn line_in(fx: &Fx, save: &str) -> Value {
+async fn line_in(fx: &AppFx, save: &str) -> Value {
     let key = format!("users/{USER}");
     fx.hub.inspect_save(save, &[&key]).await[&key]["doc"]["address"]["address1"].clone()
 }
 
 /// Writes `USER`'s address line `line` on `branch` through Arena's MCP endpoint.
-async fn write_line(fx: &Fx, branch: &str, line: &str) -> Value {
+async fn write_line(fx: &AppFx, branch: &str, line: &str) -> Value {
     let args = json!({"user_id": USER, "address1": line, "address2": "",
                       "city": "Austin", "state": "TX", "country": "USA", "zip": "73301"});
     mcp(fx, branch, "resolver", "modify_user_address", args).await
 }
 
 /// What `branch` reads and what its write saved show `line` only.
-async fn assert_own_line(fx: &Fx, branch: &str, line: &str) {
+async fn assert_own_line(fx: &AppFx, branch: &str, line: &str) {
     let user = json!({"user_id": USER});
     let read = mcp(fx, branch, "resolver", "get_user_details", user).await;
     assert_eq!(read["address"]["address1"], line, "{read}");
@@ -227,7 +183,7 @@ fn two_branches_on_one_program_keep_their_own_world() {
 }
 
 /// A test app whose benchmark is the toy world in `root`.
-async fn toy_fx(tag: &str, root: &packages::ToyRoot, providers: Option<ProviderConfig>) -> Fx {
+async fn toy_fx(tag: &str, root: &packages::ToyRoot, providers: Option<ProviderConfig>) -> AppFx {
     setup(tag, std::slice::from_ref(&root.0), "toybench", providers).await
 }
 
@@ -250,7 +206,7 @@ fn assert_run_start(rs: &Value) {
 /// The check of task 27, whatever the team did: against the gold save, passed exactly when no
 /// row differs, the differing rows sorted, and the final state saved before the instances
 /// stopped (an exchange in it when it passed).
-async fn assert_scored(fx: &Fx, b: &Branch, check: &CheckPayload) {
+async fn assert_scored(fx: &AppFx, b: &Branch, check: &CheckPayload) {
     assert_eq!(
         check.gold_db.as_deref(),
         Some("gold_retail_0_1_0_27_retail")

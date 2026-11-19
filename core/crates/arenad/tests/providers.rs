@@ -7,23 +7,12 @@
 //! adapters' own functions in `src/providers`, and retries on the wait they compute in
 //! `src/agents/open.rs`.
 
-#[path = "support/app.rs"]
-mod app_support;
-#[path = "support/live.rs"]
-mod live;
-#[path = "support/packages.rs"]
-mod packages;
-#[path = "support/pg.rs"]
-mod pg;
+mod support;
 
-use std::{
-    future::Future,
-    sync::{Arc, LazyLock},
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
 
 use arenad::{
-    app::{AppState, Config},
+    app::Config,
     gateway::REJECTED_MESSAGE,
     model::*,
     providers::{
@@ -31,38 +20,14 @@ use arenad::{
         KEY_REJECTED, NOT_CHECKED, OPENAI_BASE,
     },
 };
-use live::Live;
-use packages::TestHub;
-use pg::Cleanup;
 use serde_json::{json, Value};
-
-static RT: LazyLock<tokio::runtime::Runtime> =
-    LazyLock::new(|| tokio::runtime::Runtime::new().unwrap());
-
-fn run<F: Future>(f: F) -> F::Output {
-    RT.block_on(f)
-}
-
-/// Runs `body` on the live model, when there is one (else the test was skipped, said why).
-fn run_live<F: Future<Output = ()>>(live: Option<Live>, body: impl FnOnce(Live) -> F) {
-    if let Some(live) = live {
-        run(body(live));
-    }
-}
+use support::{app, live, live::Live, run, run_live, AppFx};
 
 fn agent(id: &str, provider: Option<&str>, model: Option<&str>) -> AgentSpec {
     AgentSpec {
-        tools: Vec::new(),
-        id: id.into(),
-        name: id.into(),
-        kind: AgentKind::Open,
         model: model.map(str::to_string),
-        prompt: format!("You are {id}."),
         provider: provider.map(str::to_string),
-        read_only: false,
-        lead: false,
-        url: None,
-        headers: Default::default(),
+        ..AgentSpec::new(id, AgentKind::Open).with_prompt(format!("You are {id}."))
     }
 }
 
@@ -81,38 +46,15 @@ fn local(name: &str, base: &str, key: Option<&str>) -> LocalEndpoint {
     }
 }
 
-struct Fx {
-    state: Arc<AppState>,
-    base: String,
-    http: reqwest::Client,
-    _hub: TestHub,
-    _clean: Cleanup,
-}
-
 /// An app whose providers are exactly `providers` (nothing from the environment).
-async fn setup(tag: &str, providers: ProviderConfig) -> Fx {
-    let hub = TestHub::new(&[]);
-    let (store, clean) = app_support::meta_store("prov", tag).await;
-    let (state, base) = app_support::app(store, hub.hub.clone(), |c| c.providers = providers).await;
-    Fx {
-        state,
-        base,
-        http: reqwest::Client::new(),
-        _hub: hub,
-        _clean: clean,
-    }
+async fn setup(tag: &str, providers: ProviderConfig) -> AppFx {
+    AppFx::configured("prov", tag)
+        .providers(providers)
+        .start()
+        .await
 }
 
-impl Fx {
-    async fn get(&self, path: &str) -> (u16, Value) {
-        app_support::send(self.http.get(format!("{}{path}", self.base))).await
-    }
-
-    async fn post(&self, path: &str, body: Value) -> (u16, Value) {
-        let req = self.http.post(format!("{}{path}", self.base)).json(&body);
-        app_support::send(req).await
-    }
-
+impl AppFx {
     /// Starts a run of task 27 with `team`; the response's status and body.
     async fn start(&self, team: &Team) -> (u16, Value) {
         self.post("/api/runs", json!({"task_id": "27", "team": team}))
@@ -154,7 +96,7 @@ impl Drop for Server {
 
 /// A server that accepts connections and never answers.
 async fn slow_server() -> Server {
-    let (listener, base) = app_support::bind().await;
+    let (listener, base) = app::bind().await;
     let task = tokio::spawn(async move {
         let mut held = vec![];
         while let Ok((sock, _)) = listener.accept().await {
@@ -169,7 +111,7 @@ async fn slow_server() -> Server {
 
 /// The base of a port nothing listens on.
 async fn down_server() -> String {
-    let (listener, base) = app_support::bind().await;
+    let (listener, base) = app::bind().await;
     drop(listener);
     base
 }
@@ -272,7 +214,7 @@ const REFUSED: [(Option<&str>, Option<&str>, &str); 5] = [
 fn runs_are_refused_on_providers_that_cannot_take_them() {
     run(async {
         let providers = ProviderConfig {
-            locals: vec![local("up", app_support::NOWHERE, None)],
+            locals: vec![local("up", app::NOWHERE, None)],
             ..ProviderConfig::default()
         };
         let fx = setup("refuse", providers).await;
@@ -296,7 +238,7 @@ fn fork_body(at: i64, changes: Value) -> Value {
 }
 
 /// A finished branch of `t`, written to the store by hand (no agent ran it): its id.
-async fn finished_by_hand(fx: &Fx, t: &Team) -> String {
+async fn finished_by_hand(fx: &AppFx, t: &Team) -> String {
     let store = &fx.state.store;
     let run_id = store.create_run("27", t).await.unwrap();
     let b = store
@@ -316,10 +258,8 @@ async fn finished_by_hand(fx: &Fx, t: &Team) -> String {
 #[test]
 fn a_fork_is_refused_on_a_provider_that_cannot_take_it() {
     run(async {
-        let mut providers = ProviderConfig::with_upstream(app_support::NOWHERE);
-        providers
-            .locals
-            .push(local("box", app_support::NOWHERE, None));
+        let mut providers = ProviderConfig::with_upstream(app::NOWHERE);
+        providers.locals.push(local("box", app::NOWHERE, None));
         let fx = setup("forkrefuse", providers).await;
         let b = finished_by_hand(&fx, &team(vec![agent("solo", None, Some("m1"))])).await;
         let url = format!("/api/branches/{b}/fork");

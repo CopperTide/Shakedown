@@ -6,33 +6,18 @@
 //! sends, that the token guards the endpoint, that each call is recorded, how an answer, an error
 //! or a timeout ends the run, that header values stay out of the record), not an agent.
 
-#[path = "support/app.rs"]
-mod app_support;
-#[path = "support/live.rs"]
-mod live;
-#[path = "support/packages.rs"]
-mod packages;
-#[path = "support/pg.rs"]
-mod pg;
+mod support;
 
 use std::{
-    future::Future,
-    sync::{Arc, LazyLock, Mutex},
+    ops::Deref,
+    sync::{Arc, Mutex},
     time::Duration,
 };
 
-use arenad::{app::AppState, model::*};
+use arenad::model::*;
 use axum::{extract::State, http::HeaderMap, routing::post, Json, Router};
-use packages::TestHub;
-use pg::Cleanup;
 use serde_json::{json, Value};
-
-static RT: LazyLock<tokio::runtime::Runtime> =
-    LazyLock::new(|| tokio::runtime::Runtime::new().unwrap());
-
-fn run<F: Future>(f: F) -> F::Output {
-    RT.block_on(f)
-}
+use support::{app, live, packages, run, AppFx};
 
 const SECRET: &str = "s3cret-header-value";
 
@@ -52,7 +37,7 @@ async fn mcp(url: &str, token: Option<&str>, body: Value) -> (u16, Value) {
     if let Some(t) = token {
         req = req.bearer_auth(t);
     }
-    app_support::send(req).await
+    app::send(req).await
 }
 
 /// The run as the protocol client takes it: list the tools, call the first, answer done.
@@ -103,18 +88,24 @@ async fn agent_server(seen: Shared) -> String {
             post(|| async { (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "boom") }),
         )
         .with_state(seen);
-    let (listener, base) = app_support::bind().await;
+    let (listener, base) = app::bind().await;
     tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
     base
 }
 
+/// The app, and the protocol client's server with what it saw.
 struct Fx {
-    state: Arc<AppState>,
-    base: String,
+    app: AppFx,
     agent: String,
     seen: Shared,
-    _hub: TestHub,
-    _clean: Cleanup,
+}
+
+impl Deref for Fx {
+    type Target = AppFx;
+
+    fn deref(&self) -> &AppFx {
+        &self.app
+    }
 }
 
 async fn setup(tag: &str) -> Fx {
@@ -123,32 +114,19 @@ async fn setup(tag: &str) -> Fx {
 
 /// `setup` with extra package roots and a benchmark to run.
 async fn setup_on(tag: &str, extra: &[std::path::PathBuf], bench: Option<&str>) -> Fx {
-    let hub = TestHub::new(extra);
-    let (store, clean) = app_support::meta_store("http", tag).await;
-    let (state, base) = app_support::idle_app(store, hub.hub.clone(), bench, |c| {
-        c.http_agent_timeout = Duration::from_secs(2);
-    })
-    .await;
+    let app = AppFx::idle("http", tag).packages(extra);
+    let app = match bench {
+        Some(b) => app.bench(b),
+        None => app,
+    };
+    let app = app.config(|c| c.http_agent_timeout = Duration::from_secs(2));
+    let app = app.start().await;
     let seen = Shared::default();
     let agent = agent_server(seen.clone()).await;
-    Fx {
-        state,
-        base,
-        agent,
-        seen,
-        _hub: hub,
-        _clean: clean,
-    }
+    Fx { app, agent, seen }
 }
 
 impl Fx {
-    async fn post(&self, path: &str, body: Value) -> (u16, Value) {
-        let req = reqwest::Client::new()
-            .post(format!("{}{path}", self.base))
-            .json(&body);
-        app_support::send(req).await
-    }
-
     fn member(&self, path: &str) -> Value {
         json!({"id": "remote", "name": "Remote", "kind": "http", "url": format!("{}{path}", self.agent),
                "headers": {"X-Api-Key": SECRET}})
@@ -177,11 +155,10 @@ impl Fx {
         let id = v["branch_id"].as_str().unwrap();
         let b = live::ended(&self.state, id).await;
         let evs = self.state.store.events(id).await.unwrap();
-        let shown = app_support::send(
-            reqwest::Client::new().get(format!("{}/api/branches/{id}", self.base)),
-        )
-        .await
-        .1;
+        let shown =
+            app::send(reqwest::Client::new().get(format!("{}/api/branches/{id}", self.base)))
+                .await
+                .1;
         (b, evs, shown)
     }
 }
@@ -267,7 +244,7 @@ fn an_agent_is_told_the_world_date_when_the_task_has_its_own_clock() {
         let clock = task.find("# World clock").unwrap();
         assert!(clock < task.find("# Ticket").unwrap(), "{task}");
         let (st, tasks) =
-            app_support::send(reqwest::Client::new().get(format!("{}/api/tasks", fx.base))).await;
+            app::send(reqwest::Client::new().get(format!("{}/api/tasks", fx.base))).await;
         assert_eq!(st, 200);
         assert_eq!(tasks[0]["clock_start"], "2026-03-10T06:00:00");
     });
@@ -293,7 +270,7 @@ fn a_silent_failing_or_missing_agent_ends_the_run_with_its_reason() {
             Some(format!("the agent at {host} answered HTTP 500: boom").as_str())
         );
 
-        let down = app_support::bind().await.1;
+        let down = app::bind().await.1;
         let gone =
             json!([{"id": "remote", "name": "R", "kind": "http", "url": format!("{down}/run")}]);
         let (b, _, _) = fx.run_to_end(gone, "chain").await;

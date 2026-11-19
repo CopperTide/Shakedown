@@ -2,74 +2,29 @@
 //! available, and the lead finishes. Without a model: what the API refuses, the teams it
 //! suggests, and a lead that can't reach its model. `live_`: a team on a real model (see
 //! `support/live.rs`), then a fork of its run.
-#[path = "support/app.rs"]
-mod app_support;
-#[path = "support/live.rs"]
-mod live;
-#[path = "support/packages.rs"]
-mod packages;
-#[path = "support/pg.rs"]
-mod pg;
+mod support;
 
-use std::{
-    collections::HashMap,
-    future::Future,
-    sync::{Arc, LazyLock},
-};
+use std::collections::HashMap;
 
-use app_support::send;
-use arenad::{app::AppState, fork, model::*, providers::ProviderConfig, runner};
-use live::Live;
-use packages::TestHub;
-use pg::Cleanup;
+use arenad::{fork, model::*, providers::ProviderConfig, runner};
 use serde_json::json;
-
-static RT: LazyLock<tokio::runtime::Runtime> =
-    LazyLock::new(|| tokio::runtime::Runtime::new().unwrap());
-
-fn run<F: Future>(f: F) -> F::Output {
-    RT.block_on(f)
-}
-
-struct Fx {
-    state: Arc<AppState>,
-    base: String,
-    _hub: TestHub,
-    _clean: Cleanup,
-}
+use support::{app, app::send, live, live::Live, run, AppFx};
 
 /// An app on the retail benchmark with the real drivers; `providers` replaces the environment's.
-async fn setup(tag: &str, providers: Option<ProviderConfig>) -> Fx {
-    let hub = TestHub::new(&[]);
-    let (store, clean) = app_support::meta_store("dispatch", tag).await;
-    let (state, base) = app_support::app_for(store, hub.hub.clone(), Some("retail"), |c| {
-        if let Some(p) = providers {
-            c.providers = p;
-        }
-    })
-    .await;
-    Fx {
-        state,
-        base,
-        _hub: hub,
-        _clean: clean,
+async fn setup(tag: &str, providers: Option<ProviderConfig>) -> AppFx {
+    let app = AppFx::configured("dispatch", tag).bench("retail");
+    match providers {
+        Some(p) => app.providers(p),
+        None => app,
     }
+    .start()
+    .await
 }
 
 fn spec(id: &str, kind: AgentKind) -> AgentSpec {
-    AgentSpec {
-        tools: Vec::new(),
-        id: id.into(),
-        name: id.into(),
-        kind,
-        model: Some("m".into()),
-        prompt: format!("You are {id}."),
-        provider: None,
-        read_only: false,
-        lead: false,
-        url: None,
-        headers: Default::default(),
-    }
+    AgentSpec::new(id, kind)
+        .with_model("m")
+        .with_prompt(format!("You are {id}."))
 }
 
 fn team(agents: Vec<AgentSpec>) -> Team {
@@ -123,7 +78,7 @@ fn the_api_refuses_what_a_dispatch_run_cant_take_and_lists_the_teams() {
 #[test]
 fn a_lead_that_cant_reach_its_model_ends_the_run_infra_error() {
     run(async {
-        let providers = ProviderConfig::with_upstream(app_support::NOWHERE);
+        let providers = ProviderConfig::with_upstream(app::NOWHERE);
         let fx = setup("infra", Some(providers)).await;
         let t = team(vec![
             spec("lead", AgentKind::Open),
@@ -320,7 +275,7 @@ fn assert_finished_last(evs: &[Event]) {
 
 /// A fork at the lead's second delegation restarts every agent there: the lead, working at the
 /// fork point, carries on with its history; the run goes on to its end.
-async fn fork_restarts_everyone(fx: &Fx, branch: &str, evs: &[Event]) {
+async fn fork_restarts_everyone(fx: &AppFx, branch: &str, evs: &[Event]) {
     let delegations = of_kind(evs, EventKind::Delegation);
     let at = delegations.get(1).unwrap_or(&delegations[0]).seq;
     let forked = fork::fork(&fx.state, branch, at, HashMap::new())

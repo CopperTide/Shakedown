@@ -2,49 +2,24 @@
 //! (`crate::driver`). The fixture drivers in `fixtures/drivers` run no model: they test how arenad
 //! starts, watches and ends a driver. The live test runs a real one.
 
-#[path = "support/app.rs"]
-mod app_support;
-#[path = "support/packages.rs"]
-mod packages;
-#[path = "support/pg.rs"]
-mod pg;
+mod support;
 
 use std::{future::Future, path::PathBuf, time::Duration};
 
-use app_support::send;
-use arenad::{app::AppState, model::*};
-use packages::TestHub;
-use pg::Cleanup;
+use arenad::model::*;
 use serde_json::{json, Value};
-use std::sync::Arc;
+use support::{app::send, AppFx};
 
 fn run<F: Future>(f: F) -> F::Output {
     tokio::runtime::Runtime::new().unwrap().block_on(f)
 }
 
-struct Fx {
-    state: Arc<AppState>,
-    _hub: TestHub,
-    _clean: Cleanup,
-    base: String,
-    http: reqwest::Client,
-}
-
-async fn setup(tag: &str) -> Fx {
-    let hub = TestHub::new(&[]);
-    let (store, clean) = app_support::meta_store("connections", tag).await;
+async fn setup(tag: &str) -> AppFx {
     let tweak = |c: &mut arenad::app::Config| {
         c.driver_grace = Duration::from_secs(2);
         c.code_run_limit = Duration::from_secs(4);
     };
-    let (state, base) = app_support::idle_app(store, hub.hub.clone(), None, tweak).await;
-    Fx {
-        state,
-        _hub: hub,
-        _clean: clean,
-        base,
-        http: reqwest::Client::new(),
-    }
+    AppFx::idle("connections", tag).config(tweak).start().await
 }
 
 fn fixture(name: &str) -> String {
@@ -54,15 +29,7 @@ fn fixture(name: &str) -> String {
     p.to_string_lossy().into_owned()
 }
 
-impl Fx {
-    async fn post(&self, path: &str, body: Value) -> (u16, Value) {
-        send(self.http.post(format!("{}{path}", self.base)).json(&body)).await
-    }
-
-    async fn get(&self, path: &str) -> (u16, Value) {
-        send(self.http.get(format!("{}{path}", self.base))).await
-    }
-
+impl AppFx {
     /// Saves a connection running `python3 <fixture>` with `env`: its id.
     async fn connection(&self, script: &str, env: Value) -> String {
         let body = json!({"name": script, "command": ["python3", fixture(script)], "env": env});
@@ -269,7 +236,7 @@ fn an_experiment_setup_launches_its_driver_for_each_run() {
 }
 
 /// The `driver` exit event of `branch`, waiting for it (it is recorded just after the run ends).
-async fn driver_exit(fx: &Fx, branch: &str) -> Event {
+async fn driver_exit(fx: &AppFx, branch: &str) -> Event {
     for _ in 0..100 {
         let evs = fx.state.store.events(branch).await.unwrap();
         let exit = evs.into_iter().rev().find(|e| {
@@ -285,7 +252,7 @@ async fn driver_exit(fx: &Fx, branch: &str) -> Event {
     panic!("no driver exit on {branch}");
 }
 
-impl Fx {
+impl AppFx {
     /// Forks `branch` at `at`, expecting its driver relaunched: the new branch.
     async fn fork_relaunched(&self, branch: &str, at: i64) -> (String, i64) {
         let path = format!("/api/branches/{branch}/fork");
@@ -513,17 +480,8 @@ fn live_an_experiment_setup_runs_a_code_connection() {
 }
 
 /// An app with the providers the environment configures (the live test's gateway).
-async fn live_setup() -> Fx {
-    let hub = TestHub::new(&[]);
-    let (store, clean) = app_support::meta_store("connections", "live").await;
-    let (state, base) = app_support::app(store, hub.hub.clone(), |_| {}).await;
-    Fx {
-        state,
-        _hub: hub,
-        _clean: clean,
-        base,
-        http: reqwest::Client::new(),
-    }
+async fn live_setup() -> AppFx {
+    AppFx::configured("connections", "live").start().await
 }
 
 #[test]

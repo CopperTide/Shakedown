@@ -4,22 +4,9 @@
 //! its rows, compares and deletes. `live_`: forks of runs on a real model (see
 //! `support/live.rs`); where a fork starts for each kind of agent is planned on recorded events
 //! in `src/fork.rs`'s own tests.
-#[path = "support/app.rs"]
-mod app_support;
-#[path = "support/legacy.rs"]
-mod legacy;
-#[path = "support/live.rs"]
-mod live;
-#[path = "support/packages.rs"]
-mod packages;
-#[path = "support/pg.rs"]
-mod pg;
+mod support;
 
-use std::{
-    collections::HashMap,
-    future::Future,
-    sync::{Arc, LazyLock},
-};
+use std::{collections::HashMap, sync::Arc};
 
 use arenad::{
     app::AppState,
@@ -27,40 +14,24 @@ use arenad::{
     model::*,
     runner,
 };
-use legacy::{legacy_run, LegacyDbs};
-use live::Live;
-use packages::{plain_hub, TestHub};
-use pg::Cleanup;
 use serde_json::{json, Value};
-
-static RT: LazyLock<tokio::runtime::Runtime> =
-    LazyLock::new(|| tokio::runtime::Runtime::new().unwrap());
-
-fn run<F: Future>(f: F) -> F::Output {
-    RT.block_on(f)
-}
-
-/// Runs `body` on the live model, when there is one (else the test was skipped, said why).
-fn run_live<F: Future<Output = ()>>(live: Option<Live>, body: impl FnOnce(Live) -> F) {
-    if let Some(live) = live {
-        run(body(live));
-    }
-}
+use support::{
+    app,
+    legacy::{legacy_run, LegacyDbs},
+    live,
+    live::Live,
+    packages::{plain_hub, TestHub},
+    pg,
+    pg::Cleanup,
+    run, run_live, AppFx,
+};
 
 /// A team for data only (never run).
 fn team() -> Team {
-    let agent = |id: &str| AgentSpec {
-        tools: Vec::new(),
-        id: id.into(),
-        name: id.into(),
-        kind: AgentKind::Open,
-        model: Some("m".into()),
-        prompt: format!("You are {id}."),
-        provider: None,
-        read_only: false,
-        lead: false,
-        url: None,
-        headers: Default::default(),
+    let agent = |id: &str| {
+        AgentSpec::new(id, AgentKind::Open)
+            .with_model("m")
+            .with_prompt(format!("You are {id}."))
     };
     Team {
         id: "t".into(),
@@ -69,34 +40,21 @@ fn team() -> Team {
     }
 }
 
-struct Fx {
-    state: Arc<AppState>,
-    hub: TestHub,
-    _clean: Cleanup,
-}
-
 /// An app with the real drivers on the configured providers.
-async fn setup(tag: &str) -> Fx {
-    let hub = TestHub::new(&[]);
-    let (store, clean) = app_support::meta_store("fork", tag).await;
-    let (state, _) = app_support::app_for(store, hub.hub.clone(), Some("retail"), |_| {}).await;
-    Fx {
-        state,
-        hub,
-        _clean: clean,
-    }
+async fn setup(tag: &str) -> AppFx {
+    AppFx::configured("fork", tag).bench("retail").start().await
 }
 
 const ORDER: &str = "#W7181492";
 
 /// The retail benchmark's own team on `live`.
-async fn bench_team(fx: &Fx, live: &Live) -> Team {
+async fn bench_team(fx: &AppFx, live: &Live) -> Team {
     let bench = fx.state.hub.bench_describe("retail").await.unwrap();
     live.bench_team(bench.team.unwrap())
 }
 
 /// Runs `team` on task 27 to its end: the branch id, the branch and its events.
-async fn parent(fx: &Fx, team: Team) -> (String, Branch, Vec<Event>) {
+async fn parent(fx: &AppFx, team: Team) -> (String, Branch, Vec<Event>) {
     let (_run, id) = runner::start_run(&fx.state, "27", team).await.unwrap();
     let (b, evs) = live::ended_ok(&fx.state, &id).await;
     (id, b, evs)
@@ -128,7 +86,7 @@ fn assert_child_of(c: &Branch, b: &Branch, parent: &str, at: i64) {
 
 /// The order as the parent's world had it just before `at`: in its last save before then, else
 /// the base save.
-async fn order_before(fx: &Fx, evs: &[Event], at: i64) -> Value {
+async fn order_before(fx: &AppFx, evs: &[Event], at: i64) -> Value {
     let save = evs
         .iter()
         .rev()
@@ -172,7 +130,7 @@ fn live_a_fork_restores_the_world_at_its_fork_point() {
 
 /// A fork at a step the branch doesn't have, or changing an agent the team doesn't have, is
 /// refused and makes no branch.
-async fn assert_bad_forks_make_nothing(fx: &Fx, pid: &str, at: i64) {
+async fn assert_bad_forks_make_nothing(fx: &AppFx, pid: &str, at: i64) {
     let e = fork::fork(&fx.state, pid, 999, HashMap::new())
         .await
         .unwrap_err();
@@ -294,7 +252,7 @@ async fn an_open_agent_resumes_a_fork_mid_conversation(live: Live) {
 }
 
 /// A branch of task 27 that has started and not ended.
-async fn running_branch(fx: &Fx) -> String {
+async fn running_branch(fx: &AppFx) -> String {
     let t = team();
     let run_id = fx.state.store.create_run("27", &t).await.unwrap();
     let branch = fx
@@ -410,9 +368,9 @@ impl LegacyFx {
         let tag = format!("t8{}_{id}", std::process::id());
         let dbs = LegacyDbs::new(&tag);
         let (snap, base_copy) = legacy_snapshot(&dbs, &tag).await;
-        let (store, clean) = app_support::meta_store("fork", "legacy").await;
+        let (store, clean) = app::meta_store("fork", "legacy").await;
         let hub = plain_hub(&dbs.saves);
-        let (state, base) = app_support::app_for(store, hub, Some("retail"), |_| {}).await;
+        let (state, base) = app::app_for(store, hub, Some("retail"), |_| {}).await;
         let (run_a, a) = legacy_run(&state.store, &dbs, solo, &snap, &snap).await;
         let (_, b) = legacy_run(&state.store, &dbs, solo, &snap, &base_copy).await;
         let evs = state.store.events(&a).await.unwrap();
@@ -437,7 +395,7 @@ impl LegacyFx {
     }
 
     async fn get(&self, path: &str) -> (u16, Value) {
-        app_support::send(self.http.get(self.url(path))).await
+        app::send(self.http.get(self.url(path))).await
     }
 
     /// Rows at the write read its snapshot.
@@ -478,7 +436,7 @@ impl LegacyFx {
         let req = self
             .http
             .post(self.url(&format!("/api/branches/{}/fork", self.names.a)));
-        let (st, v) = app_support::send(req.json(&json!({"at_seq": at}))).await;
+        let (st, v) = app::send(req.json(&json!({"at_seq": at}))).await;
         assert_eq!((st, v["start_seq"].as_i64()), (200, Some(at)), "{v}");
         let child = v["branch_id"].as_str().unwrap().to_string();
         // Its instance, with no namespace: dropped when the branch ends, and at the end if not.
@@ -501,7 +459,7 @@ impl LegacyFx {
         let req = self
             .http
             .delete(self.url(&format!("/api/runs/{}", self.names.run_a)));
-        let (st, v) = app_support::send(req).await;
+        let (st, v) = app::send(req).await;
         // The snapshot and a's database; the child's `branch_<id>` never existed, so isn't counted.
         assert_eq!((st, v["dropped"].as_u64()), (200, Some(2)), "{v}");
         let admin = pg::admin();
