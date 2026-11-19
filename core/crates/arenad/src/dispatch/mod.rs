@@ -18,7 +18,6 @@ use std::{
 };
 
 use anyhow::Result;
-use serde_json::json;
 use tokio::{
     sync::{mpsc, watch},
     task::JoinHandle,
@@ -246,14 +245,12 @@ impl Crew {
             return Ok(());
         };
         self.working.remove(agent);
-        let mut idle = json!({"ok": ok, "text": text});
-        if let Some(e) = error {
-            idle["error"] = json!(e);
-        }
-        self.ctx
-            .append(&self.state.store, Some(agent), EventKind::Idle, idle)
-            .await
-            .map(drop)
+        let idle = IdlePayload {
+            ok: Some(*ok),
+            text: text.clone(),
+            error: error.clone(),
+        };
+        self.record(agent, &idle).await.map(drop)
     }
 
     /// Records what `agent` said at the end of a turn as its report to the lead, and gives the
