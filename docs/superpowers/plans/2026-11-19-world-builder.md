@@ -786,3 +786,7 @@ build on this machine; Python and UI tasks may run beside them.
 - The software-factory template, its twins and the people engine that reads the roles' `rules` files.
 - What part 4 must keep from `arena_part.expect` (stage 4 plan, "What stage 4 needs from part 4").
 - Deleting or renaming built worlds; per-part progress while a world prepares; templates from Community roots.
+
+## Owner rulings (2026-11-19)
+
+- arenad remembers the current built world across a restart (in its data dir). Why: a demo must survive a restart. Cost: one small persisted record.

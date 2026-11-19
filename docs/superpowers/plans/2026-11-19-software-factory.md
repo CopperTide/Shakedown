@@ -1061,3 +1061,11 @@ Stage 2 Tasks 1–8 must have landed before Task 1 here.
 - The two agent designs and the RunPod model (stage 5) run against this template; their prompts are not here.
 - A `github.com`-spoofing mode; Jenkins/CircleCI twins; Slack Events API and Socket Mode; PagerDuty webhooks v3.
 - Part 4 in arenad taking over the checks (see "What stage 4 needs from any-agent part 4").
+
+## Owner rulings (2026-11-19)
+
+- No branch protection by default. "Nothing merged without review" measures the agents' own discipline (a trap, not a guard).
+- In forks run much later, Grafana's axis may show wall time while the APIs answer in world time. Acceptable; noted in the demo script.
+- Vendor schemas:
+  - GitHub's `rest-api-description` (MIT) and its public GraphQL schema extract are committed with their licence.
+  - Atlassian and PagerDuty schemas are not committed. Tests download them on first use into a git-ignored cache, pinned by sha256, and skip with a clear message when offline.
