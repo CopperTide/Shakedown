@@ -432,7 +432,7 @@ impl TokenUsage {
 }
 
 /// Payload of `EventKind::AgentEnd`.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct AgentEndPayload {
     pub ok: bool,
     pub error: Option<String>,
@@ -472,12 +472,20 @@ pub struct DelegationPayload {
 
 /// Payload of `EventKind::Report`: an agent's report to the lead (`to`). `turn_end` is set when
 /// the agent ended a turn without reporting and arenad passed on what it said last.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ReportPayload {
     pub to: String,
     pub text: String,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub turn_end: bool,
+}
+
+impl EventPayload for AgentEndPayload {
+    const KIND: EventKind = EventKind::AgentEnd;
+}
+
+impl EventPayload for ReportPayload {
+    const KIND: EventKind = EventKind::Report;
 }
 
 /// Payload of `EventKind::Finish`: the lead's summary of the run.

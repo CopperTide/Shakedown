@@ -152,14 +152,9 @@ impl Crew {
         }
     }
 
-    async fn record(
-        &self,
-        agent: &str,
-        kind: EventKind,
-        payload: serde_json::Value,
-    ) -> Result<Event> {
+    async fn record<P: EventPayload>(&self, agent: &str, payload: &P) -> Result<Event> {
         self.ctx
-            .append(&self.state.store, Some(agent), kind, payload)
+            .record(&self.state.store, Some(agent), payload)
             .await
     }
 
@@ -188,8 +183,7 @@ impl Crew {
             .iter()
             .filter(|a| agents.contains(&a.id))
         {
-            let start = serde_json::to_value(AgentStartPayload::of(spec))?;
-            self.record(&spec.id, EventKind::AgentStart, start).await?;
+            self.record(&spec.id, &AgentStartPayload::of(spec)).await?;
         }
         Ok(())
     }
@@ -256,7 +250,10 @@ impl Crew {
         if let Some(e) = error {
             idle["error"] = json!(e);
         }
-        self.record(agent, EventKind::Idle, idle).await.map(drop)
+        self.ctx
+            .append(&self.state.store, Some(agent), EventKind::Idle, idle)
+            .await
+            .map(drop)
     }
 
     /// Records what `agent` said at the end of a turn as its report to the lead, and gives the
@@ -268,9 +265,7 @@ impl Crew {
             text: text.clone(),
             turn_end: true,
         };
-        let e = self
-            .record(agent, EventKind::Report, serde_json::to_value(&p)?)
-            .await?;
+        let e = self.record(agent, &p).await?;
         let mut said = Said::new(agent, EventKind::Report, Some(&lead), &text);
         said.seq = e.seq;
         Ok(self.board.step(Input::Said(said), self.began.elapsed()))
@@ -313,7 +308,7 @@ impl Crew {
     /// Records `agent`'s wake and starts its turn (its session first, on its first turn).
     async fn wake(&mut self, agent: &str, reason: Reason, mail: &[Mail]) -> Result<()> {
         let input = self.input_for(agent, reason, mail);
-        self.record(agent, EventKind::Wake, wake_payload(reason, mail, &input))
+        self.record(agent, &wake_payload(reason, mail, &input))
             .await?;
         self.working.insert(agent.to_string());
         if !self.slots.contains_key(agent) {
@@ -375,12 +370,7 @@ impl Crew {
                 None if self.slots.contains_key(&spec.id) => runner::agent_end(&lost(&spec.id)),
                 None => never_worked(),
             };
-            self.record(
-                &spec.id,
-                EventKind::AgentEnd,
-                serde_json::to_value(payload)?,
-            )
-            .await?;
+            self.record(&spec.id, &payload).await?;
         }
         Ok(())
     }
@@ -414,20 +404,20 @@ impl Crew {
 
 /// A wake's payload: `{reason, mail, idle_wake?, input}` (`mail`: the seqs of the recorded
 /// mail it delivers; arena's own notices are in the input only).
-fn wake_payload(reason: Reason, mail: &[Mail], input: &str) -> serde_json::Value {
-    let (word, n) = match reason {
+fn wake_payload(reason: Reason, mail: &[Mail], input: &str) -> WakePayload {
+    let (word, idle_wake) = match reason {
         Reason::Start => ("start", None),
         Reason::Mail => ("mail", None),
         Reason::Idle(n) => ("idle", Some(n)),
         Reason::Resume => ("resume", None),
     };
     let recorded = mail.iter().filter(|m| m.kind != board::MailKind::Notice);
-    let seqs: Vec<i64> = recorded.map(|m| m.seq).collect();
-    let mut wake = json!({"reason": word, "mail": seqs, "input": input});
-    if let Some(n) = n {
-        wake["idle_wake"] = json!(n);
+    WakePayload {
+        reason: word.to_string(),
+        mail: recorded.map(|m| m.seq).collect(),
+        input: input.to_string(),
+        idle_wake,
     }
-    wake
 }
 
 /// An agent's end when its session never said how it ended.
@@ -513,22 +503,26 @@ mod tests {
         }
     }
 
+    fn wake(reason: Reason, mail: &[Mail], input: &str) -> serde_json::Value {
+        serde_json::to_value(wake_payload(reason, mail, input)).unwrap()
+    }
+
     /// A wake's exact JSON (golden): the seqs of its recorded mail (not notices), and
     /// `idle_wake` on an idle wake only.
     #[test]
     fn a_wake_payload_has_these_keys() {
-        let got = wake_payload(Reason::Start, &[], "brief");
+        let got = wake(Reason::Start, &[], "brief");
         assert_eq!(
             got,
             json!({"reason": "start", "mail": [], "input": "brief"})
         );
         let mail = [mail(3, MailKind::Delegation), mail(0, MailKind::Notice)];
-        let got = wake_payload(Reason::Mail, &mail, "go");
+        let got = wake(Reason::Mail, &mail, "go");
         assert_eq!(got, json!({"reason": "mail", "mail": [3], "input": "go"}));
-        let got = wake_payload(Reason::Idle(2), &[], "still there?");
+        let got = wake(Reason::Idle(2), &[], "still there?");
         let want = json!({"reason": "idle", "mail": [], "input": "still there?", "idle_wake": 2});
         assert_eq!(got, want);
-        let got = wake_payload(Reason::Resume, &[], "");
+        let got = wake(Reason::Resume, &[], "");
         assert_eq!(got, json!({"reason": "resume", "mail": [], "input": ""}));
     }
 }
