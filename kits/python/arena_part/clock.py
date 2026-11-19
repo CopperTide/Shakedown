@@ -2,11 +2,12 @@
 
 
 class FixedStep:
-    def __init__(self, step_ms: int = 100):
+    def __init__(self, step_ms: int = 100, start_ms: int = 0):
+        """A clock at the last whole step at or before `start_ms`."""
         if step_ms <= 0:
             raise ValueError("step_ms must be positive")
         self.step_ms = step_ms
-        self.done_ms = 0
+        self.done_ms = start_ms - start_ms % step_ms
 
     def advance_to(self, clock_ms: int, fn) -> int:
         """Call `fn(step_ms)` once per whole step up to `clock_ms`; the remainder waits for the next

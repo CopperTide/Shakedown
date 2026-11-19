@@ -170,6 +170,41 @@ class JsonStatePart(DocsPart):
         return {"docs": pick(json.loads(json.dumps(self.docs_of(target))), keys)}
 
 
+class ClockedJsonStatePart(JsonStatePart):
+    """A JsonStatePart on the arena clock. Its state keeps `clock_ms` (how far the world has run; a fresh
+    instance starts at the start's clock) and `queued` (the events found on the way, which wait for the next
+    `advance`). Give `step(config, state, clock_ms)`: it runs the state from `state["clock_ms"]` to
+    `clock_ms`, moving `state["clock_ms"]`, and gives the events on the way. Every call runs the world to its
+    clock first; a clock behind the world's changes nothing."""
+
+    def describe(self):
+        return {**super().describe(), "uses_clock": True}
+
+    def step(self, config, state, clock_ms) -> list:
+        raise NotImplementedError("step")
+
+    def start(self, instance, config, seed, clock_ms, from_=None):
+        super().start(instance, config, seed, clock_ms, from_)
+        if from_ is None:
+            state = self._instance(instance).state
+            state["clock_ms"] = clock_ms
+            state.setdefault("queued", [])
+
+    def _run_to(self, inst, clock_ms) -> None:
+        inst.state["queued"] += self.step(inst.config, inst.state, clock_ms)
+
+    def advance(self, instance, clock_ms):
+        inst = self._instance(instance)
+        before = inst.state["clock_ms"]
+        self._run_to(inst, clock_ms)
+        events, inst.state["queued"] = inst.state["queued"], []
+        return {"changed": bool(events) or inst.state["clock_ms"] != before, "events": events}
+
+    def call_tool(self, instance, name, args, clock_ms):
+        self._run_to(self._instance(instance), clock_ms)
+        return super().call_tool(instance, name, args, clock_ms)
+
+
 def set_scenario(config, state, args, known, overlay, kinds, tools) -> Done:
     """A scenario tool's work: sets `state["scenario"]` to `args["name"]` (one of `known`) and arms
     the disruptions the scenario's data lists (`overlay(config, state)["disruptions"]`), then those
