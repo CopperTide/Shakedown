@@ -75,6 +75,14 @@ JSON, or from another origin). Any program on this computer can still reach it, 
 connections only on a computer whose other accounts you trust. A driver that drives its run longer than
 `ARENA_CODE_RUN_SECS` (default 900) has its run ended `failed`, scored.
 
+### The world's time
+
+Every driver Shakedown launches gets `ARENA_WORLD_EPOCH_MS` (the unix ms of the world clock's 0: the task's
+`clock_start` read as UTC, else the run's start; a fork keeps its run's) and `ARENA_CLOCK_SPEED` (world ms per wall
+ms). `GET /api/branches/{id}/clock` (SDK: `Branch.clock()`) answers `{clock_ms, speed, paused, world_epoch_ms,
+world_ms}` for a live branch (409 once it ended). Simulated traffic and twins stamp what they emit with
+`world_epoch_ms + clock_ms` (the kits' `WorldTime`), so dashboards follow the world clock and its pauses.
+
 ### Reaching the world's services
 
 In a world whose parts serve HTTP (a code host, an issue tracker: see `docs/protocol.md`, "Serving HTTP"), your

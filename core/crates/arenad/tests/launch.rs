@@ -200,3 +200,18 @@ fn a_driver_in_a_world_without_http_gets_no_proxy() {
         assert!(env["ARENA_BRANCH"].is_string());
     })
 }
+
+#[test]
+fn every_driver_gets_the_worlds_epoch_and_clock_speed() {
+    run(async {
+        let env = dumped_env("envtime", &[]).await;
+        let epoch: i64 = env["ARENA_WORLD_EPOCH_MS"]
+            .as_str()
+            .unwrap()
+            .parse()
+            .unwrap();
+        assert!(epoch > 1_700_000_000_000, "{epoch}");
+        let speed: f64 = env["ARENA_CLOCK_SPEED"].as_str().unwrap().parse().unwrap();
+        assert!(speed > 0.0);
+    })
+}

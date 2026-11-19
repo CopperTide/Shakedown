@@ -72,6 +72,18 @@ pub fn rules(events: &[Event]) -> Rules {
     RunStartPayload::of(events).map_or_else(Rules::legacy, |s| Rules::of(&s))
 }
 
+/// The unix ms of the run's world clock 0: `RunStart.world_epoch_ms`, else (a run recorded before
+/// world time) the time `RunStart` was recorded; 0 without `RunStart`.
+pub fn world_epoch_ms(events: &[Event]) -> i64 {
+    let Some(start) = events.iter().find(|e| e.kind == EventKind::RunStart) else {
+        return 0;
+    };
+    let recorded = start
+        .decode::<RunStartPayload>()
+        .and_then(|p| p.world_epoch_ms);
+    recorded.unwrap_or_else(|| start.at.timestamp_millis())
+}
+
 /// The arena clock just before step `before_seq`: the `clock_ms` of the last event before it
 /// that has one (a tool call or world event), else 0.
 pub fn clock_at(events: &[Event], before_seq: i64) -> i64 {
@@ -294,6 +306,21 @@ mod tests {
         assert_eq!(saves_at(&evs, 2, &base).unwrap_err(), no_save);
         assert_eq!(saves_at(&evs, 3, &base).unwrap()["box"], "s3");
         assert_eq!(saves_at(&evs, 4, &base).unwrap_err().seq, 4);
+    }
+
+    #[test]
+    fn a_run_recorded_before_world_time_takes_its_start_as_epoch() {
+        let mut old = ev(1, EventKind::RunStart, json!({"task_id": "t1"}));
+        old.at = chrono::DateTime::parse_from_rfc3339("2026-11-19T10:00:00.250Z")
+            .unwrap()
+            .into();
+        assert_eq!(
+            world_epoch_ms(std::slice::from_ref(&old)),
+            1_795_082_400_250
+        );
+        let mut new = old.clone();
+        new.payload["world_epoch_ms"] = json!(1_773_122_400_000i64);
+        assert_eq!(world_epoch_ms(&[new]), 1_773_122_400_000);
     }
 
     #[test]

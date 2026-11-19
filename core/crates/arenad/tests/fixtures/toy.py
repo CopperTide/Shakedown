@@ -5,6 +5,7 @@
               [--save-sleep MS] [--refuse-start-if FILE] [--describe-fails] [--describe-hangs] [--gc] [--gc-fails]
               [--gc-waits-for FILE] [--tool-event KIND] [--system JSON] [--internal-peeks]
               [--http-route HOST=URL ... [--route-env K=V ...] [--route-reads PATTERN ...]] [--save-at step|points]
+              [--log-time FILE]
       An integration with one counter per instance and tools `poke` (write, adds 1) and `peek`
       (read), named `<P>poke` and `<P>peek` with --prefix. It exits on its N-th call_tool (only
       once across restarts when FILE marks that it did); every `save` after the first N is an
@@ -21,7 +22,9 @@
       --internal-peeks, `peek` counts its calls in the internal key `_peeks/n` (saved with the
       counter) and answers {"n", "peeks"}. Each --http-route makes `http_routes` give a route from HOST
       to URL (the first one with the --route-env variables and --route-reads patterns); without
-      one, `http_routes` answers -32601. --save-at sets `describe.save_at`.
+      one, `http_routes` answers -32601. --save-at sets `describe.save_at`. --log-time
+      appends "start <instance> <epoch_ms> <speed>" (from `world_time`, "none" without it) per `start` and
+      "advance <instance> <clock_ms> <wall unix ms>" per `advance` to FILE.
   toy.py bench --integration NAME [--part NAME=INTEGRATION ...] [--gold TOOL [--gold-args JSON]]
                [--config PART=JSON ...] [--clash] [--bench-tool [--tool-part PART]] [--link JSON ...]
                [--gate JSON ...] [--setup JSON ...] [--scored [--two-tasks] [--safety]]
@@ -106,11 +109,14 @@ class Part:
             raise RpcError(-32001, "the toy can't restore from a save in that mode")
         self.counters[p["instance"]] = 0 if not src else self.lookup(self.saves, src["save"], "save")
         self.peeks[p["instance"]] = self.peek_saves.get(src.get("save"), 0)
+        world = p.get("world_time") or {}
+        log_time("start %s %s %s" % (p["instance"], world.get("epoch_ms", "none"), world.get("speed", "none")))
         return {}
 
     def advance(self, p):
         i, t = p["instance"], p["clock_ms"]
         self.lookup(self.counters, i, "instance")
+        log_time("advance %s %d %d" % (i, t, int(time.time() * 1000)))
         first = i not in self.clocks
         changed = t > self.clocks.get(i, 0)
         self.clocks[i] = max(t, self.clocks.get(i, 0))
@@ -251,6 +257,13 @@ class Bench:
 
     def gold_actions(self, p):
         return {"actions": [{"name": opt("--gold", "poke"), "args": json.loads(opt("--gold-args", "{}"))}]}
+
+
+def log_time(line):
+    path = opt("--log-time", None)
+    if path:
+        with open(path, "a") as f:
+            f.write(line + "\n")
 
 
 def save_at():

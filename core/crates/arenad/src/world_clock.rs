@@ -3,7 +3,7 @@
 //! the world's current date and time (clock 0 plus the branch clock) in its input, the same way for
 //! every team, so an agent reads the world's dates against the world's clock and not against the
 //! date its own environment reports.
-use chrono::{Duration, NaiveDateTime};
+use chrono::{DateTime, Duration, NaiveDateTime, Utc};
 
 /// The format of a task's `clock_start`.
 const START_FORMAT: &str = "%Y-%m-%dT%H:%M:%S";
@@ -19,11 +19,17 @@ impl WorldClock {
     /// The clock of a task whose `clock_start` is `start` (`YYYY-MM-DDTHH:MM:SS`, fractions of a
     /// second allowed); None when it gives none or one that doesn't parse.
     pub fn of(start: Option<&str>, speed: f64) -> Option<WorldClock> {
-        let s = start?.trim();
-        let start = NaiveDateTime::parse_from_str(s, START_FORMAT)
-            .or_else(|_| NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%S%.f"))
-            .ok()?;
+        let start = parse_start(start?)?;
         Some(WorldClock { start, speed })
+    }
+
+    /// The unix ms of a world's clock 0: the task's `clock_start` read as UTC, else the run's
+    /// start (`run_start`).
+    pub fn epoch_ms(start: Option<&str>, run_start: DateTime<Utc>) -> i64 {
+        match start.and_then(parse_start) {
+            Some(t) => t.and_utc().timestamp_millis(),
+            None => run_start.timestamp_millis(),
+        }
     }
 
     /// The world's date and time at branch clock `now_ms`.
@@ -54,6 +60,14 @@ impl WorldClock {
     }
 }
 
+/// A `clock_start` (`YYYY-MM-DDTHH:MM:SS`, fractions of a second allowed).
+fn parse_start(s: &str) -> Option<NaiveDateTime> {
+    let s = s.trim();
+    let start = NaiveDateTime::parse_from_str(s, START_FORMAT)
+        .or_else(|_| NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%S%.f"));
+    start.ok()
+}
+
 /// "Tuesday, 2026-03-10 06:02".
 fn stamp(t: NaiveDateTime) -> String {
     t.format("%A, %Y-%m-%d %H:%M").to_string()
@@ -70,6 +84,19 @@ mod tests {
 
     fn clock(speed: f64) -> WorldClock {
         WorldClock::of(Some("2026-03-10T06:00:00"), speed).unwrap()
+    }
+
+    #[test]
+    fn the_epoch_is_clock_start_as_utc_else_the_runs_start() {
+        let run_start = chrono::DateTime::parse_from_rfc3339("2026-11-19T10:00:00Z").unwrap();
+        let run_start = run_start.with_timezone(&chrono::Utc);
+        let epoch = WorldClock::epoch_ms(Some("2026-03-10T06:00:00"), run_start);
+        assert_eq!(epoch, 1_773_122_400_000);
+        assert_eq!(WorldClock::epoch_ms(None, run_start), 1_795_082_400_000);
+        assert_eq!(
+            WorldClock::epoch_ms(Some("soon"), run_start),
+            1_795_082_400_000
+        );
     }
 
     #[test]

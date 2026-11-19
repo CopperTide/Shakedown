@@ -597,6 +597,11 @@ class Branch:
     def resume(self) -> dict[str, Any]:
         return self._flow("resume")
 
+    def clock(self) -> dict[str, Any]:
+        """The live branch's clock and the world's time: ``{clock_ms, speed, paused,
+        world_epoch_ms, world_ms}`` (``world_ms`` = ``world_epoch_ms`` + ``clock_ms``)."""
+        return self.arena.get(f"/api/branches/{self.id}/clock")
+
     def stop(self) -> dict[str, Any]:
         """Ends a live branch ``stopped``, unscored (newer cores only)."""
         return self._flow("stop")

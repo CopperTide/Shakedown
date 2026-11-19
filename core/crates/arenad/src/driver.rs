@@ -140,10 +140,31 @@ fn command_for(
     Ok(cmd)
 }
 
+/// `ARENA_WORLD_EPOCH_MS` (the run's world clock 0, unix ms) and `ARENA_CLOCK_SPEED` (world ms
+/// per wall ms) for a driver of `branch`.
+async fn time_env(
+    state: &AppState,
+    branch: &str,
+    ctx: Option<&crate::exec::BranchCtx>,
+) -> BTreeMap<String, String> {
+    let events = state.store.events(branch).await.unwrap_or_default();
+    let epoch = crate::recorded::world_epoch_ms(&events);
+    let speed = ctx.map_or_else(crate::clock::speed_from_env, |c| c.clock.speed());
+    let pairs = [
+        ("ARENA_WORLD_EPOCH_MS", epoch.to_string()),
+        ("ARENA_CLOCK_SPEED", speed.to_string()),
+    ];
+    pairs.map(|(k, v)| (k.to_string(), v)).into()
+}
+
 /// Starts `conn`'s command for the run `ids` and watches it (see the module's notes).
 pub async fn launch(state: &Arc<AppState>, conn: &Connection, ids: RunIds<'_>) -> Result<Launched> {
     let ctx = state.live.get(ids.branch_id);
-    let world_env = ctx.map(|c| env_for(state, &c, None)).unwrap_or_default();
+    let mut world_env = ctx
+        .as_ref()
+        .map(|c| env_for(state, c, None))
+        .unwrap_or_default();
+    world_env.extend(time_env(state, ids.branch_id, ctx.as_deref()).await);
     let mut cmd = command_for(&state.config.self_base, conn, &ids, &world_env)?;
     let what = || format!("starting the driver `{}`", conn.command.join(" "));
     let mut child = cmd.spawn().with_context(what)?;

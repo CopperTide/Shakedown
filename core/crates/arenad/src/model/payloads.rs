@@ -89,6 +89,14 @@ pub struct RunStartPayload {
         skip_serializing_if = "Option::is_none"
     )]
     pub connection: Option<String>,
+    /// The unix ms of the world's clock 0 (`world_time.epoch_ms` its parts get); runs recorded
+    /// before world time have none (their epoch is `RunStart.at`).
+    #[serde(
+        default,
+        deserialize_with = "lenient",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub world_epoch_ms: Option<i64>,
 }
 
 impl EventPayload for RunStartPayload {
