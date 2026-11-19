@@ -278,6 +278,34 @@ impl AppFx {
     }
 }
 
+/// A fork of a Code run whose connection was deleted since: the fork is made, its driver
+/// `failed`, and the new branch ends `failed` saying the connection is gone.
+#[test]
+fn a_fork_of_a_code_run_whose_connection_is_gone_fails() {
+    run(async {
+        let fx = setup("fork-gone").await;
+        let id = fx.connection("fork_aware.py", json!({})).await;
+        let parent = fx.start(&id).await;
+        fx.ended(&parent).await;
+        assert_eq!(fx.delete(&format!("/api/connections/{id}")).await.0, 200);
+        let evs = fx.state.store.events(&parent).await.unwrap();
+        let at = evs.iter().find(|e| e.kind == EventKind::AgentStart);
+        let body = json!({"at_seq": at.unwrap().seq});
+        let (status, forked) = fx.post(&format!("/api/branches/{parent}/fork"), body).await;
+        assert_eq!(
+            (status, &forked["driver"]),
+            (200, &json!("failed")),
+            "{forked}"
+        );
+        let ended = fx.ended(forked["branch_id"].as_str().unwrap()).await;
+        let why = format!("the Code connection {id} was deleted");
+        assert_eq!(
+            (ended.status, ended.error),
+            (BranchStatus::Failed, Some(why))
+        );
+    })
+}
+
 #[test]
 fn a_fork_of_a_code_run_relaunches_the_driver() {
     run(async {
