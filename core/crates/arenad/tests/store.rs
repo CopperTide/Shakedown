@@ -236,3 +236,20 @@ fn a_team_stored_before_read_only_keeps_the_old_rule() {
         done(admin, name, store).await;
     })
 }
+
+/// `run` reads one run with its branches, as `runs` lists it; an unknown run is None.
+#[test]
+fn one_run_reads_as_the_list_has_it() {
+    run(async {
+        let (admin, name, store, _clean) = fresh("one_run").await;
+        let (run_id, _) = root_branch(&store).await;
+        let (other, _) = root_branch(&store).await;
+        let listed = store.runs().await.unwrap();
+        for id in [&run_id, &other] {
+            let one = store.run(id).await.unwrap();
+            assert_eq!(one.as_ref(), listed.iter().find(|r| &r.id == id));
+        }
+        assert_eq!(store.run("nope").await.unwrap(), None);
+        done(admin, name, store).await;
+    })
+}

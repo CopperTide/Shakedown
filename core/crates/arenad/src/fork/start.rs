@@ -238,8 +238,7 @@ async fn task_of(state: &AppState, events: &[Event], parent: &Branch) -> anyhow:
     if let Some(t) = RunStartPayload::of(events).and_then(|s| s.task_id) {
         return Ok(t);
     }
-    let runs = state.store.runs().await?;
-    let run = runs.into_iter().find(|r| r.id == parent.run_id);
+    let run = state.store.run(&parent.run_id).await?;
     run.map(|r| r.task_id)
         .ok_or_else(|| anyhow::anyhow!("no run {} for branch {}", parent.run_id, parent.id))
 }

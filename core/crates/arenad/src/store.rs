@@ -343,6 +343,24 @@ impl Store {
             .collect())
     }
 
+    /// The run `id` with its branches, oldest first; None when there is no such run.
+    pub async fn run(&self, id: &str) -> Result<Option<RunSummary>> {
+        let sql = "SELECT id, name, task_id, created_at FROM runs WHERE id = $1";
+        let Some(r) = self.client.query_opt(sql, &[&id]).await? else {
+            return Ok(None);
+        };
+        let sql =
+            format!("SELECT {BRANCH_COLS} FROM branches WHERE run_id = $1 ORDER BY created_at, id");
+        let rows = self.client.query(&sql, &[&id]).await?;
+        Ok(Some(RunSummary {
+            branches: rows.iter().map(branch_from).collect::<Result<_>>()?,
+            id: r.get("id"),
+            name: r.get("name"),
+            task_id: r.get("task_id"),
+            created_at: r.get("created_at"),
+        }))
+    }
+
     /// Every branch, grouped by its run, oldest first.
     async fn branches_by_run(&self) -> Result<HashMap<String, Vec<Branch>>> {
         let rows = self
