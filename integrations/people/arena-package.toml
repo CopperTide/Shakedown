@@ -1,0 +1,11 @@
+kind = "integration"
+name = "people"
+version = "0.1.0"
+protocol = 1
+run = { command = ["uv", "run", "--project", ".", "python", "-m", "people_part"] }
+needs = { gpu_vram_gb = 0, services = [] }
+config_schema = { type = "object", required = ["people", "rules"], properties = { seed = { type = "integer" }, people = { type = "array" }, rules = { type = "object" }, systems = { type = "array" } } }
+
+[[example]]
+tool = "people_notice"
+args = { system = "github", kind = "review_requested", data = { reviewer = "rev1", repo = "acme/app", number = 1, checks = "success" } }

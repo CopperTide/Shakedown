@@ -33,6 +33,7 @@ The table is in the main `README.md`, with what was verified. Each folder has a 
 | `jira-twin` | a Jira-compatible tracker (Cloud or Server mode): issues, JQL, boards and sprints |
 | `slack-twin` | a Slack-compatible workspace: the Web API chat methods agents and slack_sdk use |
 | `pagerduty-twin` | a PagerDuty-compatible pager: incidents, notes, on-call and Events API v2 |
+| `people` | simulated people (developers, reviewers, on-call, managers) acting on the world clock by rules written as data |
 
 Examples to copy: `kits/rust/examples/counter.rs` and `kits/python/examples/counter.py`.
 

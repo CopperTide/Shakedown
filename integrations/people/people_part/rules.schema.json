@@ -1,0 +1,124 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "shakedown-people/1",
+  "title": "The rules of one role of simulated people",
+  "type": "object",
+  "required": ["format", "role", "rules"],
+  "additionalProperties": false,
+  "properties": {
+    "format": {"const": "shakedown-people/1"},
+    "role": {"$ref": "#/$defs/id"},
+    "lines": {
+      "description": "Named lists of things a person may say; {pick:<name>} in an act's text draws one, seeded.",
+      "type": "object",
+      "propertyNames": {"$ref": "#/$defs/id"},
+      "additionalProperties": {"type": "array", "minItems": 1, "items": {"type": "string"}}
+    },
+    "rules": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/rule"}}
+  },
+  "$defs": {
+    "id": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{0,62}$"},
+    "pointer": {"type": "string", "pattern": "^/"},
+    "scalar": {"type": ["string", "number", "boolean", "null"]},
+    "condition": {
+      "description": "Every pointer into the notice's data holds the value, or one of the values of a list.",
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {"$ref": "#/$defs/pointer"},
+      "additionalProperties": {
+        "anyOf": [{"$ref": "#/$defs/scalar"}, {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/scalar"}}]
+      }
+    },
+    "time": {"type": "string", "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"},
+    "rule": {
+      "type": "object",
+      "required": ["id"],
+      "additionalProperties": false,
+      "oneOf": [{"required": ["notice"]}, {"required": ["every"]}, {"required": ["once"]}],
+      "allOf": [{"oneOf": [{"required": ["act"]}, {"required": ["do"]}]}],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "notice": {"$ref": "#/$defs/notice"},
+        "every": {
+          "description": "World time, UTC: daily at each time, or every so many world minutes.",
+          "oneOf": [
+            {"type": "object", "additionalProperties": false, "required": ["at"], "properties": {"at": {
+              "oneOf": [{"$ref": "#/$defs/time"}, {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/time"}}]}}},
+            {"type": "object", "additionalProperties": false, "required": ["minutes"],
+             "properties": {"minutes": {"type": "integer", "minimum": 1}}}
+          ]
+        },
+        "once": {
+          "description": "Once, at this world minute of the clock (0 is the run's start).",
+          "type": "object", "additionalProperties": false, "required": ["minute"],
+          "properties": {"minute": {"type": "integer", "minimum": 0}}
+        },
+        "who": {"description": "all: each person the rule reaches; one: one of them, seeded.", "enum": ["all", "one"]},
+        "after": {
+          "description": "World minutes between the trigger and the act: a fixed delay or a seeded one in [lo, hi].",
+          "type": "object", "additionalProperties": false, "required": ["minutes"],
+          "properties": {"minutes": {"oneOf": [
+            {"type": "number", "minimum": 0},
+            {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "number", "minimum": 0}}]}}
+        },
+        "limit": {
+          "type": "object", "additionalProperties": false, "required": ["per_day"],
+          "properties": {"per_day": {"type": "integer", "minimum": 1}}
+        },
+        "refresh": {
+          "description": "Later notices that change what a waiting act reads: when every `match` pointer of the waiting notice equals the later one's (or is in its list), `set` copies the later values in.",
+          "type": "array", "minItems": 1,
+          "items": {
+            "type": "object", "additionalProperties": false, "required": ["notice", "match", "set"],
+            "properties": {
+              "notice": {"type": "object", "additionalProperties": false, "required": ["system", "kind"],
+                     "properties": {"system": {"$ref": "#/$defs/name"}, "kind": {"$ref": "#/$defs/name"}}},
+              "match": {"$ref": "#/$defs/pointers"},
+              "set": {"$ref": "#/$defs/pointers"}
+            }
+          }
+        },
+        "act": {"$ref": "#/$defs/acts"},
+        "do": {
+          "type": "array", "minItems": 1,
+          "items": {
+            "type": "object", "additionalProperties": false, "required": ["act"],
+            "oneOf": [{"required": ["if"]}, {"required": ["else"]}],
+            "properties": {"if": {"$ref": "#/$defs/condition"}, "else": {"const": true}, "act": {"$ref": "#/$defs/acts"}}
+          }
+        }
+      }
+    },
+    "name": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+    "pointers": {
+      "type": "object", "minProperties": 1,
+      "propertyNames": {"$ref": "#/$defs/pointer"},
+      "additionalProperties": {"$ref": "#/$defs/pointer"}
+    },
+    "notice": {
+      "description": "The notice that sets the rule off (`notice`, not `on`: YAML 1.1 reads a bare on as true).",
+      "type": "object",
+      "required": ["system", "kind"],
+      "additionalProperties": false,
+      "properties": {
+        "system": {"$ref": "#/$defs/name"},
+        "kind": {"$ref": "#/$defs/name"},
+        "to": {
+          "description": "me: the notice's reviewer, assignee or user is the person's login; a pointer: that field is (or lists) it.",
+          "anyOf": [{"const": "me"}, {"$ref": "#/$defs/pointer"}]
+        },
+        "where": {"$ref": "#/$defs/condition"}
+      }
+    },
+    "act": {
+      "description": "What the person does: an event <system>_act {person, action, args} that the world's link hands to that system. In args a string that starts with / is the notice's value there; in text, {/pointer}, {pick:<lines>} and {person:<field>} are filled.",
+      "type": "object",
+      "required": ["system", "action"],
+      "additionalProperties": false,
+      "properties": {"system": {"$ref": "#/$defs/name"}, "action": {"$ref": "#/$defs/name"}, "args": {"type": "object"}}
+    },
+    "acts": {
+      "oneOf": [{"$ref": "#/$defs/act"}, {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/act"}}]
+    }
+  }
+}
