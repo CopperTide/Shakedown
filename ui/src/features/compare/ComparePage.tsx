@@ -1,5 +1,5 @@
 import { ChevronDown, ChevronUp } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { branch as fetchBranch, views as fetchViews } from '@/api/branches';
 import { compare } from '@/api/compare';
@@ -16,8 +16,8 @@ import WhatMatters from '@/features/review/WhatMatters';
 import { pretty } from '@/features/run/Inspector';
 import { diffCounts, formatCost, jsonDiff } from '@/features/run/timeline';
 import { normalizeViews } from '@/features/world/twin';
+import { useQuery } from '@/hooks/useQuery';
 import { cn } from '@/lib/cn';
-import { errorMessage } from '@/lib/errors';
 import { agentModelLine, costIsUnknown, teamProviders } from '@/model/providers';
 import { APPROXIMATE_NOTE, isApproximate, notComparedLine } from '@/model/restore';
 import type { BranchView, TwinView } from '@/model/twin';
@@ -113,19 +113,14 @@ const endView = (id: string) => fetchViews(id).then((v) => v, () => undefined);
 const lastOf = (raw: BranchView[] | undefined): TwinView | null | undefined =>
   raw === undefined ? undefined : normalizeViews(raw).at(-1)?.view ?? null;
 
+async function loadCompare(a: string, b: string): Promise<Loaded> {
+  const [data, x, y, rx, ry] = await Promise.all([compare(a, b), fetchBranch(a), fetchBranch(b), endView(a), endView(b)]);
+  return { data, a: x, b: y, va: lastOf(rx), vb: lastOf(ry) };
+}
+
 function useCompare(a: string, b: string) {
-  const [got, setGot] = useState<Loaded | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [attempt, setAttempt] = useState(0);
-  useEffect(() => {
-    let cancelled = false;
-    setGot(null); setError(null);
-    Promise.all([compare(a, b), fetchBranch(a), fetchBranch(b), endView(a), endView(b)])
-      .then(([data, x, y, rx, ry]) => { if (!cancelled) setGot({ data, a: x, b: y, va: lastOf(rx), vb: lastOf(ry) }); })
-      .catch((e) => { if (!cancelled) setError(errorMessage(e)); });
-    return () => { cancelled = true; };
-  }, [a, b, attempt]);
-  return { got, error, retry: () => setAttempt((n) => n + 1) };
+  const { data: got, error, retry } = useQuery(`${a}|${b}`, () => loadCompare(a, b));
+  return { got, error, retry };
 }
 
 function Divergence({ got, a, b }: { got: Loaded; a: string; b: string }) {
