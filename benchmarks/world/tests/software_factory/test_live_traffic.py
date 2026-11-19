@@ -12,7 +12,7 @@ import time
 import urllib.request
 
 import pytest
-from support import images_env, profile_env
+from sf_support import images_env, profile_env
 
 pytestmark = pytest.mark.live
 PROJECT = "sf-live-traffic"

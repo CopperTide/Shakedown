@@ -10,7 +10,7 @@ from pathlib import Path
 import jsonschema
 import pytest
 from conftest import REPOS, TEMPLATE
-from support import compose_limits, images_env, load_yaml, profile_env, services
+from sf_support import compose_limits, images_env, load_yaml, profile_env, services
 
 sys.path.insert(0, str(TEMPLATE / "platform"))
 from traffic.clock import Clock  # noqa: E402
