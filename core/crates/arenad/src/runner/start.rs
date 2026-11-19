@@ -157,6 +157,7 @@ async fn set_up_task(
     };
     let e = match done {
         Ok(wrote) => {
+            save_after_setup(&exec, ctx).await;
             exec.record_view(ctx, wrote.unwrap_or(start_seq)).await;
             return Ok(());
         }
@@ -165,6 +166,14 @@ async fn set_up_task(
     ctx.world.stop().await;
     setup_failed(state, &ctx.branch_id, e.clone()).await;
     Err(anyhow!(e))
+}
+
+/// A save point after the task's setup, when it wrote to a part that saves at points: forks
+/// where the agents start restore from it. A failure is logged; the run goes on.
+async fn save_after_setup(exec: &ToolExec, ctx: &BranchCtx) {
+    if let Err(e) = exec.save_point(ctx, SAVE_AFTER_SETUP).await {
+        eprintln!("branch {}: save point after setup: {e}", ctx.branch_id);
+    }
 }
 
 /// What a run's `RunStart` records besides its world.
