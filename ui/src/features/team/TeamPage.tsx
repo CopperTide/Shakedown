@@ -1,18 +1,17 @@
 import { ArrowUp, Plus, RotateCcw, Trash2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
-import { defaultTeam } from '@/api/benchmark';
+import { useEffect } from 'react';
 import { ModelHint, ModelInput, ProviderSelect } from '@/components/ProviderFields';
 import { Button } from '@/components/ui/button';
 import { Checkbox, Field, Input, NativeSelect, Textarea } from '@/components/ui/input';
 import { PageBody, PageHeader } from '@/components/ui/page';
 import { Panel } from '@/components/ui/panel';
 import { ErrorState, LoadingState } from '@/components/ui/state';
-import { clearStoredTeam, loadTeam, saveTeam } from '@/hooks/storedTeam';
+import { saveTeam } from '@/hooks/storedTeam';
 import { useProviderList } from '@/hooks/useProviders';
-import { errorMessage } from '@/lib/errors';
+import { useStoredTeam } from '@/hooks/useTeam';
 import { MODE_LABEL, agentModelLine, agentModelTip, providerOf } from '@/model/providers';
 import { slug, withSlugIds } from '@/model/team';
-import type { AgentKind, AgentSpec, ProviderStatus, Team as TeamT } from '@/model/types';
+import type { AgentKind, AgentSpec, ProviderStatus } from '@/model/types';
 
 const KINDS: AgentKind[] = ['claude_code', 'codex', 'open'];
 
@@ -62,23 +61,15 @@ export function AgentFields({ agent: a, index: i, openOk, list, patch }: {
 
 /** The team as stored, saved on every edit once it has loaded. */
 function useTeamEditor() {
-  const [team, setTeam] = useState<TeamT | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loaded, setLoaded] = useState(false);
-  useEffect(() => {
-    loadTeam().then((t) => { setTeam(t); setLoaded(true); }).catch((e) => setError(errorMessage(e)));
-  }, []);
-  useEffect(() => { if (loaded && team) saveTeam(team); }, [loaded, team]);
-  const setAgents = (fn: (a: AgentSpec[]) => AgentSpec[]) => setTeam((t) => (t ? { ...t, agents: withSlugIds(fn(t.agents)) } : t));
+  const { team, error, update, reset } = useStoredTeam();
+  useEffect(() => { if (team) saveTeam(team); }, [team]);
+  const setAgents = (fn: (a: AgentSpec[]) => AgentSpec[]) => update((t) => ({ ...t, agents: withSlugIds(fn(t.agents)) }));
   const ops = {
     patch: (i: number, p: Partial<AgentSpec>) => setAgents((as) => as.map((a, j) => (j === i ? { ...a, ...p } : a))),
     move: (i: number) => setAgents((as) => { const n = [...as]; [n[i - 1], n[i]] = [n[i], n[i - 1]]; return n; }),
     remove: (i: number) => setAgents((as) => as.filter((_, j) => j !== i)),
     add: () => setAgents((as) => [...as, { id: slug('agent', new Set(as.map((a) => a.id))), name: `Agent ${as.length + 1}`, kind: 'claude_code', model: null, prompt: '' }]),
-    reset: async () => {
-      clearStoredTeam();
-      try { setTeam(await defaultTeam()); } catch (e) { setError(errorMessage(e)); }
-    },
+    reset,
   };
   return { team, error, ...ops };
 }

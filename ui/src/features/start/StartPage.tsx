@@ -10,7 +10,7 @@ import type { ConnectReturn } from '@/features/connect/connect';
 import { useScenario } from '@/features/scenario/ScenarioBuilder';
 import { useHealth } from '@/hooks/useHealth';
 import { useTaskNames, useTasks } from '@/hooks/useTasks';
-import { useSuggestedTeams, useTeam } from '@/hooks/useTeam';
+import { useStoredTeam, useSuggestedTeams } from '@/hooks/useTeam';
 import { errorMessage } from '@/lib/errors';
 import { missingFor, restoringLine, runLine, runnerProblem, taskName } from '@/model/summary';
 import { teamForRun } from '@/model/team';
@@ -59,7 +59,7 @@ function RunBar({ s, missing, error, disabled, onRun }: { s: Setup; missing: str
 /** What a run is started with: the task, the team, how its agents run and the disruptions. */
 function useSetup() {
   const tasks = useTasks();
-  const team = useTeam();
+  const team = useStoredTeam();
   const suggested = useSuggestedTeams();
   const [taskId, setTaskId] = useState('');
   const [runner, setRunner] = useState<Runner>('chain');

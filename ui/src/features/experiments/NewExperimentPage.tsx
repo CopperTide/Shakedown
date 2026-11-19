@@ -15,7 +15,7 @@ import { TaskPicker } from '@/features/start/WorldCard';
 import ImportDialog from '@/features/team/ImportDialog';
 import { useHealth } from '@/hooks/useHealth';
 import { useTasks } from '@/hooks/useTasks';
-import { useSuggestedTeams, useTeam } from '@/hooks/useTeam';
+import { useStoredTeam, useSuggestedTeams } from '@/hooks/useTeam';
 import { errorMessage } from '@/lib/errors';
 import type { NewExperiment } from '@/model/experiment';
 import { missingFor, runnerProblem, worldName } from '@/model/summary';
@@ -53,7 +53,7 @@ function useReturned(): ConnectReturn & { kept: Kept | null } {
 /** The benchmark's teams, then yours when it isn't one of them, then your connected agents, then the ones imported here. */
 function useTeamChoices(returned: Team | undefined) {
   const suggested = useSuggestedTeams();
-  const yours = useTeam().team;
+  const yours = useStoredTeam().team;
   const [imported, setImported] = useState<Team[]>([]);
   // The kept list, plus the agent just connected when this browser couldn't keep it.
   const [connected] = useState(() => { const l = connectedTeams(); return returned && !returned.connection && !l.some((t) => t.id === returned.id) ? [returned, ...l] : l; });
