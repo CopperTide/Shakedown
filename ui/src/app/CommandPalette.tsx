@@ -6,7 +6,7 @@ import { runs as fetchRuns } from '@/api/runs';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Kbd } from '@/components/ui/kbd';
-import { errorMessage } from '@/lib/errors';
+import { useQuery } from '@/hooks/useQuery';
 import { hasModifier } from '@/lib/keys';
 import type { ListedExperiment } from '@/model/experiment';
 import type { RunSummary } from '@/model/types';
@@ -27,16 +27,14 @@ export function usePaletteShortcut(toggle: () => void) {
 
 /** Runs and experiments, fetched each time the palette opens. */
 function useLists(open: boolean) {
-  const [runs, setRuns] = useState<RunSummary[]>([]);
-  const [experiments, setExperiments] = useState<ListedExperiment[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  useEffect(() => {
-    if (!open) return;
-    fetchRuns().then(setRuns).catch((e) => setError(errorMessage(e)));
-    fetchExperiments().then(setExperiments).catch((e) => setError(errorMessage(e)));
-  }, [open]);
-  return { runs, experiments, error };
+  // Closed, nothing is read; open again, the last lists show until the new ones land.
+  const runs = useQuery(open ? 'palette-runs' : null, fetchRuns, { keepOnError: true, keepPrevious: true });
+  const experiments = useQuery(open ? 'palette-experiments' : null, fetchExperiments, { keepOnError: true, keepPrevious: true });
+  return { runs: runs.data ?? NO_RUNS, experiments: experiments.data ?? NO_EXPERIMENTS, error: experiments.error ?? runs.error };
 }
+
+const NO_RUNS: RunSummary[] = [];
+const NO_EXPERIMENTS: ListedExperiment[] = [];
 
 function iconOf(item: Item) {
   if (item.id.startsWith('new-')) return <Play aria-hidden="true" />;
