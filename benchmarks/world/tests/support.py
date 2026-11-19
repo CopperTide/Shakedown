@@ -43,3 +43,29 @@ def ctx_any() -> Context:
 def expand_all(t):
     """Expands the whole template with any context (raises its first TemplateError)."""
     return expand(t.data, ctx_any(), t.dir, [])
+
+
+def _reply(builder, method: str, params: dict) -> dict:
+    import io
+    import json
+
+    from arena_part import serve
+    from worldbench.builder import dispatch
+    out = io.StringIO()
+    line = json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params})
+    serve(builder, io.StringIO(line + "\n"), out, dispatch_fn=dispatch)
+    return json.loads(out.getvalue())
+
+
+def call(builder, method: str, params: dict):
+    """The builder's result for one request over the line protocol."""
+    reply = _reply(builder, method, params)
+    assert "error" not in reply, reply
+    return reply["result"]
+
+
+def call_error(builder, method: str, params: dict) -> dict:
+    """The builder's error for one request over the line protocol."""
+    reply = _reply(builder, method, params)
+    assert "error" in reply, reply
+    return reply["error"]

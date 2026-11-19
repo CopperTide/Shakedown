@@ -352,6 +352,34 @@ tools, so a benchmark that wants them counted follows this convention:
   matter for a human: a write (`effect: "write"`) to a part whose `system.kind` is `"approvals"`, or a tool
   whose name contains `escalat`, `flag` or `ask_human`, case-insensitively.
 
+## Builder calls
+
+A world builder (a package of `kind = "builder"`, `benchmarks/world`) speaks the same transport and answers four
+calls over its templates (its own `templates/` and the `:`-separated `ARENA_TEMPLATES` roots, read again on every
+call). `choices` is what the builder's UI sends, every field optional: `{seed, company: {name}, size, systems,
+options: {system: {name: value}}, people: {counts: {role: n}, edits: {id: {name}}, added: [{name, role}], removed:
+[id]}, events: {id: {on, params}}}`. A problem is `{path, message}`.
+
+| Method | Params | Result |
+|---|---|---|
+| `templates` | `{}` | `[{id, name, summary, version, systems: [label]}]` |
+| `template` | `{id}` | the template's form: `{id, name, summary, version, company: {name}, size: {label, default, min, max, presets?}, systems: [{id, label, product, summary?, required, default, requires, memory_mb, hosts, options}], roles: [{id, label, summary?, count, min, systems}], events: [{id, label, description, kind, default, needs, params}]}` |
+| `preview` | `{id, choices}` | `{name, title, domain, parts: [{part, integration, system}], hosts, people, events: [{id, label, kind, on}], tasks: [{id, reason, checks: n}], dropped: [{what, why}], needs: {images: [{image, present, hint}], memory_mb}, problems}` |
+| `generate` | `{id, choices, dir}` | writes the world as a benchmark package into `dir` → `{name, title, version}` |
+
+- An unknown template is `-32602` `no template {id}`. `generate` into a `dir` that exists is `-32602`
+  `{dir} exists already`, and nothing is written.
+- `preview` answers even when the world can't be built: `problems` lists why (choices that don't fit the
+  template, a world left with no task, a template error with its path, and `needs.images.<image>` for each Docker
+  image the machine lacks: images are checked with `docker image inspect`, never pulled). People, events and tasks
+  are empty then. `generate` refuses the same problems with `-32602`, the first in its message
+  (`the world can't be built: {path}: {message}`) and all of them in the error's `data: {problems}`.
+- The same template version, choices and seed give a byte-identical `world.json`. The package's `version` is the
+  template's plus `+` and the first 8 hex digits of world.json's sha256; its name is the company's slug; it has
+  `opt_in = true` and a `[world]` table `{title, template, template_name}`; its program is
+  `python -m worldbench --world world.json --version <version>` in `${ARENA_DIR}/benchmarks/world`, a benchmark
+  scored by the task's checks (`arena_part.expect`, see [Scoring by named checks](#scoring-by-named-checks)).
+
 ## Serving HTTP
 
 A part whose instance is a web service (a code host, an issue tracker) answers `http_routes` with the hosts it
@@ -402,6 +430,8 @@ act on. `-32602` is only for protocol-level bad params (a bad id, a missing fiel
 | `-32003` | fingerprint mismatch |
 | `-32601` | method not found |
 | `-32602` | invalid params (including a bad id) |
+
+An error may carry `data` (JSON-RPC `error.data`): the builder's `generate` puts its problems there.
 
 ## Clock contract
 

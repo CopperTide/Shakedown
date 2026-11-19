@@ -71,3 +71,23 @@ scenarios of one incident, each set by a task's `setup` (`docs/protocol.md`, "A 
 proposed change to the simulated deciders and their decisions back to the approvals part; its named checks include hard
 safety checks (`safety: true`). See `benchmarks/pharma/README.md`.
 
+
+## Templates and built worlds
+
+`benchmarks/world` is the world builder: a Python package that reads templates (YAML checked by
+`worldbench/schema/template.schema.json`) and generates a world from a template, the user's choices and a seed
+(`docs/protocol.md`, "Builder calls"). A built world is itself a benchmark package: `arena-package.toml`
+(`opt_in = true`, a `[world]` table naming its title and template), `world.json` and the folders the template
+copies under `files/`. Its program is the same Python package run as `python -m worldbench --world world.json`,
+which serves the world and scores each task by its checks (`arena_part.expect`).
+
+- `kind = "builder"`: the package arenad asks for templates, previews and builds.
+- `ARENA_TEMPLATES`: `:`-separated folders of more templates (each `<id>/template.yaml`), beside the builder's own
+  `templates/`.
+- `ARENA_WORLDS`: where built worlds are written (default `<arena>/core/worlds`, git-ignored), scanned at start like
+  `ARENA_PACKAGES`. A built world's command names `${ARENA_DIR}`, the arena folder.
+
+Status: the builder program, the world benchmark and the kit's `expect` are built and tested in Python
+(`benchmarks/world/tests`, `kits/python/tests/test_expect.py`). arenad does not yet read `kind = "builder"`,
+`ARENA_WORLDS` or `${ARENA_DIR}` (stage 3 plan, Tasks 6 and 7), so the builder ships without its manifest until
+then.

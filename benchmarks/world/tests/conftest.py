@@ -37,3 +37,21 @@ def built_shop(shop, tmp_path):
     for src, dst in r.files:
         shutil.copytree(src, out / dst)
     return out
+
+
+def _builder(monkeypatch, present: bool):
+    from worldbench import needs
+    from worldbench.builder import Builder
+    monkeypatch.setattr(needs, "image_present", lambda image: present)
+    return Builder([FIXTURES])
+
+
+@pytest.fixture
+def builder(monkeypatch):
+    """A builder over the fixture templates on a machine that has every image."""
+    return _builder(monkeypatch, True)
+
+
+@pytest.fixture
+def builder_without_docker(monkeypatch):
+    return _builder(monkeypatch, False)

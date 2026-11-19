@@ -155,7 +155,10 @@ def dispatch(part, method, params):
 
 def _response(id_, out=None, err=None):
     if err is not None:
-        return {"jsonrpc": "2.0", "id": id_, "error": {"code": err.code, "message": err.message}}
+        body = {"code": err.code, "message": err.message}
+        if err.data is not None:
+            body["data"] = err.data
+        return {"jsonrpc": "2.0", "id": id_, "error": body}
     return {"jsonrpc": "2.0", "id": id_, "result": out}
 
 

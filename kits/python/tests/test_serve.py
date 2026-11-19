@@ -315,3 +315,13 @@ def test_a_benchmark_answers_its_own_calls_and_refuses_the_rest():
     r = [_json.loads(x) for x in out.getvalue().splitlines()]
     assert [x.get("result") for x in r[:3]] == [{"name": "b"}, {}, {"actions": []}]
     assert r[3]["error"]["code"] == -32601 and r[4]["error"]["code"] == -32601
+
+
+def test_an_error_with_data_is_answered_with_its_data():
+    class Refuses(Part):
+        def describe(self):
+            raise PartError(-32602, "can't", data={"problems": [{"path": "a", "message": "b"}]})
+
+    r = Client(Refuses()).call("describe")
+    assert r["error"] == {"code": -32602, "message": "can't", "data": {"problems": [{"path": "a", "message": "b"}]}}
+    assert "data" not in client().call("nope")["error"]
