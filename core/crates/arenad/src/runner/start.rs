@@ -4,7 +4,7 @@
 use std::{sync::Arc, time::Instant};
 
 use anyhow::{anyhow, Result};
-use parts::proto::BenchDescribe;
+use parts::proto::{BenchDescribe, WorldTimeParams};
 use serde_json::json;
 
 use crate::{
@@ -209,11 +209,14 @@ async fn start_world(
 ) -> Result<(World, i64, f64)> {
     let branch_id = of.branch_id;
     let seed = of.scenario.seed.unwrap_or_else(new_seed);
-    let hub = state.hub.clone();
+    let (hub, mut planned) = (state.hub.clone(), planned);
+    let world_time = world_time_of(bench, of.task_id);
+    planned.world_time = Some(world_time);
     let since = Instant::now();
     let world = World::start_planned(hub, bench, planned, branch_id, seed, WorldFrom::Base).await?;
     let restored = Overhead::of(Cat::Restore, overhead::ms_since(since));
-    let start = run_start(bench, &world, seed, &of);
+    let mut start = run_start(bench, &world, seed, &of);
+    start.world_epoch_ms = Some(world_time.epoch_ms);
     let since = Instant::now();
     match state.store.record(branch_id, None, &start, restored).await {
         Ok(e) => Ok((world, e.seq, overhead::ms_since(since))),
@@ -221,6 +224,17 @@ async fn start_world(
             world.stop().await;
             Err(e)
         }
+    }
+}
+
+/// A new run's world time: its epoch (the task's `clock_start` as UTC, else now) and the clock
+/// speed its branches run at.
+fn world_time_of(bench: &BenchDescribe, task_id: &str) -> WorldTimeParams {
+    let task = bench.tasks.iter().find(|t| t.id == task_id);
+    let start = task.and_then(|t| t.clock_start.as_deref());
+    WorldTimeParams {
+        epoch_ms: crate::world_clock::WorldClock::epoch_ms(start, chrono::Utc::now()),
+        speed: crate::clock::speed_from_env(),
     }
 }
 
@@ -248,5 +262,6 @@ fn run_start(
         scenario,
         max_cost_usd: of.rules.max_cost_usd,
         connection: of.rules.connection.clone(),
+        world_epoch_ms: None,
     }
 }

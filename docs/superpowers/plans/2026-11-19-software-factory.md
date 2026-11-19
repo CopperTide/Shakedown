@@ -1069,3 +1069,8 @@ Stage 2 Tasks 1–8 must have landed before Task 1 here.
 - Vendor schemas:
   - GitHub's `rest-api-description` (MIT) and its public GraphQL schema extract are committed with their licence.
   - Atlassian and PagerDuty schemas are not committed. Tests download them on first use into a git-ignored cache, pinned by sha256, and skip with a clear message when offline.
+- **Read-only agents and POST reads (owner, after stage 2).** Stage 2 refuses a read-only agent's non-GET requests before forwarding. That breaks `gh`, whose pull-request and issue reads are GraphQL POSTs. Task 1's Rust half changes this.
+  - The proxy forwards a read-only agent's request with `x-arena-agent` and `x-arena-readonly: 1` to parts that declare `honours_readonly: true` in `http_routes`. Other parts keep stage 2's refusal.
+  - The part refuses writes itself; the GitHub twin refuses GraphQL mutations and REST writes.
+  - If such a request comes back with `X-Arena-Effect: write`, the proxy records a violation step and the branch fails, as a refused tool write does today.
+  - Tests: a read-only agent's `gh pr list` (GraphQL query) succeeds; its `gh pr merge` is refused and recorded.

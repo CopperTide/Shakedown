@@ -1,12 +1,17 @@
 //! The `service` integration: each instance is a Docker Compose project `arena_<instance>`, and a
-//! save holds copies of the volumes the config names.
+//! save holds copies of the volumes the config names, each its own way (`volumes::*`).
 //!
-//! A save stops the project, writes each volume to `<save>/<volume>.tar` exactly as the helper
-//! container streams it (owners, modes and mtimes kept) and starts it again, so it is exact.
-//! Starting from a save makes a new project whose volumes are filled from the archives. Each
-//! running instance's config is kept in `.live/<instance>.json`, so a restarted program still
-//! knows its instances. Live volumes are not counted by `usage`: `stop` removes them.
+//! A plain volume name is saved as before: the project stops, each volume is written to
+//! `<save>/<volume>.tar` exactly as the helper container streams it (owners, modes and mtimes
+//! kept) and the project starts again, so the save is exact. A `postgres` volume is dumped while
+//! it runs; a `hardlink` one copied as a tree linked to the instance's previous save; a `skip` one
+//! not saved. Starting from a save makes a new project whose volumes are filled from it. Each
+//! running instance's config is kept in `.live/<instance>.json` and its last save in
+//! `.last/<instance>.json`, so a restarted program still knows them. arenad saves the part at
+//! save points (`save_at: "points"`). Live volumes are not counted by `usage`: `stop` removes
+//! them.
 mod config;
+mod routes;
 mod view;
 mod volumes;
 
@@ -30,6 +35,9 @@ pub struct Service {
     saves: SaveDirs,
     /// The config each running instance started with, in `.live/<instance>.json`.
     live: LiveRecords<Value>,
+    /// Each instance's last save (or the save it started from), `{"save"}` in
+    /// `.last/<instance>.json`: what its hard-linked trees link to.
+    last: LiveRecords<Value>,
 }
 
 impl Service {
@@ -48,6 +56,7 @@ impl Service {
     fn with(saves: SaveDirs) -> Service {
         Service {
             live: LiveRecords::files(saves.root().join(".live")),
+            last: LiveRecords::files(saves.root().join(".last")),
             saves,
         }
     }
@@ -59,6 +68,18 @@ impl Service {
             .get(id)
             .ok_or_else(|| PartError::unknown(format!("no instance {id}")))?;
         new_instance(id, &Config::parse(&config)?)
+    }
+
+    /// The save the instance's next hard-linked trees link to.
+    fn last_save(&self, id: &str) -> Option<String> {
+        let last = self.last.get(id)?;
+        last["save"].as_str().map(str::to_string)
+    }
+
+    fn note_last(&self, id: &str, save: &str) {
+        if let Err(e) = self.last.record(id, &json!({"save": save})) {
+            eprintln!("service: recording the last save of {id}: {e}");
+        }
     }
 
     /// The digests of a target's volumes: a save's folders, or a copy of a live instance's volumes.
@@ -90,6 +111,9 @@ fn new_instance(id: &str, config: &Config) -> Result<Instance, PartError> {
     Ok(Instance {
         project,
         volumes: config.volumes.clone(),
+        rsync_image: config.rsync_image.clone(),
+        compose_file: config.compose_file.clone(),
+        env: config.env.clone(),
     })
 }
 
@@ -123,7 +147,7 @@ impl Part for Service {
             fingerprint: json!({"integration": PACKAGE}),
             tools: vec![],
             system: Some(SystemInfo::real("api", "HTTP service", None)),
-            save_at: SaveAt::Step,
+            save_at: SaveAt::Points,
         })
     }
 
@@ -139,8 +163,10 @@ impl Part for Service {
             .record(id, &p.config)
             .map_err(PartError::internal_from)?;
         let up = blocking(move || bring_up(&inst, from.as_deref())).await;
-        if up.is_err() {
-            self.live.forget(id);
+        match (&up, &p.from) {
+            (Err(_), _) => self.live.forget(id),
+            (Ok(()), Some(f)) => self.note_last(id, &f.save),
+            (Ok(()), None) => self.last.forget(id),
         }
         up
     }
@@ -156,11 +182,11 @@ impl Part for Service {
     async fn save(&self, p: SaveParams) -> Result<Saved, PartError> {
         let inst = self.instance(&p.instance)?;
         let dir = PathBuf::from(&p.dir);
-        let to = dir.clone();
-        let bytes =
-            blocking(move || volumes::save_all(&inst, &to).map_err(PartError::internal_from))
-                .await?;
+        let (to, prev) = (dir.clone(), self.last_save(&p.instance));
+        let save = move || volumes::save_all(&inst, &to, prev.as_deref());
+        let bytes = blocking(move || save().map_err(PartError::internal_from)).await?;
         self.saves.note(&p.save, &dir);
+        self.note_last(&p.instance, &p.save);
         Ok(Saved { bytes, exact: true })
     }
 
@@ -176,6 +202,10 @@ impl Part for Service {
     }
 
     async fn drop_save(&self, p: SaveId) -> Result<(), PartError> {
+        if let Some(dir) = self.saves.find(&p.save) {
+            let trees = move || volumes::remove_trees(&dir).map_err(PartError::internal_from);
+            blocking(trees).await?;
+        }
         self.saves.remove(&p.save).map_err(PartError::internal_from)
     }
 
@@ -188,7 +218,15 @@ impl Part for Service {
         })
         .await?;
         self.live.forget(&p.instance);
+        self.last.forget(&p.instance);
         Ok(())
+    }
+
+    async fn http_routes(&self, p: IdParams) -> Result<HttpRoutes, PartError> {
+        let config = Config::parse(&self.live.get(&p.instance).unwrap_or_default());
+        let (inst, config) = (self.instance(&p.instance)?, config?);
+        let routes = move || routes::routes(&inst.project, &config.http);
+        blocking(move || routes().map_err(PartError::internal_from)).await
     }
 
     /// Nothing is kept outside `ARENA_SAVES`: live volumes are removed by `stop`.

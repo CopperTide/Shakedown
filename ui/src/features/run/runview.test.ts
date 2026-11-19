@@ -60,6 +60,12 @@ describe('run stats and diffs', () => {
     expect([safetyLine({ violated: 1, total: 2 }), safetyLine({ violated: 0, total: 2 })]).toEqual(['◆ 1 of 2 violated', '0 of 2 violated']);
     expect(runStats(events, 8)).toMatchObject({ steps: 5, reads: 0, writes: 2, abnormal: 1 });
   });
+
+  it('leaves save points out of the steps', () => {
+    const point = ev(13, 96, null, 'save_point', { reason: 'model_call', saves: { box: 's1' }, paused_ms: 4 });
+    expect(runStats([...events, point], null)).toEqual(runStats(events, null));
+    expect(runStats([...events, point], 8)).toEqual(runStats(events, 8));
+  });
   it('counts the lines a diff adds and removes', () => {
     expect(diffCounts(jsonDiff({ a: 1 }, { a: 2, b: 3 }))).toEqual({ added: 2, removed: 1 });
   });

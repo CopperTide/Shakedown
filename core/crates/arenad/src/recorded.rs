@@ -72,6 +72,18 @@ pub fn rules(events: &[Event]) -> Rules {
     RunStartPayload::of(events).map_or_else(Rules::legacy, |s| Rules::of(&s))
 }
 
+/// The unix ms of the run's world clock 0: `RunStart.world_epoch_ms`, else (a run recorded before
+/// world time) the time `RunStart` was recorded; 0 without `RunStart`.
+pub fn world_epoch_ms(events: &[Event]) -> i64 {
+    let Some(start) = events.iter().find(|e| e.kind == EventKind::RunStart) else {
+        return 0;
+    };
+    let recorded = start
+        .decode::<RunStartPayload>()
+        .and_then(|p| p.world_epoch_ms);
+    recorded.unwrap_or_else(|| start.at.timestamp_millis())
+}
+
 /// The arena clock just before step `before_seq`: the `clock_ms` of the last event before it
 /// that has one (a tool call or world event), else 0.
 pub fn clock_at(events: &[Event], before_seq: i64) -> i64 {
@@ -116,13 +128,12 @@ pub fn saves_at_except(
         .iter()
         .map(|(p, s)| (p.clone(), Ok(s.clone())))
         .collect();
-    for e in events
-        .iter()
-        .filter(|e| e.seq <= seq && e.kind == EventKind::ToolCall)
-    {
+    let saving = |k| matches!(k, EventKind::ToolCall | EventKind::SavePoint);
+    for e in events.iter().filter(|e| e.seq <= seq && saving(e.kind)) {
         let saved = saves_of(&e.payload).unwrap_or_default();
         let part = e.payload["part"].as_str().unwrap_or(LEGACY_PART);
-        if wrote(&e.payload) && !saved.contains_key(part) {
+        let call = e.kind == EventKind::ToolCall;
+        if call && wrote(&e.payload) && !saved.contains_key(part) {
             at.insert(part.to_string(), Err(e.seq));
         }
         at.extend(saved.into_iter().map(|(p, s)| (p, Ok(s))));
@@ -159,15 +170,15 @@ pub struct NamedSave {
     pub save: String,
 }
 
-/// Every save `branch`'s events name: the run's start saves, each tool call's saves (or legacy
-/// snapshot) and the final saves.
+/// Every save `branch`'s events name: the run's start saves, each tool call's and save point's
+/// saves (or legacy snapshot) and the final saves.
 pub fn named_saves(branch: &str, events: &[Event]) -> BTreeSet<NamedSave> {
     let recorded = events.iter().filter_map(|e| match e.kind {
         EventKind::RunStart => e
             .decode::<RunStartPayload>()?
             .saves
             .filter(|s| !s.is_empty()),
-        EventKind::ToolCall => saves_of(&e.payload),
+        EventKind::ToolCall | EventKind::SavePoint => saves_of(&e.payload),
         _ => None,
     });
     recorded
@@ -272,6 +283,53 @@ mod tests {
             .into_iter()
             .map(|n| n.save)
             .collect()
+    }
+
+    fn save_point(seq: i64, saves: Value) -> Event {
+        let p = json!({"reason": "model_call", "saves": saves, "paused_ms": 1});
+        ev(seq, EventKind::SavePoint, p)
+    }
+
+    #[test]
+    fn saves_at_reads_save_points() {
+        let unsaved = |seq| {
+            let p = json!({"name": "w", "error": null, "writes": ["k/1"], "part": "box"});
+            ev(seq, EventKind::ToolCall, p)
+        };
+        let base = Saves::from([("box".to_string(), "b".to_string())]);
+        let evs = vec![unsaved(2), save_point(3, json!({"box": "s3"})), unsaved(4)];
+        assert_eq!(saves_at(&evs, 1, &base).unwrap()["box"], "b");
+        let no_save = NoSave {
+            part: "box".into(),
+            seq: 2,
+        };
+        assert_eq!(saves_at(&evs, 2, &base).unwrap_err(), no_save);
+        assert_eq!(saves_at(&evs, 3, &base).unwrap()["box"], "s3");
+        assert_eq!(saves_at(&evs, 4, &base).unwrap_err().seq, 4);
+    }
+
+    #[test]
+    fn a_run_recorded_before_world_time_takes_its_start_as_epoch() {
+        let mut old = ev(1, EventKind::RunStart, json!({"task_id": "t1"}));
+        old.at = chrono::DateTime::parse_from_rfc3339("2026-11-19T10:00:00.250Z")
+            .unwrap()
+            .into();
+        assert_eq!(
+            world_epoch_ms(std::slice::from_ref(&old)),
+            1_795_082_400_250
+        );
+        let mut new = old.clone();
+        new.payload["world_epoch_ms"] = json!(1_773_122_400_000i64);
+        assert_eq!(world_epoch_ms(&[new]), 1_773_122_400_000);
+    }
+
+    #[test]
+    fn named_saves_name_save_point_saves() {
+        let evs = vec![
+            ev(1, EventKind::RunStart, json!({"saves": {"box": "base_b"}})),
+            save_point(2, json!({"box": "s_b2"})),
+        ];
+        assert_eq!(names(&evs, "x"), ["base_b", "s_b2"]);
     }
 
     #[test]

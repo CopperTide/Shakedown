@@ -1,23 +1,30 @@
 //! Pausing, resuming and stopping a live branch (`POST /api/branches/{id}/pause`, `/resume`,
-//! `/stop`), whatever drives its agents.
+//! `/stop`), whatever drives its agents, and asking for a save point (`/save`).
 
 use std::sync::Arc;
 
 use axum::{
     extract::{Path, State},
-    routing::post,
+    routing::{get, post},
     Json, Router,
 };
 use serde_json::{json, Value};
 
 use super::{ApiError, ApiResult};
-use crate::{app::AppState, exec::BranchCtx, runner};
+use crate::{
+    app::AppState,
+    exec::{BranchCtx, ToolExec},
+    model::{SavePointPayload, SAVE_ASKED},
+    runner,
+};
 
 pub(super) fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/api/branches/{id}/pause", post(pause))
         .route("/api/branches/{id}/resume", post(resume))
         .route("/api/branches/{id}/stop", post(stop))
+        .route("/api/branches/{id}/save", post(save))
+        .route("/api/branches/{id}/clock", get(clock))
 }
 
 /// The live branch `id`: 409 when it has ended (or never ran here), 404 when there is none.
@@ -56,6 +63,35 @@ async fn stop(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> Api
     let ctx = live(&state, &id).await?;
     let stopped = super::detached(async move { Ok(runner::stop(&state, &ctx).await) }).await?;
     Ok(Json(json!({"stopping": stopped})))
+}
+
+/// `POST /api/branches/{id}/save`: saves the parts that save at points and changed, as a save
+/// point: `{"seq", "saves"}` (`seq` null and `saves` empty when nothing was unsaved).
+async fn save(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> ApiResult<Value> {
+    let ctx = live(&state, &id).await?;
+    if ctx.lifecycle.is_closed() {
+        return Err(ApiError::conflict("the run is not running"));
+    }
+    let exec = ToolExec::new(state.store.clone());
+    let made = exec.save_point(&ctx, SAVE_ASKED).await;
+    let made = made.map_err(|e| ApiError(axum::http::StatusCode::INTERNAL_SERVER_ERROR, e))?;
+    let Some(e) = made else {
+        return Ok(Json(json!({"seq": null, "saves": {}})));
+    };
+    let saves = e.decode::<SavePointPayload>().unwrap_or_default().saves;
+    Ok(Json(json!({"seq": e.seq, "saves": saves})))
+}
+
+/// `GET /api/branches/{id}/clock`: the branch clock, its speed, whether it stands still, and the
+/// world's time (`world_ms = world_epoch_ms + clock_ms`).
+async fn clock(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> ApiResult<Value> {
+    let ctx = live(&state, &id).await?;
+    let epoch = crate::recorded::world_epoch_ms(&state.store.events(&id).await?);
+    let clock_ms = ctx.clock.now_ms();
+    Ok(Json(json!({
+        "clock_ms": clock_ms, "speed": ctx.clock.speed(), "paused": ctx.clock.is_paused(),
+        "world_epoch_ms": epoch, "world_ms": epoch + clock_ms,
+    })))
 }
 
 /// True when the live branch `id` is paused (a branch that isn't live never is).

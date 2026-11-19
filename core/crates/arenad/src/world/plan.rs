@@ -5,7 +5,10 @@ use std::collections::BTreeSet;
 
 use anyhow::{bail, Context, Result};
 use parts::{
-    proto::{BenchDescribe, Describe, Gate, Link, SetupCall, ToolSchema, ViewInfo, WorldPart},
+    proto::{
+        BenchDescribe, Describe, Gate, Link, SetupCall, ToolSchema, ViewInfo, WorldPart,
+        WorldTimeParams,
+    },
     Hub,
 };
 
@@ -30,6 +33,8 @@ pub struct Plan {
     pub gates: Vec<Gate>,
     /// Present when the benchmark draws the world's view.
     pub view: Option<ViewInfo>,
+    /// The world's time its parts get at `start` (None for base and gold worlds).
+    pub world_time: Option<WorldTimeParams>,
 }
 
 /// The parts of `bench`'s world and its tool table: the benchmark's tools, then each part's.
@@ -58,6 +63,7 @@ pub async fn plan(hub: &Hub, bench: &BenchDescribe) -> Result<Plan> {
         links: bench.links.clone(),
         gates: bench.gates.clone(),
         view: bench.view.clone(),
+        world_time: None,
     })
 }
 

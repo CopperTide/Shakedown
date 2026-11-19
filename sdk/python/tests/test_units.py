@@ -199,6 +199,13 @@ def test_agent_endpoint_without_proxy():
     assert (a.proxy_url, a.env) == (None, {})
 
 
+def test_branch_clock_gets_the_route():
+    clock = {"clock_ms": 5, "speed": 1.0, "paused": False, "world_epoch_ms": 1_000, "world_ms": 1_005}
+    arena = _Answers(clock)
+    assert Branch(arena, "b1", "r1").clock() == clock
+    assert arena.paths == ["/api/branches/b1/clock"]
+
+
 # ---------------------------------------------------------------- drivers
 
 def _fake_arenad(monkeypatch, calls: list):

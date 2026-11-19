@@ -25,3 +25,28 @@ that a save holds (letters, digits, `_`, `-`).
   volume's files on disk (an archive made without stopping it).
 - `usage` is 0: saves are under `ARENA_SAVES`, and live volumes are not counted (`stop` removes them).
 - Live test: `cargo test -p arena-service -- --ignored live_` (needs Docker and `redis:6.2-alpine`).
+
+## Save strategies, save points and hosts (designed; fake-Docker tested only)
+
+A volume may be given as `{name, save?, services?, service?, database?, user?}` instead of a plain name (a plain name
+is `{name, save: "tar"}` and saves exactly as above). `save` is one of:
+
+- `tar` (default): the archive above. With `services`, only those compose services stop while it is copied (when
+  every copied volume names some; otherwise the whole project stops, as before).
+- `postgres`: `docker compose exec -T <service> pg_dump -U <user> --no-owner <database>` into `<volume>.sql` while
+  the database runs (nothing stops). `service` is required; `database` and `user` default to `postgres`. A start from
+  the save brings up the database services, waits for `pg_isready` (60 s), loads the dump with `psql`, then brings up
+  the rest. Its digest is the SHA-256 of the dump's lines that are no `--` comment.
+- `hardlink`: `rsync -a --delete --numeric-ids` of the volume into the tree `<save>/<volume>/`, with `--link-dest` to
+  the instance's previous save (or the save it started from), so unchanged files are hard links and cost nothing.
+  It needs `rsync_image`: an image with `rsync`, `tar`, `cp` and `rm`, **pinned by digest** (`name:tag@sha256:…`) in
+  the config (never named in code), pulled the first time a save needs it. The trees belong to the container's
+  users, so they are restored (`cp -a`), digested (`tar -c`) and removed (`rm -rf`) through that image too.
+- `skip`: not saved; a start from a save creates it empty (a cache).
+
+Each save has `save.json` (`{volumes: [{name, save}], rsync_image?, compose_file?, env?}`). The last save of each
+instance is kept in `.last/<instance>.json`. `describe.save_at` is `points`: arenad saves the part at save points
+(before a model call, on request, at run end), not after every request. `http: [{host, service, port, env?,
+reads?}]` makes `http_routes` answer each host with the port Docker published for `service` (`docker compose port`),
+so agents reach it through arenad's proxy. The live test `live_service_strategies` (Postgres, a hard-linked volume
+and a cache; `ARENA_TEST_RSYNC_IMAGE` names the rsync image) is written but has not been run.

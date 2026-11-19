@@ -99,6 +99,11 @@ impl BranchClock {
         s.running_since = None;
     }
 
+    /// True while the clock stands still (paused, or frozen).
+    pub fn is_paused(&self) -> bool {
+        self.state.lock().unwrap().running_since.is_none()
+    }
+
     /// Pauses the clock until the returned guard drops; the guard tells how long it was held.
     pub fn paused(&self) -> Paused<'_> {
         self.pause();

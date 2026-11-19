@@ -24,7 +24,7 @@ use parts::{
     proto::{
         BenchCallTool, BenchDescribe, BenchToolOutput, CallToolParams, Describe, Effect, ExactKind,
         FromSave, Gate, HttpRoute, HttpRoutes, Link, Mode, StartParams, Target, ToolOutput,
-        ToolSchema, ViewInfo, WorldPart,
+        ToolSchema, ViewInfo, WorldPart, WorldTimeParams,
     },
     request::{Connect, GetHttpRoutes, Stop},
     CallError, Client, Hub, Request,
@@ -232,8 +232,9 @@ async fn start_part(
     branch_id: &str,
     seed: u64,
     from: Option<&StartSaves>,
+    world_time: Option<WorldTimeParams>,
 ) -> StartedPart {
-    let (part, save) = match begin_part(hub, p, branch_id, seed, from).await {
+    let (part, save) = match begin_part(hub, p, branch_id, seed, from, world_time).await {
         Ok(begun) => begun,
         Err(e) => return StartedPart::failed(None, None, e),
     };
@@ -260,9 +261,11 @@ async fn begin_part(
     branch_id: &str,
     seed: u64,
     from: Option<&StartSaves>,
+    world_time: Option<WorldTimeParams>,
 ) -> Result<(Part, Option<String>)> {
     let instance = instance_id(branch_id, &p.part.part);
-    let (params, save) = start_params(&p, &instance, seed, from)?;
+    let (mut params, save) = start_params(&p, &instance, seed, from)?;
+    params.world_time = world_time;
     let part = Part {
         client: hub.client(&p.part.integration).await?,
         name: p.part.part,
@@ -380,7 +383,8 @@ impl World {
         let mut planned = planned;
         let parts = std::mem::take(&mut planned.parts);
         let bench_client = hub.client(&bench.name).await?;
-        let starts = (parts.into_iter()).map(|p| start_part(&hub, p, branch_id, seed, from));
+        let wt = planned.world_time;
+        let starts = (parts.into_iter()).map(|p| start_part(&hub, p, branch_id, seed, from, wt));
         let started = futures_util::future::join_all(starts).await;
         let mut world = World::new(hub, &bench.name, Some(bench_client), planned);
         if let Some(e) = world.take_all_started(started) {

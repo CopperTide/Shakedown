@@ -192,7 +192,7 @@ fn a_scenario_is_expanded_into_the_setup_and_recorded() {
 
 /// The keys every new run's `RunStart` records, besides `scenario`, `max_cost_usd` and
 /// `connection` (each only when the run has one).
-const RUN_START_KEYS: [&str; 12] = [
+const RUN_START_KEYS: [&str; 13] = [
     "base_seed",
     "benchmark",
     "fingerprints",
@@ -205,6 +205,7 @@ const RUN_START_KEYS: [&str; 12] = [
     "team",
     "tools",
     "world",
+    "world_epoch_ms",
 ];
 
 /// An external run of `t1` with no agents and `seed`, not finished: its `RunStart` payload.

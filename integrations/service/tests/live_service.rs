@@ -179,3 +179,114 @@ async fn live_service_roundtrip() {
     p.drop_save(SaveId { save: "s1".into() }).await.unwrap();
     assert!(!dir.exists());
 }
+
+/// A project with a Postgres database (`postgres` volume `pg`), a file holder (`hardlink`
+/// volume `files`) and a cache (`skip`): images from `ARENA_TEST_POSTGRES_IMAGE` (default
+/// `postgres:17-alpine`) and `ARENA_TEST_RSYNC_IMAGE` (an image with rsync, pinned by digest).
+fn strategies_compose(pg_image: &str) -> String {
+    format!(
+        "services:\n  db:\n    image: {pg_image}\n    environment: {{POSTGRES_PASSWORD: pw}}\n    volumes: [pg:/var/lib/postgresql/data]\n  \
+         files:\n    image: redis:6.2-alpine\n    entrypoint: [sleep, infinity]\n    volumes: [files:/files, cache:/cache]\n\
+         volumes:\n  pg: {{}}\n  files: {{}}\n  cache: {{}}\n"
+    )
+}
+
+fn sql(w: &World, instance: &str, query: &str) -> String {
+    let out = Command::new("docker")
+        .args([
+            "exec",
+            &format!("arena_{instance}-db-1"),
+            "psql",
+            "-U",
+            "postgres",
+            "-Atc",
+            query,
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let _ = w;
+    String::from_utf8_lossy(&out.stdout).trim().to_string()
+}
+
+fn files(instance: &str, script: &str) -> String {
+    let out = Command::new("docker")
+        .args([
+            "exec",
+            &format!("arena_{instance}-files-1"),
+            "sh",
+            "-c",
+            script,
+        ])
+        .output()
+        .unwrap();
+    String::from_utf8_lossy(&out.stdout).trim().to_string()
+}
+
+/// The strategies' world and config, or None without `ARENA_TEST_RSYNC_IMAGE`.
+fn strategies_world() -> Option<(World, Value)> {
+    let Ok(rsync) = std::env::var("ARENA_TEST_RSYNC_IMAGE") else {
+        eprintln!("live_service_strategies needs ARENA_TEST_RSYNC_IMAGE");
+        return None;
+    };
+    let pg = std::env::var("ARENA_TEST_POSTGRES_IMAGE").unwrap_or("postgres:17-alpine".into());
+    let w = World::new();
+    fs::write(w.dir.join("compose.yml"), strategies_compose(&pg)).unwrap();
+    let volumes = json!([{"name": "pg", "save": "postgres", "service": "db"},
+        {"name": "files", "save": "hardlink", "services": ["files"]},
+        {"name": "cache", "save": "skip"}]);
+    let file = w.dir.join("compose.yml");
+    Some((
+        w,
+        json!({"compose_file": file, "rsync_image": rsync, "volumes": volumes}),
+    ))
+}
+
+/// Saves `a` twice (a row and a file changed between): the two saves' paths.
+async fn two_saves(w: &World, p: &Service, a: &str) -> (PathBuf, PathBuf) {
+    sql(w, a, "create table t (n int); insert into t values (1)");
+    files(
+        a,
+        "echo one > /files/f; echo same > /files/keep; echo c > /cache/c",
+    );
+    let s1 = save_to(w, p, a, "s1").await;
+    sql(w, a, "update t set n = 2");
+    files(a, "echo two > /files/f");
+    (s1, save_to(w, p, a, "s2").await)
+}
+
+#[tokio::test]
+#[ignore]
+async fn live_service_strategies() {
+    let Some((mut w, config)) = strategies_world() else {
+        return;
+    };
+    let id = std::process::id();
+    let (a, b) = (format!("t11_{id}_a"), format!("t11_{id}_b"));
+    let p = w.part();
+    w.projects
+        .extend([format!("arena_{a}"), format!("arena_{b}")]);
+    p.start(start(&a, config.clone(), None)).await.unwrap();
+    let (s1, s2) = two_saves(&w, &p, &a).await;
+    let inode = |d: &PathBuf| {
+        std::os::unix::fs::MetadataExt::ino(&fs::metadata(d.join("files/keep")).unwrap())
+    };
+    assert_eq!(inode(&s1), inode(&s2), "an unchanged file is one inode");
+    p.start(start(&b, config, Some("s1"))).await.unwrap();
+    assert_eq!(sql(&w, &b, "select n from t"), "1");
+    assert_eq!(files(&b, "cat /files/f; ls /cache | wc -l"), "one\n0");
+    for i in [&a, &b] {
+        p.stop(IdParams {
+            instance: i.clone(),
+        })
+        .await
+        .unwrap();
+    }
+    for s in ["s1", "s2"] {
+        p.drop_save(SaveId { save: s.into() }).await.unwrap();
+    }
+}

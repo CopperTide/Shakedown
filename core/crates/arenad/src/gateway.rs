@@ -206,6 +206,15 @@ fn live_agent(
     Ok((ctx, provider))
 }
 
+/// A save point before a model call, when a part that saves at points changed: the world is then
+/// restorable where a fork at this call starts. A failure is logged; the call goes on.
+async fn save_before_model_call(state: &AppState, ctx: &BranchCtx) {
+    let exec = crate::exec::ToolExec::new(state.store.clone());
+    if let Err(e) = exec.save_point(ctx, SAVE_BEFORE_MODEL_CALL).await {
+        eprintln!("gateway: save point on {}: {e}", ctx.branch_id);
+    }
+}
+
 /// The provider's answer to `body`, and how long it took (ms).
 async fn timed_upstream(
     state: &AppState,
@@ -231,6 +240,7 @@ async fn handle(
     if ctx.flow.go().await.is_err() {
         return error_response(StatusCode::CONFLICT, crate::flow::STOPPED);
     }
+    save_before_model_call(&state, &ctx).await;
     let since = Instant::now();
     if !body.is_object() {
         return error_response(

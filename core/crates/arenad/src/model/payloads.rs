@@ -89,6 +89,14 @@ pub struct RunStartPayload {
         skip_serializing_if = "Option::is_none"
     )]
     pub connection: Option<String>,
+    /// The unix ms of the world's clock 0 (`world_time.epoch_ms` its parts get); runs recorded
+    /// before world time have none (their epoch is `RunStart.at`).
+    #[serde(
+        default,
+        deserialize_with = "lenient",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub world_epoch_ms: Option<i64>,
 }
 
 impl EventPayload for RunStartPayload {
@@ -192,6 +200,27 @@ pub struct PausePayload {}
 
 impl EventPayload for PausePayload {
     const KIND: EventKind = EventKind::Pause;
+}
+
+/// Why a save point was made: before a model call through the gateway.
+pub const SAVE_BEFORE_MODEL_CALL: &str = "model_call";
+/// Why a save point was made: a driver asked (`POST /api/branches/{id}/save`).
+pub const SAVE_ASKED: &str = "asked";
+
+/// The payload of `EventKind::SavePoint`: why the parts that save at points were saved, their new
+/// saves, the first save that failed, and how long the world clock stood still for it.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SavePointPayload {
+    pub reason: String,
+    pub saves: Saves,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    pub paused_ms: i64,
+}
+
+impl EventPayload for SavePointPayload {
+    const KIND: EventKind = EventKind::SavePoint;
 }
 
 /// The payload of `EventKind::Resume`: how long the pause lasted.

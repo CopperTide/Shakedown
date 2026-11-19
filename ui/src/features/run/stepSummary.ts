@@ -30,7 +30,23 @@ function outcomeLine(a: Action): string {
   return a.durationMs == null ? 'It worked.' : `It worked, in ${formatDuration(a.durationMs)}.`;
 }
 
+/** arenad's own refusals of a request through its proxy (its other errors are failures). */
+const HTTP_REFUSAL = /is not part of this world|takes HTTPS on port 443 only|not available to this agent|is over 256 MiB/;
+
+/** A request an agent's client sent through the proxy: method, URL, the part serving it, and its status. */
+function httpStep(p: Payload, who: string): StepSummary {
+  const args = asRecord(p.args);
+  const method = String(args.method ?? 'GET');
+  const to = typeof p.part === 'string' ? ` to ${p.part}` : '';
+  const sent = `${who} sent ${method} ${String(args.url ?? '')}${to}`;
+  const title = `${who} · HTTP ${method}`;
+  if (p.error == null) return { title, text: `${sent}: ${String(asRecord(p.result).status ?? '')}.`, abnormal: false };
+  const how = HTTP_REFUSAL.test(String(p.error)) ? 'It was refused' : 'It failed';
+  return { title, text: `${sent}. ${how}: ${clip(String(p.error))}`, abnormal: true };
+}
+
 function toolStep(e: Event, events: Event[], who: string): StepSummary {
+  if (asRecord(e.payload).name === 'http') return httpStep(asRecord(e.payload), who);
   const a = classify(e, worldInfo(events))!;
   if (a.system?.kind === 'messages') return { title: `${who} · Messages`, text: `${who} read its messages.`, abnormal: false };
   const system = a.system ? `the ${kindWord(a.system)}` : 'a tool';
@@ -104,6 +120,7 @@ const WORDS: Partial<Record<Event['kind'], Words>> = {
   pause: () => ({ title: 'Paused', text: 'The run was paused: no agent could act until it resumed.', abnormal: false }),
   resume: (p) => ({ title: 'Resumed', text: `The run went on after ${clockText(Number(p.paused_ms ?? 0) / 1000)} paused.`, abnormal: false }),
   reasoning: reasoningStep,
+  save_point: (p) => ({ title: 'Saved', text: `The world was saved (${p.reason === 'asked' ? 'asked by the driver' : 'before a model call'}).`, abnormal: p.error != null }),
   run_start: () => ({ title: 'Start', text: 'The run started and the task was set up in the world.', abnormal: false }),
 };
 

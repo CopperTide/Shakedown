@@ -91,7 +91,12 @@ fn next_header<R: Read>(r: &mut R) -> io::Result<Option<Header>> {
 /// Count and bytes of the regular files in the archive, and one hash over every entry (name, owner,
 /// mode, mtime of files, data), whatever order they were written in.
 pub fn digest(path: &Path) -> io::Result<Digest> {
-    let mut r = BufReader::new(File::open(path)?);
+    digest_reader(File::open(path)?)
+}
+
+/// [`digest`] of an archive read from `r` (a helper container's `tar -c` output).
+pub fn digest_reader<R: Read>(r: R) -> io::Result<Digest> {
+    let mut r = BufReader::new(r);
     let (mut files, mut bytes) = (0, 0);
     let mut entries = vec![];
     while let Some(header) = next_header(&mut r)? {

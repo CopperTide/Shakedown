@@ -371,6 +371,15 @@ part whose save is costly (a whole stack) and whose writes come in bursts betwee
 in ms of clock 0 (the task's `clock_start` read as UTC, else the run's start; a fork keeps its run's), and `speed`
 how many world ms pass per wall ms. A part stamps what it emits (metrics, logs, traces) with
 `epoch_ms + clock_ms`, so its telemetry follows the world clock and stands still while the branch is paused.
+The epoch is recorded in `RunStart.world_epoch_ms` (a run recorded before world time takes its `RunStart`'s time).
+Base and gold worlds get no `world_time`.
+
+The kits turn this into stamps: Rust `arena_part::helpers::world_time::WorldTime` and Python
+`arena_part.world_time.WorldTime` (`at(clock_ms)`, `observe(clock_ms, now)`, `now_ms(now)`), with the formats
+`unix_nanos(ms)` (Loki push, OTLP `timeUnixNano`) and `rfc3339(ms)` (`2026-03-10T06:02:30.000Z`); Prometheus samples
+take the unix ms as it is. Between clocks, `now_ms` runs on at `speed` but at most 1 s of world time past the last
+clock seen (a paused branch sends none), and never goes back. The Python kit keeps each instance's `WorldTime` from
+`start` (`Part.world_time(instance)`, None without one) and shows it every `call_tool` and `advance` clock.
 
 ## Errors
 
