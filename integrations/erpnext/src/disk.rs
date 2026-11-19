@@ -69,7 +69,7 @@ impl Erpnext {
         let saves = self.manifests()?;
         let here = server.reference().await?;
         let live = {
-            let live = self.live.lock().expect("instances lock");
+            let live = self.live.lock();
             needed_positions(&here, &[], live.values().map(|i| &i.tracked))
         };
         let standing = Standing {
@@ -109,7 +109,7 @@ impl Erpnext {
     async fn needed(&self, server: &Server) -> Result<Vec<Position>, PartError> {
         let here = server.reference().await?;
         let saves = self.manifests()?;
-        let live = self.live.lock().expect("instances lock");
+        let live = self.live.lock();
         Ok(needed_positions(
             &here,
             &saves,
@@ -120,7 +120,7 @@ impl Erpnext {
     /// The databases in use: live instances', starting ones' and scratch sites being read.
     fn busy_dbs(&self) -> HashSet<String> {
         let mut dbs = self.busy.snapshot();
-        let live = self.live.lock().expect("instances lock");
+        let live = self.live.lock();
         dbs.extend(live.values().map(|i| i.site.db.clone()));
         dbs
     }

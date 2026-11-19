@@ -82,9 +82,7 @@ impl Erpnext {
 
     /// Applies `f` to the live instance (nothing when it has stopped since).
     fn update(&self, id: &str, f: impl FnOnce(&mut Instance)) {
-        if let Some(live) = self.live.lock().expect("instances lock").get_mut(id) {
-            f(live);
-        }
+        self.live.update(id, f);
     }
 
     /// Removes dumps that no save, no live instance and not the base needs; the bytes freed.
@@ -93,7 +91,7 @@ impl Erpnext {
             .remove_unused(|| {
                 let saves = self.manifests()?;
                 let base = self.base_manifest();
-                let live = self.live.lock().expect("instances lock");
+                let live = self.live.lock();
                 let bases = live.values().map(|i| &i.tracked.base);
                 Ok(used_roots(&saves, bases.chain(base.as_ref())))
             })

@@ -21,11 +21,11 @@ mod tool_schemas;
 mod tools;
 mod views;
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::path::PathBuf;
-use std::sync::Mutex;
 
 use arena_part::helpers::busy::BusySet;
+use arena_part::helpers::instances::Registry;
 use arena_part::helpers::mariadb::{Dumps, Server, DEFAULT_REROOT_AFTER};
 use arena_part::helpers::save_dirs::SaveDirs;
 use arena_part::proto::*;
@@ -46,7 +46,7 @@ pub struct Erpnext {
     dirs: SaveDirs,
     /// The stack up and the base loaded (or made), on first need.
     ready: OnceCell<Ready>,
-    live: Mutex<HashMap<String, Instance>>,
+    live: Registry<Instance>,
     /// Scratch sites being read for `inspect` and `diff`, by database name.
     busy: BusySet,
     /// Documents read from saves by `diff`, for the `inspect` that follows it.
@@ -90,7 +90,7 @@ impl Erpnext {
             dirs,
             cfg,
             ready: OnceCell::new(),
-            live: Mutex::new(HashMap::new()),
+            live: Registry::default(),
             busy: BusySet::default(),
             docs: doc_cache::DocCache::default(),
             starts: RwLock::new(()),
