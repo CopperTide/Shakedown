@@ -303,7 +303,8 @@ async fn a_postgres_save_is_restored_with_psql_before_the_rest_starts() {
             .position(|l| l.contains(needle))
             .unwrap_or_else(|| panic!("{needle}: {lines:?}"))
     };
-    assert!(at(" up -d db") < at("exec -T db psql -U u -d app"));
+    assert!(at(" up -d db") < at("exec -T db pg_isready -h 127.0.0.1 -U u"));
+    assert!(at("pg_isready") < at("exec -T db psql -h 127.0.0.1 -U u -d app"));
     assert!(at("exec -T db psql") < lines.iter().rposition(|l| l.ends_with(" up -d")).unwrap());
 }
 

@@ -42,11 +42,16 @@ pub fn save(project: &Project, v: &VolumeSpec, dir: &Path) -> Result<u64> {
     Ok(dump.len() as u64)
 }
 
+/// Where the database is reached in its container: over TCP, which the image's temporary
+/// server (the one its entrypoint runs while it initialises, on the socket only) never answers.
+const HOST: [&str; 2] = ["-h", "127.0.0.1"];
+
 /// Waits until `v`'s database accepts connections, then loads `save/<volume>.sql` into it.
 pub fn restore(project: &Project, v: &VolumeSpec, save: &Path) -> Result<()> {
     let svc = service(v)?;
     let since = Instant::now();
-    while let Err(e) = project.exec(svc, &["pg_isready", "-U", v.user()]) {
+    let ready = [&["pg_isready"], &HOST[..], &["-U", v.user()]].concat();
+    while let Err(e) = project.exec(svc, &ready) {
         if since.elapsed() > READY_WITHIN {
             bail!(
                 "the database of {} was not ready within 60 s: {e:#}",
@@ -55,8 +60,7 @@ pub fn restore(project: &Project, v: &VolumeSpec, save: &Path) -> Result<()> {
         }
         std::thread::sleep(Duration::from_millis(500));
     }
-    let args = [
-        "psql",
+    let load = [
         "-U",
         v.user(),
         "-d",
@@ -65,6 +69,7 @@ pub fn restore(project: &Project, v: &VolumeSpec, save: &Path) -> Result<()> {
         "-v",
         "ON_ERROR_STOP=1",
     ];
+    let args = [&["psql"], &HOST[..], &load[..]].concat();
     project.exec_in(svc, &args, &sql_path(save, &v.name))
 }
 
