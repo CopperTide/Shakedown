@@ -1,19 +1,19 @@
 import { ChevronDown, FileUp, Pencil, PlugZap, Users } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import ImportDialog from '@/features/team/ImportDialog';
-import { type ConnectFrom, connectedTeams } from '@/features/connect/connect';
-import { useCodeTeams } from '@/features/connect/connections';
-import { agentModelLine } from '@/model/providers';
-import TeamBoard from '@/features/team/TeamBoard';
 import { Button } from '@/components/ui/button';
-import { SidePanel } from '@/components/ui/side-panel';
-import { LoadingState } from '@/components/ui/state';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { RUNNER_WORDS } from './runners';
+import { SidePanel } from '@/components/ui/side-panel';
+import { LoadingState } from '@/components/ui/state';
+import { type ConnectFrom, connectedTeams } from '@/features/connect/connect';
+import { useCodeTeams } from '@/features/connect/connections';
+import ImportDialog from '@/features/team/ImportDialog';
+import TeamBoard from '@/features/team/TeamBoard';
 import { cn } from '@/lib/cn';
+import { agentModelLine } from '@/model/providers';
 import type { Runner, Team } from '@/model/types';
+import { RUNNER_WORDS } from './runners';
 
 /** The board with the picked card's prompt over its right side. */
 function BoardView({ team, runner, onExpand, className }: { team: Team; runner: Runner; onExpand?: () => void; className?: string }) {

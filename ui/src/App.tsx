@@ -1,14 +1,14 @@
 import { Suspense, lazy, useCallback, useEffect, useState } from 'react';
 import { Navigate, Route, Routes, useParams } from 'react-router-dom';
+import ExperimentsPage from '@/features/experiments/ExperimentsPage';
 import CommandPalette, { usePaletteShortcut } from './app/CommandPalette';
 import { type Mode, PALETTE_EVENT } from './app/palette';
 import StatusBar from './app/StatusBar';
 import TopBar from './app/TopBar';
+import { PageBody, PageHeader } from './components/ui/page';
 import { EmptyState } from './components/ui/state';
 import { Toaster } from './components/ui/toaster';
 import { TooltipProvider } from './components/ui/tooltip';
-import { PageBody, PageHeader } from './components/ui/page';
-import ExperimentsPage from '@/features/experiments/ExperimentsPage';
 
 // Pages other than Experiments load on first visit (React Flow and uPlot stay out of the first load).
 const ExperimentPage = lazy(() => import('@/features/experiments/ExperimentPage'));

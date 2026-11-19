@@ -1,9 +1,9 @@
 // The digital twin's model: the branch's views in step order, the view at a step, what changed
 // since the view before, and each item's status as a glyph and a word.
 import type { Mark } from '@/lib/mark';
-import type { Event } from '@/model/types';
-import type { BranchView, TwinFlow, TwinItem, TwinView, WorldViewPayload } from '@/model/twin';
 import { asRecord } from '@/lib/record';
+import type { BranchView, TwinFlow, TwinItem, TwinView, WorldViewPayload } from '@/model/twin';
+import type { Event } from '@/model/types';
 
 
 const isView = (v: unknown): v is TwinView => Array.isArray(asRecord(v).areas);

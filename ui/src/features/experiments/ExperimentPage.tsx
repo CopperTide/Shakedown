@@ -7,16 +7,16 @@ import { PageBody, PageHeader, type Width } from '@/components/ui/page';
 import { Panel } from '@/components/ui/panel';
 import { ErrorState, LoadingState } from '@/components/ui/state';
 import { StatusMark } from '@/components/ui/status';
-import { experimentMark } from '@/lib/mark';
-import { useTaskNames } from '@/hooks/useTasks';
-import { usePolled } from '@/lib/usePolled';
-import { experiment as fetchExperiment, stopExperiment } from './api';
-import { columnOf } from './model';
-import { measureRows } from './measures';
-import { Checks, Setups } from './Results';
 import { SuiteWhatMatters } from '@/features/review/WhatMatters';
-import type { Experiment } from '@/model/experiment';
+import { useTaskNames } from '@/hooks/useTasks';
 import { errorMessage } from '@/lib/errors';
+import { experimentMark } from '@/lib/mark';
+import { usePolled } from '@/lib/usePolled';
+import type { Experiment } from '@/model/experiment';
+import { experiment as fetchExperiment, stopExperiment } from './api';
+import { measureRows } from './measures';
+import { columnOf } from './model';
+import { Checks, Setups } from './Results';
 
 /** While an experiment runs, it is read again this often. */
 const POLL_MS = 2000;

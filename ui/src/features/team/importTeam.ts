@@ -2,8 +2,8 @@
 // place on the board, "hands work to" connections), or an Arena team. Every agent stays a real
 // model: Claude agents become Claude Code, Codex agents Codex; a kind Arena can't run is refused
 // by name, never swapped for something else.
-import type { AgentKind, AgentSpec, Team } from '@/model/types';
 import { type JsonObject, asRecord } from '@/lib/record';
+import type { AgentKind, AgentSpec, Team } from '@/model/types';
 import type { Board, BoardLink } from './board';
 
 export type Imported = { team: Team; from: 'Sculptured' | 'Arena' } | { error: string };

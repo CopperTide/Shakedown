@@ -1,5 +1,4 @@
-import { DEFAULT_OPENROUTER_MODEL, DEFAULT_PROVIDER } from './types';
-import type { AgentKind, AgentSpec, ProviderKind, ProviderStatus, Team } from './types';
+import { type AgentKind, type AgentSpec, DEFAULT_OPENROUTER_MODEL, DEFAULT_PROVIDER, type ProviderKind, type ProviderStatus, type Team } from './types';
 
 /** The cost source of a local server's calls (`providers/mod.rs` `LOCAL_COST_SOURCE`). */
 export const LOCAL_COST_SOURCE = 'local (no API charge)';

@@ -5,8 +5,8 @@ import { StatusChip } from '@/components/marks';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { branchTree } from '@/features/runs/tree';
-import type { Branch, BranchDetail } from '@/model/types';
 import { rewindSeq } from '@/features/world/scrub';
+import type { Branch, BranchDetail } from '@/model/types';
 import { withStep } from './useStepParam';
 
 export type RunPage = 'details' | 'world' | 'process' | 'live';

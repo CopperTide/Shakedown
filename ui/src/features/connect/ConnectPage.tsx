@@ -8,12 +8,12 @@ import { Field, Input, Textarea } from '@/components/ui/input';
 import { PageBody } from '@/components/ui/page';
 import { Segmented } from '@/components/ui/segmented';
 import { cn } from '@/lib/cn';
+import { errorMessage } from '@/lib/errors';
 import type { AgentSpec } from '@/model/types';
 import {
   type ConnectForm, type ConnectFrom, type ConnectKind, type ConnectReturn, checkBody, connectedAgent, connectedTeam, emptyForm, formProblem, saveConnected,
 } from './connect';
 import { type Connection, type ConnectionTest, codeBody, codeTeam, createConnection, deleteConnection, testConnection, testLine } from './connections';
-import { errorMessage } from '@/lib/errors';
 
 /** Where the test stands: not run (or the form changed since), running, connected, or why not. */
 export type TestState =

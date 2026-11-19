@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { suggestedTeams } from '@/api';
 import { errorMessage } from '@/lib/errors';
-import { loadTeam, saveTeam } from './storedTeam';
 import type { Team } from '@/model/types';
+import { loadTeam, saveTeam } from './storedTeam';
 
 /** The team new runs use (kept in this browser), and a way to replace it (an import). */
 export function useTeam() {

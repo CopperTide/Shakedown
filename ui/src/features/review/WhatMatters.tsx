@@ -2,11 +2,11 @@ import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { Tag } from '@/components/ui/status';
 import type { SuiteReport } from '@/model/report';
-import type { Target } from './api';
-import { ReviewFrame } from './ReviewFrame';
-import { smallPrint } from './present';
-import { useReviewEnabled } from './setting';
 import type { CompareReview, Difference } from '@/model/review';
+import type { Target } from './api';
+import { smallPrint } from './present';
+import { ReviewFrame } from './ReviewFrame';
+import { useReviewEnabled } from './setting';
 import { useReview } from './useReview';
 
 type Side = 'a' | 'b';

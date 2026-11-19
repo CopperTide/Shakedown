@@ -1,15 +1,15 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ReactElement, ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { modesLine } from '@/app/status';
 import { ProviderSelect, ProviderStatusLine } from '@/components/ProviderFields';
-import { agentModelLine, modelProblem, providerOptions, providerSummary } from '@/model/providers';
-import { bestProviders, checkProviders, resetProviders } from '@/hooks/useProviders';
-import { AgentFields } from './TeamPage';
 import { AgentEdit, applied, forkProblem } from '@/features/run/ForkPanel';
 import { changedFields, formatCost } from '@/features/run/timeline';
+import { bestProviders, checkProviders, resetProviders } from '@/hooks/useProviders';
+import { agentModelLine, modelProblem, providerOptions, providerSummary } from '@/model/providers';
 import { teamForRun } from '@/model/team';
 import type { AgentSpec, ProviderStatus } from '@/model/types';
+import { AgentFields } from './TeamPage';
 
 /** `/api/health`'s summary with only OpenRouter keyed and one local server (not asked). */
 const HEALTH: ProviderStatus[] = [

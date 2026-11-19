@@ -3,9 +3,9 @@ import { scenarioOptions as fetchOptions } from '@/api';
 import { Checkbox, Field, Input, NativeSelect } from '@/components/ui/input';
 import { Tag } from '@/components/ui/status';
 import { cn } from '@/lib/cn';
-import { type Selection, chosen, initialSelection, optionWords, paramProblem, previewText, scenarioOf, scenarioProblem, toggled, withParam } from './scenario';
-import type { DisruptionOption, ParamSpec, ParamValue, ScenarioOptions } from '@/model/scenario';
 import { errorMessage } from '@/lib/errors';
+import type { DisruptionOption, ParamSpec, ParamValue, ScenarioOptions } from '@/model/scenario';
+import { type Selection, chosen, initialSelection, optionWords, paramProblem, previewText, scenarioOf, scenarioProblem, toggled, withParam } from './scenario';
 
 /** The benchmark's `scenario_options`, loaded when a dialog opens; the selection starts at their defaults. */
 export function useScenario(open: boolean, tasks: string[]) {

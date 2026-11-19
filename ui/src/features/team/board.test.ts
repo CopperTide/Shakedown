@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { AgentSpec, Team } from '@/model/types';
 import { agentModelLine } from '@/model/providers';
+import type { AgentSpec, Team } from '@/model/types';
 import { CARD_H, CARD_W, READABLE_ZOOM, boardSize, jobLine, layoutBoard, openingView } from './board';
 import { importTeam, workOrder } from './importTeam';
 

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { branch as fetchBranch, runs as fetchRuns, stream } from '@/api';
-import type { Branch, BranchDetail, Event } from '@/model/types';
 import { errorMessage } from '@/lib/errors';
+import type { Branch, BranchDetail, Event } from '@/model/types';
 
 /** Adds a streamed event to the branch on screen, once. */
 export function withEvent(d: BranchDetail | null, id: string, e: Event): BranchDetail | null {

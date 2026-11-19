@@ -1,10 +1,10 @@
 // A step in one or two plain sentences, for the step drawer: who did what, on which system, and
 // how it went (refused or failed, and why). The raw record stays behind "Details".
+import { asRecord } from '@/lib/record';
 import { type Action, actionWord, classify, kindWord, worldInfo } from '@/model/actions';
 import { formatDuration, isWorldActor, reasoningWord } from '@/model/lanes';
 import type { Event, Team } from '@/model/types';
 import { clockText } from './flow';
-import { asRecord } from '@/lib/record';
 
 export interface StepSummary {
   title: string;

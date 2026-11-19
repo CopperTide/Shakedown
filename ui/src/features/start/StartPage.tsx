@@ -2,25 +2,25 @@ import { Play } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { startRun } from '@/api';
-import { useHealth } from '@/hooks/useHealth';
 import { Button } from '@/components/ui/button';
 import { Field, NativeSelect } from '@/components/ui/input';
 import { PageBody } from '@/components/ui/page';
 import { ErrorState } from '@/components/ui/state';
-import { LiveRun, StartingRun } from './LiveView';
 import type { ConnectReturn } from '@/features/connect/connect';
-import { missingFor, restoringLine, runLine, runnerProblem, taskName } from '@/model/summary';
-import TeamCard, { TeamActions } from './TeamCard';
-import DisruptionPicker from './DisruptionPicker';
-import { RUNNER_WORDS, RUNNERS } from './runners';
-import { useSuggestedTeams, useTeam } from '@/hooks/useTeam';
-import { useTaskNames, useTasks } from '@/hooks/useTasks';
-import { useWorldPreview } from './useWorldPreview';
-import WorldCard from './WorldCard';
 import { useScenario } from '@/features/scenario/ScenarioBuilder';
+import { useHealth } from '@/hooks/useHealth';
+import { useTaskNames, useTasks } from '@/hooks/useTasks';
+import { useSuggestedTeams, useTeam } from '@/hooks/useTeam';
+import { errorMessage } from '@/lib/errors';
+import { missingFor, restoringLine, runLine, runnerProblem, taskName } from '@/model/summary';
 import { teamForRun } from '@/model/team';
 import type { Health, Runner, Team } from '@/model/types';
-import { errorMessage } from '@/lib/errors';
+import DisruptionPicker from './DisruptionPicker';
+import { LiveRun, StartingRun } from './LiveView';
+import { RUNNER_WORDS, RUNNERS } from './runners';
+import TeamCard, { TeamActions } from './TeamCard';
+import { useWorldPreview } from './useWorldPreview';
+import WorldCard from './WorldCard';
 
 /** The runner and the disruptions, behind Options. */
 function Options({ s, busy }: { s: Setup; busy: boolean }) {

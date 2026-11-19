@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import uPlot from 'uplot';
-import { lineOptions, sparkOptions, themeColors } from '@/lib/chart';
 import { useTheme } from '@/app/theme';
+import { lineOptions, sparkOptions, themeColors } from '@/lib/chart';
 
 type Make = (width: number, colors: ReturnType<typeof themeColors>) => uPlot.Options;
 

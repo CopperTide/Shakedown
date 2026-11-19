@@ -1,28 +1,28 @@
 import { Play, Plus } from 'lucide-react';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import ImportDialog from '@/features/team/ImportDialog';
-import { type ConnectFrom, type ConnectReturn, connectedLabel, connectedTeams } from '@/features/connect/connect';
-import { setupFor, useCodeTeams } from '@/features/connect/connections';
-import { useHealth } from '@/hooks/useHealth';
 import { Button } from '@/components/ui/button';
 import { PageBody } from '@/components/ui/page';
 import { Segmented } from '@/components/ui/segmented';
 import { ErrorState } from '@/components/ui/state';
-import DisruptionPicker from '@/features/start/DisruptionPicker';
-import { missingFor, runnerProblem, worldName } from '@/model/summary';
-import { TaskPicker } from '@/features/start/WorldCard';
-import { useSuggestedTeams, useTeam } from '@/hooks/useTeam';
-import { useTasks } from '@/hooks/useTasks';
-import { useWorldPreview } from '@/features/start/useWorldPreview';
+import { type ConnectFrom, type ConnectReturn, connectedLabel, connectedTeams } from '@/features/connect/connect';
+import { setupFor, useCodeTeams } from '@/features/connect/connections';
 import { useScenario } from '@/features/scenario/ScenarioBuilder';
+import DisruptionPicker from '@/features/start/DisruptionPicker';
+import { useWorldPreview } from '@/features/start/useWorldPreview';
+import { TaskPicker } from '@/features/start/WorldCard';
+import ImportDialog from '@/features/team/ImportDialog';
+import { useHealth } from '@/hooks/useHealth';
+import { useTasks } from '@/hooks/useTasks';
+import { useSuggestedTeams, useTeam } from '@/hooks/useTeam';
+import { errorMessage } from '@/lib/errors';
+import type { NewExperiment } from '@/model/experiment';
+import { missingFor, runnerProblem, worldName } from '@/model/summary';
 import { teamForRun } from '@/model/team';
 import type { Health, Team } from '@/model/types';
 import { createExperiment } from './api';
 import { DEFAULT_RUNS, MAX_SETUPS, RUN_CHOICES, type SetupDraft, newDraft, settleDrafts, setupTeam, setupsProblem } from './model';
 import SetupCard, { type TeamChoices } from './SetupCard';
-import type { NewExperiment } from '@/model/experiment';
-import { errorMessage } from '@/lib/errors';
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (

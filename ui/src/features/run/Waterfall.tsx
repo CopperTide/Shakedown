@@ -1,5 +1,5 @@
-import { cn } from '@/lib/cn';
 import { EmptyState } from '@/components/ui/state';
+import { cn } from '@/lib/cn';
 import type { Event } from '@/model/types';
 import { type Trace, type TraceSpan, spanLength, traceOf } from './waterfall';
 

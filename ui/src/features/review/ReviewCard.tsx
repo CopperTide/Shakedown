@@ -2,12 +2,12 @@ import { Sparkles } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Tag } from '@/components/ui/status';
+import type { RunReview, StoredReview, Suggestion, WentWrong } from '@/model/review';
 import type { BranchDetail } from '@/model/types';
 import { KIND_LABEL, SEVERITY_LABEL, smallPrint } from './present';
-import { useReviewEnabled } from './setting';
-import type { RunReview, StoredReview, Suggestion, WentWrong } from '@/model/review';
-import { useReview } from './useReview';
 import { ReviewFrame } from './ReviewFrame';
+import { useReviewEnabled } from './setting';
+import { useReview } from './useReview';
 
 /** A step a review cites: a small link that selects it. */
 export function StepChip({ seq, onStep, label }: { seq: number | string; onStep?: () => void; label?: string }) {

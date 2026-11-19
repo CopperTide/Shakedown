@@ -7,12 +7,12 @@ import { Checkbox, Field, Input, NativeSelect, Textarea } from '@/components/ui/
 import { PageBody, PageHeader } from '@/components/ui/page';
 import { Panel } from '@/components/ui/panel';
 import { ErrorState, LoadingState } from '@/components/ui/state';
-import { MODE_LABEL, agentModelLine, agentModelTip, providerOf } from '@/model/providers';
-import { useProviderList } from '@/hooks/useProviders';
 import { clearStoredTeam, loadTeam, saveTeam } from '@/hooks/storedTeam';
+import { useProviderList } from '@/hooks/useProviders';
+import { errorMessage } from '@/lib/errors';
+import { MODE_LABEL, agentModelLine, agentModelTip, providerOf } from '@/model/providers';
 import { slug, withSlugIds } from '@/model/team';
 import type { AgentKind, AgentSpec, ProviderStatus, Team as TeamT } from '@/model/types';
-import { errorMessage } from '@/lib/errors';
 
 const KINDS: AgentKind[] = ['claude_code', 'codex', 'open'];
 

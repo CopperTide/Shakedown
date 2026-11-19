@@ -1,14 +1,13 @@
-import { useState } from 'react';
-import type { CSSProperties, ReactNode } from 'react';
+import { type CSSProperties, type ReactNode, useState } from 'react';
 import { Panel } from '@/components/ui/panel';
 import { Tag } from '@/components/ui/status';
 import { cn } from '@/lib/cn';
 import type { SuiteReport } from '@/model/report';
-import PassRate from './PassRate';
-import RunStrip from './RunStrip';
 import { MeasureFigure, MeasureLegend } from './Measures';
 import type { MeasureRow } from './measures';
 import { type CheckCell, type CheckRow, type Column, METRICS, type Metric, SAFETY_METRICS, bestOf, checkLabel, checkMatrix, safetyQuiet } from './model';
+import PassRate from './PassRate';
+import RunStrip from './RunStrip';
 
 /** The checks' label column, then one column per setup. */
 const gridOf = (n: number): CSSProperties => ({ gridTemplateColumns: `minmax(140px, 200px) repeat(${n}, minmax(0, 1fr))` });

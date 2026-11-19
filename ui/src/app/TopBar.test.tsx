@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
+import { describe, expect, it } from 'vitest';
 import TopBar from './TopBar';
 
 const draw = () => renderToStaticMarkup(<MemoryRouter><TopBar onPalette={() => {}} /></MemoryRouter>);

@@ -1,17 +1,17 @@
 import { useState } from 'react';
-import { cn } from '@/lib/cn';
-import { ARCHITECTURES, type ForkChoice, architectureOf, singleTeam, swapChanges, teamSwapProblem } from './architecture';
 import { fork } from '@/api';
-import { changedFields } from './timeline';
-import { RestoreChoice, blockedReason, useRestorePlan } from './RestoreChoice';
 import { ModelHint, ModelInput, ProviderSelect } from '@/components/ProviderFields';
 import { Button } from '@/components/ui/button';
 import { Field, NativeSelect, Textarea } from '@/components/ui/input';
 import { ErrorState } from '@/components/ui/state';
-import { MODE_LABEL, modelProblem, providerId, providerOf } from '@/model/providers';
 import { useProviderList } from '@/hooks/useProviders';
-import type { AgentKind, AgentSpec, BranchDetail, Change, ForkResponse, ProviderStatus, RestoreMode, Team } from '@/model/types';
+import { cn } from '@/lib/cn';
 import { errorMessage } from '@/lib/errors';
+import { MODE_LABEL, modelProblem, providerId, providerOf } from '@/model/providers';
+import type { AgentKind, AgentSpec, BranchDetail, Change, ForkResponse, ProviderStatus, RestoreMode, Team } from '@/model/types';
+import { ARCHITECTURES, type ForkChoice, architectureOf, singleTeam, swapChanges, teamSwapProblem } from './architecture';
+import { RestoreChoice, blockedReason, useRestorePlan } from './RestoreChoice';
+import { changedFields } from './timeline';
 
 const MODES: AgentKind[] = ['claude_code', 'codex', 'open'];
 

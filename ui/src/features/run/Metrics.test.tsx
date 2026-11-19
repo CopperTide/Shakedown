@@ -1,8 +1,8 @@
-import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { describe, expect, it } from 'vitest';
+import type { Event, Metrics } from '@/model/types';
 import MetricsPanel, { costText, estimateText, overheadLines } from './Metrics';
 import { runnerLine } from './RunPage';
-import type { Event, Metrics } from '@/model/types';
 
 const cost = (usd: number | null, label: string, as_of: string | null = null) => ({ usd, label, source: null, as_of });
 

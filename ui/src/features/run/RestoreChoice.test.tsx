@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ForkActions } from './ForkPanel';
 import { RestoreChoice, blockedReason, loadPlan } from './RestoreChoice';
 

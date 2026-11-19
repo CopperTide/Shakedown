@@ -2,10 +2,10 @@
 // placed by its time. Tool calls are labelled by system kind and read/write; messages between
 // agents name who they went to; a call to an approvals system, or one a gate refused, is an
 // interlock.
-import type { Event, Team } from './types';
+import { asRecord } from '@/lib/record';
 import { type Action, type Outcome, actionWord, classify, kindWord, worldInfo } from './actions';
 import type { Effect } from './report';
-import { asRecord } from '@/lib/record';
+import type { Event, Team } from './types';
 
 export type MarkKind = 'action' | 'interlock' | 'message' | 'model' | 'start' | 'end' | 'check' | 'world';
 

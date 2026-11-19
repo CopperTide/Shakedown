@@ -1,8 +1,8 @@
 // Trends: actions per minute per system, the context each model call was sent with, and tokens
 // and cost as they build up.
-import type { Event } from '@/model/types';
-import { type Action, kindWord } from '@/model/actions';
 import { asRecord } from '@/lib/record';
+import { type Action, kindWord } from '@/model/actions';
+import type { Event } from '@/model/types';
 
 export interface Series {
   name: string;

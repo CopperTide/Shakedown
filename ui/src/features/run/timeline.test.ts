@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { changedFields, rowKeys, jsonDiff, summarize } from './timeline';
 import type { Event, EventKind, Team } from '@/model/types';
+import { changedFields, rowKeys, jsonDiff, summarize } from './timeline';
 
 const team: Team = {
   id: 't', name: 't',

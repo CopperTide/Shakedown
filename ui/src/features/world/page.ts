@@ -1,10 +1,10 @@
 // The world view's words: who drove the agents, and what the step on screen was.
+import { asRecord } from '@/lib/record';
 import { isWorldActor } from '@/model/lanes';
+import type { BranchView, TwinView } from '@/model/twin';
 import type { Event, Team } from '@/model/types';
 import { type Happening, type Track, buildTrack, happenings } from './scrub';
 import { type ViewChanges, diffViews, viewIndexAt } from './twin';
-import type { BranchView, TwinView } from '@/model/twin';
-import { asRecord } from '@/lib/record';
 
 
 /** An agent's end that reports tokens: a CLI agent's model calls aren't recorded one by one, but they happened. */

@@ -1,10 +1,10 @@
-import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { describe, expect, it } from 'vitest';
+import { events, team as fixtureTeam } from '@/model/fixtures';
+import { buildLanes, spanOf } from '@/model/lanes';
+import type { Team } from '@/model/types';
 import ActionTimeline from './ActionTimeline';
 import { modelCallLine } from './Inspector';
-import { buildLanes, spanOf } from '@/model/lanes';
-import { events, team as fixtureTeam } from '@/model/fixtures';
-import type { Team } from '@/model/types';
 
 const text = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
 

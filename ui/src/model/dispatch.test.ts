@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { layoutTimeline } from '@/features/run/timelineLayout';
-import { buildLanes, gapsOf, spanOf } from './lanes';
 import { ev, runStart, team } from './fixtures';
+import { buildLanes, gapsOf, spanOf } from './lanes';
 
 /** A dispatch run: the lead delegates to quality, which works, reports, and waits; the lead finishes. */
 const dispatched = [

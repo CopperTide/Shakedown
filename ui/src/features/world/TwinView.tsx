@@ -1,14 +1,14 @@
 import { useCallback, useMemo } from 'react';
 import { Panel } from '@/components/ui/panel';
 import { useStepParam } from '@/features/run/useStepParam';
+import type { BranchView } from '@/model/twin';
 import type { BranchDetail } from '@/model/types';
 import KpiStrip from './KpiStrip';
-import PlantVideo from './PlantVideo';
 import { worldState } from './page';
+import PlantVideo from './PlantVideo';
 import { moveStop } from './scrub';
 import Scrubber from './Scrubber';
 import TwinCanvas from './TwinCanvas';
-import type { BranchView } from '@/model/twin';
 import { usePlay, useStopKeys } from './useWorld';
 
 /** The world view's state for the step in the address (the latest view when none), and the scrubber's controls. */

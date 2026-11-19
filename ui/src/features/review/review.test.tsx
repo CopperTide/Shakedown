@@ -1,12 +1,12 @@
-import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
+import { describe, expect, it } from 'vitest';
+import type { CompareReview, RunReview, StoredReview, Suggestion } from '@/model/review';
 import type { BranchDetail, Event } from '@/model/types';
 import { reviewPath } from './api';
 import { modelName, smallPrint } from './present';
 import { RunReviewBody } from './ReviewCard';
 import { parseOn } from './setting';
-import type { CompareReview, RunReview, StoredReview, Suggestion } from '@/model/review';
 import { CompareBody, citeLabel } from './WhatMatters';
 
 const text = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, "'").replace(/\s+/g, ' ');

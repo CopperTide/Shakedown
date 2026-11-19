@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
-import { renderToStaticMarkup } from 'react-dom/server';
 import type { ColumnDef } from '@tanstack/react-table';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { describe, expect, it } from 'vitest';
 import { Button } from './button';
 import { CodeBlock } from './code-block';
 import { DataTable } from './data-table';

@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { ApiError, restorePlan } from '@/api';
+import { errorMessage } from '@/lib/errors';
 import { REPLAY_NOTE, planLine } from '@/model/restore';
 import type { PartPlan, RestoreMode } from '@/model/types';
-import { errorMessage } from '@/lib/errors';
 
 /** What the restore plan for the panel's step says: loading, the parts, a refusal (409) or a failure. */
 export type Plan =

@@ -2,20 +2,20 @@ import { type ReactElement, useEffect, useState } from 'react';
 import { rows } from '@/api';
 import { Button } from '@/components/ui/button';
 import { CodeBlock } from '@/components/ui/code-block';
-import { StatusMark, Tag } from '@/components/ui/status';
 import { EmptyState, ErrorState } from '@/components/ui/state';
+import { StatusMark, Tag } from '@/components/ui/status';
 import { StepLabel } from '@/components/ui/step-label';
+import { cn } from '@/lib/cn';
+import { errorMessage } from '@/lib/errors';
+import { MARK, alarmMark, mark, passMark } from '@/lib/mark';
+import { asRecord } from '@/lib/record';
 import { actionWord, classify, systemLine, worldInfo } from '@/model/actions';
 import { reasoningWord, wakeWord } from '@/model/lanes';
 import { missingPermit, permitOf } from '@/model/permit';
-import { notComparedLine, savedLine } from '@/model/restore';
 import { costIsUnknown, providerId, providerName, providerOf } from '@/model/providers';
+import { notComparedLine, savedLine } from '@/model/restore';
 import type { Event, Team } from '@/model/types';
 import { formatCost, rowKeys } from './timeline';
-import { cn } from '@/lib/cn';
-import { MARK, alarmMark, mark, passMark } from '@/lib/mark';
-import { asRecord } from '@/lib/record';
-import { errorMessage } from '@/lib/errors';
 
 export const pretty = (v: unknown) => (typeof v === 'string' ? v : JSON.stringify(v ?? null, null, 2));
 

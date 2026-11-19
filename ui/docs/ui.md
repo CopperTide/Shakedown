@@ -10,7 +10,7 @@ secondary metadata lines, few borders, plenty of whitespace.
 - **Top bar** (`app/TopBar.tsx`): the wordmark, **Experiments** and **Runs**, and one **⋯** with Run
   once, Compare two runs, World view of a run, the Team editor, AI review on or off, the command
   palette, the theme and which Shakedown core is in use.
-- **Experiments** (`/`, `experiments/ExperimentsPage.tsx`): newest first, each row the experiment's
+- **Experiments** (`/`, `features/experiments/ExperimentsPage.tsx`): newest first, each row the experiment's
   name, its scenario in words, one small bar per setup (passed of runs asked) and when. Tick two or
   more (the box shows on hover) to **Compare** their setups side by side. Empty: one line on what an
   experiment is and **New experiment**.
@@ -21,31 +21,31 @@ secondary metadata lines, few borders, plenty of whitespace.
   what blocks starting, and **Run experiment**.
 - **Experiment** (`/experiments/:id`, `/experiments/compare?ids=`): the name, status and scenario
   line; **Stop** while it runs. The page is as wide as its setups need (two fit a narrow page, four a
-  wide one). One card per setup (`experiments/Results.tsx`, model in `experiments/model.ts`): name
+  wide one). One card per setup (`features/experiments/Results.tsx`, model in `features/experiments/model.ts`): name
   and team; the pass rate at 40 px over one bar (passes in the result ink, failures in the alarm
   ink) with the 95% Wilson range as a whisker under it; a square per run (ink passed, red ✕ failed,
   ! not scored, pulsing running, dashed not run yet, a dot for a safety violation; hover shows its
-  checks and cost, click opens it); then any measure a check gives (`experiments/measures.ts`: the label,
+  checks and cost, click opens it); then any measure a check gives (`features/experiments/measures.ts`: the label,
   the best run in bold across setups with the mean beside it, or the mean per run for a count, and each
   scored run as a dot on a scale every setup shares, with the target as a solid tick and an offline
   reference as a dashed one, named once under the cards); then checks passed, cost and time, the best in bold. Safety
   violations, denied actions and flags are rows only when some setup has one; otherwise one quiet
   "No safety violations, denied actions or flags". Under the cards, the AI comparison for two
   setups, then the checks that some run failed, side by side.
-- **Runs** (`/runs`, `pages/Runs.tsx`): name, team, result, when; reruns under their run as "↳
+- **Runs** (`/runs`, `features/runs/RunsPage.tsx`): name, team, result, when; reruns under their run as "↳
   Rerun". A row opens on Run once's live view; its menu has All details, Process view and Delete.
-- **Run once** (`/run`, `pages/Home.tsx`, `home/`): the world's name, a task picker, the team board
+- **Run once** (`/run`, `features/start/StartPage.tsx`): the world's name, a task picker, the team board
   and one big **Run**; **Options** holds the disruptions, the runner and the team's Suggested, Import
-  and Edit. After **Run** the same screen is the live run (`?run=&branch=`, `home/LiveView.tsx`):
+  and Edit. After **Run** the same screen is the live run (`?run=&branch=`, `features/start/LiveView.tsx`):
   **Pause** / **Resume**, **Stop**, status and time, **Timeline | Digital Twin**; a step opens a slim
   drawer; at the end the result in one sentence, **Details** and the run's **⋯**.
 - **Run page** (`/runs/:run/:branch`): the task, its status and the run's **⋯**; time, cost, check,
-  safety and any refusal; the review line; for an optimisation run, **Best so far** (`run/BestSoFar.tsx`,
-  `run/candidates.ts`: each candidate's objective by simulation number with its interval, ink for a new
+  safety and any refusal; the review line; for an optimisation run, **Best so far** (`features/run/BestSoFar.tsx`,
+  `features/run/candidates.ts`: each candidate's objective by simulation number with its interval, ink for a new
   best, hollow for one that missed a limit, the best feasible as a step line, the target dashed, the
   verified value as a diamond; a dot selects its step); the timeline and event log with the step panel beside
   them; the trace once a step is picked; **More about this run**.
-- **A run's ⋯** (`run/RunMenu.tsx`, on the run page, the world view, the process view and the live
+- **A run's ⋯** (`features/run/RunMenu.tsx`, on the run page, the world view, the process view and the live
   result): its other views, Compare with another run, its reruns, and under **Advanced** the only way
   to rewind: "Rewind to step N and rerun…" opens the fork panel in the step panel (`?fork=1`).
 - **Connect your agent** (`/connect`, `connect/`): from a setup's team picker ("Connect your agent…") or
@@ -61,7 +61,7 @@ secondary metadata lines, few borders, plenty of whitespace.
 **Which core.** The UI talks to the Shakedown core (arenad) it is served from. A build can name another
 with `VITE_ARENA_URL=<url>`, and the address can switch with `?core=<url>` (this browser remembers it;
 `?core=` with nothing goes back to the serving core); every `/api` request and the event stream go
-there (`src/core.ts`), and the ⋯ menu says which core is in use. A UI served from another
+there (`src/api/core.ts`), and the ⋯ menu says which core is in use. A UI served from another
 origin needs the core started with `ARENA_CORS_ORIGIN=<the UI's origin>`.
 
 Pause and Stop are arenad's (`POST /api/branches/{id}/pause`, `/resume`, `/stop`): while paused, the
@@ -122,20 +122,34 @@ These are shadcn-style components: the code is ours, built on Radix primitives w
 - `state`: `EmptyState`, `ErrorState` (says what to try and has a retry), `LoadingState` (skeleton rows
   and what is loading), and `Notice`.
 - `input`: `Input`, `Textarea`, `NativeSelect`, `Checkbox` and `Field` (a label above its control).
-- `table`: dense table primitives. `data-table` is a generic TanStack Table with sorting, a filter
-  function, ↑/↓ or j/k, Home/End and Enter, and its own loading, error, empty and no-match states.
-- `filter-chips`: one-of chips with counts. `segmented`: a few exclusive choices side by side.
+- `table`: dense table primitives. `data-table` is a generic TanStack Table with sorting, ↑/↓ or j/k,
+  Home/End and Enter, and its own loading, error and empty states.
+- `segmented`: a few exclusive choices side by side.
+- `code-block`: monospace text on the sunken surface (JSON, a diff, stderr). `step-label`: "step 12"
+  and the step's kind.
 - `tabs`, `tooltip`, `popover`, `dialog` (with `DialogActions`) and `dropdown-menu`: Radix.
 - `command`: cmdk, used by the palette. `toaster`: sonner.
 - `split`: a main area and a side panel that can be resized by dragging or with ←/→ on the handle.
   Its width is kept per page. The two stack on narrow screens.
 - `chart`: `Sparkline` and `LineChart` on uPlot, which follow the theme and the box width.
 
+## Code layout (`src`)
+
+- `api/`: the HTTP client and the core address. `model/`: arenad's types and the pure event model
+  (actions, lanes, permits, restores, reports). `hooks/`: data and state shared by pages.
+- `lib/`: small helpers with no domain (class names, keys, formats, marks, errors). `components/ui`:
+  the primitives above; `components/`: domain pieces several pages share (status marks, provider fields).
+- `features/<name>/`: one folder per screen (`experiments`, `runs`, `run`, `process`, `world`, `compare`,
+  `connect`, `team`, `start`, `review`, `scenario`) with its page, components, hooks and logic.
+  `app/` is the shell: top bar, status bar, palette and theme.
+- Imports name `@/…` across folders and `./…` within one.
+
 Logic lives in pure modules with tests, and components only render. For example: `lib/keys.ts`
-(keyboard moves), `lib/split.ts`, `lib/chart.ts`, `app/palette.ts`, `runs/runsTable.ts`,
-`run/timelineLayout.ts`, `run/zoom.ts`, `run/flow.ts`, `run/result.ts`, `run/stepSummary.ts`,
-`run/waterfall.ts`, `run/runStats.ts`, `board/board.ts`, `board/importTeam.ts`, `home/summary.ts`, `control/flowLayout.ts`,
-`control/permit.ts`, `experiments/model.ts`, `lib/format.ts` and `lib/usePolled.ts` (one way to poll).
+(keyboard moves), `lib/split.ts`, `lib/chart.ts`, `app/palette.ts`, `features/runs/runsTable.ts`,
+`features/run/timelineLayout.ts`, `features/run/zoom.ts`, `features/run/flow.ts`, `features/run/result.ts`,
+`features/run/stepSummary.ts`, `features/run/waterfall.ts`, `features/run/runStats.ts`, `features/team/board.ts`,
+`features/team/importTeam.ts`, `model/summary.ts`, `features/process/flowLayout.ts`, `model/permit.ts`,
+`features/experiments/model.ts`, `lib/format.ts` and `lib/usePolled.ts` (one way to poll).
 
 ## Patterns
 
@@ -145,8 +159,8 @@ Logic lives in pure modules with tests, and components only render. For example:
   not sentences on the screen.
 - **Status.** A status is always a glyph and a word: `✓ Passed`, `◐ Running`, `‖ Paused`, `✕ Failed`,
   `⚠ Infra error`, `■ Interrupted`, `■ Stopped`, `◆ unsafe`. Only abnormal states are coloured.
-- **Action timeline** (`run/ActionTimeline.tsx`). There is one lane per agent, plus World (links and
-  world events) and Check. Marks are placed on one time axis. The mouse moves it (`run/zoom.ts`):
+- **Action timeline** (`features/run/ActionTimeline.tsx`). There is one lane per agent, plus World (links and
+  world events) and Check. Marks are placed on one time axis. The mouse moves it (`features/run/zoom.ts`):
   the wheel scrolls sideways when there is more to see (else the page scrolls), Ctrl/⌘ + wheel or a
   trackpad pinch zooms around the cursor (fit up to 64×), and a drag on empty space pans. A live run
   follows its newest step until you scroll or zoom away; **Follow** brings it back. Pauses are shaded
@@ -160,30 +174,30 @@ Logic lives in pure modules with tests, and components only render. For example:
   - Messages and handoffs are drawn as arrows between lanes.
   - ←/→, ↑/↓, j/k and h/l move through the steps.
   - The Event log tab lists the same steps as rows.
-- **Trace waterfall** (`run/Waterfall.tsx`). It shows the selected step's turn: the agent's model call
+- **Trace waterfall** (`features/run/Waterfall.tsx`). It shows the selected step's turn: the agent's model call
   and every step up to its next model call. Each bar ends when its step was recorded and starts that
   step's `duration_ms` earlier. Shakedown's own work in a step (gate check, recording, save) is listed
   under it.
 - **Inspector.** This is the step in full: the system it touched and its effect, the permit the write
   ran under (or the change it named that approvals never recorded), the arguments, reads and writes,
   the world rows at that step, and the result or error. Change and rerun opens in the same panel.
-- **Process view** (`control/ProcessDiagram.tsx`, React Flow). Agents are units on the left and the
+- **Process view** (`features/process/ProcessDiagram.tsx`, React Flow). Agents are units on the left and the
   world's systems are equipment on the right. Each kind of system has a simple shape: a cylinder for
   data stores, a box for applications, a diamond for approvals, a hexagon for APIs and a truck for
   logistics.
   - Flows: writes are heavier and solid, reads-only flows are thin and dashed. An abnormal flow is
     alarm-coloured and labelled ("⚠ 1 refused").
   - On phones the diagram scrolls sideways.
-- **World view** (`pages/World.tsx`, `/world/:runId/:branchId`). The twin's title and the run's
+- **World view** (`features/world/WorldPage.tsx`, `/world/:runId/:branchId`). The twin's title and the run's
   status (the task and disruption are the title's tooltip), the KPIs as plain figures, the scrubber,
   and the benchmark's digital twin
   (`world_view` events, `GET /api/branches/{id}/views`) as an HMI overview: areas as zones left to right
-  in process order (`world/layout.ts`; no item counts or alarm badges on the zones, the tiles say
+  in process order (`features/world/layout.ts`; no item counts or alarm badges on the zones, the tiles say
   it), approvals as a dashed rail, items as tiles with a glyph and a word, and lot-to-order flows as
   pipes along a bus under the zones between them, one labelled lane each (ids in the tooltip). Tiles changed since the view before get an accent ring and a "what changed" line
-  (`world/twin.ts`). The scrubber (`world/scrub.ts`) stops at each view, marks disruptions (▼) and
+  (`features/world/twin.ts`). The scrubber (`features/world/scrub.ts`) stops at each view, marks disruptions (▼) and
   refusals (▲; what each is in its tooltip), plays and pauses (space), and moves with ←/→. The run's ⋯ → Advanced opens the run page's fork
-  panel at the next agent step; "Swap architecture" (`run/architecture.ts`): Team v2 adds its
+  panel at the next agent step; "Swap architecture" (`features/run/architecture.ts`): Team v2 adds its
   rules to every agent's prompt; the single agent replaces the team (a fork's `team`, which only a run
   an external system drives can take). The selected
   step is `?step=` in the address, shared by the run page, the process view and the world view. On
@@ -192,7 +206,7 @@ Logic lives in pure modules with tests, and components only render. For example:
   cards (name, a one-line job from the prompt, model badge, Read-only, the decisions it owns), group
   zones and "hands work to" arrows from a CopperTide design; any other team laid out from its runner
   (in order: rows of three left to right with an arrow to the next; at once: one row;
-  `board/board.ts`). It opens readable: a board that only fits below 80% opens at 80% from its top-left corner. The wheel pans, Ctrl/⌘ + wheel or a pinch zooms, a drag pans; −, Fit and + zoom by button and **Expand** opens it full screen (these show on hover). A card shows its prompt beside the board. **Import** (`board/importTeam.ts`) takes a
+  `features/team/board.ts`). It opens readable: a board that only fits below 80% opens at 80% from its top-left corner. The wheel pans, Ctrl/⌘ + wheel or a pinch zooms, a drag pans; −, Fit and + zoom by button and **Expand** opens it full screen (these show on hover). A card shows its prompt beside the board. **Import** (`features/team/importTeam.ts`) takes a
   CopperTide design (`TeamDraft`: `claude` becomes Claude Code, `codex` Codex; the model from the
   agent, its group or the team; places, groups and hands-work-to connections kept; agents put in work
   order; an agent whose `data_access.writes` is empty is read-only) or a Shakedown team, picked, dropped

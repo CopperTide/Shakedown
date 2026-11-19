@@ -1,9 +1,9 @@
 import { useEffect, useRef } from 'react';
-import { type LaneRow, type Span, formatDuration } from '@/model/lanes';
 import { StatusMark } from '@/components/ui/status';
 import { Table, Td, Th } from '@/components/ui/table';
 import { cn } from '@/lib/cn';
 import { alarmMark } from '@/lib/mark';
+import { type LaneRow, type Span, formatDuration } from '@/model/lanes';
 
 const offset = (at: number, span: Span | null) => (span && !Number.isNaN(at) ? `+${((at - span.start) / 1000).toFixed(1)} s` : '–');
 

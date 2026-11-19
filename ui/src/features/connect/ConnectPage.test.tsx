@@ -1,7 +1,7 @@
-import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { ConnectView, type TestState } from './ConnectPage';
+import { describe, expect, it } from 'vitest';
 import { type ConnectForm, emptyForm } from './connect';
+import { ConnectView, type TestState } from './ConnectPage';
 
 const draw = (form: ConnectForm, test: TestState = { state: 'idle' }) =>
   renderToStaticMarkup(<ConnectView form={form} test={test} onChange={() => {}} onSubmit={() => {}} onCancel={() => {}} />);

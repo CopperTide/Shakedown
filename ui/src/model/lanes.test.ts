@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { CHECK_LANE, buildLanes, formatDuration, position, spanOf } from './lanes';
 import { ev, events, runStart, team } from './fixtures';
+import { CHECK_LANE, buildLanes, formatDuration, position, spanOf } from './lanes';
 
 describe('lanes', () => {
   it('builds_one_lane_per_agent_in_team_order_then_the_check', () => {

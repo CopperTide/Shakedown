@@ -1,5 +1,5 @@
-import { Field, Input, NativeSelect } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Field, Input, NativeSelect } from '@/components/ui/input';
 import { modelPlaceholder, modelProblem, providerOptions, providerState, stateGlyph, stateReason } from '@/model/providers';
 import type { ProviderStatus } from '@/model/types';
 

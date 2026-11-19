@@ -2,8 +2,8 @@
 // compare, Run once and New experiment) render without arenad. Bundled only when the build
 // sets VITE_ARENA_FIXTURES=1 (see main.tsx); never in a normal build.
 import { scenarioOptions } from '@/features/scenario/fixtures';
-import type { Health } from '@/model/types';
 import { comparison, runs, team, v1Detail, v2Detail, views } from '@/features/world/fixtures';
+import type { Health } from '@/model/types';
 
 const branches = { [v1Detail.id]: v1Detail, [v2Detail.id]: v2Detail };
 
