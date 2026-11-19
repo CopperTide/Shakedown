@@ -182,3 +182,25 @@ def test_routes_say_when_the_twin_honours_read_only(notes):
         assert notes.http_routes("i")["routes"][0]["honours_readonly"] is True
     finally:
         del notes.HONOURS_READONLY
+
+
+class StampedNotes(NotesTwin):
+    """Notes that remember when they were seeded, by the twin's clock."""
+
+    def seed(self, ctx, config):
+        self.seeded_ms = ctx.now_ms()
+
+
+def test_the_twins_stamps_follow_the_world_clock_from_its_seed_on():
+    from conftest import Client
+    twin, epoch = StampedNotes(clock=Clock()), 1_900_000_000_000
+    c = Client(twin)
+    c.req("start", {"instance": "i", "config": CONFIG, "seed": 1, "clock_ms": 5_000,
+                    "world_time": {"epoch_ms": epoch, "speed": 1.0}})
+    c.req("advance", {"instance": "i", "clock_ms": 60_000})
+    try:
+        assert all("result" in r for r in c.run())
+        assert epoch + 5_000 <= twin.seeded_ms <= epoch + 6_000  # world time runs on at most 1 s
+        assert epoch + 60_000 <= twin.ctx("i").now_ms() <= epoch + 61_000
+    finally:
+        twin.stop("i")

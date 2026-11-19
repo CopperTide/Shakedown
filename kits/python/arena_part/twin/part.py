@@ -113,9 +113,8 @@ class HttpTwin(DocsPart):
         return self._instance(instance)
 
     def now_ms(self, instance) -> int:
-        """World ms (unix) when the part knows the world's time, else the wall clock."""
-        world_time = getattr(self, "world_time", None)
-        w = world_time(instance) if callable(world_time) else None
+        """World ms (unix) when arenad gave the world's time at `start`, else the wall clock."""
+        w = self.world_time(instance)
         return w.now_ms() if w is not None else self._wall()
 
     def _live_dir(self, instance) -> Path:
