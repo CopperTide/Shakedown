@@ -23,7 +23,12 @@ use super::{
     usage::UsageMeter,
     AgentResult, Mcp, CLI_TIMEOUT_SECS,
 };
-use crate::{exec::BranchCtx, external::UsageReport, model::EventKind, store::Store};
+use crate::{
+    exec::BranchCtx,
+    external::UsageReport,
+    model::{EventKind, TokenUsage},
+    store::Store,
+};
 
 pub struct ClaudeSession {
     child: Child,
@@ -345,7 +350,7 @@ impl ClaudeSession {
         AgentResult {
             ok: error.is_none(),
             error,
-            tokens: super::tokens_json(p, c, p + c),
+            tokens: TokenUsage::summed(p, c),
             cost_usd,
             cost_source: cost_source.map(str::to_string),
             seconds: self.busy.as_secs_f64(),

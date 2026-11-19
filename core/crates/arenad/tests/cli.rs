@@ -89,9 +89,9 @@ fn claude_parse_ok_and_error() {
     assert_eq!(ok.error, None);
     assert_eq!(ok.cost_source.as_deref(), Some("api_equivalent_estimate"));
     assert!((ok.cost_usd.unwrap() - 0.0735072).abs() < 1e-9);
-    assert_eq!(ok.tokens["prompt_tokens"], 16 + 11230 + 68352);
-    assert_eq!(ok.tokens["completion_tokens"], 2172);
-    assert_eq!(ok.tokens["total_tokens"], 16 + 11230 + 68352 + 2172);
+    assert_eq!(ok.tokens.prompt_tokens, 16 + 11230 + 68352);
+    assert_eq!(ok.tokens.completion_tokens, 2172);
+    assert_eq!(ok.tokens.total_tokens, 16 + 11230 + 68352 + 2172);
 
     let err = claude::parse(&fixture("claude_error.json"));
     assert!(!err.ok);
@@ -106,9 +106,9 @@ fn codex_parse_tokens() {
     let r = codex::parse(&fixture("codex_ok.jsonl"), 0);
     assert!(r.ok);
     assert_eq!(r.cost_usd, None);
-    assert_eq!(r.tokens["prompt_tokens"], 241348);
-    assert_eq!(r.tokens["completion_tokens"], 913);
-    assert_eq!(r.tokens["total_tokens"], 241348 + 913);
+    assert_eq!(r.tokens.prompt_tokens, 241348);
+    assert_eq!(r.tokens.completion_tokens, 913);
+    assert_eq!(r.tokens.total_tokens, 241348 + 913);
     let bad = codex::parse(&fixture("codex_ok.jsonl"), 1);
     assert!(!bad.ok);
     let none = codex::parse("", 0);

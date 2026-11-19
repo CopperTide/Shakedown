@@ -4,7 +4,7 @@ use serde_json::Value;
 
 use crate::{
     exec::BranchCtx,
-    model::AgentSpec,
+    model::{AgentSpec, TokenUsage},
     providers::{LOCAL_KEY_PREFIX, LOCAL_MODELS_ENV},
 };
 
@@ -41,8 +41,8 @@ pub enum FailureKind {
 pub struct AgentResult {
     pub ok: bool,
     pub error: Option<String>,
-    /// `{prompt_tokens, completion_tokens, total_tokens}` summed over model calls.
-    pub tokens: Value,
+    /// Summed over the agent's model calls.
+    pub tokens: TokenUsage,
     /// Summed cost; None if any call lacked a cost.
     pub cost_usd: Option<f64>,
     pub cost_source: Option<String>,
@@ -79,20 +79,11 @@ pub(crate) fn tail(s: &str) -> &str {
     &s[i..]
 }
 
-/// `{prompt_tokens, completion_tokens, total_tokens}`.
-pub(crate) fn tokens_json(prompt: i64, completion: i64, total: i64) -> Value {
-    serde_json::json!({
-        "prompt_tokens": prompt,
-        "completion_tokens": completion,
-        "total_tokens": total,
-    })
-}
-
 fn failed(error: String, seconds: f64) -> AgentResult {
     AgentResult {
         ok: false,
         error: Some(error),
-        tokens: tokens_json(0, 0, 0),
+        tokens: TokenUsage::default(),
         cost_usd: None,
         cost_source: None,
         seconds,
@@ -271,6 +262,16 @@ pub(crate) fn scrub_env(c: &mut std::process::Command, keep: &str) {
 #[cfg(test)]
 mod tests {
     use super::{scrubbed, server_name};
+    use crate::model::TokenUsage;
+
+    #[test]
+    fn an_agents_tokens_are_openai_shaped() {
+        let t = TokenUsage::summed(16, 4);
+        let want = serde_json::json!({"prompt_tokens": 16, "completion_tokens": 4,
+                                      "total_tokens": 20});
+        assert_eq!(serde_json::to_value(t).unwrap(), want);
+        assert_eq!(serde_json::from_value::<TokenUsage>(want).unwrap(), t);
+    }
 
     #[test]
     fn each_cli_keeps_only_its_own_vendor_key() {

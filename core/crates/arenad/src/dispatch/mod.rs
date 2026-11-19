@@ -440,7 +440,7 @@ fn lost(agent: &str) -> AgentResult {
         error: Some(format!(
             "{agent}'s session did not end in time when the run ended"
         )),
-        tokens: crate::agents::tokens_json(0, 0, 0),
+        tokens: TokenUsage::default(),
         cost_usd: None,
         cost_source: None,
         seconds: 0.0,

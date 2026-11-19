@@ -316,7 +316,7 @@ async fn open_agent_records_every_model_and_tool_call(live: Live) {
         .filter(|e| e.kind == EventKind::ModelCall)
         .map(|e| e.payload["usage"]["total_tokens"].as_i64().unwrap_or(0))
         .sum();
-    assert_eq!(r.tokens["total_tokens"], summed);
+    assert_eq!(r.tokens.total_tokens, summed);
     teardown(fx).await;
 }
 

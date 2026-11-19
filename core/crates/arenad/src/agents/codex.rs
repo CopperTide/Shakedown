@@ -16,7 +16,7 @@ use std::{future::Future, path::Path, pin::Pin, process::Command};
 use serde_json::{json, Value};
 
 use super::{AgentResult, AgentRun, Driver, Mcp, CLI_TIMEOUT_SECS};
-use crate::model::AgentSpec;
+use crate::model::{AgentSpec, TokenUsage};
 
 pub struct CodexDriver {
     pub self_base: String,
@@ -141,7 +141,7 @@ pub fn parse(stdout: &str, returncode: i32) -> AgentResult {
     AgentResult {
         ok,
         error,
-        tokens: super::tokens_json(t.prompt, t.completion, t.prompt + t.completion),
+        tokens: TokenUsage::summed(t.prompt, t.completion),
         cost_usd: None,
         cost_source: None,
         seconds: 0.0,

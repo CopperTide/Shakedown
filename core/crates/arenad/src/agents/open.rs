@@ -14,7 +14,7 @@ use super::{
 use crate::{
     app::AppState,
     exec::{tool_schemas, BranchCtx, ToolExec, FINISH, HANDOFF},
-    model::{add_cost, AgentSpec},
+    model::{add_cost, AgentSpec, TokenUsage},
     providers::Provider,
 };
 
@@ -149,7 +149,11 @@ impl OpenSession {
             ok: error.is_none(),
             error,
             failure: None,
-            tokens: super::tokens_json(prompt, completion, total),
+            tokens: TokenUsage {
+                prompt_tokens: prompt,
+                completion_tokens: completion,
+                total_tokens: total,
+            },
             cost_source: self.totals.cost.and(self.totals.source).map(str::to_string),
             cost_usd: self.totals.cost,
             seconds: self.busy.as_secs_f64(),
@@ -371,7 +375,11 @@ impl OpenDriver {
             ok: error.is_none(),
             error,
             failure,
-            tokens: super::tokens_json(prompt, completion, total),
+            tokens: TokenUsage {
+                prompt_tokens: prompt,
+                completion_tokens: completion,
+                total_tokens: total,
+            },
             cost_source: totals.cost.and(totals.source).map(str::to_string),
             cost_usd: totals.cost,
             seconds: start.elapsed().as_secs_f64(),

@@ -18,7 +18,10 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use super::{AgentResult, AgentRun, Driver, FailureKind};
-use crate::{model::AgentSpec, store::Store};
+use crate::{
+    model::{AgentSpec, TokenUsage},
+    store::Store,
+};
 
 pub const PROTOCOL: &str = "arena-agent/1";
 /// The longest a hello may take.
@@ -118,11 +121,7 @@ fn failure(error: String, failure: Option<FailureKind>) -> AgentResult {
 /// The result of a 2xx answer with `body` (which needn't be JSON: any 2xx means done).
 fn done(body: &str) -> AgentResult {
     let d: Done = serde_json::from_str(body).unwrap_or_default();
-    let tokens = super::tokens_json(
-        d.usage.input_tokens,
-        d.usage.output_tokens,
-        d.usage.input_tokens + d.usage.output_tokens,
-    );
+    let tokens = TokenUsage::summed(d.usage.input_tokens, d.usage.output_tokens);
     if d.ok == Some(false) {
         let why = d.error.unwrap_or_else(|| "no reason given".into());
         return AgentResult {
@@ -283,7 +282,7 @@ mod tests {
             r#"{"usage": {"input_tokens": 10, "output_tokens": 2}, "cost_usd": 0.01}"#,
         );
         assert!(ok.ok);
-        assert_eq!(ok.tokens["total_tokens"], 12);
+        assert_eq!(ok.tokens.total_tokens, 12);
         assert_eq!(
             (ok.cost_usd, ok.cost_source.as_deref()),
             (Some(0.01), Some(COST_SOURCE))

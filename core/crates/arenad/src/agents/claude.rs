@@ -18,7 +18,7 @@ use super::{
     session::{Session, SessionStart},
     AgentResult, AgentRun, Driver, Mcp, CLI_TIMEOUT_SECS,
 };
-use crate::model::AgentSpec;
+use crate::model::{AgentSpec, TokenUsage};
 
 pub struct ClaudeDriver {
     pub self_base: String,
@@ -102,7 +102,7 @@ pub fn parse(stdout: &str) -> AgentResult {
                 text
             }
         }),
-        tokens: super::tokens_json(prompt, completion, prompt + completion),
+        tokens: TokenUsage::summed(prompt, completion),
         cost_usd: v["total_cost_usd"].as_f64(),
         cost_source: Some("api_equivalent_estimate".into()),
         seconds: 0.0,

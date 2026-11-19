@@ -449,6 +449,25 @@ pub struct ModelCallPayload {
     pub provider_response: Option<Value>,
 }
 
+/// Tokens of model calls, OpenAI-shaped: what an agent's calls add up to.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TokenUsage {
+    pub prompt_tokens: i64,
+    pub completion_tokens: i64,
+    pub total_tokens: i64,
+}
+
+impl TokenUsage {
+    /// `prompt` and `completion` tokens, and their sum as the total.
+    pub fn summed(prompt: i64, completion: i64) -> TokenUsage {
+        TokenUsage {
+            prompt_tokens: prompt,
+            completion_tokens: completion,
+            total_tokens: prompt + completion,
+        }
+    }
+}
+
 /// Payload of `EventKind::AgentEnd`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentEndPayload {

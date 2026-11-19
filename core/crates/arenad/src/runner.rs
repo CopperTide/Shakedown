@@ -599,9 +599,9 @@ pub(crate) fn agent_end(result: &AgentResult) -> AgentEndPayload {
     AgentEndPayload {
         ok: result.ok,
         error: result.error.clone(),
-        tokens: result.tokens["total_tokens"].as_i64(),
-        prompt_tokens: result.tokens["prompt_tokens"].as_i64(),
-        completion_tokens: result.tokens["completion_tokens"].as_i64(),
+        tokens: Some(result.tokens.total_tokens),
+        prompt_tokens: Some(result.tokens.prompt_tokens),
+        completion_tokens: Some(result.tokens.completion_tokens),
         cost_usd: result.cost_usd,
         cost_source: result.cost_source.clone(),
         seconds: Some(result.seconds),

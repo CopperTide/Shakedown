@@ -203,6 +203,17 @@ pub struct UsageReport {
     pub compaction: Option<Value>,
 }
 
+/// A reported call's usage: its tokens, and how its input splits into fresh, cache-written and
+/// cache-read tokens.
+#[derive(Serialize)]
+struct ReportedUsage {
+    #[serde(flatten)]
+    tokens: TokenUsage,
+    input_tokens: i64,
+    cache_creation_input_tokens: i64,
+    cache_read_input_tokens: i64,
+}
+
 /// Where a reported model call comes from, in its payload's `reported_by`.
 pub const REPORTED_BY_CLIENT: &str = "client";
 
@@ -215,11 +226,13 @@ impl UsageReport {
         }
         let prompt =
             self.input_tokens + self.cache_creation_input_tokens + self.cache_read_input_tokens;
-        json!({"prompt_tokens": prompt, "completion_tokens": self.output_tokens,
-               "total_tokens": prompt + self.output_tokens,
-               "input_tokens": self.input_tokens,
-               "cache_creation_input_tokens": self.cache_creation_input_tokens,
-               "cache_read_input_tokens": self.cache_read_input_tokens})
+        let usage = ReportedUsage {
+            tokens: TokenUsage::summed(prompt, self.output_tokens),
+            input_tokens: self.input_tokens,
+            cache_creation_input_tokens: self.cache_creation_input_tokens,
+            cache_read_input_tokens: self.cache_read_input_tokens,
+        };
+        serde_json::to_value(usage).expect("usage serializes")
     }
 
     /// The call's tokens, for pricing it.
@@ -370,6 +383,18 @@ mod tests {
             (&p["usage"], &p["compaction"]["pre_tokens"]),
             (&json!({}), &json!(9))
         );
+    }
+
+    #[test]
+    fn a_reported_calls_usage_is_openai_shaped_with_its_cache_split() {
+        let r: UsageReport = serde_json::from_value(json!({"input_tokens": 2,
+            "cache_creation_input_tokens": 100, "cache_read_input_tokens": 900,
+            "output_tokens": 7}))
+        .unwrap();
+        let want = json!({"prompt_tokens": 1002, "completion_tokens": 7, "total_tokens": 1009,
+                          "input_tokens": 2, "cache_creation_input_tokens": 100,
+                          "cache_read_input_tokens": 900});
+        assert_eq!(r.payload()["usage"], want);
     }
 
     fn join() -> Join {
