@@ -31,6 +31,7 @@ The table is in the main `README.md`, with what was verified. Each folder has a 
 | `shift-roster` | a simulated shift roster with certifications |
 | `github-twin` | a GitHub-compatible code host (GHES mode) over real git repositories |
 | `jira-twin` | a Jira-compatible tracker (Cloud or Server mode): issues, JQL, boards and sprints |
+| `slack-twin` | a Slack-compatible workspace: the Web API chat methods agents and slack_sdk use |
 
 Examples to copy: `kits/rust/examples/counter.rs` and `kits/python/examples/counter.py`.
 
