@@ -1,0 +1,86 @@
+# A neutral fixture: three systems, two roles, two events, two tasks.
+format: shakedown-template/1
+id: shop
+version: 1.0.0
+name: Shop
+summary: A neutral fixture template
+company: {name: Example Co, clock_start: "2026-01-05T09:00:00"}
+size: {label: Staff, default: 10, min: 2, max: 40, presets: [5, 10, 20]}
+names: "@names.yaml"
+systems:
+  - id: alpha
+    label: Alpha
+    product: Alpha twin (simulated)
+    required: true
+    default: true
+    memory_mb: 60
+    hosts: ["alpha.{company.domain}"]
+    options: [{name: profile, label: Profile, choices: [lean, full], default: lean}]
+    parts: [{part: alpha, integration: toy-a, config: "@data/alpha.yaml"}]
+  - id: beta
+    label: Beta
+    product: Beta twin (simulated)
+    summary: The second system
+    default: true
+    memory_mb: 30
+    parts: [{part: beta, integration: toy-b, config: {staff: "{people.clerk}", leads: "{people.lead}"}}]
+  - id: gamma
+    label: Gamma
+    product: Gamma twin (simulated)
+    requires: [beta]
+    memory_mb: 200
+    images: [{image: "toy:1", hint: "make toy"}]
+    parts: [{part: gamma, integration: toy-g, config: {}}]
+roles:
+  - id: clerk
+    label: Clerks
+    summary: Work the counter
+    count: {share: 0.75}
+    min: 1
+    systems: [alpha]
+    fields: {desk: {cycle: [D1, D2]}, skills: {pick: [[till], [till, stock]]}}
+  - id: lead
+    label: Leads
+    count: {fixed: 1}
+    min: 1
+    systems: [beta]
+    rules: rules/lead.yaml
+events:
+  - id: slow-supplier
+    label: A supplier is slow
+    description: Deliveries take {param.days} more days
+    kind: trap
+    needs: [alpha]
+    params: [{name: days, label: Days late, kind: int, min: 1, max: 9, default: 2}]
+    apply:
+      - {part: alpha, append: delays, value: {id: slow-supplier, days: "{param.days}"}}
+  - id: rush
+    label: A rush order
+    description: A rush order arrives at the {param.desk} desk
+    kind: event
+    default: true
+    needs: [beta]
+    params: [{name: desk, label: Desk, kind: choice, choices: [D1, D2], default: D1}]
+    apply:
+      - {part: beta, set: rush.desk, value: "{param.desk}"}
+      - {setup: {part: beta, tool: rush, args: {}}}
+      - {link: {from: beta, event: rushed, to: alpha, tool: note, args: {text: /text}}}
+tasks:
+  - id: alpha-task
+    needs: [alpha]
+    reason: Ship order 1 for {company.name}
+    ticket: "@tickets/alpha.md"
+    setup: [{part: alpha, tool: reset, args: {}}]
+    checks: "@checks/alpha.yaml"
+  - id: beta-task
+    needs: [beta]
+    reason: Staff the {company.name} counter
+    ticket: Staff it
+    checks: []
+links:
+  - {from: alpha, event: shipped, to: beta, tool: log, args: {}, needs: [alpha, beta]}
+gates:
+  - {tool: ship, part: alpha, key: "orders/{order_id}", require: {"/approved": true}, needs: [alpha]}
+instructions: "@instructions.md"
+instructions_title: Shop policy
+teams: "@teams.yaml"

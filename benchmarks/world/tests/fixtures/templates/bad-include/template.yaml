@@ -1,0 +1,11 @@
+format: shakedown-template/1
+id: bad-include
+version: 1.0.0
+name: Bad include
+summary: Its ticket names a file outside the template
+company: {name: Example Co}
+size: {label: Staff, default: 2, min: 1, max: 4}
+systems:
+  - {id: alpha, label: Alpha, product: Alpha twin, required: true, parts: [{part: alpha, integration: toy-a}]}
+tasks:
+  - {id: t1, needs: [alpha], reason: r, ticket: "@../shop/instructions.md", checks: []}
