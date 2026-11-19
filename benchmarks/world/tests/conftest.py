@@ -22,3 +22,18 @@ def shop_only_beta_tasks(tmp_path):
 
     from worldbench.template import load_template
     return load_template(copy_with(FIXTURES / "shop", tmp_path, {}, drop=("tasks.0",)))
+
+
+@pytest.fixture
+def built_shop(shop, tmp_path):
+    """A folder holding the default shop world's world.json and its copied files."""
+    import shutil
+
+    from worldbench.generate import generate, world_json
+    r = generate(shop, {})
+    out = tmp_path / "built"
+    out.mkdir()
+    (out / "world.json").write_text(world_json(r.world))
+    for src, dst in r.files:
+        shutil.copytree(src, out / dst)
+    return out
