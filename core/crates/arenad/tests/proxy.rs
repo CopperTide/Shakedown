@@ -494,3 +494,131 @@ fn a_driver_ticket_request_is_the_latest_model_callers() {
         assert_eq!(e.payload["args"]["attributed"], "latest model call");
     })
 }
+
+/// A client through the proxy as `planner` that trusts the world's CA (from its register answer's
+/// `SSL_CERT_FILE`), and the answer's env.
+async fn tls_client(fx: &ProxyFx) -> (reqwest::Client, Value) {
+    let env = fx.join(json!({"id": "planner", "name": "Planner"})).await["env"].clone();
+    let pem = std::fs::read(env["SSL_CERT_FILE"].as_str().unwrap()).unwrap();
+    let ca = reqwest::Certificate::from_pem(&pem).unwrap();
+    let proxy = reqwest::Proxy::all(env["HTTPS_PROXY"].as_str().unwrap()).unwrap();
+    let c = reqwest::Client::builder()
+        .proxy(proxy)
+        .add_root_certificate(ca);
+    (c.build().unwrap(), env)
+}
+
+#[test]
+fn an_https_request_through_the_proxy_is_recorded_like_plain_http() {
+    run(async {
+        let fx = ProxyFx::new("https", &upstream().await, &[]).await;
+        let (c, _) = tls_client(&fx).await;
+        let r = c.get("https://toy.test/hello").send().await.unwrap();
+        assert_eq!(r.text().await.unwrap(), "hi");
+        let e = fx.last_tool_call().await;
+        let step = (
+            &e.payload["args"]["url"],
+            &e.payload["part"],
+            e.agent.as_deref(),
+        );
+        assert_eq!(
+            step,
+            (
+                &json!("https://toy.test/hello"),
+                &json!("box"),
+                Some("planner")
+            )
+        );
+    })
+}
+
+#[test]
+fn an_https_post_saves_its_part_and_every_ca_variable_names_one_pem() {
+    run(async {
+        let fx = ProxyFx::new("httpspost", &upstream().await, &[]).await;
+        let (c, env) = tls_client(&fx).await;
+        let vars = [
+            "REQUESTS_CA_BUNDLE",
+            "CURL_CA_BUNDLE",
+            "NODE_EXTRA_CA_CERTS",
+            "GIT_SSL_CAINFO",
+        ];
+        for k in vars {
+            assert_eq!(env[k], env["SSL_CERT_FILE"], "{k}");
+        }
+        let r = c
+            .post("https://toy.test/items")
+            .body("x")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(r.status().as_u16(), 201);
+        assert!(fx.last_tool_call().await.payload["saves"]["box"].is_string());
+    })
+}
+
+#[test]
+fn https_forwarding_says_https_on_443() {
+    run(async {
+        let fx = ProxyFx::new("httpshost", &upstream().await, &[]).await;
+        let (c, _) = tls_client(&fx).await;
+        let v: Value = c
+            .get("https://toy.test/echo-host")
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        let want = json!({"host": "toy.test", "x-forwarded-host": "toy.test",
+                          "x-forwarded-proto": "https", "x-forwarded-port": "443"});
+        assert_eq!(v, want);
+    })
+}
+
+#[test]
+fn a_client_that_does_not_trust_the_world_ca_fails_tls() {
+    run(async {
+        let fx = ProxyFx::new("untrusted", &upstream().await, &[]).await;
+        let before = fx.events().await.len();
+        assert!(fx
+            .client("planner")
+            .get("https://toy.test/hello")
+            .send()
+            .await
+            .is_err());
+        let evs = fx.events().await;
+        assert!(evs[before..].iter().all(|e| e.kind != EventKind::ToolCall));
+    })
+}
+
+#[test]
+fn connect_to_an_unknown_host_is_refused_and_recorded() {
+    run(async {
+        let fx = ProxyFx::new("connectunknown", &upstream().await, &[]).await;
+        let (c, _) = tls_client(&fx).await;
+        assert!(c.get("https://other.test/").send().await.is_err());
+        let e = fx.last_tool_call().await;
+        assert_eq!(e.payload["args"]["method"], "CONNECT");
+        assert_eq!(e.payload["args"]["url"], "https://other.test:443");
+        assert_eq!(
+            e.payload["error"],
+            "the host other.test is not part of this world"
+        );
+    })
+}
+
+#[test]
+fn connect_on_another_port_is_refused() {
+    run(async {
+        let fx = ProxyFx::new("connectport", &upstream().await, &[]).await;
+        let (c, _) = tls_client(&fx).await;
+        assert!(c.get("https://toy.test:8443/hello").send().await.is_err());
+        let e = fx.last_tool_call().await;
+        assert_eq!(e.payload["args"]["url"], "https://toy.test:8443");
+        assert_eq!(
+            e.payload["error"],
+            "the host toy.test takes HTTPS on port 443 only"
+        );
+    })
+}

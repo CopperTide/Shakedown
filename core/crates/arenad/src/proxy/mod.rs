@@ -8,6 +8,8 @@ pub mod forward;
 pub mod record;
 pub mod request;
 pub mod tickets;
+pub mod tls;
+mod tunnel;
 
 use std::{
     convert::Infallible,
@@ -20,15 +22,17 @@ use hyper_util::rt::TokioIo;
 
 use crate::{
     app::AppState,
-    exec::{ToolExec, NOT_RUNNING},
+    exec::{BranchCtx, ToolExec, NOT_RUNNING},
 };
 use request::{Answer, Read};
 pub use tickets::{Holder, Tickets};
 
 /// The proxy's tickets and where it listens.
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct Proxy {
     pub tickets: Tickets,
+    /// Each branch's CA, for the hosts its world serves over HTTPS.
+    pub cas: tls::Cas,
     addr: OnceLock<SocketAddr>,
 }
 
@@ -85,16 +89,22 @@ async fn handle(state: Arc<AppState>, req: Request<Incoming>) -> Answer {
         return request::text(409, NOT_RUNNING);
     };
     if req.method() == Method::CONNECT {
-        return request::text(400, "this proxy does not tunnel yet");
+        return tunnel::connect(state, branch, holder.agent, req).await;
     }
     let exec = ToolExec::new(state.store.clone());
-    let agent = holder.agent.as_deref();
-    let answer = match request::read_plain(req).await {
+    let read = request::read_plain(req).await;
+    run_read(&exec, &branch, holder.agent.as_deref(), read).await
+}
+
+/// Runs a request read off the wire as a step of `agent` on `branch` (a body too large is
+/// recorded as refused).
+async fn run_read(exec: &ToolExec, branch: &BranchCtx, agent: Option<&str>, read: Read) -> Answer {
+    let answer = match read {
         Read::Answer(a) => return a,
-        Read::Call(call) => exec.http(&branch, agent, call).await,
+        Read::Call(call) => exec.http(branch, agent, call).await,
         Read::TooLarge(call) => {
             let refused = (413, request::TOO_LARGE);
-            exec.http_refusal(&branch, agent, call, refused).await
+            exec.http_refusal(branch, agent, call, refused).await
         }
     };
     request::to_response(answer)

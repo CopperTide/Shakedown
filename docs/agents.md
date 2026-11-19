@@ -91,6 +91,11 @@ request is recorded as an `http` step of the part that serves its host: inspecta
 - The proxy listens on 127.0.0.1 only (`ARENA_PROXY_PORT`, default a free port). Its URL carries a ticket of the
   run; a request without one is answered 407. A request to a host no part serves is refused (403) and recorded. A
   read-only agent's writes are refused. Requests wait while the run is paused and are answered 409 once it ended.
+- HTTPS to a served host goes through the proxy too (`CONNECT host:443`): the proxy terminates TLS with a CA of the
+  run's branch, and the same variables give `SSL_CERT_FILE`, `REQUESTS_CA_BUNDLE`, `CURL_CA_BUNDLE`,
+  `NODE_EXTRA_CA_CERTS` and `GIT_SSL_CAINFO` naming its certificate. Shakedown never installs it in a system trust
+  store; a client that keeps its own trust store and ignores these variables fails TLS. A fork's branch has its
+  own CA. `CONNECT` to another host, or to a served host on another port, is refused (403) and recorded.
 - A world that serves no HTTP gives none of these variables: drivers reach their providers as before.
 
 ## HTTP agents (`arena-agent/1`)

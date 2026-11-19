@@ -352,6 +352,8 @@ request is recorded as a step named `http` owned by the part. A part that answer
 - The proxy keeps `Host: <host>` and adds `X-Forwarded-Proto`, `X-Forwarded-Host` and `X-Forwarded-Port`. Every
   absolute URL a part mints (`html_url`, `next` links) must be built from them, never from its upstream address: the
   kits' `public_base` does this.
+- Clients reach a host over plain HTTP or over HTTPS on port 443 (the proxy terminates TLS with a CA of the branch,
+  which drivers and agents are told to trust); the upstream itself is plain HTTP or HTTPS as `upstream` says.
 - Recorded HTTP requests are never sent again: a part that serves HTTP must restore from saves. A world with a part
   that serves HTTP and restores by replay is refused.
 

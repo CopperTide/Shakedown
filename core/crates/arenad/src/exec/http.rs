@@ -38,9 +38,12 @@ pub struct HttpCall {
 
 impl HttpCall {
     /// The URL the client asked for (`http://toy.test/hello`), the port only when it isn't the
-    /// scheme's.
+    /// scheme's (always for a `CONNECT`: `https://toy.test:443`).
     pub fn url(&self) -> String {
         let (scheme, host, pq) = (self.scheme, &self.host, &self.path_and_query);
+        if self.method == "CONNECT" {
+            return format!("{scheme}://{host}:{}", self.port);
+        }
         match (scheme, self.port) {
             ("http", 80) | ("https", 443) => format!("{scheme}://{host}{pq}"),
             (_, port) => format!("{scheme}://{host}:{port}{pq}"),

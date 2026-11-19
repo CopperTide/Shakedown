@@ -35,6 +35,30 @@ pub fn env_for(state: &AppState, ctx: &BranchCtx, agent: Option<&str>) -> BTreeM
         env.insert(k.to_string(), NO_PROXY.to_string());
     }
     env.insert("NODE_USE_ENV_PROXY".into(), "1".into());
+    env.extend(ca_env(state, &ctx.branch_id));
     env.extend(hosts.env());
     env
 }
+
+/// The variables that make clients trust `branch`'s CA (none, logged, when it can't be made).
+fn ca_env(state: &AppState, branch: &str) -> BTreeMap<String, String> {
+    let ca = match state.proxy.cas.for_branch(branch) {
+        Ok(ca) => ca,
+        Err(e) => {
+            eprintln!("proxy: no CA for {branch}: {e:#}");
+            return BTreeMap::new();
+        }
+    };
+    let pem = ca.pem_path().to_string_lossy().into_owned();
+    let vars = CA_VARS.iter().map(|k| (k.to_string(), pem.clone()));
+    vars.collect()
+}
+
+/// The variables clients read the CAs they trust from.
+const CA_VARS: [&str; 5] = [
+    "SSL_CERT_FILE",
+    "REQUESTS_CA_BUNDLE",
+    "CURL_CA_BUNDLE",
+    "NODE_EXTRA_CA_CERTS",
+    "GIT_SSL_CAINFO",
+];
