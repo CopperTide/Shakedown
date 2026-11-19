@@ -25,7 +25,7 @@ class WorldBenchmark(Benchmark):
 
     def __init__(self, world_file: Path, version: str = "0.0.0"):
         folder = str(Path(world_file).resolve().parent)
-        self.world = _with_folder(json.loads(Path(world_file).read_text()), folder)
+        self.world = _with_folder(json.loads(Path(world_file).read_text(encoding="utf-8")), folder)
         self.version = version
 
     def describe(self):

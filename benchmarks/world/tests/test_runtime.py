@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 import sys
 
@@ -42,3 +43,25 @@ def test_the_program_answers_describe_over_the_line_protocol(built_shop):
                           capture_output=True, text=True, timeout=30)
     reply = json.loads(proc.stdout.splitlines()[0])
     assert reply["id"] == 1 and reply["result"]["name"] == "example-co" and reply["result"]["version"] == "1.0.0+abc"
+
+
+BUILD_AND_LOAD = r"""
+import sys
+from pathlib import Path
+from worldbench.builder import Builder
+from worldbench.runtime import WorldBenchmark
+b = Builder([Path(sys.argv[1])])
+b.preview("shop", {"company": {"name": "Caf\u00e9 \u00dcn\u00efcode"}})
+b.generate("shop", {"company": {"name": "Caf\u00e9 \u00dcn\u00efcode"}}, sys.argv[2])
+print(WorldBenchmark(Path(sys.argv[2]) / "world.json").describe()["name"])
+"""
+
+
+def test_every_file_is_read_and_written_as_utf_8_whatever_the_locale(fixtures, tmp_path):
+    """With `warn_default_encoding`, a read or write that leaves the encoding to the locale is an error."""
+    env = {**os.environ, "PYTHONUTF8": "0", "LC_ALL": "C", "LANG": "C"}
+    proc = subprocess.run([sys.executable, "-X", "warn_default_encoding", "-W", "error::EncodingWarning", "-c",
+                           BUILD_AND_LOAD, str(fixtures), str(tmp_path / "w")], env=env, capture_output=True, text=True,
+                          timeout=60)
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.strip() == "cafe-unicode"

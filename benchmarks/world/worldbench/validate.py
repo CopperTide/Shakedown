@@ -16,7 +16,7 @@ RESERVED_FIELDS = {"id", "name", "login", "role", "added"}
 @cache
 def _validator(definition: str | None = None) -> jsonschema.Draft202012Validator:
     """The template's schema, or one of its `$defs` (`checks`) on its own."""
-    schema = json.loads(SCHEMA.read_text())
+    schema = json.loads(SCHEMA.read_text(encoding="utf-8"))
     if definition is not None:
         schema = {"$schema": schema["$schema"], "$defs": schema["$defs"], "$ref": f"#/$defs/{definition}"}
     return jsonschema.Draft202012Validator(schema)

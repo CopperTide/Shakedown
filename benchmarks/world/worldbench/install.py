@@ -52,10 +52,10 @@ def write_package(result: Result, t, dir: Path) -> dict:
     version = f"{t.version}+{hashlib.sha256(text.encode()).hexdigest()[:8]}"
     dir.mkdir(parents=True)
     try:
-        (dir / "world.json").write_text(text)
+        (dir / "world.json").write_text(text, encoding="utf-8")
         for src, dst in result.files:
             shutil.copytree(src, dir / dst, ignore=_no_links)
-        (dir / "arena-package.toml").write_text(manifest(result.world, t, version))
+        (dir / "arena-package.toml").write_text(manifest(result.world, t, version), encoding="utf-8")
     except BaseException:
         shutil.rmtree(dir, ignore_errors=True)
         raise

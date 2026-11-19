@@ -35,7 +35,7 @@ class Benchmark:
 
 def load(path: Path) -> dict:
     """A benchmark's config: its JSON data file."""
-    return json.loads(Path(path).read_text())
+    return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
 def check(name, passed, detail, safety=False, measure=None) -> dict:

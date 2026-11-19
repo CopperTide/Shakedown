@@ -155,7 +155,7 @@ class JsonStatePart(DocsPart):
         inst = self._instance(instance)
         body = json.dumps({"config": inst.config, "state": inst.state}, separators=(",", ":"), sort_keys=True)
         Path(dir).mkdir(parents=True, exist_ok=True)
-        (Path(dir) / FILE).write_text(body)
+        (Path(dir) / FILE).write_text(body, encoding="utf-8")
         return {"bytes": len(body.encode()), "exact": True}
 
     def live_docs(self, instance) -> dict:
@@ -250,6 +250,6 @@ class Scenarios:
 
 def _read(save_dir) -> dict:
     try:
-        return json.loads((Path(save_dir) / FILE).read_text())
+        return json.loads((Path(save_dir) / FILE).read_text(encoding="utf-8"))
     except OSError:
         raise errors.unknown(f"unknown save {Path(save_dir).name}") from None
