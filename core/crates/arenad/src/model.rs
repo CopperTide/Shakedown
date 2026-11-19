@@ -7,6 +7,40 @@ pub use crate::secrets::Headers;
 
 mod agent_in;
 
+/// A fieldless enum whose variants each have one name, used everywhere it is written or read:
+/// in serde, `as_str`, `parse`, and the store. `ALL` lists the variants in order.
+macro_rules! named_enum {
+    (
+        $(#[$meta:meta])*
+        pub enum $name:ident {
+            $($(#[$vmeta:meta])* $variant:ident = $text:literal,)+
+        }
+    ) => {
+        $(#[$meta])*
+        #[derive(Serialize, Deserialize)]
+        pub enum $name {
+            $($(#[$vmeta])* #[serde(rename = $text)] $variant,)+
+        }
+
+        impl $name {
+            pub const ALL: &'static [$name] = &[$($name::$variant),+];
+
+            pub fn as_str(&self) -> &'static str {
+                match self {
+                    $($name::$variant => $text,)+
+                }
+            }
+
+            pub fn parse(s: &str) -> Option<$name> {
+                match s {
+                    $($text => Some($name::$variant),)+
+                    _ => None,
+                }
+            }
+        }
+    };
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AgentKind {
@@ -239,19 +273,20 @@ impl Rules {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum BranchStatus {
-    Running,
-    Passed,
-    Failed,
-    InfraError,
-    Interrupted,
-    /// Someone stopped the run before it ended; it is not scored.
-    Stopped,
-    /// The run's model-spend estimate passed its `max_cost_usd`: its agents were stopped and the
-    /// world scored as it stood (a failure).
-    BudgetExceeded,
+named_enum! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub enum BranchStatus {
+        Running = "running",
+        Passed = "passed",
+        Failed = "failed",
+        InfraError = "infra_error",
+        Interrupted = "interrupted",
+        /// Someone stopped the run before it ended; it is not scored.
+        Stopped = "stopped",
+        /// The run's model-spend estimate passed its `max_cost_usd`: its agents were stopped and
+        /// the world scored as it stood (a failure).
+        BudgetExceeded = "budget_exceeded",
+    }
 }
 
 /// `text` trimmed, `None` when that leaves nothing: what a blank provider or model means.
@@ -265,112 +300,37 @@ pub fn add_cost(total: Option<f64>, more: Option<f64>) -> Option<f64> {
     Some(total? + more?)
 }
 
-impl BranchStatus {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            BranchStatus::Running => "running",
-            BranchStatus::Passed => "passed",
-            BranchStatus::Failed => "failed",
-            BranchStatus::InfraError => "infra_error",
-            BranchStatus::Interrupted => "interrupted",
-            BranchStatus::Stopped => "stopped",
-            BranchStatus::BudgetExceeded => "budget_exceeded",
-        }
-    }
-
-    pub fn parse(s: &str) -> Option<BranchStatus> {
-        Some(match s {
-            "running" => BranchStatus::Running,
-            "passed" => BranchStatus::Passed,
-            "failed" => BranchStatus::Failed,
-            "infra_error" => BranchStatus::InfraError,
-            "interrupted" => BranchStatus::Interrupted,
-            "stopped" => BranchStatus::Stopped,
-            "budget_exceeded" => BranchStatus::BudgetExceeded,
-            _ => return None,
-        })
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum EventKind {
-    RunStart,
-    AgentStart,
-    ModelCall,
-    ToolCall,
-    Handoff,
-    Message,
-    AgentEnd,
-    Check,
-    WorldEvent,
-    /// The world's view after a step (`{seq_of, view}`), when the benchmark draws one.
-    WorldView,
-    /// Someone paused the branch: its calls wait and its clock stands still until `Resume`.
-    Pause,
-    /// The branch goes on after a `Pause` (`{paused_ms}`).
-    Resume,
-    /// A dispatch run's lead gives an agent work (`{to, task}`).
-    Delegation,
-    /// An agent of a dispatch run reports to its lead (`{to, text, turn_end?}`).
-    Report,
-    /// arenad starts an agent's turn in a dispatch run (`{reason, mail?, input}`).
-    Wake,
-    /// An agent of a dispatch run ended its turn and waits (`{ok, error?, text?}`).
-    Idle,
-    /// The lead of a dispatch run ends it (`{summary}`).
-    Finish,
-    /// What an agent thought or said it would do (`{text, kind, source, model_call_seq?,
-    /// truncated?}`), reported by its driver or pulled from a recorded model response.
-    Reasoning,
-}
-
-impl EventKind {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            EventKind::RunStart => "run_start",
-            EventKind::AgentStart => "agent_start",
-            EventKind::ModelCall => "model_call",
-            EventKind::ToolCall => "tool_call",
-            EventKind::Handoff => "handoff",
-            EventKind::Message => "message",
-            EventKind::AgentEnd => "agent_end",
-            EventKind::Check => "check",
-            EventKind::WorldEvent => "world_event",
-            EventKind::WorldView => "world_view",
-            EventKind::Pause => "pause",
-            EventKind::Resume => "resume",
-            EventKind::Delegation => "delegation",
-            EventKind::Report => "report",
-            EventKind::Wake => "wake",
-            EventKind::Idle => "idle",
-            EventKind::Finish => "finish",
-            EventKind::Reasoning => "reasoning",
-        }
-    }
-
-    pub fn parse(s: &str) -> Option<EventKind> {
-        Some(match s {
-            "run_start" => EventKind::RunStart,
-            "agent_start" => EventKind::AgentStart,
-            "model_call" => EventKind::ModelCall,
-            "tool_call" => EventKind::ToolCall,
-            "handoff" => EventKind::Handoff,
-            "message" => EventKind::Message,
-            "agent_end" => EventKind::AgentEnd,
-            "check" => EventKind::Check,
-            "world_event" => EventKind::WorldEvent,
-            "world_view" => EventKind::WorldView,
-            "pause" => EventKind::Pause,
-            "resume" => EventKind::Resume,
-            "delegation" => EventKind::Delegation,
-            "report" => EventKind::Report,
-            "wake" => EventKind::Wake,
-            "idle" => EventKind::Idle,
-            "finish" => EventKind::Finish,
-            "reasoning" => EventKind::Reasoning,
-            _ => return None,
-        })
+named_enum! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub enum EventKind {
+        RunStart = "run_start",
+        AgentStart = "agent_start",
+        ModelCall = "model_call",
+        ToolCall = "tool_call",
+        Handoff = "handoff",
+        Message = "message",
+        AgentEnd = "agent_end",
+        Check = "check",
+        WorldEvent = "world_event",
+        /// The world's view after a step (`{seq_of, view}`), when the benchmark draws one.
+        WorldView = "world_view",
+        /// Someone paused the branch: its calls wait and its clock stands still until `Resume`.
+        Pause = "pause",
+        /// The branch goes on after a `Pause` (`{paused_ms}`).
+        Resume = "resume",
+        /// A dispatch run's lead gives an agent work (`{to, task}`).
+        Delegation = "delegation",
+        /// An agent of a dispatch run reports to its lead (`{to, text, turn_end?}`).
+        Report = "report",
+        /// arenad starts an agent's turn in a dispatch run (`{reason, mail?, input}`).
+        Wake = "wake",
+        /// An agent of a dispatch run ended its turn and waits (`{ok, error?, text?}`).
+        Idle = "idle",
+        /// The lead of a dispatch run ends it (`{summary}`).
+        Finish = "finish",
+        /// What an agent thought or said it would do (`{text, kind, source, model_call_seq?,
+        /// truncated?}`), reported by its driver or pulled from a recorded model response.
+        Reasoning = "reasoning",
     }
 }
 
@@ -593,4 +553,66 @@ pub struct RunSummary {
     pub task_id: String,
     pub created_at: DateTime<Utc>,
     pub branches: Vec<Branch>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every kind's and status's name, as stored and as the API shows it.
+    const KINDS: [&str; 18] = [
+        "run_start",
+        "agent_start",
+        "model_call",
+        "tool_call",
+        "handoff",
+        "message",
+        "agent_end",
+        "check",
+        "world_event",
+        "world_view",
+        "pause",
+        "resume",
+        "delegation",
+        "report",
+        "wake",
+        "idle",
+        "finish",
+        "reasoning",
+    ];
+    const STATUSES: [&str; 7] = [
+        "running",
+        "passed",
+        "failed",
+        "infra_error",
+        "interrupted",
+        "stopped",
+        "budget_exceeded",
+    ];
+
+    #[test]
+    fn each_event_kind_has_one_name_both_ways() {
+        let names: Vec<&str> = EventKind::ALL.iter().map(EventKind::as_str).collect();
+        assert_eq!(names, KINDS);
+        for k in EventKind::ALL {
+            assert_eq!(EventKind::parse(k.as_str()), Some(*k));
+            assert_eq!(serde_json::to_value(k).unwrap(), k.as_str());
+            let read: EventKind = serde_json::from_value(k.as_str().into()).unwrap();
+            assert_eq!(read, *k);
+        }
+        assert_eq!(EventKind::parse("nope"), None);
+    }
+
+    #[test]
+    fn each_branch_status_has_one_name_both_ways() {
+        let names: Vec<&str> = BranchStatus::ALL.iter().map(BranchStatus::as_str).collect();
+        assert_eq!(names, STATUSES);
+        for s in BranchStatus::ALL {
+            assert_eq!(BranchStatus::parse(s.as_str()), Some(*s));
+            assert_eq!(serde_json::to_value(s).unwrap(), s.as_str());
+            let read: BranchStatus = serde_json::from_value(s.as_str().into()).unwrap();
+            assert_eq!(read, *s);
+        }
+        assert_eq!(BranchStatus::parse("nope"), None);
+    }
 }
