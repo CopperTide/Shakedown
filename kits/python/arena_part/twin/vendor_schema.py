@@ -76,8 +76,9 @@ def _convert(node, used: set, prefix: str):
     if not isinstance(node, dict):
         return node
     if "$ref" in node:
-        used.add(node["$ref"][len(prefix):])
-        return {"$ref": "#/definitions/" + node["$ref"][len(prefix):]}
+        pointer = node["$ref"][len(prefix):]   # a component, or a pointer into one (`Tag/allOf/0`)
+        used.add(pointer.split("/")[0])
+        return {"$ref": "#/definitions/" + pointer}
     out = {k: _keyword(k, v, used, prefix) for k, v in node.items()
            if k not in DROP and not k.startswith("x-") and k != "nullable"}
     if "oneOf" in out:

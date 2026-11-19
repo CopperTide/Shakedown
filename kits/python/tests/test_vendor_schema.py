@@ -93,6 +93,16 @@ def test_openapi_answers_become_draft7_with_their_definitions():
     assert component_schema(SPEC, "Thing")["definitions"]["Kind"]["enum"] == ["a", "b", None]
 
 
+def test_a_ref_into_a_component_keeps_its_pointer_and_brings_the_component():
+    spec = {"openapi": "3.0.2", "paths": {"/u": {"get": {"responses": {"200": {"content": {"application/json": {
+        "schema": {"$ref": "#/components/schemas/User"}}}}}}}},
+        "components": {"schemas": {"Tag": {"allOf": [{"type": "object", "properties": {"id": {"type": "string"}}}]},
+                                   "User": {"allOf": [{"$ref": "#/components/schemas/Tag/allOf/0"}]}}}}
+    s = response_schema(spec, "GET", "/u", 200)
+    assert s["definitions"]["User"] == {"allOf": [{"$ref": "#/definitions/Tag/allOf/0"}]}
+    assert set(s["definitions"]) == {"User", "Tag"}
+
+
 def test_swagger2_answers_and_documented_ops():
     s = response_schema(SWAGGER, "GET", "/m.x", 200)
     assert s == {"$ref": "#/definitions/ok", "definitions": {"ok": {"type": "object", "properties": {

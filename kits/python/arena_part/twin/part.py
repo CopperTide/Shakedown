@@ -62,8 +62,9 @@ def _wall_ms() -> int:
 class HttpTwin(DocsPart):
     """Subclass and set `NAME` (the package name), `SYSTEM` (names the `<SYSTEM>_act` tool and
     notices), `VERSION`, `SCHEMA_SQL`; give `router()`, `seed`, `docs`, `act`; override
-    `is_immutable(path)` for files that never change in place, `route_env`, `READS`; set
-    `HONOURS_READONLY` when the twin refuses the writes of a request marked `req.readonly`."""
+    `is_immutable(path)` for files that never change in place, `route_env`, `READS`, `world_tools`
+    for world tools beside `<SYSTEM>_act`; set `HONOURS_READONLY` when the twin refuses the writes of a
+    request marked `req.readonly`."""
     NAME = ""
     SYSTEM = ""
     VERSION = "0.1.0"
@@ -96,6 +97,10 @@ class HttpTwin(DocsPart):
     def route_env(self, config: dict, host: dict) -> dict:
         return dict(host.get("env") or {})
 
+    def world_tools(self) -> dict:
+        """More world tools (called by links): `{name: (tool, run(ctx, args) -> Done)}`."""
+        return {}
+
     def act_tool(self) -> dict:
         return {"name": f"{self.SYSTEM}_act", "effect": "write",
                 "description": f"Act in {self.SYSTEM} as one of the world's people (called by links).",
@@ -106,7 +111,8 @@ class HttpTwin(DocsPart):
     def describe(self):
         return {"name": self.NAME, "version": self.VERSION, "protocol": 1,
                 "restore": {"exact": "save", "approximate": False}, "uses_clock": True,
-                "fingerprint": {"schema": self.SCHEMA_SQL.strip()[:64]}, "tools": [self.act_tool()],
+                "fingerprint": {"schema": self.SCHEMA_SQL.strip()[:64]},
+                "tools": [self.act_tool(), *(tool for tool, _ in self.world_tools().values())],
                 "save_at": "points"}
 
     def ctx(self, instance) -> TwinCtx:
@@ -167,13 +173,14 @@ class HttpTwin(DocsPart):
 
     def call_tool(self, instance, name, args, clock_ms):
         ctx = self._instance(instance)
-        if name != f"{self.SYSTEM}_act":
+        run = self._tool(name)
+        if run is None:
             return {"error": f"unknown tool {name}", "reads": [], "writes": []}
         with ctx.lock:
             queued = len(ctx.notices)
             try:
                 with ctx.store.tx():
-                    done = self.act(ctx, args.get("person", ""), args.get("action", ""), args.get("args") or {})
+                    done = run(ctx, args)
                     if done.error is not None:
                         raise _Refused(done)
             except _Refused as r:
@@ -181,6 +188,12 @@ class HttpTwin(DocsPart):
                 return r.done.answer()
             ctx.changed = True
             return done.answer()
+
+    def _tool(self, name: str):
+        if name == f"{self.SYSTEM}_act":
+            return lambda ctx, args: self.act(ctx, args.get("person", ""), args.get("action", ""), args.get("args") or {})
+        found = self.world_tools().get(name)
+        return found[1] if found else None
 
     def advance(self, instance, clock_ms):
         ctx = self._instance(instance)
