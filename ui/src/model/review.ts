@@ -72,3 +72,9 @@ export interface ReviewSettings {
   model: string;
   why?: string;
 }
+
+/** What a review is of: one branch, two branches, or two suites. */
+export type Target =
+  | { kind: 'run'; branch: string }
+  | { kind: 'compare'; a: string; b: string }
+  | { kind: 'suites'; a: string; b: string };

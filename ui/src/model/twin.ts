@@ -62,3 +62,11 @@ export interface WorldViewPayload {
   seq_of: number;
   view: TwinView;
 }
+
+/** `GET /api/branches/{id}/recording`: the plant's video for the world view (`video` null when there is none). */
+export interface Recording {
+  video: string | null;
+  /** The branch the recording is of (a fork without one of its own shows its parent's). */
+  of: string | null;
+  sidecar: { duration_s?: number; frames?: number; fps?: number; width?: number; height?: number } | null;
+}

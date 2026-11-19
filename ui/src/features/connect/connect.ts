@@ -3,6 +3,8 @@
 // this browser keeps. A header value is a secret: it goes to arenad once, in the check, and only
 // the reference arenad answers with is ever kept or sent again.
 import { hostOf, isBedrock, modelOf } from '@/model/providers';
+export type { CheckAnswer, CheckBody } from '@/model/connection';
+import type { CheckAnswer, CheckBody } from '@/model/connection';
 import type { AgentSpec, SecretRef, Team } from '@/model/types';
 import { codeProblem } from './connections';
 
@@ -25,15 +27,6 @@ export interface ConnectForm {
 const DEFAULT_REGION = 'us-east-1';
 
 export const emptyForm = (kind: ConnectKind = 'http'): ConnectForm => ({ kind, url: '', headers: '', model: '', region: DEFAULT_REGION, name: '', command: '', workdir: '', env: '' });
-
-export type CheckBody =
-  | { kind: 'http'; url: string; headers?: Record<string, string> }
-  | { kind: 'bedrock'; model_id: string; region: string };
-
-/** arenad's answer to the check: the agent as it will store it (header values as references), or why not. */
-export type CheckAnswer =
-  | { ok: true; agent: AgentSpec; name?: string; ms: number }
-  | { ok: false; error: string; ms?: number };
 
 const TOKEN = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 

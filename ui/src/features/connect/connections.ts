@@ -2,45 +2,13 @@
 // the OpenAI Agents SDK or anything else), which Shakedown launches on this computer for each run
 // that uses it (`/api/connections`). Secret env values come back redacted and stay in arenad.
 import { useEffect, useState } from 'react';
-import { call, post } from '@/api';
+export { createConnection, deleteConnection, listConnections, testConnection } from '@/api/connections';
+import { listConnections } from '@/api/connections';
+import type { Connection, ConnectionTest, NewConnection } from '@/model/connection';
+export type { Connection, ConnectionTest, NewConnection } from '@/model/connection';
 import type { NewSetup } from '@/model/experiment';
-import type { BranchStatus, Runner, Team } from '@/model/types';
+import type { Runner, Team } from '@/model/types';
 import type { ConnectForm } from './connect';
-
-export interface Connection {
-  id: string;
-  name: string;
-  kind: 'code';
-  command: string[];
-  workdir: string | null;
-  /** Values of names with KEY, TOKEN, SECRET or PASSWORD read "••••". */
-  env: Record<string, string>;
-  created_at: string;
-}
-
-export interface NewConnection {
-  name: string;
-  command: string[];
-  workdir?: string;
-  env: Record<string, string>;
-}
-
-/** What a connection test came to (`POST /api/connections/{id}/test`). */
-export interface ConnectionTest {
-  ok: boolean;
-  branch_id: string;
-  status: BranchStatus;
-  agents: string[];
-  tool_calls: number;
-  error: string | null;
-  exit: string | null;
-  stderr_tail: string;
-}
-
-export const listConnections = () => call<Connection[]>('/api/connections');
-export const createConnection = (body: NewConnection) => post<Connection>('/api/connections', body);
-export const deleteConnection = (id: string) => call<{ deleted: string }>(`/api/connections/${encodeURIComponent(id)}`, { method: 'DELETE' });
-export const testConnection = (id: string) => post<ConnectionTest>(`/api/connections/${encodeURIComponent(id)}/test`, {});
 
 const NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
