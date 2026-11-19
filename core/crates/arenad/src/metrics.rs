@@ -217,13 +217,12 @@ fn cost_of(t: &Tally, u: &AgentUse, table: &Prices) -> Cost {
 
 /// One agent run, from its AgentStart.
 fn agent_use(e: &Event) -> AgentUse {
-    let p = &e.payload;
-    let text = |k: &str| p.get(k).and_then(Value::as_str).map(str::to_string);
+    let start = e.decode::<AgentStartPayload>().unwrap_or_default();
     AgentUse {
         agent: e.agent.clone().unwrap_or_default(),
-        kind: serde_json::from_value(p["kind"].clone()).ok(),
-        model: text("model"),
-        provider: text("provider"),
+        kind: start.kind,
+        model: start.model,
+        provider: start.provider,
         tokens: 0,
         prompt_tokens: None,
         completion_tokens: None,
