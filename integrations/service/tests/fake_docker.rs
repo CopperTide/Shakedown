@@ -174,3 +174,32 @@ async fn bad_helper_image_is_invalid_params() {
     }
     assert!(f.log().is_empty());
 }
+
+#[tokio::test]
+async fn a_restarted_program_still_saves_inspects_and_stops_a_running_instance() {
+    let f = Fake::new("restart");
+    let config = f.config(&["data"], json!({}));
+    f.part().start(start("a", config.clone())).await.unwrap();
+    let record = fs::read_to_string(f.live_file("a")).unwrap();
+    assert_eq!(record, config.to_string(), "the record is the config");
+    let again = f.part(); // the program restarted: nothing in memory, the record on disk
+    assert_eq!(again.save(save_params(&f, "a")).await.unwrap().bytes, 3);
+    let target = Target::Instance {
+        instance: "a".into(),
+    };
+    let docs = again.inspect(InspectParams {
+        target,
+        keys: vec![],
+    });
+    assert!(docs.await.unwrap().docs.contains_key("volume/data"));
+    again
+        .stop(IdParams {
+            instance: "a".into(),
+        })
+        .await
+        .unwrap();
+    assert!(!f.live_file("a").exists());
+    assert!(f.log().contains(" down -v"), "{}", f.log());
+    let gone = again.save(save_params(&f, "a")).await.unwrap_err();
+    assert_eq!(gone.message, "no instance a");
+}

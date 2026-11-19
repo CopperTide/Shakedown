@@ -69,6 +69,10 @@ fn write_record(root: &Path, id: &str, record: &Record) -> anyhow::Result<()> {
         .context("recording an instance")
 }
 
+fn forget_record(root: &Path, id: &str) {
+    let _ = std::fs::remove_file(record_path(root, id));
+}
+
 fn live_ids(root: &Path) -> Vec<String> {
     let entries = std::fs::read_dir(live_dir(root)).into_iter().flatten();
     entries
@@ -195,7 +199,7 @@ impl TwentyCrm {
             .drop(&instance_db(id))
             .await
             .map_err(internal)?;
-        let _ = std::fs::remove_file(record_path(&self.root, id));
+        forget_record(&self.root, id);
         Ok(())
     }
 
@@ -349,6 +353,26 @@ mod tests {
         assert_eq!(port_of(&root, "a").unwrap(), 7);
         assert_eq!(recorded_settings(&root).unwrap().project, "arena_twenty_x");
         assert_eq!(port_of(&root, "b").unwrap_err().code, -32002);
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    /// A program restarted while an instance runs finds it by the record the one before wrote:
+    /// the same file, in the same place, with the same bytes.
+    #[test]
+    fn a_restarted_program_reads_the_record_its_predecessor_wrote() {
+        let root = std::env::temp_dir().join(format!("twenty-restart-{}", std::process::id()));
+        let file = root.join(".live/run_1.json");
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        let before = r#"{"port":41001,"project":"arena_twenty_p","db_port":5544}"#;
+        std::fs::write(&file, before).unwrap();
+        assert_eq!(port_of(&root, "run_1").unwrap(), 41001);
+        assert_eq!(recorded_settings(&root).unwrap().db_port, 5544);
+        assert_eq!(live_ids(&root), ["run_1"]);
+        let record = read_record(&root, "run_1").unwrap();
+        write_record(&root, "run_1", &record).unwrap();
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), before);
+        forget_record(&root, "run_1");
+        assert!(live_ids(&root).is_empty() && !file.exists());
         std::fs::remove_dir_all(&root).unwrap();
     }
 }
