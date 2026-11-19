@@ -110,6 +110,8 @@ fn a_clock_parts_stamps_leave_out_the_time_the_branch_was_paused() {
         tokio::time::sleep(Duration::from_millis(500)).await;
         let (before, after) = advances_around(&fx.lines(), paused_at, resumed_at);
         let (world, wall) = (after.0 - before.0, after.1 - before.1);
+        // ended first, so the clock part writes no more to the log the fixture removes
+        assert_eq!(fx.on(&fx.branch, "finish").await.0, 200);
         assert!(wall - world >= 400, "wall {wall} ms, world {world} ms");
     })
 }
