@@ -19,6 +19,7 @@ The table is in the main `README.md`, with what was verified. Each folder has a 
 | `postgres` | a Postgres database per instance |
 | `folder` | a folder of files per instance |
 | `service` | any Docker Compose project per instance |
+| `live-service` | a Docker Compose platform on the world clock: a clock file for its containers, deploys as a world tool, watches as events |
 | `mariadb` | a MariaDB database per instance |
 | `erpnext` | an ERPNext site per instance |
 | `twenty-crm` | a Twenty CRM server per instance, on its own database |

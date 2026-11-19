@@ -148,6 +148,24 @@ impl Project {
         run(self.compose_on(&["up", "-d"], s)?, "docker compose up")
     }
 
+    /// Recreates the compose services `s` (with the project's current environment, so a changed
+    /// image variable takes effect), detached, without touching the services they depend on.
+    pub fn up_no_deps(&self, s: &[&str]) -> Result<()> {
+        run(
+            self.compose_on(&["up", "-d", "--no-deps"], s)?,
+            "docker compose up",
+        )
+    }
+
+    /// The state and health of `service`'s container as compose says them (`running healthy`,
+    /// `running starting`, `exited `; health is empty for a service without a health check).
+    pub fn state(&self, service: &str) -> Result<String> {
+        let fmt = "{{.State}} {{.Health}}";
+        let cmd = self.compose_on(&["ps", "-a", "--format", fmt], &[service])?;
+        let out = run_out(cmd, "docker compose ps")?;
+        Ok(out.lines().next().unwrap_or("").trim().to_string())
+    }
+
     /// A compose command `args` followed by the service names `s`, each checked.
     fn compose_on(&self, args: &[&str], s: &[&str]) -> Result<Command> {
         if let Some(bad) = s.iter().find(|n| !name_ok(n, b"-")) {

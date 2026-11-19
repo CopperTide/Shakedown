@@ -1,4 +1,5 @@
-//! `inspect` and `diff` over volumes: a summary and a content hash per volume.
+//! `inspect` and `diff`: a summary and a content hash per volume, the probes' docs and the image
+//! each service runs.
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
@@ -73,16 +74,24 @@ fn doc(d: &Digest) -> Value {
     json!({"bytes": d.bytes, "files": d.files, "hash": d.hash})
 }
 
-/// `keys` (every volume when empty) of the digests; a key that is no volume is null.
-pub fn inspect(digests: &BTreeMap<String, Digest>, keys: &[String]) -> Docs {
-    let keys: Vec<&String> = if keys.is_empty() {
-        digests.keys().collect()
-    } else {
-        keys.iter().collect()
-    };
-    let docs: Map<String, Value> = keys
-        .into_iter()
-        .map(|k| (k.clone(), digests.get(k).map_or(Value::Null, doc)))
+/// Each volume's doc `{bytes, files, hash}`, by key.
+pub fn volume_docs(digests: &DigestMap) -> Map<String, Value> {
+    (digests.iter()).map(|(k, d)| (k.clone(), doc(d))).collect()
+}
+
+/// `image/<service>` → `{image}` for each service's image.
+pub fn image_docs(images: &BTreeMap<String, String>) -> Map<String, Value> {
+    let doc = |(s, i): (&String, &String)| (format!("image/{s}"), json!({"image": i}));
+    images.iter().map(doc).collect()
+}
+
+/// `keys` of `all` (every doc when empty); a key it lacks is null.
+pub fn select(mut all: Map<String, Value>, keys: &[String]) -> Docs {
+    if keys.is_empty() {
+        return Docs { docs: all };
+    }
+    let docs = (keys.iter())
+        .map(|k| (k.clone(), all.remove(k).unwrap_or(Value::Null)))
         .collect();
     Docs { docs }
 }

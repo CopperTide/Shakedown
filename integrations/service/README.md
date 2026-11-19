@@ -54,3 +54,20 @@ once that port accepts connections (at most 60 s), so agents reach it through ar
 service restarts it on a new port; arenad asks `http_routes` again after each save. The live test `live_service_strategies` (Postgres, a hard-linked volume
 and a cache) passed on Docker 29.1 with `postgres:17-alpine` and `redis:6.2-alpine`: an unchanged file is one inode
 in two saves, the live instance's digests equal its last save's, and a start from the first save has its row and file.
+
+## Images, probes and live copies (fake-Docker tested)
+
+- `images: {<compose service>: <image>}` reaches compose as `IMAGE_<SERVICE>` (upper case, `-` as `_`). The running
+  instance's record keeps the images it runs now and each save's `save.json` keeps them as `images`; a start from a
+  save runs the save's images. `inspect` key `image/<service>` gives `{image}`.
+- `probes: [{key, service, port, path, headers?}]` are docs read over HTTP: `inspect` of a live instance GETs `path` on
+  the port Docker published for `service` (2 s timeout, with `headers`); `{world_ms}` and `{world_s}` in the path are
+  the world's time (the clock file's, see `live-service`; the wall clock without one). The doc is the JSON body, or
+  `{error}` when the service can't be reached, answers other than 2xx, or answers no JSON. A save keeps its probes'
+  docs in `probes.json`, which `inspect` of the save reads. Volume digests are made only when every key, or a
+  `volume/` key, is asked for.
+- A `tar` or `hardlink` volume with `live_copy: true` is copied while everything runs (a store whose own recovery reads
+  a crash-consistent copy): a save whose file volumes are all live copies stops nothing.
+
+The same program is also the `live-service` package (`integrations/live-service/`), which adds the world clock,
+`service_deploy` and watches. This package refuses `live` and `watches`.

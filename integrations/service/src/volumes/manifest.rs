@@ -34,6 +34,10 @@ pub struct Manifest {
     /// that instance is gone. No other variable (a compose file's secrets) is kept.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub env: BTreeMap<String, String>,
+    /// The image each compose service ran (config `images`, as deploys left them): what a start
+    /// from the save runs.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub images: BTreeMap<String, String>,
 }
 
 /// The variables of `env` the helper's `docker` needs: `PATH` (which `docker`) and `DOCKER_*`

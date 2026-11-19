@@ -25,6 +25,8 @@ pub struct Instance {
     pub helper_image: String,
     /// The config's environment (the manifest keeps what the helper needs of it).
     pub env: std::collections::BTreeMap<String, String>,
+    /// The image each compose service runs now (the manifest keeps them).
+    pub images: std::collections::BTreeMap<String, String>,
 }
 
 impl Instance {
@@ -32,10 +34,11 @@ impl Instance {
         self.volumes.iter().filter(move |v| v.save == how)
     }
 
-    /// The compose services to stop while files are copied: every file volume's `services`
-    /// when each names some, else None (the whole project).
+    /// The compose services to stop while files are copied: every stopping file volume's
+    /// `services` when each names some, else None (the whole project). `live_copy` volumes stop
+    /// nothing.
     fn copy_services(&self) -> Option<Vec<&str>> {
-        let copies: Vec<&VolumeSpec> = self.volumes.iter().filter(|v| v.is_file_copy()).collect();
+        let copies: Vec<&VolumeSpec> = self.volumes.iter().filter(|v| v.stops()).collect();
         if copies.iter().any(|v| v.services.is_empty()) {
             return None;
         }
@@ -59,6 +62,7 @@ impl Instance {
             volumes,
             helper_image: Some(self.helper_image.clone()),
             env: manifest::docker_env(&self.env),
+            images: self.images.clone(),
         }
     }
 }
@@ -103,8 +107,12 @@ fn save_into(inst: &Instance, dir: &Path, prev: Option<&str>) -> Result<u64> {
     Ok(bytes)
 }
 
-/// Copies the file volumes with what they need stopped, then starts it again.
+/// Copies the file volumes with what they need stopped, then starts it again; nothing stops
+/// when every file volume is a `live_copy`.
 fn copy_files(inst: &Instance, dir: &Path, prev: Option<&str>) -> Result<u64> {
+    if !inst.volumes.iter().any(VolumeSpec::stops) {
+        return copy_each(inst, dir, prev);
+    }
     let services = inst.copy_services();
     let stopped = match &services {
         Some(s) => inst.project.stop_services(s),

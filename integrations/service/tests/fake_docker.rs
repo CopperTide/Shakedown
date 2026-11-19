@@ -1,95 +1,11 @@
 //! Service behaviour when Docker misbehaves, with a fake `docker` program first on the PATH.
+mod support;
+
 use arena_part::proto::*;
 use arena_part::Part;
-use arena_service::Service;
 use serde_json::{json, Value};
 use std::fs;
-use std::os::unix::fs::PermissionsExt;
-use std::path::PathBuf;
-
-/// The fake: logs its arguments (one line a call) to `log` beside its `bin`, and fails where the environment says so. `port` answers the
-/// n-th of `FAKE_PORTS` after the n-th `up` or `start` (a restarted service gets a new port).
-const FAKE: &str = r#"#!/bin/sh
-LOG="$(dirname "$0")/../log"
-{ printf '%s' "$*" | tr '\n' ' '; echo; } >> "$LOG"
-case "$*" in
-  *" stop") [ -n "$FAKE_STOP_FAIL" ] && { echo no stop >&2; exit 1; } ;;
-  *" up "*) [ -n "$FAKE_UP_FAIL" ] && { echo no up >&2; exit 1; } ;;
-  *-cpf*) case "$*" in *_bad:/v*) echo no export >&2; exit 1 ;; *) printf tar ;; esac ;;
-  *" port "*) n=$(grep -cE ' (start|up)( |$)' "$LOG")
-             echo "127.0.0.1:$(echo "${FAKE_PORTS:-49153}" | awk -v n="$n" '{print $(n < NF ? n : NF)}')" ;;
-  *pg_dump*) printf -- '-- dumped at some time\nCREATE TABLE t (n int);\n' ;;
-esac
-exit 0
-"#;
-
-/// A temporary folder with the fake docker; removed on drop.
-struct Fake(PathBuf);
-
-impl Fake {
-    fn new(tag: &str) -> Fake {
-        let dir = std::env::temp_dir().join(format!("arena_fake_{}_{tag}", std::process::id()));
-        let _ = fs::remove_dir_all(&dir);
-        fs::create_dir_all(dir.join("bin")).unwrap();
-        let docker = dir.join("bin/docker");
-        fs::write(&docker, FAKE).unwrap();
-        fs::set_permissions(&docker, fs::Permissions::from_mode(0o755)).unwrap();
-        fs::write(dir.join("compose.yml"), "services: {}\n").unwrap();
-        Fake(dir)
-    }
-
-    fn part(&self) -> Service {
-        Service::new(self.0.join("saves/service"))
-    }
-
-    /// A config whose compose runs go to the fake; `extra` adds environment variables.
-    fn config(&self, volumes: &[&str], extra: Value) -> Value {
-        let path = format!(
-            "{}:{}",
-            self.0.join("bin").display(),
-            std::env::var("PATH").unwrap()
-        );
-        let mut env = json!({"PATH": path});
-        env.as_object_mut()
-            .unwrap()
-            .extend(extra.as_object().unwrap().clone());
-        json!({"compose_file": self.0.join("compose.yml"), "volumes": volumes, "env": env})
-    }
-
-    fn log(&self) -> String {
-        fs::read_to_string(self.0.join("log")).unwrap_or_default()
-    }
-
-    fn live_file(&self, id: &str) -> PathBuf {
-        self.0.join(format!("saves/service/.live/{id}.json"))
-    }
-}
-
-impl Drop for Fake {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.0);
-    }
-}
-
-fn start(id: &str, config: Value) -> StartParams {
-    StartParams {
-        instance: id.into(),
-        config,
-        seed: 1,
-        clock_ms: 0,
-        from: None,
-        world_time: None,
-    }
-}
-
-fn save_params(f: &Fake, id: &str) -> SaveParams {
-    let dir = f.0.join("saves/service/s1");
-    SaveParams {
-        instance: id.into(),
-        save: "s1".into(),
-        dir: dir.to_string_lossy().into(),
-    }
-}
+use support::*;
 
 #[tokio::test]
 async fn failed_stop_still_starts_and_leaves_no_save() {
@@ -204,30 +120,6 @@ async fn a_restarted_program_still_saves_inspects_and_stops_a_running_instance()
     assert!(f.log().contains(" down -v"), "{}", f.log());
     let gone = again.save(save_params(&f, "a")).await.unwrap_err();
     assert_eq!(gone.message, "no instance a");
-}
-
-/// A config with `volumes` given as JSON (names or specs) and `extra` top-level fields.
-fn config_with(f: &Fake, volumes: Value, extra: Value) -> Value {
-    let mut c = f.config(&[], json!({}));
-    c["volumes"] = volumes;
-    c.as_object_mut()
-        .unwrap()
-        .extend(extra.as_object().unwrap().clone());
-    c
-}
-
-fn save_as(f: &Fake, id: &str, save: &str) -> SaveParams {
-    let dir = f.0.join("saves/service").join(save);
-    SaveParams {
-        instance: id.into(),
-        save: save.into(),
-        dir: dir.to_string_lossy().into(),
-    }
-}
-
-/// The log lines written since `from` lines.
-fn log_since(f: &Fake, from: usize) -> Vec<String> {
-    f.log().lines().skip(from).map(str::to_string).collect()
 }
 
 #[tokio::test]

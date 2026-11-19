@@ -7,6 +7,22 @@ use arena_part::PartError;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+pub use crate::probes::ProbeSpec;
+pub use crate::watches::WatchSpec;
+
+/// A compose service name: lowercase letters, digits, `_` and `-`.
+fn valid_service(s: &str) -> bool {
+    !s.is_empty()
+        && s.len() <= 80
+        && (s.bytes())
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_' || b == b'-')
+}
+
+/// The compose variable that names `service`'s image: `IMAGE_<SERVICE>`, upper case, `-` as `_`.
+pub fn image_var(service: &str) -> String {
+    format!("IMAGE_{}", service.to_ascii_uppercase().replace('-', "_"))
+}
+
 /// How a save holds a volume.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -47,6 +63,9 @@ pub struct VolumeSpec {
     /// For `postgres`: the database (default `postgres`) and user (default `postgres`).
     pub database: Option<String>,
     pub user: Option<String>,
+    /// For `tar` and `hardlink`: copied while everything runs (a store whose own recovery reads
+    /// a crash-consistent copy), so nothing stops for it.
+    pub live_copy: bool,
 }
 
 /// A volume as the config gives it: a name, or a spec.
@@ -66,6 +85,8 @@ enum VolumeEntry {
         database: Option<String>,
         #[serde(default)]
         user: Option<String>,
+        #[serde(default)]
+        live_copy: bool,
     },
 }
 
@@ -80,6 +101,7 @@ impl From<VolumeEntry> for VolumeSpec {
                 service,
                 database,
                 user,
+                live_copy,
             } => VolumeSpec {
                 name,
                 save,
@@ -87,6 +109,7 @@ impl From<VolumeEntry> for VolumeSpec {
                 service,
                 database,
                 user,
+                live_copy,
             },
         }
     }
@@ -102,6 +125,7 @@ impl VolumeSpec {
             service: None,
             database: None,
             user: None,
+            live_copy: false,
         }
     }
 
@@ -116,6 +140,11 @@ impl VolumeSpec {
     /// True for a volume copied as files (`tar`, `hardlink`): the services using it stop.
     pub fn is_file_copy(&self) -> bool {
         matches!(self.save, SaveHow::Tar | SaveHow::Hardlink)
+    }
+
+    /// True for a file copy that stops the services using it (not `live_copy`).
+    pub fn stops(&self) -> bool {
+        self.is_file_copy() && !self.live_copy
     }
 }
 
@@ -147,6 +176,24 @@ pub struct Config {
     /// Extra environment for `docker compose` (variables the compose file uses).
     #[serde(default)]
     pub env: BTreeMap<String, String>,
+    /// Writes the world clock to `clock.json` in a folder the compose file mounts
+    /// (`ARENA_CLOCK_DIR`) at start and each advance (the `live-service` package only).
+    #[serde(default)]
+    pub live: bool,
+    /// The image each compose service runs, passed as `IMAGE_<SERVICE>`; `service_deploy`
+    /// changes one, and a save keeps them.
+    #[serde(default)]
+    pub images: BTreeMap<String, String>,
+    /// Docs read over HTTP from the project's services.
+    #[serde(default)]
+    pub probes: Vec<ProbeSpec>,
+    /// Probes polled on the world clock whose items appearing and going are world events (the
+    /// `live-service` package only).
+    #[serde(default)]
+    pub watches: Vec<WatchSpec>,
+    /// How long a deployed service may take to come up healthy (default 300 s).
+    #[serde(default)]
+    pub deploy_wait_s: Option<u64>,
 }
 
 impl Config {
@@ -161,6 +208,7 @@ impl Config {
         }
         c.check_volumes()?;
         c.check_images()?;
+        c.check_watches()?;
         Ok(c)
     }
 
@@ -183,12 +231,41 @@ impl Config {
         Ok(())
     }
 
-    /// The helper image a name.
+    /// The helper image and every service's image a name, and every service a compose name.
     fn check_images(&self) -> Result<(), PartError> {
-        match self.helper_image.as_deref().filter(|i| !valid_image(i)) {
-            Some(i) => Err(PartError::invalid(format!("{i:?} is not an image name"))),
+        let images = self.helper_image.iter().chain(self.images.values());
+        if let Some(i) = images.into_iter().find(|i| !valid_image(i)) {
+            return Err(PartError::invalid(format!("{i:?} is not an image name")));
+        }
+        match self.images.keys().find(|s| !valid_service(s)) {
+            Some(s) => Err(PartError::invalid(format!("{s:?} is not a service name"))),
             None => Ok(()),
         }
+    }
+
+    /// Each watch reads a probe the config has.
+    fn check_watches(&self) -> Result<(), PartError> {
+        let probe = |key: &str| self.probes.iter().any(|p| p.key == key);
+        match self.watches.iter().find(|w| !probe(&w.probe)) {
+            Some(w) => Err(PartError::invalid(format!(
+                "a watch reads the probe {}, which the config does not have",
+                w.probe
+            ))),
+            None => Ok(()),
+        }
+    }
+
+    /// What the instance needs the world clock for, when it needs it.
+    pub fn needs_clock(&self) -> Option<&'static str> {
+        match (self.live, self.watches.is_empty()) {
+            (true, _) => Some("live"),
+            (false, false) => Some("watches"),
+            (false, true) => None,
+        }
+    }
+
+    pub fn deploy_wait(&self) -> std::time::Duration {
+        std::time::Duration::from_secs(self.deploy_wait_s.unwrap_or(300))
     }
 
     pub fn helper(&self) -> &str {
