@@ -55,8 +55,12 @@ class TwinCtx:
 
     def notify(self, kind: str, text: str, data: dict) -> None:
         """Queue a `notice` event, reported at the next advance."""
-        self.notices.append({"kind": "notice", "text": text,
-                             "data": {"system": self.system, "kind": kind, "data": data}})
+        self.event("notice", text, {"system": self.system, "kind": kind, "data": data})
+
+    def event(self, kind: str, text: str, data: dict) -> None:
+        """Queue a world event of `kind` (links carry it), reported at the next advance; dropped with
+        the request or act it is queued in when that fails."""
+        self.notices.append({"kind": kind, "text": text, "data": data})
 
     def on_rollback(self, undo: Callable[[], None]) -> None:
         """Have `undo` run if the request, act or savepoint this runs in is rolled back: for work
