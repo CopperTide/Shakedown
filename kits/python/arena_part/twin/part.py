@@ -2,8 +2,11 @@
 HTTP server, an SQLite store and a file tree; it is saved at save points and restored exactly."""
 import json
 import shutil
+import sys
 import threading
 import time
+import traceback
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
@@ -43,6 +46,7 @@ class TwinCtx:
     now_ms: Callable[[], int]
     lock: threading.RLock = field(default_factory=threading.RLock)
     notices: list = field(default_factory=list)
+    undo: list = field(default_factory=list)
     changed: bool = False
 
     def actor(self, req) -> str:
@@ -53,6 +57,52 @@ class TwinCtx:
         """Queue a `notice` event, reported at the next advance."""
         self.notices.append({"kind": "notice", "text": text,
                              "data": {"system": self.system, "kind": kind, "data": data}})
+
+    def on_rollback(self, undo: Callable[[], None]) -> None:
+        """Have `undo` run if the request, act or savepoint this runs in is rolled back: for work
+        outside the store (files, git refs)."""
+        self.undo.append(undo)
+
+    def _undo_to(self, mark: int) -> None:
+        while len(self.undo) > mark:
+            try:
+                self.undo.pop()()
+            except Exception:
+                traceback.print_exc(file=sys.stderr)
+
+    @contextmanager
+    def atomic(self):
+        """One request or act: its store transaction; on a raise its notices are dropped and its
+        outside work undone, newest first."""
+        with self._undoing():
+            with self.store.tx():
+                yield self.store.conn
+
+    @contextmanager
+    def savepoint(self, name: str = "part"):
+        """A nested part of a request that may fail on its own: on a raise, what it did is undone as
+        `atomic` does, and the raise goes on."""
+        db = self.store.conn
+        db.execute(f"SAVEPOINT {name}")
+        try:
+            with self._undoing():
+                yield db
+        except BaseException:
+            db.execute(f"ROLLBACK TO {name}")
+            raise
+        finally:
+            db.execute(f"RELEASE {name}")
+
+    @contextmanager
+    def _undoing(self):
+        queued, mark = len(self.notices), len(self.undo)
+        try:
+            yield
+        except BaseException:
+            del self.notices[queued:]
+            self._undo_to(mark)
+            raise
+        del self.undo[mark:]
 
 
 def _wall_ms() -> int:
@@ -169,14 +219,12 @@ class HttpTwin(DocsPart):
         if name != f"{self.SYSTEM}_act":
             return {"error": f"unknown tool {name}", "reads": [], "writes": []}
         with ctx.lock:
-            queued = len(ctx.notices)
             try:
-                with ctx.store.tx():
+                with ctx.atomic():
                     done = self.act(ctx, args.get("person", ""), args.get("action", ""), args.get("args") or {})
                     if done.error is not None:
                         raise _Refused(done)
             except _Refused as r:
-                del ctx.notices[queued:]
                 return r.done.answer()
             ctx.changed = True
             return done.answer()
