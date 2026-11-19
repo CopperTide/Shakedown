@@ -144,3 +144,16 @@ def test_conformance(tmp_path):
     run = subprocess.run([str(check), str(PACKAGE), "--config", str(config)], capture_output=True, text=True,
                          env=env, timeout=300)
     assert run.returncode == 0, run.stdout + run.stderr
+
+
+def test_a_save_written_before_the_kits_clocked_part_still_restores(saves_root):
+    """`fixtures/old-save` was written by the part before it was a ClockedJsonStatePart, with a window event
+    queued for the next advance; restoring it gives the same docs, the queued event and the rest."""
+    fixtures = Path(__file__).parent / "fixtures"
+    shutil.copytree(fixtures / "old-save", saves_root / "utility" / "old-save")
+    expected = json.loads((fixtures / "old-save-expected.json").read_text())
+    part = Utility()
+    part.start("i1", CONFIG, 0, 12 * MIN, {"save": "old-save", "mode": "exact"})
+    assert part.inspect({"instance": "i1"}, [])["docs"] == expected["docs"]
+    assert part.advance("i1", 50 * MIN) == expected["advance"]
+    assert part.inspect({"instance": "i1"}, [])["docs"] == expected["after"]
