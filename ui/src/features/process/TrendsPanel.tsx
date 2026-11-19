@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
-import { LineChart, Sparkline } from '../components/ui/chart';
-import { EmptyState } from '../components/ui/state';
+import { LineChart, Sparkline } from '@/components/ui/chart';
+import { EmptyState } from '@/components/ui/state';
 import type { Event } from '@/model/types';
 import type { Action } from '@/model/actions';
 import { fmt } from '@/lib/format';

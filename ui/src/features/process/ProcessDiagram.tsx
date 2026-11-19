@@ -1,6 +1,6 @@
 import { Handle, type NodeProps, Position, ReactFlow, ReactFlowProvider } from '@xyflow/react';
 import { useMemo } from 'react';
-import { StatusMark, Tag } from '../components/ui/status';
+import { StatusMark, Tag } from '@/components/ui/status';
 import { cn } from '@/lib/cn';
 import { MARK, type Mark, alarmMark, mark } from '@/lib/mark';
 import { kindWord, systemLine } from '@/model/actions';
