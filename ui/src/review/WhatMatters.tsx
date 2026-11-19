@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { Tag } from '../components/ui/status';
-import { suite as fetchSuite } from '../control/api';
+import type { SuiteReport } from '../control/types';
 import type { Target } from './api';
 import { ReviewFrame } from './ReviewFrame';
 import { smallPrint } from './present';
@@ -77,16 +77,16 @@ export default function WhatMatters({ target, hrefOf, what }: { target: Target; 
   );
 }
 
+/** Each example run's run id, by its branch id, from the two suites' reports. */
+function runsByBranch(reports: SuiteReport[]): Record<string, string> {
+  const m: Record<string, string> = {};
+  for (const r of reports) for (const row of r.runs) if (row.branch_id && row.run_id) m[row.branch_id] = row.run_id;
+  return m;
+}
+
 /** What matters between two suites: example runs link to their run pages. */
-export function SuiteWhatMatters({ a, b }: { a: string; b: string }) {
-  const [runOf, setRunOf] = useState<Record<string, string>>({});
-  useEffect(() => {
-    Promise.all([fetchSuite(a), fetchSuite(b)]).then((rs) => {
-      const m: Record<string, string> = {};
-      for (const r of rs) for (const row of r.runs) if (row.branch_id && row.run_id) m[row.branch_id] = row.run_id;
-      setRunOf(m);
-    }, () => {});
-  }, [a, b]);
+export function SuiteWhatMatters({ reports: [a, b] }: { reports: [SuiteReport, SuiteReport] }) {
+  const runOf = useMemo(() => runsByBranch([a, b]), [a, b]);
   const hrefOf: HrefOf = (_side, cite) => (typeof cite === 'string' && runOf[cite] ? `/runs/${runOf[cite]}/${cite}` : null);
-  return <WhatMatters target={{ kind: 'suites', a, b }} hrefOf={hrefOf} what="both suites' results" />;
+  return <WhatMatters target={{ kind: 'suites', a: a.id, b: b.id }} hrefOf={hrefOf} what="both suites' results" />;
 }

@@ -88,7 +88,7 @@ function View({ ids }: { ids: string[] }) {
         {error && <ErrorState error={error} hint="Showing the last results read." onRetry={reload} />}
         {list.filter((e) => e.error && e.error !== 'stopped').map((e) => <ErrorState key={e.id} error={e.error!} hint="The experiment stopped early. The runs that ended are scored." />)}
         <Setups cols={reports.map(columnOf)} measures={measureRows(reports)} />
-        {reports.length === 2 && list.every((e) => e.status !== 'running') && <SuiteWhatMatters a={reports[0].id} b={reports[1].id} />}
+        {reports.length === 2 && list.every((e) => e.status !== 'running') && <SuiteWhatMatters reports={[reports[0], reports[1]]} />}
         <Checks reports={reports} />
       </PageBody>
     </>
