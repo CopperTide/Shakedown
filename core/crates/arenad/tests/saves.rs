@@ -21,7 +21,12 @@ struct SavesFx {
 
 impl SavesFx {
     async fn new(tag: &str, part_args: &[&str]) -> SavesFx {
-        let root = packages::toy_world(tag, part_args, &[]);
+        SavesFx::with_bench(tag, part_args, &[]).await
+    }
+
+    /// `new` with the toy benchmark started with `bench_args`.
+    async fn with_bench(tag: &str, part_args: &[&str], bench_args: &[&str]) -> SavesFx {
+        let root = packages::toy_world(tag, part_args, bench_args);
         let fx = AppFx::idle("saves", tag)
             .root(root)
             .bench("toybench")
@@ -206,5 +211,45 @@ fn a_step_part_is_still_saved_after_each_write() {
         let calls = fx.of_kind(EventKind::ToolCall).await;
         assert!(calls.iter().all(|c| c.payload["saves"]["box"].is_string()));
         assert!(fx.of_kind(EventKind::SavePoint).await.is_empty());
+    })
+}
+
+#[test]
+fn with_nothing_to_save_a_save_point_never_waits_for_the_gate() {
+    run(async {
+        let fx = SavesFx::new("nogatewait", &[]).await;
+        let ctx = fx.fx.state.live.get(&fx.branch).unwrap();
+        let _held = ctx.gate().await; // a long step holds the gate
+        let exec = arenad::exec::ToolExec::new(fx.fx.state.store.clone());
+        let point = exec.save_point(&ctx, "model_call");
+        let made = tokio::time::timeout(std::time::Duration::from_secs(2), point).await;
+        assert!(matches!(made, Ok(Ok(None))), "{made:?}");
+    })
+}
+
+#[test]
+fn a_setup_that_writes_a_points_part_is_saved_where_the_agents_start() {
+    run(async {
+        let setup = json!({"part": "box", "tool": "poke"}).to_string();
+        let fx = SavesFx::with_bench("pointssetup", &POINTS, &["--setup", &setup]).await;
+        let points = fx.of_kind(EventKind::SavePoint).await;
+        assert_eq!(points.len(), 1, "{points:?}");
+        assert_eq!(points[0].payload["reason"], "setup");
+        let saved = points[0].payload["saves"]["box"].clone();
+        assert!(saved.is_string(), "{}", points[0].payload);
+        let evs = fx.events().await;
+        let start = evs
+            .iter()
+            .find(|e| e.kind == EventKind::AgentStart)
+            .unwrap();
+        assert!(points[0].seq < start.seq);
+        let team = fx.fx.state.store.branch(&fx.branch).await.unwrap().team;
+        let plan = arenad::fork::plan_fork(&evs, &team, start.seq, &Default::default()).unwrap();
+        assert_eq!((plan.start_seq, plan.moved_from), (start.seq, None));
+        assert_eq!(
+            json!(plan.restore["box"]),
+            saved,
+            "the fork starts with the setup's write"
+        );
     })
 }

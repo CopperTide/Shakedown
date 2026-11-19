@@ -97,6 +97,13 @@ function reasoningStep(p: Payload, who: string): StepSummary {
   return { title: `${who} · ${reasoningWord(p.kind)}`, text: text + cut, abnormal: false };
 }
 
+/** Why a save point was made, as the run page says it. */
+const SAVED_WHY: Record<string, string> = {
+  model_call: 'before a model call',
+  asked: 'asked by the driver',
+  setup: "after the task's setup",
+};
+
 const WORDS: Partial<Record<Event['kind'], Words>> = {
   delegation: (p, who, to) => ({ title: `${who} · Delegate`, text: `${who} gave ${to(p.to)} work: ${quote(p.task)}`, abnormal: false }),
   report: (p, who, to) => ({
@@ -120,7 +127,7 @@ const WORDS: Partial<Record<Event['kind'], Words>> = {
   pause: () => ({ title: 'Paused', text: 'The run was paused: no agent could act until it resumed.', abnormal: false }),
   resume: (p) => ({ title: 'Resumed', text: `The run went on after ${clockText(Number(p.paused_ms ?? 0) / 1000)} paused.`, abnormal: false }),
   reasoning: reasoningStep,
-  save_point: (p) => ({ title: 'Saved', text: `The world was saved (${p.reason === 'asked' ? 'asked by the driver' : 'before a model call'}).`, abnormal: p.error != null }),
+  save_point: (p) => ({ title: 'Saved', text: `The world was saved (${SAVED_WHY[String(p.reason)] ?? SAVED_WHY.model_call}).`, abnormal: p.error != null }),
   run_start: () => ({ title: 'Start', text: 'The run started and the task was set up in the world.', abnormal: false }),
 };
 

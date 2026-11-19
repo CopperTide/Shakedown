@@ -192,6 +192,8 @@ impl BranchCtx {
 /// The single place where tool calls are executed, recorded and saved.
 pub struct ToolExec {
     pub store: Arc<Store>,
+    /// How long a request through the proxy may take before it is answered 504.
+    http_timeout: std::time::Duration,
 }
 
 /// The tools `agent` gets on `branch`, in MCP shape (`name`, `description`, `inputSchema`): the
@@ -359,7 +361,16 @@ fn failure(branch: &BranchCtx, e: WorldError) -> String {
 
 impl ToolExec {
     pub fn new(store: Arc<Store>) -> ToolExec {
-        ToolExec { store }
+        ToolExec {
+            store,
+            http_timeout: crate::app::DEFAULT_PROXY_TIMEOUT,
+        }
+    }
+
+    /// The executor with requests through the proxy limited to `timeout` each.
+    pub fn with_http_timeout(mut self, timeout: std::time::Duration) -> ToolExec {
+        self.http_timeout = timeout;
+        self
     }
 
     /// The JSON given back to the agent: the result, or `{"error": msg}`.

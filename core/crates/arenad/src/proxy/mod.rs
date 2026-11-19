@@ -91,9 +91,14 @@ async fn handle(state: Arc<AppState>, req: Request<Incoming>) -> Answer {
     if req.method() == Method::CONNECT {
         return tunnel::connect(state, branch, holder.agent, req).await;
     }
-    let exec = ToolExec::new(state.store.clone());
+    let exec = executor(&state);
     let read = request::read_plain(req).await;
     run_read(&exec, &branch, holder.agent.as_deref(), read).await
+}
+
+/// The executor of the proxy's requests: each limited to the configured timeout.
+fn executor(state: &AppState) -> ToolExec {
+    ToolExec::new(state.store.clone()).with_http_timeout(state.config.proxy_timeout)
 }
 
 /// Runs a request read off the wire as a step of `agent` on `branch` (a body too large is

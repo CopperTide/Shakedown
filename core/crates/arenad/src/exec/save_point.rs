@@ -10,13 +10,17 @@ use crate::{
 
 impl ToolExec {
     /// Saves the branch's unsaved points parts behind the gate, the world clock paused, and
-    /// records the save point with `reason`; None when nothing was unsaved. A failed save is the
-    /// event's `error` and its part stays unsaved.
+    /// records the save point with `reason`; None when nothing was unsaved (then the gate is
+    /// never waited for: most worlds have no points part). A failed save is the event's `error`
+    /// and its part stays unsaved.
     pub async fn save_point(
         &self,
         branch: &BranchCtx,
         reason: &str,
     ) -> Result<Option<Event>, String> {
+        if !branch.world.has_unsaved_points() {
+            return Ok(None);
+        }
         let _gate = branch.gate_timed().await;
         if !branch.world.has_unsaved_points() {
             return Ok(None);

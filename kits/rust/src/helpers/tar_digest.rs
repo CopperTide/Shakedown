@@ -30,10 +30,15 @@ impl Header {
         self.0[156] == b'5'
     }
 
-    /// The header as hashed: a folder's mtime is left out, as unpacking does not keep it.
+    fn is_symlink(&self) -> bool {
+        self.0[156] == b'2'
+    }
+
+    /// The header as hashed: the mtime of a folder or a symbolic link is left out, as unpacking
+    /// and copying (`cp -a`) do not keep it; where a link points is kept.
     fn hashed(&self) -> [u8; BLOCK] {
         let mut block = self.0;
-        if self.is_dir() {
+        if self.is_dir() || self.is_symlink() {
             block[136..156].fill(0); // mtime and the checksum that covers it
         }
         block

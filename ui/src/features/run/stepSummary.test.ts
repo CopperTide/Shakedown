@@ -10,6 +10,15 @@ const planners: Team = { id: 't', name: 'T', agents: [{ id: 'planner', name: 'Pl
 const httpStep = (o: { method: string; url: string; status?: number; part?: string; error?: string }): Event =>
   ev(20, 'tool_call', { name: 'http', part: o.part, args: { method: o.method, url: o.url }, result: o.status == null ? null : { status: o.status }, error: o.error ?? null }, 'planner');
 
+describe('save points', () => {
+  it('says why the world was saved', () => {
+    const point = (reason: string) => stepSummary(ev(12, 'save_point', { reason, saves: {}, paused_ms: 3 }, null), [start], team).text;
+    expect(point('model_call')).toBe('The world was saved (before a model call).');
+    expect(point('asked')).toBe('The world was saved (asked by the driver).');
+    expect(point('setup')).toBe("The world was saved (after the task's setup).");
+  });
+});
+
 describe('http steps', () => {
   it('says what an http step sent and got', () => {
     const e = httpStep({ method: 'POST', url: 'https://github.acme.test/api/v3/repos/acme/app/pulls', status: 201, part: 'github' });

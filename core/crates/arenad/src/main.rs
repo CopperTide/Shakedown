@@ -1,7 +1,8 @@
 //! The arena service (`cargo run -p arenad` from `arena/core`).
 //!
 //! Environment: `ARENA_PG_URL`, `ARENA_PORT` (4510), `ARENA_PROXY_PORT` (the recording proxy,
-//! on 127.0.0.1; default: a free port),
+//! on 127.0.0.1; default: a free port), `ARENA_PROXY_TIMEOUT_SECS` (300: how long a proxied
+//! request may take before it is answered 504),
 //! the model providers of open agents (`OPENROUTER_API_KEY`, `OPENAI_API_KEY`,
 //! `ANTHROPIC_API_KEY`, `ARENA_LOCAL_MODELS="name=url,…"`, `ARENA_LOCAL_KEY_<NAME>`,
 //! `ARENA_ANTHROPIC_MAX_TOKENS` (16000); see

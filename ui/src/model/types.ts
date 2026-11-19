@@ -297,9 +297,9 @@ export interface IdlePayload {
   error?: string;
 }
 
-/** The parts that save at points, saved before a model call or when a driver asked. */
+/** The parts that save at points, saved before a model call, when a driver asked or after the task's setup. */
 export interface SavePointPayload {
-  reason: 'model_call' | 'asked';
+  reason: 'model_call' | 'asked' | 'setup';
   saves: Saves;
   error?: string;
   paused_ms: number;

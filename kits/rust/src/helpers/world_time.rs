@@ -6,12 +6,13 @@ use std::time::Instant;
 
 pub use crate::proto::WorldTimeParams;
 
-/// How far past the last clock it saw a part's world time runs on (world ms): a branch that is
-/// paused or saving sends no clock, and its telemetry must not run away from it.
+/// How long (wall ms) past the last clock it saw a part's world time runs on, at the world's
+/// speed: a branch that is paused or saving sends no clock, and its telemetry must not run away
+/// from it. At speed 10 that is 10 s of world time, so a 200 ms tick never hits it.
 pub const MAX_LEAD_MS: i64 = 1_000;
 
 /// A part's world time: stamps from the clock it is given, running on at `speed` between clocks
-/// (at most `MAX_LEAD_MS` past the last one) and never going back.
+/// (for at most `MAX_LEAD_MS` of wall time past the last one) and never going back.
 #[derive(Debug, Clone)]
 pub struct WorldTime {
     params: WorldTimeParams,
@@ -40,14 +41,14 @@ impl WorldTime {
         self.seen = Some((clock_ms, now));
     }
 
-    /// The world's unix ms at `now`: the last clock seen plus the time since at `speed`, at most
-    /// `MAX_LEAD_MS` ahead of it, and never less than what it gave before.
+    /// The world's unix ms at `now`: the last clock seen plus the wall time since (at most
+    /// `MAX_LEAD_MS`) at `speed`, and never less than what it gave before.
     pub fn now_ms(&mut self, now: Instant) -> i64 {
         let clock = match self.seen {
             None => 0,
             Some((clock, at)) => {
                 let since = now.saturating_duration_since(at).as_secs_f64() * 1000.0;
-                clock + ((since * self.params.speed) as i64).min(MAX_LEAD_MS)
+                clock + (since.min(MAX_LEAD_MS as f64) * self.params.speed) as i64
             }
         };
         self.given = self.given.max(self.at(clock));
@@ -110,10 +111,23 @@ mod tests {
         let (mut w, t0) = (WorldTime::new(params), Instant::now());
         w.observe(10_000, t0);
         assert_eq!(w.now_ms(t0 + Duration::from_millis(200)), 10_400);
-        assert_eq!(w.now_ms(t0 + Duration::from_secs(5)), 11_000); // a pause: capped at 1 s
+        // a pause: capped at 1 s of wall time, 2 s of world time
+        assert_eq!(w.now_ms(t0 + Duration::from_secs(5)), 12_000);
         w.observe(10_600, t0 + Duration::from_secs(6)); // the clock resumed behind the cap
-        assert_eq!(w.now_ms(t0 + Duration::from_secs(6)), 11_000); // never backwards
-        assert_eq!(w.now_ms(t0 + Duration::from_millis(6_400)), 11_400);
+        assert_eq!(w.now_ms(t0 + Duration::from_secs(6)), 12_000); // never backwards
+        assert_eq!(w.now_ms(t0 + Duration::from_millis(6_800)), 12_200);
+    }
+
+    #[test]
+    fn at_speed_the_lead_grows_with_the_speed() {
+        let params = WorldTimeParams {
+            epoch_ms: 0,
+            speed: 10.0,
+        };
+        let (mut w, t0) = (WorldTime::new(params), Instant::now());
+        w.observe(0, t0);
+        assert_eq!(w.now_ms(t0 + Duration::from_millis(200)), 2_000); // one tick at speed 10
+        assert_eq!(w.now_ms(t0 + Duration::from_secs(3)), 10_000); // capped at 1 s of wall time
     }
 
     #[test]

@@ -11,7 +11,7 @@ use tokio_rustls::{rustls::ServerConfig, TlsAcceptor};
 use super::request::{self, Answer};
 use crate::{
     app::AppState,
-    exec::{BranchCtx, HttpCall, ToolExec, NOT_RUNNING},
+    exec::{BranchCtx, HttpCall, NOT_RUNNING},
 };
 
 /// The one port a served host takes HTTPS on.
@@ -39,7 +39,7 @@ pub async fn connect(
     let host = authority.host().to_ascii_lowercase();
     let port = authority.port_u16().unwrap_or(HTTPS_PORT);
     if let Some(why) = refusal(&branch, &host, port) {
-        let exec = ToolExec::new(state.store.clone());
+        let exec = super::executor(&state);
         let call = connect_call(&host, port, &req);
         let answer = exec.http_refusal(&branch, agent.as_deref(), call, (403, &why));
         return request::to_response(answer.await);
@@ -105,7 +105,7 @@ impl Tunnel {
             return request::text(409, NOT_RUNNING);
         }
         let read = request::read_call(req, "https", self.host.clone(), HTTPS_PORT).await;
-        let exec = ToolExec::new(self.state.store.clone());
+        let exec = super::executor(&self.state);
         super::run_read(&exec, &self.branch, self.agent.as_deref(), read).await
     }
 }

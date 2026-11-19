@@ -17,6 +17,8 @@ pub struct HostRoute {
     pub env: BTreeMap<String, String>,
     /// `(METHOD, path glob)` of requests that only read.
     reads: Vec<(String, String)>,
+    /// True when the part refuses a read-only agent's writes itself (see `HttpRoute`).
+    pub honours_readonly: bool,
 }
 
 impl HostRoute {
@@ -82,6 +84,22 @@ impl Hosts {
             }
         }
         Ok(hosts)
+    }
+
+    /// The hosts with `part`'s routes replaced by `routes` (checked as `build` checks them); the
+    /// hosts stay as they were when one is refused.
+    pub fn replace(&mut self, part: &str, routes: Vec<HttpRoute>) -> Result<(), String> {
+        let others = self.routes.iter().filter(|r| r.part != part).cloned();
+        let mut next = Hosts {
+            routes: others.collect(),
+        };
+        for r in routes {
+            let route = host_route(part, r)
+                .map_err(|why| format!("the part {part} gives a bad route: {why}"))?;
+            next.add(route)?;
+        }
+        *self = next;
+        Ok(())
     }
 
     /// Adds `route` unless another part serves its host or sets one of its variables.
@@ -152,6 +170,7 @@ fn host_route(part: &str, r: HttpRoute) -> Result<HostRoute, String> {
         upstream,
         env: r.env,
         reads,
+        honours_readonly: r.honours_readonly,
     })
 }
 
@@ -189,6 +208,7 @@ mod tests {
             upstream: upstream.into(),
             env: BTreeMap::new(),
             reads: vec![],
+            honours_readonly: false,
         }
     }
 

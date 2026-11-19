@@ -1,5 +1,7 @@
 //! Branch comparison: per-branch totals, first divergent step, differing final rows.
 
+use std::borrow::Cow;
+
 use anyhow::{anyhow, Result};
 use parts::{
     proto::{is_internal_key, WorldPart},
@@ -13,7 +15,7 @@ use crate::{
     prices,
     restore::keeps_saves,
     saves::{self, part_code},
-    world::Saves,
+    world::{Saves, HTTP_TOOL},
 };
 
 /// `{status, restore_mode, restored, seconds, tokens, cost_usd, cost_source}` for a finished
@@ -58,16 +60,27 @@ fn combined_source(ends: &[AgentEndPayload]) -> Value {
     }
 }
 
-/// What makes two steps the same: agent, kind, tool name and arguments.
-type Signature<'a> = (Option<&'a str>, EventKind, &'a Value, &'a Value);
+/// What makes two steps the same: agent, kind, tool name and arguments (see `signed_args`).
+type Signature<'a> = (Option<&'a str>, EventKind, &'a Value, Cow<'a, Value>);
 
 fn signature(e: &Event) -> Signature<'_> {
     (
         e.agent.as_deref(),
         e.kind,
         &e.payload["name"],
-        &e.payload["args"],
+        signed_args(e),
     )
+}
+
+/// The arguments a step is compared by: a request through the proxy's are its method, URL and
+/// body hash (its headers carry dates, request ids and client versions); any other step's all.
+fn signed_args(e: &Event) -> Cow<'_, Value> {
+    let args = &e.payload["args"];
+    if e.kind != EventKind::ToolCall || e.payload["name"] != HTTP_TOOL {
+        return Cow::Borrowed(args);
+    }
+    let body = &args["body"]["sha256"];
+    Cow::Owned(json!({"method": args["method"], "url": args["url"], "body": body}))
 }
 
 /// Each step's seq and signature, bookkeeping (views, save points) and pauses left out.
@@ -226,6 +239,27 @@ mod tests {
         ];
         assert_eq!(first_divergent_seq(&a, &viewed), None);
         assert_eq!(first_divergent_seq(&viewed, &b), Some(3));
+    }
+
+    #[test]
+    fn http_steps_are_the_same_when_method_url_and_body_are() {
+        let http = |seq, ua: &str, body: &str| {
+            let args = json!({"method": "POST", "url": "http://toy.test/items",
+                              "headers": {"user-agent": ua, "date": format!("d{seq}")},
+                              "body": {"bytes": body.len(), "sha256": format!("h-{body}")}});
+            call(seq, "http", args)
+        };
+        let a = vec![http(1, "curl/8.1", "x")];
+        assert_eq!(first_divergent_seq(&a, &[http(1, "curl/8.2", "x")]), None);
+        assert_eq!(
+            first_divergent_seq(&a, &[http(1, "curl/8.1", "y")]),
+            Some(1)
+        );
+        let other_tool = |ua| call(1, "x", json!({"headers": {"user-agent": ua}}));
+        assert_eq!(
+            first_divergent_seq(&[other_tool("a")], &[other_tool("b")]),
+            Some(1)
+        );
     }
 
     #[test]

@@ -23,6 +23,11 @@ async fn echo_host(h: HeaderMap) -> axum::Json<Value> {
         "x-forwarded-host",
         "x-forwarded-proto",
         "x-forwarded-port",
+        "x-forwarded-for",
+        "forwarded",
+        "x-arena-effect",
+        "x-arena-agent",
+        "x-arena-readonly",
     ];
     let got: HashMap<&str, &str> = (names.iter())
         .filter_map(|n| Some((*n, h.get(*n)?.to_str().ok()?)))
@@ -47,7 +52,27 @@ async fn upstream() -> String {
             "/items",
             post(|b: String| async { (StatusCode::CREATED, b) }),
         )
-        .route("/graphql", post(graphql));
+        .route("/graphql", post(graphql))
+        .route("/hang", get(std::future::pending::<String>))
+        .route(
+            "/read",
+            post(|h| async { ([("x-arena-effect", "read")], echo_host(h).await) }),
+        )
+        .route(
+            "/write",
+            post(|| async { (StatusCode::CREATED, [("x-arena-effect", "write")], "done") }),
+        );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    base
+}
+
+/// An upstream that answers `GET /name` with `name` and takes `POST /items`.
+async fn named_upstream(name: &'static str) -> String {
+    let app = Router::new()
+        .route("/name", get(move || async move { name }))
+        .route("/items", post(|| async { StatusCode::CREATED }));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());
     tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
@@ -77,10 +102,20 @@ impl ProxyFx {
 
     /// The app over a toy part `box` started with `part_args` (no route unless they give one).
     async fn with_part(tag: &str, part_args: &[&str]) -> ProxyFx {
+        ProxyFx::configured(tag, part_args, |_| {}).await
+    }
+
+    /// `with_part` with the app's config changed by `tweak`.
+    async fn configured(
+        tag: &str,
+        part_args: &[&str],
+        tweak: impl FnOnce(&mut arenad::app::Config) + Send + 'static,
+    ) -> ProxyFx {
         let root = packages::toy_world(tag, part_args, &[]);
         let fx = AppFx::idle("proxy", tag)
             .root(root)
             .bench("toybench")
+            .config(tweak)
             .start()
             .await;
         let team = json!({"id": "own", "name": "Own design", "agents": []});
@@ -142,6 +177,26 @@ fn sha256_hex(b: &[u8]) -> String {
 }
 
 #[test]
+fn a_client_cannot_set_the_forwarding_headers() {
+    run(async {
+        let fx = ProxyFx::new("spoof", &upstream().await, &[]).await;
+        let r = (fx.client("planner").get("http://toy.test/echo-host"))
+            .header("x-forwarded-host", "evil.test")
+            .header("X-Forwarded-Proto", "https")
+            .header("x-forwarded-for", "10.0.0.1")
+            .header("forwarded", "host=evil.test")
+            .header("x-arena-effect", "read")
+            .send()
+            .await;
+        let v: Value = r.unwrap().json().await.unwrap();
+        let want = json!({"host": "toy.test", "x-forwarded-host": "toy.test",
+                          "x-forwarded-proto": "http", "x-forwarded-port": "80",
+                          "x-arena-agent": "planner"});
+        assert_eq!(v, want);
+    })
+}
+
+#[test]
 fn a_get_through_the_proxy_is_a_read_step_of_the_part_serving_the_host() {
     run(async {
         let fx = ProxyFx::new("get", &upstream().await, &[]).await;
@@ -194,7 +249,8 @@ fn the_upstream_sees_the_worlds_host_name() {
             .await;
         let v: Value = r.unwrap().json().await.unwrap();
         let want = json!({"host": "toy.test", "x-forwarded-host": "toy.test",
-                          "x-forwarded-proto": "http", "x-forwarded-port": "80"});
+                          "x-forwarded-proto": "http", "x-forwarded-port": "80",
+                          "x-arena-agent": "planner"});
         assert_eq!(v, want);
     })
 }
@@ -327,6 +383,79 @@ fn a_read_only_agent_may_read_but_not_write() {
 }
 
 #[test]
+fn the_upstream_is_told_which_agent_sent_each_request() {
+    run(async {
+        let fx = ProxyFx::new("agent", &upstream().await, &[]).await;
+        for agent in ["planner", "reader"] {
+            let r = (fx.client(agent).get("http://toy.test/echo-host"))
+                .header("x-arena-agent", "boss")
+                .header("x-arena-readonly", "0")
+                .send()
+                .await;
+            let v: Value = r.unwrap().json().await.unwrap();
+            assert_eq!(v["x-arena-agent"], agent, "{v}");
+            assert!(v.get("x-arena-readonly").is_none(), "{v}");
+        }
+    })
+}
+
+#[test]
+fn a_read_only_post_goes_marked_to_a_route_that_honours_read_only() {
+    run(async {
+        let honours = ["--route-honours-readonly"];
+        let fx = ProxyFx::new("honours", &upstream().await, &honours).await;
+        let (status, v) = post_json(&fx.client("reader"), "http://toy.test/read").await;
+        assert_eq!(status, 200);
+        assert_eq!(
+            (&v["x-arena-agent"], &v["x-arena-readonly"]),
+            (&json!("reader"), &json!("1"))
+        );
+        let e = fx.last_tool_call().await;
+        assert!(e.payload["error"].is_null(), "{}", e.payload);
+        assert_eq!(e.payload["reads"], json!(["http/toy.test"]));
+        let (_, v) = post_json(&fx.client("planner"), "http://toy.test/read").await;
+        assert!(
+            v.get("x-arena-readonly").is_none(),
+            "only a read-only agent's: {v}"
+        );
+    })
+}
+
+/// An empty POST to `url`: the status and the JSON answer.
+async fn post_json(c: &reqwest::Client, url: &str) -> (u16, Value) {
+    let r = c.post(url).send().await.unwrap();
+    (r.status().as_u16(), r.json().await.unwrap())
+}
+
+#[test]
+fn a_read_only_request_the_part_says_wrote_is_a_violation_that_fails_the_branch() {
+    run(async {
+        let honours = ["--route-honours-readonly"];
+        let fx = ProxyFx::new("violation", &upstream().await, &honours).await;
+        let r = fx
+            .client("reader")
+            .post("http://toy.test/write")
+            .send()
+            .await;
+        assert_eq!(r.unwrap().status().as_u16(), 201);
+        let e = fx.last_tool_call().await;
+        let why = "a read-only agent's request wrote: the box part answered X-Arena-Effect: write \
+                   to POST http://toy.test/write";
+        assert_eq!(
+            (e.agent.as_deref(), &e.payload["error"]),
+            (Some("reader"), &json!(why))
+        );
+        assert_eq!(e.payload["writes"], json!(["http/toy.test"]));
+        assert_eq!(fx.on("finish").await.0, 200);
+        let b = fx.fx.state.store.branch(&fx.branch).await.unwrap();
+        assert_eq!(
+            (b.status, b.error.as_deref()),
+            (BranchStatus::Failed, Some(why))
+        );
+    })
+}
+
+#[test]
 fn secrets_in_headers_are_not_recorded() {
     run(async {
         let fx = ProxyFx::new("secrets", &upstream().await, &[]).await;
@@ -422,6 +551,47 @@ fn a_part_that_does_not_answer_is_a_502_step() {
         let e = fx.last_tool_call().await;
         assert_eq!(e.payload["error"], json!(text));
         assert_eq!(e.payload["part"], "box");
+    })
+}
+
+#[test]
+fn a_part_that_hangs_is_a_504_step_and_frees_the_branch() {
+    run(async {
+        let route = format!("toy.test={}", upstream().await);
+        let quick = |c: &mut arenad::app::Config| c.proxy_timeout = Duration::from_millis(500);
+        let fx = ProxyFx::configured("hang", &["--http-route", &route], quick).await;
+        let c = fx.client("planner");
+        let hung =
+            tokio::time::timeout(Duration::from_secs(5), get_text(&c, "http://toy.test/hang"));
+        let (status, text) = hung.await.expect("the proxy answers in time");
+        assert_eq!(status, 504);
+        assert_eq!(text, "the box part did not answer at toy.test within 0.5 s");
+        let e = fx.last_tool_call().await;
+        assert_eq!(e.payload["error"], json!(text));
+        let next = tokio::time::timeout(
+            Duration::from_secs(5),
+            get_text(&c, "http://toy.test/hello"),
+        );
+        assert_eq!(next.await.unwrap().0, 200, "the gate is free again");
+    })
+}
+
+#[test]
+fn after_a_save_requests_go_where_the_part_now_serves() {
+    run(async {
+        let (before, after) = (
+            named_upstream("before").await,
+            named_upstream("after").await,
+        );
+        let args = ["--save-at", "points", "--route-after-save", after.as_str()];
+        let fx = ProxyFx::new("moved", &before, &args).await;
+        let c = fx.client("planner");
+        assert_eq!(get_text(&c, "http://toy.test/name").await.1, "before");
+        let r = c.post("http://toy.test/items").send().await.unwrap();
+        assert_eq!(r.status().as_u16(), 201);
+        let (status, v) = fx.on("save").await;
+        assert_eq!(status, 200, "{v}");
+        assert_eq!(get_text(&c, "http://toy.test/name").await.1, "after");
     })
 }
 
@@ -571,7 +741,8 @@ fn https_forwarding_says_https_on_443() {
             .await
             .unwrap();
         let want = json!({"host": "toy.test", "x-forwarded-host": "toy.test",
-                          "x-forwarded-proto": "https", "x-forwarded-port": "443"});
+                          "x-forwarded-proto": "https", "x-forwarded-port": "443",
+                          "x-arena-agent": "planner"});
         assert_eq!(v, want);
     })
 }

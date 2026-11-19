@@ -15,10 +15,17 @@ def test_between_advances_time_runs_on_but_stands_still_past_the_lead_and_never_
     w, t0 = WorldTime(0, 2.0), 100.0
     w.observe(10_000, now=t0)
     assert w.now_ms(now=t0 + 0.2) == 10_400
-    assert w.now_ms(now=t0 + 5) == 11_000  # a pause: capped at 1 s of world time
+    assert w.now_ms(now=t0 + 5) == 12_000  # a pause: capped at 1 s of wall time, 2 s of world time
     w.observe(10_600, now=t0 + 6)  # the clock resumed behind the cap
-    assert w.now_ms(now=t0 + 6) == 11_000  # never backwards
-    assert w.now_ms(now=t0 + 6.4) == 11_400
+    assert w.now_ms(now=t0 + 6) == 12_000  # never backwards
+    assert w.now_ms(now=t0 + 6.75) == 12_100
+
+
+def test_at_speed_the_lead_grows_with_the_speed():
+    w, t0 = WorldTime(0, 10.0), 100.0
+    w.observe(0, now=t0)
+    assert w.now_ms(now=t0 + 0.2) == 2_000  # one 200 ms tick at speed 10
+    assert w.now_ms(now=t0 + 3) == 10_000  # capped at 1 s of wall time
 
 
 class Timed(Part):
