@@ -1,7 +1,7 @@
 import { Play, Plus } from 'lucide-react';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import ImportDialog from '@/board/ImportDialog';
+import ImportDialog from '@/features/team/ImportDialog';
 import { type ConnectFrom, type ConnectReturn, connectedLabel, connectedTeams } from '@/features/connect/connect';
 import { setupFor, useCodeTeams } from '@/features/connect/connections';
 import { useHealth } from '@/hooks/useHealth';

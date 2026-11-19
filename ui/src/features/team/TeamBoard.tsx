@@ -1,8 +1,8 @@
 import { type Edge, Handle, MarkerType, type Node, type NodeProps, Panel, Position, ReactFlow, type ReactFlowInstance, ReactFlowProvider, useReactFlow } from '@xyflow/react';
 import { Maximize2, Minus, Plus } from 'lucide-react';
 import { useMemo, useRef } from 'react';
-import { Button } from '../components/ui/button';
-import { Tag } from '../components/ui/status';
+import { Button } from '@/components/ui/button';
+import { Tag } from '@/components/ui/status';
 import { cn } from '@/lib/cn';
 import type { AgentSpec, Runner, Team } from '@/model/types';
 import { agentModelLine, agentModelTip } from '@/model/providers';

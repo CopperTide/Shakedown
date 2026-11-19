@@ -20,7 +20,7 @@ const Compare = lazy(() => import('@/features/compare/ComparePage'));
 const ConnectPage = lazy(() => import('@/features/connect/ConnectPage'));
 const Run = lazy(() => import('@/features/run/RunPage'));
 const Runs = lazy(() => import('@/features/runs/RunsPage'));
-const Team = lazy(() => import('./pages/Team'));
+const Team = lazy(() => import('@/features/team/TeamPage'));
 const World = lazy(() => import('@/features/world/WorldPage'));
 
 function NotFound() {

@@ -2,7 +2,7 @@ import { ChevronUp } from 'lucide-react';
 import { diskFill, diskLine, modesLine } from './status';
 import { useHealth } from '@/hooks/useHealth';
 import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover';
-import { ProviderStatusLine } from '../ProviderFields';
+import { ProviderStatusLine } from '@/components/ProviderFields';
 import { bestProviders, checkProviders, useCheckedProviders } from '@/hooks/useProviders';
 import { providerSummary } from '@/model/providers';
 import { cn } from '@/lib/cn';

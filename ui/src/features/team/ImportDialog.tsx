@@ -1,10 +1,10 @@
 import { FileUp } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { Button } from '../components/ui/button';
-import { Dialog, DialogContent } from '../components/ui/dialog';
-import { Textarea } from '../components/ui/input';
-import { ErrorState } from '../components/ui/state';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/input';
+import { ErrorState } from '@/components/ui/state';
 import { cn } from '@/lib/cn';
 import type { Team } from '@/model/types';
 import { importTeam } from './importTeam';

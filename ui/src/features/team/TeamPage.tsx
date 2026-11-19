@@ -1,12 +1,12 @@
 import { ArrowUp, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { defaultTeam } from '@/api';
-import { ModelHint, ModelInput, ProviderSelect } from '../ProviderFields';
-import { Button } from '../components/ui/button';
-import { Checkbox, Field, Input, NativeSelect, Textarea } from '../components/ui/input';
-import { PageBody, PageHeader } from '../components/ui/page';
-import { Panel } from '../components/ui/panel';
-import { ErrorState, LoadingState } from '../components/ui/state';
+import { ModelHint, ModelInput, ProviderSelect } from '@/components/ProviderFields';
+import { Button } from '@/components/ui/button';
+import { Checkbox, Field, Input, NativeSelect, Textarea } from '@/components/ui/input';
+import { PageBody, PageHeader } from '@/components/ui/page';
+import { Panel } from '@/components/ui/panel';
+import { ErrorState, LoadingState } from '@/components/ui/state';
 import { MODE_LABEL, agentModelLine, agentModelTip, providerOf } from '@/model/providers';
 import { useProviderList } from '@/hooks/useProviders';
 import { clearStoredTeam, loadTeam, saveTeam } from '@/hooks/storedTeam';

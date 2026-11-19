@@ -1,11 +1,11 @@
 import { ChevronDown, FileUp, Pencil, PlugZap, Users } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import ImportDialog from '../board/ImportDialog';
+import ImportDialog from '@/features/team/ImportDialog';
 import { type ConnectFrom, connectedTeams } from '@/features/connect/connect';
 import { useCodeTeams } from '@/features/connect/connections';
 import { agentModelLine } from '@/model/providers';
-import TeamBoard from '../board/TeamBoard';
+import TeamBoard from '@/features/team/TeamBoard';
 import { Button } from '../components/ui/button';
 import { SidePanel } from '../components/ui/side-panel';
 import { LoadingState } from '../components/ui/state';

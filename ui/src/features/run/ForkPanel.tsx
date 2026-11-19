@@ -4,7 +4,7 @@ import { ARCHITECTURES, type ForkChoice, architectureOf, singleTeam, swapChanges
 import { fork } from '@/api';
 import { changedFields } from './timeline';
 import { RestoreChoice, blockedReason, useRestorePlan } from './RestoreChoice';
-import { ModelHint, ModelInput, ProviderSelect } from '@/ProviderFields';
+import { ModelHint, ModelInput, ProviderSelect } from '@/components/ProviderFields';
 import { Button } from '@/components/ui/button';
 import { Field, NativeSelect, Textarea } from '@/components/ui/input';
 import { ErrorState } from '@/components/ui/state';
