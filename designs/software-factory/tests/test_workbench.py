@@ -103,3 +103,15 @@ def test_push_gate(tmp_path: Path, settings):
 
 def test_without_the_gate_pushes_go_through(bench, docker):
     assert bench.shell("git push") == "exit 0\n"
+
+
+def test_benches_make_one_workspace_per_agent_with_its_env(tmp_path: Path, settings, monkeypatch):
+    from factory_designs.workbench import RealDocker, benches
+
+    class Ep:
+        env = {"HTTPS_PROXY": "http://arena:t2@127.0.0.1:4600"}
+
+    monkeypatch.setenv("FACTORY_WORKSPACES", str(tmp_path / "ws"))
+    wb = benches(settings, push_gate=True)("coder", Ep())
+    assert wb.workspace == (tmp_path / "ws" / "coder").resolve()
+    assert wb.env == Ep.env and wb.gate is not None and isinstance(wb.docker, RealDocker)

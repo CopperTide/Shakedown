@@ -5,7 +5,9 @@ proxy as usual, with their own ticket in the proxy URL."""
 
 from __future__ import annotations
 
+import os
 import socket
+import tempfile
 import threading
 from pathlib import Path
 from typing import Any
@@ -38,6 +40,12 @@ def _serve(client: socket.socket, target: tuple[str, int]) -> None:
     back.join()
     client.close()
     upstream.close()
+
+
+def bridge_socket() -> Path:
+    """Where this driver's proxy socket lives (a short path: unix sockets cap it at 108)."""
+    folder = os.environ.get("FACTORY_SOCKET_DIR") or tempfile.gettempdir()
+    return Path(folder) / f"shakedown-{os.getpid()}.sock"
 
 
 class ProxyBridge:

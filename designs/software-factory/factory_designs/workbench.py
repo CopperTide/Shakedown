@@ -8,14 +8,17 @@ Answers are text, never exceptions: ``exit <code>`` and the output's tail, or ``
 
 from __future__ import annotations
 
+import os
 import posixpath
 import re
 import subprocess
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping, Optional, Protocol
+from typing import Any, Callable, Mapping, Optional, Protocol
 from urllib.parse import urlsplit, urlunsplit
 
+from .bridge import bridge_socket
 from .settings import Settings
 
 #: Where the container's proxy listens (the image's ``bridge-then`` relays it to the socket).
@@ -200,3 +203,15 @@ class Workbench:
         if m:
             return Path(posixpath.normpath(self._relative(m.group(1)))).parts[0]
         return "."
+
+
+def benches(settings: Settings, push_gate: bool = False) -> Callable[[str, Any], "Workbench"]:
+    """A design's workbench maker for a real run: one workspace per agent under
+    ``FACTORY_WORKSPACES`` (default a new temporary folder), on Docker, bridged to the proxy."""
+    root = Path(os.environ.get("FACTORY_WORKSPACES") or tempfile.mkdtemp(prefix="shakedown-ws-"))
+    socket, docker = bridge_socket(), RealDocker()
+
+    def make(agent_id: str, endpoint: Any) -> Workbench:
+        return Workbench(agent_id, endpoint.env, root, socket, settings, docker, push_gate)
+
+    return make

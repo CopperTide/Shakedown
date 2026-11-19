@@ -6,9 +6,7 @@ the run is scored at its window like any other. Anything else is a bug and goes 
 from __future__ import annotations
 
 import os
-import tempfile
 from contextlib import ExitStack
-from pathlib import Path
 from typing import Any, Callable, ContextManager, Iterator, Optional
 
 import openai
@@ -16,7 +14,7 @@ import openai
 from arena import driver
 from arena.errors import ArenaError
 
-from .bridge import ProxyBridge
+from .bridge import ProxyBridge, bridge_socket
 
 #: Statuses the OpenAI client retries; seeing one means its retries ran out.
 RETRIED = {408, 429}
@@ -66,11 +64,6 @@ def _report(run: Any, reason: str) -> None:
 
 def _proxy_url() -> Optional[str]:
     return os.environ.get("ARENA_PROXY") or os.environ.get("HTTPS_PROXY")
-
-
-def bridge_socket() -> Path:
-    """Where this driver's proxy socket lives (a short path: unix sockets cap it at 108)."""
-    return Path(os.environ.get("FACTORY_SOCKET_DIR") or tempfile.gettempdir()) / f"shakedown-{os.getpid()}.sock"
 
 
 def run_design(main: Callable[[Any], None],

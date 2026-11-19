@@ -7,9 +7,10 @@
 
 from __future__ import annotations
 
+import os
 import time
 from datetime import datetime, timezone
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
 from arena.mcp import Tool, ToolResult
 
@@ -73,6 +74,24 @@ def wait_minutes(run: Any, minutes: float, poll_s: float = 2.0) -> str:
         clock = run.clock()
     at = datetime.fromtimestamp(clock["world_ms"] / 1000, tz=timezone.utc)
     return f"World time is {at.strftime('%Y-%m-%dT%H:%M:%SZ')}."
+
+
+def window_minutes(run: Any) -> Optional[float]:
+    """The run's world time window in minutes: ``ARENA_WORLD_MINUTES`` when arenad gives it,
+    else the run's start record; None when the run has no window."""
+    if os.environ.get("ARENA_WORLD_MINUTES"):
+        return float(os.environ["ARENA_WORLD_MINUTES"])
+    try:
+        value = run.branch.record().run_start.get("world_minutes")
+    except Exception:  # noqa: BLE001 - an older arenad: no window known
+        return None
+    return float(value) if value else None
+
+
+def minutes_text(run: Any) -> str:
+    """The window for a prompt: ``60``, or ``a limited number of`` when it is not known."""
+    m = window_minutes(run)
+    return f"{m:g}" if m else "a limited number of"
 
 
 class ToolBox:

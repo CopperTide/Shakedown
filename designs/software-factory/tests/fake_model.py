@@ -137,13 +137,23 @@ class FakeEndpoint:
         return 0
 
 
+class _FakeBranch:
+    def __init__(self, run_start: dict):
+        self.run_start = run_start
+
+    def record(self) -> "_FakeBranch":
+        return self
+
+
 class FakeRun:
     """Stands in for ``DriverRun``: registers :class:`FakeEndpoint`\\ s, records reasoning, and
     has a world clock a test moves with :meth:`advance`."""
 
     def __init__(self, fake: FakeModel, ticket: str = "Work the sprint of acme.",
-                 agent_env: Optional[dict[str, str]] = None, clock_ms: int = 0):
+                 agent_env: Optional[dict[str, str]] = None, clock_ms: int = 0,
+                 world_minutes: Optional[float] = 60.0):
         self.fake = fake
+        self.branch = _FakeBranch({"task_id": "sprint", "world_minutes": world_minutes})
         self.ticket = ticket
         self.agent_env = agent_env or {}
         self.registered: dict[str, dict] = {}
