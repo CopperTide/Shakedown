@@ -48,5 +48,6 @@ Each save has `save.json` (`{volumes: [{name, save}], rsync_image?, compose_file
 instance is kept in `.last/<instance>.json`. `describe.save_at` is `points`: arenad saves the part at save points
 (before a model call, on request, at run end), not after every request. `http: [{host, service, port, env?,
 reads?}]` makes `http_routes` answer each host with the port Docker published for `service` (`docker compose port`),
-so agents reach it through arenad's proxy. The live test `live_service_strategies` (Postgres, a hard-linked volume
+once that port accepts connections (at most 60 s), so agents reach it through arenad's proxy. A save that stops a
+service restarts it on a new port; arenad asks `http_routes` again after each save. The live test `live_service_strategies` (Postgres, a hard-linked volume
 and a cache; `ARENA_TEST_RSYNC_IMAGE` names the rsync image) is written but has not been run.

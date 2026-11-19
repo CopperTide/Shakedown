@@ -7,14 +7,16 @@ use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 
-/// The fake: logs its arguments, and fails where the environment says so.
+/// The fake: logs its arguments, and fails where the environment says so. `port` answers the
+/// n-th of `FAKE_PORTS` after the n-th `up` or `start` (a restarted service gets a new port).
 const FAKE: &str = r#"#!/bin/sh
 echo "$@" >> "$FAKE_LOG"
 case "$*" in
   *" stop") [ -n "$FAKE_STOP_FAIL" ] && { echo no stop >&2; exit 1; } ;;
   *" up "*) [ -n "$FAKE_UP_FAIL" ] && { echo no up >&2; exit 1; } ;;
   *-cpf*) case "$*" in *_bad:/v*) echo no export >&2; exit 1 ;; *) printf tar ;; esac ;;
-  *" port "*) echo 127.0.0.1:49153 ;;
+  *" port "*) n=$(grep -cE ' (start|up)( |$)' "$FAKE_LOG")
+             echo "127.0.0.1:$(echo "${FAKE_PORTS:-49153}" | awk -v n="$n" '{print $(n < NF ? n : NF)}')" ;;
   *pg_dump*) printf -- '-- dumped at some time\nCREATE TABLE t (n int);\n' ;;
 esac
 exit 0
@@ -388,30 +390,71 @@ async fn file_volumes_that_name_their_services_stop_only_those() {
     assert!(!log.lines().any(|l| l.ends_with(" stop")), "{log}");
 }
 
+/// A port something listens on (while the listener lives).
+fn listening() -> (std::net::TcpListener, u16) {
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = l.local_addr().unwrap().port();
+    (l, port)
+}
+
+fn routes_of(id: &str) -> IdParams {
+    IdParams {
+        instance: id.into(),
+    }
+}
+
 #[tokio::test]
 async fn the_service_serves_the_hosts_its_config_names() {
     let f = Fake::new("routes");
+    let (_l, port) = listening();
     let p = f.part();
     let http = json!([{"host": "app.acme.test", "service": "web", "port": 8080,
                        "env": {"APP_URL": "https://app.acme.test"}}]);
-    p.start(start(
-        "a",
-        config_with(&f, json!(["data"]), json!({"http": http})),
-    ))
-    .await
-    .unwrap();
-    let routes = p
-        .http_routes(IdParams {
-            instance: "a".into(),
-        })
-        .await
-        .unwrap();
+    let mut config = f.config(&["data"], json!({"FAKE_PORTS": port.to_string()}));
+    config["http"] = http;
+    p.start(start("a", config)).await.unwrap();
+    let routes = p.http_routes(routes_of("a")).await.unwrap();
     assert_eq!(routes.routes.len(), 1);
     assert_eq!(routes.routes[0].host, "app.acme.test");
-    assert_eq!(routes.routes[0].upstream, "http://127.0.0.1:49153");
+    assert_eq!(
+        routes.routes[0].upstream,
+        format!("http://127.0.0.1:{port}")
+    );
     assert_eq!(routes.routes[0].env["APP_URL"], "https://app.acme.test");
     assert!(f.log().contains(" port web 8080"), "{}", f.log());
     assert_eq!(p.describe().await.unwrap().save_at, SaveAt::Points);
+}
+
+#[tokio::test]
+async fn after_a_save_restarts_it_the_service_is_served_at_its_new_port_once_it_listens() {
+    let f = Fake::new("newport");
+    let (_first, first) = listening();
+    let second = listening().1; // nothing listens there until the restarted service does
+    let p = f.part();
+    let mut config = f.config(
+        &["data"],
+        json!({"FAKE_PORTS": format!("{first} {second}")}),
+    );
+    config["http"] = json!([{"host": "app.acme.test", "service": "web", "port": 8080}]);
+    p.start(start("a", config)).await.unwrap();
+    let upstream = |r: HttpRoutes| r.routes[0].upstream.clone();
+    let before = upstream(p.http_routes(routes_of("a")).await.unwrap());
+    assert_eq!(before, format!("http://127.0.0.1:{first}"));
+    p.save(save_params(&f, "a")).await.unwrap();
+    let late = std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(400));
+        let l = std::net::TcpListener::bind(("127.0.0.1", second)).unwrap();
+        std::thread::sleep(std::time::Duration::from_secs(2));
+        drop(l);
+    });
+    let after = upstream(p.http_routes(routes_of("a")).await.unwrap());
+    assert_eq!(after, format!("http://127.0.0.1:{second}"));
+    let up = std::net::TcpStream::connect(("127.0.0.1", second));
+    assert!(
+        up.is_ok(),
+        "the routes came back before the service listened"
+    );
+    late.join().unwrap();
 }
 
 #[tokio::test]
