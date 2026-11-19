@@ -1,0 +1,2 @@
+# cli/cli acee710547dcf7dfb6490afea77972187e74b819 internal/featuredetection/feature_detection.go
+query Issue_fields{Issue: __type(name: "Issue"){fields(includeDeprecated: true){name}}}

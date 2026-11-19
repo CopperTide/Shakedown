@@ -86,14 +86,11 @@ def _serve(fn, req, ctx) -> Response:
     refused = refused_write(req)
     if refused is not None:
         return _finish(refused, ctx)
-    db = ctx.store.conn
-    db.execute("SAVEPOINT api")
     try:
-        resp = fn(Call(req, ctx, _caller(req, ctx)))
+        with ctx.savepoint("api"):
+            resp = fn(Call(req, ctx, _caller(req, ctx)))
     except GithubError as e:
-        db.execute("ROLLBACK TO api")
         resp = _error_response(e)
-    db.execute("RELEASE api")
     return _finish(resp, ctx)
 
 

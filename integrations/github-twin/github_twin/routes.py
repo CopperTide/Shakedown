@@ -2,6 +2,7 @@
 from arena_part.twin import Response, Router
 
 from . import auth, events, git_http, rest, users
+from .graphql import endpoint as graphql
 from .repos import Repos
 from .rest.api import not_found_response
 from .urls import API
@@ -33,8 +34,9 @@ def _push(req, ctx, owner: str, repo: str, user: str) -> Response:
     row = ctx.store.conn.execute("SELECT * FROM repos WHERE owner = ? AND name = ?", (owner, repo)).fetchone()
     if row is None:
         return Response(404, "Repository not found.\n")
-    repos = Repos(ctx.files)
+    repos = Repos(ctx.files, ctx.on_rollback)
     before = repos.refs(f"{owner}/{repo}")
+    repos.on_rollback_refs(f"{owner}/{repo}", before)
     resp = git_http.read_whole(git_http.handle(req, ctx.files, owner, repo, "git-receive-pack", user))
     events.after_push(ctx, row, repos.refs_changed(f"{owner}/{repo}", before), by=user)
     return resp
@@ -43,6 +45,7 @@ def _push(req, ctx, owner: str, repo: str, user: str) -> Response:
 def build() -> GithubRouter:
     router = GithubRouter()
     rest.register(router)
+    router.add("POST", "/api/graphql", graphql.handle)
     router.add("GET", "/{owner}/{repo}/info/refs", _git("info/refs"))
     router.add("POST", "/{owner}/{repo}/git-upload-pack", _git("git-upload-pack"))
     router.add("POST", "/{owner}/{repo}/git-receive-pack", _git("git-receive-pack"))

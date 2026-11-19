@@ -48,20 +48,17 @@ def _request(handler, fallback: str) -> Request:
 
 
 def _handle(twin_server, req: Request) -> Response:
-    """Dispatch in one transaction; roll back (store and queued notices) on a raise or a 5xx."""
+    """Dispatch in one transaction; roll back (store, queued notices, outside work) on a raise or a 5xx."""
     ctx = twin_server.ctx
     with ctx.lock:
-        queued = len(ctx.notices)
         try:
-            with ctx.store.tx():
+            with ctx.atomic():
                 resp = twin_server.router.dispatch(req, ctx)
                 if resp.status >= 500:
                     raise _Failed(resp)
         except _Failed as f:
-            del ctx.notices[queued:]
             return f.response
         except Exception:
-            del ctx.notices[queued:]
             traceback.print_exc(file=sys.stderr)
             return Response(500, {"message": "Internal Server Error"})
         effect = resp.effect or ("read" if req.method in READ_METHODS else "write")

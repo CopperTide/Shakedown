@@ -1,0 +1,14 @@
+# Sent by gh 2.45.0 (github.com/cli/cli, MIT, LICENSE-cli.txt)
+fragment issue on Issue {number,title,url,state,updatedAt,labels(first:100){nodes{id,name,description,color},totalCount},stateReason}query IssueSearch($repo: String!, $owner: String!, $type: SearchType!, $limit: Int, $after: String, $query: String!) {
+			repository(name: $repo, owner: $owner) {
+				hasIssuesEnabled
+			}
+			search(type: $type, last: $limit, after: $after, query: $query) {
+				issueCount
+				nodes { ...issue }
+				pageInfo {
+					hasNextPage
+					endCursor
+				}
+			}
+		}

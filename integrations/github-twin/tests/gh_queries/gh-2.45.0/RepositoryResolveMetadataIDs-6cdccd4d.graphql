@@ -1,0 +1,7 @@
+# Sent by gh 2.45.0 (github.com/cli/cli, MIT, LICENSE-cli.txt)
+query RepositoryResolveMetadataIDs {
+u000: user(login:"coder"){id,login}
+repository(owner:"acme",name:"app"){
+l000: label(name:"bug"){id,name}
+}
+}

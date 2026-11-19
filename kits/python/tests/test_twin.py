@@ -1,7 +1,7 @@
 import pytest
 
 from http_client import http
-from arena_part.twin import Response
+from arena_part.twin import Done, Response, Router
 from notes_twin import NotesTwin
 
 FORWARDED = {"X-Forwarded-Proto": "https", "X-Forwarded-Host": "notes.acme.test"}
@@ -182,3 +182,67 @@ def test_routes_say_when_the_twin_honours_read_only(notes):
         assert notes.http_routes("i")["routes"][0]["honours_readonly"] is True
     finally:
         del notes.HONOURS_READONLY
+
+
+class StampedNotes(NotesTwin):
+    """Notes that remember when they were seeded, by the twin's clock."""
+
+    def seed(self, ctx, config):
+        self.seeded_ms = ctx.now_ms()
+
+
+def test_the_twins_stamps_follow_the_world_clock_from_its_seed_on():
+    from conftest import Client
+    twin, epoch = StampedNotes(clock=Clock()), 1_900_000_000_000
+    c = Client(twin)
+    c.req("start", {"instance": "i", "config": CONFIG, "seed": 1, "clock_ms": 5_000,
+                    "world_time": {"epoch_ms": epoch, "speed": 1.0}})
+    c.req("advance", {"instance": "i", "clock_ms": 60_000})
+    try:
+        assert all("result" in r for r in c.run())
+        assert epoch + 5_000 <= twin.seeded_ms <= epoch + 6_000  # world time runs on at most 1 s
+        assert epoch + 60_000 <= twin.ctx("i").now_ms() <= epoch + 61_000
+    finally:
+        twin.stop("i")
+
+
+class UndoNotes(NotesTwin):
+    """Notes whose `POST /moves` does outside work (a list it appends to) and undoes it on rollback."""
+
+    def __init__(self, **kw):
+        super().__init__(**kw)
+        self.moved = []
+
+    def router(self):
+        r = Router()
+
+        def move(req, ctx):
+            self.moved.append(req.arg("name"))
+            ctx.on_rollback(lambda: self.moved.remove(req.arg("name")))
+            return Response(int(req.arg("status") or 201), {})
+
+        r.add("POST", "/moves", move)
+        return r
+
+    def act(self, ctx, person, action, args):
+        self.moved.append(action)
+        ctx.on_rollback(lambda: self.moved.remove(action))
+        return Done(error="refused") if action == "refuse" else Done({})
+
+
+@pytest.fixture
+def undo_notes():
+    twin = UndoNotes(clock=Clock())
+    twin.start("i", CONFIG, 1, 0)
+    yield twin
+    twin.stop("i")
+
+
+def test_outside_work_is_undone_when_the_request_or_act_fails(undo_notes):
+    t = undo_notes
+    assert http(up(t), "POST", "/moves?name=kept").status == 201
+    assert http(up(t), "POST", "/moves?name=failed&status=503").status == 503
+    assert t.call_tool("i", "notes_act", {"person": "dana", "action": "refuse"}, 0)["error"] == "refused"
+    assert t.call_tool("i", "notes_act", {"person": "dana", "action": "done"}, 0)["result"] == {}
+    assert t.moved == ["kept", "done"]
+    assert t.ctx("i").undo == []

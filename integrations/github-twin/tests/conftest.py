@@ -199,3 +199,31 @@ def twin_with_pr(with_clone):
     assert create_pr(with_clone, "add-b", title="Add b") == 1
     advance_events(with_clone)
     return with_clone
+
+
+def gql_raw(twin, query, variables=None, as_user=None, headers=None, token=None) -> Answer:
+    body = {"query": query, **({"variables": variables} if variables is not None else {})}
+    return api_raw(twin, "POST", "/api/graphql", body, as_user=as_user, headers=headers, token=token)
+
+
+def gql(twin, query, variables=None, **kw) -> dict:
+    r = gql_raw(twin, query, variables, **kw)
+    assert r.status == 200, (r.status, r.body[:500])
+    return r.json()
+
+
+def gql_data(twin, query, variables=None, **kw) -> dict:
+    out = gql(twin, query, variables, **kw)
+    assert "errors" not in out, out["errors"]
+    return out["data"]
+
+
+@pytest.fixture
+def front(twin, tmp_path):
+    """The twin behind a TLS front on 127.0.0.1 with a test CA (see tls_front)."""
+    from tls_front import TlsFront, make_ca
+    ca, cert, key = make_ca(tmp_path / "ca")
+    f = TlsFront(twin.up, cert, key)
+    f.ca, f.twin = ca, twin
+    yield f
+    f.close()

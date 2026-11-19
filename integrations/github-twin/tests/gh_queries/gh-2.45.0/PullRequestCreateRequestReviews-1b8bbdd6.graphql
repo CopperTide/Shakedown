@@ -1,0 +1,4 @@
+# Sent by gh 2.45.0 (github.com/cli/cli, MIT, LICENSE-cli.txt)
+mutation PullRequestCreateRequestReviews($input: RequestReviewsInput!) {
+			requestReviews(input: $input) { clientMutationId }
+		}

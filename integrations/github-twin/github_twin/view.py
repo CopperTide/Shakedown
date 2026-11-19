@@ -32,7 +32,7 @@ class View:
 
     @cached_property
     def repos(self) -> Repos:
-        return Repos(self.ctx.files)
+        return Repos(self.ctx.files, self.ctx.on_rollback)
 
     def now(self) -> int:
         return self.ctx.now_ms()

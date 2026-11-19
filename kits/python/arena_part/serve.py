@@ -123,9 +123,14 @@ def _observe(part, params):
 
 
 def _start(part, params):
+    """Keeps the world time first, so what `start` makes (a twin's seed) is stamped in world time."""
     instance, config, seed, clock_ms = _need(params, "instance", "config", "seed", "clock_ms")
-    part.start(instance, config, seed, clock_ms, params.get("from"))
     _keep_world_time(part, instance, params.get("world_time"), clock_ms)
+    try:
+        part.start(instance, config, seed, clock_ms, params.get("from"))
+    except BaseException:
+        _keep_world_time(part, instance, None, clock_ms)
+        raise
     return {}
 
 
