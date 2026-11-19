@@ -66,7 +66,7 @@ impl AppFx {
     }
 
     fn clock_ms(&self, branch: &str) -> i64 {
-        self.state.live.read().unwrap()[branch].clock.now_ms()
+        self.state.live.get(branch).unwrap().clock.now_ms()
     }
 }
 
@@ -161,7 +161,7 @@ fn stopping_refuses_the_held_calls_and_ends_the_run_unscored() {
             !fx.kinds(&branch).await.contains(&EventKind::Check),
             "not scored"
         );
-        assert!(!fx.state.live.read().unwrap().contains_key(&branch));
+        assert!(!fx.state.live.contains(&branch));
         assert_eq!(fx.branch(&branch).await["paused"], false);
         for what in ["pause", "resume", "stop"] {
             assert_eq!(fx.on(&branch, what).await.0, 409, "{what}");

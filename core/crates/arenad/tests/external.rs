@@ -362,7 +362,7 @@ async fn assert_history_handed_back(fx: &AppFx, branch: &str, evs: &[Event], at:
     let got: Vec<Value> = history.iter().map(|e| e["kind"].clone()).collect();
     assert_eq!(got, want);
     let child = f["branch_id"].as_str().unwrap().to_string();
-    assert!(fx.state.live.read().unwrap().contains_key(&child));
+    assert!(fx.state.live.contains(&child));
     assert!(of("reviewer")["mcp_url"].as_str().unwrap().contains(&child));
     let (status, v) = fx.finish(&child).await;
     assert_eq!(status, 200, "{v}");

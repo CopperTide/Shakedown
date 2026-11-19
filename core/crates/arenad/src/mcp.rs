@@ -58,8 +58,7 @@ fn admitted(
     headers: &HeaderMap,
 ) -> Result<Arc<BranchCtx>, (StatusCode, Json<Value>)> {
     let refuse = |status, code, msg| (status, Json(rpc_error(Value::Null, code, msg)));
-    let ctx: Option<Arc<BranchCtx>> = state.live.read().unwrap().get(branch).cloned();
-    let Some(ctx) = ctx.filter(|c| c.has_agent(agent)) else {
+    let Some(ctx) = state.live.agent(branch, agent) else {
         return Err(refuse(
             StatusCode::NOT_FOUND,
             -32000,

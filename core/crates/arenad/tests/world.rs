@@ -219,11 +219,7 @@ async fn make_live(fx: &AppFx) {
         agents: vec![],
     };
     let ctx = arenad::exec::BranchCtx::new("b1".into(), world, team, "t1".into());
-    fx.state
-        .live
-        .write()
-        .unwrap()
-        .insert("b1".into(), Arc::new(ctx));
+    fx.state.live.insert(Arc::new(ctx));
 }
 
 #[test]
@@ -247,7 +243,7 @@ fn gc_refused_while_branch_live() {
             fx.save_exists("toy-a", "s_orphan").await,
             "nothing was dropped"
         );
-        fx.state.live.write().unwrap().clear();
+        fx.state.live.remove("b1");
         assert_eq!(fx.post_empty("/api/gc").await.0, 200);
     })
 }

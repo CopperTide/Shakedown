@@ -373,8 +373,7 @@ async fn run_is_running(state: &AppState, id: &str) -> Result<bool, ApiError> {
         return Ok(true);
     }
     let branches = state.store.run_branches(id).await?;
-    let live = state.live.read().unwrap();
-    Ok(branches.iter().any(|b| live.contains_key(b)))
+    Ok(branches.iter().any(|b| state.live.contains(b)))
 }
 
 async fn delete_run(
@@ -540,7 +539,7 @@ fn budget_of(state: &AppState, id: &str, events: &[crate::model::Event]) -> Valu
         .iter()
         .find(|e| e.kind == crate::model::EventKind::RunStart);
     let max = start.and_then(|e| e.payload["max_cost_usd"].as_f64());
-    let live = state.live.read().unwrap().get(id).map(|c| c.budget.spent());
+    let live = state.live.get(id).map(|c| c.budget.spent());
     json!({"max_cost_usd": max, "estimate_usd": live})
 }
 

@@ -1,6 +1,6 @@
 use std::{
     collections::HashMap,
-    sync::{Arc, OnceLock, RwLock},
+    sync::{Arc, OnceLock},
     time::Duration,
 };
 
@@ -11,7 +11,7 @@ use crate::{
     agents::{
         claude::ClaudeDriver, codex::CodexDriver, http::HttpDriver, open::OpenDriver, Driver,
     },
-    exec::BranchCtx,
+    live::LiveBranches,
     model::AgentKind,
     providers::ProviderConfig,
     store::Store,
@@ -98,7 +98,7 @@ pub struct AppState {
     /// when neither names one.
     pub benchmark: String,
     /// Branches currently running, by branch id.
-    pub live: RwLock<HashMap<String, Arc<BranchCtx>>>,
+    pub live: LiveBranches,
     pub config: Config,
     /// Shared HTTP client (gateway upstream and open agent loop).
     pub http: reqwest::Client,
@@ -126,7 +126,7 @@ impl AppState {
             store,
             hub,
             benchmark,
-            live: RwLock::new(HashMap::new()),
+            live: LiveBranches::default(),
             config,
             http,
             drivers: OnceLock::new(),

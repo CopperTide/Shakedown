@@ -22,7 +22,7 @@ pub(super) fn router() -> Router<Arc<AppState>> {
 
 /// The live branch `id`: 409 when it has ended (or never ran here), 404 when there is none.
 async fn live(state: &AppState, id: &str) -> Result<Arc<BranchCtx>, ApiError> {
-    if let Some(ctx) = state.live.read().unwrap().get(id).cloned() {
+    if let Some(ctx) = state.live.get(id) {
         return Ok(ctx);
     }
     match state.store.find_branch(id).await? {
@@ -60,6 +60,5 @@ async fn stop(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> Api
 
 /// True when the live branch `id` is paused (a branch that isn't live never is).
 pub(super) fn is_paused(state: &AppState, id: &str) -> bool {
-    let live = state.live.read().unwrap();
-    live.get(id).is_some_and(|c| c.flow.is_paused())
+    state.live.get(id).is_some_and(|c| c.flow.is_paused())
 }

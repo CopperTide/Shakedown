@@ -250,11 +250,7 @@ fn run_start(bench: &BenchDescribe, world: &World, seed: u64, of: &RunStartOf<'_
 /// is live before this returns, so a cleanup can't slip in between the start and the task.
 pub fn spawn_branch(state: &Arc<AppState>, ctx: Arc<BranchCtx>, from: StartPoint) {
     let state = state.clone();
-    state
-        .live
-        .write()
-        .unwrap()
-        .insert(ctx.branch_id.clone(), ctx.clone());
+    state.live.insert(ctx.clone());
     tokio::spawn(async move {
         let branch_id = ctx.branch_id.clone();
         let inner = tokio::spawn(run_branch(state.clone(), ctx.clone(), from));
@@ -277,8 +273,7 @@ pub async fn run_branch(state: Arc<AppState>, ctx: Arc<BranchCtx>, from: StartPo
 
 /// Makes a branch that an external system drives live, its clock ticking.
 pub async fn go_live(state: &AppState, ctx: Arc<BranchCtx>) {
-    let id = ctx.branch_id.clone();
-    state.live.write().unwrap().insert(id, ctx.clone());
+    state.live.insert(ctx.clone());
     ctx.start_ticker(&state.store).await;
 }
 
@@ -346,7 +341,7 @@ async fn conclude(state: &AppState, ctx: &BranchCtx, outcome: Result<Ending>) ->
 async fn leave_live(state: &AppState, ctx: &BranchCtx) {
     ctx.stop_ticker().await;
     ctx.world.stop().await;
-    state.live.write().unwrap().remove(&ctx.branch_id);
+    state.live.remove(&ctx.branch_id);
 }
 
 /// How a branch ended: its status and error.

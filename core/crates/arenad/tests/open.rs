@@ -56,7 +56,7 @@ async fn setup(tag: &str, agents: Vec<AgentSpec>, providers: ProviderConfig) -> 
     config.self_base = base;
     let state = Arc::new(AppState::new(store, hub.hub.clone(), config));
     let ctx = Arc::new(BranchCtx::new(branch.clone(), world, team, "task".into()));
-    state.live.write().unwrap().insert(branch, ctx.clone());
+    state.live.insert(ctx.clone());
     app::serve(listener, &state);
     Fx {
         state,

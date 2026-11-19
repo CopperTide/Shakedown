@@ -97,7 +97,7 @@ fn a_lead_that_cant_reach_its_model_ends_the_run_infra_error() {
         assert_eq!(evs[0].payload["runner"], "dispatch");
         assert_lifecycle_events(&evs);
         assert_lead_woken_with_its_brief(&evs);
-        assert!(fx.state.live.read().unwrap().is_empty());
+        assert!(fx.state.live.is_empty());
     })
 }
 

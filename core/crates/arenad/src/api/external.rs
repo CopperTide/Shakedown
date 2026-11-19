@@ -60,8 +60,7 @@ pub(super) async fn create_run(
 /// The live branch `id` an external system drives: 404 when it isn't live, 409 when arenad runs
 /// its agents.
 fn external_branch(state: &AppState, id: &str) -> Result<Arc<BranchCtx>, ApiError> {
-    let ctx = state.live.read().unwrap().get(id).cloned();
-    let ctx = ctx.ok_or_else(|| ApiError::not_found(format!("no live branch \"{id}\"")))?;
+    let ctx = state.live.get(id).ok_or_else(|| ApiError::not_found(format!("no live branch \"{id}\"")))?;
     if ctx.rules.runner != Runner::External {
         return Err(ApiError::conflict(
             "arenad runs this branch's agents itself",

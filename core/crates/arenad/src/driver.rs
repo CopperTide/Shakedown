@@ -26,7 +26,6 @@ use crate::{
     app::AppState,
     external,
     model::*,
-    runner,
     store::Connection,
     suite::{Slot, Suite},
 };
@@ -178,13 +177,10 @@ async fn cut_off(state: &AppState, branch: &str, since: Instant) {
     if since.elapsed() < limit {
         return;
     }
-    let ctx = state.live.read().unwrap().get(branch).cloned();
-    if let Some(ctx) = ctx {
-        let mins = (limit.as_secs_f64() / 60.0).max(0.1);
-        let why =
-            format!("the driver was still running after {mins:.1} min, so Shakedown ended the run");
-        runner::finish_failed(state, &ctx, why).await;
-    }
+    let mins = (limit.as_secs_f64() / 60.0).max(0.1);
+    let why =
+        format!("the driver was still running after {mins:.1} min, so Shakedown ended the run");
+    state.live.fail_if_live(state, branch, why).await;
 }
 
 /// Waits for the driver to exit; ends its run when the driver drove it past the limit
@@ -197,7 +193,7 @@ async fn watch(state: &AppState, branch: &str, child: &mut Child) -> Option<Exit
         tokio::select! {
             status = child.wait() => return status.ok(),
             _ = tokio::time::sleep(POLL) => {
-                if state.live.read().unwrap().contains_key(branch) {
+                if state.live.contains(branch) {
                     cut_off(state, branch, started).await;
                     continue;
                 }
@@ -257,8 +253,6 @@ async fn exited(state: &Arc<AppState>, branch: &str, status: Option<ExitStatus>,
     {
         eprintln!("branch {branch}: recording the driver's exit: {e:#}");
     }
-    let ctx = state.live.read().unwrap().get(branch).cloned();
-    let Some(ctx) = ctx else { return };
     let how = match status.and_then(|s| s.code()) {
         Some(c) => format!("exited with code {c}"),
         None => words.replace("exit", "exited"),
@@ -268,7 +262,7 @@ async fn exited(state: &Arc<AppState>, branch: &str, status: Option<ExitStatus>,
         true => format!("the driver {how} before finishing"),
         false => format!("the driver {how} before finishing: {tail}"),
     };
-    runner::finish_failed(state, &ctx, why).await;
+    state.live.fail_if_live(state, branch, why).await;
 }
 
 /// The rules of a run a Code connection drives.
@@ -352,11 +346,8 @@ pub async fn launch_or_fail(
     match launch(state, conn, ids).await {
         Ok(l) => Some(l),
         Err(e) => {
-            let ctx = state.live.read().unwrap().get(&branch).cloned();
-            if let Some(ctx) = ctx {
-                runner::finish_failed(state, &ctx, format!("the driver could not start: {e:#}"))
-                    .await;
-            }
+            let why = format!("the driver could not start: {e:#}");
+            state.live.fail_if_live(state, &branch, why).await;
             None
         }
     }

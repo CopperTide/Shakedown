@@ -81,7 +81,7 @@ fn an_unreachable_provider_ends_the_branch_infra_error() {
         let end: AgentEndPayload =
             serde_json::from_value(evs.last().unwrap().payload.clone()).unwrap();
         assert!(!end.ok);
-        assert!(fx.state.live.read().unwrap().is_empty());
+        assert!(fx.state.live.is_empty());
     })
 }
 
@@ -116,11 +116,7 @@ async fn live_branch(fx: &AppFx, team: Team, bench: &str, task: &str) -> (String
         .unwrap();
     let world = fx.hub.start_world(bench, &branch).await;
     let ctx = Arc::new(BranchCtx::new(branch.clone(), world, team, task.into()));
-    fx.state
-        .live
-        .write()
-        .unwrap()
-        .insert(branch.clone(), ctx.clone());
+    fx.state.live.insert(ctx.clone());
     (branch, ctx)
 }
 
@@ -179,6 +175,28 @@ fn two_branches_on_one_program_keep_their_own_world() {
         }
         actx.world.stop().await;
         bctx.world.stop().await;
+    })
+}
+
+/// A live branch that must end ends `failed` with the reason, scored, and leaves `live`; a branch
+/// that isn't live here is left alone.
+#[test]
+fn fail_if_live_ends_a_live_branch_failed() {
+    run(async {
+        let fx = setup("failiflive", &[], "retail", None).await;
+        let live = &fx.state.live;
+        assert!(!live.fail_if_live(&fx.state, "nobranch", "no".into()).await);
+        let (b, _ctx) = live_branch(&fx, unreachable_team(), "retail", "27").await;
+        assert!(
+            live.fail_if_live(&fx.state, &b, "the driver broke".into())
+                .await
+        );
+        let ended = fx.state.store.branch(&b).await.unwrap();
+        let got = (ended.status, ended.error.as_deref());
+        assert_eq!(got, (BranchStatus::Failed, Some("the driver broke")));
+        let evs = fx.state.store.events(&b).await.unwrap();
+        assert!(evs.iter().any(|e| e.kind == EventKind::Check), "scored");
+        assert!(!live.contains(&b));
     })
 }
 
@@ -321,7 +339,7 @@ async fn a_team_runs_task_27_and_arena_records_and_scores_it(live: Live) {
     assert_scored(&fx, &b, &check).await;
     assert_overhead(&b, &evs);
     assert_resolver_input(&evs);
-    assert!(fx.state.live.read().unwrap().is_empty());
+    assert!(fx.state.live.is_empty());
 }
 
 /// A branch under the old rules (a fork of a run recorded before runners) fails when an agent

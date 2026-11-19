@@ -9,7 +9,6 @@ use anyhow::Result;
 use super::{run_order, STOPPED};
 use crate::{
     app::AppState,
-    runner,
     suite::{self, shutting_down, Suite},
 };
 
@@ -61,17 +60,9 @@ async fn next_run(state: &Arc<AppState>, id: &str, suite: &Suite) -> Result<()> 
         return Ok(());
     };
     if state.store.experiment_ended(id).await? {
-        stop_branch(state, &branch).await;
+        state.live.stop(state, &branch).await;
     }
     suite::wait_ended(state, &branch).await
-}
-
-/// Stops the branch if it is live here (as `POST /api/branches/{id}/stop` does).
-async fn stop_branch(state: &AppState, branch: &str) {
-    let ctx = state.live.read().unwrap().get(branch).cloned();
-    if let Some(ctx) = ctx {
-        runner::stop(state, &ctx).await;
-    }
 }
 
 /// Stops the experiment: no further run starts, its suites end, and the run that is running now
@@ -81,7 +72,7 @@ pub async fn stop(state: &AppState, id: &str) -> Result<()> {
     for s in state.store.experiment_suites(id).await? {
         for slot in state.store.slots(&s.id).await? {
             if let Some(branch) = &slot.branch_id {
-                stop_branch(state, branch).await;
+                state.live.stop(state, branch).await;
             }
         }
     }

@@ -139,7 +139,7 @@ pub async fn gc(State(state): State<Arc<AppState>>) -> ApiResult<Value> {
     let guard = lock
         .try_write_owned()
         .map_err(|_| ApiError::conflict(CLEANING_UP))?;
-    if !state.live.read().unwrap().is_empty() {
+    if !state.live.is_empty() {
         return Err(ApiError::conflict(
             "agents are running; clean up when they have stopped",
         ));

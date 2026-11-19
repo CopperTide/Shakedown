@@ -342,15 +342,12 @@ async fn live_setup(
     let mut cfg = Config::new();
     cfg.self_base = base.clone();
     let state = Arc::new(AppState::new(store.clone(), hub.hub.clone(), cfg));
-    state.live.write().unwrap().insert(
+    state.live.insert(Arc::new(BranchCtx::new(
         branch.clone(),
-        Arc::new(BranchCtx::new(
-            branch.clone(),
-            world.clone(),
-            team,
-            "task".into(),
-        )),
-    );
+        world.clone(),
+        team,
+        "task".into(),
+    )));
     tokio::spawn(async move { axum::serve(listener, app::router(state)).await.unwrap() });
     (store, clean, branch, world, base, hub)
 }

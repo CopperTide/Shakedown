@@ -277,10 +277,7 @@ async fn ended_or_stopped(
     if b.status != BranchStatus::Running {
         return Ok((b, None));
     }
-    let ctx = state.live.read().unwrap().get(branch).cloned();
-    if let Some(ctx) = ctx {
-        crate::runner::stop(state, &ctx).await;
-    }
+    state.live.stop(state, branch).await;
     let late = "the run was still going after 5 minutes, so it was stopped".to_string();
     Ok((state.store.branch(branch).await?, Some(late)))
 }

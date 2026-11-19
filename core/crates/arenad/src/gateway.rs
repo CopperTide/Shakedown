@@ -196,8 +196,7 @@ fn live_agent(
     headers: &HeaderMap,
 ) -> Result<(Arc<BranchCtx>, Option<String>), Refused> {
     let unknown = (StatusCode::NOT_FOUND, "unknown branch or agent");
-    let ctx = state.live.read().unwrap().get(branch).cloned();
-    let ctx = ctx.ok_or(unknown)?;
+    let ctx = state.live.get(branch).ok_or(unknown)?;
     let provider = ctx.provider_of(agent).ok_or(unknown)?;
     let authorization = headers.get(AUTHORIZATION).and_then(|v| v.to_str().ok());
     if !ctx.token_ok(agent, authorization) {

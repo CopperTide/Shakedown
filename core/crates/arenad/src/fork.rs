@@ -618,10 +618,7 @@ async fn relaunch(
 
 /// Ends the new branch `failed` (scored) because its driver can't be started: `failed`.
 async fn driver_gone(state: &Arc<AppState>, branch_id: &str, why: String) -> &'static str {
-    let ctx = state.live.read().unwrap().get(branch_id).cloned();
-    if let Some(ctx) = ctx {
-        runner::finish_failed(state, &ctx, why).await;
-    }
+    state.live.fail_if_live(state, branch_id, why).await;
     "failed"
 }
 

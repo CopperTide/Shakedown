@@ -66,11 +66,7 @@ impl AppFx {
             .unwrap();
         let world = self.hub.start_world("toybench", &branch).await;
         let ctx = Arc::new(BranchCtx::new(branch.clone(), world, team, "t1".into()));
-        self.state
-            .live
-            .write()
-            .unwrap()
-            .insert(branch.clone(), ctx.clone());
+        self.state.live.insert(ctx.clone());
         (branch, ctx)
     }
 
