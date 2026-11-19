@@ -10,7 +10,7 @@ use parts::proto::WorldPart;
 use serde_json::{Map, Value};
 
 use crate::{
-    model::{Event, EventKind, Rules},
+    model::{Event, EventKind, Rules, RunStartPayload},
     world::Saves,
 };
 
@@ -41,46 +41,35 @@ fn legacy(save: &str) -> Saves {
     Saves::from([(LEGACY_PART.to_string(), save.to_string())])
 }
 
-/// A `{part: save}` object, None when `v` is not one (or names no save).
-fn saves_in(v: &Value) -> Option<Saves> {
-    serde_json::from_value::<Saves>(v.clone())
-        .ok()
-        .filter(|s| !s.is_empty())
-}
-
 /// The run facts of a branch's events (a run recorded before integrations: retail, seed 0,
 /// base `world_base`; a branch without `RunStart`: no base). A run whose parts all keep no saves
 /// records `saves: {}`.
 pub fn run_info(events: &[Event]) -> RunInfo {
-    let start = events
-        .iter()
-        .find(|e| e.kind == EventKind::RunStart)
-        .map(|e| &e.payload);
-    let base = start.and_then(|p| serde_json::from_value::<Saves>(p["saves"].clone()).ok());
-    let world = start.and_then(|p| serde_json::from_value(p["world"].clone()).ok());
-    let fingerprints = start.and_then(|p| p["fingerprints"].as_object().cloned());
+    let Some(start) = RunStartPayload::of(events) else {
+        return RunInfo {
+            benchmark: LEGACY_PART.to_string(),
+            seed: 0,
+            base: Saves::new(),
+            world: vec![],
+            fingerprints: Map::new(),
+            started: false,
+            legacy: false,
+        };
+    };
     RunInfo {
-        benchmark: start
-            .and_then(|p| p["benchmark"].as_str())
-            .unwrap_or(LEGACY_PART)
-            .to_string(),
-        seed: start.and_then(|p| p["seed"].as_u64()).unwrap_or(0),
-        started: start.is_some(),
-        legacy: start.is_some() && base.is_none(),
-        base: match (start, base) {
-            (_, Some(b)) => b,
-            (Some(_), None) => legacy(LEGACY_BASE),
-            (None, None) => Saves::new(),
-        },
-        world: world.unwrap_or_default(),
-        fingerprints: fingerprints.unwrap_or_default(),
+        benchmark: start.benchmark.unwrap_or_else(|| LEGACY_PART.to_string()),
+        seed: start.seed,
+        legacy: start.saves.is_none(),
+        base: start.saves.unwrap_or_else(|| legacy(LEGACY_BASE)),
+        world: start.world.unwrap_or_default(),
+        fingerprints: start.fingerprints,
+        started: true,
     }
 }
 
 /// The rules the run of `events` runs under, from its `RunStart` (legacy when there is none).
 pub fn rules(events: &[Event]) -> Rules {
-    let start = events.iter().find(|e| e.kind == EventKind::RunStart);
-    start.map_or_else(Rules::legacy, |e| Rules::of_run_start(&e.payload))
+    RunStartPayload::of(events).map_or_else(Rules::legacy, |s| Rules::of(&s))
 }
 
 /// The arena clock just before step `before_seq`: the `clock_ms` of the last event before it
@@ -174,7 +163,10 @@ pub struct NamedSave {
 /// snapshot) and the final saves.
 pub fn named_saves(branch: &str, events: &[Event]) -> BTreeSet<NamedSave> {
     let recorded = events.iter().filter_map(|e| match e.kind {
-        EventKind::RunStart => saves_in(&e.payload["saves"]),
+        EventKind::RunStart => e
+            .decode::<RunStartPayload>()?
+            .saves
+            .filter(|s| !s.is_empty()),
         EventKind::ToolCall => saves_of(&e.payload),
         _ => None,
     });

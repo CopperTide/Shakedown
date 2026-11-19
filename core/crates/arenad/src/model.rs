@@ -246,18 +246,16 @@ impl Rules {
         }
     }
 
-    /// The rules a `RunStart` payload records; one without `runner` is a legacy run.
-    pub fn of_run_start(payload: &Value) -> Rules {
-        match serde_json::from_value::<Runner>(payload["runner"].clone()) {
-            Ok(runner) => Rules {
+    /// The rules a `RunStart` records; one without `runner` is a legacy run.
+    pub fn of(start: &RunStartPayload) -> Rules {
+        match start.runner {
+            Some(runner) => Rules {
                 runner,
-                handoff_required: payload["handoff"] == "required",
-                max_cost_usd: payload["max_cost_usd"]
-                    .as_f64()
-                    .and_then(crate::budget::positive),
-                connection: payload["connection"].as_str().map(String::from),
+                handoff_required: start.handoff.as_deref() == Some("required"),
+                max_cost_usd: start.max_cost_usd.and_then(crate::budget::positive),
+                connection: start.connection.clone(),
             },
-            Err(_) => Rules::legacy(),
+            None => Rules::legacy(),
         }
     }
 

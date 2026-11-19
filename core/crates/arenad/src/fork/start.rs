@@ -248,12 +248,8 @@ async fn create_child(
 
 /// The task of the run: from `RunStart`, else from the run row.
 async fn task_of(state: &AppState, events: &[Event], parent: &Branch) -> anyhow::Result<String> {
-    if let Some(t) = events
-        .iter()
-        .find(|e| e.kind == EventKind::RunStart)
-        .and_then(|e| e.payload["task_id"].as_str())
-    {
-        return Ok(t.to_string());
+    if let Some(t) = RunStartPayload::of(events).and_then(|s| s.task_id) {
+        return Ok(t);
     }
     let runs = state.store.runs().await?;
     let run = runs.into_iter().find(|r| r.id == parent.run_id);

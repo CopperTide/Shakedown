@@ -535,10 +535,8 @@ async fn get_branch(
 
 /// A branch's spend limit (from its `RunStart`) and, while it runs, its live estimate.
 fn budget_of(state: &AppState, id: &str, events: &[crate::model::Event]) -> Value {
-    let start = events
-        .iter()
-        .find(|e| e.kind == crate::model::EventKind::RunStart);
-    let max = start.and_then(|e| e.payload["max_cost_usd"].as_f64());
+    let start = crate::model::RunStartPayload::of(events);
+    let max = start.and_then(|s| s.max_cost_usd);
     let live = state.live.get(id).map(|c| c.budget.spent());
     json!({"max_cost_usd": max, "estimate_usd": live})
 }

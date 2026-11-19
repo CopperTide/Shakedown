@@ -363,21 +363,16 @@ pub fn build(rec: &RunRecord, caps: Caps) -> Digest {
         problems: Capped::first(problems(events, caps), caps.problems),
         agents: agent_lines(rec.branch, events, &tools, caps),
         notes: Capped::ends(notes(events, caps), caps.notes),
-        disruptions: run_start(events).and_then(|p| p.get("scenario").cloned()),
+        disruptions: RunStartPayload::of(events).and_then(|s| s.scenario),
         world_events: world_lines(events, caps),
         writes: writes(events, &tools, caps),
         metrics: metrics_line(rec.branch, events),
     }
 }
 
-fn run_start(events: &[Event]) -> Option<&Value> {
-    let rs = events.iter().find(|e| e.kind == EventKind::RunStart);
-    rs.map(|e| &e.payload)
-}
-
 fn task_of(events: &[Event]) -> String {
-    let id = run_start(events).and_then(|p| p["task_id"].as_str());
-    id.unwrap_or("").to_string()
+    let id = RunStartPayload::of(events).and_then(|s| s.task_id);
+    id.unwrap_or_default()
 }
 
 fn branch_line(b: &Branch, caps: Caps) -> BranchLine {
@@ -457,10 +452,10 @@ struct Tools(BTreeSet<String>);
 
 impl Tools {
     fn of(events: &[Event]) -> Tools {
-        let map = run_start(events).and_then(|p| p["tools"].as_object());
-        let writes = map.into_iter().flatten();
+        let tools = RunStartPayload::of(events).map(|s| s.tools);
+        let writes = tools.into_iter().flatten();
         let writes = writes.filter(|(_, t)| t["effect"] == "write");
-        Tools(writes.map(|(name, _)| name.clone()).collect())
+        Tools(writes.map(|(name, _)| name).collect())
     }
 
     /// A call that writes: its tool is a write tool, or it wrote keys (runs recorded before

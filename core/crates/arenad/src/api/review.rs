@@ -135,10 +135,7 @@ async fn post_branch(
 
 /// The ticket of the run's task, when the benchmark has it.
 async fn ticket(state: &AppState, events: &[crate::model::Event]) -> Option<String> {
-    let rs = events
-        .iter()
-        .find(|e| e.kind == crate::model::EventKind::RunStart)?;
-    let task = rs.payload["task_id"].as_str()?;
+    let task = crate::model::RunStartPayload::of(events)?.task_id?;
     let bench = state.bench().await.ok()?;
     bench
         .tasks

@@ -6,7 +6,7 @@ use serde_json::Value;
 
 use crate::{
     exec::{LINK_ACTOR, SETUP_ACTOR},
-    model::{Event, EventKind},
+    model::{Event, EventKind, RunStartPayload},
 };
 
 /// Words in a tool call's error that say the call was refused rather than failed.
@@ -36,7 +36,7 @@ pub fn is_denial(error: &str) -> bool {
 /// writes to a part whose system kind is `approvals` (in `RunStart`'s `systems`, with the tool's
 /// effect and part from its `tools`), or whose tool name contains `escalat`, `flag` or
 /// `ask_human` (case-insensitively). `call` is the `tool_call` payload, `start` the `RunStart`'s.
-pub fn is_flag(agent: Option<&str>, call: &Value, start: &Value) -> bool {
+pub fn is_flag(agent: Option<&str>, call: &Value, start: &RunStartPayload) -> bool {
     let by_agent = agent.is_some_and(|a| a != LINK_ACTOR && a != SETUP_ACTOR);
     let failed = call["error"].as_str().is_some_and(|e| !e.is_empty());
     if !by_agent || failed {
@@ -49,10 +49,11 @@ pub fn is_flag(agent: Option<&str>, call: &Value, start: &Value) -> bool {
 
 /// True when the call of `tool` is a write to a part of kind `approvals`: the part it recorded,
 /// else the tool's fixed part.
-fn writes_approvals(tool: &str, call: &Value, start: &Value) -> bool {
-    let info = &start["tools"][tool];
+fn writes_approvals(tool: &str, call: &Value, start: &RunStartPayload) -> bool {
+    let info = start.tools.get(tool).unwrap_or(&Value::Null);
     let part = call["part"].as_str().or_else(|| info["part"].as_str());
-    let kind = part.and_then(|p| start["systems"][p]["kind"].as_str());
+    let system = part.and_then(|p| start.systems.get(p));
+    let kind = system.and_then(|s| s["kind"].as_str());
     info["effect"] == "write" && kind == Some(APPROVALS)
 }
 
@@ -65,14 +66,13 @@ pub struct Raised {
 
 /// The denials and flags among the run's tool calls.
 pub fn raised(events: &[Event]) -> Raised {
-    let start = events.iter().find(|e| e.kind == EventKind::RunStart);
-    let start = start.map_or(&Value::Null, |e| &e.payload);
+    let start = RunStartPayload::of(events).unwrap_or_default();
     let calls = events.iter().filter(|e| e.kind == EventKind::ToolCall);
     let mut r = Raised::default();
     for e in calls {
         let error = e.payload["error"].as_str().unwrap_or_default();
         r.denials += i64::from(is_denial(error));
-        r.flags += i64::from(is_flag(e.agent.as_deref(), &e.payload, start));
+        r.flags += i64::from(is_flag(e.agent.as_deref(), &e.payload, &start));
     }
     r
 }
@@ -122,7 +122,7 @@ mod tests {
 
     #[test]
     fn a_flag_is_an_agents_successful_write_to_approvals_or_an_escalation_tool() {
-        let s = start();
+        let s: RunStartPayload = serde_json::from_value(start()).unwrap();
         let flag = |agent, c: Value| is_flag(agent, &c, &s);
         assert!(flag(Some("planner"), call("request", None, None)));
         assert!(flag(Some("planner"), call("bench_tool", Some("ok"), None)));
