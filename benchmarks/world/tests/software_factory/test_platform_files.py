@@ -6,7 +6,7 @@ import shutil
 import subprocess
 
 import pytest
-from support import compose_limits, images_env, interpolate, load_yaml, metric_names, profile_env, services
+from sf_support import compose_limits, images_env, interpolate, load_yaml, metric_names, profile_env, services
 
 DASHBOARDS = {"service-overview", "production-slo", "deploys", "database"}
 ALERTS = {"HighErrorRate": "page", "HighLatency": "ticket", "ServiceDown": "page"}

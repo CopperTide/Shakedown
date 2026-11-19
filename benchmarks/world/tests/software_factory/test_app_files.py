@@ -5,7 +5,7 @@ import re
 import jsonschema
 import pytest
 from conftest import REPOS
-from support import load_yaml
+from sf_support import load_yaml
 
 # The workflow subset the GitHub twin's Actions runs (Task 5): keys per level and the actions it knows.
 TOP, JOB, STEP = {"name", "on", "env", "jobs"}, {"name", "runs-on", "container", "needs", "if", "env", "steps"}, \

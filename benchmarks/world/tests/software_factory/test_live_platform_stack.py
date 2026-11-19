@@ -9,7 +9,7 @@ import time
 import urllib.request
 
 import pytest
-from support import compose_limits, images_env, profile_env, services
+from sf_support import compose_limits, images_env, profile_env, services
 
 pytestmark = pytest.mark.live
 STACK = ["prometheus", "alertmanager", "loki", "tempo", "grafana", "glitchtip"]

@@ -6,7 +6,7 @@ import subprocess
 
 import pytest
 from conftest import REPOS
-from support import load_yaml
+from sf_support import load_yaml
 
 pytestmark = pytest.mark.live
 WORKSPACE = "/github/workspace"

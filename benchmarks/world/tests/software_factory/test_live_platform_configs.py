@@ -4,7 +4,7 @@ import shutil
 import subprocess
 
 import pytest
-from support import load_yaml, profile_env
+from sf_support import load_yaml, profile_env
 
 pytestmark = pytest.mark.live
 
