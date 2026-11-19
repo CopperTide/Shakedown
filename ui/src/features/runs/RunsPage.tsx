@@ -12,10 +12,10 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { PageBody, PageHeader } from '@/components/ui/page';
 import { Panel } from '@/components/ui/panel';
 import { EmptyState, ErrorState } from '@/components/ui/state';
+import { useAction } from '@/hooks/useAction';
 import { DISK_CHANGED } from '@/hooks/useHealth';
 import { pollWhile, useQuery } from '@/hooks/useQuery';
 import { useTaskNames } from '@/hooks/useTasks';
-import { errorMessage } from '@/lib/errors';
 import { ago, formatTime } from '@/lib/time';
 import { qs } from '@/lib/url';
 import type { RunSummary } from '@/model/types';
@@ -77,21 +77,15 @@ function columns(nameOf: (r: BranchRow) => string, onDelete: (r: RunSummary) => 
 
 /** Two-step delete: the run and every branch, freeing its saves. */
 function DeleteRunDialog({ run, onClose, onDone }: { run: RunSummary | null; onClose: () => void; onDone: () => void }) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const remove = async () => {
-    if (!run) return;
-    setBusy(true); setError(null);
-    try {
-      const r = await deleteRun(run.id);
-      window.dispatchEvent(new Event(DISK_CHANGED));
-      toast(`Deleted ${runTitle(run)}`, { description: `${r.dropped} saved world${r.dropped === 1 ? '' : 's'} dropped.` });
-      onDone(); onClose();
-    } catch (e) { setError(errorMessage(e)); }
-    setBusy(false);
-  };
+  const { busy, error, run: act, reset } = useAction(async (r: RunSummary) => {
+    const { dropped } = await deleteRun(r.id);
+    window.dispatchEvent(new Event(DISK_CHANGED));
+    toast(`Deleted ${runTitle(r)}`, { description: `${dropped} saved world${dropped === 1 ? '' : 's'} dropped.` });
+    onDone(); onClose();
+  });
+  const remove = async () => { if (run) await act(run); };
   return (
-    <Dialog open={!!run} onOpenChange={(o) => { if (!o) { setError(null); onClose(); } }}>
+    <Dialog open={!!run} onOpenChange={(o) => { if (!o) { reset(); onClose(); } }}>
       <DialogContent title="Delete this run?" description={run ? `${runTitle(run)} and all ${run.branches.length} of its branches, with their saves. This can't be undone.` : ''}>
         {error && <ErrorState error={error} hint="Nothing was deleted." className="m-4" />}
         <DialogActions onCancel={onClose} onGo={remove} disabled={busy} danger label={busy ? 'Deleting…' : 'Delete run'} />
