@@ -1,5 +1,5 @@
 // The command palette's model: what it lists in each mode and what picking an item does.
-import { branchTree } from '../runs/tree';
+import { branchTree } from '@/features/runs/tree';
 import type { ListedExperiment } from '@/model/experiment';
 import type { BranchStatus, RunSummary } from '@/model/types';
 

@@ -19,7 +19,7 @@ const ProcessPage = lazy(() => import('./control/ProcessPage'));
 const Compare = lazy(() => import('./pages/Compare'));
 const ConnectPage = lazy(() => import('./connect/ConnectPage'));
 const Run = lazy(() => import('./pages/Run'));
-const Runs = lazy(() => import('./pages/Runs'));
+const Runs = lazy(() => import('@/features/runs/RunsPage'));
 const Team = lazy(() => import('./pages/Team'));
 const World = lazy(() => import('./pages/World'));
 
