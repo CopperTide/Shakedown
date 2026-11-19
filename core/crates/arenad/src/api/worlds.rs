@@ -1,7 +1,7 @@
 //! The world builder's routes: templates and previews (the builder's answers passed through),
 //! building a world into the worlds folder, and the benchmarks a user can choose between.
 
-use std::{path::Path, path::PathBuf, sync::Arc, time::Instant};
+use std::{path::Path, path::PathBuf, sync::Arc};
 
 use axum::{
     extract::{Path as UrlPath, State},
@@ -117,12 +117,12 @@ struct BuildReq {
 /// (409 with a free one), generates it into the worlds folder, installs it and prepares it in the
 /// background: 202 `{name, state: "preparing"}`.
 async fn build(State(state): State<Arc<AppState>>, JsonBody(req): JsonBody<BuildReq>) -> Answer {
-    let started = Instant::now();
+    let asked = worlds::Asked::now(&state);
     let dir = worlds_dir(&state)?;
     let name = previewed_name(&state, &req).await?;
     refuse_taken(&state, &dir, &name)?;
     write_world(&state, &dir, &req, &name).await?;
-    worlds::spawn_prepare(&state, &name, started);
+    worlds::spawn_prepare(&state, &name, asked);
     Ok(preparing(&name))
 }
 
@@ -293,7 +293,7 @@ async fn choose(State(state): State<Arc<AppState>>, UrlPath(name): UrlPath<Strin
 /// is being prepared.
 async fn prepare(State(state): State<Arc<AppState>>, UrlPath(name): UrlPath<String>) -> Answer {
     benchmark_or_404(&state, &name)?;
-    if !worlds::spawn_prepare(&state, &name, Instant::now()) {
+    if !worlds::spawn_prepare(&state, &name, worlds::Asked::now(&state)) {
         return Err(refusal(
             StatusCode::CONFLICT,
             format!("{name} is being prepared"),

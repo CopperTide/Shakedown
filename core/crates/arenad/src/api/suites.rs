@@ -57,15 +57,19 @@ struct NewSuiteReq {
     /// Each run's model-spend limit in USD (`crate::budget`).
     #[serde(default)]
     max_cost_usd: Option<f64>,
+    /// The benchmark it is made on (absent: the current one); 409 when it isn't installed.
+    #[serde(default)]
+    benchmark: Option<String>,
 }
 
 /// The most scenarios a suite may vary its runs over.
 const MAX_VARIANTS: usize = 20;
 
-/// The suite's one scenario and its variants, each expanded; 400 for both at once, too many, or
-/// one that can't be expanded.
+/// The suite's one scenario and its variants, each expanded with the options of the benchmark
+/// `bench`; 400 for both at once, too many, or one that can't be expanded.
 async fn suite_scenarios(
     state: &AppState,
+    bench: &str,
     req: &NewSuiteReq,
 ) -> Result<(Scenario, Vec<Scenario>), ApiError> {
     let one = req.scenario.as_ref().filter(|s| !s.disruptions.is_empty());
@@ -79,18 +83,20 @@ async fn suite_scenarios(
     }
     let mut variants = vec![];
     for asked in &req.scenarios {
-        variants.push(super::twin::scenario_of(state, Some(asked)).await?);
+        variants.push(super::twin::scenario_of(state, bench, Some(asked)).await?);
     }
-    Ok((super::twin::scenario_of(state, one).await?, variants))
+    Ok((super::twin::scenario_of(state, bench, one).await?, variants))
 }
 
-/// The tasks a suite runs: the ones asked for (each once, each the benchmark's), or all.
+/// The tasks a suite runs: the ones asked for (each once, each one of the benchmark `bench`'s), or
+/// all.
 pub(super) async fn suite_tasks(
     state: &AppState,
+    bench: &str,
     asked: Vec<String>,
 ) -> Result<Vec<String>, ApiError> {
     let known: Vec<String> = state
-        .bench()
+        .bench_named(bench)
         .await?
         .tasks
         .into_iter()
@@ -132,20 +138,20 @@ async fn create(
 ) -> ApiResult<SuiteReport> {
     settle_providers(&mut req.team);
     validate_suite(&state, &req)?;
-    let (scenario, variants) = suite_scenarios(&state, &req).await?;
-    let tasks = suite_tasks(&state, std::mem::take(&mut req.tasks)).await?;
+    let bench = super::benchmark_asked(&state, req.benchmark.as_deref())?;
+    let (scenario, variants) = suite_scenarios(&state, &bench, &req).await?;
+    let tasks = suite_tasks(&state, &bench, std::mem::take(&mut req.tasks)).await?;
     if req.runner != Runner::External {
         check_disk(&state).await?;
     }
     let name = (req.name.as_deref().and_then(trimmed)).unwrap_or(req.team.name.clone());
-    let current = state.benchmark();
     let new = NewSuite {
         name: &name,
         team: &req.team,
         tasks: &tasks,
         repeats: req.repeats,
         runner: req.runner,
-        benchmark: &current,
+        benchmark: &bench,
         scenario: &scenario,
         variants: &variants,
         max_cost_usd: super::max_cost(req.max_cost_usd)?,

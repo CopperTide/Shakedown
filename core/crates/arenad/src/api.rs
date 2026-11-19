@@ -370,6 +370,22 @@ struct NewRun {
     /// `external`; `chain`, the default, is taken as that).
     #[serde(default)]
     connection: Option<String>,
+    /// The benchmark it is made on (absent: the current one); 409 when it isn't installed.
+    #[serde(default)]
+    benchmark: Option<String>,
+}
+
+/// The benchmark a new run, suite or experiment is made on: the one it asks for (409 when it isn't
+/// installed), else the current one. Read once, so that what the request checks and what it starts
+/// are on the same benchmark whatever is chosen meanwhile.
+pub(super) fn benchmark_asked(state: &AppState, asked: Option<&str>) -> Result<String, ApiError> {
+    match asked {
+        Some(name) if !state.has_benchmark(name) => Err(ApiError::conflict(format!(
+            "no benchmark named {name} is installed"
+        ))),
+        Some(name) => Ok(name.to_string()),
+        None => Ok(state.benchmark()),
+    }
 }
 
 /// A request's spend limit: absent, or a positive number of dollars (else 400).
@@ -388,6 +404,7 @@ async fn create_code_run(
     permit: StartPermit,
     headers: &axum::http::HeaderMap,
     req: NewRun,
+    bench: String,
     scenario: crate::scenario::Scenario,
 ) -> ApiResult<Value> {
     let max_cost_usd = max_cost(req.max_cost_usd)?;
@@ -397,6 +414,7 @@ async fn create_code_run(
         team,
         scenario,
         max_cost_usd,
+        benchmark: bench,
     };
     let id = req.connection.unwrap_or_default();
     connections::create_run(state, permit, headers, (&id, req.runner), run).await
@@ -409,16 +427,18 @@ async fn create_run(
     JsonBody(mut req): JsonBody<NewRun>,
 ) -> ApiResult<Value> {
     settle_providers(&mut req.team);
-    let mut scenario = twin::scenario_of(&state, req.scenario.as_ref()).await?;
+    let bench = benchmark_asked(&state, req.benchmark.as_deref())?;
+    let mut scenario = twin::scenario_of(&state, &bench, req.scenario.as_ref()).await?;
     if req.seed.is_some_and(|s| s > runner::MAX_SEED) {
         return Err(ApiError::bad("seed must be at most 2^53 - 1"));
     }
     scenario.seed = req.seed;
     if req.connection.is_some() {
-        return create_code_run(state, permit, &headers, req, scenario).await;
+        return create_code_run(state, permit, &headers, req, bench, scenario).await;
     }
     if req.runner == Runner::External {
-        return external::create_run(state, permit, req.task_id, req.team, scenario).await;
+        let (task, team) = (req.task_id, req.team);
+        return external::create_run(state, permit, bench, task, team, scenario).await;
     }
     team::validate_builtin(providers_of(&state), &req.team, req.runner)?;
     let max = max_cost(req.max_cost_usd)?;
@@ -427,6 +447,7 @@ async fn create_run(
         let _permit = permit;
         let (task, team) = (&req.task_id, req.team);
         let run = runner::RunOptions::new(req.runner).scenario(&scenario);
+        let run = run.benchmark(&bench);
         Ok(run.max_cost(max).start(&state, task, team).await?)
     })
     .await?;

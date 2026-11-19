@@ -70,6 +70,9 @@ struct NewExperimentReq {
     /// Each run's model-spend limit in USD (`crate::budget`).
     #[serde(default)]
     max_cost_usd: Option<f64>,
+    /// The benchmark it is made on (absent: the current one); 409 when it isn't installed.
+    #[serde(default)]
+    benchmark: Option<String>,
 }
 
 /// 400 unless arenad can run the setup itself: a built-in runner and a team it can run. The
@@ -146,8 +149,9 @@ async fn create(
     let names = validate(&state, &mut req)?;
     check_connections(&state, &headers, &names, &req.setups).await?;
     let max_cost_usd = super::max_cost(req.max_cost_usd)?;
-    super::suites::suite_tasks(&state, vec![req.task.clone()]).await?;
-    let scenario = super::twin::scenario_of(&state, req.scenario.as_ref()).await?;
+    let bench = super::benchmark_asked(&state, req.benchmark.as_deref())?;
+    super::suites::suite_tasks(&state, &bench, vec![req.task.clone()]).await?;
+    let scenario = super::twin::scenario_of(&state, &bench, req.scenario.as_ref()).await?;
     check_disk(&state).await?;
     let setups: Vec<NewSetup> = (names.iter().zip(&req.setups))
         .map(|(name, s)| NewSetup {
@@ -157,12 +161,11 @@ async fn create(
             connection: s.connection.as_deref(),
         })
         .collect();
-    let current = state.benchmark();
     let new = NewExperiment {
         name: &experiment::name_of(req.name.as_deref(), &names),
         task: &req.task,
         runs: req.runs,
-        benchmark: &current,
+        benchmark: &bench,
         scenario: &scenario,
         setups: &setups,
         max_cost_usd,

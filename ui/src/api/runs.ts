@@ -4,10 +4,19 @@ import { del, get, path, post } from './client';
 
 export const runs = () => get<RunSummary[]>('/api/runs');
 
+/** How a run starts: its runner, scenario and Code connection, and the benchmark it runs on (the page's; absent, the current one). */
+export interface RunChoice {
+  runner?: Runner;
+  scenario?: ScenarioChoice;
+  connection?: string;
+  benchmark?: string;
+}
+
 /** Starts a run; with `connection`, Shakedown launches that Code connection's driver, which drives it. */
-export const startRun = (task_id: string, team: Team, runner: Runner = 'chain', scenario?: ScenarioChoice, connection?: string) =>
+export const startRun = (task_id: string, team: Team, { runner = 'chain', scenario, connection, benchmark }: RunChoice = {}) =>
   post<NewRunResponse>('/api/runs', {
     task_id, team, runner: connection ? 'external' : runner, ...(scenario ? { scenario } : {}), ...(connection ? { connection } : {}),
+    ...(benchmark ? { benchmark } : {}),
   });
 
 export const deleteRun = (id: string) => del<{ dropped: number }>(path`/api/runs/${id}`);

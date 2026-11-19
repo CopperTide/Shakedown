@@ -495,6 +495,166 @@ fn an_experiment_keeps_its_world_when_another_is_chosen() {
     });
 }
 
+/// The current `toybench` and the opt-in `acme` over one toy part `box`; only `acme` offers a
+/// disruption (`jam`, after `{after}` calls). Open agents call a provider that never answers.
+async fn asked_for(tag: &str) -> AppFx {
+    let part = toy(&format!("toy-{tag}"), "integration", &["part"]);
+    let after =
+        json!({"name": "after", "label": "After", "kind": "int", "min": 0, "max": 9, "default": 1});
+    let jam = json!({"id": "jam", "label": "Jam", "description": "It jams after {after} calls",
+        "part": "box", "params": [after],
+        "template": {"id": "jam-{after}", "when": {"after_calls": "{after}"}, "do": {"kind": "jam"},
+                     "text": "The box jams"}});
+    let options = json!({"base": ["t1"], "disruptions": [jam],
+                         "setup": {"box": {"tool": "poke", "args": {}}}})
+    .to_string();
+    let bench = |name: &str, extra: &[&str]| {
+        let args = [
+            &["bench", "--name", name, "--integration", &part.name],
+            extra,
+        ]
+        .concat();
+        toy(name, "benchmark", &args)
+    };
+    let toybench = bench("toybench", &[]);
+    let acme = bench("acme", &["--scenario-options", &options]);
+    let root = package_root(tag, &[toybench, acme, part]);
+    AppFx::idle("worlds", tag)
+        .root(root)
+        .bench("toybench")
+        .providers(ProviderConfig::with_upstream(&silent_provider().await))
+        .start()
+        .await
+}
+
+fn jam() -> Value {
+    json!({"disruptions": [{"id": "jam", "params": {"after": 2}}]})
+}
+
+/// A team of one open agent.
+fn planner() -> Value {
+    let agent = json!({"id": "planner", "name": "Planner", "kind": "open", "model": "m",
+                       "prompt": "Poke the box."});
+    json!({"id": "a", "name": "Team a", "agents": [agent]})
+}
+
+/// Starts a run of `task` with no agent, which an external system drives, on `bench` in
+/// `scenario`, and finishes it: the status, and `{branch_id, start}` (its `RunStart`) or the error
+/// answered.
+async fn external_run(
+    fx: &AppFx,
+    task: &str,
+    bench: Option<&str>,
+    scenario: Value,
+) -> (u16, Value) {
+    let team = json!({"id": "own", "name": "Own", "agents": []});
+    let body = json!({"task_id": task, "team": team, "runner": "external", "scenario": scenario,
+                      "benchmark": bench});
+    let (status, v) = fx.post("/api/runs", body).await;
+    let Some(branch) = v["branch_id"].as_str() else {
+        return (status, v);
+    };
+    fx.post(&format!("/api/branches/{branch}/finish"), json!({}))
+        .await;
+    let events = fx.state.store.events(branch).await.unwrap();
+    (
+        status,
+        json!({"branch_id": branch, "start": events[0].payload}),
+    )
+}
+
+#[test]
+fn a_run_runs_on_the_benchmark_it_asks_for_in_a_scenario_of_that_benchmark() {
+    run(async {
+        let fx = asked_for("wrun").await;
+        let (status, v) = external_run(&fx, "t1", Some("acme"), jam()).await;
+        assert_eq!(status, 200, "{v}");
+        assert_eq!(v["start"]["benchmark"], "acme");
+        let jammed = &v["start"]["scenario"]["disruptions"][0];
+        assert_eq!(
+            (&jammed["id"], &jammed["params"]["after"]),
+            (&json!("jam"), &json!(2))
+        );
+        let (status, v) = external_run(&fx, "t1", Some("nope"), json!(null)).await;
+        assert_eq!(
+            (status, &v["error"]),
+            (409, &json!("no benchmark named nope is installed"))
+        );
+        let (status, v) = external_run(&fx, "t1", None, json!(null)).await;
+        assert_eq!(
+            (status, &v["start"]["benchmark"]),
+            (200, &json!("toybench"))
+        );
+    });
+}
+
+#[test]
+fn an_experiment_runs_on_the_benchmark_it_asks_for_in_a_scenario_of_that_benchmark() {
+    run(async {
+        let fx = asked_for("wexpask").await;
+        let body = |bench: &str| {
+            json!({"task": "t1", "runs": 1, "setups": [{"team": planner()}], "scenario": jam(),
+                   "benchmark": bench})
+        };
+        let (status, v) = fx.post("/api/experiments", body("acme")).await;
+        assert_eq!(status, 200, "{v}");
+        let id = v["id"].as_str().unwrap();
+        fx.post(&format!("/api/experiments/{id}/stop"), json!({}))
+            .await;
+        let stored = fx.state.store.experiment(id).await.unwrap().unwrap();
+        assert_eq!(stored.benchmark, "acme");
+        let (status, v) = fx.post("/api/experiments", body("nope")).await;
+        assert_eq!(
+            (status, &v["error"]),
+            (409, &json!("no benchmark named nope is installed"))
+        );
+    });
+}
+
+#[test]
+fn a_suite_runs_on_the_benchmark_it_asks_for_in_scenarios_of_that_benchmark() {
+    run(async {
+        let fx = asked_for("wsuiteask").await;
+        let team = json!({"id": "own", "name": "Own", "agents": []});
+        let body = |bench: &str| {
+            json!({"team": team, "runner": "external", "tasks": ["t1"], "scenarios": [jam()],
+                   "benchmark": bench})
+        };
+        let (status, v) = fx.post("/api/suites", body("acme")).await;
+        assert_eq!(status, 200, "{v}");
+        let stored = fx.state.store.suite(v["id"].as_str().unwrap()).await;
+        assert_eq!(stored.unwrap().unwrap().benchmark, "acme");
+        let (status, v) = fx.post("/api/suites", body("nope")).await;
+        assert_eq!(
+            (status, &v["error"]),
+            (409, &json!("no benchmark named nope is installed"))
+        );
+    });
+}
+
+/// A world asked for while one benchmark (`first-co`) is current, and prepared after another
+/// (`toybench`) was chosen, is ready but not made current: the choice made since stands.
+#[test]
+fn a_world_prepared_after_another_was_chosen_leaves_that_one_current() {
+    run(async {
+        let part = toy(
+            "toy-wslow",
+            "integration",
+            &["part", "--save-sleep", "1500"],
+        );
+        let fx = Fx::on("wslow", roots("wslow", part), app::NOWHERE).await;
+        fx.built("First Co").await;
+        let (status, v) = fx.build("Acme Tools").await;
+        assert_eq!(status, 202, "{v}");
+        let (status, v) = fx.app.post("/api/worlds/toybench/use", json!({})).await;
+        assert_eq!(status, 200, "{v}");
+        let ready = wait_world(&fx.app, "acme-tools", "ready").await;
+        assert_eq!(ready["current"], json!(false), "{ready}");
+        let health = fx.app.get("/api/health").await.1;
+        assert_eq!(health["benchmark"]["name"], "toybench");
+    });
+}
+
 /// The real builder and its small manufacturer template: built, prepared and current in under a
 /// minute (stage 3, W8). Needs `uv`, the template's integrations and Docker images.
 #[test]

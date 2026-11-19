@@ -9,6 +9,7 @@ import { ErrorState } from '@/components/ui/state';
 import type { ConnectReturn } from '@/features/connect/connect';
 import { useScenario } from '@/features/scenario/ScenarioBuilder';
 import { useAction } from '@/hooks/useAction';
+import { useBenchmark } from '@/hooks/useBenchmark';
 import { useHealth } from '@/hooks/useHealth';
 import { useTaskNames, useTasks } from '@/hooks/useTasks';
 import { useStoredTeam, useSuggestedTeams } from '@/hooks/useTeam';
@@ -70,7 +71,9 @@ function useSetup() {
   const scenario = useScenario(task ? [task.id] : []);
   const nameOf = useTaskNames();
   useConnected(team.replace);
-  return { tasks, team, suggested, task, setTaskId, runner, setRunner, scenario, nameOf };
+  // The world this page shows: the run is made on it, even if another is chosen elsewhere meanwhile.
+  const benchmark = useBenchmark().data?.name;
+  return { tasks, team, suggested, task, setTaskId, runner, setRunner, scenario, nameOf, benchmark };
 }
 
 type Setup = ReturnType<typeof useSetup>;
@@ -91,7 +94,8 @@ function useConnected(replace: (t: Team) => void) {
 function useStart(s: Setup, open: (run: string, branch: string) => void, back: () => void) {
   const start = useAction(async (task: string, team: Team) => {
     try {
-      const r = await startRun(task, teamForRun(team, s.runner), s.runner, s.scenario.scenario, team.connection);
+      const choice = { runner: s.runner, scenario: s.scenario.scenario, connection: team.connection, benchmark: s.benchmark };
+      const r = await startRun(task, teamForRun(team, s.runner), choice);
       open(r.run_id, r.branch_id);
     } catch (e) { back(); throw e; }
   });

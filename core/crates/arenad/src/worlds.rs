@@ -82,23 +82,43 @@ impl Builds {
     }
 }
 
+/// When a world's preparation was asked for, and which benchmark was current then.
+#[derive(Debug, Clone)]
+pub struct Asked {
+    pub at: Instant,
+    pub current: String,
+}
+
+impl Asked {
+    /// Asked now.
+    pub fn now(state: &AppState) -> Asked {
+        Asked {
+            at: Instant::now(),
+            current: state.benchmark(),
+        }
+    }
+}
+
 /// Prepares `name` on a task of its own unless it is being prepared (false then).
-pub fn spawn_prepare(state: &Arc<AppState>, name: &str, started: Instant) -> bool {
-    if !state.builds.begin_since(name, started) {
+pub fn spawn_prepare(state: &Arc<AppState>, name: &str, asked: Asked) -> bool {
+    if !state.builds.begin_since(name, asked.at) {
         return false;
     }
-    tokio::spawn(prepare(state.clone(), name.to_string()));
+    tokio::spawn(prepare(state.clone(), name.to_string(), asked.current));
     true
 }
 
 /// Makes the base saves of the benchmark `name` (held off by a cleanup, as a starting run is),
-/// then makes it the current benchmark; the outcome is recorded in `state.builds`.
-pub async fn prepare(state: Arc<AppState>, name: String) {
+/// then makes it the current benchmark unless another was chosen since `was` was (that choice
+/// stands); the outcome is recorded in `state.builds`.
+pub async fn prepare(state: Arc<AppState>, name: String, was: String) {
     let _no_cleanup = state.cleanup.clone().read_owned().await;
     let made = async {
         let bench = state.bench_named(&name).await?;
         crate::world::ensure_base(&state.hub, &bench).await?;
-        state.use_benchmark(&name).map_err(anyhow::Error::msg)
+        state
+            .use_benchmark_if(&name, &was)
+            .map_err(anyhow::Error::msg)
     };
     let error = made.await.err().map(|e| format!("{e:#}"));
     state.builds.end(&name, error);

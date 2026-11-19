@@ -39,6 +39,7 @@ pub(super) fn router() -> Router<Arc<AppState>> {
 pub(super) async fn create_run(
     state: Arc<AppState>,
     permit: StartPermit,
+    benchmark: String,
     task_id: String,
     team: Team,
     scenario: crate::scenario::Scenario,
@@ -53,7 +54,7 @@ pub(super) async fn create_run(
             scenario: &scenario,
             rules: Rules::new(Runner::External),
             driver: None,
-            benchmark: None,
+            benchmark: Some(&benchmark),
         };
         let l = launch(&state, spec).await?;
         let started = external::Started::of(l.run_id, l.branch_id, l.agents);

@@ -181,19 +181,36 @@ impl AppState {
         self.current.read().unwrap().clone()
     }
 
+    /// True when `name` is an installed benchmark.
+    pub fn has_benchmark(&self, name: &str) -> bool {
+        let registry = self.hub.registry();
+        registry
+            .get(name)
+            .is_some_and(|m| m.kind == parts::Kind::Benchmark)
+    }
+
     /// Makes `name` the benchmark of new runs, and remembers it across a restart.
     pub fn use_benchmark(&self, name: &str) -> Result<(), String> {
-        let registry = self.hub.registry();
-        let found = registry
-            .get(name)
-            .filter(|m| m.kind == parts::Kind::Benchmark);
-        if found.is_none() {
+        self.switch_benchmark(name, None).map(|_| ())
+    }
+
+    /// Like [`use_benchmark`](Self::use_benchmark), only while the benchmark of new runs is still
+    /// `was` (a choice made since stands): true when `name` was made current.
+    pub fn use_benchmark_if(&self, name: &str, was: &str) -> Result<bool, String> {
+        self.switch_benchmark(name, Some(was))
+    }
+
+    fn switch_benchmark(&self, name: &str, was: Option<&str>) -> Result<bool, String> {
+        if !self.has_benchmark(name) {
             return Err(format!("no benchmark named {name}"));
         }
-        drop(registry);
-        *self.current.write().unwrap() = name.to_string();
+        let mut current = self.current.write().unwrap();
+        if was.is_some_and(|w| *current != w) {
+            return Ok(false);
+        }
+        *current = name.to_string();
         crate::worlds::remember(self.config.worlds_dir.as_deref(), name);
-        Ok(())
+        Ok(true)
     }
 }
 

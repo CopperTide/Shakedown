@@ -15,6 +15,7 @@ import { TaskPicker } from '@/features/start/WorldCard';
 import { CurrentWorldPicker } from '@/features/start/WorldPicker';
 import ImportDialog from '@/features/team/ImportDialog';
 import { useAction } from '@/hooks/useAction';
+import { useBenchmark } from '@/hooks/useBenchmark';
 import { useHealth } from '@/hooks/useHealth';
 import { useTasks } from '@/hooks/useTasks';
 import { useStoredTeam, useSuggestedTeams } from '@/hooks/useTeam';
@@ -101,8 +102,10 @@ function useNewExperiment(health: Health | null) {
   const built = drafts.drafts.map((x) => { const base = teams.choices.find((c) => c.key === x.teamId)?.team; return base ? setupTeam(base, x) : null; });
   const missing = built.flatMap((t) => (t ? setupMissing(t, health) : []));
   const problem = setupsProblem(drafts.drafts) ?? scenario.problem ?? missing[0] ?? null;
+  // The world this page shows: the experiment is made on it, even if another is chosen elsewhere meanwhile.
+  const benchmark = useBenchmark().data?.name;
   const body = (): NewExperiment | null => (task && built.every(Boolean) ? {
-    name: name.trim() || undefined, task: task.id, scenario: scenario.scenario, runs,
+    name: name.trim() || undefined, benchmark, task: task.id, scenario: scenario.scenario, runs,
     setups: drafts.drafts.map((x, i) => setupFor(x.name.trim(), built[i]!, teamForRun)),
   } : null);
   const keep = (): Kept => ({ name, taskId, runs, drafts: drafts.drafts });
