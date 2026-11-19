@@ -12,6 +12,7 @@ import { useScenario } from '@/features/scenario/ScenarioBuilder';
 import DisruptionPicker from '@/features/start/DisruptionPicker';
 import { useWorldPreview } from '@/features/start/useWorldPreview';
 import { TaskPicker } from '@/features/start/WorldCard';
+import { CurrentWorldPicker } from '@/features/start/WorldPicker';
 import ImportDialog from '@/features/team/ImportDialog';
 import { useAction } from '@/hooks/useAction';
 import { useHealth } from '@/hooks/useHealth';
@@ -137,6 +138,7 @@ function useStart() {
 function Scenario({ f, world, busy }: { f: Form; world: string; busy: boolean }) {
   return (
     <Section title={`Scenario · ${world}`}>
+      <CurrentWorldPicker busy={busy} />
       <TaskPicker tasks={f.tasks} task={f.task} onTask={f.setTaskId} busy={busy} />
       <DisruptionPicker s={f.scenario} busy={busy} />
     </Section>

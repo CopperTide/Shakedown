@@ -55,6 +55,19 @@ secondary metadata lines, few borders, plenty of whitespace.
   agent** goes back with a one-agent team selected. Any edit means testing again. This browser keeps
   the agent arenad answered (`arena.connected.v1`; header values only as arenad's secret references,
   never the values), listed as "<name> (connected)" in both pickers.
+- **Build a world** (`/worlds/new`, `features/build/`): from ⋯ ("Build a world…"), ⌘K, or the last option of the
+  world picker. A stepper (Template, Company, Systems, People, Events, Review; done steps ✓ and clickable; on
+  phones "Step 3 of 6 · Systems"), one panel per step, and a bottom bar with **Back**, what the step comes to or
+  what blocks it in alarm ink, and **Next** (on Review **Build world**). Template: cards. Company: the name and
+  the size (presets or an exact number), the seed under Options. Systems: a checkbox per system (a required one
+  stays ticked), its options, the memory line. People: the roles with their counts, then one role's names as
+  inputs with ✕ and "+ Add person". Events: a checkbox, label, Trap or Event, params inline. Review: the company,
+  the tasks with their checks, the images (✓ present, ⚠ missing with its command) and memory, and what was left
+  out. Then "◐ Preparing · 23 s" with an indeterminate bar, "✓ Ready · 38 s" with **Run** and **New
+  experiment**, or "✕ Failed", why and **Try again**. Model in `features/build/builder.ts`.
+- **World picker** (`features/start/WorldPicker.tsx`, on Run once and New experiment above the task): the worlds
+  by title, the current one chosen; choosing one makes it current (`POST /api/worlds/{name}/use`) and reloads the
+  page; the last option is "Build a world…".
 - **Compare runs** (`/compare/:a/:b`), **World view** (`/world/…`), **Process view** (`/control/…`)
   and the **Team editor** (`/team`) are one click away under ⋯ and ⌘K.
 

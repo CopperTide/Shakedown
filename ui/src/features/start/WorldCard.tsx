@@ -3,6 +3,7 @@ import { chosen, optionWords } from '@/features/scenario/scenario';
 import type { ScenarioState } from '@/features/scenario/ScenarioBuilder';
 import { taskName, ticketTitle, worldName } from '@/model/summary';
 import type { Task } from '@/model/types';
+import { CurrentWorldPicker } from './WorldPicker';
 
 /** The task by its plain name; the ticket heading is its tooltip. */
 export function TaskPicker({ tasks, task, onTask, busy }: { tasks: Task[] | null; task: Task | null; onTask: (id: string) => void; busy: boolean }) {
@@ -37,6 +38,7 @@ export default function WorldCard({ benchmark, title, tasks, task, onTask, scena
   return (
     <div className="flex flex-col gap-3">
       <h1 className="text-xl font-semibold">{worldName(benchmark, title)}</h1>
+      <CurrentWorldPicker busy={busy} />
       <TaskPicker tasks={tasks} task={task} onTask={onTask} busy={busy} />
       <Chosen s={scenario} />
     </div>

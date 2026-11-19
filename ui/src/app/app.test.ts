@@ -54,3 +54,10 @@ describe('theme', () => {
     expect([parsePref('dark'), parsePref('nonsense'), parsePref(null)]).toEqual(['dark', 'system', 'system']);
   });
 });
+
+describe('the way in to the builder', () => {
+  it('the palette offers Build a world, opening the builder', () => {
+    const items = itemsFor({ kind: 'root' }, [], []);
+    expect(items.find((i) => i.id === 'build-world')).toMatchObject({ label: 'Build a world', group: 'Actions', action: { go: '/worlds/new' } });
+  });
+});

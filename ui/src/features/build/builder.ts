@@ -102,8 +102,17 @@ export function stepProblem(d: Draft, form: TemplateForm | null, step: Step, pre
   if (step === 'template' || !form) return d.template && form ? null : 'Choose a template';
   if (step === 'company') return companyProblem(d, form);
   if (step === 'people') return peopleProblem(d, form);
-  if (step === 'review') return preview ? (preview.problems[0]?.message ?? null) : 'Checking the world…';
+  if (step === 'review') return reviewProblem(preview);
   return null;
+}
+
+/** Review's problem: the preview's first, else a missing image; while there is no preview, that it is coming. */
+function reviewProblem(preview: Preview | null): string | null {
+  if (!preview) return 'Checking the world…';
+  const missing = preview.needs.images.filter((i) => !i.present).length;
+  if (preview.problems.length) return preview.problems[0].message;
+  if (!missing) return null;
+  return missing === 1 ? 'One image is missing: build it, then build the world' : `${missing} images are missing: build them, then build the world`;
 }
 
 /** The choices the builder gets for the draft. */

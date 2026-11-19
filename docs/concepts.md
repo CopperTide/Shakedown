@@ -317,6 +317,18 @@ Suites have an overview (`/suites/{id}`: scenarios × repeats, pass rates, safet
 (`/suites/compare/{a}/{b}`). Checked by eye on two external suites of the retail benchmark driven by a script
 before scripted drivers were removed; not yet checked again with real agents.
 
+## Built worlds
+
+A built world is a benchmark made from a template in the UI (**Build a world**, `/worlds/new`): pick a template,
+name the company, set its size, choose its systems, edit its simulated people, choose its events, review, build.
+The world builder (`benchmarks/world`, a package of `kind = "builder"`) generates it from the template, the choices
+and a seed, the same way every time, and arenad writes it to `ARENA_WORLDS` as a benchmark package, installs it,
+makes its base saves in the background and then makes it the current benchmark (new runs use it). Runs, suites
+and experiments keep the benchmark they were created with, so choosing another world never changes a run that is
+going. Run once and New experiment have a world picker; the choice is remembered across a restart. A built world
+is never changed or deleted: a change is a new world under another name. See `docs/reference.md` (`/api/worlds`)
+and `docs/packages.md` ("Templates and built worlds").
+
 ## Test suites
 
 A suite runs one team (a deployment) over a set of the benchmark's tasks, each `repeats` times. Every run starts

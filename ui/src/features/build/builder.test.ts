@@ -56,3 +56,10 @@ describe('the builder draft', () => {
     expect(STEPS.map((s) => STEP_LABEL[s])).toEqual(['Template', 'Company', 'Systems', 'People', 'Events', 'Review']);
   });
 });
+
+describe('review', () => {
+  it('is blocked by a missing image even when the preview names no problem', () => {
+    const missing = { ...preview, needs: { images: [{ image: 'toy:1', present: false, hint: 'make toy' }], memory_mb: 90 } };
+    expect(stepProblem(draftFor(form), form, 'review', missing)).toBe('One image is missing: build it, then build the world');
+  });
+});
