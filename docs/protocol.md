@@ -386,7 +386,7 @@ Base and gold worlds get no `world_time`.
 The kits turn this into stamps: Rust `arena_part::helpers::world_time::WorldTime` and Python
 `arena_part.world_time.WorldTime` (`at(clock_ms)`, `observe(clock_ms, now)`, `now_ms(now)`), with the formats
 `unix_nanos(ms)` (Loki push, OTLP `timeUnixNano`) and `rfc3339(ms)` (`2026-03-10T06:02:30.000Z`); Prometheus samples
-take the unix ms as it is. Between clocks, `now_ms` runs on at `speed` but at most 1 s of world time past the last
+take the unix ms as it is. Between clocks, `now_ms` runs on at `speed` for at most 1 s of wall time past the last
 clock seen (a paused branch sends none), and never goes back. The Python kit keeps each instance's `WorldTime` from
 `start` (`Part.world_time(instance)`, None without one) and shows it every `call_tool` and `advance` clock.
 

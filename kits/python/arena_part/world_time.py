@@ -4,13 +4,13 @@ telemetry follows the world clock and stands still while the branch is paused. a
 import datetime
 import time
 
-#: How far past the last clock it saw a part's world time runs on (world ms).
+#: How long (wall ms) past the last clock it saw a part's world time runs on, at the world's speed.
 MAX_LEAD_MS = 1_000
 
 
 class WorldTime:
-    """Stamps from the clock a part is given, running on at `speed` between clocks (at most
-    `MAX_LEAD_MS` past the last one) and never going back."""
+    """Stamps from the clock a part is given, running on at `speed` between clocks (for at most
+    `MAX_LEAD_MS` of wall time past the last one) and never going back."""
 
     def __init__(self, epoch_ms, speed):
         self.epoch_ms, self.speed = int(epoch_ms), float(speed)
@@ -26,13 +26,13 @@ class WorldTime:
         self._seen = (int(clock_ms), time.monotonic() if now is None else now)
 
     def now_ms(self, now=None):
-        """The world's unix ms now: the last clock seen plus the time since at `speed`, at most
-        `MAX_LEAD_MS` ahead of it, never less than what it gave before."""
+        """The world's unix ms now: the last clock seen plus the wall time since (at most
+        `MAX_LEAD_MS`) at `speed`, never less than what it gave before."""
         now = time.monotonic() if now is None else now
         clock = 0
         if self._seen is not None:
             seen, at = self._seen
-            clock = seen + min(int(max(now - at, 0) * 1000 * self.speed), MAX_LEAD_MS)
+            clock = seen + int(min(max(now - at, 0) * 1000, MAX_LEAD_MS) * self.speed)
         value = self.at(clock)
         self._given = value if self._given is None else max(self._given, value)
         return self._given
