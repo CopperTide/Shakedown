@@ -2,10 +2,8 @@
 // the OpenAI Agents SDK or anything else), which Shakedown launches on this computer for each run
 // that uses it (`/api/connections`). Secret env values come back redacted and stay in arenad.
 import { useEffect, useState } from 'react';
-export { createConnection, deleteConnection, listConnections, testConnection } from '@/api/connections';
 import { listConnections } from '@/api/connections';
 import type { Connection, ConnectionTest, NewConnection } from '@/model/connection';
-export type { Connection, ConnectionTest, NewConnection } from '@/model/connection';
 import type { NewSetup } from '@/model/experiment';
 import type { Runner, Team } from '@/model/types';
 import type { ConnectForm } from './connect';

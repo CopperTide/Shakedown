@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { branch as fetchBranch, runs as fetchRuns, stream } from '@/api';
+import { branch as fetchBranch, stream } from '@/api/branches';
+import { runs as fetchRuns } from '@/api/runs';
 import { errorMessage } from '@/lib/errors';
 import type { Branch, BranchDetail, Event } from '@/model/types';
 

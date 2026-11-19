@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
+import { recording } from '@/api/branches';
 import { Panel } from '@/components/ui/panel';
+import { type Recording } from '@/model/twin';
 import type { Event } from '@/model/types';
-import { type Recording, arenaSecondAt, clockText, recording } from './recording';
+import { arenaSecondAt, clockText } from './recording';
 
 /** "Plant (Isaac Sim)": the branch's recorded plant, held at the arena second of the step on screen. Nothing when the
  *  branch has no recording. Its own controls play on from there. */

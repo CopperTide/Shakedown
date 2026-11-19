@@ -1,5 +1,5 @@
 // The team new runs use, kept in this browser (`arena.team.v1`), else the benchmark's default.
-import { defaultTeam, suggestedTeams } from '@/api';
+import { defaultTeam, suggestedTeams } from '@/api/benchmark';
 import { isUntouched } from '@/model/team';
 import type { Team } from '@/model/types';
 

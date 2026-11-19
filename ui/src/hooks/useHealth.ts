@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { health } from '@/api';
+import { health } from '@/api/health';
 import type { Health } from '@/model/types';
 
 /** Pages dispatch this after they change how much disk the arena uses (e.g. delete a run). */

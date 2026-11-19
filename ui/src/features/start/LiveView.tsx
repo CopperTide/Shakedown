@@ -1,7 +1,7 @@
 import { ListTree, Pause, Play, CircleStop } from 'lucide-react';
 import { type ReactNode, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { setPaused, stopBranch } from '@/api';
+import { setPaused, stopBranch } from '@/api/branches';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogActions, DialogContent } from '@/components/ui/dialog';
 import { Panel } from '@/components/ui/panel';

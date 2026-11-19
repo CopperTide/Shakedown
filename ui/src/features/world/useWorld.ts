@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
-import { views as fetchViews } from '@/api';
+import { views as fetchViews } from '@/api/branches';
 import { errorMessage } from '@/lib/errors';
 import { hasModifier, isTyping, navOf } from '@/lib/keys';
 import type { BranchView } from '@/model/twin';

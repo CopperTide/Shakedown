@@ -3,7 +3,7 @@ import { MoreHorizontal, Play } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { deleteRun, runs as fetchRuns } from '@/api';
+import { deleteRun, runs as fetchRuns } from '@/api/runs';
 import { ApproximateMark, StatusChip } from '@/components/marks';
 import { Button } from '@/components/ui/button';
 import { DataTable } from '@/components/ui/data-table';
@@ -16,6 +16,7 @@ import { DISK_CHANGED } from '@/hooks/useHealth';
 import { useTaskNames } from '@/hooks/useTasks';
 import { errorMessage } from '@/lib/errors';
 import { ago, formatTime } from '@/lib/time';
+import { qs } from '@/lib/url';
 import { usePolled } from '@/lib/usePolled';
 import type { RunSummary } from '@/model/types';
 import { type BranchRow, branchRows, runIsRunning, runTitle } from './runsTable';
@@ -47,7 +48,7 @@ function RowMenu({ row, onDelete }: { row: BranchRow; onDelete: (r: RunSummary) 
 }
 
 /** A row opens on the Run screen: its result and timeline, with everything else one click away. */
-const openOf = (r: BranchRow) => `/run?run=${encodeURIComponent(r.run.id)}&branch=${encodeURIComponent(r.branch.id)}`;
+const openOf = (r: BranchRow) => `/run${qs({ run: r.run.id, branch: r.branch.id })}`;
 
 /** The run's name (its team is the tooltip); a rerun is "↳ Rerun", its note the tooltip. */
 function NameCell({ row, name }: { row: BranchRow; name: string }) {

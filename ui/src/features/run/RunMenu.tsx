@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { branchTree } from '@/features/runs/tree';
 import { rewindSeq } from '@/features/world/scrub';
+import { path } from '@/lib/url';
 import type { Branch, BranchDetail } from '@/model/types';
 import { withStep } from './useStepParam';
 
@@ -29,7 +30,7 @@ export default function RunMenu({ runId, d, page, step, siblings = [] }: {
   const running = d.status === 'running';
   // The first step at or after the one picked that a rerun can start from (the first agent step when none is).
   const rewindAt = rewindSeq(d.events, (step ?? 0) - 1);
-  const at = `${encodeURIComponent(runId)}/${encodeURIComponent(branchId)}`;
+  const at = path`${runId}/${branchId}`;
   const reruns = siblings.length > 1 ? branchTree(siblings) : [];
   return (
     <DropdownMenu>
@@ -41,7 +42,7 @@ export default function RunMenu({ runId, d, page, step, siblings = [] }: {
         <DropdownMenuItem onSelect={() => openPalette({ kind: 'compare-runs', first: branchId })}>Compare with another run…</DropdownMenuItem>
         {reruns.length > 0 && <DropdownMenuLabel>Reruns</DropdownMenuLabel>}
         {reruns.map(({ branch: b, depth }) => (
-          <DropdownMenuItem key={b.id} onSelect={() => nav(`/runs/${encodeURIComponent(runId)}/${encodeURIComponent(b.id)}`)} className={b.id === branchId ? 'bg-accent-soft' : ''}>
+          <DropdownMenuItem key={b.id} onSelect={() => nav(path`/runs/${runId}/${b.id}`)} className={b.id === branchId ? 'bg-accent-soft' : ''}>
             <span style={{ paddingLeft: depth * 12 }} className="min-w-0 flex-1 truncate text-xs">{depth ? `↳ ${b.fork_note ?? 'Rerun'}` : 'Original'}</span>
             <StatusChip status={b.status} />
           </DropdownMenuItem>

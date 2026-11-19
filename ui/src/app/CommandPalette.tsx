@@ -1,11 +1,11 @@
 import { ArrowRight, Factory, GitCompare, Layers, ListTree, Monitor, Play } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { runs as fetchRuns } from '@/api';
+import { experiments as fetchExperiments } from '@/api/experiments';
+import { runs as fetchRuns } from '@/api/runs';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Kbd } from '@/components/ui/kbd';
-import { experiments as fetchExperiments } from '@/features/experiments/api';
 import { errorMessage } from '@/lib/errors';
 import { hasModifier } from '@/lib/keys';
 import type { ListedExperiment } from '@/model/experiment';

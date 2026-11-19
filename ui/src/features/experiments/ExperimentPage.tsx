@@ -1,6 +1,7 @@
 import { CircleStop } from 'lucide-react';
 import { useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
+import { experiment as fetchExperiment, stopExperiment } from '@/api/experiments';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogActions, DialogContent } from '@/components/ui/dialog';
 import { PageBody, PageHeader, type Width } from '@/components/ui/page';
@@ -13,7 +14,6 @@ import { errorMessage } from '@/lib/errors';
 import { experimentMark } from '@/lib/mark';
 import { usePolled } from '@/lib/usePolled';
 import type { Experiment } from '@/model/experiment';
-import { experiment as fetchExperiment, stopExperiment } from './api';
 import { measureRows } from './measures';
 import { columnOf } from './model';
 import { Checks, Setups } from './Results';

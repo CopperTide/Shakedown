@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { tasks as fetchTasks } from '@/api';
+import { tasks as fetchTasks } from '@/api/benchmark';
 import { errorMessage } from '@/lib/errors';
 import { taskName } from '@/model/summary';
 import type { Task } from '@/model/types';

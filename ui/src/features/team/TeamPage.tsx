@@ -1,6 +1,6 @@
 import { ArrowUp, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { defaultTeam } from '@/api';
+import { defaultTeam } from '@/api/benchmark';
 import { ModelHint, ModelInput, ProviderSelect } from '@/components/ProviderFields';
 import { Button } from '@/components/ui/button';
 import { Checkbox, Field, Input, NativeSelect, Textarea } from '@/components/ui/input';

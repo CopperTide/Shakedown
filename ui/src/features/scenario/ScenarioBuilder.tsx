@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { scenarioOptions as fetchOptions } from '@/api';
+import { scenarioOptions as fetchOptions } from '@/api/benchmark';
 import { Checkbox, Field, Input, NativeSelect } from '@/components/ui/input';
 import { Tag } from '@/components/ui/status';
 import { cn } from '@/lib/cn';

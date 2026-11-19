@@ -1,6 +1,7 @@
 import { Play, Plus } from 'lucide-react';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { createExperiment } from '@/api/experiments';
 import { Button } from '@/components/ui/button';
 import { PageBody } from '@/components/ui/page';
 import { Segmented } from '@/components/ui/segmented';
@@ -20,7 +21,6 @@ import type { NewExperiment } from '@/model/experiment';
 import { missingFor, runnerProblem, worldName } from '@/model/summary';
 import { teamForRun } from '@/model/team';
 import type { Health, Team } from '@/model/types';
-import { createExperiment } from './api';
 import { DEFAULT_RUNS, MAX_SETUPS, RUN_CHOICES, type SetupDraft, newDraft, settleDrafts, setupTeam, setupsProblem } from './model';
 import SetupCard, { type TeamChoices } from './SetupCard';
 

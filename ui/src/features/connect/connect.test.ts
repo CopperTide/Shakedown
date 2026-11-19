@@ -1,12 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { checkAnswer } from '@/dev/fixtureApi';
+import { type CheckAnswer } from '@/model/connection';
 import { agentModelLine, agentModelTip, modelProblem, providerOptions } from '@/model/providers';
 import { missingFor, runLine, runnerProblem } from '@/model/summary';
 import { teamForRun } from '@/model/team';
 import type { AgentSpec, Health, Team } from '@/model/types';
-import {
-  CONNECTED_KEY, type CheckAnswer, checkBody, connectedAgent, connectedLabel, connectedTeam, connectedTeams, emptyForm, formProblem, parseHeaders, readConnected, saveConnected,
-} from './connect';
+import { CONNECTED_KEY, checkBody, connectedAgent, connectedLabel, connectedTeam, connectedTeams, emptyForm, formProblem, parseHeaders, readConnected, saveConnected } from './connect';
 
 const http = (more: Partial<AgentSpec> = {}): AgentSpec => ({
   id: 'planner', name: 'Plant planner', kind: 'http', model: null, prompt: '', url: 'https://agent.example.com/arena',

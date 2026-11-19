@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { type Connection } from '@/model/connection';
 import { teamForRun } from '@/model/team';
 import { checkBody, emptyForm, formProblem } from './connect';
-import { type Connection, codeBody, codeTeam, parseEnv, splitCommand, testLine } from './connections';
+import { codeBody, codeTeam, parseEnv, splitCommand, testLine } from './connections';
 
 const conn: Connection = {
   id: 'c1', name: 'LangGraph team', kind: 'code', command: ['uv', 'run', 'python', 'driver.py'], workdir: '/work', env: { MODE: 'fast' }, created_at: '2026-11-17T12:00:00Z',

@@ -1,5 +1,5 @@
 import { useEffect, useSyncExternalStore } from 'react';
-import { providers as fetchProviders } from '@/api';
+import { providers as fetchProviders } from '@/api/health';
 import { useHealth } from '@/hooks/useHealth';
 import { errorMessage } from '@/lib/errors';
 import type { ProviderStatus } from '@/model/types';

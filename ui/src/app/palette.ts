@@ -1,5 +1,6 @@
 // The command palette's model: what it lists in each mode and what picking an item does.
 import { branchTree } from '@/features/runs/tree';
+import { path } from '@/lib/url';
 import type { ListedExperiment } from '@/model/experiment';
 import type { BranchStatus, RunSummary } from '@/model/types';
 
@@ -76,7 +77,7 @@ export function hereOf(pathname: string, search = ''): Here {
 /** The deeper views of the run on screen: its world view, all its details (event log, trace, deployment estimate), its process view. */
 export function hereItems(here: Here): Item[] {
   if (!here) return [];
-  const at = `${encodeURIComponent(here.runId)}/${encodeURIComponent(here.branchId)}`;
+  const at = path`${here.runId}/${here.branchId}`;
   const item = (page: string, label: string, keywords: string[]): Item[] => (here.page === page ? [] : [{
     id: `${page}-here`, group: 'This run', label, keywords, action: { go: `/${page}/${at}` },
   }]);

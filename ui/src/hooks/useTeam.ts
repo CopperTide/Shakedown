@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { suggestedTeams } from '@/api';
+import { suggestedTeams } from '@/api/benchmark';
 import { errorMessage } from '@/lib/errors';
 import type { Team } from '@/model/types';
 import { loadTeam, saveTeam } from './storedTeam';

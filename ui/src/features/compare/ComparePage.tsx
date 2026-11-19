@@ -1,7 +1,8 @@
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { branch as fetchBranch, compare, views as fetchViews } from '@/api';
+import { branch as fetchBranch, views as fetchViews } from '@/api/branches';
+import { compare } from '@/api/compare';
 import { ApproximateMark, StatusChip } from '@/components/marks';
 import { Button } from '@/components/ui/button';
 import { CodeBlock } from '@/components/ui/code-block';

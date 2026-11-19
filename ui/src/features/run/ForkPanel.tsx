@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { fork } from '@/api';
+import { fork } from '@/api/branches';
 import { ModelHint, ModelInput, ProviderSelect } from '@/components/ProviderFields';
 import { Button } from '@/components/ui/button';
 import { Field, NativeSelect, Textarea } from '@/components/ui/input';

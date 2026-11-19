@@ -1,3 +1,4 @@
+import { path } from '@/lib/url';
 import type { StoredReview } from '@/model/review';
 
 /** The reviewer as a person reads it: "Claude Code sonnet", "openrouter deepseek/…". */
@@ -18,7 +19,7 @@ export function smallPrint(s: StoredReview): string {
 
 /** The run page at a step. */
 export const stepHref = (runId: string, branchId: string, seq: number) =>
-  `/runs/${encodeURIComponent(runId)}/${encodeURIComponent(branchId)}?step=${seq}`;
+  `${path`/runs/${runId}/${branchId}`}?step=${seq}`;
 
 export const SEVERITY_LABEL = { safety: 'Safety', goal: 'Goal', efficiency: 'Efficiency' } as const;
 

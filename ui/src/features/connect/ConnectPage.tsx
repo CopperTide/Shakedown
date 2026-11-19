@@ -1,7 +1,8 @@
 import { Check, PlugZap } from 'lucide-react';
 import { type FormEvent, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { checkAgent } from '@/api';
+import { checkAgent } from '@/api/agents';
+import { createConnection, deleteConnection, testConnection } from '@/api/connections';
 import { Button } from '@/components/ui/button';
 import { CodeBlock } from '@/components/ui/code-block';
 import { Field, Input, Textarea } from '@/components/ui/input';
@@ -9,11 +10,10 @@ import { PageBody } from '@/components/ui/page';
 import { Segmented } from '@/components/ui/segmented';
 import { cn } from '@/lib/cn';
 import { errorMessage } from '@/lib/errors';
+import { type Connection, type ConnectionTest } from '@/model/connection';
 import type { AgentSpec } from '@/model/types';
-import {
-  type ConnectForm, type ConnectFrom, type ConnectKind, type ConnectReturn, checkBody, connectedAgent, connectedTeam, emptyForm, formProblem, saveConnected,
-} from './connect';
-import { type Connection, type ConnectionTest, codeBody, codeTeam, createConnection, deleteConnection, testConnection, testLine } from './connections';
+import { type ConnectForm, type ConnectFrom, type ConnectKind, type ConnectReturn, checkBody, connectedAgent, connectedTeam, emptyForm, formProblem, saveConnected } from './connect';
+import { codeBody, codeTeam, testLine } from './connections';
 
 /** Where the test stands: not run (or the form changed since), running, connected, or why not. */
 export type TestState =

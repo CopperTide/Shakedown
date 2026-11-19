@@ -1,6 +1,7 @@
 import { FlaskConical, GitCompare, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { experiments as fetchExperiments } from '@/api/experiments';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/input';
 import { PageBody, PageHeader } from '@/components/ui/page';
@@ -13,7 +14,6 @@ import { experimentMark } from '@/lib/mark';
 import { ago, formatTime } from '@/lib/time';
 import { usePolled } from '@/lib/usePolled';
 import type { ListedExperiment, SetupLine } from '@/model/experiment';
-import { experiments as fetchExperiments } from './api';
 
 /** While any experiment runs, the list is read again this often. */
 const POLL_MS = 3000;

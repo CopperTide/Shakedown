@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { getReview, startReview } from '@/api/reviews';
 import { errorMessage } from '@/lib/errors';
-import type { CompareReview, RunReview, StoredReview } from '@/model/review';
-import { type Target, getReview, startReview } from './api';
+import type { CompareReview, RunReview, StoredReview, Target } from '@/model/review';
 
 /** How often a running review is asked about. */
 export const POLL_MS = 3000;

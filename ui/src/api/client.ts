@@ -1,5 +1,7 @@
-// The one way the UI talks to arenad: typed requests on paths whose segments are encoded once, here.
+// The one way the UI talks to arenad: typed requests, on paths built with `path` and `qs` (lib/url).
 import { api } from './core';
+
+export { path, qs } from '@/lib/url';
 
 /** A request arenad refused: its status and arenad's `error` (else the body, else the status text). */
 export class ApiError extends Error {
@@ -34,12 +36,3 @@ export const post = <T>(path: string, body?: unknown) =>
     : { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
 
 export const del = <T>(path: string) => request<T>(path, { method: 'DELETE' });
-
-/** A path whose interpolated values are encoded as segments: path`/api/branches/${id}/rows`. */
-export function path(strings: TemplateStringsArray, ...values: (string | number)[]): string {
-  return strings.reduce((out, s, i) => out + s + (i < values.length ? encodeURIComponent(values[i]) : ''), '');
-}
-
-/** "?a=1&b=x%2Fy": a query, in the order given, each value encoded. */
-export const qs = (params: Record<string, string | number>) =>
-  `?${Object.entries(params).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&')}`;

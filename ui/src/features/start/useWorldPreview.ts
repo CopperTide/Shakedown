@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
-import { call, runs as fetchRuns, views as fetchViews } from '@/api';
+import { benchmark } from '@/api/benchmark';
+import { views as fetchViews } from '@/api/branches';
+import { runs as fetchRuns } from '@/api/runs';
 import type { TwinView } from '@/model/twin';
 import type { BenchmarkDescription } from '@/model/types';
 
@@ -13,7 +15,7 @@ export function useWorldPreview() {
   useEffect(() => {
     let alive = true;
     (async () => {
-      const b = await call<BenchmarkDescription>('/api/benchmark');
+      const b = await benchmark();
       if (!alive) return;
       setBench(b);
       if (!b.view) return;

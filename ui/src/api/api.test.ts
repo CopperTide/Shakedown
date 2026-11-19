@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { stream } from '@/api';
 import type { Event } from '@/model/types';
+import { stream } from './branches';
 
 class FakeEventSource {
   static last: FakeEventSource;
