@@ -83,7 +83,7 @@ async fn run_chain(
     from: StartPoint,
 ) -> Result<Option<Ending>> {
     let mut resume = from.resume;
-    for idx in from.agent_index..ctx.team.agents.len() {
+    for idx in from.agent_index..ctx.roster.team.agents.len() {
         if let Some(end) = run_agent(state, ctx, idx, brief, resume.take()).await? {
             return Ok(Some(end));
         }
@@ -99,7 +99,7 @@ async fn run_concurrent(
     brief: &Brief,
     first: usize,
 ) -> Result<Option<Ending>> {
-    let runs = (first..ctx.team.agents.len()).map(|i| run_agent(state, ctx, i, brief, None));
+    let runs = (first..ctx.roster.team.agents.len()).map(|i| run_agent(state, ctx, i, brief, None));
     let mut worst = None;
     for ended in futures_util::future::join_all(runs).await {
         worst = worse(worst, ended?);
@@ -121,14 +121,14 @@ fn worse(a: Option<Ending>, b: Option<Ending>) -> Option<Ending> {
 
 /// Carries over the recorded handoff notes of the agents before the start point.
 fn restore_notes(ctx: &BranchCtx, from: &StartPoint) -> Result<()> {
-    let agents = &ctx.team.agents;
+    let agents = &ctx.roster.team.agents;
     if from.agent_index >= agents.len() {
         return Err(anyhow!(
             "start agent index {} out of range",
             from.agent_index
         ));
     }
-    let mut h = ctx.handoffs.lock().unwrap();
+    let mut h = ctx.mailbox.handoffs.lock().unwrap();
     for (spec, note) in agents.iter().zip(&from.notes).take(from.agent_index) {
         h.insert(spec.id.clone(), note.clone());
     }
@@ -153,7 +153,7 @@ async fn agent_input(
     input.push_str(&format!("{ticket}\n# {title}\n\n{instructions}\n"));
     let notes = match ctx.rules.handoff_required {
         true => legacy_note(ctx, idx)?.into_iter().collect(),
-        false => notes_for(state, ctx, &ctx.team.agents[idx].id).await?,
+        false => notes_for(state, ctx, &ctx.roster.team.agents[idx].id).await?,
     };
     for (from, note) in notes {
         input.push_str(&format!("\n# Handoff note from {from}\n\n{note}\n"));
@@ -163,11 +163,12 @@ async fn agent_input(
 
 /// The previous agent's name and note, in a legacy run (none for the first agent).
 fn legacy_note(ctx: &BranchCtx, idx: usize) -> Result<Option<(String, String)>> {
-    let Some(prev) = idx.checked_sub(1).map(|i| &ctx.team.agents[i]) else {
+    let Some(prev) = idx.checked_sub(1).map(|i| &ctx.roster.team.agents[i]) else {
         return Ok(None);
     };
-    let spec = &ctx.team.agents[idx];
+    let spec = &ctx.roster.team.agents[idx];
     let note = ctx
+        .mailbox
         .handoff_note(&prev.id)
         .ok_or_else(|| anyhow!("no handoff note from {} to start {}", prev.id, spec.id))?;
     Ok(Some((prev.name.clone(), note)))
@@ -181,7 +182,7 @@ async fn notes_for(
 ) -> Result<Vec<(String, String)>> {
     let events = state.store.events(&ctx.branch_id).await?;
     let name_of = |id: &str| {
-        let spec = ctx.team.agents.iter().find(|a| a.id == id);
+        let spec = ctx.roster.team.agents.iter().find(|a| a.id == id);
         spec.map_or_else(|| id.to_string(), |a| a.name.clone())
     };
     let mail = mail_for(&events, agent);
@@ -200,7 +201,7 @@ async fn run_agent(
     brief: &Brief,
     resume: Option<Vec<Value>>,
 ) -> Result<Option<Ending>> {
-    let spec = ctx.team.agents[idx].clone();
+    let spec = ctx.roster.team.agents[idx].clone();
     let input = agent_input(state, ctx, idx, brief).await?;
     let driver = driver_for(state, spec.kind)?;
     let start = AgentStartPayload::of(&spec);
@@ -224,7 +225,7 @@ async fn record_end(
     agent: &str,
     result: &AgentResult,
 ) -> Result<()> {
-    if ctx.rules.handoff_required && ctx.is_last(agent) {
+    if ctx.rules.handoff_required && ctx.roster.is_last(agent) {
         freeze(ctx).await;
     }
     let end = serde_json::to_value(agent_end(result))?;
@@ -260,7 +261,7 @@ pub(crate) fn agent_end(result: &AgentResult) -> AgentEndPayload {
 /// How the branch ends after an agent, if it does: a stopped world program, a failed agent, or
 /// (in a legacy run) a missing handoff.
 fn agent_ending(ctx: &BranchCtx, agent: &str, result: AgentResult) -> Option<Ending> {
-    if let Some(f) = ctx.fatal() {
+    if let Some(f) = ctx.lifecycle.fatal() {
         return Some(Ending::infra(f));
     }
     if !result.ok {
@@ -277,8 +278,8 @@ fn agent_ending(ctx: &BranchCtx, agent: &str, result: AgentResult) -> Option<End
     if let Some(why) = result.cost_usd.and_then(|c| ctx.budget.settle(agent, c)) {
         return Some(Ending::because(BranchStatus::BudgetExceeded, why));
     }
-    let required = ctx.rules.handoff_required && !ctx.is_last(agent);
-    if required && ctx.handoff_note(agent).is_none() {
+    let required = ctx.rules.handoff_required && !ctx.roster.is_last(agent);
+    if required && ctx.mailbox.handoff_note(agent).is_none() {
         return Some(Ending::failed("no handoff"));
     }
     None

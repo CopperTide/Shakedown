@@ -1,10 +1,13 @@
 mod dispatch;
+mod lifecycle;
 mod links;
+mod mailbox;
+mod roster;
 mod setup;
 mod talk;
 mod view;
 
-use std::{collections::HashMap, sync::Arc, sync::Mutex};
+use std::sync::Arc;
 
 use parts::proto::{Effect, ToolOutput, WorldEvent};
 use serde_json::{json, Value};
@@ -21,7 +24,10 @@ use crate::{
 };
 
 pub use dispatch::{Said, CLOSED, DELEGATE, FINISH, REPORT};
+pub use lifecycle::Lifecycle;
 pub use links::LINK_ACTOR;
+pub use mailbox::Mailbox;
+pub use roster::Roster;
 pub use setup::SETUP_ACTOR;
 pub use talk::{handoff_schema, mail_for, said_text, HANDOFF, INBOX, MESSAGE};
 
@@ -29,35 +35,23 @@ pub use talk::{handoff_schema, mail_for, said_text, HANDOFF, INBOX, MESSAGE};
 pub struct BranchCtx {
     pub branch_id: String,
     pub world: Arc<World>,
-    pub team: Team,
     pub task_id: String,
     /// The branch's arena clock (from 0 at the run's start, from the fork point on a fork).
     pub clock: BranchClock,
-    /// Sends `advance` to the world's clock parts while the branch runs.
-    ticker: tokio::sync::Mutex<Option<Ticker>>,
     /// The rules the branch runs under (from its run's `RunStart`).
     pub rules: Rules,
     /// Its spend limit and running estimate (`rules.max_cost_usd`).
     pub budget: crate::budget::Budget,
-    /// Agents an external system registered while the branch runs (not in `team`).
-    joined: std::sync::RwLock<Vec<AgentSpec>>,
-    /// agent id -> its latest handoff note.
-    pub handoffs: Mutex<HashMap<String, String>>,
-    /// Set when a program of the world has stopped: the branch ends `infra_error` with it.
-    fatal: Mutex<Option<String>>,
     /// Held across every tool call so world order, saves and event order agree.
     gate: tokio::sync::Mutex<()>,
-    /// Set once something has begun to end the branch.
-    ending: std::sync::atomic::AtomicBool,
     /// Paused, stopped or running: calls wait while the branch is paused.
     pub flow: FlowControl,
-    /// Where what agents say is passed on, while a dispatch runner listens.
-    tap: Mutex<Option<tokio::sync::mpsc::UnboundedSender<Said>>>,
-    /// Set once the lead of a dispatch run has finished it: every later call is refused.
-    closed: std::sync::atomic::AtomicBool,
-    /// agent id -> the bearer token its MCP endpoint wants, for an agent given one (an `http`
-    /// agent, while arenad waits for it). Kept in memory only.
-    tokens: Mutex<HashMap<String, String>>,
+    /// Its team, the agents that joined it and their tokens.
+    pub roster: Roster,
+    /// Its agents' handoff notes and what they say.
+    pub mailbox: Mailbox,
+    /// Its ticker and how far it is through its life.
+    pub lifecycle: Lifecycle,
     /// The arena's time on this branch since its last event (see [`crate::overhead`]).
     pub overhead: Ledger,
 }
@@ -69,21 +63,15 @@ impl BranchCtx {
         BranchCtx {
             branch_id,
             world,
-            team,
             task_id,
             clock: BranchClock::from_env(0),
-            ticker: tokio::sync::Mutex::new(None),
             rules: Rules::legacy(),
             budget: crate::budget::Budget::default(),
-            joined: Default::default(),
-            handoffs: Mutex::new(HashMap::new()),
-            fatal: Mutex::new(None),
             gate: tokio::sync::Mutex::new(()),
-            ending: Default::default(),
             flow: FlowControl::default(),
-            tap: Mutex::new(None),
-            closed: Default::default(),
-            tokens: Default::default(),
+            roster: Roster::new(team),
+            mailbox: Mailbox::default(),
+            lifecycle: Lifecycle::default(),
             overhead: Ledger::default(),
         }
     }
@@ -103,7 +91,7 @@ impl BranchCtx {
 
     /// Starts the clock ticker (when the world has clock parts and none runs yet).
     pub async fn start_ticker(self: &Arc<Self>, store: &Arc<Store>) {
-        let mut t = self.ticker.lock().await;
+        let mut t = self.lifecycle.ticker.lock().await;
         if t.is_none() {
             *t = Ticker::start(ToolExec::new(store.clone()), self.clone());
         }
@@ -111,135 +99,9 @@ impl BranchCtx {
 
     /// Stops the clock ticker and waits for it to end.
     pub async fn stop_ticker(&self) {
-        if let Some(t) = self.ticker.lock().await.take() {
+        if let Some(t) = self.lifecycle.ticker.lock().await.take() {
             t.stop().await;
         }
-    }
-
-    /// The id of the agent that leads a dispatch run (see [`Team::lead_index`]).
-    pub fn lead_id(&self) -> String {
-        let lead = self.team.agents.get(self.team.lead_index());
-        lead.map(|a| a.id.clone()).unwrap_or_default()
-    }
-
-    pub fn is_lead(&self, agent: &str) -> bool {
-        self.lead_id() == agent
-    }
-
-    /// Passes what agents say from now on to the returned receiver (replacing an earlier one).
-    pub fn listen(&self) -> tokio::sync::mpsc::UnboundedReceiver<Said> {
-        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
-        *self.tap.lock().unwrap() = Some(tx);
-        rx
-    }
-
-    /// Passes on what an agent said, when someone listens.
-    pub fn tell(&self, said: Said) {
-        if let Some(tx) = self.tap.lock().unwrap().as_ref() {
-            let _ = tx.send(said);
-        }
-    }
-
-    /// Refuses every later call: the run is over.
-    pub fn close(&self) {
-        self.closed.store(true, std::sync::atomic::Ordering::SeqCst);
-    }
-
-    pub fn is_closed(&self) -> bool {
-        self.closed.load(std::sync::atomic::Ordering::SeqCst)
-    }
-
-    pub fn is_last(&self, agent: &str) -> bool {
-        self.team.agents.last().is_some_and(|a| a.id == agent)
-    }
-
-    /// The agent `id`: one of the team, or one that joined while the branch runs.
-    pub fn agent(&self, id: &str) -> Option<AgentSpec> {
-        let known = self.team.agents.iter().find(|a| a.id == id).cloned();
-        known.or_else(|| {
-            self.joined
-                .read()
-                .unwrap()
-                .iter()
-                .find(|a| a.id == id)
-                .cloned()
-        })
-    }
-
-    /// Every agent: the team's, then those that joined, in order.
-    pub fn agents(&self) -> Vec<AgentSpec> {
-        let mut all = self.team.agents.clone();
-        all.extend(self.joined.read().unwrap().iter().cloned());
-        all
-    }
-
-    /// Adds an agent that joined while the branch runs; false when one has its id already.
-    pub fn join(&self, spec: AgentSpec) -> bool {
-        let mut joined = self.joined.write().unwrap();
-        let taken = self
-            .team
-            .agents
-            .iter()
-            .chain(joined.iter())
-            .any(|a| a.id == spec.id);
-        if !taken {
-            joined.push(spec);
-        }
-        !taken
-    }
-
-    /// True when `agent`'s team keeps it from writing (an unknown agent writes nothing either).
-    pub fn read_only(&self, agent: &str) -> bool {
-        self.agent(agent).is_none_or(|a| a.read_only)
-    }
-
-    /// True when `agent`'s setup lets it use the world tool `name` (an unknown agent uses none).
-    pub fn may_use(&self, agent: &str, name: &str) -> bool {
-        self.agent(agent).is_some_and(|a| a.may_use(name))
-    }
-
-    pub fn has_agent(&self, agent: &str) -> bool {
-        self.agent(agent).is_some()
-    }
-
-    /// The provider `agent`'s model calls go to (`Some(None)`: it names none, so the default
-    /// one); `None` when the branch has no such agent.
-    pub fn provider_of(&self, agent: &str) -> Option<Option<String>> {
-        self.agent(agent).map(|a| a.provider)
-    }
-
-    /// A new bearer token for `agent`'s MCP endpoint, which takes no call without it from now on.
-    pub fn issue_token(&self, agent: &str) -> String {
-        let token = uuid::Uuid::new_v4().simple().to_string();
-        self.tokens
-            .lock()
-            .unwrap()
-            .insert(agent.into(), token.clone());
-        token
-    }
-
-    /// Takes back `agent`'s token: its endpoint answers no one until another is issued.
-    pub fn revoke_token(&self, agent: &str) {
-        self.tokens
-            .lock()
-            .unwrap()
-            .insert(agent.into(), String::new());
-    }
-
-    /// True when a call to `agent`'s endpoint with `authorization` (the header's value) may go
-    /// through: the agent was never given a token, or this is it.
-    pub fn token_ok(&self, agent: &str, authorization: Option<&str>) -> bool {
-        match self.tokens.lock().unwrap().get(agent) {
-            None => true,
-            Some(t) => {
-                let given = authorization.and_then(|a| a.strip_prefix("Bearer "));
-                !t.is_empty() && given == Some(t.as_str())
-            }
-        }
-    }
-
-    pub fn handoff_note(&self, agent: &str) -> Option<String> {
-        self.handoffs.lock().unwrap().get(agent).cloned()
     }
 
     /// Holds the branch gate: no tool call runs on the world until the guard drops.
@@ -322,23 +184,6 @@ impl BranchCtx {
         self.overhead.add_since(Cat::Wait, since);
         guard
     }
-
-    /// True for the one caller that may end the branch: the first to ask.
-    pub fn claim_end(&self) -> bool {
-        !self.ending.swap(true, std::sync::atomic::Ordering::SeqCst)
-    }
-
-    /// Why the branch can't go on (a world program stopped), once that has happened.
-    pub fn fatal(&self) -> Option<String> {
-        self.fatal.lock().unwrap().clone()
-    }
-
-    fn set_fatal(&self, msg: &str) {
-        self.fatal
-            .lock()
-            .unwrap()
-            .get_or_insert_with(|| msg.to_string());
-    }
 }
 
 /// The single place where tool calls are executed, recorded and saved.
@@ -350,12 +195,12 @@ pub struct ToolExec {
 /// world's (only its read tools when the agent's team made it read-only, only those its setup lists
 /// when it lists some), and the tools agents talk with (see `talk`).
 pub fn tool_schemas(branch: &BranchCtx, agent: &str) -> Vec<Value> {
-    let read_only = branch.read_only(agent);
+    let read_only = branch.roster.read_only(agent);
     let mut list: Vec<Value> = branch
         .world
         .tools()
         .filter(|t| !read_only || t.effect != Effect::Write)
-        .filter(|t| branch.may_use(agent, &t.name))
+        .filter(|t| branch.roster.may_use(agent, &t.name))
         .map(|t| json!({"name": t.name, "description": t.description, "inputSchema": t.input_schema}))
         .collect();
     list.extend(talk::schemas(branch, agent));
@@ -470,15 +315,18 @@ fn part_events(part: Option<&str>, events: Box<[WorldEvent]>, clock_ms: i64) -> 
 /// Why `agent` may not run `name` now: the branch can't go on, its setup doesn't give it the tool,
 /// or it writes and the agent's team made it read-only.
 fn refusal(branch: &BranchCtx, agent: &str, name: &str) -> Option<String> {
-    if let Some(f) = branch.fatal() {
+    if let Some(f) = branch.lifecycle.fatal() {
         return Some(f);
     }
-    if branch.world.has_tool(name) && branch.has_agent(agent) && !branch.may_use(agent, name) {
+    if branch.world.has_tool(name)
+        && branch.roster.has_agent(agent)
+        && !branch.roster.may_use(agent, name)
+    {
         return Some(format!(
             "{name} is not available to this agent: its setup does not list it"
         ));
     }
-    (branch.world.is_write(name) && branch.read_only(agent)).then(|| {
+    (branch.world.is_write(name) && branch.roster.read_only(agent)).then(|| {
         "Write tools are not available to this agent: its team made it read-only".to_string()
     })
 }
@@ -499,7 +347,7 @@ async fn save_step(branch: &BranchCtx, written: Option<&str>, facts: &mut CallFa
 /// The message of a failed world call; a stopped program also ends the branch.
 fn failure(branch: &BranchCtx, e: WorldError) -> String {
     if e.fatal {
-        branch.set_fatal(&e.message);
+        branch.lifecycle.set_fatal(&e.message);
         e.message
     } else {
         format!("internal error: {e}")
@@ -532,7 +380,7 @@ impl ToolExec {
     /// Advances the world's clock parts to the branch clock behind the gate (a clock tick).
     pub async fn tick(&self, branch: &BranchCtx) -> Result<(), String> {
         let _gate = branch.gate().await;
-        if branch.fatal().is_some() {
+        if branch.lifecycle.fatal().is_some() {
             return Ok(());
         }
         self.advance(branch, branch.clock.now_ms()).await
@@ -598,7 +446,7 @@ impl ToolExec {
     ) -> Result<Value, String> {
         branch.flow.go().await.map_err(|_| STOPPED.to_string())?;
         let _gate = branch.gate_timed().await;
-        if branch.is_closed() {
+        if branch.lifecycle.is_closed() {
             return Err(CLOSED.to_string());
         }
         if talk::is_talk(branch, name) {

@@ -131,18 +131,24 @@ impl Drop for Crew {
 
 impl Crew {
     fn new(state: &Arc<AppState>, ctx: &Arc<BranchCtx>, brief: &Brief) -> Crew {
-        let ids: Vec<String> = ctx.team.agents.iter().map(|a| a.id.clone()).collect();
+        let ids: Vec<String> = ctx
+            .roster
+            .team
+            .agents
+            .iter()
+            .map(|a| a.id.clone())
+            .collect();
         let limits = Limits::from_env();
         Crew {
             state: state.clone(),
             ctx: ctx.clone(),
             brief: brief.clone(),
-            board: Board::new(&ids, ctx.team.lead_index(), limits),
+            board: Board::new(&ids, ctx.roster.team.lead_index(), limits),
             limits,
             slots: HashMap::new(),
             working: HashSet::new(),
             history: HashMap::new(),
-            said: ctx.listen(),
+            said: ctx.mailbox.listen(),
             turns: mpsc::unbounded_channel(),
             ends: mpsc::unbounded_channel(),
             stop: watch::channel(false).0,
@@ -160,8 +166,15 @@ impl Crew {
     /// A new run starts the lead; a fork (its inherited record has agent starts) restarts every
     /// agent from it ([`resume`]). The starts are recorded first.
     async fn begin(&mut self, events: &[Event]) -> Result<Vec<Action>> {
-        let Some(r) = resume::resumed(events, &self.ctx.team) else {
-            let all: Vec<String> = self.ctx.team.agents.iter().map(|a| a.id.clone()).collect();
+        let Some(r) = resume::resumed(events, &self.ctx.roster.team) else {
+            let all: Vec<String> = self
+                .ctx
+                .roster
+                .team
+                .agents
+                .iter()
+                .map(|a| a.id.clone())
+                .collect();
             self.record_starts(&all).await?;
             return Ok(self.board.start());
         };
@@ -177,6 +190,7 @@ impl Crew {
     async fn record_starts(&self, agents: &[String]) -> Result<()> {
         for spec in self
             .ctx
+            .roster
             .team
             .agents
             .iter()
@@ -271,7 +285,7 @@ impl Crew {
     /// The input of `agent`'s turn: on its first, the brief, how the run works and (on a fork) its
     /// history; then why it was woken.
     fn input_for(&self, agent: &str, reason: Reason, mail: &[Mail]) -> String {
-        let team = &self.ctx.team;
+        let team = &self.ctx.roster.team;
         let lead = self.board.lead_id();
         let mut input = String::new();
         let clock = self.brief.clock;
@@ -329,6 +343,7 @@ impl Crew {
     fn open(&mut self, agent: &str) -> Result<(), String> {
         let spec = self
             .ctx
+            .roster
             .agent(agent)
             .ok_or_else(|| format!("no agent {agent}"))?;
         let driver = runner::driver_for(&self.state, spec.kind).map_err(|e| format!("{e:#}"))?;
@@ -355,13 +370,13 @@ impl Crew {
     /// agents still working get a while to end their turn; then every session ends and every
     /// agent's end is recorded.
     async fn wind_down(&mut self, end: &End) -> Result<()> {
-        self.ctx.close();
+        self.ctx.lifecycle.close();
         if *end == End::Finished {
             self.let_turns_end().await?;
         }
         let _ = self.stop.send(true);
         let results = self.collect_ends().await;
-        for spec in self.ctx.team.agents.clone() {
+        for spec in self.ctx.roster.team.agents.clone() {
             let payload = match results.get(&spec.id) {
                 Some(r) => runner::agent_end(r),
                 None if self.slots.contains_key(&spec.id) => runner::agent_end(&lost(&spec.id)),

@@ -135,7 +135,7 @@ async fn live_child(
     events: &[Event],
 ) -> ForkResponse {
     let (branch_id, base) = (ctx.branch_id.clone(), &state.config.self_base);
-    let agents = external::resumables(base, &branch_id, &ctx.team, events, plan.start_seq);
+    let agents = external::resumables(base, &branch_id, &ctx.roster.team, events, plan.start_seq);
     runner::go_live(state, Arc::new(ctx)).await;
     ForkResponse {
         branch_id,

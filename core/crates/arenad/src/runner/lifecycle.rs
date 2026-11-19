@@ -53,7 +53,7 @@ pub async fn go_live(state: &AppState, ctx: Arc<BranchCtx>) {
 /// Ends a live branch an external system drove: freezes and scores its world, stops it and
 /// records how it ended. `None` when the branch is ending already.
 pub async fn finish(state: &AppState, ctx: &BranchCtx) -> Option<Ending> {
-    if !ctx.claim_end() {
+    if !ctx.lifecycle.claim_end() {
         return None;
     }
     freeze(ctx).await;
@@ -66,7 +66,7 @@ pub async fn finish(state: &AppState, ctx: &BranchCtx) -> Option<Ending> {
 /// but the branch ends `failed` with `why`. An infra error stays one. `None` when the branch is
 /// ending already.
 pub async fn finish_failed(state: &AppState, ctx: &BranchCtx, why: String) -> Option<Ending> {
-    if !ctx.claim_end() {
+    if !ctx.lifecycle.claim_end() {
         return None;
     }
     freeze(ctx).await;
@@ -85,7 +85,7 @@ pub async fn stop(state: &AppState, ctx: &BranchCtx) -> bool {
         return false;
     }
     if ctx.rules.runner == Runner::External {
-        if !ctx.claim_end() {
+        if !ctx.lifecycle.claim_end() {
             return false;
         }
         conclude(state, ctx, Ok(Ending::STOPPED)).await;
@@ -97,7 +97,7 @@ pub async fn stop(state: &AppState, ctx: &BranchCtx) -> bool {
 /// stopped, which makes it `infra_error` whatever the agents did after.
 async fn conclude(state: &AppState, ctx: &BranchCtx, outcome: Result<Ending>) -> Ending {
     leave_live(state, ctx).await;
-    let ending = match (ctx.fatal(), outcome) {
+    let ending = match (ctx.lifecycle.fatal(), outcome) {
         (Some(f), _) => Ending::infra(f),
         (None, Ok(v)) => v,
         (None, Err(e)) => Ending::infra(format!("{e:#}")),

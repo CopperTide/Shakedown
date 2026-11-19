@@ -78,7 +78,7 @@ async fn teardown(fx: Fx) {
 fn agent_run(fx: &Fx, idx: usize, input: &str, resume: Option<Vec<Value>>) -> AgentRun {
     AgentRun {
         branch: fx.ctx.clone(),
-        spec: fx.ctx.team.agents[idx].clone(),
+        spec: fx.ctx.roster.team.agents[idx].clone(),
         input: input.into(),
         resume,
     }
@@ -164,7 +164,7 @@ fn gateway_refuses_unknown_branch_or_agent_without_calling_a_provider() {
 fn gateway_wants_the_agents_bearer_token_once_it_has_one() {
     run(async {
         let fx = setup("gwtoken", vec![agent("solo", Some("m"))], nowhere()).await;
-        let token = fx.ctx.issue_token("solo");
+        let token = fx.ctx.roster.issue_token("solo");
         let body = json!({"model": "m", "messages": [{"role": "user", "content": "x"}]});
         let url = gateway_url(&fx, &fx.ctx.branch_id, "solo");
         for bearer in [None, Some("wrong")] {
@@ -340,7 +340,11 @@ fn assert_handoff_stopped_the_loop(fx: &Fx, evs: &[Event], ok: bool) {
     assert!(ok);
     let stopped = evs[i + 1..].iter().all(|e| e.kind != EventKind::ModelCall);
     assert!(stopped, "the loop stopped");
-    let note = fx.ctx.handoff_note("triage").expect("the note is kept");
+    let note = fx
+        .ctx
+        .mailbox
+        .handoff_note("triage")
+        .expect("the note is kept");
     assert_eq!(json!(note), evs[i].payload["note"]);
 }
 

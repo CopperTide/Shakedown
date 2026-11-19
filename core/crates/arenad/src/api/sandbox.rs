@@ -78,7 +78,7 @@ async fn report(
         .live
         .get(&id)
         .ok_or_else(|| ApiError::not_found(format!("no live branch \"{id}\"")))?;
-    if ctx.agent(&r.agent).is_none() {
+    if ctx.roster.agent(&r.agent).is_none() {
         return Err(ApiError::bad(format!(
             "the branch has no agent \"{}\"",
             r.agent

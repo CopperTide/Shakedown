@@ -230,9 +230,9 @@ impl HttpDriver {
         if run.resume.is_some() {
             return super::fail("an http agent can't resume in the middle of its run".into());
         }
-        let token = run.branch.issue_token(&run.spec.id);
+        let token = run.branch.roster.issue_token(&run.spec.id);
         let result = self.call(run, &token).await;
-        run.branch.revoke_token(&run.spec.id);
+        run.branch.roster.revoke_token(&run.spec.id);
         result
     }
 

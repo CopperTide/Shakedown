@@ -51,7 +51,7 @@ pub fn is_dispatch_talk(branch: &BranchCtx, name: &str) -> bool {
 
 /// The dispatch tools `agent` gets: the lead `delegate` and `finish`, every other agent `report`.
 pub fn schemas(branch: &BranchCtx, agent: &str) -> Vec<Value> {
-    if branch.is_lead(agent) {
+    if branch.roster.is_lead(agent) {
         return vec![delegate_schema(branch, agent), finish_schema()];
     }
     vec![report_schema()]
@@ -59,7 +59,7 @@ pub fn schemas(branch: &BranchCtx, agent: &str) -> Vec<Value> {
 
 /// The team the lead may delegate to, as `id (name)`.
 fn roster(branch: &BranchCtx, lead: &str) -> String {
-    let others = branch.team.agents.iter().filter(|a| a.id != lead);
+    let others = branch.roster.team.agents.iter().filter(|a| a.id != lead);
     let named: Vec<String> = others.map(|a| format!("`{}` ({})", a.id, a.name)).collect();
     named.join(", ")
 }
@@ -115,7 +115,7 @@ fn required(args: &Value, tool: &str, key: &str) -> Result<String, String> {
 
 /// `agent`'s call of the dispatch tool `name`, or why it is refused.
 pub fn take(branch: &BranchCtx, agent: &str, name: &str, args: &Value) -> Result<Taken, String> {
-    let lead = branch.lead_id();
+    let lead = branch.roster.lead_id();
     match (name, agent == lead) {
         (DELEGATE, true) => delegation(branch, agent, args).map(Taken::Delegation),
         (FINISH, true) => Ok(Taken::Finish(FinishPayload {
@@ -137,7 +137,7 @@ fn delegation(branch: &BranchCtx, lead: &str, args: &Value) -> Result<Delegation
     if to == lead {
         return Err("delegate to another agent of your team, not to yourself".into());
     }
-    if !branch.team.agents.iter().any(|a| a.id == to) {
+    if !branch.roster.team.agents.iter().any(|a| a.id == to) {
         let team = roster(branch, lead);
         return Err(format!("there is no agent {to:?} in this team: {team}"));
     }
@@ -165,7 +165,7 @@ impl ToolExec {
             Taken::Finish(p) => {
                 let said = Said::new(agent, EventKind::Finish, None, &p.summary);
                 self.told(branch, said, &p).await?;
-                branch.close();
+                branch.lifecycle.close();
                 Ok(
                     json!({"ok": true, "note": "The run is finishing: every agent is stopped and the world is scored."}),
                 )

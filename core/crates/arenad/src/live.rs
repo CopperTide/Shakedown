@@ -37,7 +37,7 @@ impl LiveBranches {
 
     /// The live `branch`, when it has `agent` (one of its team, or one that joined).
     pub fn agent(&self, branch: &str, agent: &str) -> Option<Arc<BranchCtx>> {
-        self.get(branch).filter(|c| c.has_agent(agent))
+        self.get(branch).filter(|c| c.roster.has_agent(agent))
     }
 
     /// Stops `branch` if it is live here, as `POST /api/branches/{id}/stop` does.

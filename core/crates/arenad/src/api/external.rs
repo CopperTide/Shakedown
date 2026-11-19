@@ -78,7 +78,7 @@ fn external_branch(state: &AppState, id: &str) -> Result<Arc<BranchCtx>, ApiErro
 /// The live external branch `id` (see `external_branch`) when it has `agent`: 404 when it hasn't.
 fn external_agent(state: &AppState, id: &str, agent: &str) -> Result<Arc<BranchCtx>, ApiError> {
     let ctx = external_branch(state, id)?;
-    match ctx.has_agent(agent) {
+    match ctx.roster.has_agent(agent) {
         true => Ok(ctx),
         false => Err(ApiError::not_found(format!(
             "no agent \"{agent}\" on this branch"
@@ -114,7 +114,7 @@ async fn register(
 ) -> ApiResult<Value> {
     team::validate_id(&join.id)?;
     let ctx = external_branch(&state, &id)?;
-    if ctx.agent(&join.id).is_none() {
+    if ctx.roster.agent(&join.id).is_none() {
         team::validate_agents(providers_of(&state), &[join.spec()])?;
     }
     let spec = external::register(&state.store, &ctx, &join).await?;

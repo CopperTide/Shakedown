@@ -460,7 +460,7 @@ async fn run_calls(
             return Ok(true);
         }
         // A world program stopped: the branch can't go on.
-        if let Some(f) = branch.fatal() {
+        if let Some(f) = branch.lifecycle.fatal() {
             return Err(Fault::Infra(f));
         }
     }

@@ -66,7 +66,7 @@ fn admitted(
         ));
     };
     let authorization = headers.get(AUTHORIZATION).and_then(|v| v.to_str().ok());
-    if !ctx.token_ok(agent, authorization) {
+    if !ctx.roster.token_ok(agent, authorization) {
         let why = "this endpoint wants the run's bearer token";
         return Err(refuse(StatusCode::UNAUTHORIZED, -32001, why));
     }

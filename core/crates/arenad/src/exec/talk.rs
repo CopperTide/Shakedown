@@ -66,7 +66,7 @@ pub fn schemas(branch: &BranchCtx, agent: &str) -> Vec<Value> {
     if !branch.rules.handoff_required {
         return vec![optional_handoff_schema(), message_schema(), inbox_schema()];
     }
-    if branch.is_last(agent) {
+    if branch.roster.is_last(agent) {
         return vec![];
     }
     vec![handoff_schema()]
@@ -81,7 +81,7 @@ fn text_arg(args: &Value, key: &str) -> String {
 fn take_handoff(branch: &BranchCtx, agent: &str, args: &Value) -> Result<HandoffPayload, String> {
     let note = text_arg(args, "note");
     let to = Some(text_arg(args, "to")).filter(|t| !t.is_empty());
-    if branch.rules.handoff_required && branch.is_last(agent) {
+    if branch.rules.handoff_required && branch.roster.is_last(agent) {
         return Err("handoff is not available to the last agent".to_string());
     }
     if branch.rules.runner == Runner::Dispatch {
@@ -90,10 +90,10 @@ fn take_handoff(branch: &BranchCtx, agent: &str, args: &Value) -> Result<Handoff
     if note.is_empty() {
         return Err("handoff() requires a non-empty 'note' string".to_string());
     }
-    if let Some(t) = to.as_deref().filter(|t| !branch.has_agent(t)) {
+    if let Some(t) = to.as_deref().filter(|t| !branch.roster.has_agent(t)) {
         return Err(format!("there is no agent {t:?} in this team"));
     }
-    let mut h = branch.handoffs.lock().unwrap();
+    let mut h = branch.mailbox.handoffs.lock().unwrap();
     if branch.rules.handoff_required && h.contains_key(agent) {
         return Err("handoff already sent".to_string());
     }
@@ -107,7 +107,7 @@ fn take_message(branch: &BranchCtx, args: &Value) -> Result<MessagePayload, Stri
     if text.is_empty() {
         return Err("message() requires a non-empty 'text' string".to_string());
     }
-    if to != EVERYONE && !branch.has_agent(&to) {
+    if to != EVERYONE && !branch.roster.has_agent(&to) {
         return Err(format!("there is no agent {to:?} in this team"));
     }
     Ok(MessagePayload { to, text })
@@ -197,7 +197,7 @@ impl ToolExec {
         said.seq = self
             .record_seq(branch, Some(&agent), said.kind, payload)
             .await?;
-        branch.tell(said);
+        branch.mailbox.tell(said);
         Ok(json!({"ok": true}))
     }
 

@@ -57,7 +57,7 @@ impl Started {
 pub(crate) async fn go(state: &AppState, ctx: &Arc<BranchCtx>) -> anyhow::Result<Vec<Endpoints>> {
     runner::go_live(state, ctx.clone()).await;
     let mut agents = vec![];
-    for spec in &ctx.team.agents {
+    for spec in &ctx.roster.team.agents {
         ctx.record(&state.store, Some(&spec.id), &start_payload(spec))
             .await?;
         agents.push(endpoints(&state.config.self_base, &ctx.branch_id, &spec.id));
@@ -108,11 +108,11 @@ pub fn start_payload(spec: &AgentSpec) -> AgentStartPayload {
 /// knows already (one of its team, or one that joined before) is started again instead. The
 /// branch's stored team gets the new agent.
 pub async fn register(store: &Store, ctx: &BranchCtx, join: &Join) -> anyhow::Result<AgentSpec> {
-    let spec = match ctx.agent(&join.id) {
+    let spec = match ctx.roster.agent(&join.id) {
         Some(known) => known,
         None => {
             let spec = join.spec();
-            if ctx.join(spec.clone()) {
+            if ctx.roster.join(spec.clone()) {
                 store.set_team(&ctx.branch_id, &team_with(ctx)).await?;
             }
             spec
@@ -126,8 +126,8 @@ pub async fn register(store: &Store, ctx: &BranchCtx, join: &Join) -> anyhow::Re
 /// The branch's team with the agents that joined it.
 fn team_with(ctx: &BranchCtx) -> Team {
     Team {
-        agents: ctx.agents(),
-        ..ctx.team.clone()
+        agents: ctx.roster.agents(),
+        ..ctx.roster.team.clone()
     }
 }
 

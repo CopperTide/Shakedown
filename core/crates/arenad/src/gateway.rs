@@ -197,9 +197,9 @@ fn live_agent(
 ) -> Result<(Arc<BranchCtx>, Option<String>), Refused> {
     let unknown = (StatusCode::NOT_FOUND, "unknown branch or agent");
     let ctx = state.live.get(branch).ok_or(unknown)?;
-    let provider = ctx.provider_of(agent).ok_or(unknown)?;
+    let provider = ctx.roster.provider_of(agent).ok_or(unknown)?;
     let authorization = headers.get(AUTHORIZATION).and_then(|v| v.to_str().ok());
-    if !ctx.token_ok(agent, authorization) {
+    if !ctx.roster.token_ok(agent, authorization) {
         let why = "this endpoint wants the run's bearer token";
         return Err((StatusCode::UNAUTHORIZED, why));
     }
