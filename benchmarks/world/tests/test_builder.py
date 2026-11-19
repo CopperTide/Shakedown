@@ -1,6 +1,7 @@
 import json
 import tomllib
 
+import pytest
 from support import call, call_error, copy_with
 
 from worldbench import needs
@@ -144,3 +145,20 @@ def test_a_company_name_beyond_ascii_is_kept_in_the_package_manifest(builder, tm
     call(builder, "generate", {"id": "shop", "choices": {"company": {"name": name}}, "dir": str(tmp_path / "w")})
     toml = tomllib.loads((tmp_path / "w" / "arena-package.toml").read_text(encoding="utf-8"))
     assert toml["world"]["title"] == name
+
+
+@pytest.mark.parametrize("choices, path", [
+    ({"options": {"alpha": 5}}, "options.alpha"),
+    ({"people": {"counts": [1]}}, "people.counts"),
+    ({"people": {"added": 5}}, "people.added"),
+    ({"people": {"added": [{"name": "Al", "role": ["clerk"]}]}}, "people.added[0].role"),
+    ({"people": {"removed": 5}}, "people.removed"),
+    ({"people": {"removed": [{"id": 1}]}}, "people.removed[0]"),
+    ({"people": {"edits": [1]}}, "people.edits"),
+    ({"systems": [{"id": "alpha"}]}, "systems[0]"),
+    ({"events": {"rush": [1]}}, "events.rush"),
+    ({"events": {"rush": {"params": [1]}}}, "events.rush.params"),
+])
+def test_malformed_choices_are_problems_not_errors(builder, choices, path):
+    p = call(builder, "preview", {"id": "shop", "choices": choices})
+    assert path in [x["path"] for x in p["problems"]], p["problems"]

@@ -47,11 +47,20 @@ class Choices:
         return c, out
 
 
-def _object(raw: dict, key: str, out: list) -> dict:
+def _object(raw: dict, key: str, out: list, path: str | None = None) -> dict:
+    """`raw[key]` when it is an object (`{}` when absent); a problem at `path` (default `key`) when it is not."""
     v = raw.get(key) or {}
     if not isinstance(v, dict):
-        out.append(problem(key, f"{key} must be an object"))
+        out.append(problem(path or key, f"{path or key} must be an object"))
         return {}
+    return v
+
+
+def _list(raw: dict, key: str, out: list, path: str) -> list:
+    v = raw.get(key) or []
+    if not isinstance(v, list):
+        out.append(problem(path, f"{path} must be a list"))
+        return []
     return v
 
 
@@ -88,20 +97,20 @@ def _systems(t, raw: dict, out: list) -> list:
     if not isinstance(asked, list):
         out.append(problem("systems", "systems must be a list of system ids"))
         asked = []
-    for i, sid in enumerate(asked):
-        if sid not in known:
-            out.append(problem(f"systems[{i}]", f"no system {sid}"))
-    return select.closure(t, [s for s in asked if s in known])
+    ok = [isinstance(sid, str) and sid in known for sid in asked]
+    out += [problem(f"systems[{i}]", f"no system {sid}") for i, sid in enumerate(asked) if not ok[i]]
+    return select.closure(t, [sid for sid, fine in zip(asked, ok) if fine])
 
 
 def _options(t, raw: dict, out: list) -> dict:
     filled = {s["id"]: {o["name"]: o["default"] for o in s.get("options", [])} for s in t.systems}
     specs = {s["id"]: {o["name"]: o for o in s.get("options", [])} for s in t.systems}
-    for sid, values in _object(raw, "options", out).items():
+    asked = _object(raw, "options", out)
+    for sid in asked:
         if sid not in specs:
             out.append(problem(f"options.{sid}", f"no system {sid}"))
             continue
-        for name, v in (values or {}).items():
+        for name, v in _object(asked, sid, out, f"options.{sid}").items():
             _option(specs[sid], sid, name, v, filled, out)
     return filled
 
@@ -119,16 +128,23 @@ def _option(specs: dict, sid: str, name: str, v, filled: dict, out: list) -> Non
 def _people(t, raw: dict, out: list) -> dict:
     roles = {r["id"]: r for r in t.roles}
     counts = {}
-    for rid, n in (raw.get("counts") or {}).items():
+    for rid, n in _object(raw, "counts", out, "people.counts").items():
         if rid not in roles:
             out.append(problem(f"people.counts.{rid}", f"no role {rid}"))
         elif not _whole(n) or n < roles[rid].get("min", 0):
             out.append(problem(f"people.counts.{rid}", f"{roles[rid]['label']} need at least {roles[rid].get('min', 0)}"))
         else:
             counts[rid] = n
-    added = [a for i, a in enumerate(raw.get("added") or []) if _added_ok(a, i, roles, out)]
-    return {"counts": counts, "edits": dict(raw.get("edits") or {}), "added": added,
-            "removed": list(raw.get("removed") or [])}
+    added = [a for i, a in enumerate(_list(raw, "added", out, "people.added")) if _added_ok(a, i, roles, out)]
+    return {"counts": counts, "edits": dict(_object(raw, "edits", out, "people.edits")), "added": added,
+            "removed": _removed(raw, out)}
+
+
+def _removed(raw: dict, out: list) -> list:
+    removed = _list(raw, "removed", out, "people.removed")
+    out += [problem(f"people.removed[{i}]", "a person is removed by id") for i, pid in enumerate(removed)
+            if not isinstance(pid, str)]
+    return [pid for pid in removed if isinstance(pid, str)]
 
 
 def _added_ok(a, i: int, roles: dict, out: list) -> bool:
@@ -136,7 +152,7 @@ def _added_ok(a, i: int, roles: dict, out: list) -> bool:
     if not isinstance(a, dict) or not isinstance(a.get("name"), str) or not a["name"].strip():
         out.append(problem(f"{path}.name", "a person needs a name"))
         return False
-    if a.get("role") not in roles:
+    if not isinstance(a.get("role"), str) or a["role"] not in roles:
         out.append(problem(f"{path}.role", f"no role {a.get('role')}"))
         return False
     return True
@@ -148,14 +164,14 @@ def _events(t, raw: dict, out: list) -> dict:
     for eid in asked:
         if eid not in known:
             out.append(problem(f"events.{eid}", f"no event {eid}"))
-    return {e["id"]: _event(e, asked.get(e["id"]) or {}, out) for e in t.events}
+    return {e["id"]: _event(e, _object(asked, e["id"], out, f"events.{e['id']}"), out) for e in t.events}
 
 
 def _event(e: dict, asked: dict, out: list) -> dict:
     on = asked.get("on", e.get("default", False))
     params = {p["name"]: p["default"] for p in e.get("params", [])}
     specs = {p["name"]: p for p in e.get("params", [])}
-    for name, v in (asked.get("params") or {}).items():
+    for name, v in _object(asked, "params", out, f"events.{e['id']}.params").items():
         path = f"events.{e['id']}.params.{name}"
         if name not in specs:
             out.append(problem(path, f"{e['id']} has no param {name}"))
