@@ -6,10 +6,9 @@ mod docs;
 mod paths;
 mod tools;
 
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
 
+use arena_part::helpers::instances::Registry;
 use arena_part::helpers::save_dirs::SaveDirs;
 use arena_part::helpers::{folder, remove_tree};
 use arena_part::proto::*;
@@ -28,7 +27,7 @@ struct Instance {
 pub struct Folder {
     saves: SaveDirs,
     live_root: PathBuf,
-    live: Mutex<HashMap<String, Instance>>,
+    live: Registry<Instance>,
 }
 
 impl Folder {
@@ -48,16 +47,12 @@ impl Folder {
         Folder {
             live_root: saves.root().join(".live"),
             saves,
-            live: Mutex::new(HashMap::new()),
+            live: Registry::default(),
         }
     }
 
-    fn instances(&self) -> std::sync::MutexGuard<'_, HashMap<String, Instance>> {
-        self.live.lock().expect("instance map lock")
-    }
-
     fn instance_dir(&self, id: &str) -> Result<PathBuf, PartError> {
-        match self.instances().get(id) {
+        match self.live.lock().get(id) {
             Some(i) => Ok(i.dir.clone()),
             None => Err(PartError::unknown(format!("no instance {id}"))),
         }
@@ -112,8 +107,7 @@ impl Part for Folder {
             return Err(e);
         }
         let prev_save = p.from.as_ref().and_then(|f| self.saves.find(&f.save));
-        self.instances()
-            .insert(p.instance, Instance { dir, prev_save });
+        self.live.insert(p.instance, Instance { dir, prev_save });
         Ok(())
     }
 
@@ -125,7 +119,8 @@ impl Part for Folder {
     async fn save(&self, p: SaveParams) -> Result<Saved, PartError> {
         let dir = self.instance_dir(&p.instance)?;
         let prev = self
-            .instances()
+            .live
+            .lock()
             .get(&p.instance)
             .and_then(|i| i.prev_save.clone());
         let to = PathBuf::from(&p.dir);
@@ -134,9 +129,7 @@ impl Part for Folder {
             PartError::internal_from(e)
         })?;
         self.saves.note(&p.save, &to);
-        if let Some(i) = self.instances().get_mut(&p.instance) {
-            i.prev_save = Some(to);
-        }
+        self.live.update(&p.instance, |i| i.prev_save = Some(to));
         Ok(Saved { bytes, exact: true })
     }
 
@@ -159,7 +152,7 @@ impl Part for Folder {
         let dir = self.instance_dir(&p.instance)?;
         remove_tree(&dir)
             .map_err(|e| PartError::internal_from(format!("cannot remove {dir:?}: {e}")))?;
-        self.instances().remove(&p.instance);
+        self.live.remove(&p.instance);
         Ok(())
     }
 
