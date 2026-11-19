@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { Tag } from '../components/ui/status';
+import { Tag } from '@/components/ui/status';
 import type { SuiteReport } from '@/model/report';
 import type { Target } from './api';
 import { ReviewFrame } from './ReviewFrame';

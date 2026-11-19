@@ -1,5 +1,5 @@
 import { Check } from 'lucide-react';
-import { DropdownMenuItem } from '../components/ui/dropdown-menu';
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { modelName } from './present';
 import { setReviewOn, useReviewOn, useServerReview } from './setting';
 

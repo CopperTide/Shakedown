@@ -26,7 +26,7 @@ import RunMenu from '@/features/run/RunMenu';
 import { useViews } from '@/features/world/useWorld';
 import { taskOf } from '@/features/run/runStats';
 import { useNow } from '@/hooks/useNow';
-import { RunReview } from '@/review/RunReview';
+import { RunReview } from '@/features/review/RunReview';
 import { errorMessage } from '@/lib/errors';
 
 type Main = 'timeline' | 'twin';

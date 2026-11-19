@@ -1,7 +1,7 @@
 import { Sparkles } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { Button } from '../components/ui/button';
-import { Tag } from '../components/ui/status';
+import { Button } from '@/components/ui/button';
+import { Tag } from '@/components/ui/status';
 import type { BranchDetail } from '@/model/types';
 import { KIND_LABEL, SEVERITY_LABEL, smallPrint } from './present';
 import { useReviewEnabled } from './setting';

@@ -4,7 +4,7 @@ import { Button } from '../components/ui/button';
 import { CORE } from '@/api/core';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '../components/ui/dropdown-menu';
 import { Kbd } from '../components/ui/kbd';
-import ReviewToggle from '../review/ReviewToggle';
+import ReviewToggle from '@/features/review/ReviewToggle';
 import { cn } from '@/lib/cn';
 import type { Mode } from './palette';
 import { setThemePref, useTheme } from './theme';

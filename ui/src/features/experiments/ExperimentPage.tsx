@@ -14,7 +14,7 @@ import { experiment as fetchExperiment, stopExperiment } from './api';
 import { columnOf } from './model';
 import { measureRows } from './measures';
 import { Checks, Setups } from './Results';
-import { SuiteWhatMatters } from '@/review/WhatMatters';
+import { SuiteWhatMatters } from '@/features/review/WhatMatters';
 import type { Experiment } from '@/model/experiment';
 import { errorMessage } from '@/lib/errors';
 

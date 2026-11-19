@@ -30,7 +30,7 @@ import { drivenLine } from '@/features/world/page';
 import Waterfall from './Waterfall';
 import BestSoFar from './BestSoFar';
 import { studyOf } from './candidates';
-import { RunReview } from '@/review/RunReview';
+import { RunReview } from '@/features/review/RunReview';
 import RunMenu from './RunMenu';
 import type { Branch, BranchDetail, Event, RunStartPayload } from '@/model/types';
 import { forkNotice } from './forkNotice';
