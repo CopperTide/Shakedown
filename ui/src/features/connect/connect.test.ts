@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { missingFor, runLine, runnerProblem } from '@/home/summary';
+import { missingFor, runLine, runnerProblem } from '@/model/summary';
 import { agentModelLine, agentModelTip, modelProblem, providerOptions } from '@/model/providers';
 import { teamForRun } from '@/model/team';
 import type { AgentSpec, Health, Team } from '@/model/types';

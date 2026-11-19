@@ -1,7 +1,7 @@
 // The Run screen's words: the world and task in plain words, the one line on what will run, and
 // what is missing before a team can run (a CLI not installed, a key not set). Never a stand-in.
-import { isBedrock, modelOf, providerOf, runsOn } from '@/model/providers';
-import type { AgentKind, Health, Runner, TaskSummary, Team } from '@/model/types';
+import { isBedrock, modelOf, providerOf, runsOn } from './providers';
+import type { AgentKind, Health, Runner, TaskSummary, Team } from './types';
 
 const capital = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 

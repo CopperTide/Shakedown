@@ -1,9 +1,9 @@
 import { X } from 'lucide-react';
 import { useState } from 'react';
-import { Button } from '../components/ui/button';
-import { NativeSelect } from '../components/ui/input';
-import { type ScenarioState, ParamInput } from '../scenario/ScenarioBuilder';
-import { chosen, optionWords } from '../scenario/scenario';
+import { Button } from '@/components/ui/button';
+import { NativeSelect } from '@/components/ui/input';
+import { type ScenarioState, ParamInput } from '@/scenario/ScenarioBuilder';
+import { chosen, optionWords } from '@/scenario/scenario';
 
 /** "Add a disruption": the benchmark's disruptions as a picker; each one added shows in words, its parameters behind Adjust. */
 export default function DisruptionPicker({ s, busy }: { s: ScenarioState; busy: boolean }) {
