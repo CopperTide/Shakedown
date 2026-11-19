@@ -27,6 +27,16 @@ pub struct Data {
     pub orders: Vec<Order>,
     pub lims: Value,
     pub logistics: Value,
+    pub scenario_options: OptionPicks,
+}
+
+/// What the scenario builder's options name: the courier that loses capacity, the qualified
+/// carriers with a lane from the US plant, and the test a retest fails.
+#[derive(Debug, Clone, Deserialize)]
+pub struct OptionPicks {
+    pub usual_courier: String,
+    pub us_carriers: Vec<String>,
+    pub retest: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]

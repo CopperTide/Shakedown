@@ -4,6 +4,7 @@
 //! agents are not told.
 use std::collections::BTreeMap;
 
+use arena_part::helpers::bench;
 use arena_part::proto::{DisruptionOption, ScenarioOptions, ScenarioParam, SetupTemplate};
 use serde_json::{json, Value};
 
@@ -23,23 +24,15 @@ fn after(part_calls: &str, default: i64) -> ScenarioParam {
 
 /// An option, offered selected; its disruption fires after `{after}` agent calls of its part.
 fn option(
-    (id, label, description, part): What,
+    what: What,
     params: Vec<ScenarioParam>,
     kind: &str,
     text: &str,
     extra: Value,
 ) -> DisruptionOption {
-    let template = json!({"id": id, "when": {"after_calls": "{after}"}, "text": text,
+    let template = json!({"id": what.0, "when": {"after_calls": "{after}"}, "text": text,
                           "do": merged(json!({"kind": kind}), &extra)});
-    DisruptionOption {
-        id: id.into(),
-        label: label.into(),
-        description: description.into(),
-        part: part.into(),
-        default: true,
-        params,
-        template,
-    }
+    bench::option(what, params, template, true)
 }
 
 fn demand_response() -> DisruptionOption {

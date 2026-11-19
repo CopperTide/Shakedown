@@ -2,15 +2,12 @@
 //! Each is scheduled in a simulated part through its scenario tool; the agents are not told.
 use std::collections::BTreeMap;
 
+use arena_part::helpers::bench;
 use arena_part::proto::{DisruptionOption, ScenarioOptions, ScenarioParam, SetupTemplate};
 use serde_json::{json, Value};
 
+use crate::data::{Data, Lot};
 use crate::scenario::{BASE, SCENARIOS};
-
-const TUNDRA: &str = "Tundra Medical Courier";
-const STERILITY: &str = "Sterility (USP <71>)";
-/// The qualified carriers with a lane from the US plant.
-const US_CARRIERS: [&str; 2] = [TUNDRA, "Borealis Cold Chain"];
 
 use ScenarioParam as P;
 
@@ -22,21 +19,19 @@ fn choice(name: &str, label: &str, choices: &[&str]) -> ScenarioParam {
     P::choice(name, label, choices)
 }
 
-/// An option: `(id, label, description, part)`, its params and its template.
+/// An option: `(id, label, description, part)`, its params and its template, offered unselected.
 fn option(
-    (id, label, description, part): (&str, &str, &str, &str),
+    what: (&str, &str, &str, &str),
     params: Vec<ScenarioParam>,
     template: Value,
 ) -> DisruptionOption {
-    DisruptionOption {
-        id: id.into(),
-        label: label.into(),
-        description: description.into(),
-        part: part.into(),
-        default: false,
-        params,
-        template,
-    }
+    bench::option(what, params, template, false)
+}
+
+/// The qualified carriers with a lane from the US plant.
+fn us_carriers(d: &Data) -> Vec<&str> {
+    let carriers = d.scenario_options.us_carriers.iter();
+    carriers.map(String::as_str).collect()
 }
 
 fn us_lane(carrier: &str) -> Value {
@@ -50,11 +45,13 @@ fn with(mut base: Value, extra: Value) -> Value {
     base
 }
 
-fn courier_capacity() -> DisruptionOption {
+fn courier_capacity(d: &Data) -> DisruptionOption {
+    let courier = d.scenario_options.usual_courier.as_str();
+    let description = format!("{courier} has {{capacity}} shipments left from the US plant after {{after}} quote(s); the agents are not told");
     let what = (
         "courier-capacity",
         "Usual courier loses capacity",
-        "Tundra Medical Courier has {capacity} shipments left from the US plant after {after} quote(s); the agents are not told",
+        description.as_str(),
         "logistics",
     );
     let params = vec![
@@ -63,12 +60,12 @@ fn courier_capacity() -> DisruptionOption {
     ];
     let template = json!({"id": "courier-capacity",
         "when": {"after_calls": "{after}", "tool": "cold_chain_quotes"},
-        "do": with(json!({"kind": "lane_capacity", "capacity": "{capacity}"}), us_lane(TUNDRA)),
-        "text": "Tundra Medical Courier has {capacity} shipments left this week from the US plant"});
+        "do": with(json!({"kind": "lane_capacity", "capacity": "{capacity}"}), us_lane(courier)),
+        "text": format!("{courier} has {{capacity}} shipments left this week from the US plant")});
     option(what, params, template)
 }
 
-fn lane_unavailable() -> DisruptionOption {
+fn lane_unavailable(d: &Data) -> DisruptionOption {
     let what = (
         "lane-unavailable",
         "A lane becomes unavailable",
@@ -76,7 +73,7 @@ fn lane_unavailable() -> DisruptionOption {
         "logistics",
     );
     let params = vec![
-        choice("carrier", "Carrier", &US_CARRIERS),
+        choice("carrier", "Carrier", &us_carriers(d)),
         int("after", "After how many logistics calls", (0, 30, 2)),
     ];
     let template = json!({"id": "lane-unavailable", "when": {"after_calls": "{after}"},
@@ -85,7 +82,7 @@ fn lane_unavailable() -> DisruptionOption {
     option(what, params, template)
 }
 
-fn transit_delay() -> DisruptionOption {
+fn transit_delay(d: &Data) -> DisruptionOption {
     let what = (
         "transit-delay",
         "Transit delayed",
@@ -93,7 +90,7 @@ fn transit_delay() -> DisruptionOption {
         "logistics",
     );
     let params = vec![
-        choice("carrier", "Carrier", &US_CARRIERS),
+        choice("carrier", "Carrier", &us_carriers(d)),
         int("days", "Extra days", (1, 7, 2)),
         int("after", "After how many logistics calls", (0, 30, 0)),
     ];
@@ -103,7 +100,7 @@ fn transit_delay() -> DisruptionOption {
     option(what, params, template)
 }
 
-fn first_reallocation_rejected(d: &crate::data::Data) -> DisruptionOption {
+fn first_reallocation_rejected(d: &Data) -> DisruptionOption {
     let what = (
         "first-reallocation-rejected",
         "First reallocation rejected",
@@ -117,15 +114,14 @@ fn first_reallocation_rejected(d: &crate::data::Data) -> DisruptionOption {
     option(what, vec![], template)
 }
 
-fn retest_fails(d: &crate::data::Data) -> DisruptionOption {
+fn retest_fails(d: &Data) -> DisruptionOption {
     let what = (
         "retest-fails",
         "A lot's retest fails",
         "{lot}'s sterility retest fails after {after} LIMS call(s); the agents are not told",
         "lims",
     );
-    let quarantined =
-        |l: &&crate::data::Lot| l.qa_status == "Quarantined" && l.batch != d.incident.batch;
+    let quarantined = |l: &&Lot| l.qa_status == "Quarantined" && l.batch != d.incident.batch;
     let next: Vec<&str> = d
         .lots
         .iter()
@@ -137,12 +133,12 @@ fn retest_fails(d: &crate::data::Data) -> DisruptionOption {
         int("after", "After how many LIMS calls", (0, 30, 2)),
     ];
     let template = json!({"id": "retest-fails", "when": {"after_calls": "{after}"},
-        "do": {"kind": "result_fails", "lot": "{lot}", "test": STERILITY},
+        "do": {"kind": "result_fails", "lot": "{lot}", "test": d.scenario_options.retest},
         "text": "{lot}'s sterility retest is out of specification"});
     option(what, params, template)
 }
 
-fn urgent_escalation(d: &crate::data::Data) -> DisruptionOption {
+fn urgent_escalation(d: &Data) -> DisruptionOption {
     let what = (
         "urgent-escalation",
         "A customer escalates an order",
@@ -161,7 +157,7 @@ fn urgent_escalation(d: &crate::data::Data) -> DisruptionOption {
 }
 
 /// What the builder may add, to any of the five tasks.
-pub fn scenario_options(d: &crate::data::Data) -> ScenarioOptions {
+pub fn scenario_options(d: &Data) -> ScenarioOptions {
     let setup = |tool: &str| SetupTemplate {
         tool: tool.into(),
         args: json!({"name": BASE}),
@@ -169,9 +165,9 @@ pub fn scenario_options(d: &crate::data::Data) -> ScenarioOptions {
     ScenarioOptions {
         base: SCENARIOS.iter().map(|s| s.task.to_string()).collect(),
         disruptions: vec![
-            courier_capacity(),
-            lane_unavailable(),
-            transit_delay(),
+            courier_capacity(d),
+            lane_unavailable(d),
+            transit_delay(d),
             first_reallocation_rejected(d),
             retest_fails(d),
             urgent_escalation(d),
@@ -180,5 +176,31 @@ pub fn scenario_options(d: &crate::data::Data) -> ScenarioOptions {
             ("lims".into(), setup("lims_scenario")),
             ("logistics".into(), setup("logistics_scenario")),
         ]),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::data::data;
+
+    #[test]
+    fn the_carriers_and_the_retests_test_come_from_the_data() {
+        let d = data();
+        let picks = &d.scenario_options;
+        assert_eq!(picks.usual_courier, "Tundra Medical Courier");
+        let o = scenario_options(d);
+        let by_id = |id: &str| o.disruptions.iter().find(|x| x.id == id).unwrap();
+        let capacity = by_id("courier-capacity");
+        assert!(capacity
+            .description
+            .starts_with("Tundra Medical Courier has {capacity}"));
+        assert_eq!(capacity.template["do"]["carrier"], picks.usual_courier);
+        let carriers = by_id("lane-unavailable").params[0].choices.clone();
+        assert_eq!(
+            carriers.unwrap(),
+            json!(picks.us_carriers).as_array().unwrap().clone()
+        );
+        assert_eq!(by_id("retest-fails").template["do"]["test"], picks.retest);
     }
 }
