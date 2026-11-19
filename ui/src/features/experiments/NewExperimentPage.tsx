@@ -13,10 +13,10 @@ import DisruptionPicker from '@/features/start/DisruptionPicker';
 import { useWorldPreview } from '@/features/start/useWorldPreview';
 import { TaskPicker } from '@/features/start/WorldCard';
 import ImportDialog from '@/features/team/ImportDialog';
+import { useAction } from '@/hooks/useAction';
 import { useHealth } from '@/hooks/useHealth';
 import { useTasks } from '@/hooks/useTasks';
 import { useStoredTeam, useSuggestedTeams } from '@/hooks/useTeam';
-import { errorMessage } from '@/lib/errors';
 import type { NewExperiment } from '@/model/experiment';
 import { missingFor, runnerProblem, worldName } from '@/model/summary';
 import { teamForRun } from '@/model/team';
@@ -129,14 +129,9 @@ type Form = ReturnType<typeof useNewExperiment>;
 
 function useStart() {
   const nav = useNavigate();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const start = async (body: NewExperiment | null) => {
-    if (!body) return;
-    setBusy(true); setError(null);
-    try { nav(`/experiments/${(await createExperiment(body)).id}`); } catch (e) { setError(errorMessage(e)); setBusy(false); }
-  };
-  return { busy, error, start };
+  const create = useAction(async (body: NewExperiment) => nav(`/experiments/${(await createExperiment(body)).id}`), { stayBusy: true });
+  const start = async (body: NewExperiment | null) => { if (body) await create.run(body); };
+  return { busy: create.busy, error: create.error, start };
 }
 
 function Scenario({ f, world, busy }: { f: Form; world: string; busy: boolean }) {
