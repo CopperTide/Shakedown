@@ -18,11 +18,12 @@ mod team;
 mod tool_schemas;
 mod tools;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use arena_part::helpers::blocking;
+use arena_part::helpers::instances::KeyedLocks;
 use arena_part::helpers::save_dirs::SaveDirs;
 use arena_part::proto::*;
 use arena_part::{Part, PartError};
@@ -46,7 +47,7 @@ pub struct Sculptured {
     saves: SaveDirs,
     live: Live,
     /// Held by each tool call and save, so an instance does one thing at a time.
-    busy: Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
+    busy: KeyedLocks,
     /// The instances this value started and has not stopped: `gc` leaves them alone.
     mine: Mutex<HashSet<String>>,
 }
@@ -85,7 +86,7 @@ impl Sculptured {
         Sculptured {
             live: Live::new(std::path::absolute(&live).unwrap_or(live)),
             saves,
-            busy: Mutex::new(HashMap::new()),
+            busy: KeyedLocks::default(),
             mine: Mutex::new(HashSet::new()),
         }
     }
@@ -103,8 +104,7 @@ impl Sculptured {
     }
 
     fn lock(&self, id: &str) -> Arc<tokio::sync::Mutex<()>> {
-        let mut busy = self.busy.lock().expect("busy map lock");
-        busy.entry(id.to_string()).or_default().clone()
+        self.busy.lock_for(id)
     }
 
     /// A target's changes as the tools show them: a live instance's from its server, a save's

@@ -142,7 +142,7 @@ impl Sculptured {
         }
         self.live.remove(id, None); // a folder left without a record
         self.mine.lock().expect("mine lock").remove(id);
-        self.busy.lock().expect("busy map lock").remove(id);
+        self.busy.forget(id);
         Ok(())
     }
 

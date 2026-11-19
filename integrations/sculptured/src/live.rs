@@ -5,8 +5,8 @@
 use std::io;
 use std::path::{Path, PathBuf};
 
+use arena_part::helpers::instances::LiveRecords;
 use arena_part::helpers::remove_tree_or_log;
-use arena_part::proto::valid_id;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -28,11 +28,17 @@ pub struct Run {
 
 pub struct Live {
     root: PathBuf,
+    runs: LiveRecords<Run>,
+    aliases: LiveRecords<Aliases>,
 }
 
 impl Live {
     pub fn new(root: PathBuf) -> Live {
-        Live { root }
+        Live {
+            runs: LiveRecords::folders(root.clone(), "run.json"),
+            aliases: LiveRecords::folders(root.clone(), "aliases.json"),
+            root,
+        }
     }
 
     fn folder(&self, instance: &str) -> PathBuf {
@@ -47,39 +53,26 @@ impl Live {
         }
     }
 
-    fn record_path(&self, instance: &str) -> PathBuf {
-        self.folder(instance).join("run.json")
-    }
-
     pub fn record(&self, instance: &str, run: &Run) -> io::Result<()> {
-        write_json(&self.record_path(instance), run)
+        self.runs.record(instance, run)
     }
 
     /// The record of `instance`, when it runs (or is starting).
     pub fn run(&self, instance: &str) -> Option<Run> {
-        read_json(&self.record_path(instance))
-    }
-
-    fn aliases_path(&self, instance: &str) -> PathBuf {
-        self.folder(instance).join("aliases.json")
+        self.runs.get(instance)
     }
 
     pub fn aliases(&self, instance: &str) -> Aliases {
-        read_json(&self.aliases_path(instance)).unwrap_or_default()
+        self.aliases.get(instance).unwrap_or_default()
     }
 
     pub fn set_aliases(&self, instance: &str, aliases: &Aliases) -> io::Result<()> {
-        write_json(&self.aliases_path(instance), aliases)
+        self.aliases.record(instance, aliases)
     }
 
     /// Every instance with a folder here.
     pub fn ids(&self) -> Vec<String> {
-        let Ok(rd) = std::fs::read_dir(&self.root) else {
-            return vec![];
-        };
-        let names = rd.filter_map(Result::ok).map(|e| e.file_name());
-        let names = names.filter_map(|n| n.to_str().map(str::to_string));
-        names.filter(|n| valid_id(n)).collect()
+        self.runs.ids()
     }
 
     /// Removes the instance's folder and its scratch folder, if known (failures are logged).
@@ -89,13 +82,4 @@ impl Live {
             remove_tree_or_log(t);
         }
     }
-}
-
-fn write_json<T: Serialize>(path: &Path, v: &T) -> io::Result<()> {
-    std::fs::create_dir_all(path.parent().expect("a record has a folder"))?;
-    std::fs::write(path, serde_json::to_vec(v)?)
-}
-
-fn read_json<T: for<'de> Deserialize<'de>>(path: &Path) -> Option<T> {
-    serde_json::from_slice(&std::fs::read(path).ok()?).ok()
 }
