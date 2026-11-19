@@ -1,20 +1,15 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { recording } from '@/api/branches';
 import { Panel } from '@/components/ui/panel';
-import { type Recording } from '@/model/twin';
+import { useQuery } from '@/hooks/useQuery';
 import type { Event } from '@/model/types';
 import { arenaSecondAt, clockText } from './recording';
 
 /** "Plant (Isaac Sim)": the branch's recorded plant, held at the arena second of the step on screen. Nothing when the
  *  branch has no recording. Its own controls play on from there. */
 export default function PlantVideo({ branchId, events, step }: { branchId: string; events: Event[]; step: number | null }) {
-  const [rec, setRec] = useState<Recording | null>(null);
+  const { data: rec } = useQuery(branchId, () => recording(branchId), { keepPrevious: true });
   const ref = useRef<HTMLVideoElement>(null);
-  useEffect(() => {
-    let live = true;
-    recording(branchId).then((r) => live && setRec(r)).catch(() => live && setRec(null));
-    return () => { live = false; };
-  }, [branchId]);
   const t = arenaSecondAt(events, step);
   useEffect(() => {
     const v = ref.current;
