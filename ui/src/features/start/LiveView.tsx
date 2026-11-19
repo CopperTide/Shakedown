@@ -14,19 +14,19 @@ import { type Flow, clockText, flowMark, flowOf, isLive, pausesOf } from '@/feat
 import Inspector from '@/features/run/Inspector';
 import { type Result, resultOf } from '@/features/run/result';
 import RunMenu from '@/features/run/RunMenu';
+import { RunErrorBanner } from '@/features/run/RunShell';
 import { taskOf } from '@/features/run/runStats';
 import { stepSummary } from '@/features/run/stepSummary';
 import { summarize } from '@/features/run/timeline';
-import { stepOrder } from '@/features/run/timelineLayout';
 import { useBranch } from '@/features/run/useBranch';
 import { useStepKeys } from '@/features/run/useStepKeys';
 import { useStepParam, withStep } from '@/features/run/useStepParam';
+import { useTimeline } from '@/features/run/useTimeline';
 import TwinView, { useWorldView } from '@/features/world/TwinView';
 import { useViews } from '@/features/world/useWorld';
 import { useAction } from '@/hooks/useAction';
 import { useNow } from '@/hooks/useNow';
 import { cn } from '@/lib/cn';
-import { buildLanes, spanOf } from '@/model/lanes';
 import type { BranchDetail, Event } from '@/model/types';
 
 type Main = 'timeline' | 'twin';
@@ -107,12 +107,10 @@ type SetStep = (next: number | null | ((s: number | null) => number | null)) => 
 
 function TimelineMain({ d, now, selected, onSelect }: { d: BranchDetail; now: number; selected: number | null; onSelect: SetStep }) {
   const [models, setModels] = useState(true);
-  const lanes = useMemo(() => buildLanes(d.events, d.team, d.start_seq), [d]);
+  const { lanes, span, order } = useTimeline(d, models);
   const live = d.status === 'running';
   const pauses = useMemo(() => pausesOf(d.events, now), [d.events, now]);
-  const order = useMemo(() => stepOrder(lanes, models), [lanes, models]);
   useStepKeys(order, onSelect);
-  const span = spanOf(lanes);
   return (
     <Panel>
       {span ? <ActionTimeline lanes={lanes} team={d.team} span={span} selected={selected} onSelect={onSelect} models={models} onModels={setModels} live={live} pauses={pauses} />
@@ -171,7 +169,7 @@ export function LiveRun({ runId, branchId, nameOf }: { runId: string; branchId: 
     <div className="flex flex-col gap-3">
       <Toolbar flow={flow} seconds={d ? summarize(d, d.events, now).seconds : null} title={title} main={main} setMain={setMain} busy={c.busy}
         onPause={c.pause} onStop={() => c.setStopping(true)} result={d ? endedLine(d, runId, selected) : null} />
-      {error && <ErrorState error={error} onRetry={reload} />}
+      <RunErrorBanner error={error} onRetry={reload} />
       {c.error && <ErrorState error={c.error} hint="The run carries on as it was." />}
       {d && <RunReview d={d} onStep={setSelected} />}
       {d && <MainArea d={d} main={main} flow={flow} now={now} selected={selected} onSelect={setSelected} />}
