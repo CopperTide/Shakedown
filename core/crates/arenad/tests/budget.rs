@@ -4,19 +4,11 @@
 //!   counts the live estimate as its cost;
 //! - an `http` agent that reports a cost over the limit ends its run `budget_exceeded`, scored
 //!   (a failure), with the limit in `RunStart` and in `GET /api/branches/{id}`.
-#[path = "support/app.rs"]
-mod app_support;
-#[path = "support/live.rs"]
-mod live;
-#[path = "support/packages.rs"]
-mod packages;
-#[path = "support/pg.rs"]
-mod pg;
+mod support;
 
 use std::{
-    future::Future,
     os::unix::fs::PermissionsExt,
-    sync::{Arc, LazyLock},
+    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -31,30 +23,12 @@ use arenad::{
     store::Store,
 };
 use axum::{routing::post, Json, Router};
-use packages::TestHub;
 use serde_json::{json, Value};
-
-static RT: LazyLock<tokio::runtime::Runtime> =
-    LazyLock::new(|| tokio::runtime::Runtime::new().unwrap());
-
-fn run<F: Future>(f: F) -> F::Output {
-    RT.block_on(f)
-}
+use support::packages::TestHub;
+use support::{app, live, run};
 
 fn member(id: &str, kind: AgentKind, model: &str) -> AgentSpec {
-    AgentSpec {
-        tools: Vec::new(),
-        id: id.into(),
-        name: id.into(),
-        kind,
-        model: Some(model.into()),
-        prompt: "p".into(),
-        provider: None,
-        read_only: false,
-        lead: false,
-        url: None,
-        headers: Default::default(),
-    }
+    AgentSpec::new(id, kind).with_model(model).with_prompt("p")
 }
 
 /// A stand-in for `claude` (stream-json): on its first input it shows one Haiku call with 50 M
@@ -115,7 +89,7 @@ async fn one_turn(
 fn a_claude_turn_over_the_limit_is_stopped_at_once_and_its_estimate_is_its_cost() {
     run(async {
         let hub = TestHub::new(&[]);
-        let (store, _clean) = app_support::meta_store("budget", "claude").await;
+        let (store, _clean) = app::meta_store("budget", "claude").await;
         let (team, ctx) = claude_branch(&hub, &store).await;
         let (turn, end, took) = one_turn(&ctx, team.agents[0].clone(), &store).await;
         assert!(took < Duration::from_secs(20), "the turn was waited out");
@@ -154,18 +128,18 @@ async fn spender() -> String {
             )
         }),
     );
-    let (listener, base) = app_support::bind().await;
+    let (listener, base) = app::bind().await;
     tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
     format!("{base}/run")
 }
 
 async fn post_run(base: &str, body: Value) -> (u16, Value) {
     let req = reqwest::Client::new().post(format!("{base}/api/runs"));
-    app_support::send(req.json(&body)).await
+    app::send(req.json(&body)).await
 }
 
 async fn get(base: &str, path: &str) -> Value {
-    app_support::send(reqwest::Client::new().get(format!("{base}{path}")))
+    app::send(reqwest::Client::new().get(format!("{base}{path}")))
         .await
         .1
 }
@@ -174,8 +148,8 @@ async fn get(base: &str, path: &str) -> Value {
 fn a_run_whose_reported_cost_passes_its_limit_ends_budget_exceeded_and_scored() {
     run(async {
         let hub = TestHub::new(&[]);
-        let (store, _clean) = app_support::meta_store("budget", "http").await;
-        let (state, base) = app_support::idle_app(store, hub.hub.clone(), None, |_| {}).await;
+        let (store, _clean) = app::meta_store("budget", "http").await;
+        let (state, base) = app::idle_app(store, hub.hub.clone(), None, |_| {}).await;
         let url = spender().await;
         let team = json!({"id": "t", "name": "T", "agents": [
             {"id": "remote", "name": "Remote", "kind": "http", "url": url}]});

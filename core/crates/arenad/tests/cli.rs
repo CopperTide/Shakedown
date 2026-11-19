@@ -1,8 +1,6 @@
-use std::{
-    future::Future,
-    path::Path,
-    sync::{Arc, LazyLock},
-};
+mod support;
+
+use std::{path::Path, sync::Arc};
 
 use arenad::{
     agents::{claude, claude::ClaudeDriver, codex, codex::CodexDriver, AgentRun, Driver, Mcp},
@@ -13,20 +11,7 @@ use arenad::{
     world::World,
 };
 use serde_json::json;
-
-#[path = "support/app.rs"]
-mod app_support;
-#[path = "support/packages.rs"]
-mod packages;
-#[path = "support/pg.rs"]
-mod pg;
-
-static RT: LazyLock<tokio::runtime::Runtime> =
-    LazyLock::new(|| tokio::runtime::Runtime::new().unwrap());
-
-fn run<F: Future>(f: F) -> F::Output {
-    RT.block_on(f)
-}
+use support::{packages, pg, run};
 
 fn fixture(name: &str) -> String {
     std::fs::read_to_string(
@@ -39,17 +24,10 @@ fn fixture(name: &str) -> String {
 
 fn spec(model: Option<&str>) -> AgentSpec {
     AgentSpec {
-        tools: Vec::new(),
-        id: "triage".into(),
-        name: "Triage".into(),
-        kind: AgentKind::ClaudeCode,
         model: model.map(Into::into),
-        prompt: "p".into(),
-        provider: None,
-        read_only: false,
-        lead: false,
-        url: None,
-        headers: Default::default(),
+        ..AgentSpec::new("triage", AgentKind::ClaudeCode)
+            .with_name("Triage")
+            .with_prompt("p")
     }
 }
 
@@ -316,19 +294,7 @@ fn driver_times_out() {
 // ---- live smoke tests (use the user's CLI sign-in; cost a few cents) ----
 
 fn agent_spec(id: &str, kind: AgentKind, prompt: &str) -> AgentSpec {
-    AgentSpec {
-        tools: Vec::new(),
-        id: id.into(),
-        name: id.into(),
-        kind,
-        model: None,
-        prompt: prompt.into(),
-        provider: None,
-        read_only: false,
-        lead: false,
-        url: None,
-        headers: Default::default(),
-    }
+    AgentSpec::new(id, kind).with_prompt(prompt)
 }
 
 fn live_team() -> Team {
@@ -368,7 +334,7 @@ async fn live_setup(
     String,
     packages::TestHub,
 ) {
-    let (store, clean) = app_support::meta_store("cli", tag).await;
+    let (store, clean) = support::app::meta_store("cli", tag).await;
     let team = live_team();
     let hub = packages::TestHub::new(&[]);
     let (branch, world) = live_branch(&store, &hub, &team).await;

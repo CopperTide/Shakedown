@@ -1,35 +1,16 @@
-use std::{future::Future, sync::LazyLock};
-
 use arenad::{model::*, pg::Admin, store::Store};
 use serde_json::json;
+use support::{pg, run};
 
-#[path = "support/pg.rs"]
-mod pg;
-
-static RT: LazyLock<tokio::runtime::Runtime> =
-    LazyLock::new(|| tokio::runtime::Runtime::new().unwrap());
-
-fn run<F: Future>(f: F) -> F::Output {
-    RT.block_on(f)
-}
+mod support;
 
 fn team() -> Team {
     Team {
         id: "t".into(),
         name: "T".into(),
-        agents: vec![AgentSpec {
-            tools: Vec::new(),
-            id: "a".into(),
-            name: "A".into(),
-            kind: AgentKind::Open,
-            model: None,
-            prompt: "p".into(),
-            provider: None,
-            read_only: false,
-            lead: false,
-            url: None,
-            headers: Default::default(),
-        }],
+        agents: vec![AgentSpec::new("a", AgentKind::Open)
+            .with_name("A")
+            .with_prompt("p")],
     }
 }
 

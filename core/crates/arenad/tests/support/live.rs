@@ -155,17 +155,10 @@ impl Live {
     /// An agent `id` on this model with `prompt`.
     pub fn agent(&self, id: &str, prompt: &str) -> AgentSpec {
         AgentSpec {
-            tools: Vec::new(),
-            id: id.into(),
-            name: id.into(),
-            kind: self.kind(),
-            model: Some(self.model().into()),
-            prompt: prompt.into(),
             provider: self.provider().map(str::to_string),
-            read_only: false,
-            lead: false,
-            url: None,
-            headers: Default::default(),
+            ..AgentSpec::new(id, self.kind())
+                .with_model(self.model())
+                .with_prompt(prompt)
         }
     }
 

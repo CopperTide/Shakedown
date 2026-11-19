@@ -11,16 +11,7 @@
 //! program (`ARENA_SCULPTURED_BINARY`: one recent enough to serve the changes route) and a model;
 //! everything it makes is removed when it ends. Run:
 //! `cargo test -p arenad --test pharma -- --ignored live_ --nocapture`.
-#[path = "support/app.rs"]
-mod app_support;
-#[path = "support/live.rs"]
-mod live;
-#[path = "support/live_world.rs"]
-mod live_world;
-#[path = "support/packages.rs"]
-mod packages;
-#[path = "support/pg.rs"]
-mod pg;
+mod support;
 
 use std::{process::Command, sync::Arc};
 
@@ -28,24 +19,25 @@ use arenad::{
     app::{AppState, Config},
     model::*,
 };
-use live::Live;
-use live_world::{path_with_sculptured, walk_for, walk_in, Stack};
-use packages::{arena, bin_dir, package_roots};
 use parts::{Hub, Registry};
-use pg::Cleanup;
 use serde_json::{json, Value};
+use support::live::Live;
+use support::live_world::{path_with_sculptured, walk_for, walk_in, Stack};
+use support::packages::{arena, bin_dir, package_roots};
+use support::pg::Cleanup;
+use support::{app, live, live_world};
 
 const TASK: &str = "cvx-2611-em-excursion";
 
 async fn app(hub: &Arc<Hub>, tag: &str) -> (Arc<AppState>, Cleanup) {
-    let (store, clean) = app_support::meta_store("pharma", tag).await;
+    let (store, clean) = app::meta_store("pharma", tag).await;
     let mut config = Config::new();
-    let (listener, base) = app_support::bind().await;
+    let (listener, base) = app::bind().await;
     config.self_base = base;
     let state = AppState::new(store, hub.clone(), config).with_benchmark("pharma");
     let state = Arc::new(state);
     live::install(&state);
-    app_support::serve(listener, &state);
+    app::serve(listener, &state);
     (state, clean)
 }
 

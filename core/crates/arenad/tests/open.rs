@@ -3,19 +3,9 @@
 //! `support/live.rs`), every model and tool call recorded with its fields. What only a model
 //! that misbehaves on purpose could show (arguments cut off, output cut off, a refusal) is tested
 //! on the loop's own functions in `src/agents/open.rs`.
-#[path = "support/app.rs"]
-mod app_support;
-#[path = "support/live.rs"]
-mod live;
-#[path = "support/packages.rs"]
-mod packages;
-#[path = "support/pg.rs"]
-mod pg;
+mod support;
 
-use std::{
-    future::Future,
-    sync::{Arc, LazyLock},
-};
+use std::sync::Arc;
 
 use arenad::{
     agents::{open::OpenDriver, AgentRun, Driver},
@@ -24,39 +14,17 @@ use arenad::{
     model::*,
     providers::ProviderConfig,
 };
-use live::Live;
-use packages::TestHub;
-use pg::Cleanup;
 use serde_json::{json, Value};
-
-static RT: LazyLock<tokio::runtime::Runtime> =
-    LazyLock::new(|| tokio::runtime::Runtime::new().unwrap());
-
-fn run<F: Future>(f: F) -> F::Output {
-    RT.block_on(f)
-}
-
-/// Runs `body` on the live model, when there is one (else the test was skipped, said why).
-fn run_live<F: Future<Output = ()>>(live: Option<Live>, body: impl FnOnce(Live) -> F) {
-    if let Some(live) = live {
-        run(body(live));
-    }
-}
+use support::live::Live;
+use support::packages::TestHub;
+use support::pg::Cleanup;
+use support::{app, live, run, run_live};
 
 /// An open agent on the default provider that names `model`.
 fn agent(id: &str, model: Option<&str>) -> AgentSpec {
     AgentSpec {
-        tools: Vec::new(),
-        id: id.into(),
-        name: id.into(),
-        kind: AgentKind::Open,
         model: model.map(str::to_string),
-        prompt: "p".into(),
-        provider: None,
-        read_only: false,
-        lead: false,
-        url: None,
-        headers: Default::default(),
+        ..AgentSpec::new(id, AgentKind::Open).with_prompt("p")
     }
 }
 
@@ -70,7 +38,7 @@ struct Fx {
 /// A live branch of a retail world for `agents`, on an app with `providers`.
 async fn setup(tag: &str, agents: Vec<AgentSpec>, providers: ProviderConfig) -> Fx {
     let hub = TestHub::new(&[]);
-    let (store, clean) = app_support::meta_store("open", tag).await;
+    let (store, clean) = app::meta_store("open", tag).await;
     let team = Team {
         id: "t".into(),
         name: "T".into(),
@@ -82,14 +50,14 @@ async fn setup(tag: &str, agents: Vec<AgentSpec>, providers: ProviderConfig) -> 
         .await
         .unwrap();
     let world = hub.start_world("retail", &branch).await;
-    let (listener, base) = app_support::bind().await;
+    let (listener, base) = app::bind().await;
     let mut config = Config::new();
     config.providers = providers;
     config.self_base = base;
     let state = Arc::new(AppState::new(store, hub.hub.clone(), config));
     let ctx = Arc::new(BranchCtx::new(branch.clone(), world, team, "task".into()));
     state.live.write().unwrap().insert(branch, ctx.clone());
-    app_support::serve(listener, &state);
+    app::serve(listener, &state);
     Fx {
         state,
         ctx,
@@ -98,9 +66,9 @@ async fn setup(tag: &str, agents: Vec<AgentSpec>, providers: ProviderConfig) -> 
     }
 }
 
-/// Providers whose default is the local server [`app_support::NOWHERE`], where nothing listens.
+/// Providers whose default is the local server [`app::NOWHERE`], where nothing listens.
 fn nowhere() -> ProviderConfig {
-    ProviderConfig::with_upstream(app_support::NOWHERE)
+    ProviderConfig::with_upstream(app::NOWHERE)
 }
 
 async fn teardown(fx: Fx) {

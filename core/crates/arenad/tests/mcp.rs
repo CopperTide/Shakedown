@@ -1,15 +1,6 @@
-#[path = "support/app.rs"]
-mod app_support;
-#[path = "support/packages.rs"]
-mod packages;
-#[path = "support/pg.rs"]
-mod pg;
+mod support;
 
-use std::{
-    future::Future,
-    path::PathBuf,
-    sync::{Arc, LazyLock},
-};
+use std::{path::PathBuf, sync::Arc};
 
 use arenad::{
     app::{AppState, Config},
@@ -18,31 +9,13 @@ use arenad::{
     store::Store,
     world::World,
 };
-use packages::TestHub;
-use pg::Cleanup;
 use serde_json::{json, Value};
-
-static RT: LazyLock<tokio::runtime::Runtime> =
-    LazyLock::new(|| tokio::runtime::Runtime::new().unwrap());
-
-fn run<F: Future>(f: F) -> F::Output {
-    RT.block_on(f)
-}
+use support::packages::TestHub;
+use support::pg::Cleanup;
+use support::{app, packages, run};
 
 fn agent(id: &str) -> AgentSpec {
-    AgentSpec {
-        tools: Vec::new(),
-        id: id.into(),
-        name: id.into(),
-        kind: AgentKind::Open,
-        model: None,
-        prompt: "p".into(),
-        provider: None,
-        read_only: false,
-        lead: false,
-        url: None,
-        headers: Default::default(),
-    }
+    AgentSpec::new(id, AgentKind::Open).with_prompt("p")
 }
 
 struct Fx {
@@ -84,7 +57,7 @@ async fn new_branch(store: &Store) -> (Team, String) {
 
 async fn setup_with(tag: &str, extra: &[PathBuf], bench: &str) -> Fx {
     let hub = TestHub::new(extra);
-    let (store, clean) = app_support::meta_store("mcp", tag).await;
+    let (store, clean) = app::meta_store("mcp", tag).await;
     let (team, branch) = new_branch(&store).await;
     let world = hub.start_world(bench, &branch).await;
     let state = AppState::new(store.clone(), hub.hub.clone(), Config::new());
@@ -95,8 +68,8 @@ async fn setup_with(tag: &str, extra: &[PathBuf], bench: &str) -> Fx {
         .write()
         .unwrap()
         .insert(branch.clone(), Arc::new(ctx));
-    let (listener, base) = app_support::bind().await;
-    app_support::serve(listener, &state);
+    let (listener, base) = app::bind().await;
+    app::serve(listener, &state);
     Fx {
         store,
         hub,

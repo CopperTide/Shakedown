@@ -5,7 +5,7 @@
 //! and checks that the answer is a valid review whose every cited step is a step of that run. It
 //! prints `skipped: …` and passes without `claude`.
 
-use std::{future::Future, process::Command, sync::LazyLock};
+use std::process::Command;
 
 use arenad::{
     model::*,
@@ -21,16 +21,9 @@ use arenad::{
     store::{ReviewDone, Store},
 };
 use serde_json::{json, Value};
+use support::{pg, run};
 
-#[path = "support/pg.rs"]
-mod pg;
-
-static RT: LazyLock<tokio::runtime::Runtime> =
-    LazyLock::new(|| tokio::runtime::Runtime::new().unwrap());
-
-fn run<F: Future>(f: F) -> F::Output {
-    RT.block_on(f)
-}
+mod support;
 
 fn db_name() -> String {
     format!(
