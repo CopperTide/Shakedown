@@ -373,8 +373,10 @@ options: {system: {name: value}}, people: {counts: {role: n}, edits: {id: {name}
   `{dir} exists already`, and nothing is written.
 - `preview` answers even when the world can't be built: `problems` lists why (choices that don't fit the
   template, a world left with no task, a template error with its path, and `needs.images.<image>` for each Docker
-  image the machine lacks: images are checked with `docker image inspect`, never pulled). People, events and tasks
-  are empty then. `generate` refuses the same problems with `-32602`, the first in its message
+  image the machine lacks: images are checked with `docker image inspect`, never pulled). When the choices, the
+  systems or the template leave no world, `events` and `tasks` are empty (a missing image alone leaves them filled);
+  `people` still lists whoever could be drawn (a choice that doesn't fit is drawn at its default), so a UI keeps
+  showing the names while one choice is wrong. `generate` refuses the same problems with `-32602`, the first in its message
   (`the world can't be built: {path}: {message}`) and all of them in the error's `data: {problems}`.
 - The same template version, choices and seed give a byte-identical `world.json`. The package's `version` is the
   template's plus `+` and the first 8 hex digits of world.json's sha256; its name is the company's slug; it has

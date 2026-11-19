@@ -50,7 +50,7 @@ def preview(t, raw_choices: dict) -> dict:
     return {"name": a.company["slug"], "title": a.choices.company, "domain": a.company["domain"],
             "parts": [{"part": p["part"], "integration": p["integration"], "system": s["id"]}
                       for s in t.systems if s["id"] in a.choices.systems for p in s["parts"]],
-            "hosts": a.hosts, "people": w.get("people", []),
+            "hosts": a.hosts, "people": a.result.people,
             "events": [{k: e[k] for k in ("id", "label", "kind", "on")} for e in w.get("events", [])],
             "tasks": [{"id": x["id"], "reason": x["reason"], "checks": len(x["checks"])} for x in w.get("tasks", [])],
             "dropped": a.result.dropped, "needs": a.needs, "problems": a.problems}

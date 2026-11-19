@@ -20,11 +20,12 @@ NO_TASK = problem("tasks", "every task needs a system that is not chosen")
 @dataclass
 class Result:
     """The world (None when there are problems), the folders it copies (`(source, "files/<path>")`), what was
-    dropped and why, and the problems."""
+    dropped and why, the problems, and the people drawn (also when other problems left no world)."""
     world: dict | None
     files: list[tuple[Path, str]] = field(default_factory=list)
     dropped: list = field(default_factory=list)
     problems: list = field(default_factory=list)
+    people: list = field(default_factory=list)
 
 
 def world_json(world: dict) -> str:
@@ -32,21 +33,23 @@ def world_json(world: dict) -> str:
 
 
 def generate(t, raw_choices: dict) -> Result:
+    """The world of `raw_choices`; with problems, no world but the people still drawn (the choices that don't fit
+    are left at their defaults), so the builder's People step keeps showing them."""
     c, problems = Choices.parse(t, raw_choices)
     kept = select.keep(t, c.systems)
-    if not kept.tasks:
-        return Result(None, dropped=kept.dropped, problems=problems + [NO_TASK])
+    problems += [] if kept.tasks else [NO_TASK]
     problems += _added_roles(c, kept.roles)
-    if problems:
-        return Result(None, dropped=kept.dropped, problems=problems)
     try:
-        people, problems = apply_edits(generate_people(t, c, kept.roles), c)
-        if problems:
-            return Result(None, dropped=kept.dropped, problems=problems)
+        people, edit_problems = apply_edits(generate_people(t, c, kept.roles), c)
+    except TemplateError as e:
+        return Result(None, dropped=kept.dropped, problems=problems + [problem(e.path, e.message)])
+    if problems or edit_problems:
+        return Result(None, dropped=kept.dropped, problems=problems + edit_problems, people=people)
+    try:
         world, files = _build(t, c, kept, people)
     except TemplateError as e:
-        return Result(None, dropped=kept.dropped, problems=[problem(e.path, e.message)])
-    return Result(world, files, kept.dropped)
+        return Result(None, dropped=kept.dropped, problems=[problem(e.path, e.message)], people=people)
+    return Result(world, files, kept.dropped, people=world["people"])
 
 
 def _added_roles(c: Choices, roles: list) -> list:

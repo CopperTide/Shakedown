@@ -29,7 +29,7 @@ def test_preview_lists_parts_hosts_people_events_and_tasks(builder):
 
 def test_a_preview_with_problems_still_names_the_world(builder_without_docker):
     p = call(builder_without_docker, "preview", {"id": "shop", "choices": {"systems": ["gamma"], "size": 99}})
-    assert p["name"] == "example-co" and p["people"] == [] and p["tasks"] == []
+    assert p["name"] == "example-co" and len(p["people"]) == 9 and p["tasks"] == []
     assert p["problems"] == [{"path": "size", "message": "Size is between 2 and 40"},
                              {"path": "needs.images.toy:1", "message": "the Docker image toy:1 is missing: make toy"}]
 
@@ -127,3 +127,13 @@ def test_the_program_adds_the_template_roots_its_command_names(fixtures, tmp_pat
                           input='{"jsonrpc":"2.0","id":1,"method":"templates"}\n', timeout=30)
     ids = [t["id"] for t in json.loads(proc.stdout.splitlines()[0])["result"]]
     assert ids == ["bad-include", "bad-placeholder", "shop"]
+
+
+def test_a_preview_with_problems_still_lists_the_people_it_drew(builder):
+    blank = call(builder, "preview", {"id": "shop", "choices": {"people": {"edits": {"clerk-002": {"name": " "}}}}})
+    assert blank["problems"] == [{"path": "people.edits.clerk-002.name", "message": "a person needs a name"}]
+    assert [p["id"] for p in blank["people"]][:3] == ["clerk-001", "clerk-002", "clerk-003"]
+    assert blank["tasks"] == [] and blank["events"] == []
+    low = call(builder, "preview", {"id": "shop", "choices": {"people": {"counts": {"clerk": 0}}}})
+    assert low["problems"][0]["path"] == "people.counts.clerk" and len(low["people"]) == 9
+
