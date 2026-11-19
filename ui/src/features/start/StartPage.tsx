@@ -8,10 +8,10 @@ import { PageBody } from '@/components/ui/page';
 import { ErrorState } from '@/components/ui/state';
 import type { ConnectReturn } from '@/features/connect/connect';
 import { useScenario } from '@/features/scenario/ScenarioBuilder';
+import { useAction } from '@/hooks/useAction';
 import { useHealth } from '@/hooks/useHealth';
 import { useTaskNames, useTasks } from '@/hooks/useTasks';
 import { useStoredTeam, useSuggestedTeams } from '@/hooks/useTeam';
-import { errorMessage } from '@/lib/errors';
 import { missingFor, restoringLine, runLine, runnerProblem, taskName } from '@/model/summary';
 import { teamForRun } from '@/model/team';
 import type { Health, Runner, Team } from '@/model/types';
@@ -89,19 +89,17 @@ function useConnected(replace: (t: Team) => void) {
 
 /** Starting a run: the world is restored while the request waits, then the address names the run. */
 function useStart(s: Setup, open: (run: string, branch: string) => void, back: () => void) {
-  const [starting, setStarting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const start = useAction(async (task: string, team: Team) => {
+    try {
+      const r = await startRun(task, teamForRun(team, s.runner), s.runner, s.scenario.scenario, team.connection);
+      open(r.run_id, r.branch_id);
+    } catch (e) { back(); throw e; }
+  });
   const run = async () => {
     const team = s.team.team;
-    if (!team || !s.task) return;
-    setStarting(true); setError(null);
-    try {
-      const r = await startRun(s.task.id, teamForRun(team, s.runner), s.runner, s.scenario.scenario, team.connection);
-      open(r.run_id, r.branch_id);
-    } catch (e) { setError(errorMessage(e)); back(); }
-    setStarting(false);
+    if (team && s.task) await start.run(s.task.id, team);
   };
-  return { starting, error, run };
+  return { starting: start.busy, error: start.error, run };
 }
 
 /** What must be fixed before the team can run; an external system runs the agents itself, so nothing here has to be installed for it. */
