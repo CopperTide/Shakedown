@@ -4,6 +4,7 @@ import os
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
 from .gitcmd import EMPTY_TREE, Person, ok, run
 
@@ -48,8 +49,12 @@ def is_immutable(path: Path) -> bool:
 
 
 class Repos:
-    def __init__(self, root: Path):
+    """`on_rollback` (a twin ctx's) is told how to put back each ref this moves, so a request that
+    fails after moving one leaves it where it was."""
+
+    def __init__(self, root: Path, on_rollback: Callable[[Callable[[], None]], None] | None = None):
         self.root = Path(root)
+        self.on_rollback = on_rollback
 
     def path(self, name: str) -> Path:
         return self.root / f"{name}.git"
@@ -89,10 +94,29 @@ class Repos:
         return {r[len("refs/heads/"):]: sha for r, sha in self.refs(name, "refs/heads/").items()}
 
     def update_ref(self, name: str, ref: str, new: str, old: str | None = None) -> None:
+        self._remember(name, ref)
         self.git(name, "update-ref", ref, new, *([old] if old is not None else []))
 
     def delete_ref(self, name: str, ref: str) -> None:
+        self._remember(name, ref)
         self.git(name, "update-ref", "-d", ref)
+
+    def _remember(self, name: str, ref: str) -> None:
+        if self.on_rollback is not None:
+            self.on_rollback_refs(name, {ref: sha for r, sha in self.refs(name, ref).items() if r == ref}, ref)
+
+    def on_rollback_refs(self, name: str, before: dict, prefix: str = "refs/") -> None:
+        """On a rollback, put the refs under `prefix` back as they were in `before`."""
+        if self.on_rollback is not None:
+            self.on_rollback(lambda: self.restore_refs(name, before, prefix))
+
+    def restore_refs(self, name: str, before: dict, prefix: str = "refs/") -> None:
+        """Set every ref under `prefix` that differs from `before` back (deleting the new ones)."""
+        for change in self.refs_changed(name, before, prefix):
+            if change.old == ZERO:
+                run(self.path(name), "update-ref", "-d", change.ref)
+            else:
+                run(self.path(name), "update-ref", change.ref, change.old)
 
     def set_pull_ref(self, name: str, n: int, sha: str) -> None:
         self.update_ref(name, f"refs/pull/{n}/head", sha)
