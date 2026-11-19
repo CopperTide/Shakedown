@@ -8,12 +8,12 @@ import { EmptyState } from './components/ui/state';
 import { Toaster } from './components/ui/toaster';
 import { TooltipProvider } from './components/ui/tooltip';
 import { PageBody, PageHeader } from './components/ui/page';
-import ExperimentsPage from './experiments/ExperimentsPage';
+import ExperimentsPage from '@/features/experiments/ExperimentsPage';
 
 // Pages other than Experiments load on first visit (React Flow and uPlot stay out of the first load).
-const ExperimentPage = lazy(() => import('./experiments/ExperimentPage'));
-const ExperimentsCompare = lazy(() => import('./experiments/ExperimentPage').then((m) => ({ default: m.ComparePage })));
-const NewExperimentPage = lazy(() => import('./experiments/NewExperimentPage'));
+const ExperimentPage = lazy(() => import('@/features/experiments/ExperimentPage'));
+const ExperimentsCompare = lazy(() => import('@/features/experiments/ExperimentPage').then((m) => ({ default: m.ComparePage })));
+const NewExperimentPage = lazy(() => import('@/features/experiments/NewExperimentPage'));
 const Home = lazy(() => import('./pages/Home'));
 const ProcessPage = lazy(() => import('./control/ProcessPage'));
 const Compare = lazy(() => import('./pages/Compare'));

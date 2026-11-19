@@ -1,12 +1,12 @@
 import { CircleStop } from 'lucide-react';
 import { useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
-import { Button } from '../components/ui/button';
-import { Dialog, DialogActions, DialogContent } from '../components/ui/dialog';
-import { PageBody, PageHeader, type Width } from '../components/ui/page';
-import { Panel } from '../components/ui/panel';
-import { ErrorState, LoadingState } from '../components/ui/state';
-import { StatusMark } from '../components/ui/status';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogActions, DialogContent } from '@/components/ui/dialog';
+import { PageBody, PageHeader, type Width } from '@/components/ui/page';
+import { Panel } from '@/components/ui/panel';
+import { ErrorState, LoadingState } from '@/components/ui/state';
+import { StatusMark } from '@/components/ui/status';
 import { experimentMark } from '@/lib/mark';
 import { useTaskNames } from '@/hooks/useTasks';
 import { usePolled } from '@/lib/usePolled';
@@ -14,7 +14,7 @@ import { experiment as fetchExperiment, stopExperiment } from './api';
 import { columnOf } from './model';
 import { measureRows } from './measures';
 import { Checks, Setups } from './Results';
-import { SuiteWhatMatters } from '../review/WhatMatters';
+import { SuiteWhatMatters } from '@/review/WhatMatters';
 import type { Experiment } from '@/model/experiment';
 import { errorMessage } from '@/lib/errors';
 

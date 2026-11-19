@@ -2,7 +2,7 @@ import { ArrowRight, Factory, GitCompare, Layers, ListTree, Monitor, Play } from
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { runs as fetchRuns } from '@/api';
-import { experiments as fetchExperiments } from '../experiments/api';
+import { experiments as fetchExperiments } from '@/features/experiments/api';
 import type { ListedExperiment } from '@/model/experiment';
 import type { RunSummary } from '@/model/types';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '../components/ui/command';

@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Tooltip } from '../components/ui/tooltip';
+import { Tooltip } from '@/components/ui/tooltip';
 import { cn } from '@/lib/cn';
 import type { RunCell, RunState } from './model';
 

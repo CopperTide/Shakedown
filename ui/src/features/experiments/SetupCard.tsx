@@ -1,7 +1,7 @@
 import { X } from 'lucide-react';
-import { Button } from '../components/ui/button';
-import { Field, NativeSelect, Textarea } from '../components/ui/input';
-import { runLine } from '../home/summary';
+import { Button } from '@/components/ui/button';
+import { Field, NativeSelect, Textarea } from '@/components/ui/input';
+import { runLine } from '@/home/summary';
 import type { Team } from '@/model/types';
 import { MODELS, type SetupDraft } from './model';
 

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
-import { Panel } from '../components/ui/panel';
-import { Tag } from '../components/ui/status';
+import { Panel } from '@/components/ui/panel';
+import { Tag } from '@/components/ui/status';
 import { cn } from '@/lib/cn';
 import type { SuiteReport } from '@/model/report';
 import PassRate from './PassRate';

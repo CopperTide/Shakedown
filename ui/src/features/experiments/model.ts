@@ -2,7 +2,7 @@
 // a cell per run, the figures that matter), the checks side by side, and the setups a new
 // experiment is started with. Pure functions only; the pages draw what these return.
 import { duration, fmt } from '@/lib/format';
-import { runLine } from '../home/summary';
+import { runLine } from '@/home/summary';
 import type { CheckRate, RunRow, SuiteReport } from '@/model/report';
 import { withRules } from '@/model/team';
 import type { Team } from '@/model/types';

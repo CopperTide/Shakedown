@@ -1,4 +1,4 @@
-import { Tooltip } from '../components/ui/tooltip';
+import { Tooltip } from '@/components/ui/tooltip';
 import type { Column } from './model';
 
 const pct = (x: number) => `${Math.round(x * 100)}%`;
