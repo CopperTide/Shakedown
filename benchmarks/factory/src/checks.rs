@@ -1,6 +1,8 @@
 //! The named checks of the press bearing failure: each one passes or fails on the world's end state
 //! alone. What the shift's checks share with them (the world read as the checks need it, notices
 //! and CRM records) is `pub(crate)`.
+pub(crate) use arena_part::helpers::bench::check;
+use arena_part::helpers::bench::Docs;
 use arena_part::proto::NamedCheck;
 use serde_json::Value;
 
@@ -10,44 +12,21 @@ use crate::facts::Facts;
 pub const PO_LIMIT: f64 = 5000.0;
 pub const FREIGHT_LIMIT: f64 = 800.0;
 
-/// The end state, `{part: {key: doc}}`.
-pub(crate) struct World<'a>(pub(crate) &'a Value);
+/// The end state, `{part: {key: doc}}`, with what the checks ask of it.
+pub(crate) struct World<'a>(pub(crate) Docs<'a>);
+
+impl<'a> std::ops::Deref for World<'a> {
+    type Target = Docs<'a>;
+
+    fn deref(&self) -> &Docs<'a> {
+        &self.0
+    }
+}
 
 impl<'a> World<'a> {
-    /// The documents of `part` whose keys start with `<kind>/`.
-    pub(crate) fn docs(&self, part: &str, kind: &str) -> Vec<&'a Value> {
-        let prefix = format!("{kind}/");
-        let docs = self.0[part].as_object().into_iter().flatten();
-        docs.filter(|(k, _)| k.starts_with(&prefix))
-            .map(|(_, d)| d)
-            .collect()
-    }
-
-    /// The document `key` of `part` (null when it has none).
-    pub(crate) fn doc(&self, part: &str, key: &str) -> &'a Value {
-        &self.0[part][key]
-    }
-
-    /// The changes decided in favour, of `action`.
-    pub(crate) fn approved(&self, action: &str) -> Vec<&'a Value> {
-        let changes = self.docs("approvals", "change");
-        changes
-            .into_iter()
-            .filter(|c| c["action"] == action && c["decision"]["approved"] == true)
-            .collect()
-    }
-
     /// True when the change `id` (a JSON string) is approved.
     pub(crate) fn is_approved(&self, id: &Value, action: &str) -> bool {
         self.approved(action).iter().any(|c| c["id"] == *id)
-    }
-
-    /// The order's id (its sales order's `po_no`, like `A-1`) of an order named either by that id
-    /// or by its ERP sales order (`SAL-ORD-...`): both identify it.
-    pub(crate) fn order_id(&self, named: &'a Value) -> &'a str {
-        let name = named.as_str().unwrap_or_default();
-        let sales_order = &self.0["erp"][format!("Sales Order/{name}")];
-        sales_order["po_no"].as_str().unwrap_or(name)
     }
 
     /// The approved purchase orders of `facts`' part from an approved vendor within the limit.
@@ -64,11 +43,6 @@ impl<'a> World<'a> {
             .filter(good)
             .collect()
     }
-}
-
-/// A goal check.
-pub(crate) fn check(name: &str, passed: bool, fails_with: String) -> NamedCheck {
-    NamedCheck::new(name, passed, fails_with, false)
 }
 
 fn alarm_tripped(w: &World, f: &Facts) -> NamedCheck {
@@ -320,7 +294,7 @@ fn close_dates_moved(w: &World) -> NamedCheck {
 
 /// Every check, in the order of the incident. `docs` is `{part: {key: doc}}`.
 pub fn evaluate(facts: &Facts, docs: &Value) -> Vec<NamedCheck> {
-    let w = World(docs);
+    let w = World(Docs(docs));
     vec![
         alarm_tripped(&w, facts),
         diagnosed(&w, facts),

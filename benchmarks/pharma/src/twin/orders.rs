@@ -2,6 +2,7 @@
 //! which are at risk, and the bookings as flows from a lot to an order.
 use std::collections::BTreeSet;
 
+use arena_part::helpers::bench::Docs;
 use arena_part::proto::{TwinArea, TwinFlow, TwinItem};
 use serde_json::Value;
 
@@ -40,7 +41,7 @@ pub struct OrderState {
 
 /// The incident's orders (earliest due first), then any other order a booking names.
 pub fn states(s: &Snapshot, f: &Facts) -> Vec<OrderState> {
-    let w = World(&s.docs);
+    let w = World(Docs(&s.docs));
     let mut pos: Vec<String> = f.data.affected().iter().map(|o| o.po.clone()).collect();
     let bookings = w.bookings();
     let booked: BTreeSet<&str> = bookings.iter().map(|b| b.order).collect();
@@ -173,7 +174,7 @@ pub fn flows(states: &[OrderState]) -> Vec<TwinFlow> {
 pub fn transport_cost(s: &Snapshot) -> f64 {
     let logistics = &s.docs["logistics"];
     let price = |b: &Value| logistics[format!("quote/{}", text(&b["quote_id"]))]["price"].as_f64();
-    World(&s.docs)
+    World(Docs(&s.docs))
         .docs("logistics", "shipment")
         .into_iter()
         .filter_map(price)

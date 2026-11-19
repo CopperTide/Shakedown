@@ -1,5 +1,6 @@
 //! Helpers for common kinds of integration. Most sit behind a cargo feature.
 pub mod args;
+pub mod bench;
 pub mod busy;
 #[cfg(feature = "compose")]
 pub mod compose;

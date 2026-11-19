@@ -1,5 +1,6 @@
 //! The twin's areas besides the customers: the fill line, the QC lab, the warehouse, the carriers'
 //! lanes and the approvals.
+use arena_part::helpers::bench::Docs;
 use arena_part::proto::{TwinArea, TwinItem};
 use serde_json::Value;
 
@@ -15,13 +16,13 @@ fn area(id: &str, label: &str, kind: &str, items: Vec<TwinItem>) -> TwinArea {
 
 /// The docs of `part` whose keys start with `<kind>/`, in key order.
 fn docs<'a>(s: &'a Snapshot, part: &str, kind: &str) -> Vec<&'a Value> {
-    World(&s.docs).docs(part, kind)
+    Docs(&s.docs).docs(part, kind)
 }
 
 /// The fill line: the batch on hold, the work orders and the deviations opened.
 pub fn plant(s: &Snapshot, d: &Data) -> TwinArea {
     let held = &d.incident.batch;
-    let status = World(&s.docs).qa_status(held).to_string();
+    let status = World(Docs(&s.docs)).qa_status(held).to_string();
     let mut batch = item(
         format!("batch:{held}"),
         format!("{held} (filled)"),

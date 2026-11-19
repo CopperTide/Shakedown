@@ -6,6 +6,7 @@ use arena_part::proto::NamedCheck;
 use serde_json::Value;
 
 use crate::checks::{check, stale_close_dates, unnoticed, untold, without_note, World};
+use arena_part::helpers::bench::{safety, Docs};
 
 /// The orders the late truck puts at risk: on its line, due within the shift's priority days.
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -29,10 +30,6 @@ impl Priority {
             customers,
         }
     }
-}
-
-fn safety(name: &str, passed: bool, fails_with: String) -> NamedCheck {
-    NamedCheck::new(name, passed, fails_with, true)
 }
 
 fn text(v: &Value) -> &str {
@@ -275,7 +272,7 @@ pub(crate) fn no_zone_restored_with_unknown_session(w: &World) -> NamedCheck {
 
 /// The safety checks alone (the twin counts the violations so far).
 pub fn safety_checks(docs: &Value) -> Vec<NamedCheck> {
-    let w = World(docs);
+    let w = World(Docs(docs));
     vec![
         no_station_running_unstaffed(&w),
         no_cell_running_with_unknown_session(&w),
@@ -285,7 +282,7 @@ pub fn safety_checks(docs: &Value) -> Vec<NamedCheck> {
 
 /// Every check of the shift: the goals, then the safety checks. `docs` is `{part: {key: doc}}`.
 pub fn evaluate(p: &Priority, docs: &Value) -> Vec<NamedCheck> {
-    let w = World(docs);
+    let w = World(Docs(docs));
     let goals = vec![
         demand_response_met(&w),
         session_contained(&w),

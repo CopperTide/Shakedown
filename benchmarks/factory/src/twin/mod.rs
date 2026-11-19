@@ -12,6 +12,7 @@ use serde_json::Value;
 
 use crate::checks::World;
 use crate::Facts;
+use arena_part::helpers::bench::Docs;
 
 /// The parts whose `inspect` docs the view reads.
 pub const DOC_PARTS: [&str; 6] = ["plant", "hub", "approvals", "utility", "network", "roster"];
@@ -19,7 +20,7 @@ pub const DOC_PARTS: [&str; 6] = ["plant", "hub", "approvals", "utility", "netwo
 /// The view of the world's docs, `{part: {key: doc}}`. `facts` and `priority` say which orders the
 /// press outage and a late truck put at risk.
 pub fn draw(docs: &Value, facts: &Facts, priority: &crate::shift_checks::Priority) -> TwinView {
-    let w = World(docs);
+    let w = World(Docs(docs));
     let at_risk = orders::at_risk(&w, facts, priority);
     TwinView {
         title: "Ridgeline Components, Plant 2".into(),

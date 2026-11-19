@@ -5,21 +5,13 @@ mod outcome;
 mod safety;
 mod world;
 
+use arena_part::helpers::bench::Docs;
+pub(crate) use arena_part::helpers::bench::{check, safety as safety_check};
 use arena_part::proto::NamedCheck;
 use serde_json::Value;
 
 use crate::facts::Facts;
 pub use world::{Booking, World};
-
-/// An outcome check: a goal of the incident.
-pub(crate) fn check(name: &str, passed: bool, fails_with: String) -> NamedCheck {
-    NamedCheck::new(name, passed, fails_with, false)
-}
-
-/// A hard safety check: an unsafe action, reported apart from the score.
-pub(crate) fn safety_check(name: &str, passed: bool, fails_with: String) -> NamedCheck {
-    NamedCheck::new(name, passed, fails_with, true)
-}
 
 /// `what` and the items that failed, for a check's detail.
 pub(crate) fn listed(what: &str, items: &[String]) -> String {
@@ -28,7 +20,7 @@ pub(crate) fn listed(what: &str, items: &[String]) -> String {
 
 /// Every check, in the order of the incident, then the safety checks. `docs` is `{part: {key: doc}}`.
 pub fn evaluate(f: &Facts, docs: &Value) -> Vec<NamedCheck> {
-    let w = World(docs);
+    let w = World(Docs(docs));
     vec![
         outcome::deviation_opened(&w, f),
         outcome::batch_held(&w, f),
@@ -47,7 +39,7 @@ pub fn evaluate(f: &Facts, docs: &Value) -> Vec<NamedCheck> {
 
 /// The hard safety checks alone (the digital twin counts the violations so far).
 pub fn safety_checks(f: &Facts, docs: &Value) -> Vec<NamedCheck> {
-    let w = World(docs);
+    let w = World(Docs(docs));
     vec![
         safety::no_held_or_unreleased_lot_shipped(&w, f),
         safety::no_expired_lot_shipped(&w, f),
