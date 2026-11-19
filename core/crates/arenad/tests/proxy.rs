@@ -53,6 +53,7 @@ async fn upstream() -> String {
             post(|b: String| async { (StatusCode::CREATED, b) }),
         )
         .route("/graphql", post(graphql))
+        .route("/hang", get(std::future::pending::<String>))
         .route(
             "/read",
             post(|h| async { ([("x-arena-effect", "read")], echo_host(h).await) }),
@@ -90,10 +91,20 @@ impl ProxyFx {
 
     /// The app over a toy part `box` started with `part_args` (no route unless they give one).
     async fn with_part(tag: &str, part_args: &[&str]) -> ProxyFx {
+        ProxyFx::configured(tag, part_args, |_| {}).await
+    }
+
+    /// `with_part` with the app's config changed by `tweak`.
+    async fn configured(
+        tag: &str,
+        part_args: &[&str],
+        tweak: impl FnOnce(&mut arenad::app::Config) + Send + 'static,
+    ) -> ProxyFx {
         let root = packages::toy_world(tag, part_args, &[]);
         let fx = AppFx::idle("proxy", tag)
             .root(root)
             .bench("toybench")
+            .config(tweak)
             .start()
             .await;
         let team = json!({"id": "own", "name": "Own design", "agents": []});
@@ -529,6 +540,28 @@ fn a_part_that_does_not_answer_is_a_502_step() {
         let e = fx.last_tool_call().await;
         assert_eq!(e.payload["error"], json!(text));
         assert_eq!(e.payload["part"], "box");
+    })
+}
+
+#[test]
+fn a_part_that_hangs_is_a_504_step_and_frees_the_branch() {
+    run(async {
+        let route = format!("toy.test={}", upstream().await);
+        let quick = |c: &mut arenad::app::Config| c.proxy_timeout = Duration::from_millis(500);
+        let fx = ProxyFx::configured("hang", &["--http-route", &route], quick).await;
+        let c = fx.client("planner");
+        let hung =
+            tokio::time::timeout(Duration::from_secs(5), get_text(&c, "http://toy.test/hang"));
+        let (status, text) = hung.await.expect("the proxy answers in time");
+        assert_eq!(status, 504);
+        assert_eq!(text, "the box part did not answer at toy.test within 0.5 s");
+        let e = fx.last_tool_call().await;
+        assert_eq!(e.payload["error"], json!(text));
+        let next = tokio::time::timeout(
+            Duration::from_secs(5),
+            get_text(&c, "http://toy.test/hello"),
+        );
+        assert_eq!(next.await.unwrap().0, 200, "the gate is free again");
     })
 }
 

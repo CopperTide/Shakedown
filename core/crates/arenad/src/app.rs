@@ -44,11 +44,15 @@ pub struct Config {
     /// How long a Code connection's driver may drive its run before arenad ends the run
     /// `failed` (scored) for it (time paused counted too).
     pub code_run_limit: Duration,
+    /// How long a request through the recording proxy may take, answer read whole, before it is
+    /// answered 504 (recorded) and the branch goes on: env `ARENA_PROXY_TIMEOUT_SECS`.
+    pub proxy_timeout: Duration,
 }
 
 pub const DEFAULT_DRIVER_GRACE: Duration = Duration::from_secs(30);
 pub const DEFAULT_MAX_DB_BYTES: u64 = 5 * 1024 * 1024 * 1024;
 pub const DEFAULT_RETRY_BASE: Duration = Duration::from_secs(1);
+pub const DEFAULT_PROXY_TIMEOUT: Duration = Duration::from_secs(300);
 
 pub use crate::providers::{is_openrouter_url, OPENROUTER_BASE};
 
@@ -81,6 +85,10 @@ impl Config {
                     .and_then(|v| v.trim().parse().ok())
                     .unwrap_or(crate::agents::CLI_TIMEOUT_SECS),
             ),
+            proxy_timeout: std::env::var("ARENA_PROXY_TIMEOUT_SECS")
+                .ok()
+                .and_then(|v| v.trim().parse().ok())
+                .map_or(DEFAULT_PROXY_TIMEOUT, Duration::from_secs),
         }
     }
 

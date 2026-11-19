@@ -182,11 +182,27 @@ impl ToolExec {
             readonly: admitted.readonly,
         };
         let since = std::time::Instant::now();
-        let forwarded = forward(admitted.route, call, sender).await;
+        let forwarded = self.send(admitted.route, call, sender).await;
         facts.duration_ms = Some(since.elapsed().as_secs_f64() * 1000.0);
         match forwarded {
             Ok(f) => answered(branch, &admitted, call, f, facts).await,
-            Err(e) => Exchanged::refused(502, not_answered(admitted.route, &e), facts),
+            Err((status, why)) => Exchanged::refused(status, why, facts),
+        }
+    }
+
+    /// `call` sent to `route`'s upstream, its answer read whole within the executor's timeout;
+    /// else 502 (no answer) or 504 (too slow) and why.
+    async fn send(
+        &self,
+        route: &HostRoute,
+        call: &HttpCall,
+        sender: Sender<'_>,
+    ) -> Result<Forwarded, (u16, String)> {
+        let limit = self.http_timeout;
+        match tokio::time::timeout(limit, forward(route, call, sender)).await {
+            Ok(Ok(f)) => Ok(f),
+            Ok(Err(e)) => Err((502, not_answered(route, &e))),
+            Err(_) => Err((504, too_slow(route, limit))),
         }
     }
 
@@ -218,6 +234,12 @@ fn not_answered(route: &HostRoute, e: &str) -> String {
         "the {} part did not answer at {}: {e}",
         route.part, route.host
     )
+}
+
+/// Why a request answered 504: the part serving its host took longer than `limit`.
+fn too_slow(route: &HostRoute, limit: std::time::Duration) -> String {
+    let (part, host, secs) = (&route.part, &route.host, limit.as_secs_f64());
+    format!("the {part} part did not answer at {host} within {secs} s")
 }
 
 /// A request arenad lets through: its host's route, whether it writes by the method rule, and
