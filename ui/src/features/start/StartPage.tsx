@@ -17,7 +17,7 @@ import { useSuggestedTeams, useTeam } from '@/hooks/useTeam';
 import { useTaskNames, useTasks } from '@/hooks/useTasks';
 import { useWorldPreview } from './useWorldPreview';
 import WorldCard from './WorldCard';
-import { useScenario } from '@/scenario/ScenarioBuilder';
+import { useScenario } from '@/features/scenario/ScenarioBuilder';
 import { teamForRun } from '@/model/team';
 import type { Health, Runner, Team } from '@/model/types';
 import { errorMessage } from '@/lib/errors';

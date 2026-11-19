@@ -1,9 +1,9 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
-import ScenarioBuilder, { type ScenarioState } from '@/scenario/ScenarioBuilder';
-import { scenarioOptions } from '@/scenario/fixtures';
-import { initialSelection } from '@/scenario/scenario';
+import ScenarioBuilder, { type ScenarioState } from '@/features/scenario/ScenarioBuilder';
+import { scenarioOptions } from '@/features/scenario/fixtures';
+import { initialSelection } from '@/features/scenario/scenario';
 import { FORK_SEQ, comparison, v1Detail, v2Detail } from '@/features/world/fixtures';
 import { TwinTile } from '@/features/world/TwinTile';
 import OutcomePanel, { DivergenceStrip } from './OutcomePanel';

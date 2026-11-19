@@ -15,7 +15,7 @@ import { TaskPicker } from '@/features/start/WorldCard';
 import { useSuggestedTeams, useTeam } from '@/hooks/useTeam';
 import { useTasks } from '@/hooks/useTasks';
 import { useWorldPreview } from '@/features/start/useWorldPreview';
-import { useScenario } from '@/scenario/ScenarioBuilder';
+import { useScenario } from '@/features/scenario/ScenarioBuilder';
 import { teamForRun } from '@/model/team';
 import type { Health, Team } from '@/model/types';
 import { createExperiment } from './api';

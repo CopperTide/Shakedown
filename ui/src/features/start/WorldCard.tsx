@@ -1,6 +1,6 @@
 import { NativeSelect } from '@/components/ui/input';
-import type { ScenarioState } from '@/scenario/ScenarioBuilder';
-import { chosen, optionWords } from '@/scenario/scenario';
+import type { ScenarioState } from '@/features/scenario/ScenarioBuilder';
+import { chosen, optionWords } from '@/features/scenario/scenario';
 import { taskName, ticketTitle, worldName } from '@/model/summary';
 import type { Task } from '@/model/types';
 

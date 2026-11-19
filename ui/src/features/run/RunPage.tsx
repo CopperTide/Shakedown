@@ -25,7 +25,7 @@ import { useStepKeys } from './useStepKeys';
 import { useStepParam } from './useStepParam';
 import { useTaskNames } from '@/hooks/useTasks';
 import { type ForkChoice, forkChoiceOf } from './architecture';
-import { recordedLine } from '@/scenario/scenario';
+import { recordedLine } from '@/features/scenario/scenario';
 import { drivenLine } from '@/features/world/page';
 import Waterfall from './Waterfall';
 import BestSoFar from './BestSoFar';

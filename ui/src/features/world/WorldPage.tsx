@@ -5,7 +5,7 @@ import { Panel } from '@/components/ui/panel';
 import RunMenu from '@/features/run/RunMenu';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/state';
 import { useBranch } from '@/features/run/useBranch';
-import { recordedLine } from '@/scenario/scenario';
+import { recordedLine } from '@/features/scenario/scenario';
 import type { BranchDetail, RunStartPayload } from '@/model/types';
 import { drivenLine } from './page';
 import TwinView, { useWorldView } from './TwinView';
