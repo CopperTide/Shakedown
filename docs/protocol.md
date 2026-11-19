@@ -309,6 +309,24 @@ against that no run made (an offline baseline search). Experiments show each mea
 scored run's value, and the best run (or, without `better`, the mean). `benchmarks/line2-oee` scores a
 study by the verified objective of its recommendation this way.
 
+A Python benchmark may write its checks as data instead of code: `arena_part.expect.evaluate(checks, docs)` turns
+a list of checks in the expected end state format (end state only) into the `checks` answer. Each is
+`{name, says?, safety?, measure?, check}`, where `check` is one of
+
+- a key: `{part, key, field?, op, value}` or `{part, key, field?, op, ref: {part, key, field?}}` (compared with
+  another part's field); `op` is `=`, `!=`, `<`, `<=`, `>`, `>=`, `in`, `contains`, `exists` or `absent`, `field` a
+  dotted path into the doc (the whole doc without one);
+- a find: `{part, find: "<glob>", where?: {field: value | {op: value}}, count: "<op> <n>" | n}`, a count of the
+  part's keys matching the glob whose docs match `where`;
+- `{all: [check]}` or `{any: [check]}`.
+
+Numbers are equal within 0.005, as gates compare them; `= null` (in `value` or `where`) matches a missing field, and
+`absent` passes on a missing field or doc. A `measure` (`{label, unit?, better?, target?}`) gets the key's number or
+the find's count as its `value`. A failed check's `detail` says what was found: `{part} {key}.{field} is {actual},
+expected {op} {value}`, `{part} has no {key}` or `{n} of {part} {glob} match, expected {count}`; a check that can't
+be evaluated as written fails with `can't evaluate: …`. The world builder's benchmarks score this way
+(`benchmarks/world`).
+
 ### Optimisation studies
 
 A tool result with an `objective`, `{label, value, ci95?, unit?, better: "higher"|"lower"}`, is one
