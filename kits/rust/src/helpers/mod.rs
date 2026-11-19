@@ -12,6 +12,7 @@ pub mod folder;
 pub mod frappe;
 #[cfg(feature = "http")]
 pub mod http;
+pub mod instances;
 #[cfg(feature = "mariadb")]
 pub mod mariadb;
 #[cfg(feature = "postgres")]
