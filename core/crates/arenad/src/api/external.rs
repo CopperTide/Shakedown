@@ -18,6 +18,7 @@ use crate::{
     external::{self, endpoints, AgentDone, Join, UsageReport},
     launch::{launch, LaunchSpec},
     model::*,
+    proxy::env::env_for,
     reasoning::{self, ReasoningReport},
     runner,
 };
@@ -118,7 +119,8 @@ async fn register(
         team::validate_agents(providers_of(&state), &[join.spec()])?;
     }
     let spec = external::register(&state.store, &ctx, &join).await?;
-    let mut v = serde_json::to_value(endpoints(&state.config.self_base, &id, &spec.id))?;
+    let env = env_for(&state, &ctx, Some(&spec.id));
+    let mut v = serde_json::to_value(endpoints(&state.config.self_base, &id, &spec.id, env))?;
     v["tools"] = json!(tool_schemas(&ctx, &spec.id));
     v["spec"] = serde_json::to_value(&spec)?;
     Ok(Json(v))

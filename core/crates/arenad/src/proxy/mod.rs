@@ -3,6 +3,7 @@
 //! step of the part serving the host (see `exec::http`). One listener on 127.0.0.1 serves every
 //! branch: the ticket in the proxy URL says which branch (and agent) a request is from.
 
+pub mod env;
 pub mod forward;
 pub mod record;
 pub mod request;

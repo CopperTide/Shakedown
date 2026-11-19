@@ -16,6 +16,9 @@ pub struct Roster {
     /// agent id -> the bearer token its MCP endpoint wants, for an agent given one (an `http`
     /// agent, while arenad waits for it). Kept in memory only.
     tokens: Mutex<HashMap<String, String>>,
+    /// The agent whose model call through the gateway came last (a driver's own HTTP requests
+    /// are attributed to it).
+    last_model_caller: Mutex<Option<String>>,
 }
 
 impl Roster {
@@ -24,6 +27,7 @@ impl Roster {
             team,
             joined: Default::default(),
             tokens: Default::default(),
+            last_model_caller: Default::default(),
         }
     }
 
@@ -94,6 +98,16 @@ impl Roster {
     /// one); `None` when the branch has no such agent.
     pub fn provider_of(&self, agent: &str) -> Option<Option<String>> {
         self.agent(agent).map(|a| a.provider)
+    }
+
+    /// Notes that `agent` makes a model call through the gateway.
+    pub fn note_model_call(&self, agent: &str) {
+        *self.last_model_caller.lock().unwrap() = Some(agent.to_string());
+    }
+
+    /// The agent whose model call came last, if any did.
+    pub fn last_model_caller(&self) -> Option<String> {
+        self.last_model_caller.lock().unwrap().clone()
     }
 
     /// A new bearer token for `agent`'s MCP endpoint, which takes no call without it from now on.

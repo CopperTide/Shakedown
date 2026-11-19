@@ -11,7 +11,7 @@
 //! whose accounts trust each other (`docs/agents.md`).
 
 use std::{
-    collections::VecDeque,
+    collections::{BTreeMap, VecDeque},
     os::unix::process::ExitStatusExt,
     process::{ExitStatus, Stdio},
     sync::{Arc, Mutex},
@@ -25,6 +25,7 @@ use tokio::{io::AsyncReadExt, process::Child};
 use crate::{
     app::AppState,
     model::*,
+    proxy::env::env_for,
     store::Connection,
     suite::{
         self,
@@ -105,8 +106,14 @@ pub struct RunIds<'a> {
 }
 
 /// The command that starts `conn`'s driver for the run `ids`: in its own process group, with
-/// only [`PASSED_ENV`] of arenad's environment, the connection's env and the run's ids.
-fn command_for(base: &str, conn: &Connection, ids: &RunIds<'_>) -> Result<tokio::process::Command> {
+/// only [`PASSED_ENV`] of arenad's environment, then `world_env` (the proxy and hosts of a world
+/// that serves HTTP), the connection's env and the run's ids.
+fn command_for(
+    base: &str,
+    conn: &Connection,
+    ids: &RunIds<'_>,
+    world_env: &BTreeMap<String, String>,
+) -> Result<tokio::process::Command> {
     let (program, args) = (conn.command.split_first()).context("the connection has no command")?;
     let mut cmd = tokio::process::Command::new(program);
     cmd.args(args).env_clear().stdin(Stdio::null());
@@ -117,7 +124,8 @@ fn command_for(base: &str, conn: &Connection, ids: &RunIds<'_>) -> Result<tokio:
             cmd.env(k, v);
         }
     }
-    cmd.envs(&conn.env)
+    cmd.envs(world_env)
+        .envs(&conn.env)
         .env("ARENA_URL", base)
         .env("ARENA_RUN", ids.run_id)
         .env("ARENA_BRANCH", ids.branch_id)
@@ -134,7 +142,9 @@ fn command_for(base: &str, conn: &Connection, ids: &RunIds<'_>) -> Result<tokio:
 
 /// Starts `conn`'s command for the run `ids` and watches it (see the module's notes).
 pub async fn launch(state: &Arc<AppState>, conn: &Connection, ids: RunIds<'_>) -> Result<Launched> {
-    let mut cmd = command_for(&state.config.self_base, conn, &ids)?;
+    let ctx = state.live.get(ids.branch_id);
+    let world_env = ctx.map(|c| env_for(state, &c, None)).unwrap_or_default();
+    let mut cmd = command_for(&state.config.self_base, conn, &ids, &world_env)?;
     let what = || format!("starting the driver `{}`", conn.command.join(" "));
     let mut child = cmd.spawn().with_context(what)?;
     let launched = Launched {

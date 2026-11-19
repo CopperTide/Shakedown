@@ -72,7 +72,12 @@ impl ProxyFx {
         let route = format!("toy.test={upstream}");
         let mut args = vec!["--http-route", route.as_str()];
         args.extend_from_slice(part_args);
-        let root = packages::toy_world(tag, &args, &[]);
+        ProxyFx::with_part(tag, &args).await
+    }
+
+    /// The app over a toy part `box` started with `part_args` (no route unless they give one).
+    async fn with_part(tag: &str, part_args: &[&str]) -> ProxyFx {
+        let root = packages::toy_world(tag, part_args, &[]);
         let fx = AppFx::idle("proxy", tag)
             .root(root)
             .bench("toybench")
@@ -90,10 +95,12 @@ impl ProxyFx {
         pfx
     }
 
-    async fn join(&self, agent: Value) {
+    /// Registers `agent`: the register answer.
+    async fn join(&self, agent: Value) -> Value {
         let path = format!("/api/branches/{}/agents", self.branch);
         let (status, a) = self.fx.post(&path, agent).await;
         assert_eq!(status, 200, "{a}");
+        a
     }
 
     /// A ticket of `agent` on the branch.
@@ -430,5 +437,60 @@ fn the_ticket_is_the_branchs_and_the_agents() {
             (fx.branch.as_str(), Some("planner"))
         );
         assert!(fx.fx.state.proxy.tickets.holder("nope").is_none());
+    })
+}
+
+#[test]
+fn an_agents_register_answer_has_its_proxy_only_in_a_world_that_serves_http() {
+    run(async {
+        let routed = ProxyFx::new(
+            "register",
+            &upstream().await,
+            &["--route-env", "TOY_URL=https://toy.test"],
+        )
+        .await;
+        let a = routed
+            .join(json!({"id": "planner", "name": "Planner"}))
+            .await;
+        let proxy = a["proxy_url"].as_str().unwrap();
+        assert!(proxy.starts_with("http://arena:"), "{a}");
+        assert_eq!(
+            (&a["env"]["HTTPS_PROXY"], &a["env"]["TOY_URL"]),
+            (&json!(proxy), &json!("https://toy.test"))
+        );
+        let plain = ProxyFx::with_part("registerplain", &[]).await;
+        let a = plain
+            .join(json!({"id": "planner", "name": "Planner"}))
+            .await;
+        assert!(
+            a.get("proxy_url").is_none() && a.get("env").is_none(),
+            "{a}"
+        );
+    })
+}
+
+#[test]
+fn a_driver_ticket_request_is_the_latest_model_callers() {
+    run(async {
+        let fx = ProxyFx::new("attributed", &upstream().await, &[]).await;
+        let url = fx.fx.state.proxy.url(&fx.ticket(None)).unwrap();
+        let driver = reqwest::Client::builder()
+            .proxy(reqwest::Proxy::all(url).unwrap())
+            .build()
+            .unwrap();
+        assert_eq!(get_text(&driver, "http://toy.test/hello").await.0, 200);
+        let e = fx.last_tool_call().await;
+        assert!(
+            e.agent.is_none() && e.payload["args"].get("attributed").is_none(),
+            "{e:?}"
+        );
+        let a = fx.join(json!({"id": "planner", "name": "Planner"})).await;
+        let chat = format!("{}/chat/completions", a["gateway_url"].as_str().unwrap());
+        let body = json!({"model": "m", "messages": [{"role": "user", "content": "hi"}]});
+        fx.fx.http.post(chat).json(&body).send().await.unwrap();
+        assert_eq!(get_text(&driver, "http://toy.test/hello").await.0, 200);
+        let e = fx.last_tool_call().await;
+        assert_eq!(e.agent.as_deref(), Some("planner"));
+        assert_eq!(e.payload["args"]["attributed"], "latest model call");
     })
 }

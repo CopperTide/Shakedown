@@ -635,11 +635,17 @@ class AgentEndpoint:
         tools: Optional[list[Tool]] = None,
         spec: Optional[dict[str, Any]] = None,
         history: Optional[list[Event]] = None,
+        proxy_url: Optional[str] = None,
+        env: Optional[dict[str, str]] = None,
     ):
         self.branch = branch
         self.id = agent_id
         self.mcp_url = mcp_url
         self.gateway_url = gateway_url
+        #: The recording proxy the agent's own HTTP clients go through (None: the world serves no
+        #: HTTP), and the variables to start them with (``HTTPS_PROXY``, the hosts' base URLs).
+        self.proxy_url = proxy_url
+        self.env = env or {}
         self.spec = spec or {}
         #: The agent's recorded events before a fork point (forks of external runs).
         self.history = history or []
@@ -652,7 +658,8 @@ class AgentEndpoint:
     def from_answer(cls, branch: Branch, d: dict[str, Any]) -> "AgentEndpoint":
         tools = [Tool.from_dict(t) for t in d["tools"]] if d.get("tools") is not None else None
         hist = [Event.from_dict(e) for e in d.get("history") or []]
-        return cls(branch, d["agent"], d["mcp_url"], d["gateway_url"], tools, d.get("spec"), hist)
+        return cls(branch, d["agent"], d["mcp_url"], d["gateway_url"], tools, d.get("spec"), hist,
+                   d.get("proxy_url"), d.get("env"))
 
     def __repr__(self) -> str:
         return f"AgentEndpoint({self.id!r}, branch={self.branch.id!r})"

@@ -206,6 +206,17 @@ fn live_agent(
     Ok((ctx, provider))
 }
 
+/// The provider's answer to `body`, and how long it took (ms).
+async fn timed_upstream(
+    state: &AppState,
+    provider: &Result<Provider, String>,
+    body: &Value,
+) -> (Result<Upstream, String>, f64) {
+    let asked = Instant::now();
+    let upstream = send_upstream(state, provider, body).await;
+    (upstream, ms_since(asked))
+}
+
 async fn handle(
     State(state): State<Arc<AppState>>,
     Path((branch, agent)): Path<(String, String)>,
@@ -228,9 +239,8 @@ async fn handle(
         );
     }
     let provider = state.config.providers.resolve(provider.as_deref());
-    let asked = Instant::now();
-    let upstream = send_upstream(&state, &provider, &body).await;
-    let upstream_ms = ms_since(asked);
+    ctx.roster.note_model_call(&agent);
+    let (upstream, upstream_ms) = timed_upstream(&state, &provider, &body).await;
     let (status, payload) = model_call_payload(body, &provider, &upstream);
     // The gateway's own handling: all but the provider's answer and the time recording takes.
     ctx.overhead.add_besides(Cat::Gateway, since, upstream_ms);

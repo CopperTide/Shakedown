@@ -75,6 +75,24 @@ JSON, or from another origin). Any program on this computer can still reach it, 
 connections only on a computer whose other accounts you trust. A driver that drives its run longer than
 `ARENA_CODE_RUN_SECS` (default 900) has its run ended `failed`, scored.
 
+### Reaching the world's services
+
+In a world whose parts serve HTTP (a code host, an issue tracker: see `docs/protocol.md`, "Serving HTTP"), your
+agents' own clients (`git`, `gh`, `curl`, SDKs) reach those services through Shakedown's recording proxy, and each
+request is recorded as an `http` step of the part that serves its host: inspectable and forkable like a tool call.
+
+- A driver Shakedown launches gets `HTTP_PROXY`, `HTTPS_PROXY` (and their lower-case forms), `ARENA_PROXY`,
+  `NO_PROXY=127.0.0.1,localhost,::1`, `NODE_USE_ENV_PROXY=1`, and the variables the parts' routes name (a
+  base URL such as `GITHUB_API_URL`). Set them in the environment of the clients your agents run.
+- An agent's register answer (`POST /api/branches/{id}/agents`) has its own `proxy_url` and `env`; the SDK gives them
+  as `AgentEndpoint.proxy_url` and `AgentEndpoint.env`. Requests with an agent's proxy are recorded as that agent's;
+  requests with the driver's are recorded as the agent whose model call through the gateway came last
+  (`args.attributed: "latest model call"`), else as no agent's.
+- The proxy listens on 127.0.0.1 only (`ARENA_PROXY_PORT`, default a free port). Its URL carries a ticket of the
+  run; a request without one is answered 407. A request to a host no part serves is refused (403) and recorded. A
+  read-only agent's writes are refused. Requests wait while the run is paused and are answered 409 once it ended.
+- A world that serves no HTTP gives none of these variables: drivers reach their providers as before.
+
 ## HTTP agents (`arena-agent/1`)
 
 **Run.** When the agent's turn starts, arenad sends one `POST` to its URL, with its headers:
