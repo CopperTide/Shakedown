@@ -23,9 +23,9 @@ import { useStepKeys } from '@/features/run/useStepKeys';
 import { useStepParam, withStep } from '@/features/run/useStepParam';
 import TwinView, { useWorldView } from '@/features/world/TwinView';
 import { useViews } from '@/features/world/useWorld';
+import { useAction } from '@/hooks/useAction';
 import { useNow } from '@/hooks/useNow';
 import { cn } from '@/lib/cn';
-import { errorMessage } from '@/lib/errors';
 import { buildLanes, spanOf } from '@/model/lanes';
 import type { BranchDetail, Event } from '@/model/types';
 
@@ -130,13 +130,9 @@ function TwinMain({ d, scrub }: { d: BranchDetail; scrub: boolean }) {
 
 /** Pause, Resume and Stop: one request at a time, its failure said in words. */
 function useControls(branchId: string, reload: () => void) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [stopping, setStopping] = useState(false);
-  const act = (f: () => Promise<unknown>) => {
-    setBusy(true); setError(null);
-    f().then(reload, (e) => setError(errorMessage(e))).finally(() => setBusy(false));
-  };
+  const { busy, error, run } = useAction(async (f: () => Promise<unknown>) => { await f(); reload(); });
+  const act = (f: () => Promise<unknown>) => { void run(f); };
   return { busy, error, stopping, setStopping, pause: (p: boolean) => act(() => setPaused(branchId, p)), stop: () => { setStopping(false); act(() => stopBranch(branchId)); } };
 }
 
