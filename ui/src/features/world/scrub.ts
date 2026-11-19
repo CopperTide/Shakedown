@@ -25,7 +25,6 @@ export interface Track {
   marks: TrackMark[];
 }
 
-
 /** A world event a part reported as a disruption (contract A: `{kind: "disruption", text, data}`). */
 export function isDisruption(e: Event): boolean {
   return e.kind === 'world_event' && asRecord(e.payload).kind === 'disruption';

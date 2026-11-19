@@ -12,7 +12,6 @@ export interface Permit {
   action: string;
 }
 
-
 /** Every change the approvals system recorded up to `seq`, by id, with its decision when there is one. */
 function changesUpTo(events: Event[], seq: number): Map<string, Permit> {
   const out = new Map<string, Permit>();

@@ -5,7 +5,6 @@ import { asRecord } from '@/lib/record';
 import type { BranchView, TwinFlow, TwinItem, TwinView, WorldViewPayload } from '@/model/twin';
 import type { Event } from '@/model/types';
 
-
 const isView = (v: unknown): v is TwinView => Array.isArray(asRecord(v).areas);
 
 /** A `world_view` event's payload, or null for any other event. */

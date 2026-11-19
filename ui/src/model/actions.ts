@@ -38,7 +38,6 @@ export interface Action {
   saved: boolean;
 }
 
-
 export function worldInfo(events: Event[]): WorldInfo {
   const start = runStartOf(events);
   return {

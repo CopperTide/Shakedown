@@ -36,7 +36,6 @@ const OVERHEAD_WORDS: Record<string, string> = {
   mcp: 'MCP endpoint', restore: 'restore', gateway: 'gateway hop', score: 'scoring',
 };
 
-
 /** The agent's steps cut into turns: each model call starts one; steps before the first form turn 0. */
 export function turnsOf(events: Event[], agent: string): Event[][] {
   const mine = events.filter((e) => e.agent === agent && e.kind !== 'run_start').sort((a, b) => a.seq - b.seq);

@@ -50,7 +50,6 @@ export const WORLD_LANE = 'world';
 export const isWorldActor = (agent: string | null) => agent == null || agent === 'link' || agent === 'setup';
 export const CHECK_LANE = 'check';
 
-
 const APPROVALS = 'approvals';
 
 function actionMark(a: Action): TimelineMark {

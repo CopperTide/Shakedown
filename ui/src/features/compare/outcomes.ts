@@ -7,7 +7,6 @@ import { lastPayload } from '@/model/events';
 import type { TwinView } from '@/model/twin';
 import type { BranchDetail, CompareSide, Event, NamedCheck } from '@/model/types';
 
-
 /** One figure of a branch: the text shown, a number to compare (null: not comparable) and whether it is abnormal. */
 export interface Figure {
   text: string;

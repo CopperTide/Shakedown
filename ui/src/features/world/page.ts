@@ -6,7 +6,6 @@ import type { Event, Team } from '@/model/types';
 import { type Happening, type Track, buildTrack, happenings } from './scrub';
 import { type ViewChanges, diffViews, viewIndexAt } from './twin';
 
-
 /** An agent's end that reports tokens: a CLI agent's model calls aren't recorded one by one, but they happened. */
 const reportsTokens = (e: Event) => e.kind === 'agent_end' && Number(asRecord(e.payload).tokens ?? 0) > 0;
 
