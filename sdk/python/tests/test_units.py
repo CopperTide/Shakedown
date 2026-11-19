@@ -11,7 +11,7 @@ from arena.models import BranchRecord, CheckResult, Event, as_scenario, as_team
 from arena.sse import parse
 from arena.mcp import Tool, ToolResult
 from arena.env import _messages_for, _parse_action, END
-from arena.client import wait_review
+from arena.client import Branch, Suite, _poll, wait_review
 
 
 def test_sse_parse_events_comments_and_multiline():
@@ -138,6 +138,45 @@ def test_wait_review_follows_a_running_review_to_its_end():
     with pytest.raises(TimeoutError):
         wait_review(lambda: {"status": "running"}, {"status": "running"}, -1, 0, lambda _: None)
 
+
+
+def test_poll_fetches_until_done_or_the_deadline():
+    answers, slept = iter([1, 2, 3]), []
+    assert _poll(lambda: next(answers), lambda n: n >= 3, None, 0.5, str, sleep=slept.append) == 3
+    assert slept == [0.5, 0.5]
+    assert _poll(lambda: 9, lambda n: n > 0, 60, 1, str, first=5, sleep=slept.append) == 5
+    with pytest.raises(TimeoutError, match="^still 0$"):
+        _poll(lambda: 0, bool, -1, 0, lambda n: f"still {n}", sleep=lambda _: None)
+
+
+class _Answers:
+    """An arena whose GETs answer `bodies` in turn (the last one again once they run out)."""
+
+    def __init__(self, *bodies):
+        self.bodies, self.paths = list(bodies), []
+
+    def get(self, path, **params):
+        self.paths.append(path)
+        return self.bodies.pop(0) if len(self.bodies) > 1 else self.bodies[0]
+
+
+def _branch(status):
+    return {"id": "b1", "run_id": "r1", "status": status, "events": []}
+
+
+def test_branch_and_suite_wait_read_until_ended(monkeypatch):
+    slept = []
+    monkeypatch.setattr("arena.client.time.sleep", slept.append)
+    arena = _Answers(_branch("running"), _branch("running"), _branch("passed"))
+    assert Branch(arena, "b1", "r1").wait(poll=0.25).status == "passed"
+    assert (arena.paths, slept) == (["/api/branches/b1"] * 3, [0.25, 0.25])
+    arena = _Answers({"id": "s1", "status": "running"}, {"id": "s1", "status": "done", "summary": {"n": 2}})
+    suite = Suite(arena, {"id": "s1", "status": "running"})
+    assert suite.wait(poll=1) == {"id": "s1", "status": "done", "summary": {"n": 2}} == suite.report
+    with pytest.raises(TimeoutError, match="^branch b1 still running after -1 s$"):
+        Branch(_Answers(_branch("running")), "b1", "r1").wait(timeout=-1)
+    with pytest.raises(TimeoutError, match="^suite s1 still running after -1 s$"):
+        Suite(_Answers({"id": "s1", "status": "running"}), {"id": "s1"}).wait(timeout=-1)
 
 # ---------------------------------------------------------------- drivers
 

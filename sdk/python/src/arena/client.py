@@ -322,14 +322,41 @@ def wait_review(
 ) -> dict[str, Any]:
     """``first``, or what ``fetch()`` gives, once its ``status`` is no longer ``running``
     (``done`` with ``review``, or ``error`` with ``error``); TimeoutError after ``timeout`` s."""
-    deadline = time.monotonic() + timeout
-    r = first
-    while r.get("status") == "running":
-        if time.monotonic() > deadline:
-            raise TimeoutError(f"the review {r.get('key')} is still running after {timeout} s")
+    return _poll(
+        fetch,
+        lambda r: r.get("status") != "running",
+        timeout,
+        poll,
+        lambda r: f"the review {r.get('key')} is still running after {timeout} s",
+        first=first,
+        sleep=sleep,
+    )
+
+
+_UNSET: Any = object()
+
+
+def _poll(
+    fetch: Any,
+    done: Any,
+    timeout: Optional[float],
+    poll: float,
+    timed_out: Any,
+    first: Any = _UNSET,
+    sleep: Any = None,
+) -> Any:
+    """What ``fetch()`` gives (``first`` instead of the first fetch, when given) once ``done`` of it
+    is true, sleeping ``poll`` s between fetches; TimeoutError(``timed_out(last)``) when ``timeout`` s
+    (None: no limit) have passed."""
+    sleep = sleep or time.sleep
+    deadline = None if timeout is None else time.monotonic() + timeout
+    value = fetch() if first is _UNSET else first
+    while not done(value):
+        if deadline is not None and time.monotonic() > deadline:
+            raise TimeoutError(timed_out(value))
         sleep(poll)
-        r = fetch()
-    return r
+        value = fetch()
+    return value
 
 
 def _bid(b: Union[str, "Branch"]) -> str:
@@ -475,14 +502,10 @@ class Branch:
 
     def wait(self, timeout: Optional[float] = None, poll: float = 2.0) -> BranchRecord:
         """Waits for the branch to end and returns its record."""
-        deadline = None if timeout is None else time.monotonic() + timeout
-        while True:
-            rec = self.record()
-            if rec.ended:
-                return rec
-            if deadline is not None and time.monotonic() > deadline:
-                raise TimeoutError(f"branch {self.id} still {rec.status} after {timeout} s")
-            time.sleep(poll)
+        def timed_out(rec: BranchRecord) -> str:
+            return f"branch {self.id} still {rec.status} after {timeout} s"
+
+        return _poll(self.record, lambda rec: rec.ended, timeout, poll, timed_out)
 
     def review(
         self, again: bool = False, wait: bool = True, timeout: float = 900.0, poll: float = 3.0
@@ -719,12 +742,10 @@ class Suite:
 
     def wait(self, timeout: Optional[float] = None, poll: float = 5.0) -> dict[str, Any]:
         """Waits until the suite is no longer ``running`` (arenad runs it) and returns the report."""
-        deadline = None if timeout is None else time.monotonic() + timeout
-        while self.refresh()["status"] == "running":
-            if deadline is not None and time.monotonic() > deadline:
-                raise TimeoutError(f"suite {self.id} still running after {timeout} s")
-            time.sleep(poll)
-        return self.report
+        def timed_out(_: dict[str, Any]) -> str:
+            return f"suite {self.id} still running after {timeout} s"
+
+        return _poll(self.refresh, lambda report: report["status"] != "running", timeout, poll, timed_out)
 
     def claim(self) -> Optional[Branch]:
         """External suites: claims the next run and starts it as an external run; None when every
