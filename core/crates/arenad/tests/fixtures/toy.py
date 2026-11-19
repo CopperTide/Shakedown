@@ -25,11 +25,11 @@
       one, `http_routes` answers -32601. --save-at sets `describe.save_at`. --log-time
       appends "start <instance> <epoch_ms> <speed>" (from `world_time`, "none" without it) per `start` and
       "advance <instance> <clock_ms> <wall unix ms>" per `advance` to FILE.
-  toy.py bench --integration NAME [--part NAME=INTEGRATION ...] [--gold TOOL [--gold-args JSON]]
+  toy.py bench [--name NAME] --integration NAME [--part NAME=INTEGRATION ...] [--gold TOOL [--gold-args JSON]]
                [--config PART=JSON ...] [--clash] [--bench-tool [--tool-part PART]] [--link JSON ...]
                [--gate JSON ...] [--setup JSON ...] [--scored [--two-tasks] [--safety]]
                [--view PART [--view-fails]] [--scenario-options JSON] [--clock-start ISO]
-      A benchmark with one task `t1` whose world is one part `box` of integration NAME, or the
+      A benchmark (named `toybench`, or --name) with one task `t1` whose world is one part `box` of integration NAME, or the
       --part list; each part's config is `{}` or the --config given for it. Tools: none; with --clash a `poke`; with --bench-tool a `ring` that reports it
       ran on PART (default `box`). --link adds a link to the world, --gate a gate, --setup a call to `t1`'s setup. With --scored,
       `score` has one check `poked`: the first part's box/n is at least 1. Gold: one TOOL with JSON args (default `poke` with `{}`).
@@ -225,7 +225,7 @@ class Bench:
     def describe(self, p):
         tools = [dict(TOOLS[0], description="The benchmark's own poke.")] if "--clash" in ARGS else []
         tools += [RING] if "--bench-tool" in ARGS else []
-        return {"name": "toybench", "version": "0.1.0", "protocol": 1, "world": world(),
+        return {"name": opt("--name", "toybench"), "version": "0.1.0", "protocol": 1, "world": world(),
                 "tasks": tasks(),
                 "instructions": "Be kind to the box.", "tools": tools,
                 "links": [json.loads(link) for link in opts("--link")],

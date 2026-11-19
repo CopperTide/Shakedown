@@ -146,6 +146,7 @@ fn hub_on(ns: &str, saves: &Path, extra: &[PathBuf]) -> Arc<Hub> {
         bin_dir(),
         saves.to_path_buf(),
     )
+    .with_arena_dir(arena())
     .with_env(vec![(
         "ARENA_PG_URL".into(),
         format!("{url}{sep}arena_ns={ns}"),

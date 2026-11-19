@@ -15,6 +15,9 @@
 //!   (default `<arena>/core/target/release`; build with `cargo build --release` in `<arena>`);
 //!   `${ARENA_DIR}` stands for `<arena>`;
 //! - `ARENA_SAVES`: save storage (default `<arena>/core/saves`).
+//! - `ARENA_WORLDS`: where built worlds are written, installed from at start like a package
+//!   root, and where the current benchmark is remembered (default `<arena>/core/worlds`).
+//! - `ARENA_TEMPLATES`: more template folders for the world builder (passed on to it).
 //! - `ARENA_RUN_<PACKAGE>`: a command line (`/bin/sh -c`) run in place of a package's `run`,
 //!   e.g. `ssh <host> -- <command>` for a part on another machine (`docs/protocol.md`).
 //!
@@ -42,29 +45,52 @@ fn env_path(key: &str, default: PathBuf) -> PathBuf {
         .unwrap_or(default)
 }
 
-/// The hub over `ARENA_PACKAGES`, `ARENA_BIN_DIR` and `ARENA_SAVES`; programs get `ARENA_PG_URL`.
-fn hub(pg_url: &str) -> anyhow::Result<Hub> {
+/// `ARENA_WORLDS`, created, without the temporary folders a build left.
+fn worlds_dir() -> anyhow::Result<PathBuf> {
+    let dir = env_path("ARENA_WORLDS", arena_dir().join("core/worlds"));
+    std::fs::create_dir_all(&dir)?;
+    arenad::worlds::remove_leftovers(&dir);
+    Ok(dir)
+}
+
+/// What every command-mode program gets: `ARENA_PG_URL`, and `ARENA_TEMPLATES` when it is set.
+fn program_env(pg_url: &str) -> Vec<(String, String)> {
+    let mut env = vec![("ARENA_PG_URL".to_string(), pg_url.to_string())];
+    if let Some(t) = std::env::var("ARENA_TEMPLATES")
+        .ok()
+        .filter(|t| !t.is_empty())
+    {
+        env.push(("ARENA_TEMPLATES".into(), t));
+    }
+    env
+}
+
+/// The hub over `ARENA_PACKAGES` and the built worlds, `ARENA_BIN_DIR` and `ARENA_SAVES`.
+fn hub(pg_url: &str, worlds: &std::path::Path) -> anyhow::Result<Hub> {
     let arena = arena_dir();
-    let roots: Vec<PathBuf> = match std::env::var("ARENA_PACKAGES") {
+    let mut roots: Vec<PathBuf> = match std::env::var("ARENA_PACKAGES") {
         Ok(p) if !p.is_empty() => std::env::split_paths(&p).collect(),
         _ => vec![arena.join("integrations"), arena.join("benchmarks")],
     };
+    roots.push(worlds.to_path_buf());
     let bin_dir = env_path("ARENA_BIN_DIR", arena.join("core/target/release"));
     let saves = env_path("ARENA_SAVES", arena.join("core/saves"));
     std::fs::create_dir_all(&saves)?;
     let registry = Registry::scan(&roots)?;
     Ok(Hub::new(registry, bin_dir, saves)
         .with_arena_dir(arena)
-        .with_env(vec![("ARENA_PG_URL".into(), pg_url.to_string())]))
+        .with_env(program_env(pg_url)))
 }
 
 /// The store and the hub.
 async fn app_state(url: &str, port: u16) -> anyhow::Result<Arc<AppState>> {
     let admin = Admin::connect(url).await?;
     let store = Arc::new(Store::open(&admin).await?);
-    let hub = Arc::new(hub(url)?);
+    let worlds = worlds_dir()?;
+    let hub = Arc::new(hub(url, &worlds)?);
     let mut config = Config::new();
     config.self_base = format!("http://127.0.0.1:{port}");
+    config.worlds_dir = Some(worlds);
     Ok(Arc::new(AppState::new(store, hub, config)))
 }
 
@@ -108,7 +134,7 @@ async fn startup_bench(state: &AppState) -> anyhow::Result<BenchDescribe> {
     state
         .bench()
         .await
-        .map_err(|e| match state.benchmark.as_str() {
+        .map_err(|e| match state.benchmark().as_str() {
             "" => e,
             name => anyhow::anyhow!("benchmark {name}: {e:#}"),
         })
@@ -162,7 +188,7 @@ async fn main() -> anyhow::Result<()> {
         return build_base(&state, &bench).await;
     }
     // Before any run can save: drop the saves no event names (left by crashes and aborted tests).
-    arenad::gc::run_startup_gc(&state.store, &state.hub, &state.benchmark).await?;
+    arenad::gc::run_startup_gc(&state.store, &state.hub, &state.benchmark()).await?;
     app::install_default_drivers(&state);
 
     let mut router = app::router(state.clone());

@@ -40,7 +40,7 @@ pub use ids::{instance_id, new_save_id};
 pub use links::link_args;
 pub use plan::{plan, Plan, PlannedPart, Route};
 pub use saving::StepSaves;
-pub use standard::{ensure_base, ensure_gold, SHARED_SEED};
+pub use standard::{ensure_base, ensure_gold, has_base, SHARED_SEED};
 
 /// `{part: save}`.
 pub type Saves = BTreeMap<String, String>;

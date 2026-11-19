@@ -203,6 +203,7 @@ pub(super) async fn start_code_run(
             scenario: &run.scenario,
             rules: driver::rules_for(&conn.id, run.max_cost_usd),
             driver: Some(&conn),
+            benchmark: None,
         };
         let l = launch(&state, spec).await?;
         let (started, launched) = (Started::of(l.run_id, l.branch_id, l.agents), l.driver);

@@ -41,6 +41,7 @@ mod suites;
 mod twin;
 mod ui;
 mod world;
+mod worlds;
 
 use extract::{JsonBody, OptionalJson, StartPermit};
 pub use ui::with_ui;
@@ -74,6 +75,7 @@ pub fn router() -> Router<Arc<AppState>> {
         .merge(sandbox::router())
         .merge(twin::router())
         .merge(recording::router())
+        .merge(worlds::router())
         .route("/api/{*rest}", get(api_not_found).post(api_not_found))
 }
 
@@ -249,11 +251,11 @@ pub fn on_path(name: &str) -> bool {
 }
 
 async fn health(State(state): State<Arc<AppState>>) -> ApiResult<Value> {
-    let bytes = gc::usage(&state.hub, &state.benchmark).await?;
+    let bytes = gc::usage(&state.hub, &state.benchmark()).await?;
     let benchmark = match state.bench().await {
         Ok(b) => json!({"name": b.name, "version": b.version, "tasks": b.tasks.len(),
                         "world": b.world.iter().map(|p| json!({"part": p.part, "integration": p.integration})).collect::<Vec<_>>()}),
-        Err(e) => json!({"name": state.benchmark, "error": format!("{e:#}")}),
+        Err(e) => json!({"name": state.benchmark(), "error": format!("{e:#}")}),
     };
     Ok(Json(json!({
         "open_available": state.config.open_available(),

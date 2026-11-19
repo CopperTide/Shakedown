@@ -138,13 +138,14 @@ async fn create(
         check_disk(&state).await?;
     }
     let name = (req.name.as_deref().and_then(trimmed)).unwrap_or(req.team.name.clone());
+    let current = state.benchmark();
     let new = NewSuite {
         name: &name,
         team: &req.team,
         tasks: &tasks,
         repeats: req.repeats,
         runner: req.runner,
-        benchmark: &state.benchmark,
+        benchmark: &current,
         scenario: &scenario,
         variants: &variants,
         max_cost_usd: super::max_cost(req.max_cost_usd)?,

@@ -146,7 +146,7 @@ pub async fn gc(State(state): State<Arc<AppState>>) -> ApiResult<Value> {
     }
     detached(async move {
         let _guard = guard;
-        let report = gc::run_gc(&state.store, &state.hub, &state.benchmark).await?;
+        let report = gc::run_gc(&state.store, &state.hub, &state.benchmark()).await?;
         Ok(Json(json!({
             "removed": report.removed,
             "freed_bytes": report.result.bytes,

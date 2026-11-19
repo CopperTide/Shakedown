@@ -13,6 +13,14 @@ All JSON on `http://127.0.0.1:4510`, except the event stream. Errors are `{error
 | `GET /api/providers` | `[{id, kind, label, available, checked, why?, models?}]`, one per model provider; see [Model providers](#model-providers) |
 | `GET /api/tasks` | the benchmark's tasks, `[{id, reason, ticket, instructions, clock_start?}]` (`instructions` is the benchmark's, the same for every task; `clock_start`, the world's date and time at clock 0 when its world keeps its own calendar: agents are told the world's date, see [protocol](protocol.md#a-tasks-clock)) |
 | `GET /api/benchmark` | `{name, version, tasks: [{id, reason}], scenario_options, view}`: `scenario_options` is the benchmark's `describe.scenario_options` (null when it offers none), the disruptions a run's scenario may add ([protocol](protocol.md#a-runs-scenario)); `view` is true when the benchmark draws the world's view |
+| `GET /api/templates` | the world builder's templates, `[{id, name, summary, version, systems: [label]}]` ([protocol](protocol.md#builder-calls)); 404 `no world builder is installed` when no package of `kind = "builder"` is (with several, the first by name answers) |
+| `GET /api/templates/{id}` | the template's form (its choices and defaults); 404 for an unknown template |
+| `POST /api/templates/{id}/preview` | body: the choices; what the world would be: name, title, parts, hosts, people, events, tasks, what is dropped, the images and memory it needs, and its `problems` |
+| `POST /api/worlds` | `{template, choices}`: builds a world. 202 `{name, state: "preparing"}`: it is written to `ARENA_WORLDS/<name>` (generated into a hidden temporary folder first), installed, and its base saves are made in the background, after which it is the current benchmark; 422 `{problems}` when the choices have problems (nothing is written); 409 `{error, suggested}` when a world or package has that name (`suggested` is the first free `<name>-N`) |
+| `GET /api/worlds` | the benchmarks a user can choose between (those not opt-in, every built world and the current one): `[{name, title, template: {id, name} \| null, built, current, state}]`, `state` being `preparing`, `ready` or `failed` for a world prepared since arenad started, else `ready` when its base saves exist and `not_prepared` when they don't |
+| `GET /api/worlds/{name}` | that row plus `elapsed_ms` (how long its preparation took, or has taken) and `error`; 404 for an unknown benchmark |
+| `POST /api/worlds/{name}/use` | makes it the benchmark of new runs (runs, suites and experiments made before keep theirs), remembered across a restart in `ARENA_WORLDS/.current`; answers its row; 404 for an unknown benchmark |
+| `POST /api/worlds/{name}/prepare` | makes its base saves again (after a failure) and then makes it current: 202; 409 while it is being prepared |
 | `GET /api/team/default[?kind=&model=&provider=]` | the default team; the query runs every agent with that kind, model or provider instead of Claude Code with `sonnet` |
 | `GET /api/teams[?kind=&model=&provider=]` | every team the benchmark suggests, the default first: `[{id, name, agents, runner}]`, `runner` being the runner the team's prompts are written for (`chain` when the benchmark names none or one arenad doesn't know); the query as for `/api/team/default` |
 | `GET /api/runs` | the runs with their branches |
@@ -73,6 +81,11 @@ Environment variables, read once at startup by arenad:
 - `ARENA_PORT`: HTTP port (default 4510).
 - `ARENA_BENCHMARK`: the benchmark new runs use, by package name (default: the only installed benchmark,
   not counting those whose manifest says `opt_in = true`; required when several are installed).
+  A benchmark chosen with `POST /api/worlds/{name}/use` (or a world made current when it was built) is
+  remembered in `ARENA_WORLDS/.current` and wins over it at the next start.
+- `ARENA_WORLDS`: where built worlds are written; scanned at start like `ARENA_PACKAGES` (default `core/worlds`,
+  ignored by git).
+- `ARENA_TEMPLATES`: `:`-separated folders of more world templates, passed on to the world builder.
 - `ARENA_PACKAGES`: `:`-separated folders whose subfolders hold an `arena-package.toml` (default
   `integrations:benchmarks` in the repository root).
 - `ARENA_BIN_DIR`: what `${ARENA_BIN_DIR}` in a manifest stands for (default `core/target/release`).

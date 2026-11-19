@@ -486,7 +486,8 @@ mod tests {
 
     #[test]
     fn an_error_reply_keeps_its_data() {
-        let line = r#"{"id": 3, "error": {"code": -32602, "message": "no", "data": {"problems": []}}}"#;
+        let line =
+            r#"{"id": 3, "error": {"code": -32602, "message": "no", "data": {"problems": []}}}"#;
         let (id, reply) = parse_reply(line).unwrap();
         let Err(CallError::Part { code, data, .. }) = reply else {
             panic!("an error reply")

@@ -272,7 +272,10 @@ run = { command = ["x"] }"#,
     fn a_world_table_without_its_title_is_refused() {
         let text = format!("{BENCH}\n[world]\ntemplate = \"shop\"\ntemplate_name = \"Shop\"");
         let e = Manifest::parse(&text, Path::new("/p")).unwrap_err();
-        assert_eq!(e.to_string(), "world.title: `title` is missing or not a string");
+        assert_eq!(
+            e.to_string(),
+            "world.title: `title` is missing or not a string"
+        );
     }
 
     #[test]

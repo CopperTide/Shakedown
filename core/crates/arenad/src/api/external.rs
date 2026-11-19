@@ -53,6 +53,7 @@ pub(super) async fn create_run(
             scenario: &scenario,
             rules: Rules::new(Runner::External),
             driver: None,
+            benchmark: None,
         };
         let l = launch(&state, spec).await?;
         let started = external::Started::of(l.run_id, l.branch_id, l.agents);

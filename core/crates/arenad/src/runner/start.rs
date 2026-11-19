@@ -54,6 +54,7 @@ pub struct RunOptions<'a> {
     runner: Runner,
     scenario: Option<&'a Scenario>,
     max_cost_usd: Option<f64>,
+    benchmark: Option<&'a str>,
 }
 
 impl<'a> RunOptions<'a> {
@@ -62,6 +63,15 @@ impl<'a> RunOptions<'a> {
             runner,
             scenario: None,
             max_cost_usd: None,
+            benchmark: None,
+        }
+    }
+
+    /// The run on the benchmark `name` (else the current one).
+    pub fn benchmark(self, name: &'a str) -> RunOptions<'a> {
+        RunOptions {
+            benchmark: Some(name),
+            ..self
         }
     }
 
@@ -95,6 +105,7 @@ impl<'a> RunOptions<'a> {
             scenario: self.scenario.unwrap_or(&none),
             rules: Rules::new(self.runner).with_max_cost(self.max_cost_usd),
             driver: None,
+            benchmark: self.benchmark,
         };
         let started = crate::launch::launch(state, spec).await?;
         Ok((started.run_id, started.branch_id))
@@ -106,12 +117,16 @@ impl<'a> RunOptions<'a> {
 /// branch, ready to be driven.
 pub async fn begin_run(
     state: &AppState,
+    benchmark: Option<&str>,
     task_id: &str,
     team: Team,
     rules: Rules,
     scenario: &Scenario,
 ) -> Result<(RunId, BranchCtx), RunError> {
-    let bench = state.bench().await?;
+    let bench = match benchmark {
+        Some(name) => state.bench_named(name).await?,
+        None => state.bench().await?,
+    };
     if !bench.tasks.iter().any(|t| t.id == task_id) {
         return Err(RunError::UnknownTask(task_id.to_string()));
     }

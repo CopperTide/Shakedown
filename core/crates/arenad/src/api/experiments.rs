@@ -157,11 +157,12 @@ async fn create(
             connection: s.connection.as_deref(),
         })
         .collect();
+    let current = state.benchmark();
     let new = NewExperiment {
         name: &experiment::name_of(req.name.as_deref(), &names),
         task: &req.task,
         runs: req.runs,
-        benchmark: &state.benchmark,
+        benchmark: &current,
         scenario: &scenario,
         setups: &setups,
         max_cost_usd,

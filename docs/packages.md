@@ -87,6 +87,6 @@ which serves the world and scores each task by its checks (`arena_part.expect`).
 - `ARENA_WORLDS`: where built worlds are written (default `<arena>/core/worlds`, git-ignored), scanned at start like
   `ARENA_PACKAGES`. A built world's command names `${ARENA_DIR}`, the arena folder.
 
-Status: arenad reads `kind = "builder"` (`benchmarks/world/arena-package.toml`), the `[world]` table and
-`${ARENA_DIR}`, and can install a package while it runs (`parts`: `Registry::builders`, `Hub::install`). It does not
-yet build worlds or scan `ARENA_WORLDS` (stage 3 plan, Task 7).
+arenad asks the first builder installed (by name) for templates and previews, writes a built world into
+`ARENA_WORLDS`, installs it while it runs and prepares its base in the background (`docs/reference.md`,
+`/api/templates` and `/api/worlds`).

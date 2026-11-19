@@ -125,6 +125,13 @@ pub async fn ensure_base(hub: &Arc<Hub>, bench: &BenchDescribe) -> Result<Saves>
         .with_context(|| format!("making the base save of {}", bench.name))
 }
 
+/// True when the base save of every part that keeps saves exists (nothing is made).
+pub async fn has_base(hub: &Arc<Hub>, bench: &BenchDescribe) -> Result<bool> {
+    let planned = plan(hub, bench).await?;
+    let names = kept_names(&planned, base_names(bench));
+    saves_exist(hub, &planned, &names).await
+}
+
 /// The gold save of each part for `task`: the base plus the task's setup and its gold actions,
 /// made once.
 pub async fn ensure_gold(hub: &Arc<Hub>, bench: &BenchDescribe, task: &str) -> Result<Saves> {
