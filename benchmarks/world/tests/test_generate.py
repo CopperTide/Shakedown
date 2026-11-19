@@ -32,14 +32,14 @@ def test_a_world_with_no_task_is_a_problem(shop_only_beta_tasks):   # Review Foc
 
 
 def test_counts_follow_size_and_edits_rename_by_id(shop):
-    w = generate(shop, {"size": 20, "people": {"edits": {"p-002": {"name": "Ana Ruiz"}}}}).world
+    w = generate(shop, {"size": 20, "people": {"edits": {"clerk-002": {"name": "Ana Ruiz"}}}}).world
     assert len([p for p in w["people"] if p["role"] == "clerk"]) == 15     # share 0.75 of 20
-    assert next(p for p in w["people"] if p["id"] == "p-002")["name"] == "Ana Ruiz"
+    assert next(p for p in w["people"] if p["id"] == "clerk-002")["name"] == "Ana Ruiz"
 
 
 def test_an_edit_of_a_missing_person_is_a_problem(shop):   # Review Focus 5
-    r = generate(shop, {"size": 2, "people": {"edits": {"p-099": {"name": "X"}}}})
-    assert {"path": "people.edits.p-099", "message": "no person p-099 in this world"} in r.problems
+    r = generate(shop, {"size": 2, "people": {"edits": {"clerk-099": {"name": "X"}}}})
+    assert {"path": "people.edits.clerk-099", "message": "no person clerk-099 in this world"} in r.problems
     assert r.world is None
 
 
@@ -124,3 +124,30 @@ def test_hand_set_counts_and_too_few_names(shop, tmp_path):
 def test_a_template_error_while_filling_is_a_problem(fixtures):
     r = generate(load_template(fixtures / "bad-placeholder"), {})
     assert r.world is None and r.problems == [{"path": "tasks[0].ticket", "message": "unknown placeholder {company.ceo}"}]
+
+
+def _of(world, role):
+    return [(p["id"], p["name"]) for p in world["people"] if p["role"] == role]
+
+
+def test_an_edit_survives_a_count_change_in_another_role(shop):   # Review Focus 5, per-role ids
+    edits = {"lead-001": {"name": "Ana Ruiz"}}
+    before = generate(shop, {"size": 10, "people": {"edits": edits}}).world
+    after = generate(shop, {"size": 10, "people": {"edits": edits, "counts": {"clerk": 12}}}).world
+    assert _of(after, "lead") == _of(before, "lead") == [("lead-001", "Ana Ruiz")]
+    assert _of(after, "clerk")[:8] == _of(before, "clerk") and len(_of(after, "clerk")) == 12
+    assert [i for i, _ in _of(after, "clerk")] == [f"clerk-{n:03d}" for n in range(1, 13)]
+
+
+def test_lowering_a_count_drops_only_that_roles_highest_ids(shop):
+    full = generate(shop, {"people": {"counts": {"clerk": 6, "lead": 3}}}).world
+    fewer = generate(shop, {"people": {"counts": {"clerk": 4, "lead": 3}}}).world
+    assert _of(fewer, "clerk") == _of(full, "clerk")[:4] and _of(fewer, "lead") == _of(full, "lead")
+    assert world_json(fewer) == world_json(generate(shop, {"people": {"counts": {"clerk": 4, "lead": 3}}}).world)
+
+
+def test_a_role_with_too_few_names_of_its_own_is_a_problem(shop, tmp_path):
+    small = load_template(copy_with(shop.dir, tmp_path, {"names": {"first": ["Ada", "Ben"], "last": ["Ames", "Bell", "Cole"]}}))
+    r = generate(small, {"people": {"counts": {"clerk": 5, "lead": 1}}})
+    assert r.world is None and r.problems[0]["path"] == "names"
+    assert r.problems[0]["message"].startswith("the name pools give the role clerk ")

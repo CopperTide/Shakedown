@@ -23,24 +23,35 @@ def role_count(role: dict, c) -> int:
     return max(role.get("min", 0), n)
 
 
+def person_id(role: str, n: int, added: bool = False) -> str:
+    """A person's stable id: `<role>-001…` within the role (`<role>-added-001…` for people the user added)."""
+    return f"{role}-added-{n:03d}" if added else f"{role}-{n:03d}"
+
+
 def generate_people(t, c, chosen_roles: list[dict]) -> list[dict]:
-    """People of `chosen_roles` in role order (ids `p-001…`), then the people the user added."""
-    plan = [(role, role_count(role, c)) for role in chosen_roles]
-    total = sum(n for _, n in plan)
-    rng = Random(f"{c.seed}:{t.id}:people")
-    names = _draw_names(rng, *_pools(t), total) if total else []
+    """People of `chosen_roles` in role order, each role numbered and drawn on its own (its count never moves
+    another role's ids or names), then the people the user added."""
+    counts = [(role, role_count(role, c)) for role in chosen_roles]
+    total = sum(n for _, n in counts)
+    draws = _role_draws(t, c.seed, total) if total else {}
     people = []
-    for role, count in plan:
-        for i in range(count):
-            people.append({"id": _id(len(people) + 1), "name": names[len(people)], "role": role["id"],
-                           **_fields(role, i, rng)})
-    added = [{"id": _id(total + j + 1), "name": a["name"].strip(), "role": a["role"], "added": True}
-             for j, a in enumerate(c.added)]
-    return people + added
+    for role, n in counts:
+        rng, names = draws.get(role["id"], (None, []))
+        if n > len(names):
+            raise TemplateError("names", f"the name pools give the role {role['id']} {len(names)} full names; "
+                                         f"it needs {n}")
+        people += [{"id": person_id(role["id"], i + 1), "name": names[i], "role": role["id"],
+                    **_fields(role, i, rng)} for i in range(n)]
+    return people + _added(c.added)
 
 
-def _id(n: int) -> str:
-    return f"p-{n:03d}"
+def _added(added: list) -> list[dict]:
+    out, per_role = [], {}
+    for a in added:
+        per_role[a["role"]] = per_role.get(a["role"], 0) + 1
+        out.append({"id": person_id(a["role"], per_role[a["role"]], added=True), "name": a["name"].strip(),
+                    "role": a["role"], "added": True})
+    return out
 
 
 def _pools(t) -> tuple[list, list]:
@@ -56,16 +67,37 @@ def _index(rng: Random, n: int) -> int:
     return min(int(rng.random() * n), n - 1)
 
 
-def _draw_names(rng: Random, first: list, last: list, total: int) -> list[str]:
-    """`total` full names, none twice (a partial Fisher–Yates shuffle of every first-last pair)."""
+def _shuffled(rng: Random, n: int) -> list[int]:
+    """0..n-1 in a Fisher–Yates order of `rng`."""
+    pool = list(range(n))
+    for k in range(n - 1):
+        j = k + _index(rng, n - k)
+        pool[k], pool[j] = pool[j], pool[k]
+    return pool
+
+
+def _role_draws(t, seed: int, total: int) -> dict:
+    """For every role of the template: its generator (`{seed}:{template}:people:{role}`, which draws its fields
+    after its names) and its full names in order. Each role shuffles every first-last pair; a pair belongs to the
+    role that has it earliest (ties: template order), so no name is used twice and no role's names depend on
+    another role's count or on which roles the world kept."""
+    first, last = _pools(t)
     pairs = len(first) * len(last)
     if total > pairs:
         raise TemplateError("names", f"the name pools hold {pairs} full names; this world needs {total}")
-    pool, out = list(range(pairs)), []
-    for k in range(total):
-        j = k + _index(rng, pairs - k)
-        pool[k], pool[j] = pool[j], pool[k]
-        out.append(f"{first[pool[k] // len(last)]} {last[pool[k] % len(last)]}")
+    rngs = {r["id"]: Random(f"{seed}:{t.id}:people:{r['id']}") for r in t.roles}
+    orders = {rid: _shuffled(rng, pairs) for rid, rng in rngs.items()}
+    rank = {rid: _inverse(order) for rid, order in orders.items()}
+    roles = list(rngs)
+    owner = [min(roles, key=lambda rid: (rank[rid][p], roles.index(rid))) for p in range(pairs)]
+    return {rid: (rngs[rid], [f"{first[p // len(last)]} {last[p % len(last)]}" for p in order if owner[p] == rid])
+            for rid, order in orders.items()}
+
+
+def _inverse(order: list[int]) -> list[int]:
+    out = [0] * len(order)
+    for i, p in enumerate(order):
+        out[p] = i
     return out
 
 
