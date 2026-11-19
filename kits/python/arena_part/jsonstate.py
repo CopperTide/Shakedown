@@ -186,6 +186,33 @@ def set_scenario(config, state, args, known, overlay, kinds, tools) -> Done:
 
 
 
+@dataclass(frozen=True)
+class Scenarios:
+    """A part's scenarios: `scenarios` in its config at `path` (`("lims",)` reads `config["lims"]["scenarios"]`),
+    each `{name: overlay}`, beside the base scenario, which changes nothing. `sort` lists them by name rather
+    than in the config's order."""
+    path: tuple = ()
+    sort: bool = False
+    base: str = "base"
+
+    def _all(self, config) -> dict:
+        for key in self.path:
+            config = config[key]
+        return config.get("scenarios", {})
+
+    def names(self, config) -> list:
+        named = self._all(config)
+        return [self.base, *(sorted(named) if self.sort else named)]
+
+    def overlay(self, config, state) -> dict:
+        """What the instance's scenario changes (empty for the base)."""
+        return self._all(config).get(state["scenario"], {})
+
+    def set(self, config, state, args, kinds, tools) -> Done:
+        """The scenario tool's work (`set_scenario`), with `kinds` and `tools` the part's own."""
+        return set_scenario(config, state, args, self.names(config), self.overlay, kinds, tools)
+
+
 def _read(save_dir) -> dict:
     try:
         return json.loads((Path(save_dir) / FILE).read_text())

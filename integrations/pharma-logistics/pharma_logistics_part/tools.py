@@ -1,6 +1,6 @@
 """The logistics tools: the qualified-lanes register, quotes, bookings and notices for agents, the scenario a
 task's setup sets, and the supply chain director's review that a benchmark's link calls."""
-from arena_part.jsonstate import Done, Tool, set_scenario
+from arena_part.jsonstate import Done, Tool
 from arena_part.params import Param
 
 from . import director, disrupt, freight, network
@@ -24,7 +24,7 @@ def _requests(config, state, args):
 
 
 def _scenario(config, state, args):
-    return set_scenario(config, state, args, network.scenarios(config), network.overlay, disrupt.KINDS, TOOLS)
+    return network.SCENARIOS.set(config, state, args, disrupt.KINDS, TOOLS)
 
 
 TOOLS = {t.name: t for t in [

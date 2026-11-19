@@ -1,6 +1,6 @@
 """The OT network's tools: its status, the gateway's sessions and the playbook for agents; isolating and restoring
 a zone, revoking a session and reporting an incident; and the scenario a task's setup sets."""
-from arena_part.jsonstate import Done, Tool, event, set_scenario
+from arena_part.jsonstate import Done, Scenarios, Tool, event
 from arena_part.params import Param, Refusal
 
 from . import disrupt, network
@@ -83,11 +83,11 @@ def _report(config, state, args):
     return Done(state["incidents"][iid], writes=[f"incident/{iid}"])
 
 
+SCENARIOS = Scenarios(base=network.BASE)
+
+
 def _scenario(config, state, args):
-    def overlay(cfg, st):
-        return cfg.get("scenarios", {}).get(st["scenario"], {})
-    known = [network.BASE, *config.get("scenarios", {})]
-    return set_scenario(config, state, args, known, overlay, disrupt.KINDS, TOOLS)
+    return SCENARIOS.set(config, state, args, disrupt.KINDS, TOOLS)
 
 
 TOOLS = {t.name: t for t in [

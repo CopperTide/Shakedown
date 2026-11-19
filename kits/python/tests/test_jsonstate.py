@@ -2,7 +2,8 @@
 import pytest
 
 from arena_part import PartError
-from arena_part.jsonstate import DENIALS, Denied, Done, JsonStatePart, Tool, denial, denials_doc, event
+from arena_part.jsonstate import (DENIALS, Denied, Done, JsonStatePart, Scenarios, Tool, denial, denials_doc,
+                                  event)
 from arena_part.params import Param, Refusal
 
 
@@ -91,3 +92,20 @@ def test_a_denial_is_the_structured_error_a_numbered_record_and_a_denial_event()
     assert DENIALS == "_audit/denials"
     assert [d["requested_usd"] for d in docs[DENIALS]["denials"]] == [500, 600]
     assert denial({"denials": [{}, {}]}, {"node": "x"}) == {"n": 3, "node": "x"}
+
+
+def test_scenarios_are_read_at_a_path_and_set_by_the_scenario_tool():
+    top = Scenarios()
+    nested = Scenarios(("lims",), sort=True)
+    config = {"scenarios": {"zeta": {"x": 1}, "alpha": {}}, "lims": {"scenarios": {"zeta": {"y": 2}, "alpha": {}}}}
+    assert top.names(config) == ["base", "zeta", "alpha"]
+    assert nested.names(config) == ["base", "alpha", "zeta"]
+    assert top.names({}) == ["base"]
+    assert (top.overlay(config, {"scenario": "zeta"}), nested.overlay(config, {"scenario": "zeta"})) == ({"x": 1},
+                                                                                                         {"y": 2})
+    assert top.overlay(config, {"scenario": "base"}) == {}
+    state = {"scenario": "base"}
+    done = nested.set(config, state, {"name": "zeta"}, {}, {})
+    assert (state["scenario"], done.result, done.writes) == ("zeta", {"scenario": "zeta"}, ["scenario/current"])
+    with pytest.raises(Refusal, match=r"unknown scenario nope \(known: base, alpha, zeta\)"):
+        nested.set(config, state, {"name": "nope"}, {}, {})
