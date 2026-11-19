@@ -27,7 +27,7 @@ use crate::{
         prompt,
         settings::{settings, ReviewSettings, ReviewerModel},
         suites::{runs_of, suite_digest},
-        Job, Shape,
+        ticket, Job, Shape,
     },
     store::StoredReview,
     suite,
@@ -131,17 +131,6 @@ async fn post_branch(
         branch_job(&s, &id).await
     })
     .await
-}
-
-/// The ticket of the run's task, when the benchmark has it.
-async fn ticket(state: &AppState, events: &[crate::model::Event]) -> Option<String> {
-    let task = crate::model::RunStartPayload::of(events)?.task_id?;
-    let bench = state.bench().await.ok()?;
-    bench
-        .tasks
-        .into_iter()
-        .find(|t| t.id == task)
-        .map(|t| t.ticket)
 }
 
 async fn branch_job(state: &AppState, id: &str) -> anyhow::Result<Job> {

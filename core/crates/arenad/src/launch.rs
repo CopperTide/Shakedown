@@ -24,6 +24,8 @@ pub struct LaunchSpec<'a> {
     pub scenario: &'a Scenario,
     pub rules: Rules,
     pub driver: Option<&'a Connection>,
+    /// The benchmark the run is of (None: the current one).
+    pub benchmark: Option<&'a str>,
 }
 
 /// A run just started: its ids, each agent's endpoints when an external system drives it, and
@@ -76,8 +78,10 @@ pub async fn launch(state: &Arc<AppState>, spec: LaunchSpec<'_>) -> Result<Launc
         scenario,
         rules,
         driver,
+        benchmark,
     } = spec;
-    let (run_id, ctx) = runner::begin_run(state, task_id, team, rules, scenario).await?;
+    let begun = runner::begin_run(state, benchmark, task_id, team, rules, scenario);
+    let (run_id, ctx) = begun.await?;
     let branch_id = ctx.branch_id.clone();
     let agents = go(state, Arc::new(ctx)).await?;
     let ids = RunIds {

@@ -44,11 +44,21 @@ pub struct Config {
     /// How long a Code connection's driver may drive its run before arenad ends the run
     /// `failed` (scored) for it (time paused counted too).
     pub code_run_limit: Duration,
+    /// Where built worlds are written and the current benchmark is remembered (`ARENA_WORLDS`,
+    /// set by arenad's main). None: no world can be built and nothing is remembered.
+    pub worlds_dir: Option<std::path::PathBuf>,
+    /// How long a request through the recording proxy may take, answer read whole, before it is
+    /// answered 504 (recorded) and the branch goes on: env `ARENA_PROXY_TIMEOUT_SECS`.
+    pub proxy_timeout: Duration,
+    /// The benchmark to start on (`ARENA_BENCHMARK`); it wins over the one remembered in
+    /// `worlds_dir`. None: the remembered one, else the only one installed.
+    pub start_benchmark: Option<String>,
 }
 
 pub const DEFAULT_DRIVER_GRACE: Duration = Duration::from_secs(30);
 pub const DEFAULT_MAX_DB_BYTES: u64 = 5 * 1024 * 1024 * 1024;
 pub const DEFAULT_RETRY_BASE: Duration = Duration::from_secs(1);
+pub const DEFAULT_PROXY_TIMEOUT: Duration = Duration::from_secs(300);
 
 pub use crate::providers::{is_openrouter_url, OPENROUTER_BASE};
 
@@ -81,6 +91,14 @@ impl Config {
                     .and_then(|v| v.trim().parse().ok())
                     .unwrap_or(crate::agents::CLI_TIMEOUT_SECS),
             ),
+            worlds_dir: None,
+            proxy_timeout: std::env::var("ARENA_PROXY_TIMEOUT_SECS")
+                .ok()
+                .and_then(|v| v.trim().parse().ok())
+                .map_or(DEFAULT_PROXY_TIMEOUT, Duration::from_secs),
+            start_benchmark: std::env::var("ARENA_BENCHMARK")
+                .ok()
+                .filter(|b| !b.is_empty()),
         }
     }
 
@@ -94,9 +112,15 @@ pub struct AppState {
     pub store: Arc<Store>,
     /// The installed integrations and benchmarks, their programs started on first use.
     pub hub: Arc<Hub>,
-    /// The benchmark new runs use: env `ARENA_BENCHMARK`, else the only one installed; empty
-    /// when neither names one.
+    /// The benchmark chosen at start: env `ARENA_BENCHMARK`, else the only one installed; empty
+    /// when neither names one. New runs use [`AppState::benchmark`], which may since have changed.
     pub benchmark: String,
+    /// The benchmark new runs use: env `ARENA_BENCHMARK`, else the one remembered in
+    /// `worlds_dir`, else `benchmark` (also when the remembered one can't describe itself at
+    /// start); changed by [`AppState::use_benchmark`].
+    current: std::sync::RwLock<String>,
+    /// Built worlds whose base is being prepared, or was since arenad started.
+    pub builds: crate::worlds::Builds,
     /// Branches currently running, by branch id.
     pub live: LiveBranches,
     pub config: Config,
@@ -120,11 +144,18 @@ impl AppState {
             .timeout(std::time::Duration::from_secs(300))
             .build()
             .expect("http client");
-        let benchmark = std::env::var("ARENA_BENCHMARK")
-            .ok()
-            .filter(|b| !b.is_empty())
-            .unwrap_or_else(|| only_benchmark(&hub));
+        let named = config.start_benchmark.clone();
+        let benchmark = named.clone().unwrap_or_else(|| only_benchmark(&hub));
+        let remembered = || crate::worlds::remembered(&hub, config.worlds_dir.as_deref());
+        let current = named
+            .or_else(remembered)
+            .unwrap_or_else(|| benchmark.clone());
+        if current != benchmark {
+            eprintln!("arenad: using the remembered benchmark {current}");
+        }
         AppState {
+            current: current.into(),
+            builds: Default::default(),
             store,
             hub,
             benchmark,
@@ -141,22 +172,87 @@ impl AppState {
     /// Uses `name` as the benchmark of new runs.
     pub fn with_benchmark(mut self, name: &str) -> AppState {
         self.benchmark = name.to_string();
+        self.current = name.to_string().into();
         self
+    }
+
+    /// The benchmark new runs use (empty when none is chosen).
+    pub fn benchmark(&self) -> String {
+        self.current.read().unwrap().clone()
+    }
+
+    /// True when `name` is an installed benchmark.
+    pub fn has_benchmark(&self, name: &str) -> bool {
+        let registry = self.hub.registry();
+        registry
+            .get(name)
+            .is_some_and(|m| m.kind == parts::Kind::Benchmark)
+    }
+
+    /// Makes `name` the benchmark of new runs, and remembers it across a restart.
+    pub fn use_benchmark(&self, name: &str) -> Result<(), String> {
+        self.switch_benchmark(name, None).map(|_| ())
+    }
+
+    /// Like [`use_benchmark`](Self::use_benchmark), only while the benchmark of new runs is still
+    /// `was` (a choice made since stands): true when `name` was made current.
+    pub fn use_benchmark_if(&self, name: &str, was: &str) -> Result<bool, String> {
+        self.switch_benchmark(name, Some(was))
+    }
+
+    fn switch_benchmark(&self, name: &str, was: Option<&str>) -> Result<bool, String> {
+        if !self.has_benchmark(name) {
+            return Err(format!("no benchmark named {name}"));
+        }
+        let mut current = self.current.write().unwrap();
+        if was.is_some_and(|w| *current != w) {
+            return Ok(false);
+        }
+        *current = name.to_string();
+        crate::worlds::remember(self.config.worlds_dir.as_deref(), name);
+        Ok(true)
     }
 }
 
 impl AppState {
     /// The `describe` of the benchmark new runs use: its world, tasks, instructions and tools.
     pub async fn bench(&self) -> anyhow::Result<BenchDescribe> {
-        if self.benchmark.is_empty() {
+        self.bench_named(&self.benchmark()).await
+    }
+
+    /// The `describe` of the benchmark arenad starts on: arenad doesn't start without one (none
+    /// chosen, its package missing or not built).
+    pub async fn startup_bench(&self) -> anyhow::Result<BenchDescribe> {
+        let name = self.benchmark();
+        let described = match self.bench_named(&name).await {
+            Err(e) if name != self.benchmark => {
+                eprintln!(
+                    "arenad: the remembered benchmark {name} can't be used ({e:#}); using {:?}",
+                    self.benchmark
+                );
+                *self.current.write().unwrap() = self.benchmark.clone();
+                self.bench_named(&self.benchmark).await
+            }
+            described => described,
+        };
+        described.map_err(|e| match self.benchmark().as_str() {
+            "" => e,
+            name => anyhow::anyhow!("benchmark {name}: {e:#}"),
+        })
+    }
+
+    /// The `describe` of the benchmark `name` (empty: none is chosen, which is an error saying
+    /// why).
+    pub async fn bench_named(&self, name: &str) -> anyhow::Result<BenchDescribe> {
+        if name.is_empty() {
             anyhow::bail!(no_benchmark_chosen(&self.hub));
         }
-        self.hub.bench_describe(&self.benchmark).await
+        self.hub.bench_describe(name).await
     }
 
     /// True when the arena's saves use at least the configured limit: new runs are refused.
     pub async fn saves_over_limit(&self) -> anyhow::Result<bool> {
-        let bytes = crate::gc::usage(&self.hub, &self.benchmark).await?;
+        let bytes = crate::gc::usage(&self.hub, &self.benchmark()).await?;
         Ok(bytes >= self.config.max_db_bytes)
     }
 
@@ -168,7 +264,11 @@ impl AppState {
 
 /// Why no benchmark is chosen: none is installed, or several are and `ARENA_BENCHMARK` names none.
 fn no_benchmark_chosen(hub: &Hub) -> String {
-    let installed: Vec<&str> = hub.registry().benchmarks().map(|m| &*m.name).collect();
+    let installed: Vec<String> = hub
+        .registry()
+        .benchmarks()
+        .map(|m| m.name.clone())
+        .collect();
     if installed.is_empty() {
         return "no benchmark is installed: no folder in ARENA_PACKAGES holds a benchmark package"
             .into();
@@ -181,8 +281,11 @@ fn no_benchmark_chosen(hub: &Hub) -> String {
 
 /// The name of the one installed benchmark; empty when there are none or several.
 fn only_benchmark(hub: &Hub) -> String {
-    let benchmarks = hub.registry().benchmarks().filter(|m| !m.opt_in);
-    let mut names = benchmarks.map(|m| m.name.clone());
+    let registry = hub.registry();
+    let mut names = registry
+        .benchmarks()
+        .filter(|m| !m.opt_in)
+        .map(|m| m.name.clone());
     match (names.next(), names.next()) {
         (Some(one), None) => one,
         _ => String::new(),

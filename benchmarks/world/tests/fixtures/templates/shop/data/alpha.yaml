@@ -1,0 +1,4 @@
+company: "{company.name}"
+profile: "{options.alpha.profile}"
+seed: "@seed/"
+size: "{size}"

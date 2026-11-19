@@ -41,16 +41,17 @@ async fn benchmark(State(state): State<Arc<AppState>>) -> ApiResult<Value> {
     })))
 }
 
-/// The scenario `asked` expanded with the benchmark's options (empty when none was asked); 400
-/// with why when it can't be.
+/// The scenario `asked` expanded with the options of the benchmark `bench` (empty when none was
+/// asked); 400 with why when it can't be.
 pub(super) async fn scenario_of(
     state: &AppState,
+    bench: &str,
     asked: Option<&ScenarioRequest>,
 ) -> Result<Scenario, ApiError> {
     let Some(asked) = asked.filter(|a| !a.disruptions.is_empty()) else {
         return Ok(Scenario::default());
     };
-    let bench = state.bench().await?;
+    let bench = state.bench_named(bench).await?;
     scenario::expand(bench.scenario_options.as_ref(), asked).map_err(ApiError::bad)
 }
 

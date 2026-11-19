@@ -206,6 +206,9 @@ impl EventPayload for PausePayload {
 pub const SAVE_BEFORE_MODEL_CALL: &str = "model_call";
 /// Why a save point was made: a driver asked (`POST /api/branches/{id}/save`).
 pub const SAVE_ASKED: &str = "asked";
+/// Why a save point was made: the task's setup (and the links it set off) wrote, so a fork where
+/// the agents start has the world they started in.
+pub const SAVE_AFTER_SETUP: &str = "setup";
 
 /// The payload of `EventKind::SavePoint`: why the parts that save at points were saved, their new
 /// saves, the first save that failed, and how long the world clock stood still for it.

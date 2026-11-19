@@ -4,8 +4,8 @@
 //! A plain volume name is saved as before: the project stops, each volume is written to
 //! `<save>/<volume>.tar` exactly as the helper container streams it (owners, modes and mtimes
 //! kept) and the project starts again, so the save is exact. A `postgres` volume is dumped while
-//! it runs; a `hardlink` one copied as a tree linked to the instance's previous save; a `skip` one
-//! not saved. Starting from a save makes a new project whose volumes are filled from it. Each
+//! it runs; a `hardlink` one copied as a tree linked to the instance's previous save (by the same
+//! helper image); a `skip` one not saved. Starting from a save makes a new project whose volumes are filled from it. Each
 //! running instance's config is kept in `.live/<instance>.json` and its last save in
 //! `.last/<instance>.json`, so a restarted program still knows them. arenad saves the part at
 //! save points (`save_at: "points"`). Live volumes are not counted by `usage`: `stop` removes
@@ -111,8 +111,7 @@ fn new_instance(id: &str, config: &Config) -> Result<Instance, PartError> {
     Ok(Instance {
         project,
         volumes: config.volumes.clone(),
-        rsync_image: config.rsync_image.clone(),
-        compose_file: config.compose_file.clone(),
+        helper_image: config.helper().to_string(),
         env: config.env.clone(),
     })
 }

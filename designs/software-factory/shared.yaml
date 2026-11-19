@@ -1,0 +1,11 @@
+# The one place both designs read their model settings. FACTORY_PROVIDER and FACTORY_MODEL
+# override the provider and the model; nothing else is overridable, so both designs always
+# run with the same reasoning effort, output cap, temperature, tool output size and timeout.
+provider: local:runpod
+model: openai/gpt-oss-120b
+reasoning_effort: medium
+max_tokens: 4096
+temperature: 1.0
+tool_output_chars: 8000
+command_timeout_s: 600
+workbench_image: shakedown-workbench:1

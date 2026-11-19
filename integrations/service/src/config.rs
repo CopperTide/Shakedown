@@ -137,13 +137,10 @@ pub struct Config {
     pub compose_file: PathBuf,
     /// The compose file's volumes that a save holds, and how.
     pub volumes: Vec<VolumeSpec>,
-    /// The image whose `tar` copies volumes (default `redis:6.2-alpine`).
+    /// The image whose `tar`, `sh`, `cp` and `find` copy volumes, archives and hard-linked trees
+    /// alike (default `redis:6.2-alpine`, never pulled).
     #[serde(default)]
     pub helper_image: Option<String>,
-    /// The image with `rsync` (and `tar`, `cp`, `rm`) that `hardlink` volumes need, pinned by
-    /// digest (`name:tag@sha256:…`); pulled the first time a save needs it.
-    #[serde(default)]
-    pub rsync_image: Option<String>,
     /// The hosts the instance serves.
     #[serde(default)]
     pub http: Vec<HttpSpec>,
@@ -182,27 +179,15 @@ impl Config {
                     "volume {name} saves by {how}, which needs service (the compose service running the database)"
                 )));
             }
-            if v.save == SaveHow::Hardlink && self.rsync_image.is_none() {
-                return Err(PartError::invalid(format!(
-                    "volume {name} saves by {how}, which needs rsync_image (an image with rsync)"
-                )));
-            }
         }
         Ok(())
     }
 
-    /// The helper image a name, and the rsync image a name pinned by digest.
+    /// The helper image a name.
     fn check_images(&self) -> Result<(), PartError> {
-        if let Some(i) = self.helper_image.as_deref().filter(|i| !valid_image(i)) {
-            return Err(PartError::invalid(format!("{i:?} is not an image name")));
-        }
-        match self.rsync_image.as_deref() {
-            Some(i) if !valid_image(i) || !i.contains("@sha256:") => {
-                Err(PartError::invalid(format!(
-                    "rsync_image {i:?} must be an image pinned by digest (name:tag@sha256:...)"
-                )))
-            }
-            _ => Ok(()),
+        match self.helper_image.as_deref().filter(|i| !valid_image(i)) {
+            Some(i) => Err(PartError::invalid(format!("{i:?} is not an image name"))),
+            None => Ok(()),
         }
     }
 

@@ -28,10 +28,14 @@ impl World {
         Ok(())
     }
 
-    /// Saves `p` under a new id and records it as the part's current state.
+    /// Saves `p` under a new id and records it as the part's current state; a part that serves
+    /// hosts is then asked where it serves them now.
     async fn save_new(&self, p: &Part) -> Result<String, WorldError> {
         let save = new_save_id();
         let saved = self.save_as(p, &save).await;
+        if saved.is_ok() && p.serves_http {
+            self.refresh_routes(p).await;
+        }
         let mut t = self.track.lock().unwrap();
         match saved {
             Ok(()) => {

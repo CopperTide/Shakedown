@@ -4,10 +4,11 @@
 class PartError(Exception):
     """A JSON-RPC error with an arena-part/1 code."""
 
-    def __init__(self, code: int, message: str):
+    def __init__(self, code: int, message: str, data=None):
         super().__init__(message)
         self.code = code
         self.message = message
+        self.data = data  # JSON-RPC `error.data`, sent only when given
 
     def __str__(self) -> str:
         return f"{self.message} ({self.code})"

@@ -164,6 +164,8 @@ pub(super) struct CodeRun {
     pub team: Team,
     pub scenario: crate::scenario::Scenario,
     pub max_cost_usd: Option<f64>,
+    /// The benchmark it runs on (read once when it was asked for).
+    pub benchmark: String,
 }
 
 /// `POST /api/runs` with `connection`: 403/415 for a request a web page could make, 400 for a
@@ -203,6 +205,7 @@ pub(super) async fn start_code_run(
             scenario: &run.scenario,
             rules: driver::rules_for(&conn.id, run.max_cost_usd),
             driver: Some(&conn),
+            benchmark: Some(&run.benchmark),
         };
         let l = launch(&state, spec).await?;
         let (started, launched) = (Started::of(l.run_id, l.branch_id, l.agents), l.driver);
@@ -233,6 +236,7 @@ async fn test_run(state: &AppState, conn: &Connection) -> Result<CodeRun, ApiErr
         team,
         scenario: Default::default(),
         max_cost_usd: Some(TEST_MAX_COST_USD),
+        benchmark: bench.name,
     })
 }
 

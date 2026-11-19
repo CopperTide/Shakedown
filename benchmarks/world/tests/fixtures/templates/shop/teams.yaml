@@ -1,0 +1,6 @@
+- id: shop-team
+  name: Shop team
+  agents: [{id: clerk, name: Clerk, prompt: "You work at {company.name}."}]
+- id: solo
+  name: One agent
+  agents: [{id: solo, name: Solo, prompt: Do the task.}]

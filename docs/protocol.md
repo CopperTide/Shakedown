@@ -71,7 +71,7 @@ environment, and `${ARENA_BIN_DIR}` substituted). Use it for a part on another m
 | `usage` | `{}` | `{bytes}` |
 | `gc` (optional) | `{keep: [save]}` | `{dropped, bytes}` |
 | `connect` (optional) | `{instance}` | connection info, e.g. `{url}` for `postgres` |
-| `http_routes` (optional) | `{instance}` | `{routes: [{host, upstream, env?, reads?}]}`: the hosts the instance serves ([Serving HTTP](#serving-http)) |
+| `http_routes` (optional) | `{instance}` | `{routes: [{host, upstream, env?, reads?, honours_readonly?}]}`: the hosts the instance serves ([Serving HTTP](#serving-http)) |
 
 `system` (optional, additive) says what kind of system the part is, for monitoring views: `kind` is a
 short word ("erp", "crm", "database", "api", "mcp", "messaging", "approvals", "plant", "lims", "files",
@@ -309,6 +309,26 @@ against that no run made (an offline baseline search). Experiments show each mea
 scored run's value, and the best run (or, without `better`, the mean). `benchmarks/line2-oee` scores a
 study by the verified objective of its recommendation this way.
 
+A Python benchmark may write its checks as data instead of code: `arena_part.expect.evaluate(checks, docs)` turns
+a list of checks in the expected end state format (end state only) into the `checks` answer. Each is
+`{name, says?, safety?, measure?, check}`, where `check` is one of
+
+- a key: `{part, key, field?, op, value}` or `{part, key, field?, op, ref: {part, key, field?}}` (compared with
+  another part's field); `op` is `=`, `!=`, `<`, `<=`, `>`, `>=`, `in`, `contains`, `exists` or `absent`, `field` a
+  dotted path into the doc (the whole doc without one);
+- a find: `{part, find: "<glob>", where?: {field: value | {op: value}}, count: "<op> <n>" | n}`, a count of the
+  part's keys matching the glob whose docs match `where`;
+- `{all: [check]}` or `{any: [check]}`.
+
+Numbers are equal within 0.005, as gates compare them; `= null` (in `value` or `where`) matches a missing field, and
+`absent` passes on a missing field or doc (of a part the world has). An object in `where` is `{op: value}`; compare
+with an object as `{"=": {…}}`. A `measure` (`{label, unit?, better?, target?}`) gets the key's number or
+the find's count as its `value`. A failed check's `detail` says what was found: `{part} {key}.{field} is {actual},
+expected {op} {value}`, `{part} has no {key}` or `{n} of {part} {glob} match, expected {count}`; a check that can't
+be evaluated as written (a part the world doesn't have, an empty `all` or `any`, a `ref` field that is missing, an
+unknown op or field, a malformed body) fails alone with `can't evaluate: …`. The world builder's benchmarks score this way
+(`benchmarks/world`).
+
 ### Optimisation studies
 
 A tool result with an `objective`, `{label, value, ci95?, unit?, better: "higher"|"lower"}`, is one
@@ -334,6 +354,36 @@ tools, so a benchmark that wants them counted follows this convention:
   matter for a human: a write (`effect: "write"`) to a part whose `system.kind` is `"approvals"`, or a tool
   whose name contains `escalat`, `flag` or `ask_human`, case-insensitively.
 
+## Builder calls
+
+A world builder (a package of `kind = "builder"`, `benchmarks/world`) speaks the same transport and answers four
+calls over its templates (its own `templates/`, the folders its command names with `--templates`, and the
+`:`-separated `ARENA_TEMPLATES` roots, read again on every call). `choices` is what the builder's UI sends, every field optional: `{seed, company: {name}, size, systems,
+options: {system: {name: value}}, people: {counts: {role: n}, edits: {id: {name}}, added: [{name, role}], removed:
+[id]}, events: {id: {on, params}}}`. A problem is `{path, message}`.
+
+| Method | Params | Result |
+|---|---|---|
+| `templates` | `{}` | `[{id, name, summary, version, systems: [label]}]` |
+| `template` | `{id}` | the template's form: `{id, name, summary, version, company: {name}, size: {label, default, min, max, presets?}, systems: [{id, label, product, summary?, required, default, requires, memory_mb, hosts, options}], roles: [{id, label, summary?, count, min, systems}], events: [{id, label, description, kind, default, needs, params}]}` |
+| `preview` | `{id, choices}` | `{name, title, domain, parts: [{part, integration, system}], hosts, people, events: [{id, label, kind, on}], tasks: [{id, reason, checks: n}], dropped: [{what, why}], needs: {images: [{image, present, hint}], memory_mb}, problems}` |
+| `generate` | `{id, choices, dir}` | writes the world as a benchmark package into `dir` → `{name, title, version}` |
+
+- An unknown template is `-32602` `no template {id}`. `generate` into a `dir` that exists is `-32602`
+  `{dir} exists already`, and nothing is written.
+- `preview` answers even when the world can't be built: `problems` lists why (choices that don't fit the
+  template, a world left with no task, a template error with its path, and `needs.images.<image>` for each Docker
+  image the machine lacks: images are checked with `docker image inspect`, never pulled). When the choices, the
+  systems or the template leave no world, `events` and `tasks` are empty (a missing image alone leaves them filled);
+  `people` still lists whoever could be drawn (a choice that doesn't fit is drawn at its default), so a UI keeps
+  showing the names while one choice is wrong. `generate` refuses the same problems with `-32602`, the first in its message
+  (`the world can't be built: {path}: {message}`) and all of them in the error's `data: {problems}`.
+- The same template version, choices and seed give a byte-identical `world.json`. The package's `version` is the
+  template's plus `+` and the first 8 hex digits of world.json's sha256; its name is the company's slug; it has
+  `opt_in = true` and a `[world]` table `{title, template, template_name}`; its program is
+  `python -m worldbench --world world.json --version <version>` in `${ARENA_DIR}/benchmarks/world`, a benchmark
+  scored by the task's checks (`arena_part.expect`, see [Scoring by named checks](#scoring-by-named-checks)).
+
 ## Serving HTTP
 
 A part whose instance is a web service (a code host, an issue tracker) answers `http_routes` with the hosts it
@@ -351,7 +401,16 @@ request is recorded as a step named `http` owned by the part. A part that answer
   GraphQL query is a `POST` that reads). arenad strips it before the client sees the answer.
 - The proxy keeps `Host: <host>` and adds `X-Forwarded-Proto`, `X-Forwarded-Host` and `X-Forwarded-Port`. Every
   absolute URL a part mints (`html_url`, `next` links) must be built from them, never from its upstream address: the
-  kits' `public_base` does this.
+  kits' `public_base` does this. A client's own `X-Forwarded-*`, `Forwarded` and `X-Arena-*` headers are dropped, so
+  what a part reads there is the proxy's.
+- `X-Arena-Agent: <agent id>` names the agent that sent the request (a driver's request is the agent's whose model call
+  came last; none before any did). Rust kit: `proto::AGENT_HEADER`.
+- A read-only agent's request that writes by the rules above is refused (403) before it is sent, unless the route says
+  `honours_readonly: true`. To such a route every request of a read-only agent goes with `X-Arena-Readonly: 1`
+  (Rust kit: `proto::READONLY_HEADER`), and the part must refuse its writes
+  itself (a twin answers them `403` with `X-Arena-Effect: read`): so a GraphQL query, a `POST`, still reaches it. If
+  the part answers such a request with `X-Arena-Effect: write`, the step is recorded with the violation as its error
+  and the branch ends `failed` with it.
 - Clients reach a host over plain HTTP or over HTTPS on port 443 (the proxy terminates TLS with a CA of the branch,
   which drivers and agents are told to trust); the upstream itself is plain HTTP or HTTPS as `upstream` says.
 - Recorded HTTP requests are never sent again: a part that serves HTTP must restore from saves. A world with a part
@@ -377,7 +436,7 @@ Base and gold worlds get no `world_time`.
 The kits turn this into stamps: Rust `arena_part::helpers::world_time::WorldTime` and Python
 `arena_part.world_time.WorldTime` (`at(clock_ms)`, `observe(clock_ms, now)`, `now_ms(now)`), with the formats
 `unix_nanos(ms)` (Loki push, OTLP `timeUnixNano`) and `rfc3339(ms)` (`2026-03-10T06:02:30.000Z`); Prometheus samples
-take the unix ms as it is. Between clocks, `now_ms` runs on at `speed` but at most 1 s of world time past the last
+take the unix ms as it is. Between clocks, `now_ms` runs on at `speed` for at most 1 s of wall time past the last
 clock seen (a paused branch sends none), and never goes back. The Python kit keeps each instance's `WorldTime` from
 `start` (`Part.world_time(instance)`, None without one) and shows it every `call_tool` and `advance` clock.
 
@@ -395,6 +454,8 @@ act on. `-32602` is only for protocol-level bad params (a bad id, a missing fiel
 | `-32003` | fingerprint mismatch |
 | `-32601` | method not found |
 | `-32602` | invalid params (including a bad id) |
+
+An error may carry `data` (JSON-RPC `error.data`): the builder's `generate` puts its problems there.
 
 ## Clock contract
 

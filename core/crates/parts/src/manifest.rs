@@ -9,6 +9,8 @@ use std::path::{Path, PathBuf};
 pub enum Kind {
     Integration,
     Benchmark,
+    /// A world builder: answers `templates`, `template`, `preview` and `generate`.
+    Builder,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -22,6 +24,14 @@ pub struct Needs {
     pub gpu_vram_gb: u32,
     pub services: Vec<String>,
     pub network: Option<String>,
+}
+
+/// Which built world a benchmark is: its `[world]` table.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct WorldMeta {
+    pub title: String,
+    pub template: String,
+    pub template_name: String,
 }
 
 #[derive(Debug, Clone)]
@@ -39,6 +49,8 @@ pub struct Manifest {
     pub config_schema: Value,
     /// Used only when chosen by name, never as the one benchmark installed.
     pub opt_in: bool,
+    /// Set for a world the builder made.
+    pub world: Option<WorldMeta>,
 }
 
 fn str_of(v: &Value, key: &str) -> Result<String> {
@@ -84,6 +96,7 @@ impl Manifest {
                 .cloned()
                 .unwrap_or_default(),
             config_schema: v.get("config_schema").cloned().unwrap_or(Value::Null),
+            world: parse_world(v.get("world"))?,
         })
     }
 }
@@ -92,8 +105,21 @@ fn parse_kind(v: &Value) -> Result<Kind> {
     Ok(match str_of(v, "kind")?.as_str() {
         "integration" => Kind::Integration,
         "benchmark" => Kind::Benchmark,
-        k => bail!("kind must be integration or benchmark, not {k:?}"),
+        "builder" => Kind::Builder,
+        k => bail!("kind must be integration, benchmark or builder, not {k:?}"),
     })
+}
+
+fn parse_world(world: Option<&Value>) -> Result<Option<WorldMeta>> {
+    let Some(w) = world else {
+        return Ok(None);
+    };
+    let field = |key: &str| str_of(w, key).map_err(|e| anyhow!("world.{key}: {e}"));
+    Ok(Some(WorldMeta {
+        title: field("title")?,
+        template: field("template")?,
+        template_name: field("template_name")?,
+    }))
 }
 
 fn parse_run(run: &Value) -> Result<Run> {
@@ -186,5 +212,82 @@ impl Registry {
 
     pub fn integrations(&self) -> impl Iterator<Item = &Manifest> {
         self.of_kind(Kind::Integration)
+    }
+
+    pub fn builders(&self) -> impl Iterator<Item = &Manifest> {
+        self.of_kind(Kind::Builder)
+    }
+
+    /// Adds `m`; refuses a name another package has.
+    pub fn add(&mut self, m: Manifest) -> Result<()> {
+        if self.by_name.contains_key(&m.name) {
+            bail!("a package named {} is installed already", m.name);
+        }
+        self.by_name.insert(m.name.clone(), m);
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const BENCH: &str = r#"kind = "benchmark"
+name = "acme"
+version = "0.1.0"
+protocol = 1
+run = { command = ["x"] }"#;
+
+    fn parse(text: &str) -> Manifest {
+        Manifest::parse(text, Path::new("/p")).unwrap()
+    }
+
+    fn of(name: &str) -> Manifest {
+        parse(&BENCH.replace("\"acme\"", &format!("{name:?}")))
+    }
+
+    #[test]
+    fn a_builder_manifest_parses_and_a_world_table_is_read() {
+        let m = parse(
+            r#"kind = "builder"
+name = "world-builder"
+version = "0.1.0"
+protocol = 1
+run = { command = ["x"] }"#,
+        );
+        assert_eq!(m.kind, Kind::Builder);
+        let w = parse(&format!(
+            "{BENCH}\n[world]\ntitle = \"Acme\"\ntemplate = \"shop\"\ntemplate_name = \"Shop\""
+        ));
+        let want = WorldMeta {
+            title: "Acme".into(),
+            template: "shop".into(),
+            template_name: "Shop".into(),
+        };
+        assert_eq!(w.world, Some(want));
+        assert!(parse(BENCH).world.is_none());
+    }
+
+    #[test]
+    fn a_world_table_without_its_title_is_refused() {
+        let text = format!("{BENCH}\n[world]\ntemplate = \"shop\"\ntemplate_name = \"Shop\"");
+        let e = Manifest::parse(&text, Path::new("/p")).unwrap_err();
+        assert_eq!(
+            e.to_string(),
+            "world.title: `title` is missing or not a string"
+        );
+    }
+
+    #[test]
+    fn builders_are_listed_apart_and_a_taken_name_is_refused() {
+        let mut r = Registry::default();
+        r.add(of("acme")).unwrap();
+        let builder = parse(&BENCH.replace("benchmark", "builder").replace("acme", "wb"));
+        r.add(builder).unwrap();
+        let builders: Vec<&str> = r.builders().map(|m| &*m.name).collect();
+        assert_eq!(builders, ["wb"]);
+        assert_eq!(r.benchmarks().count(), 1);
+        let e = r.add(of("acme")).unwrap_err();
+        assert_eq!(e.to_string(), "a package named acme is installed already");
     }
 }

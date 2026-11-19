@@ -125,9 +125,19 @@ pub struct WorldTimeParams {
 /// (`read` or `write`); arenad strips it before the client sees the answer.
 pub const EFFECT_HEADER: &str = "x-arena-effect";
 
+/// The header arenad's proxy names the agent behind a request with (a client's own copy is
+/// dropped); none for a driver's request no agent's model call came before.
+pub const AGENT_HEADER: &str = "x-arena-agent";
+
+/// The header (`1`) arenad's proxy marks a read-only agent's request with, sent only to routes
+/// that say `honours_readonly`: the part must then refuse its writes itself.
+pub const READONLY_HEADER: &str = "x-arena-readonly";
+
 /// A host an instance serves through arenad's proxy: requests to `host` go to `upstream`. `env`
 /// is what drivers and agents are given to find it (`GITHUB_API_URL`); each of `reads` is a
-/// `METHOD glob` pattern of requests that only read (`POST */git-upload-pack`).
+/// `METHOD glob` pattern of requests that only read (`POST */git-upload-pack`). With
+/// `honours_readonly`, a read-only agent's requests are sent on marked `READONLY_HEADER` (the part
+/// refuses their writes); without it arenad refuses those that write by the method rule.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct HttpRoute {
     pub host: String,
@@ -136,6 +146,8 @@ pub struct HttpRoute {
     pub env: BTreeMap<String, String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub reads: Vec<String>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub honours_readonly: bool,
 }
 
 /// `http_routes`: the hosts an instance serves.
@@ -701,7 +713,7 @@ mod tests {
             serde_json::json!({"host": "a.test", "upstream": "http://127.0.0.1:9"}),
         )
         .unwrap();
-        assert!(r.env.is_empty() && r.reads.is_empty());
+        assert!(r.env.is_empty() && r.reads.is_empty() && !r.honours_readonly);
         let v = serde_json::to_value(&r).unwrap();
         assert_eq!(
             v,

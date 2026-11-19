@@ -1,0 +1,6 @@
+{"id": "p7h9k2m4n6", "name": "shakedown-gpt-oss",
+ "image": "vllm/vllm-openai:v0.32.0-x86_64-cu129@sha256:be7326dd2f0731b3c49bd7c09975b46323733dcac74757aa5d5ada60acdee217",
+ "desiredStatus": "RUNNING", "runtimeStatus": "initializing", "runtimeStatusReason": "awaiting_container",
+ "gpu": {"id": "NVIDIA H100 80GB HBM3", "count": 1, "vcpuCount": 16, "memory": 125},
+ "cloud": "COMMUNITY", "dataCenterId": "US-TX-3", "cudaVersion": "12.9", "cost": 2.69,
+ "createdAt": "2026-11-19T21:30:00Z", "startedAt": "2026-11-19T21:30:05Z"}

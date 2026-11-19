@@ -1,0 +1,11 @@
+# The factory benchmark's shift roster (benchmarks/factory/data/shift.json, `roster`) on Factory-01's day, its
+# operators the simulated people of the role `operator`.
+shift: {name: Day shift, starts: '2026-11-16T06:00:00', ends: '2026-11-16T14:00:00'}
+stations:
+- {id: LINE-A, name: Press Line A, kind: press-line, needs: press}
+- {id: LINE-B, name: Press Line B, kind: press-line, needs: press}
+- {id: LINE-C, name: Press Line C, kind: press-line, needs: press}
+- {id: CELL-R1, name: Robot welding cell R1, kind: robot-cell, needs: robot-cell}
+operators: '{people.operator}'
+overtime: {rate_per_hour: 64.5, hours: 6}
+supervisors: '{people.supervisor}'

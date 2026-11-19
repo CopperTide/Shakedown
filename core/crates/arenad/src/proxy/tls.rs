@@ -4,6 +4,7 @@
 
 use std::{
     collections::HashMap,
+    io::Write,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
@@ -39,7 +40,9 @@ fn validity(p: &mut CertificateParams) {
 }
 
 impl WorldCa {
-    /// A new CA "Shakedown world <branch>", its PEM written to `dir/ca.pem`.
+    /// A new CA "Shakedown world <branch>", its PEM written to `dir/ca.pem`. `dir` is made here,
+    /// readable only by this user; one that exists already (or a link) is refused, so no one
+    /// else's folder or file is ever used.
     pub fn new(branch: &str, dir: &Path) -> anyhow::Result<WorldCa> {
         let mut p = CertificateParams::new(Vec::<String>::new())?;
         p.distinguished_name
@@ -49,9 +52,10 @@ impl WorldCa {
         validity(&mut p);
         let key = KeyPair::generate()?;
         let cert = p.self_signed(&key)?;
-        std::fs::create_dir_all(dir).with_context(|| format!("creating {}", dir.display()))?;
+        private_dir(dir)?;
         let pem = dir.join("ca.pem");
-        std::fs::write(&pem, cert.pem()).with_context(|| format!("writing {}", pem.display()))?;
+        write_new(&pem, cert.pem().as_bytes())
+            .with_context(|| format!("writing {}", pem.display()))?;
         let leaves = Mutex::default();
         let dir = dir.to_path_buf();
         Ok(WorldCa {
@@ -100,6 +104,24 @@ impl WorldCa {
     }
 }
 
+/// Writes `bytes` to a new file at `path` (an existing file or link is an error).
+fn write_new(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    let mut f = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)?;
+    f.write_all(bytes)
+}
+
+/// Makes `dir` (not its parents) with mode 0700; an existing `dir` is an error.
+fn private_dir(dir: &Path) -> anyhow::Result<()> {
+    use std::os::unix::fs::DirBuilderExt;
+    let mut b = std::fs::DirBuilder::new();
+    b.mode(0o700);
+    b.create(dir)
+        .with_context(|| format!("creating {}", dir.display()))
+}
+
 impl Drop for WorldCa {
     fn drop(&mut self) {
         match std::fs::remove_dir_all(&self.dir) {
@@ -118,14 +140,15 @@ pub struct Cas {
 }
 
 impl Cas {
-    /// The CA of `branch` (in `<temp>/arena-proxy/<branch>/`), made the first time it is asked
-    /// for. A fork is a branch of its own: its world gets its own CA.
+    /// The CA of `branch` (in a new `<temp>/arena-proxy-<random>/`, private to this user), made
+    /// the first time it is asked for. A fork is a branch of its own: its world gets its own CA.
     pub fn for_branch(&self, branch: &str) -> anyhow::Result<Arc<WorldCa>> {
         let mut by_branch = self.by_branch.lock().unwrap();
         if let Some(ca) = by_branch.get(branch) {
             return Ok(ca.clone());
         }
-        let dir = std::env::temp_dir().join("arena-proxy").join(branch);
+        let random = uuid::Uuid::new_v4().simple();
+        let dir = std::env::temp_dir().join(format!("arena-proxy-{random}"));
         let ca = Arc::new(WorldCa::new(branch, &dir)?);
         by_branch.insert(branch.to_string(), ca.clone());
         Ok(ca)
@@ -204,6 +227,32 @@ mod tests {
         cas.drop_branch("b_one");
         cas.drop_branch("b_two");
         assert!(dirs.iter().all(|d| !d.exists()));
+    }
+
+    #[test]
+    fn a_branchs_ca_folder_is_private_and_unpredictable() {
+        use std::os::unix::fs::PermissionsExt;
+        let (one, two) = (Cas::default(), Cas::default());
+        let (a, b) = (
+            one.for_branch("b_priv").unwrap(),
+            two.for_branch("b_priv").unwrap(),
+        );
+        let dir = a.pem_path().parent().unwrap();
+        assert_ne!(
+            Some(dir),
+            b.pem_path().parent(),
+            "a folder no one can guess"
+        );
+        let mode = std::fs::metadata(dir).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o700);
+        let planted =
+            std::env::temp_dir().join(format!("arena-tls-planted-{}", std::process::id()));
+        std::fs::create_dir_all(&planted).unwrap();
+        assert!(
+            WorldCa::new("b_planted", &planted).is_err(),
+            "a folder that exists is not used"
+        );
+        std::fs::remove_dir_all(&planted).unwrap();
     }
 
     #[test]

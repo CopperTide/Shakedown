@@ -62,6 +62,22 @@ pub struct Job {
     pub shape: Shape,
 }
 
+/// The ticket of the run's task, read from the benchmark the run was on (its `RunStart`; the
+/// current one for a run recorded before runs named theirs), when that benchmark has it.
+pub async fn ticket(state: &AppState, events: &[crate::model::Event]) -> Option<String> {
+    let start = crate::model::RunStartPayload::of(events)?;
+    let bench = match start.benchmark {
+        Some(name) => state.bench_named(&name).await,
+        None => state.bench().await,
+    };
+    let (task, bench) = (start.task_id?, bench.ok()?);
+    bench
+        .tasks
+        .into_iter()
+        .find(|t| t.id == task)
+        .map(|t| t.ticket)
+}
+
 /// The answer checked against what the job may cite: the review as JSON, and the issues found.
 pub fn check(answer: &serde_json::Value, job: &Job) -> Result<(serde_json::Value, Vec<String>)> {
     let (v, issues) = match job.shape {

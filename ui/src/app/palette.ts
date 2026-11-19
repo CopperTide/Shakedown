@@ -35,6 +35,7 @@ function actions(): Item[] {
   return [
     { id: 'new-experiment', group: 'Actions', label: 'New experiment', keywords: ['start', 'compare', 'suite', 'test'], action: { go: '/experiments/new' } },
     { id: 'new-run', group: 'Actions', label: 'Run once', keywords: ['start', 'task', 'single'], action: { go: '/run' } },
+    { id: 'build-world', group: 'Actions', label: 'Build a world', keywords: ['template', 'company', 'new', 'benchmark'], action: { go: '/worlds/new' } },
     { id: 'world', group: 'Actions', label: 'World view of a run…', keywords: ['twin', 'digital', 'plant', 'scrub'], action: { mode: { kind: 'world' } } },
     { id: 'cmp-runs', group: 'Actions', label: 'Compare two runs…', keywords: ['diff', 'branch'], action: { mode: { kind: 'compare-runs', first: null } } },
     { id: 'theme', group: 'Actions', label: 'Switch theme (system, light, dark)', keywords: ['dark', 'light'], action: { theme: true } },

@@ -53,7 +53,7 @@ fn in_context<T>(r: Result<T, CallError>, integration: &str, method: &str) -> Re
 /// The part's own error, `(code, message)`, when `e` is one.
 pub fn part_refusal(e: &anyhow::Error) -> Option<(i64, &str)> {
     match e.downcast_ref::<CallError>() {
-        Some(CallError::Part { code, message }) => Some((*code, message.as_str())),
+        Some(CallError::Part { code, message, .. }) => Some((*code, message.as_str())),
         _ => None,
     }
 }

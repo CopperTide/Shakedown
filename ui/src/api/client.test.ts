@@ -38,3 +38,10 @@ describe('requests', () => {
     await expect(get('/api/x')).rejects.toMatchObject({ status: 500, message: 'Bad' });
   });
 });
+
+describe('a refusal', () => {
+  it('keeps the JSON arenad answered, for answers that say more than an error', async () => {
+    answer('{"problems":[{"path":"company.name","message":"Give the company a name"}]}', 422);
+    await expect(get('/api/x')).rejects.toMatchObject({ status: 422, body: { problems: [{ path: 'company.name', message: 'Give the company a name' }] } });
+  });
+});

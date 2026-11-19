@@ -1,0 +1,9 @@
+# Design B: one engineer with every tool, working the sprint ticket by ticket. Its pushes wait
+# until the repository's tests passed after its last write_file (the workbench's push gate).
+agent: {id: engineer, prompt: engineer.md, tools: [shell, read_file, write_file, run_tests, wait_minutes], read_only: false, max_turns: 400}
+push_gate: true
+# When the engineer stops with world time left in the window, it is asked to go on, at most
+# this many times in all.
+continuations: 3
+inputs:
+  continue: Production must be healthy at the end of the window; keep watching.

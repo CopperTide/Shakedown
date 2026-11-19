@@ -83,6 +83,7 @@ pub(crate) fn slot_spec<'a>(suite: &'a Suite, slot: &'a Slot, rules: Rules) -> L
         scenario: suite.scenario_of(slot),
         rules,
         driver: None,
+        benchmark: Some(&suite.benchmark),
     }
 }
 

@@ -16,7 +16,7 @@ mod view;
 
 use std::{
     collections::{BTreeMap, BTreeSet},
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, RwLock},
 };
 
 use anyhow::{anyhow, bail, Result};
@@ -40,7 +40,7 @@ pub use ids::{instance_id, new_save_id};
 pub use links::link_args;
 pub use plan::{plan, Plan, PlannedPart, Route};
 pub use saving::StepSaves;
-pub use standard::{ensure_base, ensure_gold, SHARED_SEED};
+pub use standard::{ensure_base, ensure_gold, has_base, SHARED_SEED};
 
 /// `{part: save}`.
 pub type Saves = BTreeMap<String, String>;
@@ -149,6 +149,9 @@ struct Part {
     instance: String,
     client: Arc<Client>,
     describe: Describe,
+    /// True when the instance serves hosts through the proxy: its routes are asked again after
+    /// each of its saves (a save that restarts a service may move it to a new port).
+    serves_http: bool,
 }
 
 impl Part {
@@ -272,6 +275,7 @@ async fn begin_part(
         integration: p.part.integration,
         instance,
         describe: p.describe,
+        serves_http: false,
     };
     let started: Result<Value, WorldError> = request(&part.client, &part.label(), &params).await;
     started.map_err(|e| anyhow::Error::from(e).context(StartingPart(part.name.clone())))?;
@@ -289,8 +293,8 @@ pub struct World {
     /// Present when the benchmark draws the world's view.
     view: Option<ViewInfo>,
     connections: Map<String, Value>,
-    /// The hosts its parts serve through the proxy.
-    hosts: Hosts,
+    /// The hosts its parts serve through the proxy (asked again after a routed part's save).
+    hosts: RwLock<Hosts>,
     track: Mutex<Track>,
 }
 
@@ -364,7 +368,7 @@ impl World {
             gates: plan.gates,
             view: plan.view,
             connections: Map::new(),
-            hosts: Hosts::default(),
+            hosts: RwLock::default(),
             track: Mutex::default(),
         }
     }
@@ -401,7 +405,8 @@ impl World {
         let mut served = vec![];
         for mut s in started {
             let routes = std::mem::take(&mut s.routes);
-            if let Some(p) = &s.part {
+            if let Some(p) = &mut s.part {
+                p.serves_http = !routes.is_empty();
                 served.push((p.name.clone(), p.describe.restore, routes));
             }
             if let Some(e) = self.take_started(s) {
@@ -409,7 +414,7 @@ impl World {
             }
         }
         match Hosts::build(served) {
-            Ok(hosts) => self.hosts = hosts,
+            Ok(hosts) => *self.hosts.get_mut().unwrap() = hosts,
             Err(e) => drop(failed.get_or_insert(anyhow!(e))),
         }
         failed
@@ -436,9 +441,22 @@ impl World {
         &self.bench
     }
 
-    /// The hosts the world's parts serve through the proxy.
-    pub fn hosts(&self) -> &Hosts {
-        &self.hosts
+    /// The hosts the world's parts serve through the proxy (held for reading: never across an
+    /// await).
+    pub fn hosts(&self) -> std::sync::RwLockReadGuard<'_, Hosts> {
+        self.hosts.read().unwrap()
+    }
+
+    /// Asks `p` again which hosts it serves and serves those; a failure is logged and the old
+    /// routes stay.
+    async fn refresh_routes(&self, p: &Part) {
+        let replaced = match http_routes(p).await {
+            Ok(routes) => self.hosts.write().unwrap().replace(&p.name, routes),
+            Err(e) => Err(format!("{e:#}")),
+        };
+        if let Err(e) = replaced {
+            eprintln!("world: the routes of {} after its save: {e}", p.name);
+        }
     }
 
     fn bench_label(&self) -> String {

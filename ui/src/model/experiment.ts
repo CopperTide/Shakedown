@@ -49,6 +49,8 @@ export interface NewSetup {
 
 export interface NewExperiment {
   name?: string;
+  /** The benchmark its runs are made on (the page's); absent, the current one. */
+  benchmark?: string;
   task: string;
   scenario?: ScenarioChoice;
   runs: number;

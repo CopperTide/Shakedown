@@ -40,6 +40,35 @@ requests! {
     GoldParams => "gold_actions",
     ScoreParams => "score",
     ViewParams => "view",
+    ListTemplates => "templates",
+    GetTemplate => "template",
+    PreviewWorld => "preview",
+    GenerateWorld => "generate",
+}
+
+/// A builder's `templates` (no params: `{}`).
+#[derive(Debug, Clone, Serialize)]
+pub struct ListTemplates {}
+
+/// A builder's `template`: the form of template `id`.
+#[derive(Debug, Clone, Serialize)]
+pub struct GetTemplate {
+    pub id: String,
+}
+
+/// A builder's `preview` of the world `choices` make of template `id`.
+#[derive(Debug, Clone, Serialize)]
+pub struct PreviewWorld {
+    pub id: String,
+    pub choices: serde_json::Value,
+}
+
+/// A builder's `generate`: the world written as a package into `dir`.
+#[derive(Debug, Clone, Serialize)]
+pub struct GenerateWorld {
+    pub id: String,
+    pub choices: serde_json::Value,
+    pub dir: String,
 }
 
 /// `stop` an instance.
@@ -138,5 +167,25 @@ mod tests {
         };
         let want = json!({"instance": "i", "name": "t", "args": {}, "clock_ms": 5});
         assert_eq!(sent(&call), ("call_tool", want));
+    }
+
+    #[test]
+    fn builder_requests_are_sent_as_the_builder_calls() {
+        assert_eq!(sent(&ListTemplates {}), ("templates", json!({})));
+        let one = GetTemplate { id: "shop".into() };
+        assert_eq!(sent(&one), ("template", json!({"id": "shop"})));
+        let preview = PreviewWorld {
+            id: "shop".into(),
+            choices: json!({}),
+        };
+        let want = json!({"id": "shop", "choices": {}});
+        assert_eq!(sent(&preview), ("preview", want));
+        let generate = GenerateWorld {
+            id: "shop".into(),
+            choices: json!({"size": 3}),
+            dir: "/w/acme".into(),
+        };
+        let want = json!({"id": "shop", "choices": {"size": 3}, "dir": "/w/acme"});
+        assert_eq!(sent(&generate), ("generate", want));
     }
 }
