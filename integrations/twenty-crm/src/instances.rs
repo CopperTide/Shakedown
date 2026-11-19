@@ -1,9 +1,10 @@
 //! Instances and saves: a database each (`ti_<id>`, `ts_<id>`), copied with the kit's Postgres
 //! templates, and for a running instance a server and a record in `.live/<id>.json`.
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::Duration;
 
 use anyhow::Context;
+use arena_part::helpers::instances::LiveRecords;
 use arena_part::helpers::pg::Templates;
 use arena_part::proto::*;
 use arena_part::PartError;
@@ -50,38 +51,27 @@ struct Record {
     db_port: u16,
 }
 
-fn live_dir(root: &Path) -> PathBuf {
-    root.join(".live")
-}
-
-fn record_path(root: &Path, id: &str) -> PathBuf {
-    live_dir(root).join(format!("{id}.json"))
+/// The records, at `.live/<id>.json`.
+fn records(root: &Path) -> LiveRecords<Record> {
+    LiveRecords::files(root.join(".live"))
 }
 
 fn read_record(root: &Path, id: &str) -> Option<Record> {
-    let text = std::fs::read_to_string(record_path(root, id)).ok()?;
-    serde_json::from_str(&text).ok()
+    records(root).get(id)
 }
 
 fn write_record(root: &Path, id: &str, record: &Record) -> anyhow::Result<()> {
-    std::fs::create_dir_all(live_dir(root))?;
-    std::fs::write(record_path(root, id), serde_json::to_vec(record)?)
-        .context("recording an instance")
+    let records = records(root);
+    std::fs::create_dir_all(records.dir())?;
+    records.record(id, record).context("recording an instance")
 }
 
 fn forget_record(root: &Path, id: &str) {
-    let _ = std::fs::remove_file(record_path(root, id));
+    records(root).forget(id);
 }
 
 fn live_ids(root: &Path) -> Vec<String> {
-    let entries = std::fs::read_dir(live_dir(root)).into_iter().flatten();
-    entries
-        .flatten()
-        .filter_map(|e| {
-            let name = e.file_name().into_string().ok()?;
-            name.strip_suffix(".json").map(str::to_string)
-        })
-        .collect()
+    records(root).ids()
 }
 
 /// The port of a running instance's server; an unknown instance is -32002.
