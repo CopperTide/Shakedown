@@ -135,6 +135,11 @@ impl Cas {
     pub fn drop_branch(&self, branch: &str) {
         self.by_branch.lock().unwrap().remove(branch);
     }
+
+    /// Forgets every branch's CA (at shutdown: their folders go once no tunnel holds them).
+    pub fn clear(&self) {
+        self.by_branch.lock().unwrap().clear();
+    }
 }
 
 #[cfg(test)]
@@ -199,5 +204,14 @@ mod tests {
         cas.drop_branch("b_one");
         cas.drop_branch("b_two");
         assert!(dirs.iter().all(|d| !d.exists()));
+    }
+
+    #[test]
+    fn clearing_removes_every_branchs_ca() {
+        let cas = Cas::default();
+        let pem = cas.for_branch("b_clear").unwrap().pem_path().to_path_buf();
+        assert!(pem.exists());
+        cas.clear();
+        assert!(!pem.parent().unwrap().exists());
     }
 }
