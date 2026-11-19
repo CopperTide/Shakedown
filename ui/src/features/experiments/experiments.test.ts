@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { duration, fmt } from '@/lib/format';
-import type { RunOutcome, RunRow, Spread, SetupReport } from '@/model/report';
+import type { RunOutcome, RunRow, SetupReport, Spread } from '@/model/report';
 import type { Team } from '@/model/types';
 import { METRICS, bestOf, checkLabel, checkMatrix, columnOf, settleDrafts, setupTeam, setupsProblem, wilson } from './model';
 
