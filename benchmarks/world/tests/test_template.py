@@ -95,3 +95,10 @@ def test_well_formed_checks_load_in_every_form(fixtures, tmp_path):
                          "count": "<= {size}"}},
               {"name": "a", "check": {"all": [{"any": [{"part": "alpha", "key": "k", "op": "exists"}]}]}}]
     load_template(copy_with(fixtures / "shop", tmp_path, {"tasks.1.checks": checks}))
+
+
+def test_a_role_id_may_not_end_in_added(fixtures, tmp_path):
+    """`clerk-added-001` is the first person added to `clerk`; a role `clerk-added` would draw the same id."""
+    with pytest.raises(TemplateError) as e:
+        load_template(copy_with(fixtures / "shop", tmp_path, {"roles.0.id": "clerk-added"}))
+    assert e.value.path == "roles[0].id"

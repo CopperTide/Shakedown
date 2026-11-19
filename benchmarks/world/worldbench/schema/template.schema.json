@@ -329,7 +329,7 @@
       "additionalProperties": false,
       "properties": {
         "id": {
-          "$ref": "#/$defs/id"
+          "$ref": "#/$defs/roleId"
         },
         "label": {
           "$ref": "#/$defs/text"
@@ -907,6 +907,19 @@
           }
         }
       }
+    },
+    "roleId": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/id"
+        },
+        {
+          "not": {
+            "pattern": "-added$"
+          }
+        }
+      ],
+      "$comment": "people the user adds are <role>-added-001…, so no role may end in -added"
     }
   }
 }
