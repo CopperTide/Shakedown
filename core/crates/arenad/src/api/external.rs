@@ -167,7 +167,7 @@ async fn report_reasoning(
         let Some(p) = reasoning::payload(item, reasoning::SOURCE_AGENT) else {
             continue;
         };
-        let ev = ctx.append(&state.store, Some(&agent), EventKind::Reasoning, p);
+        let ev = ctx.record(&state.store, Some(&agent), &p);
         seqs.push(ev.await?.seq);
     }
     Ok(Json(json!({"seqs": seqs})))

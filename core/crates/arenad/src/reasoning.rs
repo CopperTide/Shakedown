@@ -3,9 +3,9 @@
 //! responses it records itself.
 
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::Value;
 
-use crate::{exec::BranchCtx, model::EventKind, store::Store};
+use crate::{exec::BranchCtx, model::ReasoningPayload, store::Store};
 
 /// Most items one report may carry.
 pub const MAX_ITEMS: usize = 100;
@@ -57,20 +57,19 @@ pub struct ReasoningReport {
 }
 
 /// The `reasoning` event's payload for `item`, or `None` when its text is blank.
-pub fn payload(item: &ReasoningItem, source: &str) -> Option<Value> {
+pub fn payload(item: &ReasoningItem, source: &str) -> Option<ReasoningPayload> {
     if item.text.trim().is_empty() {
         return None;
     }
     let cut = item.text.char_indices().nth(MAX_TEXT).map(|(i, _)| i);
     let text = cut.map_or(item.text.as_str(), |i| &item.text[..i]);
-    let mut v = json!({"text": text, "kind": item.kind, "source": source});
-    if let Some(seq) = item.model_call_seq {
-        v["model_call_seq"] = json!(seq);
-    }
-    if cut.is_some() {
-        v["truncated"] = json!(true);
-    }
-    Some(v)
+    Some(ReasoningPayload {
+        text: text.to_string(),
+        kind: item.kind,
+        source: source.to_string(),
+        model_call_seq: item.model_call_seq,
+        truncated: cut.is_some(),
+    })
 }
 
 fn thinking(text: &str) -> Option<ReasoningItem> {
@@ -160,10 +159,7 @@ pub async fn record(
         let Some(p) = payload(&item, source) else {
             continue;
         };
-        if let Err(e) = ctx
-            .append(store, Some(agent), EventKind::Reasoning, p)
-            .await
-        {
+        if let Err(e) = ctx.record(store, Some(agent), &p).await {
             eprintln!("branch {}: recording reasoning: {e:#}", ctx.branch_id);
         }
     }
@@ -172,6 +168,7 @@ pub async fn record(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     fn texts(items: &[ReasoningItem]) -> Vec<(&str, ReasoningKind)> {
         items.iter().map(|i| (i.text.as_str(), i.kind)).collect()
@@ -262,25 +259,29 @@ mod tests {
         );
     }
 
+    fn json_of(item: &ReasoningItem, source: &str) -> Option<Value> {
+        payload(item, source).map(|p| serde_json::to_value(p).unwrap())
+    }
+
     /// The payload's exact JSON (golden): `model_call_seq` and `truncated` only when they apply.
     #[test]
     fn a_payload_has_these_keys() {
         let item = ReasoningItem::new("Look first.", ReasoningKind::Plan);
         let plain = json!({"text": "Look first.", "kind": "plan", "source": "gateway"});
-        assert_eq!(payload(&item, SOURCE_GATEWAY), Some(plain));
+        assert_eq!(json_of(&item, SOURCE_GATEWAY), Some(plain));
         let long = ReasoningItem {
             model_call_seq: Some(4),
             ..ReasoningItem::new("x".repeat(MAX_TEXT + 1), ReasoningKind::Step)
         };
         let full = json!({"text": "x".repeat(MAX_TEXT), "kind": "step", "source": "agent",
                           "model_call_seq": 4, "truncated": true});
-        assert_eq!(payload(&long, SOURCE_AGENT), Some(full));
+        assert_eq!(json_of(&long, SOURCE_AGENT), Some(full));
     }
 
     #[test]
     fn long_text_is_cut_on_a_char_boundary() {
         let item = ReasoningItem::new("é".repeat(MAX_TEXT + 5), ReasoningKind::Thinking);
-        let p = payload(&item, "agent").unwrap();
+        let p = json_of(&item, "agent").unwrap();
         assert_eq!(p["text"].as_str().unwrap().chars().count(), MAX_TEXT);
         assert_eq!(p["truncated"], json!(true));
     }
