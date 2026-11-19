@@ -50,6 +50,11 @@ class Part:
     def connect(self, instance):
         raise errors.method_not_found("connect")
 
+    def http_routes(self, instance):
+        """The hosts the instance serves through arenad's proxy: `{"routes": [{host, upstream,
+        env?, reads?}]}`. Not answered by default: the part serves none."""
+        raise errors.method_not_found("http_routes")
+
 
 def valid_id(v) -> bool:
     """True for an instance or save id (`[a-z0-9_]{1,63}`)."""
@@ -137,6 +142,7 @@ _METHODS = {
     "usage": lambda part, params: part.usage(),
     "gc": _plain("gc", "keep"),
     "connect": _plain("connect", "instance"),
+    "http_routes": _plain("http_routes", "instance"),
 }
 
 

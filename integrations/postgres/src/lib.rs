@@ -533,6 +533,7 @@ impl Part for Postgres {
                 vec![]
             },
             system: Some(SystemInfo::real("database", "PostgreSQL", None)),
+            save_at: SaveAt::Step,
         })
     }
 

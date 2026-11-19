@@ -160,6 +160,7 @@ impl Run<'_> {
             seed: SEED,
             clock_ms: 0,
             from,
+            world_time: None,
         };
         self.request(&p).await.map_err(show)?;
         if !self.live.contains(&inst) {

@@ -208,6 +208,7 @@ impl Part for Counter {
                 tool("get", "Read the counter.", json!({}), Effect::Read),
             ],
             system: None,
+            save_at: SaveAt::Step,
         })
     }
 

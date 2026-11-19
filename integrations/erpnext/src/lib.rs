@@ -132,6 +132,7 @@ impl Part for Erpnext {
                 "ERPNext",
                 Some("SAP S/4HANA, Oracle"),
             )),
+            save_at: SaveAt::Step,
         })
     }
 

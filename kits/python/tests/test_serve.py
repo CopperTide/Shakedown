@@ -259,6 +259,23 @@ def test_connect_default_is_method_not_found():
     assert c.call("connect", {"instance": "Bad"})["error"]["code"] == -32602
 
 
+def test_http_routes_default_is_method_not_found():
+    c = Client(Plain())
+    r = c.call("http_routes", {"instance": "i1"})
+    assert r["error"] == {"code": -32601, "message": "method not found: http_routes"}
+    assert c.call("http_routes", {"instance": "Bad"})["error"]["code"] == -32602
+    assert c.call("http_routes", {})["error"]["code"] == -32602
+
+
+def test_a_part_that_serves_http_answers_its_routes():
+    class Served(Plain):
+        def http_routes(self, instance):
+            return {"routes": [{"host": f"{instance}.test", "upstream": "http://127.0.0.1:9"}]}
+
+    r = Client(Served()).call("http_routes", {"instance": "i1"})
+    assert r["result"] == {"routes": [{"host": "i1.test", "upstream": "http://127.0.0.1:9"}]}
+
+
 def test_drop_save_reaches_the_part_and_answers_empty():
     part = Plain()
     c = Client(part)

@@ -94,6 +94,7 @@ fn start(e: &Env, instance: &str, from: Option<&str>) -> StartParams {
             save: s.into(),
             mode: Mode::Exact,
         }),
+        world_time: None,
     }
 }
 

@@ -400,3 +400,47 @@ async fn advance_is_split_independent() {
     assert_eq!(get(&mut one, "i1").await, 2);
     assert_eq!(get(&mut many, "i1").await, 2);
 }
+
+/// A part that keeps every default the kit gives.
+struct Defaults;
+
+#[async_trait::async_trait]
+impl arena_part::Part for Defaults {
+    async fn describe(&self) -> Result<Describe, PartError> {
+        Err(PartError::internal("unused"))
+    }
+    async fn start(&self, _p: StartParams) -> Result<(), PartError> {
+        Ok(())
+    }
+    async fn call_tool(&self, _p: CallToolParams) -> Result<ToolOutput, PartError> {
+        Ok(ToolOutput::default())
+    }
+    async fn save(&self, _p: SaveParams) -> Result<Saved, PartError> {
+        Err(PartError::internal("unused"))
+    }
+    async fn inspect(&self, _p: InspectParams) -> Result<Docs, PartError> {
+        Ok(Docs::default())
+    }
+    async fn diff(&self, _p: DiffParams) -> Result<Differing, PartError> {
+        Ok(Differing::default())
+    }
+    async fn drop_save(&self, _p: SaveId) -> Result<(), PartError> {
+        Ok(())
+    }
+    async fn stop(&self, _p: IdParams) -> Result<(), PartError> {
+        Ok(())
+    }
+    async fn usage(&self) -> Result<Usage, PartError> {
+        Ok(Usage::default())
+    }
+}
+
+#[tokio::test]
+async fn a_part_without_http_routes_answers_method_not_found() {
+    let mut c = Client::new(Defaults);
+    let r = c.call("http_routes", json!({"instance": "i1"})).await;
+    assert_eq!(r["error"]["code"], -32601);
+    assert_eq!(r["error"]["message"], "method not found: http_routes");
+    let r = c.call("http_routes", json!({})).await;
+    assert_eq!(r["error"]["code"], -32602, "{r}");
+}

@@ -74,6 +74,7 @@ fn start(instance: &str, binary: &PathBuf, from: Option<&str>) -> StartParams {
             save: s.into(),
             mode: Mode::Exact,
         }),
+        world_time: None,
     }
 }
 

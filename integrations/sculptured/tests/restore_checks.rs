@@ -52,6 +52,7 @@ async fn start_from(part: &Sculptured, save: &str) -> arena_part::PartError {
             save: save.into(),
             mode: Mode::Exact,
         }),
+        world_time: None,
     };
     part.start(p).await.unwrap_err()
 }

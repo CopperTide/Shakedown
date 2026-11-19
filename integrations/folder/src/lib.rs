@@ -96,6 +96,7 @@ impl Part for Folder {
             fingerprint: json!({"integration": PACKAGE}),
             tools: tools::schemas(),
             system: Some(SystemInfo::real("files", "Folder", None)),
+            save_at: SaveAt::Step,
         })
     }
 

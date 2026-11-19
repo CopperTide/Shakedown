@@ -8,6 +8,7 @@ pub mod compose;
 pub mod docker_name;
 #[cfg(feature = "folder")]
 pub mod folder;
+pub mod forwarded;
 #[cfg(feature = "http")]
 pub mod frappe;
 #[cfg(feature = "http")]

@@ -59,8 +59,8 @@ environment, and `${ARENA_BIN_DIR}` substituted). Use it for a part on another m
 
 | Method | Params | Result |
 |---|---|---|
-| `describe` | `{}` | `{name, version, protocol, restore: {exact: "save"\|"replay"\|"none", approximate: bool}, uses_clock: bool, fingerprint: {...}, tools: [ToolSchema], system?: {kind, product, stands_in_for?, simulated}}` |
-| `start` | `{instance, config, seed, clock_ms, from?: {save, mode: "exact"\|"approximate"}}` | `{}` |
+| `describe` | `{}` | `{name, version, protocol, restore: {exact: "save"\|"replay"\|"none", approximate: bool}, uses_clock: bool, fingerprint: {...}, tools: [ToolSchema], system?: {kind, product, stands_in_for?, simulated}, save_at?: "step"\|"points"}` |
+| `start` | `{instance, config, seed, clock_ms, from?: {save, mode: "exact"\|"approximate"}, world_time?: {epoch_ms, speed}}` | `{}` |
 | `call_tool` | `{instance, name, args, clock_ms}` | `{result?, error?, reads: [key], writes: [key], events?: [{kind, text, data}]}` |
 | `advance` | `{instance, clock_ms}` | `{changed: bool, events: [{kind, text, data}]}` |
 | `save` | `{instance, save, dir}` | `{bytes, exact: bool}` |
@@ -71,6 +71,7 @@ environment, and `${ARENA_BIN_DIR}` substituted). Use it for a part on another m
 | `usage` | `{}` | `{bytes}` |
 | `gc` (optional) | `{keep: [save]}` | `{dropped, bytes}` |
 | `connect` (optional) | `{instance}` | connection info, e.g. `{url}` for `postgres` |
+| `http_routes` (optional) | `{instance}` | `{routes: [{host, upstream, env?, reads?}]}`: the hosts the instance serves ([Serving HTTP](#serving-http)) |
 
 `system` (optional, additive) says what kind of system the part is, for monitoring views: `kind` is a
 short word ("erp", "crm", "database", "api", "mcp", "messaging", "approvals", "plant", "lims", "files",
@@ -332,6 +333,42 @@ tools, so a benchmark that wants them counted follows this convention:
 - **Flag:** a successful tool call by an agent (not the links' `link` or a setup's `setup`) that raises a
   matter for a human: a write (`effect: "write"`) to a part whose `system.kind` is `"approvals"`, or a tool
   whose name contains `escalat`, `flag` or `ask_human`, case-insensitively.
+
+## Serving HTTP
+
+A part whose instance is a web service (a code host, an issue tracker) answers `http_routes` with the hosts it
+serves. Agents' own clients (`git`, `gh`, `curl`, SDKs) reach those hosts through arenad's recording proxy, and each
+request is recorded as a step named `http` owned by the part. A part that answers `-32601` serves none.
+
+- `host` is the world's name for the service (`github.acme.test`, `[a-z0-9.-]+`). It comes from the part's config and
+  never includes a branch or instance id, so it is the same across runs and forks.
+- `upstream` is where the instance listens (`http://127.0.0.1:49153`); requests to `host` go there.
+- `env` names the variables drivers and agents get to find the service (`GITHUB_API_URL`); two parts of a world may
+  not set the same one.
+- `reads` lists `METHOD glob` patterns of requests that only read (`POST */git-upload-pack`; `*` matches any run of
+  characters, `/` included). GET, HEAD and OPTIONS are reads; any other method is a write unless a pattern matches.
+- The upstream may answer with the header `X-Arena-Effect: read|write`, which has the last word on the effect (a
+  GraphQL query is a `POST` that reads). arenad strips it before the client sees the answer.
+- The proxy keeps `Host: <host>` and adds `X-Forwarded-Proto`, `X-Forwarded-Host` and `X-Forwarded-Port`. Every
+  absolute URL a part mints (`html_url`, `next` links) must be built from them, never from its upstream address: the
+  kits' `public_base` does this.
+- Recorded HTTP requests are never sent again: a part that serves HTTP must restore from saves. A world with a part
+  that serves HTTP and restores by replay is refused.
+
+## When arenad saves
+
+`describe.save_at` says when arenad saves a part. `step` (the default, and what a part that leaves it out gets)
+saves it after every step that wrote to it. `points` saves it only at save points: before a model call through
+arenad's gateway when it changed since its last save, when a driver asks (`POST /api/branches/{id}/save`), and at
+the run's end. A fork whose point has no save of the part starts at the last save point before it. `points` suits a
+part whose save is costly (a whole stack) and whose writes come in bursts between model calls.
+
+## World time
+
+`start` gives a part `world_time: {epoch_ms, speed}` when arenad knows the world's time: `epoch_ms` is the unix time
+in ms of clock 0 (the task's `clock_start` read as UTC, else the run's start; a fork keeps its run's), and `speed`
+how many world ms pass per wall ms. A part stamps what it emits (metrics, logs, traces) with
+`epoch_ms + clock_ms`, so its telemetry follows the world clock and stands still while the branch is paused.
 
 ## Errors
 

@@ -600,6 +600,7 @@ fn start_params(
         seed,
         clock_ms: 0,
         from: None,
+        world_time: None,
     };
     let Some(f) = part_start(p, from)? else {
         return Ok((params, None));

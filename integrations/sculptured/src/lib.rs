@@ -138,6 +138,7 @@ impl Part for Sculptured {
             fingerprint: json!({"integration": PACKAGE}),
             tools: tool_schemas::schemas(),
             system: Some(SystemInfo::real("approvals", "CopperTide approvals", None)),
+            save_at: SaveAt::Step,
         })
     }
 

@@ -35,6 +35,10 @@ pub trait Part: Send + Sync + 'static {
     async fn connect(&self, _p: IdParams) -> R<Value> {
         Err(PartError::method_not_found("connect"))
     }
+    /// The hosts the instance serves through arenad's proxy (default: none, method not found).
+    async fn http_routes(&self, _p: IdParams) -> R<HttpRoutes> {
+        Err(PartError::method_not_found("http_routes"))
+    }
 }
 
 /// A benchmark: tasks, tools and a loader for the parts of its world.
@@ -262,6 +266,7 @@ async fn part_dispatch<P: Part>(p: &P, method: &str, params: Value) -> R<Value> 
         "usage" => out(p.usage().await),
         "gc" => out(p.gc(parse(params)?).await),
         "connect" => out(p.connect(parse(params)?).await),
+        "http_routes" => out(p.http_routes(parse(params)?).await),
         m => Err(PartError::method_not_found(m)),
     }
 }

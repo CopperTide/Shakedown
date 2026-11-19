@@ -123,6 +123,7 @@ impl Part for Service {
             fingerprint: json!({"integration": PACKAGE}),
             tools: vec![],
             system: Some(SystemInfo::real("api", "HTTP service", None)),
+            save_at: SaveAt::Step,
         })
     }
 

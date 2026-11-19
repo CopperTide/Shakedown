@@ -32,6 +32,7 @@ requests! {
     GcParams => "gc",
     Stop => "stop",
     Connect => "connect",
+    GetHttpRoutes => "http_routes",
     Describe => "describe",
     GetUsage => "usage",
     SeedParams => "seed",
@@ -50,6 +51,11 @@ pub struct Stop(pub IdParams);
 #[derive(Debug, Clone, Serialize)]
 #[serde(transparent)]
 pub struct Connect(pub IdParams);
+
+/// `http_routes`: the hosts an instance serves through arenad's proxy.
+#[derive(Debug, Clone, Serialize)]
+#[serde(transparent)]
+pub struct GetHttpRoutes(pub IdParams);
 
 /// `describe` a program (no params: `{}`).
 #[derive(Debug, Clone, Serialize)]
@@ -75,6 +81,14 @@ impl Connect {
     }
 }
 
+impl GetHttpRoutes {
+    pub fn instance(instance: impl Into<String>) -> GetHttpRoutes {
+        GetHttpRoutes(IdParams {
+            instance: instance.into(),
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use serde_json::{json, Value};
@@ -94,6 +108,8 @@ mod tests {
         assert_eq!(connect, ("connect", json!({"instance": "i"})));
         assert_eq!(sent(&Describe {}), ("describe", json!({})));
         assert_eq!(sent(&GetUsage {}), ("usage", json!({})));
+        let routes = sent(&GetHttpRoutes::instance("i"));
+        assert_eq!(routes, ("http_routes", json!({"instance": "i"})));
     }
 
     #[test]
@@ -110,6 +126,7 @@ mod tests {
             seed: 1,
             clock_ms: 0,
             from: None,
+            world_time: None,
         };
         let want = json!({"instance": "i", "config": {"k": 1}, "seed": 1, "clock_ms": 0});
         assert_eq!(sent(&start), ("start", want));

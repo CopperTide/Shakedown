@@ -99,6 +99,7 @@ fn start(instance: &str, config: &Value, from: Option<&str>) -> StartParams {
             save: s.into(),
             mode: Mode::Exact,
         }),
+        world_time: None,
     }
 }
 

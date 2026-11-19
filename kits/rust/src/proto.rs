@@ -93,6 +93,55 @@ pub struct Describe {
     /// What kind of system this part is, for monitoring views (absent: not said).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub system: Option<SystemInfo>,
+    /// When arenad saves the part (absent: after every step that wrote to it).
+    #[serde(default, skip_serializing_if = "SaveAt::is_step")]
+    pub save_at: SaveAt,
+}
+
+/// When arenad saves a part: after each step that wrote to it (`step`, the default), or only at
+/// save points (`points`: before a model call when it changed, on request, at run end).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SaveAt {
+    #[default]
+    Step,
+    Points,
+}
+
+impl SaveAt {
+    pub fn is_step(&self) -> bool {
+        *self == SaveAt::Step
+    }
+}
+
+/// The world's time at `start`: the unix ms of clock 0 and how fast the clock runs.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct WorldTimeParams {
+    pub epoch_ms: i64,
+    pub speed: f64,
+}
+
+/// The header an upstream answers a proxied request with to say whether it read or wrote
+/// (`read` or `write`); arenad strips it before the client sees the answer.
+pub const EFFECT_HEADER: &str = "x-arena-effect";
+
+/// A host an instance serves through arenad's proxy: requests to `host` go to `upstream`. `env`
+/// is what drivers and agents are given to find it (`GITHUB_API_URL`); each of `reads` is a
+/// `METHOD glob` pattern of requests that only read (`POST */git-upload-pack`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct HttpRoute {
+    pub host: String,
+    pub upstream: String,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub env: BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reads: Vec<String>,
+}
+
+/// `http_routes`: the hosts an instance serves.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct HttpRoutes {
+    pub routes: Vec<HttpRoute>,
 }
 
 /// The kind of system a part is: `kind` is one of "erp", "crm", "database", "api", "mcp",
@@ -152,6 +201,9 @@ pub struct StartParams {
     pub clock_ms: i64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub from: Option<FromSave>,
+    /// The world's time (absent: the part is not told it).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub world_time: Option<WorldTimeParams>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -600,6 +652,63 @@ mod tests {
         let b: BTreeMap<String, i32> = [("y".into(), 3), ("z".into(), 4), ("x".into(), 1)].into();
         assert_eq!(Differing::between(&a, &b).differing, ["y", "z"]);
         assert!(Differing::between(&a, &a).differing.is_empty());
+    }
+
+    #[test]
+    fn describe_without_save_at_reads_as_step_and_writes_none() {
+        let d: Describe = serde_json::from_value(serde_json::json!({"name": "x", "version": "1",
+            "protocol": 1, "restore": {"exact": "save", "approximate": false},
+            "uses_clock": false, "fingerprint": {}, "tools": []}))
+        .unwrap();
+        assert_eq!(d.save_at, SaveAt::Step);
+        assert!(serde_json::to_value(&d).unwrap().get("save_at").is_none());
+        let p: SaveAt = serde_json::from_value(serde_json::json!("points")).unwrap();
+        assert_eq!(p, SaveAt::Points);
+        let d = Describe {
+            save_at: SaveAt::Points,
+            ..d
+        };
+        assert_eq!(serde_json::to_value(&d).unwrap()["save_at"], "points");
+    }
+
+    #[test]
+    fn start_params_carry_world_time_only_when_given() {
+        let mut s = StartParams {
+            instance: "i".into(),
+            config: serde_json::json!({}),
+            seed: 1,
+            clock_ms: 0,
+            from: None,
+            world_time: None,
+        };
+        assert!(serde_json::to_value(&s)
+            .unwrap()
+            .get("world_time")
+            .is_none());
+        s.world_time = Some(WorldTimeParams {
+            epoch_ms: 1_773_122_400_000,
+            speed: 3.0,
+        });
+        assert_eq!(
+            serde_json::to_value(&s).unwrap()["world_time"],
+            serde_json::json!({"epoch_ms": 1_773_122_400_000i64, "speed": 3.0})
+        );
+    }
+
+    #[test]
+    fn an_http_route_needs_only_host_and_upstream() {
+        let r: HttpRoute = serde_json::from_value(
+            serde_json::json!({"host": "a.test", "upstream": "http://127.0.0.1:9"}),
+        )
+        .unwrap();
+        assert!(r.env.is_empty() && r.reads.is_empty());
+        let v = serde_json::to_value(&r).unwrap();
+        assert_eq!(
+            v,
+            serde_json::json!({"host": "a.test", "upstream": "http://127.0.0.1:9"})
+        );
+        let none: HttpRoutes = serde_json::from_value(serde_json::json!({"routes": []})).unwrap();
+        assert_eq!(none, HttpRoutes::default());
     }
 
     #[test]
