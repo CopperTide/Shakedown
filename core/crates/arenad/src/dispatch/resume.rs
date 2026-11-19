@@ -213,30 +213,12 @@ mod tests {
     use serde_json::json;
 
     fn ev(seq: i64, agent: &str, kind: EventKind, payload: Value) -> Event {
-        Event {
-            branch_id: "b".into(),
-            seq,
-            at: chrono::Utc::now(),
-            agent: Some(agent.into()).filter(|a: &String| !a.is_empty()),
-            kind,
-            payload,
-        }
+        let agent = Some(agent).filter(|a| !a.is_empty());
+        crate::testkit::event(seq, agent, kind, payload)
     }
 
     fn team() -> Team {
-        let spec = |id: &str| AgentSpec {
-            tools: Vec::new(),
-            id: id.into(),
-            name: id.into(),
-            kind: AgentKind::ClaudeCode,
-            model: None,
-            prompt: String::new(),
-            provider: None,
-            read_only: false,
-            lead: false,
-            url: None,
-            headers: Default::default(),
-        };
+        let spec = |id: &str| AgentSpec::new(id, AgentKind::ClaudeCode);
         Team {
             id: "t".into(),
             name: "T".into(),

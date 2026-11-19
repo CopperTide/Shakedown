@@ -90,17 +90,12 @@ pub struct Join {
 impl Join {
     pub fn spec(&self) -> AgentSpec {
         AgentSpec {
-            tools: Vec::new(),
-            id: self.id.clone(),
             name: self.name.clone().unwrap_or_else(|| self.id.clone()),
-            kind: self.kind.unwrap_or(AgentKind::External),
             model: self.model.as_deref().and_then(trimmed),
             prompt: self.prompt.clone(),
             provider: self.provider.as_deref().and_then(trimmed),
             read_only: self.read_only,
-            lead: false,
-            url: None,
-            headers: Default::default(),
+            ..AgentSpec::new(&self.id, self.kind.unwrap_or(AgentKind::External))
         }
     }
 }
@@ -316,14 +311,7 @@ mod tests {
     use super::*;
 
     fn ev(seq: i64, agent: Option<&str>, kind: EventKind, payload: Value) -> Event {
-        Event {
-            branch_id: "b".into(),
-            seq,
-            at: chrono::Utc::now(),
-            agent: agent.map(Into::into),
-            kind,
-            payload,
-        }
+        crate::testkit::event(seq, agent, kind, payload)
     }
 
     #[test]

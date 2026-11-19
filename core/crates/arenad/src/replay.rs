@@ -118,12 +118,8 @@ mod tests {
 
     fn ev(seq: i64, ms: i64, kind: EventKind, payload: Value) -> Event {
         Event {
-            branch_id: "b".into(),
-            seq,
             at: Utc.timestamp_opt(1_000_000, 0).unwrap() + Duration::milliseconds(ms),
-            agent: None,
-            kind,
-            payload,
+            ..crate::testkit::event(seq, None, kind, payload)
         }
     }
 

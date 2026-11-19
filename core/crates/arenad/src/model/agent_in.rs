@@ -119,4 +119,19 @@ mod tests {
         );
         assert_eq!(serde_json::from_str::<AgentSpec>(&back).unwrap(), a);
     }
+
+    #[test]
+    fn a_new_agent_has_the_defaults_a_stored_one_without_them_reads_as() {
+        let read: AgentSpec =
+            serde_json::from_value(json!({"id": "a", "name": "a", "kind": "open"})).unwrap();
+        assert_eq!(AgentSpec::new("a", AgentKind::Open), read);
+        let full = AgentSpec::new("a", AgentKind::Open)
+            .with_name("A")
+            .with_model("m")
+            .with_prompt("p")
+            .with_provider("openai");
+        let want = json!({"id": "a", "name": "A", "kind": "open", "model": "m", "prompt": "p",
+                          "provider": "openai", "read_only": false});
+        assert_eq!(serde_json::to_value(&full).unwrap(), want);
+    }
 }

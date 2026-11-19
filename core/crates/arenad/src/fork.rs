@@ -799,19 +799,7 @@ mod tests {
     use serde_json::json;
 
     fn spec(id: &str, kind: AgentKind) -> AgentSpec {
-        AgentSpec {
-            tools: Vec::new(),
-            id: id.into(),
-            name: id.into(),
-            kind,
-            model: None,
-            prompt: format!("You are {id}."),
-            provider: None,
-            read_only: false,
-            lead: false,
-            url: None,
-            headers: Default::default(),
-        }
+        AgentSpec::new(id, kind).with_prompt(format!("You are {id}."))
     }
 
     fn team(resolver: AgentKind) -> Team {
@@ -823,14 +811,7 @@ mod tests {
     }
 
     fn ev(seq: i64, agent: Option<&str>, kind: EventKind, payload: Value) -> Event {
-        Event {
-            branch_id: "b".into(),
-            seq,
-            at: chrono::Utc::now(),
-            agent: agent.map(str::to_string),
-            kind,
-            payload,
-        }
+        crate::testkit::event(seq, agent, kind, payload)
     }
 
     fn msgs(tag: &str) -> Vec<Value> {

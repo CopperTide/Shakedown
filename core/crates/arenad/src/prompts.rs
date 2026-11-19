@@ -122,17 +122,12 @@ fn team_of(t: &BenchTeam) -> Team {
 
 fn agent(role: &TeamRole) -> AgentSpec {
     AgentSpec {
-        id: role.id.clone(),
-        name: role.name.clone(),
-        kind: AgentKind::ClaudeCode,
-        model: Some(MODEL.into()),
-        prompt: role.prompt.clone(),
-        provider: None,
         read_only: role.read_only,
-        lead: false,
-        url: None,
-        headers: Default::default(),
         tools: role.tools.clone(),
+        ..AgentSpec::new(&role.id, AgentKind::ClaudeCode)
+            .with_name(&role.name)
+            .with_model(MODEL)
+            .with_prompt(&role.prompt)
     }
 }
 

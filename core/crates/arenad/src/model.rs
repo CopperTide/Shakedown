@@ -60,6 +60,45 @@ pub struct AgentSpec {
 }
 
 impl AgentSpec {
+    /// Agent `id` of `kind`, named `id`, with what a stored agent that says nothing more has: no
+    /// model, prompt or provider (the defaults), free to write and to use every tool, not the lead.
+    pub fn new(id: impl Into<String>, kind: AgentKind) -> AgentSpec {
+        let id = id.into();
+        AgentSpec {
+            name: id.clone(),
+            id,
+            kind,
+            model: None,
+            prompt: String::new(),
+            provider: None,
+            read_only: false,
+            lead: false,
+            url: None,
+            headers: Headers::default(),
+            tools: Vec::new(),
+        }
+    }
+
+    pub fn with_name(mut self, name: impl Into<String>) -> AgentSpec {
+        self.name = name.into();
+        self
+    }
+
+    pub fn with_model(mut self, model: impl Into<String>) -> AgentSpec {
+        self.model = Some(model.into());
+        self
+    }
+
+    pub fn with_prompt(mut self, prompt: impl Into<String>) -> AgentSpec {
+        self.prompt = prompt.into();
+        self
+    }
+
+    pub fn with_provider(mut self, provider: impl Into<String>) -> AgentSpec {
+        self.provider = Some(provider.into());
+        self
+    }
+
     /// True when the agent's setup lets it see and call the world tool `name`.
     pub fn may_use(&self, name: &str) -> bool {
         self.tools.is_empty() || self.tools.iter().any(|t| t == name)
