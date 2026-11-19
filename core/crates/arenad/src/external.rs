@@ -401,6 +401,22 @@ mod tests {
         serde_json::from_value(json!({"id": "x"})).unwrap()
     }
 
+    /// An external agent's `AgentStart` (golden): `provider` only when it has one.
+    #[test]
+    fn an_external_start_has_these_keys() {
+        let plain = start_payload(&join().spec());
+        let want = json!({"name": "x", "kind": "external", "model": null, "external": true});
+        assert_eq!(plain, want);
+        let on = Join {
+            model: Some("m".into()),
+            provider: Some("bedrock:us-east-1".into()),
+            ..join()
+        };
+        let want = json!({"name": "x", "kind": "external", "model": "m", "external": true,
+                          "provider": "bedrock:us-east-1"});
+        assert_eq!(start_payload(&on.spec()), want);
+    }
+
     #[test]
     fn a_registered_agent_is_external_unless_it_says_otherwise() {
         let s = join().spec();

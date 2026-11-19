@@ -8,7 +8,7 @@ use std::collections::HashMap;
 
 use arenad::{fork, model::*, providers::ProviderConfig, runner};
 use serde_json::json;
-use support::{app, app::send, live, live::Live, run, AppFx};
+use support::{app, app::send, keys, live, live::Live, run, written, AppFx};
 
 /// An app on the retail benchmark with the real drivers; `providers` replaces the environment's.
 async fn setup(tag: &str, providers: Option<ProviderConfig>) -> AppFx {
@@ -97,6 +97,7 @@ fn a_lead_that_cant_reach_its_model_ends_the_run_infra_error() {
         assert_eq!(evs[0].payload["runner"], "dispatch");
         assert_lifecycle_events(&evs);
         assert_lead_woken_with_its_brief(&evs);
+        assert_dispatch_payloads(&evs);
         assert!(fx.state.live.is_empty());
     })
 }
@@ -125,6 +126,23 @@ fn assert_lifecycle_events(evs: &[Event]) {
             (EventKind::AgentEnd, helper),
         ]
     );
+}
+
+/// What a dispatch run records when it starts its agents, wakes the lead and the lead goes idle
+/// (golden).
+fn assert_dispatch_payloads(evs: &[Event]) {
+    let starts: Vec<serde_json::Value> = (of_kind(evs, EventKind::AgentStart).iter())
+        .map(|e| written(&e.payload))
+        .collect();
+    let start = |id: &str| json!({"name": id, "kind": "open", "model": "m"});
+    assert_eq!(starts, [start("lead"), start("helper")]);
+    let wake = &of_kind(evs, EventKind::Wake)[0].payload;
+    assert_eq!(keys(wake), ["input", "mail", "reason"]);
+    assert_eq!(wake["mail"], json!([]));
+    let idle = &of_kind(evs, EventKind::Idle)[0].payload;
+    assert_eq!(keys(idle), ["error", "ok", "text"]);
+    assert_eq!((&idle["ok"], &idle["text"]), (&json!(false), &json!("")));
+    assert!(idle["error"].is_string(), "{idle}");
 }
 
 fn assert_lead_woken_with_its_brief(evs: &[Event]) {

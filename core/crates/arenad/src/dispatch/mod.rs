@@ -500,3 +500,38 @@ async fn serve(
     let result = session.end(cut).await;
     let _ = ends.send((agent, result));
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use board::{Mail, MailKind};
+    use serde_json::json;
+
+    fn mail(seq: i64, kind: MailKind) -> Mail {
+        Mail {
+            seq,
+            from: "lead".into(),
+            kind,
+            text: "t".into(),
+        }
+    }
+
+    /// A wake's exact JSON (golden): the seqs of its recorded mail (not notices), and
+    /// `idle_wake` on an idle wake only.
+    #[test]
+    fn a_wake_payload_has_these_keys() {
+        let got = wake_payload(Reason::Start, &[], "brief");
+        assert_eq!(
+            got,
+            json!({"reason": "start", "mail": [], "input": "brief"})
+        );
+        let mail = [mail(3, MailKind::Delegation), mail(0, MailKind::Notice)];
+        let got = wake_payload(Reason::Mail, &mail, "go");
+        assert_eq!(got, json!({"reason": "mail", "mail": [3], "input": "go"}));
+        let got = wake_payload(Reason::Idle(2), &[], "still there?");
+        let want = json!({"reason": "idle", "mail": [], "input": "still there?", "idle_wake": 2});
+        assert_eq!(got, want);
+        let got = wake_payload(Reason::Resume, &[], "");
+        assert_eq!(got, json!({"reason": "resume", "mail": [], "input": ""}));
+    }
+}

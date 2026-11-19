@@ -33,6 +33,22 @@ pub fn run<F: Future>(f: F) -> F::Output {
     RT.block_on(f)
 }
 
+/// An event's payload as its writer made it: without the `overhead_ms` the store adds.
+pub fn written(payload: &Value) -> Value {
+    let mut p = payload.clone();
+    if let Some(o) = p.as_object_mut() {
+        o.remove("overhead_ms");
+    }
+    p
+}
+
+/// The keys of an event's payload as its writer made it, sorted.
+pub fn keys(payload: &Value) -> Vec<String> {
+    let p = written(payload);
+    p.as_object()
+        .map_or(vec![], |o| o.keys().cloned().collect())
+}
+
 /// Runs `body` on the live model, when there is one (else the test was skipped, said why).
 pub fn run_live<F: Future<Output = ()>>(live: Option<Live>, body: impl FnOnce(Live) -> F) {
     if let Some(live) = live {

@@ -12,7 +12,7 @@ use arenad::{
     runner::{self, StartPoint},
 };
 use serde_json::{json, Value};
-use support::{app, app::send, live, live::Live, packages, run, run_live, AppFx};
+use support::{app, app::send, keys, live, live::Live, packages, run, run_live, written, AppFx};
 
 /// An app with the real drivers whose benchmark is `bench` (on the packages plus `extra`);
 /// `providers` replaces the environment's when given.
@@ -82,7 +82,23 @@ fn an_unreachable_provider_ends_the_branch_infra_error() {
             serde_json::from_value(evs.last().unwrap().payload.clone()).unwrap();
         assert!(!end.ok);
         assert!(fx.state.live.is_empty());
+        assert_chain_starts(&evs);
     })
+}
+
+/// What a chain run records when it starts and starts an agent (golden).
+fn assert_chain_starts(evs: &[Event]) {
+    let rs = &evs[0].payload;
+    let fixed = (&rs["runner"], &rs["handoff"], &rs["task_id"]);
+    assert_eq!(fixed, (&json!("chain"), &json!("optional"), &json!("27")));
+    assert!(!keys(rs)
+        .iter()
+        .any(|k| k == "scenario" || k == "connection"));
+    let start = written(&evs[1].payload);
+    assert_eq!(
+        start,
+        json!({"name": "triage", "kind": "open", "model": "m"})
+    );
 }
 
 #[test]

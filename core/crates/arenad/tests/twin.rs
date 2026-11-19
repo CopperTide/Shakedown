@@ -10,7 +10,7 @@ mod support;
 use arenad::model::*;
 use serde_json::{json, Value};
 use support::{
-    live,
+    keys, live,
     live::Live,
     packages::{package_root, toy, ToyRoot},
     run, run_live, AppFx,
@@ -187,6 +187,71 @@ fn a_scenario_is_expanded_into_the_setup_and_recorded() {
         assert_eq!(set[0].payload["args"]["disruptions"][0]["id"], "jam-2");
         let (_, plain) = fx.external_run(json!({"disruptions": []})).await;
         assert!(plain[0].payload.get("scenario").is_none() && steps(&plain, "setup").is_empty());
+    })
+}
+
+/// The keys every new run's `RunStart` records, besides `scenario`, `max_cost_usd` and
+/// `connection` (each only when the run has one).
+const RUN_START_KEYS: [&str; 12] = [
+    "base_seed",
+    "benchmark",
+    "fingerprints",
+    "handoff",
+    "runner",
+    "saves",
+    "seed",
+    "systems",
+    "task_id",
+    "team",
+    "tools",
+    "world",
+];
+
+/// An external run of `t1` with no agents and `seed`, not finished: its `RunStart` payload.
+async fn seeded_run_start(fx: &AppFx, seed: u64) -> Value {
+    let team = json!({"id": "own", "name": "Own", "agents": []});
+    let body = json!({"task_id": "t1", "team": team, "runner": "external", "seed": seed});
+    let (status, v) = fx.post("/api/runs", body).await;
+    assert_eq!(status, 200, "{v}");
+    let evs = fx
+        .state
+        .store
+        .events(v["branch_id"].as_str().unwrap())
+        .await;
+    evs.unwrap()[0].payload.clone()
+}
+
+/// What `RunStart` records (golden): its keys, `scenario` only when the run has one, a seed alone
+/// recorded as `seed`, and no `max_cost_usd` or `connection` when the run has none.
+#[test]
+fn run_start_records_these_keys() {
+    run(async {
+        let fx = setup("rskeys", world("rskeys", &[])).await;
+        let (_, plain) = fx.external_run(Value::Null).await;
+        let p = &plain[0].payload;
+        assert_eq!(keys(p), RUN_START_KEYS, "{p}");
+        let fixed = (&p["task_id"], &p["runner"], &p["handoff"], &p["base_seed"]);
+        let want = (
+            &json!("t1"),
+            &json!("external"),
+            &json!("optional"),
+            &json!(0),
+        );
+        assert_eq!(fixed, want, "{p}");
+        assert_eq!(p["team"], json!({"id": "own", "name": "Own", "agents": []}));
+        assert!(p["benchmark"].is_string() && p["world"].is_array(), "{p}");
+        assert!(p["saves"].is_object() && p["systems"].is_object(), "{p}");
+        let jam = json!({"disruptions": [{"id": "jam", "params": {"after": 2}}]});
+        let (_, scen) = fx.external_run(jam).await;
+        let mut with = RUN_START_KEYS.to_vec();
+        with.push("scenario");
+        with.sort();
+        assert_eq!(keys(&scen[0].payload), with);
+        let p = seeded_run_start(&fx, 7).await;
+        assert_eq!(
+            (keys(&p), &p["seed"]),
+            (RUN_START_KEYS.map(String::from).to_vec(), &json!(7))
+        );
     })
 }
 

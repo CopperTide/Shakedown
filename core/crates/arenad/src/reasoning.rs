@@ -262,6 +262,21 @@ mod tests {
         );
     }
 
+    /// The payload's exact JSON (golden): `model_call_seq` and `truncated` only when they apply.
+    #[test]
+    fn a_payload_has_these_keys() {
+        let item = ReasoningItem::new("Look first.", ReasoningKind::Plan);
+        let plain = json!({"text": "Look first.", "kind": "plan", "source": "gateway"});
+        assert_eq!(payload(&item, SOURCE_GATEWAY), Some(plain));
+        let long = ReasoningItem {
+            model_call_seq: Some(4),
+            ..ReasoningItem::new("x".repeat(MAX_TEXT + 1), ReasoningKind::Step)
+        };
+        let full = json!({"text": "x".repeat(MAX_TEXT), "kind": "step", "source": "agent",
+                          "model_call_seq": 4, "truncated": true});
+        assert_eq!(payload(&long, SOURCE_AGENT), Some(full));
+    }
+
     #[test]
     fn long_text_is_cut_on_a_char_boundary() {
         let item = ReasoningItem::new("é".repeat(MAX_TEXT + 5), ReasoningKind::Thinking);

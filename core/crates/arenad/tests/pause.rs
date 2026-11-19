@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use arenad::model::*;
 use serde_json::{json, Value};
-use support::{app::send, packages::gold_action_args, run, AppFx};
+use support::{app::send, keys, packages::gold_action_args, run, AppFx};
 
 async fn setup(tag: &str) -> AppFx {
     AppFx::idle("pause", tag).start().await
@@ -102,6 +102,11 @@ async fn pause_is_recorded(fx: &AppFx, branch: &str) {
         .as_f64()
         .unwrap();
     assert!(pause >= HELD.as_millis() as f64, "{pause}");
+    let written = (
+        keys(&evs[at(Pause)].payload),
+        keys(&evs[at(Resume)].payload),
+    );
+    assert_eq!(written, (vec![], vec!["paused_ms".to_string()]), "golden");
 }
 
 #[test]
