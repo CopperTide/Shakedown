@@ -28,7 +28,14 @@ fn service(v: &VolumeSpec) -> Result<&str> {
 
 /// Dumps `v`'s database to `dir/<volume>.sql` (the services keep running); the bytes written.
 pub fn save(project: &Project, v: &VolumeSpec, dir: &Path) -> Result<u64> {
-    let args = ["pg_dump", "-U", v.user(), "--no-owner", v.database()];
+    let args = [
+        "pg_dump",
+        "-U",
+        v.user(),
+        "--no-owner",
+        "--no-privileges",
+        v.database(),
+    ];
     let dump = project.exec(service(v)?, &args)?;
     let path = sql_path(dir, &v.name);
     std::fs::write(&path, &dump)?;
@@ -61,11 +68,18 @@ pub fn restore(project: &Project, v: &VolumeSpec, save: &Path) -> Result<()> {
     project.exec_in(svc, &args, &sql_path(save, &v.name))
 }
 
-/// A dump's digest: SHA-256 of its lines that are no `--` comment (a dump names the time it was
-/// made), one file of the dump's size.
+/// True for a dump line that differs between two dumps of one database: a `--` comment (a dump
+/// names the time it was made) and the `\restrict <key>` / `\unrestrict <key>` lines with a
+/// random key (pg_dump 17.6, 16.10 and later).
+fn varies(line: &str) -> bool {
+    line.starts_with("--") || line.starts_with("\\restrict ") || line.starts_with("\\unrestrict ")
+}
+
+/// A dump's digest: SHA-256 of its lines that don't vary between dumps (see `varies`), one file
+/// of the dump's size.
 pub fn digest(dump: &str) -> Digest {
     let mut h = Sha256::new();
-    for line in dump.lines().filter(|l| !l.starts_with("--")) {
+    for line in dump.lines().filter(|l| !varies(l)) {
         h.update(line.as_bytes());
         h.update(b"\n");
     }
@@ -87,5 +101,16 @@ mod tests {
         assert_eq!(digest(a).hash, digest(b).hash);
         assert_ne!(digest(a).hash, digest("CREATE TABLE u (n int);\n").hash);
         assert_eq!((digest(a).files, digest(a).bytes), (1, a.len() as u64));
+    }
+
+    #[test]
+    fn postgres_digests_ignore_the_random_restrict_keys() {
+        let dump =
+            |key: &str| format!("\\restrict {key}\nCREATE TABLE t (n int);\n\\unrestrict {key}\n");
+        assert_eq!(digest(&dump("aB3x")).hash, digest(&dump("Zq9w")).hash);
+        assert_ne!(
+            digest(&dump("aB3x")).hash,
+            digest("CREATE TABLE t (n int);\n\\connect other\n").hash
+        );
     }
 }

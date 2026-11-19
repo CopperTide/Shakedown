@@ -269,7 +269,7 @@ async fn a_postgres_volume_is_dumped_without_stopping_anything() {
     p.save(save_params(&f, "a")).await.unwrap();
     let log = f.log();
     assert!(
-        log.contains("exec -T db pg_dump -U postgres --no-owner postgres"),
+        log.contains("exec -T db pg_dump -U postgres --no-owner --no-privileges postgres"),
         "{log}"
     );
     assert!(
