@@ -2,6 +2,7 @@
 //! an open opportunity per sales order, due when the order is. An opportunity's name starts with
 //! the order's id, by which a notice about the order finds it.
 use anyhow::{anyhow, bail, Result};
+use arena_part::helpers::twenty::Crm;
 use serde_json::{json, Value};
 
 use crate::company::{list, Company};
@@ -41,73 +42,6 @@ pub fn person(contact: &Value, account_id: &str) -> Value {
            "emails": {"primaryEmail": contact["email"]}, "jobTitle": contact["title"],
            "companyId": account_id})
 }
-
-struct Crm {
-    client: reqwest::Client,
-    base: String,
-    key: String,
-}
-
-impl Crm {
-    fn connect(info: &Value) -> Result<Crm> {
-        let text = |name: &str| {
-            info[name]
-                .as_str()
-                .ok_or_else(|| anyhow!("the crm part's connect info has no {name}"))
-        };
-        Ok(Crm {
-            client: reqwest::Client::new(),
-            base: text("url")?.trim_end_matches('/').to_string(),
-            key: text("api_key")?.to_string(),
-        })
-    }
-
-    /// Posts `body` to `/rest/<path>`; the answer. Twenty limits an API key to 100 requests a
-    /// minute, so a 429 waits as long as it says and is sent again.
-    async fn post(&self, path: &str, body: &Value) -> Result<Value> {
-        let at = format!("{}/rest/{path}", self.base);
-        loop {
-            let answer = self
-                .client
-                .post(&at)
-                .bearer_auth(&self.key)
-                .json(body)
-                .send();
-            let answer = answer.await?;
-            let status = answer.status();
-            let text = answer.text().await?;
-            let v: Value = serde_json::from_str(&text).unwrap_or(Value::Null);
-            if status.as_u16() == 429 {
-                let wait = v["retryAfterSeconds"].as_u64().unwrap_or(5).max(1);
-                tokio::time::sleep(std::time::Duration::from_secs(wait)).await;
-                continue;
-            }
-            if !status.is_success() {
-                bail!("writing to {path}: {status}: {text}");
-            }
-            return Ok(v);
-        }
-    }
-
-    /// Writes `body` to `/rest/<path>`; the new record's id, from `create<made>`.
-    async fn create(&self, path: &str, made: &str, body: &Value) -> Result<String> {
-        let v = self.post(path, body).await?;
-        let id = v["data"][format!("create{made}")]["id"].as_str();
-        id.map(str::to_string)
-            .ok_or_else(|| anyhow!("no id in {v}"))
-    }
-
-    /// Writes `bodies` through `/rest/batch/<path>`, [`BATCH`] to a request.
-    async fn create_all(&self, path: &str, bodies: &[Value]) -> Result<()> {
-        for chunk in bodies.chunks(BATCH) {
-            self.post(&format!("batch/{path}"), &json!(chunk)).await?;
-        }
-        Ok(())
-    }
-}
-
-/// The most records Twenty's batch endpoint takes in one request.
-const BATCH: usize = 60;
 
 /// The account of customer `name`, with what the CRM keeps about the company when the data says.
 pub fn company(name: &str, account: &Value) -> Value {

@@ -8,7 +8,7 @@ use serde_json::{json, Value};
 
 use crate::data::Data;
 use crate::days::day;
-use crate::erp::Erp;
+use arena_part::helpers::frappe::Erp;
 
 fn schema(name: &str, description: &str, props: Value, required: &[&str]) -> ToolSchema {
     ToolSchema {

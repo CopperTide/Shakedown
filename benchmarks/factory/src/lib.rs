@@ -6,7 +6,6 @@ pub mod checks;
 pub mod company;
 pub mod crm;
 pub mod date;
-pub mod erp;
 pub mod facts;
 pub mod options;
 pub mod scale;
@@ -22,6 +21,7 @@ pub mod world;
 use std::path::PathBuf;
 use std::sync::OnceLock;
 
+use arena_part::helpers::frappe;
 use arena_part::proto::*;
 use arena_part::{Benchmark, PartError};
 use async_trait::async_trait;
@@ -159,7 +159,7 @@ impl Benchmark for Factory {
         let mut docs = json!(p.docs);
         let names = twin::unresolved_sales_orders(&docs);
         if let (false, Some(erp)) = (names.is_empty(), p.connections.get("erp")) {
-            if let Ok(erp) = erp::Erp::connect(erp) {
+            if let Ok(erp) = frappe::Erp::connect(erp) {
                 for name in names {
                     if let Ok(so) = erp.get("Sales Order", &name).await {
                         docs["erp"][format!("Sales Order/{name}")] = json!({"po_no": so["po_no"]});

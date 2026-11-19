@@ -12,8 +12,8 @@ use serde_json::Value;
 
 use crate::checks;
 use crate::data::Data;
-use crate::erp::Erp;
 use crate::facts::Facts;
+use arena_part::helpers::frappe::Erp;
 
 pub use read::Snapshot;
 

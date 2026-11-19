@@ -4,8 +4,8 @@ use anyhow::Result;
 use serde_json::{json, Map, Value};
 
 use crate::data::Data;
-use crate::erp::Erp;
 use crate::reports;
+use arena_part::helpers::frappe::Erp;
 
 /// The world at one moment, as the twin needs it.
 pub struct Snapshot {

@@ -12,7 +12,7 @@ name = "arena-pharma"
 path = "src/main.rs"
 
 [dependencies]
-arena-part = { path = "../../kits/rust" }
+arena-part = { path = "../../kits/rust", features = ["http"] }
 tokio.workspace = true
 serde.workspace = true
 serde_json.workspace = true

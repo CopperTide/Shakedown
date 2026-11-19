@@ -1,4 +1,5 @@
-//! The ERP's REST API, as the seed uses it: one site, through the part's `connect` info.
+//! An ERPNext part's REST API as a benchmark uses it (feature `http`): one site, through the part's
+//! `connect` info, for seeding the world and reading it in report tools and twins.
 use anyhow::{anyhow, bail, Result};
 use reqwest::Method;
 use serde_json::{json, Value};
@@ -135,6 +136,20 @@ impl Erp {
         let doctype = doc["doctype"].as_str().unwrap_or_default();
         let name = name_of(&saved)?;
         self.update(doctype, name, &json!({"docstatus": 1})).await
+    }
+
+    /// `fields` of every document of `doctype` matching `filters`.
+    pub async fn list(
+        &self,
+        doctype: &str,
+        filters: &Value,
+        fields: &[&str],
+    ) -> Result<Vec<Value>> {
+        let fields = json!(fields);
+        let path =
+            format!("resource/{doctype}?filters={filters}&fields={fields}&limit_page_length=0");
+        let found = self.send(Method::GET, &path, None).await?;
+        Ok(found.as_array().cloned().unwrap_or_default())
     }
 
     /// The names of `doctype` matching `filters`.

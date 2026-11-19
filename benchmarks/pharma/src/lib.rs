@@ -6,7 +6,6 @@ pub mod checks;
 pub mod crm;
 pub mod data;
 pub mod days;
-pub mod erp;
 pub mod erp_docs;
 pub mod facts;
 pub mod options;
@@ -17,6 +16,7 @@ pub mod team;
 pub mod twin;
 pub mod world;
 
+use arena_part::helpers::frappe;
 use arena_part::proto::*;
 use arena_part::{Benchmark, PartError};
 use async_trait::async_trait;
@@ -90,7 +90,7 @@ impl Benchmark for Pharma {
             out.error = Some(format!("the pharma benchmark has no tool {}", p.name));
             return Ok(out);
         }
-        let erp = erp::Erp::connect(connection(&p.connections, "erp")?)
+        let erp = frappe::Erp::connect(connection(&p.connections, "erp")?)
             .map_err(|e| PartError::invalid(format!("{e:#}")))?;
         let args = if p.args.is_null() { json!({}) } else { p.args };
         match reports::run(&erp, data::data(), &p.name, &args).await {

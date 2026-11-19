@@ -7,6 +7,8 @@ pub mod docker_name;
 #[cfg(feature = "folder")]
 pub mod folder;
 #[cfg(feature = "http")]
+pub mod frappe;
+#[cfg(feature = "http")]
 pub mod http;
 #[cfg(feature = "mariadb")]
 pub mod mariadb;
@@ -22,6 +24,8 @@ pub mod tar_digest;
 #[cfg(feature = "folder")]
 pub mod temp_dir;
 mod tree;
+#[cfg(feature = "http")]
+pub mod twenty;
 
 pub use pool::blocking;
 pub use tree::{remove_tree, remove_tree_or_log};
