@@ -1,5 +1,7 @@
 import type { ComponentProps, ReactNode } from 'react';
 import { cn } from '@/lib/cn';
+import { Panel } from './panel';
+import { ErrorState, LoadingState } from './state';
 
 /** The page widths: a form, a list, results side by side, or the whole window (a timeline, a twin). */
 export type Width = 'narrow' | 'default' | 'wide' | 'full';
@@ -37,5 +39,17 @@ export function Stat({ label, value, abnormal = false, title, children, classNam
       <span className={cn('text-sm break-words tabular-nums', abnormal && 'font-semibold text-alarm')}>{value}</span>
       {children}
     </div>
+  );
+}
+
+/** A page whose data has not come yet: its header, then a loading panel, or the error and a retry. */
+export function PageGate({ title, loadingTitle = title, label, rows, error, onRetry, width }: {
+  title: ReactNode; loadingTitle?: ReactNode; label: string; rows?: number; error: string | null; onRetry: () => void; width?: Width;
+}) {
+  return (
+    <>
+      <PageHeader width={width} title={error ? title : loadingTitle} />
+      <PageBody width={width}>{error ? <ErrorState error={error} onRetry={onRetry} /> : <Panel><LoadingState label={label} rows={rows} /></Panel>}</PageBody>
+    </>
   );
 }

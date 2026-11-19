@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ApproximateMark, StatusChip } from '@/components/marks';
-import { PageBody, PageHeader, Stat } from '@/components/ui/page';
+import { PageBody, PageGate, PageHeader, Stat } from '@/components/ui/page';
 import { Panel, PanelHeader } from '@/components/ui/panel';
 import { Split } from '@/components/ui/split';
-import { ErrorState, LoadingState, Notice } from '@/components/ui/state';
+import { Notice } from '@/components/ui/state';
 import { StatusMark } from '@/components/ui/status';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { RunReview } from '@/features/review/RunReview';
@@ -12,7 +12,6 @@ import { recordedLine } from '@/features/scenario/scenario';
 import { drivenLine } from '@/features/world/page';
 import { useTaskNames } from '@/hooks/useTasks';
 import { duration } from '@/lib/format';
-import { buildLanes, spanOf } from '@/model/lanes';
 import { costIsUnknown, teamProviders } from '@/model/providers';
 import { worldLine } from '@/model/restore';
 import type { Branch, BranchDetail, Event, RunStartPayload } from '@/model/types';
@@ -29,10 +28,11 @@ import MetricsPanel from './Metrics';
 import RunMenu from './RunMenu';
 import { checkMark, runStats, safetyLine, taskOf } from './runStats';
 import { formatCost, summarize } from './timeline';
-import { stepOrder } from './timelineLayout';
+import { RunErrorBanner, StepSidePanel } from './RunShell';
 import { useBranch } from './useBranch';
 import { useStepKeys } from './useStepKeys';
 import { useStepParam } from './useStepParam';
+import { type Timeline, useTimeline } from './useTimeline';
 import Waterfall from './Waterfall';
 
 /** How the run's agents ran, from its `run_start` (old runs: a chain with a handoff required). */
@@ -102,8 +102,7 @@ function Side({ runId, detail, event, forking, setForking, autoRows, choice }: {
 }) {
   const nav = useNavigate();
   return (
-    <Panel className="lg:sticky lg:top-16 lg:max-h-[calc(100vh-88px)] lg:overflow-auto">
-      <PanelHeader title="Step" />
+    <StepSidePanel>
       {forking && event && (
         <div className="border-b border-line bg-raised">
           <ForkPanel key={`${detail.id}:${event.seq}`} branch={detail} seq={event.seq} choice={choice} onClose={() => setForking(false)}
@@ -111,17 +110,15 @@ function Side({ runId, detail, event, forking, setForking, autoRows, choice }: {
         </div>
       )}
       <Inspector branchId={detail.id} event={event} team={detail.team} autoRows={autoRows} events={detail.events} />
-    </Panel>
+    </StepSidePanel>
   );
 }
 
-function Main({ detail, selected, onSelect, models, setModels }: {
-  detail: BranchDetail; selected: number | null; onSelect: (s: number) => void; models: boolean; setModels: (m: boolean) => void;
+function Main({ detail, timeline: { lanes, span }, selected, onSelect, models, setModels }: {
+  detail: BranchDetail; timeline: Timeline; selected: number | null; onSelect: (s: number) => void; models: boolean; setModels: (m: boolean) => void;
 }) {
-  const lanes = useMemo(() => buildLanes(detail.events, detail.team, detail.start_seq), [detail]);
   const live = detail.status === 'running';
   const now = Date.now();
-  const span = spanOf(lanes);
   const pauses = useMemo(() => pausesOf(detail.events, now), [detail.events, now]);
   const study = useMemo(() => studyOf(detail.events), [detail.events]);
   return (
@@ -161,21 +158,18 @@ export default function Run() {
   const { detail, siblings, error, reload } = useBranch(branchId, runId);
   const [models, setModels] = useState(true);
   const nameOf = useTaskNames();
-  const order = useMemo(() => (detail ? stepOrder(buildLanes(detail.events, detail.team, detail.start_seq), models) : []), [detail, models]);
-  const v = useRunView(branchId, order);
-  if (!detail) {
-    return <><PageHeader title="Run" /><PageBody>{error ? <ErrorState error={error} onRetry={reload} /> : <Panel><LoadingState label="Loading the run's steps…" rows={5} /></Panel>}</PageBody></>;
-  }
+  const timeline = useTimeline(detail, models);
+  const v = useRunView(branchId, timeline.order);
+  if (!detail) return <PageGate title="Run" label="Loading the run's steps…" rows={5} error={error} onRetry={reload} />;
   const event = detail.events.find((e) => e.seq === v.selected) ?? null;
   return (
     <>
       <Header runId={runId} detail={detail} siblings={siblings} title={nameOf(taskOf(detail.events)) || 'Run'} step={v.selected} />
       <PageBody>
         {v.notice && <Notice onDismiss={() => v.setNotice(null)}>{v.notice}</Notice>}
-        {error && <ErrorState error={error} onRetry={reload} />}
-        {detail.error && <ErrorState error={detail.error} hint="The run stopped with this error. Its steps up to here are recorded." />}
+        <RunErrorBanner error={error} onRetry={reload} detail={detail} />
         <RunReview d={detail} onStep={v.setSelected} />
-        <Split storageKey="arena.run.side" main={<Main detail={detail} selected={v.selected} onSelect={v.setSelected} models={models} setModels={setModels} />}
+        <Split storageKey="arena.run.side" main={<Main detail={detail} timeline={timeline} selected={v.selected} onSelect={v.setSelected} models={models} setModels={setModels} />}
           side={<Side runId={runId} detail={detail} event={event} forking={v.forking} setForking={v.setForking} autoRows={v.autoRows} choice={v.choice} />} />
         <More detail={detail} />
       </PageBody>

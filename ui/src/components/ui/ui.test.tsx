@@ -7,7 +7,7 @@ import { DataTable } from './data-table';
 import { Dialog, DialogContent } from './dialog';
 import { Checkbox, Field, Input, NativeSelect, Textarea } from './input';
 import { Kbd } from './kbd';
-import { PageHeader, Stat } from './page';
+import { PageGate, PageHeader, Stat } from './page';
 import { Panel, PanelHeader } from './panel';
 import { Split } from './split';
 import { EmptyState, ErrorState, LoadingState, Notice } from './state';
@@ -55,6 +55,16 @@ describe('base components', () => {
     expect(classes).toContain('rounded');
     expect(classes).not.toContain('rounded-md');
     expect(text(html(<StepLabel seq={12} kind="tool_call"><i>lead</i></StepLabel>))).toBe('step 12 lead tool call');
+  });
+  it('page gate: the header, then a loading panel or the error with a retry', () => {
+    const loading = html(<PageGate title="Run" label="Loading the run…" rows={2} error={null} onRetry={() => {}} />);
+    expect(text(loading)).toBe('Run Loading the run…');
+    expect(loading).toContain('aria-busy="true"');
+    const failed = html(<PageGate title="Run" loadingTitle={<i>…</i>} label="Loading" error="down" onRetry={() => {}} />);
+    expect(failed).toContain('role="alert"');
+    expect(text(failed)).toContain('Run down');
+    expect(text(failed)).toContain('Try again');
+    expect(text(html(<PageGate title="Experiment" loadingTitle="(loading)" label="Loading" error={null} onRetry={() => {}} />))).toBe('(loading) Loading');
   });
   it('form controls carry their label', () => {
     const f = html(<Field label="Task" hint="pick one"><NativeSelect><option>a</option></NativeSelect></Field>);
