@@ -7,8 +7,10 @@ pub use crate::secrets::Headers;
 
 mod agent_in;
 mod payloads;
+pub mod team;
 
 pub use payloads::*;
+pub use team::TeamError;
 
 /// A fieldless enum whose variants each have one name, used everywhere it is written or read:
 /// in serde, `as_str`, `parse`, and the store. `ALL` lists the variants in order.

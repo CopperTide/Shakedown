@@ -12,9 +12,7 @@ use axum::{
 use serde_json::{json, Value};
 use tokio::sync::OwnedRwLockReadGuard;
 
-use super::{
-    check_disk, detached, parse_body, validate_agent_id, validate_agents, ApiError, ApiResult,
-};
+use super::{check_disk, detached, parse_body, providers_of, ApiError, ApiResult};
 use crate::{
     app::AppState,
     exec::{tool_schemas, BranchCtx},
@@ -44,7 +42,7 @@ pub(super) async fn create_run(
     team: Team,
     scenario: crate::scenario::Scenario,
 ) -> ApiResult<Value> {
-    validate_agents(&state, &team.agents)?;
+    team::validate_agents(providers_of(&state), &team.agents)?;
     check_disk(&state).await?;
     detached(async move {
         let _cleanup = cleanup;
@@ -78,10 +76,10 @@ async fn register(
     body: Bytes,
 ) -> ApiResult<Value> {
     let join: Join = parse_body(&body)?;
-    validate_agent_id(&join.id)?;
+    team::validate_id(&join.id)?;
     let ctx = external_branch(&state, &id)?;
     if ctx.agent(&join.id).is_none() {
-        validate_agents(&state, &[join.spec()])?;
+        team::validate_agents(providers_of(&state), &[join.spec()])?;
     }
     let spec = external::register(&state.store, &ctx, &join).await?;
     let mut v = serde_json::to_value(endpoints(&state.config.self_base, &id, &spec.id))?;

@@ -12,12 +12,12 @@ use axum::{
 use parts::proto::ScenarioRequest;
 use serde::Deserialize;
 
-use super::{check_disk, detached, parse_body, settle_providers, validate_builtin_team};
+use super::{check_disk, detached, parse_body, providers_of, settle_providers};
 use super::{ApiError, ApiResult};
 use crate::{
     app::AppState,
     experiment::{self, Detail, Listed, DEFAULT_RUNS, MAX_SETUPS},
-    model::{Runner, Team},
+    model::{team, Runner, Team},
     store::{NewExperiment, NewSetup},
     suite::MAX_REPEATS,
 };
@@ -83,16 +83,16 @@ fn validate_setup(state: &AppState, name: &str, setup: &mut SetupReq) -> Result<
             )));
         }
         setup.runner = Runner::External;
-        return super::validate_agents(state, &setup.team.agents)
-            .map_err(|ApiError(code, msg)| ApiError(code, format!("{name}: {msg}")));
+        return team::validate_agents(providers_of(state), &setup.team.agents)
+            .map_err(|e| ApiError::bad(format!("{name}: {e}")));
     }
     if setup.runner == Runner::External {
         return Err(ApiError::bad(format!(
             "{name}: an experiment's setups run on arenad's runners, or a Code connection's driver"
         )));
     }
-    validate_builtin_team(state, &setup.team, setup.runner)
-        .map_err(|ApiError(code, msg)| ApiError(code, format!("{name}: {msg}")))
+    team::validate_builtin(providers_of(state), &setup.team, setup.runner)
+        .map_err(|e| ApiError::bad(format!("{name}: {e}")))
 }
 
 /// The setups' names, after checking their number, the runs and each setup (400 otherwise).

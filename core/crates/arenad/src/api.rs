@@ -111,6 +111,12 @@ impl From<runner::RunError> for ApiError {
     }
 }
 
+impl From<TeamError> for ApiError {
+    fn from(e: TeamError) -> ApiError {
+        ApiError::bad(e.to_string())
+    }
+}
+
 impl From<serde_json::Error> for ApiError {
     fn from(e: serde_json::Error) -> ApiError {
         anyhow::Error::from(e).into()
@@ -186,18 +192,6 @@ fn not_cleaning(state: &AppState) -> Result<OwnedRwLockReadGuard<()>, ApiError> 
         .map_err(|_| ApiError::conflict(CLEANING_UP))
 }
 
-/// 400 unless an open agent can run on `provider` with `model`.
-fn open_check(
-    state: &AppState,
-    provider: Option<&str>,
-    model: Option<&str>,
-) -> Result<(), ApiError> {
-    match state.config.providers.refusal(provider, model) {
-        None => Ok(()),
-        Some(why) => Err(ApiError::bad(why)),
-    }
-}
-
 /// 400 when the team the fork would run (`changes` applied to `parent`) puts a changed agent in
 /// open mode on a provider that can't run it.
 fn check_fork_team(
@@ -211,7 +205,11 @@ fn check_fork_team(
         .iter()
         .filter(|a| a.kind == AgentKind::Open && changes.contains_key(&a.id));
     for a in changed_open {
-        open_check(state, a.provider.as_deref(), a.model.as_deref())?;
+        team::open_check(
+            providers_of(state),
+            a.provider.as_deref(),
+            a.model.as_deref(),
+        )?;
     }
     Ok(())
 }
@@ -223,92 +221,9 @@ fn settle_providers(team: &mut Team) {
     }
 }
 
-fn validate_team(state: &AppState, team: &Team) -> Result<(), ApiError> {
-    if team.agents.is_empty() {
-        return Err(ApiError::bad("the team needs at least one agent"));
-    }
-    validate_agents(state, &team.agents)
-}
-
-/// 400 unless arenad can run the team itself under `runner`: some agents, each valid, none
-/// external; in a dispatch run at most one lead, and only agents that keep a session.
-fn validate_builtin_team(state: &AppState, team: &Team, runner: Runner) -> Result<(), ApiError> {
-    validate_team(state, team)?;
-    if team.agents.iter().any(|a| a.kind == AgentKind::External) {
-        return Err(ApiError::bad(
-            "an external agent runs only in a run with runner \"external\"",
-        ));
-    }
-    match runner {
-        Runner::Dispatch => validate_dispatch_team(team),
-        _ => Ok(()),
-    }
-}
-
-/// 400 when two agents are marked `lead`, or an agent can't stay alive across turns (Codex).
-fn validate_dispatch_team(team: &Team) -> Result<(), ApiError> {
-    if team.agents.iter().filter(|a| a.lead).count() > 1 {
-        return Err(ApiError::bad("mark at most one agent as the lead"));
-    }
-    if let Some(a) = team.agents.iter().find(|a| a.kind == AgentKind::Http) {
-        return Err(ApiError::bad(format!(
-            "agent {:?} is an http agent, which answers one run at a time and can't take turns: a dispatch run needs Claude Code or arenad's own loop (open)",
-            a.id
-        )));
-    }
-    if let Some(a) = team.agents.iter().find(|a| a.kind == AgentKind::Codex) {
-        return Err(ApiError::bad(format!(
-            "agent {:?} is a Codex agent, which can't keep a session across turns yet: a dispatch run needs Claude Code or arenad's own loop (open)",
-            a.id
-        )));
-    }
-    Ok(())
-}
-
-/// 400 unless every agent has a good, unique id and an open agent can run.
-fn validate_agents(state: &AppState, agents: &[AgentSpec]) -> Result<(), ApiError> {
-    let mut seen = std::collections::HashSet::new();
-    for a in agents {
-        validate_agent_id(&a.id)?;
-        if !seen.insert(a.id.as_str()) {
-            return Err(ApiError::bad(format!("duplicate agent id {:?}", a.id)));
-        }
-        if a.kind == AgentKind::Open {
-            open_check(state, a.provider.as_deref(), a.model.as_deref())?;
-        }
-        if a.kind == AgentKind::Http {
-            validate_http(a)?;
-        }
-    }
-    Ok(())
-}
-
-/// 400 unless an `http` agent has an http(s) URL and every header's value is still held.
-fn validate_http(a: &AgentSpec) -> Result<(), ApiError> {
-    let named = |why: String| ApiError::bad(format!("agent {:?}: {why}", a.id));
-    if let Some(why) = crate::agents::http::bad_url(a.url.as_deref()) {
-        return Err(named(why));
-    }
-    a.headers.reveal().map(|_| ()).map_err(named)
-}
-
-/// 400 unless `id` matches `^[a-z0-9_-]+$` and isn't the links' actor.
-fn validate_agent_id(id: &str) -> Result<(), ApiError> {
-    let ok = !id.is_empty()
-        && id
-            .bytes()
-            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_' || b == b'-');
-    if !ok {
-        return Err(ApiError::bad(format!(
-            "agent id {id:?} must match ^[a-z0-9_-]+$"
-        )));
-    }
-    if id == crate::exec::LINK_ACTOR || id == crate::exec::SETUP_ACTOR {
-        return Err(ApiError::bad(format!(
-            "agent id {id:?} is kept for steps the world makes (its links, a task's setup)"
-        )));
-    }
-    Ok(())
+/// The providers open agents run on, for [`team`]'s checks.
+fn providers_of(state: &AppState) -> &providers::ProviderConfig {
+    &state.config.providers
 }
 
 /// Runs `f` on its own task and waits for it, so a client disconnect can't cancel it midway.
@@ -515,7 +430,7 @@ async fn create_run(
     if req.runner == Runner::External {
         return external::create_run(state, cleanup, req.task_id, req.team, scenario).await;
     }
-    validate_builtin_team(&state, &req.team, req.runner)?;
+    team::validate_builtin(providers_of(&state), &req.team, req.runner)?;
     let max = max_cost(req.max_cost_usd)?;
     check_disk(&state).await?;
     let (run_id, branch_id) = detached(async move {
@@ -609,7 +524,7 @@ async fn fork_branch(
     check_fork_team(&state, &parent.team, &req.changes)?;
     if let Some(team) = &mut req.team {
         settle_providers(team);
-        validate_team(&state, team)?;
+        team::validate(providers_of(&state), team)?;
     }
     check_disk(&state).await?;
     let req = fork::ForkRequest {

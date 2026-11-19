@@ -15,7 +15,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use tokio::sync::OwnedRwLockReadGuard;
 
-use super::{check_disk, detached, parse_body, validate_agents, ApiError, ApiResult};
+use super::{check_disk, detached, parse_body, providers_of, ApiError, ApiResult};
 use crate::{
     app::AppState,
     driver::{self, Launched, RunIds},
@@ -193,7 +193,7 @@ pub(super) async fn start_code_run(
     conn: Connection,
     run: CodeRun,
 ) -> Result<(Value, Option<Launched>), ApiError> {
-    validate_agents(&state, &run.team.agents)?;
+    team::validate_agents(providers_of(&state), &run.team.agents)?;
     check_disk(&state).await?;
     detached(async move {
         let _cleanup = cleanup;

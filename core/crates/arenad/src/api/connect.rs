@@ -8,7 +8,7 @@ use std::{sync::Arc, time::Instant};
 use axum::{body::Bytes, extract::State, routing::post, Json, Router};
 use serde_json::{json, Value};
 
-use super::{parse_body, validate_http, ApiError, ApiResult};
+use super::{parse_body, ApiError, ApiResult};
 use crate::{
     agents::http::{hello, host_of},
     app::AppState,
@@ -75,7 +75,7 @@ fn default_name(a: &AgentSpec) -> String {
 async fn check(State(state): State<Arc<AppState>>, body: Bytes) -> ApiResult<Value> {
     let mut agent = agent_of(&body)?;
     match agent.kind {
-        AgentKind::Http => validate_http(&agent)?,
+        AgentKind::Http => team::validate_http(&agent)?,
         _ if is_bedrock(&agent) => {}
         _ => {
             return Err(ApiError::bad(

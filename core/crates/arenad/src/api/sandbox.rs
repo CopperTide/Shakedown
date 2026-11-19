@@ -13,7 +13,7 @@ use axum::{
 use serde::Deserialize;
 use serde_json::{json, Value};
 
-use super::{parse_body, validate_agent_id, ApiError, ApiResult};
+use super::{parse_body, ApiError, ApiResult};
 use crate::{app::AppState, model::*};
 
 pub(super) fn router() -> Router<Arc<AppState>> {
@@ -52,7 +52,7 @@ fn payload(agent: &str, e: SandboxEvent, clock_ms: i64) -> WorldEventPayload {
 }
 
 fn check(r: &Report) -> Result<(), ApiError> {
-    validate_agent_id(&r.agent)?;
+    crate::model::team::validate_id(&r.agent)?;
     if r.events.len() > MAX_EVENTS {
         return Err(ApiError::bad(format!(
             "at most {MAX_EVENTS} events per report"

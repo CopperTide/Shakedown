@@ -13,8 +13,8 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use super::{
-    check_disk, detached, not_cleaning, parse_body, settle_providers, validate_agents,
-    validate_builtin_team, ApiError, ApiResult,
+    check_disk, detached, not_cleaning, parse_body, providers_of, settle_providers, ApiError,
+    ApiResult,
 };
 use crate::{
     app::AppState,
@@ -118,10 +118,11 @@ fn validate_suite(state: &AppState, req: &NewSuiteReq) -> Result<(), ApiError> {
             "repeats must be from 1 to {MAX_REPEATS}"
         )));
     }
-    match req.runner {
-        Runner::External => validate_agents(state, &req.team.agents),
-        runner => validate_builtin_team(state, &req.team, runner),
-    }
+    let checked = match req.runner {
+        Runner::External => team::validate_agents(providers_of(state), &req.team.agents),
+        runner => team::validate_builtin(providers_of(state), &req.team, runner),
+    };
+    Ok(checked?)
 }
 
 /// `POST /api/suites`: stores the suite and, for a built-in runner, starts running it. Answers
