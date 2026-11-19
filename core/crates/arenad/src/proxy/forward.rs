@@ -1,0 +1,115 @@
+//! Sending a proxied request on to the part's upstream: the world's host name kept, the scheme,
+//! host and port it was asked on forwarded, hop-by-hop and proxy headers dropped.
+
+use std::{sync::LazyLock, time::Duration};
+
+use bytes::Bytes;
+use parts::proto::{Effect, EFFECT_HEADER};
+
+use crate::{exec::HttpCall, world::HostRoute};
+
+/// The client for upstreams: never through a proxy, never following redirects (the agent's
+/// client sees them).
+static CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
+    reqwest::Client::builder()
+        .no_proxy()
+        .redirect(reqwest::redirect::Policy::none())
+        .connect_timeout(Duration::from_secs(10))
+        .build()
+        .expect("the proxy's upstream client")
+});
+
+/// Headers that belong to one connection, not to the request: never passed on.
+const HOP_BY_HOP: [&str; 9] = [
+    "connection",
+    "keep-alive",
+    "te",
+    "trailer",
+    "transfer-encoding",
+    "upgrade",
+    "expect",
+    "host",
+    "content-length",
+];
+
+/// True for a header that is not passed on either way.
+pub fn is_hop(name: &str) -> bool {
+    let name = name.to_ascii_lowercase();
+    name.starts_with("proxy-") || HOP_BY_HOP.contains(&name.as_str())
+}
+
+/// What the upstream answered, and the effect it said the request had.
+pub struct Forwarded {
+    pub status: u16,
+    pub headers: Vec<(String, String)>,
+    pub body: Bytes,
+    pub effect: Option<Effect>,
+}
+
+/// The `Host` the upstream sees: the world's host, with the port when it isn't the scheme's.
+fn host_header(route: &HostRoute, call: &HttpCall) -> String {
+    match (call.scheme, call.port) {
+        ("http", 80) | ("https", 443) => route.host.clone(),
+        (_, port) => format!("{}:{port}", route.host),
+    }
+}
+
+/// Sends `call` to `route`'s upstream; the error when the upstream doesn't answer.
+pub async fn forward(route: &HostRoute, call: &HttpCall) -> Result<Forwarded, String> {
+    let method = reqwest::Method::from_bytes(call.method.as_bytes()).map_err(|e| e.to_string())?;
+    let mut req = CLIENT.request(method, route.target(&call.path_and_query));
+    for (k, v) in call.headers.iter().filter(|(k, _)| !is_hop(k)) {
+        req = req.header(k, v);
+    }
+    let host = host_header(route, call);
+    let resp = (req.header("host", &host))
+        .header("x-forwarded-host", &host)
+        .header("x-forwarded-proto", call.scheme)
+        .header("x-forwarded-port", call.port.to_string())
+        .body(call.body.clone())
+        .send()
+        .await
+        .map_err(|e| error_chain(&e))?;
+    answered(resp).await
+}
+
+/// The upstream's answer read whole, its effect header taken out.
+async fn answered(resp: reqwest::Response) -> Result<Forwarded, String> {
+    let status = resp.status().as_u16();
+    let mut effect = None;
+    let mut headers = vec![];
+    for (k, v) in resp.headers() {
+        let value = String::from_utf8_lossy(v.as_bytes()).into_owned();
+        match k.as_str() {
+            EFFECT_HEADER => effect = effect_of(&value),
+            name if is_hop(name) => {}
+            name => headers.push((name.to_string(), value)),
+        }
+    }
+    let body = resp.bytes().await.map_err(|e| error_chain(&e))?;
+    Ok(Forwarded {
+        status,
+        headers,
+        body,
+        effect,
+    })
+}
+
+fn effect_of(value: &str) -> Option<Effect> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "read" => Some(Effect::Read),
+        "write" => Some(Effect::Write),
+        _ => None,
+    }
+}
+
+/// An error with its causes, `: `-separated (reqwest's own message names only the URL).
+fn error_chain(e: &dyn std::error::Error) -> String {
+    let mut text = e.to_string();
+    let mut source = e.source();
+    while let Some(s) = source {
+        text = format!("{text}: {s}");
+        source = s.source();
+    }
+    text
+}

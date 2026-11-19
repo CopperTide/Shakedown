@@ -34,6 +34,11 @@ pub async fn bind() -> (tokio::net::TcpListener, String) {
 pub fn serve(listener: tokio::net::TcpListener, state: &Arc<AppState>) {
     let router = app::router(state.clone());
     tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    let proxy = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    proxy.set_nonblocking(true).unwrap();
+    state.proxy.listening(proxy.local_addr().unwrap());
+    let proxy = tokio::net::TcpListener::from_std(proxy).unwrap();
+    tokio::spawn(arenad::proxy::serve(state.clone(), proxy));
 }
 
 /// A provider base nothing answers on: for apps that must offer open mode (a local provider

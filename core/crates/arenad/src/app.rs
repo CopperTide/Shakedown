@@ -109,6 +109,8 @@ pub struct AppState {
     /// Held for writing by a cleanup (`POST /api/gc`) and for reading while a run or fork
     /// starts, so a cleanup never drops saves a starting branch is about to name.
     pub cleanup: Arc<tokio::sync::RwLock<()>>,
+    /// The recording proxy agents' own HTTP clients reach the world's hosts through.
+    pub proxy: crate::proxy::Proxy,
 }
 
 impl AppState {
@@ -132,6 +134,7 @@ impl AppState {
             drivers: OnceLock::new(),
             shutdown: tokio::sync::watch::channel(false).0,
             cleanup: Arc::default(),
+            proxy: crate::proxy::Proxy::default(),
         }
     }
 

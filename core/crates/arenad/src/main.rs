@@ -1,6 +1,7 @@
 //! The arena service (`cargo run -p arenad` from `arena/core`).
 //!
-//! Environment: `ARENA_PG_URL`, `ARENA_PORT` (4510),
+//! Environment: `ARENA_PG_URL`, `ARENA_PORT` (4510), `ARENA_PROXY_PORT` (the recording proxy,
+//! on 127.0.0.1; default: a free port),
 //! the model providers of open agents (`OPENROUTER_API_KEY`, `OPENAI_API_KEY`,
 //! `ANTHROPIC_API_KEY`, `ARENA_LOCAL_MODELS="name=url,…"`, `ARENA_LOCAL_KEY_<NAME>`,
 //! `ARENA_ANTHROPIC_MAX_TOKENS` (16000); see
@@ -121,15 +122,36 @@ async fn build_base(state: &AppState, bench: &BenchDescribe) -> anyhow::Result<(
     Ok(())
 }
 
+/// `ARENA_PROXY_PORT`, or 0 (a free port).
+fn proxy_port_from_env() -> anyhow::Result<u16> {
+    match std::env::var("ARENA_PROXY_PORT") {
+        Ok(p) if !p.is_empty() => p
+            .parse()
+            .map_err(|_| anyhow::anyhow!("ARENA_PROXY_PORT {p:?} is not a port number")),
+        _ => Ok(0),
+    }
+}
+
+/// `ARENA_UI_DIST`, when set.
+fn ui_dist_from_env() -> Option<PathBuf> {
+    let dist = std::env::var("ARENA_UI_DIST").ok();
+    dist.filter(|p| !p.is_empty()).map(PathBuf::from)
+}
+
+/// Serves the recording proxy on 127.0.0.1 (`ARENA_PROXY_PORT`).
+async fn start_proxy(state: &std::sync::Arc<arenad::app::AppState>) -> anyhow::Result<()> {
+    let proxy = tokio::net::TcpListener::bind(("127.0.0.1", proxy_port_from_env()?)).await?;
+    println!("arenad: proxy on http://{}", proxy.local_addr()?);
+    tokio::spawn(arenad::proxy::serve(state.clone(), proxy));
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let url = std::env::var("ARENA_PG_URL")
         .unwrap_or_else(|_| "postgres://arena:arena@127.0.0.1:5544/postgres".to_string());
     let port = port_from_env()?;
-    let ui_dist = std::env::var("ARENA_UI_DIST")
-        .ok()
-        .filter(|p| !p.is_empty())
-        .map(PathBuf::from);
+    let ui_dist = ui_dist_from_env();
 
     let state = app_state(&url, port).await?;
     let bench = startup_bench(&state).await?;
@@ -145,6 +167,7 @@ async fn main() -> anyhow::Result<()> {
         router = arenad::api::with_ui(router, dist.clone());
     }
     let listener = tokio::net::TcpListener::bind(("127.0.0.1", port)).await?;
+    start_proxy(&state).await?;
     println!(
         "arenad: listening on http://127.0.0.1:{port} (benchmark: {} {}; modes: {}; ui: {})",
         bench.name,

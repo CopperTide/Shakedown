@@ -1,4 +1,5 @@
 mod dispatch;
+mod http;
 mod lifecycle;
 mod links;
 mod mailbox;
@@ -24,6 +25,7 @@ use crate::{
 };
 
 pub use dispatch::{Said, CLOSED, DELEGATE, FINISH, REPORT};
+pub use http::{HttpAnswer, HttpCall, NOT_RUNNING};
 pub use lifecycle::Lifecycle;
 pub use links::LINK_ACTOR;
 pub use mailbox::Mailbox;
