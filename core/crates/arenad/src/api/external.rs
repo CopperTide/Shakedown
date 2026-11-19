@@ -4,15 +4,13 @@
 use std::sync::Arc;
 
 use axum::{
-    body::Bytes,
     extract::{Path, State},
     routing::post,
     Json, Router,
 };
 use serde_json::{json, Value};
-use tokio::sync::OwnedRwLockReadGuard;
 
-use super::{check_disk, detached, parse_body, providers_of, ApiError, ApiResult};
+use super::{detached, providers_of, ApiError, ApiResult, JsonBody, OptionalJson, StartPermit};
 use crate::{
     app::AppState,
     exec::{tool_schemas, BranchCtx},
@@ -37,15 +35,15 @@ pub(super) fn router() -> Router<Arc<AppState>> {
 /// with each agent's endpoints.
 pub(super) async fn create_run(
     state: Arc<AppState>,
-    cleanup: OwnedRwLockReadGuard<()>,
+    permit: StartPermit,
     task_id: String,
     team: Team,
     scenario: crate::scenario::Scenario,
 ) -> ApiResult<Value> {
     team::validate_agents(providers_of(&state), &team.agents)?;
-    check_disk(&state).await?;
+    permit.check_disk(&state).await?;
     detached(async move {
-        let _cleanup = cleanup;
+        let _permit = permit;
         let rules = Rules::new(Runner::External);
         let started = external::start(&state, &task_id, team, &scenario, rules).await?;
         Ok(Json(serde_json::to_value(started)?))
@@ -73,9 +71,8 @@ fn external_branch(state: &AppState, id: &str) -> Result<Arc<BranchCtx>, ApiErro
 async fn register(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
-    body: Bytes,
+    JsonBody(join): JsonBody<Join>,
 ) -> ApiResult<Value> {
-    let join: Join = parse_body(&body)?;
     team::validate_id(&join.id)?;
     let ctx = external_branch(&state, &id)?;
     if ctx.agent(&join.id).is_none() {
@@ -93,16 +90,8 @@ async fn register(
 async fn end_agent(
     State(state): State<Arc<AppState>>,
     Path((id, agent)): Path<(String, String)>,
-    body: Bytes,
+    OptionalJson(done): OptionalJson<AgentDone>,
 ) -> ApiResult<Value> {
-    let done: AgentDone = if body.is_empty() {
-        AgentDone {
-            ok: true,
-            ..AgentDone::default()
-        }
-    } else {
-        parse_body(&body)?
-    };
     let ctx = external_branch(&state, &id)?;
     if !ctx.has_agent(&agent) {
         return Err(ApiError::not_found(format!(
@@ -119,9 +108,8 @@ async fn end_agent(
 async fn report_usage(
     State(state): State<Arc<AppState>>,
     Path((id, agent)): Path<(String, String)>,
-    body: Bytes,
+    JsonBody(report): JsonBody<UsageReport>,
 ) -> ApiResult<Value> {
-    let report: UsageReport = parse_body(&body)?;
     let ctx = external_branch(&state, &id)?;
     if !ctx.has_agent(&agent) {
         return Err(ApiError::not_found(format!(
@@ -142,9 +130,8 @@ async fn report_usage(
 async fn report_reasoning(
     State(state): State<Arc<AppState>>,
     Path((id, agent)): Path<(String, String)>,
-    body: Bytes,
+    JsonBody(report): JsonBody<ReasoningReport>,
 ) -> ApiResult<Value> {
-    let report: ReasoningReport = parse_body(&body)?;
     if report.items.is_empty() || report.items.len() > reasoning::MAX_ITEMS {
         return Err(ApiError::bad(format!(
             "a reasoning report carries 1 to {} items",
@@ -181,12 +168,8 @@ struct FinishReq {
 async fn finish(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
-    body: Bytes,
+    OptionalJson(req): OptionalJson<FinishReq>,
 ) -> ApiResult<Value> {
-    let req: FinishReq = match body.is_empty() {
-        true => FinishReq::default(),
-        false => parse_body(&body)?,
-    };
     let ctx = external_branch(&state, &id)?;
     detached(async move {
         let ended = match req.error.filter(|e| !e.trim().is_empty()) {

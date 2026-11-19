@@ -4,7 +4,6 @@
 use std::sync::Arc;
 
 use axum::{
-    body::Bytes,
     extract::{Path, State},
     routing::{get, post},
     Json, Router,
@@ -12,7 +11,7 @@ use axum::{
 use parts::proto::ScenarioRequest;
 use serde::Deserialize;
 
-use super::{check_disk, detached, parse_body, providers_of, settle_providers};
+use super::{check_disk, detached, providers_of, settle_providers, JsonBody};
 use super::{ApiError, ApiResult};
 use crate::{
     app::AppState,
@@ -142,9 +141,8 @@ async fn check_connections(
 async fn create(
     State(state): State<Arc<AppState>>,
     headers: axum::http::HeaderMap,
-    body: Bytes,
+    JsonBody(mut req): JsonBody<NewExperimentReq>,
 ) -> ApiResult<Detail> {
-    let mut req: NewExperimentReq = parse_body(&body)?;
     let names = validate(&state, &mut req)?;
     check_connections(&state, &headers, &names, &req.setups).await?;
     let max_cost_usd = super::max_cost(req.max_cost_usd)?;

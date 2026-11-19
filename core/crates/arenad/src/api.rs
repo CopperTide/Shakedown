@@ -13,7 +13,6 @@ use axum::{
 use parts::proto::Mode;
 use serde::Deserialize;
 use serde_json::{json, Value};
-use tokio::sync::OwnedRwLockReadGuard;
 
 use crate::{
     app::AppState,
@@ -30,6 +29,7 @@ mod connect;
 mod connections;
 mod experiments;
 mod external;
+mod extract;
 mod flow;
 mod names;
 mod recording;
@@ -42,6 +42,7 @@ mod twin;
 mod ui;
 mod world;
 
+use extract::{JsonBody, OptionalJson, StartPermit};
 pub use ui::with_ui;
 
 pub fn router() -> Router<Arc<AppState>> {
@@ -178,18 +179,6 @@ fn pair(q: &HashMap<String, String>) -> Result<(String, String), ApiError> {
 
 fn parse_body<T: serde::de::DeserializeOwned>(body: &Bytes) -> Result<T, ApiError> {
     serde_json::from_slice(body).map_err(|e| ApiError::bad(format!("bad request body: {e}")))
-}
-
-/// The reason a run or fork is refused while saves are being cleaned up.
-const CLEANING_UP: &str = "Saves are being cleaned up; try again in a moment";
-
-/// Held while a run or fork starts; 409 while a cleanup holds the lock.
-fn not_cleaning(state: &AppState) -> Result<OwnedRwLockReadGuard<()>, ApiError> {
-    state
-        .cleanup
-        .clone()
-        .try_read_owned()
-        .map_err(|_| ApiError::conflict(CLEANING_UP))
 }
 
 /// 400 when the team the fork would run (`changes` applied to `parent`) puts a changed agent in
@@ -394,7 +383,7 @@ pub(crate) fn max_cost(asked: Option<f64>) -> Result<Option<f64>, ApiError> {
 /// `POST /api/runs` with `connection` (see `connections::create_run`).
 async fn create_code_run(
     state: Arc<AppState>,
-    cleanup: OwnedRwLockReadGuard<()>,
+    permit: StartPermit,
     headers: &axum::http::HeaderMap,
     req: NewRun,
     scenario: crate::scenario::Scenario,
@@ -408,16 +397,15 @@ async fn create_code_run(
         max_cost_usd,
     };
     let id = req.connection.unwrap_or_default();
-    connections::create_run(state, cleanup, headers, (&id, req.runner), run).await
+    connections::create_run(state, permit, headers, (&id, req.runner), run).await
 }
 
 async fn create_run(
     State(state): State<Arc<AppState>>,
+    permit: StartPermit,
     headers: axum::http::HeaderMap,
-    body: Bytes,
+    JsonBody(mut req): JsonBody<NewRun>,
 ) -> ApiResult<Value> {
-    let cleanup = not_cleaning(&state)?;
-    let mut req: NewRun = parse_body(&body)?;
     settle_providers(&mut req.team);
     let mut scenario = twin::scenario_of(&state, req.scenario.as_ref()).await?;
     if req.seed.is_some_and(|s| s > runner::MAX_SEED) {
@@ -425,16 +413,16 @@ async fn create_run(
     }
     scenario.seed = req.seed;
     if req.connection.is_some() {
-        return create_code_run(state, cleanup, &headers, req, scenario).await;
+        return create_code_run(state, permit, &headers, req, scenario).await;
     }
     if req.runner == Runner::External {
-        return external::create_run(state, cleanup, req.task_id, req.team, scenario).await;
+        return external::create_run(state, permit, req.task_id, req.team, scenario).await;
     }
     team::validate_builtin(providers_of(&state), &req.team, req.runner)?;
     let max = max_cost(req.max_cost_usd)?;
-    check_disk(&state).await?;
+    permit.check_disk(&state).await?;
     let (run_id, branch_id) = detached(async move {
-        let _cleanup = cleanup;
+        let _permit = permit;
         let (task, team) = (&req.task_id, req.team);
         let run = runner::start_run_capped(&state, task, team, req.runner, &scenario, max);
         Ok(run.await?)
@@ -513,11 +501,10 @@ async fn guard_code_fork(
 async fn fork_branch(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
+    permit: StartPermit,
     headers: axum::http::HeaderMap,
-    body: Bytes,
+    JsonBody(mut req): JsonBody<ForkReq>,
 ) -> ApiResult<fork::ForkResponse> {
-    let cleanup = not_cleaning(&state)?;
-    let mut req: ForkReq = parse_body(&body)?;
     let parent = forkable(&state, &id).await?;
     guard_code_fork(&state, &headers, &id).await?;
     fork::settle_changes(&parent.team, &mut req.changes, &state.config.providers);
@@ -526,7 +513,7 @@ async fn fork_branch(
         settle_providers(team);
         team::validate(providers_of(&state), team)?;
     }
-    check_disk(&state).await?;
+    permit.check_disk(&state).await?;
     let req = fork::ForkRequest {
         at_seq: req.at_seq,
         changes: req.changes,
@@ -534,7 +521,7 @@ async fn fork_branch(
         team: req.team,
     };
     let resp = detached(async move {
-        let _cleanup = cleanup;
+        let _permit = permit;
         Ok(fork::fork_with(&state, &id, req).await?)
     })
     .await?;

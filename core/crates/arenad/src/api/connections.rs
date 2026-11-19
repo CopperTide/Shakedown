@@ -13,9 +13,8 @@ use axum::{
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
-use tokio::sync::OwnedRwLockReadGuard;
 
-use super::{check_disk, detached, parse_body, providers_of, ApiError, ApiResult};
+use super::{detached, parse_body, providers_of, ApiError, ApiResult, StartPermit};
 use crate::{
     app::AppState,
     driver::{self, Launched, RunIds},
@@ -170,7 +169,7 @@ pub(super) struct CodeRun {
 /// runner other than `external` (or `chain`, the default), 404 for an unknown connection.
 pub(super) async fn create_run(
     state: Arc<AppState>,
-    cleanup: OwnedRwLockReadGuard<()>,
+    permit: StartPermit,
     headers: &HeaderMap,
     (id, runner): (&str, Runner),
     run: CodeRun,
@@ -182,21 +181,21 @@ pub(super) async fn create_run(
         ));
     }
     let conn = connection_or_404(&state, id).await?;
-    Ok(Json(start_code_run(state, cleanup, conn, run).await?.0))
+    Ok(Json(start_code_run(state, permit, conn, run).await?.0))
 }
 
 /// A run a connection's driver drives, just started: the run's ids, its agents' endpoints (none
 /// yet), and whether the driver started (`launched`) or not (`failed`, the run ended saying why).
 pub(super) async fn start_code_run(
     state: Arc<AppState>,
-    cleanup: OwnedRwLockReadGuard<()>,
+    permit: StartPermit,
     conn: Connection,
     run: CodeRun,
 ) -> Result<(Value, Option<Launched>), ApiError> {
     team::validate_agents(providers_of(&state), &run.team.agents)?;
-    check_disk(&state).await?;
+    permit.check_disk(&state).await?;
     detached(async move {
-        let _cleanup = cleanup;
+        let _permit = permit;
         let rules = driver::rules_for(&conn.id, run.max_cost_usd);
         let task = run.task_id;
         let started = external::start(&state, &task, run.team, &run.scenario, rules).await?;
@@ -248,10 +247,10 @@ async fn test(
 ) -> ApiResult<Value> {
     guard_launch(&state, &headers)?;
     let conn = connection_or_404(&state, &id).await?;
-    let cleanup = super::not_cleaning(&state)?;
+    let permit = StartPermit::take(&state)?;
     let run = test_run(&state, &conn).await?;
     let name = format!("Connection test · {}", conn.name);
-    let (started, launched) = start_code_run(state.clone(), cleanup, conn, run).await?;
+    let (started, launched) = start_code_run(state.clone(), permit, conn, run).await?;
     let text = |k: &str| started[k].as_str().unwrap_or_default().to_string();
     let (run_id, branch) = (text("run_id"), text("branch_id"));
     state.store.name_run(&run_id, &name).await?;

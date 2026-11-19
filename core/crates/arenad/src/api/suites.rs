@@ -4,7 +4,6 @@
 use std::{collections::HashMap, sync::Arc};
 
 use axum::{
-    body::Bytes,
     extract::{Path, Query, State},
     routing::{get, post},
     Json, Router,
@@ -13,8 +12,8 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use super::{
-    check_disk, detached, not_cleaning, parse_body, providers_of, settle_providers, ApiError,
-    ApiResult,
+    check_disk, detached, providers_of, settle_providers, ApiError, ApiResult, JsonBody,
+    StartPermit,
 };
 use crate::{
     app::AppState,
@@ -127,8 +126,10 @@ fn validate_suite(state: &AppState, req: &NewSuiteReq) -> Result<(), ApiError> {
 
 /// `POST /api/suites`: stores the suite and, for a built-in runner, starts running it. Answers
 /// its report.
-async fn create(State(state): State<Arc<AppState>>, body: Bytes) -> ApiResult<SuiteReport> {
-    let mut req: NewSuiteReq = parse_body(&body)?;
+async fn create(
+    State(state): State<Arc<AppState>>,
+    JsonBody(mut req): JsonBody<NewSuiteReq>,
+) -> ApiResult<SuiteReport> {
     settle_providers(&mut req.team);
     validate_suite(&state, &req)?;
     let (scenario, variants) = suite_scenarios(&state, &req).await?;
@@ -190,10 +191,10 @@ async fn claim(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> Ap
     if s.runner != Runner::External || s.connection.is_some() {
         return Err(ApiError::conflict("arenad runs this suite's runs itself"));
     }
-    let cleanup = not_cleaning(&state)?;
-    check_disk(&state).await?;
+    let permit = StartPermit::take(&state)?;
+    permit.check_disk(&state).await?;
     detached(async move {
-        let _cleanup = cleanup;
+        let _permit = permit;
         let Some(claimed) = suite::claim_external(&state, &s).await? else {
             return Ok(Json(json!({"done": true})));
         };

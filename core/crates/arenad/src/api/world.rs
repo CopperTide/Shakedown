@@ -9,7 +9,7 @@ use parts::proto::{Describe, ExactKind, SystemInfo, WorldPart};
 use serde::Serialize;
 use serde_json::{json, Value};
 
-use super::{detached, ApiError, ApiResult, CLEANING_UP};
+use super::{detached, extract::CLEANING_UP, ApiError, ApiResult};
 use crate::{app::AppState, gc, saves};
 
 /// How long one integration gets to answer `describe` or `usage` before the page shows it as not

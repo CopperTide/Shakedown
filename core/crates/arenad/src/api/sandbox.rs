@@ -5,7 +5,6 @@
 use std::sync::Arc;
 
 use axum::{
-    body::Bytes,
     extract::{Path, State},
     routing::post,
     Json, Router,
@@ -13,7 +12,7 @@ use axum::{
 use serde::Deserialize;
 use serde_json::{json, Value};
 
-use super::{parse_body, ApiError, ApiResult};
+use super::{ApiError, ApiResult, JsonBody};
 use crate::{app::AppState, model::*};
 
 pub(super) fn router() -> Router<Arc<AppState>> {
@@ -72,9 +71,8 @@ fn check(r: &Report) -> Result<(), ApiError> {
 async fn report(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
-    body: Bytes,
+    JsonBody(r): JsonBody<Report>,
 ) -> ApiResult<Value> {
-    let r: Report = parse_body(&body)?;
     check(&r)?;
     let ctx = state
         .live

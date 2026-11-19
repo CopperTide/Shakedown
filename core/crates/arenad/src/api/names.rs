@@ -2,27 +2,25 @@
 use std::sync::Arc;
 
 use axum::{
-    body::Bytes,
     extract::{Path, State},
     Json,
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
 
-use super::{parse_body, ApiError, ApiResult};
+use super::{ApiError, ApiResult, JsonBody};
 use crate::app::AppState;
 
 #[derive(Deserialize)]
-struct Name {
+pub(super) struct Name {
     name: String,
 }
 
 pub(super) async fn set(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
-    body: Bytes,
+    JsonBody(req): JsonBody<Name>,
 ) -> ApiResult<Value> {
-    let req: Name = parse_body(&body)?;
     let name = req.name.trim();
     if name.is_empty() || name.len() > 300 {
         return Err(ApiError::bad("name must be 1 to 300 bytes"));
