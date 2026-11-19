@@ -641,3 +641,72 @@ fn errors_read_well() {
         .to_string()
         .contains("triage"));
 }
+
+// ---- Save points: parts saved only at points, forks moved back to the last save.
+
+fn solo() -> Team {
+    Team {
+        id: "t".into(),
+        name: "T".into(),
+        agents: vec![spec("a", AgentKind::Open)],
+    }
+}
+
+fn box_write(seq: i64) -> Event {
+    let p = json!({"name": "poke", "args": {}, "result": {}, "error": null, "reads": [],
+                   "writes": ["box/n"], "snapshot": null, "tool_call_id": "x", "part": "box"});
+    ev(seq, Some("a"), EventKind::ToolCall, p)
+}
+
+fn save_point(seq: i64, save: &str) -> Event {
+    let p = json!({"reason": "model_call", "saves": {"box": save}, "paused_ms": 3});
+    ev(seq, None, EventKind::SavePoint, p)
+}
+
+fn run_start(runner: &str) -> Event {
+    let p = json!({"saves": {"box": "b"}, "runner": runner, "handoff": "optional"});
+    ev(1, None, EventKind::RunStart, p)
+}
+
+/// 1 RunStart{box: b}, 2 AgentStart a, 3 ModelCall a, 4 ToolCall box write (no saves),
+/// 5 SavePoint{box: s5}, 6 ModelCall a, 7 ToolCall box write (no saves), 8 ModelCall a.
+fn points_events(runner: &str) -> Vec<Event> {
+    vec![
+        run_start(runner),
+        start(2, "a"),
+        mc(3, "a", "m3"),
+        box_write(4),
+        save_point(5, "s5"),
+        mc(6, "a", "m6"),
+        box_write(7),
+        mc(8, "a", "m8"),
+    ]
+}
+
+#[test]
+fn a_fork_at_a_tool_call_restores_from_the_save_point_before_its_model_call() {
+    let p = plan_fork(&points_events("chain"), &solo(), 7, &HashMap::new()).unwrap();
+    assert_eq!((p.start_seq, p.restore["box"].as_str()), (6, "s5"));
+}
+
+#[test]
+fn a_fork_where_the_world_was_not_saved_moves_back_to_the_last_save_point() {
+    let p = plan_fork(&points_events("external"), &solo(), 8, &HashMap::new()).unwrap();
+    let moved = (p.start_seq, p.moved_from, p.reason.as_deref());
+    assert_eq!(moved, (6, Some(8), Some(plan::REASON_SAVED)));
+    assert_eq!(p.restore["box"], "s5");
+}
+
+#[test]
+fn with_no_save_point_the_fork_falls_back_to_the_base() {
+    let evs = vec![
+        run_start("external"),
+        start(2, "a"),
+        mc(3, "a", "m3"),
+        box_write(4),
+        mc(5, "a", "m5"),
+    ];
+    let p = plan_fork(&evs, &solo(), 5, &HashMap::new()).unwrap();
+    let moved = (p.start_seq, p.moved_from, p.restore["box"].as_str());
+    assert_eq!(moved, (3, Some(5), "b"));
+}

@@ -4,6 +4,7 @@ mod lifecycle;
 mod links;
 mod mailbox;
 mod roster;
+mod save_point;
 mod setup;
 mod talk;
 mod view;

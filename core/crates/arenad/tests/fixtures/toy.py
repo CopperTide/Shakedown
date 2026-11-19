@@ -4,7 +4,7 @@
               [--prefix P] [--exact save|replay|none] [--approximate] [--uses-clock [--event-every]]
               [--save-sleep MS] [--refuse-start-if FILE] [--describe-fails] [--describe-hangs] [--gc] [--gc-fails]
               [--gc-waits-for FILE] [--tool-event KIND] [--system JSON] [--internal-peeks]
-              [--http-route HOST=URL ... [--route-env K=V ...] [--route-reads PATTERN ...]]
+              [--http-route HOST=URL ... [--route-env K=V ...] [--route-reads PATTERN ...]] [--save-at step|points]
       An integration with one counter per instance and tools `poke` (write, adds 1) and `peek`
       (read), named `<P>poke` and `<P>peek` with --prefix. It exits on its N-th call_tool (only
       once across restarts when FILE marks that it did); every `save` after the first N is an
@@ -21,7 +21,7 @@
       --internal-peeks, `peek` counts its calls in the internal key `_peeks/n` (saved with the
       counter) and answers {"n", "peeks"}. Each --http-route makes `http_routes` give a route from HOST
       to URL (the first one with the --route-env variables and --route-reads patterns); without
-      one, `http_routes` answers -32601.
+      one, `http_routes` answers -32601. --save-at sets `describe.save_at`.
   toy.py bench --integration NAME [--part NAME=INTEGRATION ...] [--gold TOOL [--gold-args JSON]]
                [--config PART=JSON ...] [--clash] [--bench-tool [--tool-part PART]] [--link JSON ...]
                [--gate JSON ...] [--setup JSON ...] [--scored [--two-tasks] [--safety]]
@@ -83,7 +83,7 @@ class Part:
             raise RpcError(-32000, "the toy cannot describe itself")
         return {"name": "toy", "version": "0.1.0", "protocol": 1,
                 "restore": {"exact": EXACT, "approximate": APPROXIMATE}, "uses_clock": "--uses-clock" in ARGS,
-                "fingerprint": {"toy": 1}, "tools": TOOLS, **system()}
+                "fingerprint": {"toy": 1}, "tools": TOOLS, **system(), **save_at()}
 
     def value(self, target):
         if "save" in target:
@@ -251,6 +251,10 @@ class Bench:
 
     def gold_actions(self, p):
         return {"actions": [{"name": opt("--gold", "poke"), "args": json.loads(opt("--gold-args", "{}"))}]}
+
+
+def save_at():
+    return {"save_at": opt("--save-at", "")} if "--save-at" in ARGS else {}
 
 
 def view_and_scenario():

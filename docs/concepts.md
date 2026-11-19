@@ -75,6 +75,23 @@ A fork asks for one restore mode for the whole world. Each integration declares 
 The table is implemented in `core/crates/arenad/src/restore.rs`. `GET /api/branches/{id}/restore-plan` and the
 rerun panel show, per part, how it will be restored and, for a replay, an estimate of the time.
 
+## When the world is saved
+
+By default arenad saves a part after every step that wrote to it, so a fork can start at any step. A part whose
+`describe` says `save_at: "points"` (a whole stack, where each save is costly) is saved only at **save points**:
+
+- before a model call through arenad's gateway, when the part changed since its last save;
+- when a driver asks (`POST /api/branches/{id}/save`, answered `{"seq", "saves"}`; `seq` is null when nothing
+  changed);
+- at the run's end, with the final saves.
+
+Each save point is a `save_point` event (`{reason: "model_call"|"asked", saves, error?, paused_ms}`). It is
+bookkeeping, not a step: metrics, compare's divergence and the step lists leave it out. A fork whose point has no
+save of such a part (it was written since its last save point) moves back to the latest model call or agent start
+whose world was saved, with the reason "the world was last saved before an earlier step, so the fork starts there";
+the run's start always restores, from the base. A write whose save failed (a part saved after each step) still
+refuses the fork, as before.
+
 ## Teams and agents
 
 A team is a description: agents, each with an id, a name, a kind, a model and a prompt. It is not a protocol.

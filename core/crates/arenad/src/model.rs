@@ -334,6 +334,17 @@ named_enum! {
         /// What an agent thought or said it would do (`{text, kind, source, model_call_seq?,
         /// truncated?}`), reported by its driver or pulled from a recorded model response.
         Reasoning = "reasoning",
+        /// arenad saved the parts that save at points (`{reason, saves, error?, paused_ms}`):
+        /// bookkeeping, no step.
+        SavePoint = "save_point",
+    }
+}
+
+impl EventKind {
+    /// True for arenad's own records that are no step of the run: the world's views and save
+    /// points.
+    pub fn is_bookkeeping(self) -> bool {
+        matches!(self, EventKind::WorldView | EventKind::SavePoint)
     }
 }
 
@@ -571,7 +582,7 @@ mod tests {
     use super::*;
 
     /// Every kind's and status's name, as stored and as the API shows it.
-    const KINDS: [&str; 18] = [
+    const KINDS: [&str; 19] = [
         "run_start",
         "agent_start",
         "model_call",
@@ -590,6 +601,7 @@ mod tests {
         "idle",
         "finish",
         "reasoning",
+        "save_point",
     ];
     const STATUSES: [&str; 7] = [
         "running",

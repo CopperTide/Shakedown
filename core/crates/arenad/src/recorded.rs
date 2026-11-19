@@ -116,13 +116,12 @@ pub fn saves_at_except(
         .iter()
         .map(|(p, s)| (p.clone(), Ok(s.clone())))
         .collect();
-    for e in events
-        .iter()
-        .filter(|e| e.seq <= seq && e.kind == EventKind::ToolCall)
-    {
+    let saving = |k| matches!(k, EventKind::ToolCall | EventKind::SavePoint);
+    for e in events.iter().filter(|e| e.seq <= seq && saving(e.kind)) {
         let saved = saves_of(&e.payload).unwrap_or_default();
         let part = e.payload["part"].as_str().unwrap_or(LEGACY_PART);
-        if wrote(&e.payload) && !saved.contains_key(part) {
+        let call = e.kind == EventKind::ToolCall;
+        if call && wrote(&e.payload) && !saved.contains_key(part) {
             at.insert(part.to_string(), Err(e.seq));
         }
         at.extend(saved.into_iter().map(|(p, s)| (p, Ok(s))));
@@ -159,15 +158,15 @@ pub struct NamedSave {
     pub save: String,
 }
 
-/// Every save `branch`'s events name: the run's start saves, each tool call's saves (or legacy
-/// snapshot) and the final saves.
+/// Every save `branch`'s events name: the run's start saves, each tool call's and save point's
+/// saves (or legacy snapshot) and the final saves.
 pub fn named_saves(branch: &str, events: &[Event]) -> BTreeSet<NamedSave> {
     let recorded = events.iter().filter_map(|e| match e.kind {
         EventKind::RunStart => e
             .decode::<RunStartPayload>()?
             .saves
             .filter(|s| !s.is_empty()),
-        EventKind::ToolCall => saves_of(&e.payload),
+        EventKind::ToolCall | EventKind::SavePoint => saves_of(&e.payload),
         _ => None,
     });
     recorded
@@ -272,6 +271,38 @@ mod tests {
             .into_iter()
             .map(|n| n.save)
             .collect()
+    }
+
+    fn save_point(seq: i64, saves: Value) -> Event {
+        let p = json!({"reason": "model_call", "saves": saves, "paused_ms": 1});
+        ev(seq, EventKind::SavePoint, p)
+    }
+
+    #[test]
+    fn saves_at_reads_save_points() {
+        let unsaved = |seq| {
+            let p = json!({"name": "w", "error": null, "writes": ["k/1"], "part": "box"});
+            ev(seq, EventKind::ToolCall, p)
+        };
+        let base = Saves::from([("box".to_string(), "b".to_string())]);
+        let evs = vec![unsaved(2), save_point(3, json!({"box": "s3"})), unsaved(4)];
+        assert_eq!(saves_at(&evs, 1, &base).unwrap()["box"], "b");
+        let no_save = NoSave {
+            part: "box".into(),
+            seq: 2,
+        };
+        assert_eq!(saves_at(&evs, 2, &base).unwrap_err(), no_save);
+        assert_eq!(saves_at(&evs, 3, &base).unwrap()["box"], "s3");
+        assert_eq!(saves_at(&evs, 4, &base).unwrap_err().seq, 4);
+    }
+
+    #[test]
+    fn named_saves_name_save_point_saves() {
+        let evs = vec![
+            ev(1, EventKind::RunStart, json!({"saves": {"box": "base_b"}})),
+            save_point(2, json!({"box": "s_b2"})),
+        ];
+        assert_eq!(names(&evs, "x"), ["base_b", "s_b2"]);
     }
 
     #[test]
