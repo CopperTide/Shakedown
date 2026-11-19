@@ -1,6 +1,6 @@
 // The plant's recording for the world view: Isaac Sim writes its frames on arena time, so a step's arena second is the
 // video's second. `GET /api/branches/{id}/recording` says whether there is one (`video` null when not).
-import { call } from '../api';
+import { call } from '@/api';
 import type { Event } from '@/model/types';
 
 export interface Recording {

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { branch as fetchBranch, compare, views as fetchViews } from '../api';
+import { branch as fetchBranch, compare, views as fetchViews } from '@/api';
 import OutcomePanel, { DivergenceStrip } from '../compare/OutcomePanel';
 import { divergenceStrip } from '../compare/divergence';
 import { ChevronDown, ChevronUp } from 'lucide-react';

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { stream } from './api';
+import { stream } from '@/api';
 import type { Event } from '@/model/types';
 
 class FakeEventSource {

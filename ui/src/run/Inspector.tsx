@@ -1,5 +1,5 @@
 import { type ReactElement, useEffect, useState } from 'react';
-import { rows } from '../api';
+import { rows } from '@/api';
 import { Button } from '../components/ui/button';
 import { CodeBlock } from '../components/ui/code-block';
 import { StatusMark, Tag } from '../components/ui/status';

@@ -1,4 +1,4 @@
-import { ApiError, call } from '../api';
+import { ApiError, call } from '@/api';
 import type { CompareReview, ReviewSettings, RunReview, StoredReview } from '@/model/review';
 
 const id = encodeURIComponent;

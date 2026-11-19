@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
-import { views as fetchViews } from '../api';
+import { views as fetchViews } from '@/api';
 import { hasModifier, isTyping, navOf } from '@/lib/keys';
 import type { BranchDetail } from '@/model/types';
 import { moveStop, snapStop } from './scrub';

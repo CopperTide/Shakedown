@@ -1,4 +1,4 @@
-import type { CheckAnswer, CheckBody } from './connect/connect';
+import type { CheckAnswer, CheckBody } from '@/connect/connect';
 import { api } from './core';
 import type { ScenarioChoice } from '@/model/scenario';
 import type { BranchView } from '@/model/twin';

@@ -1,4 +1,4 @@
-import { call, post } from '../api';
+import { call, post } from '@/api';
 import type { Experiment, ListedExperiment, NewExperiment } from '@/model/experiment';
 
 const id = encodeURIComponent;

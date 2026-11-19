@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ApiError, restorePlan } from '../api';
+import { ApiError, restorePlan } from '@/api';
 import { REPLAY_NOTE, planLine } from '@/model/restore';
 import type { PartPlan, RestoreMode } from '@/model/types';
 import { errorMessage } from '@/lib/errors';

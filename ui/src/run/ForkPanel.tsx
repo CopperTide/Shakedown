@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { cn } from '@/lib/cn';
 import { ARCHITECTURES, type ForkChoice, architectureOf, singleTeam, swapChanges, teamSwapProblem } from './architecture';
-import { fork } from '../api';
+import { fork } from '@/api';
 import { changedFields } from './timeline';
 import { RestoreChoice, blockedReason, useRestorePlan } from './RestoreChoice';
 import { ModelHint, ModelInput, ProviderSelect } from '../ProviderFields';

@@ -1,7 +1,7 @@
 import { Play } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { startRun } from '../api';
+import { startRun } from '@/api';
 import { useHealth } from '@/hooks/useHealth';
 import { Button } from '../components/ui/button';
 import { Field, NativeSelect } from '../components/ui/input';

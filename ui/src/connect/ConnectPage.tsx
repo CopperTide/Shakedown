@@ -1,7 +1,7 @@
 import { Check, PlugZap } from 'lucide-react';
 import { type FormEvent, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { checkAgent } from '../api';
+import { checkAgent } from '@/api';
 import { Button } from '../components/ui/button';
 import { CodeBlock } from '../components/ui/code-block';
 import { Field, Input, Textarea } from '../components/ui/input';

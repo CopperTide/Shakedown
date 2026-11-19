@@ -1,7 +1,7 @@
 import { ArrowRight, Factory, GitCompare, Layers, ListTree, Monitor, Play } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { runs as fetchRuns } from '../api';
+import { runs as fetchRuns } from '@/api';
 import { experiments as fetchExperiments } from '../experiments/api';
 import type { ListedExperiment } from '@/model/experiment';
 import type { RunSummary } from '@/model/types';

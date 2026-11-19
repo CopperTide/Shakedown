@@ -3,7 +3,7 @@ import { MoreHorizontal, Play } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { deleteRun, runs as fetchRuns } from '../api';
+import { deleteRun, runs as fetchRuns } from '@/api';
 import { ApproximateMark, StatusChip } from '@/components/marks';
 import { DISK_CHANGED } from '@/hooks/useHealth';
 import { ago, formatTime } from '@/lib/time';
