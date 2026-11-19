@@ -35,7 +35,7 @@ describe('review presentation', () => {
   it('is on unless this browser turned it off, and names its routes', () => {
     expect([parseOn(null), parseOn('on'), parseOn('off')]).toEqual([true, true, false]);
     expect(reviewPath({ kind: 'run', branch: 'b 1' })).toBe('/api/branches/b%201/review');
-    expect(reviewPath({ kind: 'suites', a: 'x', b: 'y' })).toBe('/api/suites/compare/review?a=x&b=y');
+    expect(reviewPath({ kind: 'setups', a: 'x', b: 'y' })).toBe('/api/suites/compare/review?a=x&b=y');
   });
 });
 

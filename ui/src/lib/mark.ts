@@ -1,5 +1,5 @@
 // A state as a glyph and a word; `abnormal` is the only thing that adds colour (ISA-101).
-import type { SuiteStatus } from '@/model/report';
+import type { ExperimentStatus } from '@/model/report';
 import type { BranchStatus } from '@/model/types';
 
 export interface Mark {
@@ -43,11 +43,11 @@ const RUN: Record<BranchStatus, Mark> = {
 /** A run's status. */
 export const runMark = (status: BranchStatus): Mark => RUN[status] ?? mark('?', status);
 
-const EXPERIMENT: Record<SuiteStatus, Mark> = {
+const EXPERIMENT: Record<ExperimentStatus, Mark> = {
   running: MARK.running,
   finished: MARK.finished,
   stopped: MARK.stopped,
 };
 
 /** An experiment's status (a stopped one ended early, by choice or because arenad stopped). */
-export const experimentMark = (s: SuiteStatus): Mark => EXPERIMENT[s];
+export const experimentMark = (s: ExperimentStatus): Mark => EXPERIMENT[s];

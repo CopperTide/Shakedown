@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { duration, fmt } from '@/lib/format';
-import type { RunOutcome, RunRow, Spread, SuiteReport } from '@/model/report';
+import type { RunOutcome, RunRow, Spread, SetupReport } from '@/model/report';
 import type { Team } from '@/model/types';
 import { METRICS, bestOf, checkLabel, checkMatrix, columnOf, settleDrafts, setupTeam, setupsProblem, wilson } from './model';
 
@@ -20,7 +20,7 @@ const team: Team = { id: 'team', name: 'Planners', agents: [
   { id: 'helper', name: 'Helper', kind: 'codex', model: null, prompt: 'Help.' },
 ] };
 
-const report = (id: string, rows: RunRow[], passed: number, over: Partial<SuiteReport['summary']> = {}): SuiteReport => ({
+const report = (id: string, rows: RunRow[], passed: number, over: Partial<SetupReport['summary']> = {}): SetupReport => ({
   id, name: `Setup ${id}`, team, tasks: ['t'], repeats: rows.length, runner: 'chain', benchmark: 'b', created_at: '', ended_at: null, error: null,
   status: 'running', finished_s: null, runs: rows,
   checks: [

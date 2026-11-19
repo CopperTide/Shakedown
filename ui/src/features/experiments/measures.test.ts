@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { RunOutcome, RunRow, SuiteReport } from '@/model/report';
+import type { RunOutcome, RunRow, SetupReport } from '@/model/report';
 import type { NamedCheck } from '@/model/types';
 import { dodge, measureRows, measureText, position } from './measures';
 
@@ -18,7 +18,7 @@ const outcome = (oee: number | null, sims: number, scored = true): RunOutcome =>
 
 const row = (i: number, o: RunOutcome | null): RunRow => ({ task_id: 't', repeat: i, run_id: `r${i}`, branch_id: `b${i}`, status: o ? 'passed' : 'running', error: null, outcome: o });
 
-const report = (id: string, rows: RunRow[]) => ({ id, name: id, runs: rows } as unknown as SuiteReport);
+const report = (id: string, rows: RunRow[]) => ({ id, name: id, runs: rows } as unknown as SetupReport);
 
 describe('measures per setup', () => {
   const a = report('A', [row(1, outcome(87.5, 15)), row(2, outcome(83.1, 22)), row(3, outcome(null, 30)), row(4, null)]);

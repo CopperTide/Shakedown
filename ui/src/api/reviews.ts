@@ -6,7 +6,7 @@ export function reviewPath(t: Target): string {
   switch (t.kind) {
     case 'run': return path`/api/branches/${t.branch}/review`;
     case 'compare': return '/api/compare/review' + qs({ a: t.a, b: t.b });
-    case 'suites': return '/api/suites/compare/review' + qs({ a: t.a, b: t.b });
+    case 'setups': return '/api/suites/compare/review' + qs({ a: t.a, b: t.b });
   }
 }
 

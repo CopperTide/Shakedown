@@ -1,7 +1,7 @@
 // The figures some checks measure (a study's verified objective, the simulations it used), per setup:
 // each scored run's value as a dot on a scale every setup shares, and a headline — the best run when
 // the measure says which way is better, else the mean. Pure functions only.
-import type { SuiteReport } from '@/model/report';
+import type { SetupReport } from '@/model/report';
 import type { Measure } from '@/model/types';
 
 export interface MeasureDot {
@@ -45,7 +45,7 @@ export function measureText(v: number | null, unit: string): string {
 
 const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
 
-function cellOf(r: SuiteReport, name: string, better: MeasureRow['better'], unit: string): MeasureCell {
+function cellOf(r: SetupReport, name: string, better: MeasureRow['better'], unit: string): MeasureCell {
   const dots: MeasureDot[] = [];
   r.runs.forEach((run, i) => {
     const m = run.outcome?.scored ? run.outcome.checks.find((c) => c.name === name)?.measure : undefined;
@@ -75,7 +75,7 @@ function markBest(cells: MeasureCell[], better: MeasureRow['better']) {
 }
 
 /** The first measure a check gives in any report's runs, by check name, in the order checks first appear. */
-function measuresIn(reports: SuiteReport[]): Map<string, Measure> {
+function measuresIn(reports: SetupReport[]): Map<string, Measure> {
   const out = new Map<string, Measure>();
   for (const run of reports.flatMap((r) => r.runs)) {
     for (const c of run.outcome?.checks ?? []) if (c.measure && !out.has(c.name)) out.set(c.name, c.measure);
@@ -95,7 +95,7 @@ export function dodge(dots: MeasureDot[], gap: number): void {
 }
 
 /** One row per measured check, a cell per setup, on a shared scale. */
-export function measureRows(reports: SuiteReport[]): MeasureRow[] {
+export function measureRows(reports: SetupReport[]): MeasureRow[] {
   return [...measuresIn(reports)].map(([name, m]) => {
     const better = m.better ?? null;
     const unit = m.unit ?? '';

@@ -7,7 +7,7 @@ import { Dialog, DialogActions, DialogContent } from '@/components/ui/dialog';
 import { PageBody, PageGate, PageHeader, type Width } from '@/components/ui/page';
 import { ErrorState } from '@/components/ui/state';
 import { StatusMark } from '@/components/ui/status';
-import { SuiteWhatMatters } from '@/features/review/WhatMatters';
+import { SetupsWhatMatters } from '@/features/review/WhatMatters';
 import { useAction } from '@/hooks/useAction';
 import { pollWhile, useQuery } from '@/hooks/useQuery';
 import { useTaskNames } from '@/hooks/useTasks';
@@ -87,7 +87,7 @@ function View({ ids }: { ids: string[] }) {
         {error && <ErrorState error={error} hint="Showing the last results read." onRetry={reload} />}
         {list.filter((e) => e.error && e.error !== 'stopped').map((e) => <ErrorState key={e.id} error={e.error!} hint="The experiment stopped early. The runs that ended are scored." />)}
         <Setups cols={reports.map(columnOf)} measures={measureRows(reports)} />
-        {reports.length === 2 && list.every((e) => e.status !== 'running') && <SuiteWhatMatters reports={[reports[0], reports[1]]} />}
+        {reports.length === 2 && list.every((e) => e.status !== 'running') && <SetupsWhatMatters reports={[reports[0], reports[1]]} />}
         <Checks reports={reports} />
       </PageBody>
     </>

@@ -99,9 +99,10 @@ export interface TaskSpread extends Figures {
   runs: number;
 }
 
-export type SuiteStatus = 'running' | 'finished' | 'stopped';
+export type ExperimentStatus = 'running' | 'finished' | 'stopped';
 
-export interface Suite {
+/** One setup of an experiment as arenad stores it (a suite: `suite/`): its team, tasks and runs per task. */
+export interface StoredSetup {
   id: string;
   name: string;
   team: Team;
@@ -116,8 +117,9 @@ export interface Suite {
   scenario?: RecordedScenario;
 }
 
-export interface SuiteReport extends Suite {
-  status: SuiteStatus;
+/** A setup's report (arenad's suite report): its runs, check rates and figures. */
+export interface SetupReport extends StoredSetup {
+  status: ExperimentStatus;
   finished_s: number | null;
   runs: RunRow[];
   checks: CheckRate[];

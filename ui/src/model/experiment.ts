@@ -1,6 +1,6 @@
 // Mirrors arenad's experiments API (`api/experiments.rs`): an experiment is one scenario run by
-// 1–4 agent setups, N times each; each setup is stored as a suite, so its report is a SuiteReport.
-import type { SuiteReport, SuiteStatus } from './report';
+// 1–4 agent setups, N times each; each setup is stored as a suite, so its report is a SetupReport.
+import type { SetupReport, ExperimentStatus } from './report';
 import type { ScenarioChoice } from './scenario';
 import type { Runner, Team } from './types';
 
@@ -24,7 +24,7 @@ interface ExperimentBase {
   /** Runs per setup. */
   runs: number;
   created_at: string;
-  status: SuiteStatus;
+  status: ExperimentStatus;
   /** A suite from before experiments, shown as a one-setup experiment. */
   legacy: boolean;
 }
@@ -36,7 +36,7 @@ export interface ListedExperiment extends ExperimentBase {
 export interface Experiment extends ExperimentBase {
   ended_at: string | null;
   error: string | null;
-  setups: SuiteReport[];
+  setups: SetupReport[];
 }
 
 export interface NewSetup {

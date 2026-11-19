@@ -2,7 +2,7 @@
 // a cell per run, the figures that matter), the checks side by side, and the setups a new
 // experiment is started with. Pure functions only; the pages draw what these return.
 import { duration, fmt } from '@/lib/format';
-import type { CheckRate, RunRow, SuiteReport } from '@/model/report';
+import type { CheckRate, RunRow, SetupReport } from '@/model/report';
 import { runLine } from '@/model/summary';
 import { withRules } from '@/model/team';
 import type { Team } from '@/model/types';
@@ -102,7 +102,7 @@ function cell(r: RunRow, i: number): RunCell {
 }
 
 /** A setup's column, from its suite report. */
-export function columnOf(r: SuiteReport): Column {
+export function columnOf(r: SetupReport): Column {
   const s = r.summary;
   return {
     id: r.id,
@@ -192,7 +192,7 @@ function rateOf(checks: CheckRate[], name: string): CheckCell | null {
 }
 
 /** Every check of every setup, goal checks first, then safety checks, in the order they first appear. */
-export function checkMatrix(reports: SuiteReport[]): CheckRow[] {
+export function checkMatrix(reports: SetupReport[]): CheckRow[] {
   const names: { name: string; safety: boolean }[] = [];
   for (const c of reports.flatMap((r) => r.checks)) if (!names.some((n) => n.name === c.name)) names.push({ name: c.name, safety: c.safety });
   const rows = names.map(({ name, safety }) => {

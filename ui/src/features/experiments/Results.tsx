@@ -2,7 +2,7 @@ import { type CSSProperties, type ReactNode, useState } from 'react';
 import { Panel } from '@/components/ui/panel';
 import { Tag } from '@/components/ui/status';
 import { cn } from '@/lib/cn';
-import type { SuiteReport } from '@/model/report';
+import type { SetupReport } from '@/model/report';
 import { MeasureFigure, MeasureLegend } from './Measures';
 import type { MeasureRow } from './measures';
 import { type CheckCell, type CheckRow, type Column, METRICS, type Metric, SAFETY_METRICS, bestOf, checkLabel, checkMatrix, safetyQuiet } from './model';
@@ -91,7 +91,7 @@ function CheckLine({ row, n }: { row: CheckRow; n: number }) {
 }
 
 /** The checks that some run failed, side by side; every check one click away. */
-export function Checks({ reports }: { reports: SuiteReport[] }) {
+export function Checks({ reports }: { reports: SetupReport[] }) {
   const [all, setAll] = useState(false);
   const rows = checkMatrix(reports);
   if (!rows.length) return null;

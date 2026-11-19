@@ -73,8 +73,8 @@ export interface ReviewSettings {
   why?: string;
 }
 
-/** What a review is of: one branch, two branches, or two suites. */
+/** What a review is of: one branch, two branches, or two setups of an experiment (arenad's suites). */
 export type Target =
   | { kind: 'run'; branch: string }
   | { kind: 'compare'; a: string; b: string }
-  | { kind: 'suites'; a: string; b: string };
+  | { kind: 'setups'; a: string; b: string };

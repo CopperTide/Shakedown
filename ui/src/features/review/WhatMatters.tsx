@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { Tag } from '@/components/ui/status';
-import type { SuiteReport } from '@/model/report';
+import type { SetupReport } from '@/model/report';
 import type { CompareReview, Difference, Target } from '@/model/review';
 import { smallPrint } from './present';
 import { ReviewFrame } from './ReviewFrame';
@@ -76,16 +76,16 @@ export default function WhatMatters({ target, hrefOf, what }: { target: Target; 
   );
 }
 
-/** Each example run's run id, by its branch id, from the two suites' reports. */
-function runsByBranch(reports: SuiteReport[]): Record<string, string> {
+/** Each example run's run id, by its branch id, from the two setups' reports. */
+function runsByBranch(reports: SetupReport[]): Record<string, string> {
   const m: Record<string, string> = {};
   for (const r of reports) for (const row of r.runs) if (row.branch_id && row.run_id) m[row.branch_id] = row.run_id;
   return m;
 }
 
-/** What matters between two suites: example runs link to their run pages. */
-export function SuiteWhatMatters({ reports: [a, b] }: { reports: [SuiteReport, SuiteReport] }) {
+/** What matters between two setups of an experiment: example runs link to their run pages. */
+export function SetupsWhatMatters({ reports: [a, b] }: { reports: [SetupReport, SetupReport] }) {
   const runOf = useMemo(() => runsByBranch([a, b]), [a, b]);
   const hrefOf: HrefOf = (_side, cite) => (typeof cite === 'string' && runOf[cite] ? `/runs/${runOf[cite]}/${cite}` : null);
-  return <WhatMatters target={{ kind: 'suites', a: a.id, b: b.id }} hrefOf={hrefOf} what="both suites' results" />;
+  return <WhatMatters target={{ kind: 'setups', a: a.id, b: b.id }} hrefOf={hrefOf} what="both suites' results" />;
 }
