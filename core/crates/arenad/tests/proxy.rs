@@ -68,6 +68,17 @@ async fn upstream() -> String {
     base
 }
 
+/// An upstream that answers `GET /name` with `name` and takes `POST /items`.
+async fn named_upstream(name: &'static str) -> String {
+    let app = Router::new()
+        .route("/name", get(move || async move { name }))
+        .route("/items", post(|| async { StatusCode::CREATED }));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    base
+}
+
 /// A port nothing listens on.
 fn closed_port() -> u16 {
     let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
@@ -562,6 +573,25 @@ fn a_part_that_hangs_is_a_504_step_and_frees_the_branch() {
             get_text(&c, "http://toy.test/hello"),
         );
         assert_eq!(next.await.unwrap().0, 200, "the gate is free again");
+    })
+}
+
+#[test]
+fn after_a_save_requests_go_where_the_part_now_serves() {
+    run(async {
+        let (before, after) = (
+            named_upstream("before").await,
+            named_upstream("after").await,
+        );
+        let args = ["--save-at", "points", "--route-after-save", after.as_str()];
+        let fx = ProxyFx::new("moved", &before, &args).await;
+        let c = fx.client("planner");
+        assert_eq!(get_text(&c, "http://toy.test/name").await.1, "before");
+        let r = c.post("http://toy.test/items").send().await.unwrap();
+        assert_eq!(r.status().as_u16(), 201);
+        let (status, v) = fx.on("save").await;
+        assert_eq!(status, 200, "{v}");
+        assert_eq!(get_text(&c, "http://toy.test/name").await.1, "after");
     })
 }
 

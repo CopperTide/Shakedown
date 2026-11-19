@@ -182,7 +182,7 @@ impl ToolExec {
             readonly: admitted.readonly,
         };
         let since = std::time::Instant::now();
-        let forwarded = self.send(admitted.route, call, sender).await;
+        let forwarded = self.send(&admitted.route, call, sender).await;
         facts.duration_ms = Some(since.elapsed().as_secs_f64() * 1000.0);
         match forwarded {
             Ok(f) => answered(branch, &admitted, call, f, facts).await,
@@ -244,8 +244,8 @@ fn too_slow(route: &HostRoute, limit: std::time::Duration) -> String {
 
 /// A request arenad lets through: its host's route, whether it writes by the method rule, and
 /// whether it goes marked read-only (a read-only agent's, to a route that honours read-only).
-struct Admitted<'w> {
-    route: &'w HostRoute,
+struct Admitted {
+    route: HostRoute,
     write_by_rule: bool,
     readonly: bool,
 }
@@ -253,13 +253,13 @@ struct Admitted<'w> {
 /// The request admitted (the part is noted in `facts`); else the status and why arenad refuses
 /// it: an unknown host, a branch that can't go on, a write of a read-only agent to a route that
 /// does not honour read-only.
-fn admit<'w>(
-    branch: &'w BranchCtx,
+fn admit(
+    branch: &BranchCtx,
     agent: Option<&str>,
     call: &HttpCall,
     facts: &mut CallFacts,
-) -> Result<Admitted<'w>, (u16, String)> {
-    let Some(route) = branch.world.hosts().route(&call.host) else {
+) -> Result<Admitted, (u16, String)> {
+    let Some(route) = branch.world.hosts().route(&call.host).cloned() else {
         return Err((
             403,
             format!("the host {} is not part of this world", call.host),
@@ -274,10 +274,11 @@ fn admit<'w>(
     if write_by_rule && read_only && !route.honours_readonly {
         return Err((403, READ_ONLY.to_string()));
     }
+    let readonly = read_only && route.honours_readonly;
     Ok(Admitted {
         route,
         write_by_rule,
-        readonly: read_only && route.honours_readonly,
+        readonly,
     })
 }
 
@@ -286,12 +287,12 @@ fn admit<'w>(
 /// wrote.
 async fn answered(
     branch: &BranchCtx,
-    admitted: &Admitted<'_>,
+    admitted: &Admitted,
     call: &HttpCall,
     f: Forwarded,
     mut facts: CallFacts,
 ) -> Exchanged {
-    let route = admitted.route;
+    let route = &admitted.route;
     let write = f
         .effect
         .map_or(admitted.write_by_rule, |e| e == Effect::Write);
@@ -323,7 +324,7 @@ async fn answered(
 /// on the branch, which then fails.
 fn violation(
     branch: &BranchCtx,
-    admitted: &Admitted<'_>,
+    admitted: &Admitted,
     call: &HttpCall,
     f: &Forwarded,
 ) -> Option<String> {

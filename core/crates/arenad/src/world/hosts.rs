@@ -86,6 +86,22 @@ impl Hosts {
         Ok(hosts)
     }
 
+    /// The hosts with `part`'s routes replaced by `routes` (checked as `build` checks them); the
+    /// hosts stay as they were when one is refused.
+    pub fn replace(&mut self, part: &str, routes: Vec<HttpRoute>) -> Result<(), String> {
+        let others = self.routes.iter().filter(|r| r.part != part).cloned();
+        let mut next = Hosts {
+            routes: others.collect(),
+        };
+        for r in routes {
+            let route = host_route(part, r)
+                .map_err(|why| format!("the part {part} gives a bad route: {why}"))?;
+            next.add(route)?;
+        }
+        *self = next;
+        Ok(())
+    }
+
     /// Adds `route` unless another part serves its host or sets one of its variables.
     fn add(&mut self, route: HostRoute) -> Result<(), String> {
         for other in &self.routes {
