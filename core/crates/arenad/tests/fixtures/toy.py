@@ -4,6 +4,7 @@
               [--prefix P] [--exact save|replay|none] [--approximate] [--uses-clock [--event-every]]
               [--save-sleep MS] [--refuse-start-if FILE] [--describe-fails] [--describe-hangs] [--gc] [--gc-fails]
               [--gc-waits-for FILE] [--tool-event KIND] [--system JSON] [--internal-peeks]
+              [--http-route HOST=URL ... [--route-env K=V ...] [--route-reads PATTERN ...]]
       An integration with one counter per instance and tools `poke` (write, adds 1) and `peek`
       (read), named `<P>poke` and `<P>peek` with --prefix. It exits on its N-th call_tool (only
       once across restarts when FILE marks that it did); every `save` after the first N is an
@@ -18,7 +19,9 @@
       FILE exists. With --gc-waits-for, `gc` answers only once FILE exists. With --tool-event,
       `poke`'s result gives an event of that kind with data {"n": <the new value>}. With
       --internal-peeks, `peek` counts its calls in the internal key `_peeks/n` (saved with the
-      counter) and answers {"n", "peeks"}.
+      counter) and answers {"n", "peeks"}. Each --http-route makes `http_routes` give a route from HOST
+      to URL (the first one with the --route-env variables and --route-reads patterns); without
+      one, `http_routes` answers -32601.
   toy.py bench --integration NAME [--part NAME=INTEGRATION ...] [--gold TOOL [--gold-args JSON]]
                [--config PART=JSON ...] [--clash] [--bench-tool [--tool-part PART]] [--link JSON ...]
                [--gate JSON ...] [--setup JSON ...] [--scored [--two-tasks] [--safety]]
@@ -178,6 +181,15 @@ class Part:
 
     def usage(self, p):
         return {"bytes": len(self.saves)}
+
+    def http_routes(self, p):
+        served = [spec.split("=", 1) for spec in opts("--http-route")]
+        if not served:
+            raise RpcError(-32601, "method not found: http_routes")
+        routes = [{"host": host, "upstream": url} for host, url in served]
+        routes[0]["env"] = dict(spec.split("=", 1) for spec in opts("--route-env"))
+        routes[0]["reads"] = opts("--route-reads")
+        return {"routes": routes}
 
     def gc(self, p):
         if "--gc" not in ARGS:

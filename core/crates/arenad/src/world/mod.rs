@@ -4,6 +4,7 @@
 
 mod clocked;
 mod gates;
+mod hosts;
 mod ids;
 mod links;
 mod plan;
@@ -22,10 +23,10 @@ use anyhow::{anyhow, bail, Result};
 use parts::{
     proto::{
         BenchCallTool, BenchDescribe, BenchToolOutput, CallToolParams, Describe, Effect, ExactKind,
-        FromSave, Gate, Link, Mode, StartParams, Target, ToolOutput, ToolSchema, ViewInfo,
-        WorldPart,
+        FromSave, Gate, HttpRoute, HttpRoutes, Link, Mode, StartParams, Target, ToolOutput,
+        ToolSchema, ViewInfo, WorldPart,
     },
-    request::{Connect, Stop},
+    request::{Connect, GetHttpRoutes, Stop},
     CallError, Client, Hub, Request,
 };
 use serde::de::DeserializeOwned;
@@ -34,6 +35,7 @@ use serde_json::{Map, Value};
 use crate::restore::{in_shared_saves, keeps_saves};
 
 pub use clocked::PartEvent;
+pub use hosts::{HostRoute, Hosts, HTTP_TOOL};
 pub use ids::{instance_id, new_save_id};
 pub use links::link_args;
 pub use plan::{plan, Plan, PlannedPart, Route};
@@ -205,6 +207,8 @@ struct StartedPart {
     part: Option<Part>,
     save: Option<String>,
     connection: Option<Value>,
+    /// The hosts the part's instance serves through the proxy.
+    routes: Vec<HttpRoute>,
     error: Option<anyhow::Error>,
 }
 
@@ -214,6 +218,7 @@ impl StartedPart {
             part,
             save,
             connection: None,
+            routes: vec![],
             error: Some(e),
         }
     }
@@ -232,11 +237,16 @@ async fn start_part(
         Ok(begun) => begun,
         Err(e) => return StartedPart::failed(None, None, e),
     };
-    match connect(&part).await {
-        Ok(connection) => StartedPart {
+    let connected = match connect(&part).await {
+        Ok(connection) => connection,
+        Err(e) => return StartedPart::failed(Some(part), save, e),
+    };
+    match http_routes(&part).await {
+        Ok(routes) => StartedPart {
             part: Some(part),
             save,
-            connection,
+            connection: connected,
+            routes,
             error: None,
         },
         Err(e) => StartedPart::failed(Some(part), save, e),
@@ -276,6 +286,8 @@ pub struct World {
     /// Present when the benchmark draws the world's view.
     view: Option<ViewInfo>,
     connections: Map<String, Value>,
+    /// The hosts its parts serve through the proxy.
+    hosts: Hosts,
     track: Mutex<Track>,
 }
 
@@ -349,6 +361,7 @@ impl World {
             gates: plan.gates,
             view: plan.view,
             connections: Map::new(),
+            hosts: Hosts::default(),
             track: Mutex::default(),
         }
     }
@@ -370,17 +383,32 @@ impl World {
         let starts = (parts.into_iter()).map(|p| start_part(&hub, p, branch_id, seed, from));
         let started = futures_util::future::join_all(starts).await;
         let mut world = World::new(hub, &bench.name, Some(bench_client), planned);
-        let mut failed = None;
-        for s in started {
-            if let Some(e) = world.take_started(s) {
-                failed.get_or_insert(e);
-            }
-        }
-        if let Some(e) = failed {
+        if let Some(e) = world.take_all_started(started) {
             world.stop().await;
             return Err(e);
         }
         Ok(world)
+    }
+
+    /// Adds the parts that started (see `take_started`) and the hosts they serve; the first
+    /// error, or why their hosts can't be served together.
+    fn take_all_started(&mut self, started: Vec<StartedPart>) -> Option<anyhow::Error> {
+        let mut failed = None;
+        let mut served = vec![];
+        for mut s in started {
+            let routes = std::mem::take(&mut s.routes);
+            if let Some(p) = &s.part {
+                served.push((p.name.clone(), p.describe.restore, routes));
+            }
+            if let Some(e) = self.take_started(s) {
+                failed.get_or_insert(e);
+            }
+        }
+        match Hosts::build(served) {
+            Ok(hosts) => self.hosts = hosts,
+            Err(e) => drop(failed.get_or_insert(anyhow!(e))),
+        }
+        failed
     }
 
     /// Adds a part that started (in world order) with its save and connection; the error of one
@@ -402,6 +430,11 @@ impl World {
 
     pub fn bench(&self) -> &str {
         &self.bench
+    }
+
+    /// The hosts the world's parts serve through the proxy.
+    pub fn hosts(&self) -> &Hosts {
+        &self.hosts
     }
 
     fn bench_label(&self) -> String {
@@ -623,6 +656,18 @@ async fn connect(part: &Part) -> Result<Option<Value>> {
         Err(CallError::Part { code: -32601, .. }) => Ok(None),
         Err(CallError::Stopped(tail)) => bail!(stopped_message(&part.label(), &tail)),
         Err(e) => bail!("connecting to the part {}: {e}", part.name),
+    }
+}
+
+/// The hosts a part's instance serves through the proxy; none when it doesn't answer
+/// `http_routes`.
+async fn http_routes(part: &Part) -> Result<Vec<HttpRoute>> {
+    let asked = GetHttpRoutes::instance(&part.instance);
+    match part.client.request::<HttpRoutes>(&asked).await {
+        Ok(served) => Ok(served.routes),
+        Err(CallError::Part { code: -32601, .. }) => Ok(vec![]),
+        Err(CallError::Stopped(tail)) => bail!(stopped_message(&part.label(), &tail)),
+        Err(e) => bail!("asking the part {} which hosts it serves: {e}", part.name),
     }
 }
 

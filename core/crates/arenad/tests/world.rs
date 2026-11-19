@@ -341,3 +341,66 @@ async fn gc_refused_right_after_run_starts(live: Live) {
     let (b, evs) = live::ended_ok(&fx.state, &branch).await;
     live::assert_recorded(&b, &evs, &live);
 }
+
+/// The world of a toy part `box` started with `part_args`, and its hub (kept alive with it).
+async fn hosted_world(
+    tag: &str,
+    part_args: &[&str],
+) -> (
+    Arc<arenad::world::World>,
+    packages::TestHub,
+    packages::ToyRoot,
+) {
+    let root = packages::toy_world(tag, part_args, &[]);
+    let hub = packages::TestHub::new(std::slice::from_ref(&root.0));
+    let world = hub.start_world("toybench", "b1").await;
+    (world, hub, root)
+}
+
+#[test]
+fn a_world_knows_the_hosts_its_parts_serve() {
+    run(async {
+        let args = [
+            "--http-route",
+            "toy.test=http://127.0.0.1:9",
+            "--route-env",
+            "TOY_URL=https://toy.test",
+        ];
+        let (world, _hub, _root) = hosted_world("hosts", &args).await;
+        assert_eq!(world.hosts().route("toy.test").unwrap().part, "box");
+        let want = [("TOY_URL".to_string(), "https://toy.test".to_string())].into();
+        assert_eq!(world.hosts().env(), want);
+        world.stop().await;
+    })
+}
+
+#[test]
+fn a_world_whose_parts_serve_nothing_has_no_hosts() {
+    run(async {
+        let (world, _hub, _root) = hosted_world("nohosts", &[]).await;
+        assert!(world.hosts().is_empty());
+        world.stop().await;
+    })
+}
+
+#[test]
+fn a_world_whose_replayed_part_serves_http_is_refused() {
+    run(async {
+        let args = [
+            "--exact",
+            "replay",
+            "--http-route",
+            "toy.test=http://127.0.0.1:9",
+        ];
+        let root = packages::toy_world("hostsreplay", &args, &[]);
+        let hub = packages::TestHub::new(std::slice::from_ref(&root.0));
+        let bench = hub.hub.bench_describe("toybench").await.unwrap();
+        let from = arenad::world::WorldFrom::Saves(Default::default());
+        let started = arenad::world::World::start(hub.hub.clone(), &bench, "b1", 1, from).await;
+        let e = format!("{:#}", started.err().unwrap());
+        assert!(
+            e.contains("the part box serves HTTP but restores by replay"),
+            "{e}"
+        );
+    })
+}

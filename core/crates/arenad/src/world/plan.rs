@@ -72,6 +72,9 @@ fn tool_table(bench: &BenchDescribe, parts: &[PlannedPart]) -> Result<Vec<(ToolS
     for (i, p) in parts.iter().enumerate() {
         tools.extend(p.describe.tools.iter().map(|t| (t.clone(), Route::Part(i))));
     }
+    if tools.iter().any(|(t, _)| t.name == super::HTTP_TOOL) {
+        bail!("the tool name http is kept for requests through the proxy");
+    }
     let mut seen = BTreeSet::from(["handoff"]);
     if let Some((t, _)) = tools.iter().find(|(t, _)| !seen.insert(t.name.as_str())) {
         bail!("two tools are called {}", t.name);
@@ -171,4 +174,52 @@ async fn describe_parts(hub: &Hub, bench: &BenchDescribe) -> Result<Vec<PlannedP
         });
     }
     Ok(parts)
+}
+
+#[cfg(test)]
+mod tests {
+    use parts::proto::{Effect, ExactKind, Restore, SaveAt};
+    use serde_json::json;
+
+    use super::*;
+
+    fn part_with_tool(name: &str) -> PlannedPart {
+        let tool = ToolSchema {
+            name: name.into(),
+            description: String::new(),
+            input_schema: json!({"type": "object"}),
+            effect: Effect::Read,
+        };
+        let describe = Describe {
+            name: "toy".into(),
+            version: "1".into(),
+            protocol: 1,
+            restore: Restore {
+                exact: ExactKind::Save,
+                approximate: false,
+            },
+            uses_clock: false,
+            fingerprint: json!({}),
+            tools: vec![tool],
+            system: None,
+            save_at: SaveAt::Step,
+        };
+        let part = WorldPart {
+            part: "box".into(),
+            integration: "toy".into(),
+            config: json!({}),
+        };
+        PlannedPart { part, describe }
+    }
+
+    #[test]
+    fn a_tool_named_http_is_refused() {
+        let bench = BenchDescribe::default();
+        let e = tool_table(&bench, &[part_with_tool("http")]).unwrap_err();
+        assert_eq!(
+            e.to_string(),
+            "the tool name http is kept for requests through the proxy"
+        );
+        assert!(tool_table(&bench, &[part_with_tool("fetch")]).is_ok());
+    }
 }
