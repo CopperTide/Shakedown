@@ -64,8 +64,14 @@ probes:
   - {key: version/orders, service: prod-orders, port: 8000, path: /version}
   - {key: version/inventory, service: prod-inventory, port: 8000, path: /version}
   - {key: alerts, service: alertmanager, port: 9093, path: "/api/v2/alerts?active=true&silenced=false&inhibited=false"}
-  - {key: alerts/paging, service: alertmanager, port: 9093,
-     path: "/api/v2/alerts?active=true&silenced=false&inhibited=false&filter=severity%3D%22page%22"}
+  # Paging alerts in world time: Prometheus evaluates rules.yml at the wall clock, where a world's samples (stamped in
+  # world time) are not, so this asks the gateway each `severity: page` rule's expr at the world's time, labelled as
+  # Alertmanager would (alertname, pagerduty_severity, summary). Rules fire at once here (no `for:`). Encoded form of
+  # the rules' exprs; tests/software_factory/test_platform_files.py checks it against rules.yml.
+  - key: alerts/paging
+    service: worldclock-gateway
+    port: 4319
+    path: "/q/prometheus/api/v1/query?time={{world_s}}&query=label_join%28label_join%28label_replace%28label_replace%28label_replace%28%28sum%20by%20%28service_name%29%20%28rate%28http_server_request_duration_seconds_count%7Bdeployment_environment_name%3D%22production%22%2C%20http_route%21%3D%22%2Fhealthz%22%2C%20http_response_status_code%3D~%225..%22%7D%5B5m%5D%29%29%20%2F%20sum%20by%20%28service_name%29%20%28rate%28http_server_request_duration_seconds_count%7Bdeployment_environment_name%3D%22production%22%2C%20http_route%21%3D%22%2Fhealthz%22%7D%5B5m%5D%29%29%20%3E%200.05%29%2C%20%22alertname%22%2C%20%22HighErrorRate%22%2C%20%22%22%2C%20%22%22%29%2C%20%22pagerduty_severity%22%2C%20%22critical%22%2C%20%22%22%2C%20%22%22%29%2C%20%22says%22%2C%20%22answers%20more%20than%205%25%20of%20requests%20with%20a%20server%20error%22%2C%20%22%22%2C%20%22%22%29%2C%20%22summary%22%2C%20%22%20%22%2C%20%22service_name%22%2C%20%22says%22%29%2C%20%22alert_id%22%2C%20%22%3A%22%2C%20%22alertname%22%2C%20%22service_name%22%29%20or%20label_join%28label_join%28label_replace%28label_replace%28label_replace%28%28scalar%28max%28max_over_time%28timestamp%28http_server_request_duration_seconds_count%7Bdeployment_environment_name%3D%22production%22%7D%29%5B1h%3A1m%5D%29%29%29%20-%20max%20by%20%28service_name%29%20%28max_over_time%28timestamp%28http_server_request_duration_seconds_count%7Bdeployment_environment_name%3D%22production%22%7D%29%5B1h%3A1m%5D%29%29%20%3E%20180%29%2C%20%22alertname%22%2C%20%22ServiceDown%22%2C%20%22%22%2C%20%22%22%29%2C%20%22pagerduty_severity%22%2C%20%22critical%22%2C%20%22%22%2C%20%22%22%29%2C%20%22says%22%2C%20%22has%20reported%20nothing%20for%203%20minutes%20while%20the%20others%20have%22%2C%20%22%22%2C%20%22%22%29%2C%20%22summary%22%2C%20%22%20%22%2C%20%22service_name%22%2C%20%22says%22%29%2C%20%22alert_id%22%2C%20%22%3A%22%2C%20%22alertname%22%2C%20%22service_name%22%29"
   - key: glitchtip/issues
     service: glitchtip
     port: 8000
@@ -80,12 +86,12 @@ probes:
 watches:
   - probe: alerts/paging
     every_ms: 15000
-    items: ""
-    id: /fingerprint
+    items: /data/result
+    id: /metric/alert_id
     "on": alert_firing
     "off": alert_resolved
     fields:
-      summary: /annotations/summary
-      service: /labels/service_name
-      severity: /labels/pagerduty_severity
-      alertname: /labels/alertname
+      summary: /metric/summary
+      service: /metric/service_name
+      severity: /metric/pagerduty_severity
+      alertname: /metric/alertname

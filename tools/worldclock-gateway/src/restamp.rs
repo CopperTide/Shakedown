@@ -118,6 +118,7 @@ mod tests {
             clock_ms: 60_000,
             speed: 1.0,
             wall_ms: W,
+            world: true,
         })
     }
 

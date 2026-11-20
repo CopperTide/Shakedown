@@ -169,3 +169,23 @@ def test_every_app_reports_to_the_glitchtip_project_init_makes(platform):
     for number, (name, key) in enumerate(projects.items(), 1):
         for env in ("prod", "staging"):
             assert lean[f"{env}-{name}"]["environment"]["SENTRY_DSN"] == f"http://{key}@glitchtip:8000/{number}"
+
+
+def test_the_paging_watch_evaluates_the_paging_rules_in_world_time(platform):
+    """Prometheus evaluates its rules at the wall clock, where a world's samples (stamped in world time) are not, so
+    the watch asks the gateway's query face each paging rule at the world's own time instead."""
+    from urllib.parse import parse_qs, urlsplit
+    part = load_yaml(platform / "service.yaml")
+    watch = next(w for w in part["watches"] if w["probe"] == "alerts/paging")
+    probe = next(p for p in part["probes"] if p["key"] == "alerts/paging")
+    url = urlsplit(probe["path"])
+    assert (probe["service"], probe["port"], url.path) == ("worldclock-gateway", 4319, "/q/prometheus/api/v1/query")
+    asked = parse_qs(url.query)
+    assert asked["time"] == ["{{world_s}}"]
+    flat = lambda text: " ".join(text.split())  # noqa: E731
+    paging = [r for r in rules(platform) if r["labels"]["severity"] == "page"]
+    assert paging and all(flat(r["expr"]) in flat(asked["query"][0]) for r in paging)
+    assert all(f'"alertname", "{r["alert"]}"' in asked["query"][0] for r in paging)
+    assert (watch["items"], watch["id"]) == ("/data/result", "/metric/alert_id")
+    assert watch["fields"] == {"summary": "/metric/summary", "service": "/metric/service_name",
+                               "severity": "/metric/pagerduty_severity", "alertname": "/metric/alertname"}

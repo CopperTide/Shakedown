@@ -82,6 +82,11 @@ async fn store() -> (Store, String) {
 
 /// The gateway's faces (ingest, query) on a clock `offset_ms` from the wall, in front of the store.
 async fn gateway(offset_ms: i64) -> (Store, String, String) {
+    gateway_on(offset_ms, true).await
+}
+
+/// `gateway`, its clock file saying whether it is a world clock (`world`).
+async fn gateway_on(offset_ms: i64, world: bool) -> (Store, String, String) {
     let (s, base) = store().await;
     let now_ms = (wall_now_ns() / 1_000_000) as i64;
     let clock = Clock::of(ClockFile {
@@ -89,6 +94,7 @@ async fn gateway(offset_ms: i64) -> (Store, String, String) {
         clock_ms: now_ms + offset_ms,
         speed: 1.0,
         wall_ms: now_ms,
+        world,
     });
     let up = Upstreams {
         traces: format!("{base}/traces"),
@@ -151,6 +157,22 @@ async fn ingest_restamps_protobuf_and_passes_the_stores_answer_back() {
     assert!(
         (shifted + i128::from(HOUR_MS) * 1_000_000).abs() < 1_100_000_000,
         "{shifted}"
+    );
+}
+
+/// A world with no world time of its own (a base or gold save being made) sends wall-time stamps;
+/// they are dropped, so the stores a run starts from hold only world time it can add to.
+#[tokio::test]
+async fn telemetry_is_dropped_while_the_clock_is_no_world_clock() {
+    let (s, ingest, _) = gateway_on(0, false).await;
+    let sent = reqwest::Client::new()
+        .post(format!("{ingest}/v1/traces"))
+        .header("content-type", "application/x-protobuf")
+        .body(one_span(wall_now_ns()).encode_to_vec());
+    assert_eq!(sent.send().await.unwrap().status().as_u16(), 200);
+    assert!(
+        s.got.lock().unwrap().is_empty(),
+        "nothing reached the store"
     );
 }
 

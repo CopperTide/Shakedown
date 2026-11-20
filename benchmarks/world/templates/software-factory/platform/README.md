@@ -12,7 +12,10 @@ containers with the CI job and the traffic service, under 2600).
 - Dashboards (`grafana/dashboards/`): Service overview, Production SLO, Deploys, Database; every query reads only
   metrics in `metrics.txt`, which platform-lib's tests check against what a service emits.
 - Alerts (`prometheus/rules.yml`): HighErrorRate (page), HighLatency (ticket), ServiceDown (page). Alertmanager has
-  no notifier; the `alerts/paging` watch turns paging alerts into world events.
+  no notifier. Prometheus evaluates the rules at the wall clock, where world-time samples are not, so the
+  `alerts/paging` watch evaluates the paging rules' exprs through the gateway at world time and turns them into world
+  events. The gateway drops telemetry while the world has no world time (a base or gold save being made), so saved
+  stores hold only world time.
 - GlitchTip 6.2.6, web and worker in one process (lean) or two containers (full), no Valkey; `glitchtip/init.sh`
   makes the organisation, the three projects with the apps' DSN keys and the probes' API token, then starts it.
 - `seed/`: the catalog (stock for more than a world week of the traffic's orders) and `PROD_ORDERS_ROWS` past

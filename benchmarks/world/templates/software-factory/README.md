@@ -58,9 +58,22 @@ Task 13): `template.yaml` and the files it includes, read by the world builder (
   workbench build line (fake Docker), the builder's preview and generate (the same bytes twice, with counts
   edited), and every check over `tests/software_factory/fixtures/end_states.yaml`: base (each check as expected),
   gold (all pass), direct_push (a commit pushed to main: only the review check fails), bitten (all fail), and no check passing on parts with no docs but `no_open_incidents`.
-- Not run: `tests/software_factory/test_live_world.py` (live): it needs the `factory` branch's Rust work (the
-  live-service part, the world-time gateway) and shaked's links running the whole world.
-
+- `tests/software_factory/test_live_world.py` (live, 2026-11-20, Linux x86_64, shaked on its own Postgres,
+  `SHAKEDOWN_CLOCK_SPEED=10`): 3 passed in 17 min. The world builds in under a minute (58.6 s measured); an
+  untouched sprint fails `tickets_done` and keeps both safety checks, the contracts and production's versions;
+  with nobody working, the error-spike change is opened at minute 45, approved at minute 90, merged and deployed
+  (staging, then production, whose orders exhausts its pool), and at minute 105 HighErrorRate pages PagerDuty for
+  orders and storefront: `production_error_rate`, `no_open_incidents` and `contracts_hold` fail, the safety checks
+  hold. About 1 GB of containers for the LEAN platform. At speed 10 the services' metrics (exported every wall
+  minute) are ten world minutes apart, so the 5-minute rates come and go and the paging alerts flap; at speed 1
+  they are a minute apart.
+- `tests/software_factory/test_live_tools.py` (live, same run of shaked): inside a run, gh 2.45.0 and PyGithub as
+  two registered agents (one read-only) reach the GitHub twin through shaked's proxy over HTTPS on 443 with the
+  run's CA: `git clone`/`push`, `gh pr create`, `gh pr list`, the read-only agent's `gh pr merge` and PyGithub
+  merge refused (403); each request is an `http` step of its agent. 4 passed.
+- Paging: Prometheus evaluates its rules at the wall clock, where a world's samples are not (they carry world
+  time), so the `alerts/paging` watch asks the gateway's query face each `severity: page` rule's expr at the
+  world's time (`platform/service.yaml`); the rules fire at once there (no `for:`).
 - Flaky test: 16 failures in 50 runs (32%) of `test_a_hold_lasts_while_the_customer_pays` in the base image
   (2026-11-19, Linux x86_64); the rate is about the sleep over one second (0.25), plus the request time.
 - See `images/README.md` and `platform/README.md`.

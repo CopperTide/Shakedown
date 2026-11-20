@@ -30,12 +30,21 @@ pub struct ClockFile {
     pub clock_ms: i64,
     pub speed: f64,
     pub wall_ms: i64,
+    /// False while the world has no world time of its own (a base or gold save being made); a
+    /// file without the field is a world clock.
+    #[serde(default = "is_world")]
+    pub world: bool,
+}
+
+fn is_world() -> bool {
+    true
 }
 
 /// One point of the timeline: world `base_ns` at wall `wall_ns`, never below `floor_ns`.
 #[derive(Debug, Clone, Copy)]
 struct Point {
     epoch_ms: i64,
+    world: bool,
     base_ns: i128,
     wall_ns: i128,
     speed: f64,
@@ -57,6 +66,11 @@ pub struct Timeline {
 }
 
 impl Timeline {
+    /// Whether the latest point is a world clock's (no point yet: it is).
+    pub fn is_world(&self) -> bool {
+        self.points.back().is_none_or(|p| p.world)
+    }
+
     /// Adds the point a clock file gives.
     pub fn add(&mut self, f: ClockFile) {
         let wall_ns = i128::from(f.wall_ms) * NS_PER_MS;
@@ -67,6 +81,7 @@ impl Timeline {
         }
         self.points.push_back(Point {
             epoch_ms: f.epoch_ms,
+            world: f.world,
             base_ns: i128::from(f.epoch_ms + f.clock_ms) * NS_PER_MS,
             wall_ns,
             speed: f.speed,
@@ -132,6 +147,11 @@ impl Clock {
 
     pub fn world_ns(&self, wall_ns: u64) -> u64 {
         self.state.lock().expect("clock lock").0.world_ns(wall_ns)
+    }
+
+    /// Whether the latest clock file is a world clock (no file yet: it is).
+    pub fn is_world(&self) -> bool {
+        self.state.lock().expect("clock lock").0.is_world()
     }
 
     /// World now minus wall now, in ms.

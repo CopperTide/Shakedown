@@ -20,6 +20,14 @@ pub struct Clock {
     pub speed: f64,
     /// The wall time (unix ms) the clock was written at.
     pub wall_ms: i64,
+    /// Whether the world gave its world time; a base or gold world runs on the wall clock, and
+    /// the world-time gateway drops what it sends then (a file without the field is a world's).
+    #[serde(default = "is_world")]
+    pub world: bool,
+}
+
+fn is_world() -> bool {
+    true
 }
 
 /// The unix ms now.
@@ -33,6 +41,7 @@ impl Clock {
     /// runs at speed 1 from now, so stamps stay near the wall clock the stores accept.
     pub fn at_start(world_time: Option<WorldTimeParams>, clock_ms: i64) -> Clock {
         let wall = wall_now_ms();
+        let world = world_time.is_some();
         let wt = world_time.unwrap_or(WorldTimeParams {
             epoch_ms: wall - clock_ms,
             speed: 1.0,
@@ -43,6 +52,7 @@ impl Clock {
             world_ms: wt.epoch_ms + clock_ms,
             speed: wt.speed,
             wall_ms: wall,
+            world,
         }
     }
 
@@ -96,5 +106,16 @@ mod tests {
     fn without_world_time_the_world_starts_at_the_wall_clock() {
         let c = Clock::at_start(None, 0);
         assert!((c.world_ms - wall_now_ms()).abs() < 5_000);
+    }
+
+    #[test]
+    fn the_file_says_whether_it_is_a_world_clock() {
+        let wt = WorldTimeParams {
+            epoch_ms: 1_000_000,
+            speed: 1.0,
+        };
+        let json = |c: Clock| serde_json::to_value(c).unwrap()["world"].clone();
+        assert_eq!(json(Clock::at_start(Some(wt), 0).moved_to(10)), true);
+        assert_eq!(json(Clock::at_start(None, 0).moved_to(10)), false);
     }
 }

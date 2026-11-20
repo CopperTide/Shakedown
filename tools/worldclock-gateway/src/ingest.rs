@@ -62,6 +62,11 @@ async fn ingest(State(g): State<Arc<Gateway>>, s: Signal, h: HeaderMap, body: By
     if let Some(refused) = compressed(&h) {
         return refused;
     }
+    if !g.clock.is_world() {
+        // Wall-time stamps of a base or gold save: a run's world time would come after them in
+        // the saved stores only by chance, and Prometheus refuses samples older than its head.
+        return StatusCode::OK.into_response();
+    }
     let content_type = h.get(header::CONTENT_TYPE).and_then(|v| v.to_str().ok());
     let json = content_type.is_some_and(|t| t.starts_with("application/json"));
     let restamped = match restamp_body(s, &body, json, &g.clock) {
