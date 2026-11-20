@@ -250,15 +250,17 @@ pub async fn batch_last_text(db: &str, sql: &str) -> Option<String> {
 /// Bootstraps database `db` and migrates only stream identity (as the Cloud gateway would).
 pub async fn identity_only(db: &str) {
     let (mut c, task) = db_client(db).await;
-    c.batch_execute(coppertide_schema::BOOTSTRAP_SQL)
+    c.batch_execute(shakedown_schema::BOOTSTRAP_SQL)
         .await
         .unwrap();
-    let plan = coppertide_schema::Plan {
-        apply: &[coppertide_schema::Stream::Identity],
+    let plan = shakedown_schema::Plan {
+        apply: &[shakedown_schema::Stream("identity")],
         require: &[],
         applied_by: "test",
     };
-    coppertide_schema::migrate(&mut c, &plan).await.unwrap();
+    shakedown_schema::migrate(&mut c, &plan, shakedown_schema::retiring_identity())
+        .await
+        .unwrap();
     drop(c);
     let _ = task.await;
 }

@@ -147,7 +147,7 @@ fn run_events<'a>(team: &'a Team, snap: &str) -> Vec<(Option<&'a str>, EventKind
 
 /// The tables shaked kept in `public` until 2026-11-20 (its SCHEMA strings at bb8e7e8).
 pub const TODAYS_PUBLIC_SCHEMA: &str =
-    include_str!("../../../coppertide-schema/tests/fixtures/shaked-bb8e7e8.sql");
+    include_str!("../../../shakedown-schema/tests/fixtures/shaked-bb8e7e8.sql");
 
 /// Makes database `name` as an old shaked left it: its tables in `public`, one run with a root
 /// branch and two events. The run's and the branch's ids.

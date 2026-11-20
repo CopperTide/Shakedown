@@ -1,9 +1,9 @@
-//! Opening the metadata database: the roles, the migrations of coppertide-schema, the local seed,
+//! Opening the metadata database: the roles, the migrations of shakedown-schema, the local seed,
 //! and the connection pools.
 
 use anyhow::{bail, Context, Result};
-use coppertide_schema::{migrate, Plan, Stream, BOOTSTRAP_SQL};
 use deadpool_postgres::{Manager, ManagerConfig, Pool, RecyclingMethod, Runtime};
+use shakedown_schema::{base, migrate, retiring_identity, Plan, Stream, BOOTSTRAP_SQL, SHAKEDOWN};
 use tokio_postgres::{Client, NoTls};
 
 use crate::pg::Admin;
@@ -16,7 +16,7 @@ const POOL_SIZE: usize = 16;
 
 /// What a login that is not a superuser needs first. Never names the login's URL.
 const BOOTSTRAP_HINT: &str = "this Postgres login is not a superuser and is not in the roles \
-     shaked_app and shaked_system: run core/crates/coppertide-schema/bootstrap.sql once as a \
+     shaked_app and shaked_system: run core/crates/shakedown-schema/bootstrap.sql once as a \
      superuser, then GRANT shaked_app, shaked_system TO the login";
 
 /// Brings database `name` up to date for a local shaked, on one connection it closes before
@@ -40,13 +40,13 @@ async fn prepare_on(c: &mut Client, name: &str) -> Result<()> {
         require: &[],
         applied_by: APPLIED_BY,
     };
-    migrate(c, &plan(&[Stream::Identity]))
+    migrate(c, &plan(&[Stream("identity")]), retiring_identity())
         .await
         .context("migrating stream identity")?;
     super::seed::seed_local(c)
         .await
         .context("seeding the local owner")?;
-    migrate(c, &plan(&[Stream::Shakedown]))
+    migrate(c, &plan(&[SHAKEDOWN]), base())
         .await
         .context("migrating stream shakedown")?;
     let quoted = name.replace('"', "\"\"");
@@ -98,8 +98,9 @@ pub(super) fn pool(url: &str) -> Result<Pool> {
 /// What a test template database is named after: the embedded migrations and the local seed, so a
 /// changed schema gets a new template. 8 hex digits.
 pub fn template_key() -> String {
-    let mut all: Vec<u8> = coppertide_schema::migrations()
+    let mut all: Vec<u8> = shakedown_schema::retiring_identity()
         .iter()
+        .chain(base())
         .flat_map(|m| m.checksum)
         .collect();
     all.extend_from_slice(super::seed::SEED_SQL.as_bytes());

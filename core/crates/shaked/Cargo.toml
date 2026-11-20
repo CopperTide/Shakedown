@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 parts = { path = "../parts" }
-coppertide-schema = { path = "../coppertide-schema" }
+shakedown-schema = { path = "../shakedown-schema" }
 deadpool-postgres = { version = "0.14", default-features = false, features = ["rt_tokio_1"] }
 tokio = { workspace = true }
 tokio-postgres = { workspace = true, features = ["with-uuid-1"] }

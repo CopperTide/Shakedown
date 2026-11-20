@@ -3,9 +3,17 @@
 
 use std::{collections::BTreeSet, path::Path};
 
-use coppertide_schema::{migrations, Stream};
+use shakedown_schema::{base, load, retiring_identity, Error, Files, Migration, Stream};
 
-const STREAMS: [Stream; 3] = [Stream::Identity, Stream::Cloud, Stream::Shakedown];
+/// Every embedded set, one stream each.
+fn sets() -> [&'static [Migration]; 2] {
+    [base(), retiring_identity()]
+}
+
+/// Every embedded migration.
+fn migrations() -> Vec<&'static Migration> {
+    sets().into_iter().flatten().collect()
+}
 
 /// The `.sql` files in `migrations/<stream>/`, by name.
 fn files_on_disk(s: Stream) -> BTreeSet<String> {
@@ -25,8 +33,10 @@ fn files_on_disk(s: Stream) -> BTreeSet<String> {
 /// the file names below.)
 #[test]
 fn every_file_parses_and_versions_are_dense_from_1() {
-    for s in STREAMS {
-        let embedded: Vec<_> = migrations().iter().filter(|m| m.stream == s).collect();
+    for set in sets() {
+        let s = set[0].stream;
+        assert!(set.iter().all(|m| m.stream == s), "one stream per set");
+        let embedded: Vec<_> = set.iter().collect();
         for (i, m) in embedded.iter().enumerate() {
             assert_eq!(
                 m.version as usize,
@@ -148,4 +158,20 @@ fn every_file_sets_no_timeouts_itself() {
             m.version
         );
     }
+}
+
+#[test]
+fn stream_names_are_checked() {
+    let bad = Files {
+        stream: Stream("Bad-Name"),
+        files: &[],
+        also_accept: &[],
+    };
+    assert!(matches!(load(&[&bad]), Err(Error::BadFile(_))));
+    let bad_requires = Files {
+        stream: Stream("extra"),
+        files: &[("0001_x.sql", "-- requires: Bad-Name >= 1\nSELECT 1;")],
+        also_accept: &[],
+    };
+    assert!(matches!(load(&[&bad_requires]), Err(Error::BadFile(_))));
 }

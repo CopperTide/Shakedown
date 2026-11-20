@@ -77,7 +77,7 @@ impl Scratch {
         let db = Scratch::new(tag).await;
         db.connect()
             .await
-            .batch_execute(coppertide_schema::BOOTSTRAP_SQL)
+            .batch_execute(shakedown_schema::BOOTSTRAP_SQL)
             .await
             .unwrap();
         db

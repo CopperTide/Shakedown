@@ -4,18 +4,32 @@ mod support;
 
 use std::time::Duration;
 
-use coppertide_schema::{
-    check, migrate, migrate_set, migrations, wait_ready, Error, Migration, Plan, Stream,
+use shakedown_schema::{
+    base, check, load, migrate, retiring_identity, wait_ready, Error, Files, Migration, Plan,
+    Stream, BASE_FILES, SHAKEDOWN,
 };
 use support::{count, fingerprint, Scratch};
 
+const ID: Stream = Stream("identity");
+
+/// Every migration this crate embeds: the base and, until the cloud takes it, identity.
+fn all() -> Vec<Migration> {
+    let mut all: Vec<Migration> = base().iter().chain(retiring_identity()).cloned().collect();
+    all.sort_by_key(|m| (m.stream, m.version));
+    all
+}
+
+fn migrations() -> Vec<Migration> {
+    all()
+}
+
 const LOCAL: Plan<'static> = Plan {
-    apply: &[Stream::Identity, Stream::Shakedown],
+    apply: &[ID, SHAKEDOWN],
     require: &[],
     applied_by: "test",
 };
 const IDENTITY: Plan<'static> = Plan {
-    apply: &[Stream::Identity],
+    apply: &[ID],
     require: &[],
     applied_by: "test",
 };
@@ -43,9 +57,9 @@ async fn todays_shaked_migrated(c: &mut tokio_postgres::Client) {
         .await
         .unwrap();
     c.batch_execute(TODAYS_ROWS).await.unwrap();
-    migrate(c, &IDENTITY).await.unwrap();
+    migrate(c, &IDENTITY, &all()).await.unwrap();
     c.batch_execute(LOCAL_ORG).await.unwrap();
-    migrate(c, &LOCAL).await.unwrap();
+    migrate(c, &LOCAL, &all()).await.unwrap();
 }
 
 fn latest(s: Stream) -> u32 {
@@ -61,19 +75,19 @@ fn latest(s: Stream) -> u32 {
 async fn empty_to_latest_then_again_is_a_no_op() {
     let db = Scratch::bootstrapped("noop").await;
     let mut c = db.connect().await;
-    let first = migrate(&mut c, &LOCAL).await.unwrap();
+    let first = migrate(&mut c, &LOCAL, &all()).await.unwrap();
     assert_eq!(first.applied.len(), migrations().len());
-    let again = migrate(&mut c, &LOCAL).await.unwrap();
+    let again = migrate(&mut c, &LOCAL, &all()).await.unwrap();
     assert!(again.applied.is_empty(), "{:?}", again.applied);
     let rows = count(&c, "SELECT * FROM schema_meta.migrations").await;
     assert_eq!(rows as usize, migrations().len());
-    assert!(check(&mut c, &LOCAL).await.is_ok());
+    assert!(check(&mut c, &LOCAL, &all()).await.is_ok());
 }
 
 /// The embedded set, with `(stream, version)` also accepting `old`.
 fn also_accepting(stream: Stream, version: u32, old: [u8; 32]) -> Vec<Migration> {
     let accepted: &'static [[u8; 32]] = Box::leak(Box::new([old]));
-    let mut set = migrations().to_vec();
+    let mut set = all();
     for m in set
         .iter_mut()
         .filter(|m| (m.stream, m.version) == (stream, version))
@@ -87,40 +101,40 @@ fn also_accepting(stream: Stream, version: u32, old: [u8; 32]) -> Vec<Migration>
 async fn a_changed_checksum_refuses_and_also_accept_admits() {
     let db = Scratch::bootstrapped("checksum").await;
     let mut c = db.connect().await;
-    migrate(&mut c, &LOCAL).await.unwrap();
+    migrate(&mut c, &LOCAL, &all()).await.unwrap();
     let old = [7u8; 32];
     let sql =
         "UPDATE schema_meta.migrations SET checksum = $1 WHERE stream = 'identity' AND version = 1";
     c.execute(sql, &[&old.as_slice()]).await.unwrap();
-    let refused = migrate(&mut c, &LOCAL).await;
+    let refused = migrate(&mut c, &LOCAL, &all()).await;
     assert!(
         matches!(
             refused,
             Err(Error::Checksum {
-                stream: Stream::Identity,
+                stream: ID,
                 version: 1,
                 ..
             })
         ),
         "{refused:?}"
     );
-    let checked = check(&mut c, &LOCAL).await;
+    let checked = check(&mut c, &LOCAL, &all()).await;
     assert!(
         matches!(checked, Err(Error::Checksum { .. })),
         "{checked:?}"
     );
-    let set = also_accepting(Stream::Identity, 1, old);
-    let r = migrate_set(&mut c, &LOCAL, &set).await.unwrap();
+    let set = also_accepting(ID, 1, old);
+    let r = migrate(&mut c, &LOCAL, &set).await.unwrap();
     assert!(r.applied.is_empty());
 }
 
 const HOSTED: Plan<'static> = Plan {
-    apply: &[Stream::Shakedown],
-    require: &[(Stream::Identity, 2)],
+    apply: &[SHAKEDOWN],
+    require: &[(ID, 2)],
     applied_by: "test",
 };
 
-fn is_behind(r: &Result<coppertide_schema::Report, Error>, s: Stream, h: u32, n: u32) -> bool {
+fn is_behind(r: &Result<shakedown_schema::Report, Error>, s: Stream, h: u32, n: u32) -> bool {
     matches!(r, Err(Error::Behind { stream, have, need }) if (*stream, *have, *need) == (s, h, n))
 }
 
@@ -128,18 +142,18 @@ fn is_behind(r: &Result<coppertide_schema::Report, Error>, s: Stream, h: u32, n:
 async fn a_missing_required_stream_reports_behind_and_wait_ready_gives_up() {
     let db = Scratch::bootstrapped("behind").await;
     let mut c = db.connect().await;
-    migrate(&mut c, &IDENTITY).await.unwrap();
+    migrate(&mut c, &IDENTITY, &all()).await.unwrap();
     // As if the other service had applied only identity 1.
     let sql = "DELETE FROM schema_meta.migrations WHERE stream = 'identity' AND version >= 2";
     c.batch_execute(sql).await.unwrap();
-    let r = migrate(&mut c, &HOSTED).await;
-    assert!(is_behind(&r, Stream::Identity, 1, 2), "{r:?}");
+    let r = migrate(&mut c, &HOSTED, &all()).await;
+    assert!(is_behind(&r, ID, 1, 2), "{r:?}");
     let shakedown = "SELECT * FROM schema_meta.migrations WHERE stream = 'shakedown'";
     assert_eq!(count(&c, shakedown).await, 0);
     let started = std::time::Instant::now();
     let (every, give_up) = (Duration::from_millis(10), Duration::from_millis(50));
-    let r = wait_ready(&mut c, &HOSTED, every, give_up).await;
-    assert!(is_behind(&r, Stream::Identity, 1, 2), "{r:?}");
+    let r = wait_ready(&mut c, &HOSTED, &all(), every, give_up).await;
+    assert!(is_behind(&r, ID, 1, 2), "{r:?}");
     assert!(started.elapsed() >= give_up);
 }
 
@@ -147,7 +161,8 @@ async fn a_missing_required_stream_reports_behind_and_wait_ready_gives_up() {
 async fn two_concurrent_migrators_apply_each_version_once() {
     let db = Scratch::bootstrapped("concurrent").await;
     let (mut a, mut b) = (db.connect().await, db.connect().await);
-    let (ra, rb) = tokio::join!(migrate(&mut a, &LOCAL), migrate(&mut b, &LOCAL));
+    let set = all();
+    let (ra, rb) = tokio::join!(migrate(&mut a, &LOCAL, &set), migrate(&mut b, &LOCAL, &set));
     let (ra, rb) = (ra.unwrap(), rb.unwrap());
     assert_eq!(ra.applied.len() + rb.applied.len(), migrations().len());
     let rows = count(&a, "SELECT * FROM schema_meta.migrations").await;
@@ -158,8 +173,8 @@ async fn two_concurrent_migrators_apply_each_version_once() {
 async fn newer_versions_than_the_binary_knows_are_reported_not_refused() {
     let db = Scratch::bootstrapped("newer").await;
     let mut c = db.connect().await;
-    migrate(&mut c, &LOCAL).await.unwrap();
-    let v = latest(Stream::Identity) as i32 + 1;
+    migrate(&mut c, &LOCAL, &all()).await.unwrap();
+    let v = latest(ID) as i32 + 1;
     c.execute(
         "INSERT INTO schema_meta.migrations (stream, version, name, checksum, applied_by)
          VALUES ('identity', $1, 'from_the_future', '\\x00', 'gateway')",
@@ -167,9 +182,9 @@ async fn newer_versions_than_the_binary_knows_are_reported_not_refused() {
     )
     .await
     .unwrap();
-    let r = migrate(&mut c, &LOCAL).await.unwrap();
+    let r = migrate(&mut c, &LOCAL, &all()).await.unwrap();
     assert!(r.applied.is_empty());
-    assert_eq!(r.newer, vec![(Stream::Identity, v as u32)]);
+    assert_eq!(r.newer, vec![(ID, v as u32)]);
 }
 
 #[tokio::test]
@@ -181,9 +196,9 @@ async fn identity_1_create_path_matches_cloud_0015_moved_path() {
     let ada = "INSERT INTO users (id, name, email)
                VALUES ('00000000-0000-0000-0000-0000000000c1', 'Ada', 'ada@example.test')";
     a.batch_execute(ada).await.unwrap();
-    migrate(&mut a, &IDENTITY).await.unwrap();
+    migrate(&mut a, &IDENTITY, &all()).await.unwrap();
     let mut b = fresh.connect().await;
-    migrate(&mut b, &IDENTITY).await.unwrap();
+    migrate(&mut b, &IDENTITY, &all()).await.unwrap();
     let fp = fingerprint(&b, "identity").await;
     assert!(
         fp.len() > 80,
@@ -214,7 +229,7 @@ async fn shakedown_1_is_idempotent_over_tables_made_by_todays_shaked() {
         0
     );
     let mut b = fresh.connect().await;
-    migrate(&mut b, &LOCAL).await.unwrap();
+    migrate(&mut b, &LOCAL, &all()).await.unwrap();
     let fp = fingerprint(&b, "shakedown").await;
     assert!(
         fp.len() > 60,
@@ -228,7 +243,7 @@ async fn shakedown_1_is_idempotent_over_tables_made_by_todays_shaked() {
 async fn a_missing_setting_matches_no_row() {
     let db = Scratch::bootstrapped("nosetting").await;
     let mut c = db.connect().await;
-    migrate(&mut c, &IDENTITY).await.unwrap();
+    migrate(&mut c, &IDENTITY, &all()).await.unwrap();
     let org = "00000000-0000-0000-0000-0000000000d1";
     c.batch_execute(&format!(
         "INSERT INTO identity.orgs (id, slug, name, kind) VALUES ('{org}', 'acme', 'Acme', 'customer')"
@@ -278,4 +293,51 @@ async fn shakedown_2_on_todays_data_gives_every_row_the_local_org() {
             .collect();
         assert_eq!(orgs, [local], "{t}");
     }
+}
+
+const EXTRA: Files = Files {
+    stream: Stream("extra"),
+    files: &[(
+        "0001_extra.sql",
+        include_str!("fixtures/extra/0001_extra.sql"),
+    )],
+    also_accept: &[],
+};
+const WITH_EXTRA: Plan<'static> = Plan {
+    apply: &[ID, SHAKEDOWN, Stream("extra")],
+    require: &[],
+    applied_by: "test",
+};
+
+/// Identity, the base and stream `extra` applied (identity until the base drops its orgs).
+async fn with_extra(c: &mut tokio_postgres::Client) {
+    let mut set = load(&[&BASE_FILES, &EXTRA]).unwrap();
+    set.extend(retiring_identity().iter().cloned());
+    set.sort_by_key(|m| (m.stream, m.version));
+    migrate(c, &WITH_EXTRA, &set).await.unwrap();
+}
+
+#[tokio::test]
+async fn a_stream_the_crate_does_not_know_applies_after_the_base() {
+    let db = Scratch::bootstrapped("extra").await;
+    let mut c = db.connect().await;
+    with_extra(&mut c).await;
+    let extra = "SELECT * FROM schema_meta.migrations WHERE stream = 'extra' AND version = 1";
+    assert_eq!(count(&c, extra).await, 1);
+    assert!(support::exists(&c, "extra.t").await);
+}
+
+#[tokio::test]
+async fn a_binary_that_knows_only_the_base_reports_the_other_stream_as_newer_not_an_error() {
+    let db = Scratch::bootstrapped("extranewer").await;
+    let mut c = db.connect().await;
+    with_extra(&mut c).await;
+    let base_only = Plan {
+        apply: &[SHAKEDOWN],
+        require: &[],
+        applied_by: "test",
+    };
+    let r = migrate(&mut c, &base_only, base()).await.unwrap();
+    assert!(r.applied.is_empty(), "{:?}", r.applied);
+    assert!(r.newer.contains(&(Stream("extra"), 1)), "{:?}", r.newer);
 }

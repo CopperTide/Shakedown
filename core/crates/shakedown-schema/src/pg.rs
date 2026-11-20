@@ -35,7 +35,7 @@ impl Conn for tokio_postgres::Client {
                 let s: String = r.get(0);
                 let version: i32 = r.get(1);
                 Ok(Applied {
-                    stream: Stream::parse(&s)
+                    stream: Stream::named(&s)
                         .ok_or_else(|| Error::Sql(format!("unknown stream {s:?}")))?,
                     version: version as u32,
                     checksum: r.get(2),

@@ -1,6 +1,6 @@
 -- CopperTide schema bootstrap: section 0 of docs/superpowers/specs/2026-11-19-schema.sql (CopperTide-Cloud).
 -- An operator runs this once per Postgres cluster and database as a superuser, before any migration:
---   psql "$URL" -f core/crates/coppertide-schema/bootstrap.sql
+--   psql "$URL" -f core/crates/shakedown-schema/bootstrap.sql
 -- A local shaked on a superuser login (the compose Postgres) runs it itself at every start. It is idempotent,
 -- also when two databases on one server run it at once (roles are per cluster).
 -- Login roles are made per deployment, e.g.

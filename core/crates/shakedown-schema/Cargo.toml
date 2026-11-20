@@ -1,8 +1,8 @@
 [package]
-name = "coppertide-schema"
+name = "shakedown-schema"
 version = "0.1.0"
 edition = "2021"
-description = "CopperTide's one database schema: the identity, cloud and shakedown migration streams and a migrator that works with any Postgres driver."
+description = "Shakedown's database schema (the shakedown migration stream) and a migrator that applies any streams a binary passes, with any Postgres driver."
 
 [features]
 default = ["tokio-postgres"]

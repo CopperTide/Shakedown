@@ -3,7 +3,7 @@
 
 use std::{collections::BTreeMap, future::Future, time::Duration};
 
-use crate::stream::{hex, migrations, Migration, Stream};
+use crate::stream::{hex, Migration, Stream};
 
 /// What went wrong. Messages name streams and versions, never connection strings.
 #[derive(Debug, thiserror::Error)]
@@ -63,7 +63,7 @@ pub struct Report {
 /// single implicit transaction, which would release the lock before its DDL commits.
 const META_DDL: &str = "CREATE SCHEMA IF NOT EXISTS schema_meta;
 CREATE TABLE IF NOT EXISTS schema_meta.migrations (
-  stream        text        NOT NULL CHECK (stream IN ('identity','cloud','shakedown')),
+  stream        text        NOT NULL CHECK (stream ~ '^[a-z][a-z_]{0,31}$'),
   version       integer     NOT NULL CHECK (version > 0),
   name          text        NOT NULL,
   checksum      bytea       NOT NULL,
@@ -73,14 +73,10 @@ CREATE TABLE IF NOT EXISTS schema_meta.migrations (
   PRIMARY KEY (stream, version)
 );";
 
-/// Applies the embedded migrations of `plan.apply` that the database lacks, after checking that
-/// `plan.require` holds.
-pub async fn migrate(c: &mut impl Conn, plan: &Plan<'_>) -> Result<Report, Error> {
-    migrate_set(c, plan, migrations()).await
-}
-
-/// `migrate` over another set of migrations (tests, and tools that carry their own).
-pub async fn migrate_set(
+/// Applies the migrations of `set` in the streams of `plan.apply` that the database lacks, after
+/// checking that `plan.require` holds. `set` is what the binary embeds ([`crate::base`], or
+/// [`crate::load`] over the base and its own streams).
+pub async fn migrate(
     c: &mut impl Conn,
     plan: &Plan<'_>,
     set: &[Migration],
@@ -102,13 +98,13 @@ pub async fn migrate_set(
 
 /// Checks without writing anything: checksums match, required streams are new enough, and owned
 /// streams are fully applied (else [`Error::Behind`]).
-pub async fn check(c: &mut impl Conn, plan: &Plan<'_>) -> Result<Report, Error> {
+pub async fn check(c: &mut impl Conn, plan: &Plan<'_>, set: &[Migration]) -> Result<Report, Error> {
     let applied = c.applied().await?;
-    verify(migrations(), &applied, &streams_of(plan))?;
+    verify(set, &applied, &streams_of(plan))?;
     requirements(&applied, plan.require)?;
     for s in plan.apply {
-        let need = latest(migrations(), *s);
-        let missing = migrations().iter().any(|m| {
+        let need = latest(set, *s);
+        let missing = set.iter().any(|m| {
             m.stream == *s
                 && !applied
                     .iter()
@@ -124,7 +120,7 @@ pub async fn check(c: &mut impl Conn, plan: &Plan<'_>) -> Result<Report, Error> 
     }
     Ok(Report {
         applied: Vec::new(),
-        newer: newer(migrations(), &applied, &streams_of(plan)),
+        newer: newer(set, &applied, &streams_of(plan)),
     })
 }
 
@@ -133,12 +129,13 @@ pub async fn check(c: &mut impl Conn, plan: &Plan<'_>) -> Result<Report, Error> 
 pub async fn wait_ready(
     c: &mut impl Conn,
     plan: &Plan<'_>,
+    set: &[Migration],
     every: Duration,
     give_up: Duration,
 ) -> Result<Report, Error> {
     let started = tokio::time::Instant::now();
     loop {
-        match check(c, plan).await {
+        match check(c, plan, set).await {
             Err(Error::Behind { .. }) if started.elapsed() < give_up => {
                 tokio::time::sleep(every).await;
             }
@@ -315,11 +312,14 @@ fn latest(set: &[Migration], s: Stream) -> u32 {
         .unwrap_or(0)
 }
 
-/// Applied versions of `streams` above the newest this binary embeds.
+/// Applied versions above the newest this binary embeds: of `streams`, and of every stream `set`
+/// does not know (another service's, which this binary never touches).
 fn newer(set: &[Migration], applied: &[Applied], streams: &[Stream]) -> Vec<(Stream, u32)> {
+    let known = |s: Stream| set.iter().any(|m| m.stream == s);
     let mut n: Vec<(Stream, u32)> = applied
         .iter()
-        .filter(|a| streams.contains(&a.stream) && a.version > latest(set, a.stream))
+        .filter(|a| streams.contains(&a.stream) || !known(a.stream))
+        .filter(|a| a.version > latest(set, a.stream))
         .map(|a| (a.stream, a.version))
         .collect();
     n.sort();

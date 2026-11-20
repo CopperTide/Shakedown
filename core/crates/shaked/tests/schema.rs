@@ -1,4 +1,4 @@
-//! shaked's records in the shakedown schema through coppertide-schema: old databases move in place,
+//! shaked's records in the shakedown schema through shakedown-schema: old databases move in place,
 //! a fresh one has the built-in local owner, and a login that cannot set up the roles is refused.
 
 use serde_json::json;
@@ -111,7 +111,7 @@ fn a_non_superuser_without_roles_is_refused_naming_bootstrap_sql() {
             .expect("a login outside shaked_app is refused");
         let msg = format!("{err:#}");
         assert!(
-            msg.contains("core/crates/coppertide-schema/bootstrap.sql"),
+            msg.contains("core/crates/shakedown-schema/bootstrap.sql"),
             "{msg}"
         );
         assert!(
