@@ -4,8 +4,14 @@
 
 pub mod can;
 pub mod principal;
+pub mod scope;
+pub mod system;
 
 pub use can::{
     can, level, required, Action, Grant, Grantee, OrgFlags, Resource, ResourceKind, Target,
 };
 pub use principal::{Level, OrgRole, Principal, RunTokenKind, SeatRole, TokenScope};
+#[cfg(any(test, feature = "testkit"))]
+pub use scope::test_scope;
+pub use scope::{local_owner, Scope};
+pub use system::{SystemJob, SystemScope};

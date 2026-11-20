@@ -7,6 +7,7 @@ pub mod fake_llm;
 pub mod legacy;
 pub mod live;
 pub mod live_world;
+pub mod orgs;
 pub mod packages;
 pub mod pg;
 

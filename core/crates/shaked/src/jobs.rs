@@ -1,8 +1,8 @@
-//! Background jobs that span every org, on the store's system connections.
+//! Background jobs that span every org: system transactions (`Store::system_tx`).
 
 use anyhow::Result;
 
-use crate::store::Store;
+use crate::{auth::SystemScope, store::Store};
 
 /// What was running when shaked last stopped won't go on: branches are interrupted, built-in
 /// suites and experiments get no more runs, and reviews won't finish.
@@ -17,6 +17,7 @@ UPDATE reviews SET status = 'error', finished_at = now(), error = 'shaked stoppe
 
 /// Marks what was running when shaked last stopped as interrupted (at start, before any run).
 pub async fn interrupt_at_start(store: &Store) -> Result<()> {
-    store.system_db().await?.batch_execute(INTERRUPT).await?;
-    Ok(())
+    let tx = store.system_tx(&SystemScope::interrupt_at_start()).await?;
+    tx.batch(INTERRUPT).await?;
+    tx.commit().await
 }

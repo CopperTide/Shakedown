@@ -15,12 +15,14 @@ mod open;
 mod reviews;
 mod seed;
 mod suites;
+mod tx;
 pub use connections::{is_secret, Connection, NewConnection, REDACTED};
 pub use experiments::{NewExperiment, NewSetup};
 pub use open::{prepare_db, template_key};
 pub use reviews::{ReviewDone, StoredReview};
 pub use seed::{LOCAL_ORG_ID, LOCAL_USER_ID};
 pub use suites::NewSuite;
+pub use tx::Tx;
 
 pub type RunId = String;
 pub type BranchId = String;
@@ -52,6 +54,9 @@ pub struct Store {
     app: Pool,
     /// Background jobs that span orgs (`crate::jobs`).
     system: Pool,
+    /// Each transaction sets its role (`shaked_app`, `shaked_system`): true for a local login,
+    /// which is a superuser or a member of both roles.
+    set_role: bool,
     tx: broadcast::Sender<Event>,
     // Per-branch locks make `max(seq)+1` appends atomic within this process.
     locks: Mutex<HashMap<String, std::sync::Arc<AsyncMutex<()>>>>,
@@ -82,16 +87,17 @@ impl Store {
         }
         prepare_db(admin, name).await?;
         let url = admin.db_url(name);
-        let store = Store::with_pools(open::pool(&url)?, open::pool(&url)?);
+        let store = Store::with_pools(open::pool(&url)?, open::pool(&url)?, true);
         crate::jobs::interrupt_at_start(&store).await?;
         Ok(store)
     }
 
-    fn with_pools(app: Pool, system: Pool) -> Store {
+    fn with_pools(app: Pool, system: Pool, set_role: bool) -> Store {
         let (tx, _) = broadcast::channel(1024);
         Store {
             app,
             system,
+            set_role,
             tx,
             locks: Mutex::new(HashMap::new()),
         }
@@ -100,11 +106,6 @@ impl Store {
     /// A pooled connection for a request path.
     async fn db(&self) -> Result<deadpool_postgres::Object> {
         Ok(self.app.get().await?)
-    }
-
-    /// A pooled connection for a background job ([`crate::jobs`]).
-    pub(crate) async fn system_db(&self) -> Result<deadpool_postgres::Object> {
-        Ok(self.system.get().await?)
     }
 
     fn lock_for(&self, branch: &str) -> std::sync::Arc<AsyncMutex<()>> {

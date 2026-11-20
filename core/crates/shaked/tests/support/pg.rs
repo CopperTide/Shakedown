@@ -198,3 +198,48 @@ fn with_user(url: &str, user: &str, password: &str) -> String {
     let host = rest.rsplit_once('@').map_or(rest, |(_, h)| h);
     format!("{scheme}://{user}:{password}@{host}")
 }
+
+/// A connection to database `db` as the test login (a superuser: no row-level security).
+async fn db_client(db: &str) -> (tokio_postgres::Client, tokio::task::JoinHandle<()>) {
+    let (c, conn) = tokio_postgres::connect(&admin().db_url(db), tokio_postgres::NoTls)
+        .await
+        .unwrap();
+    let task = tokio::spawn(async move {
+        let _ = conn.await;
+    });
+    (c, task)
+}
+
+/// Runs `sql` (many statements are fine) in database `db` as the test login.
+pub async fn execute(db: &str, sql: &str) {
+    let (c, task) = db_client(db).await;
+    c.batch_execute(sql)
+        .await
+        .unwrap_or_else(|e| panic!("{sql}: {e:?}"));
+    drop(c);
+    let _ = task.await;
+}
+
+/// The first column of the one row `sql` returns, as text (None for SQL NULL).
+pub async fn query_text(db: &str, sql: &str) -> Option<String> {
+    let (c, task) = db_client(db).await;
+    let row = c
+        .query_one(&format!("SELECT ({sql})::text"), &[])
+        .await
+        .unwrap();
+    drop(c);
+    let _ = task.await;
+    row.get(0)
+}
+
+/// The first column of the last row the statements in `sql` return (simple-query protocol).
+pub async fn batch_last_text(db: &str, sql: &str) -> Option<String> {
+    let (c, task) = db_client(db).await;
+    let msgs = c.simple_query(sql).await.unwrap();
+    drop(c);
+    let _ = task.await;
+    msgs.iter().rev().find_map(|m| match m {
+        tokio_postgres::SimpleQueryMessage::Row(r) => r.get(0).map(str::to_string),
+        _ => None,
+    })
+}

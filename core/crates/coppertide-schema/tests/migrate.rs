@@ -232,3 +232,32 @@ async fn a_missing_setting_matches_no_row() {
         assert_eq!(n, want, "with app.org_id {set:?}");
     }
 }
+
+#[tokio::test]
+async fn shakedown_2_on_todays_data_gives_every_row_the_local_org() {
+    let old = Scratch::bootstrapped("orgdefault").await;
+    let mut c = old.connect().await;
+    c.batch_execute(include_str!("fixtures/shaked-bb8e7e8.sql")).await.unwrap();
+    c.batch_execute(
+        "INSERT INTO runs (id, task_id, team) VALUES ('r1', 't', '{}');
+         INSERT INTO branches (id, run_id, team) VALUES ('b1', 'r1', '{}');
+         INSERT INTO events (branch_id, seq, kind, payload) VALUES ('b1', 1, 'message', '{}');
+         INSERT INTO suites (id, name, team, tasks, repeats, runner, benchmark) VALUES ('s1', 's', '{}', '[]', 1, 'chain', 'b');
+         INSERT INTO suite_runs (suite_id, ord, task_id, repeat) VALUES ('s1', 0, 't', 0);
+         INSERT INTO experiments (id, name, task_id, benchmark, runs) VALUES ('e1', 'e', 't', 'b', 1);
+         INSERT INTO reviews (key, kind, status, model) VALUES ('run:r1', 'run', 'done', 'm');
+         INSERT INTO connections (id, name, command) VALUES ('c1', 'c', '[]');",
+    )
+    .await
+    .unwrap();
+    migrate(&mut c, &IDENTITY).await.unwrap();
+    let local = "00000000-0000-0000-0000-00000000000b";
+    let org = format!("INSERT INTO identity.orgs (id, slug, name, kind) VALUES ('{local}', 'local', 'Local', 'local')");
+    c.batch_execute(&org).await.unwrap();
+    migrate(&mut c, &LOCAL).await.unwrap();
+    for t in ["runs", "branches", "events", "suites", "suite_runs", "experiments", "reviews", "connections"] {
+        let sql = format!("SELECT org_id::text FROM shakedown.{t}");
+        let orgs: Vec<String> = c.query(&sql, &[]).await.unwrap().iter().map(|r| r.get(0)).collect();
+        assert_eq!(orgs, [local], "{t}");
+    }
+}

@@ -1,0 +1,72 @@
+# Two customer orgs for the tenancy tests (row-level security, the store's scopes, the router), each with one team
+# and one user per org role. Test data only: example.test addresses, made-up names.
+
+[[org]]
+key = "a"
+id = "0a000000-0000-0000-0000-000000000001"
+slug = "test-org-a"
+name = "Test Org A"
+team = { id = "0a000000-0000-0000-0000-0000000000f1", slug = "team-a", name = "Team A" }
+
+[[org]]
+key = "b"
+id = "0b000000-0000-0000-0000-000000000001"
+slug = "test-org-b"
+name = "Test Org B"
+team = { id = "0b000000-0000-0000-0000-0000000000f1", slug = "team-b", name = "Team B" }
+
+# One user per (org, role). `seat` puts the user on the org's team (member or maintainer).
+[[user]]
+key = "a_owner"
+id = "0a000000-0000-0000-0000-0000000000a1"
+org = "a"
+role = "owner"
+
+[[user]]
+key = "a_admin"
+id = "0a000000-0000-0000-0000-0000000000a2"
+org = "a"
+role = "admin"
+
+[[user]]
+key = "a_member"
+id = "0a000000-0000-0000-0000-0000000000a3"
+org = "a"
+role = "member"
+
+[[user]]
+key = "a_seated"
+id = "0a000000-0000-0000-0000-0000000000a4"
+org = "a"
+role = "member"
+seat = "member"
+
+[[user]]
+key = "a_viewer"
+id = "0a000000-0000-0000-0000-0000000000a5"
+org = "a"
+role = "viewer"
+
+[[user]]
+key = "a_billing"
+id = "0a000000-0000-0000-0000-0000000000a6"
+org = "a"
+role = "billing"
+
+[[user]]
+key = "b_owner"
+id = "0b000000-0000-0000-0000-0000000000b1"
+org = "b"
+role = "owner"
+
+[[user]]
+key = "b_member"
+id = "0b000000-0000-0000-0000-0000000000b3"
+org = "b"
+role = "member"
+
+[[user]]
+key = "b_viewer"
+id = "0b000000-0000-0000-0000-0000000000b5"
+org = "b"
+role = "viewer"

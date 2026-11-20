@@ -29,8 +29,14 @@ base64 = "0.22"
 rcgen = { version = "0.13", default-features = false, features = ["ring", "pem"] }
 tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
 
+[features]
+# Lets integration tests build scopes the auth layer would (`auth::test_scope`).
+testkit = []
+
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
+shaked = { path = ".", features = ["testkit"] }
+uuid = { workspace = true, features = ["serde"] }
 
 [lints]
 workspace = true
