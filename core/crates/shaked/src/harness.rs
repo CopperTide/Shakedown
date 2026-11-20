@@ -46,6 +46,7 @@ struct Spy {
     fallback: Mutex<Option<Fallback>>,
     routes: Mutex<Option<MakeRoutes>>,
     policy: std::sync::OnceLock<Policy>,
+    headers: Mutex<Vec<String>>,
 }
 
 /// A layer that records every hook call; it allows everything unless told otherwise.
@@ -96,6 +97,11 @@ impl SpyLayer {
         self
     }
 
+    /// The header names `authenticate` was shown, over every request.
+    pub fn seen_headers(&self) -> Vec<String> {
+        self.0.headers.lock().unwrap().clone()
+    }
+
     pub fn calls(&self) -> Vec<Call> {
         self.0.calls.lock().unwrap().clone()
     }
@@ -123,10 +129,12 @@ impl Layer for SpyLayer {
 
     fn authenticate<'a>(
         &'a self,
-        _req: &'a Parts,
+        req: &'a Parts,
         found: Option<Caller>,
     ) -> BoxFuture<'a, Result<Caller, Refusal>> {
         self.saw(Call::Authenticate);
+        let names = req.headers.keys().map(|k| k.as_str().to_string());
+        self.0.headers.lock().unwrap().extend(names);
         let refused = self.0.refuse.lock().unwrap().clone();
         async move {
             match refused {

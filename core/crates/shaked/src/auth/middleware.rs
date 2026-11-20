@@ -1,6 +1,6 @@
-//! The `/api` auth layer: inbound gateway headers are dropped, a Bearer token is resolved by the
-//! engine (an unknown, revoked or expired one is 401), and the layer's `authenticate` decides who
-//! calls. `GET /api/health` needs no caller.
+//! The `/api` auth layer: inbound gateway headers are dropped (unless the layer serves others: it
+//! verifies them itself), a Bearer token is resolved by the engine (an unknown, revoked or expired
+//! one is 401), and the layer's `authenticate` decides who calls. `GET /api/health` needs no caller.
 
 use std::sync::Arc;
 
@@ -16,7 +16,8 @@ use serde_json::json;
 use super::{run_tokens::resolve_run_token, tokens::resolve_api_token, Caller};
 use crate::{app::AppState, store::Store};
 
-/// Headers a hosting gateway sets; never trusted from a caller here.
+/// Headers a hosting gateway sets; never trusted from a caller here. A layer that serves others
+/// receives them, since it is the one that checks the gateway's signature.
 const GATEWAY_HEADER_PREFIX: &str = "x-sculptured-";
 
 fn refuse(status: StatusCode, message: &str) -> Response {
@@ -70,13 +71,15 @@ async fn found_caller(
     }
 }
 
-/// Drops `x-sculptured-*` headers, resolves a Bearer token, then asks the layer who calls.
+/// Drops `x-sculptured-*` headers (locally), resolves a Bearer token, then asks the layer who calls.
 pub async fn authenticate(
     State(state): State<Arc<AppState>>,
     mut req: Request,
     next: Next,
 ) -> Response {
-    strip_gateway_headers(&mut req);
+    if !state.store.layer().policy().serves_others {
+        strip_gateway_headers(&mut req);
+    }
     if req.uri().path() == "/api/health" {
         return next.run(req).await;
     }

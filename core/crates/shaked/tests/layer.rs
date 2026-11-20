@@ -10,7 +10,7 @@ use shaked::{
     app::AppState,
     auth::SystemJob,
     harness::{Call, SpyLayer},
-    layer::{Admission, Refusal},
+    layer::{Admission, Policy, Refusal},
 };
 use support::{app, records, run, AppFx};
 
@@ -218,4 +218,28 @@ fn a_public_bind_needs_a_layer_that_serves_others() {
     assert!(shaked::mode::bind_from(get, true).is_ok());
     let refusal = Refusal::new(StatusCode::UNAUTHORIZED, "x");
     assert_eq!(refusal.status, 401);
+}
+
+/// A gateway's headers reach the layer only when it serves others (it verifies them); locally
+/// they are dropped before anything reads them.
+#[test]
+fn gateway_headers_reach_only_a_layer_that_serves_others() {
+    run(async {
+        let serving = Policy {
+            serves_others: true,
+            ..Policy::LOCAL
+        };
+        for (policy, kept) in [(Policy::LOCAL, false), (serving, true)] {
+            let spy = SpyLayer::new().with_policy(policy);
+            let fx = AppFx::idle("layer", "gatewayheaders")
+                .layer(Arc::new(spy.clone()))
+                .start()
+                .await;
+            let url = format!("{}/api/runs", fx.base);
+            let r = fx.http.get(url).header("x-sculptured-user", "someone");
+            assert_eq!(r.send().await.unwrap().status(), 200);
+            let seen = spy.seen_headers().contains(&"x-sculptured-user".to_string());
+            assert_eq!(seen, kept, "{policy:?}");
+        }
+    })
 }
