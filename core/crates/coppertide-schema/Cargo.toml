@@ -1,0 +1,22 @@
+[package]
+name = "coppertide-schema"
+version = "0.1.0"
+edition = "2021"
+description = "CopperTide's one database schema: the identity, cloud and shakedown migration streams and a migrator that works with any Postgres driver."
+
+[features]
+default = ["tokio-postgres"]
+# The migrator's `Conn` for a tokio_postgres::Client (shaked's driver).
+tokio-postgres = ["dep:tokio-postgres"]
+
+[dependencies]
+sha2 = "0.11"
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tokio-postgres = { workspace = true, optional = true }
+
+[dev-dependencies]
+uuid = { workspace = true }
+
+[lints]
+workspace = true
