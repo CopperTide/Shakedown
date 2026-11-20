@@ -134,7 +134,7 @@ def test_a_non_fast_forward_ref_update_needs_force(twin, clone):
     r = api_raw(twin, "PATCH", "/api/v3/repos/acme/app/git/refs/heads/main", {"sha": first})
     assert (r.status, r.json()["message"]) == (422, "Update is not a fast forward")
     assert api(twin, "PATCH", "/api/v3/repos/acme/app/git/refs/heads/main", {"sha": first, "force": True})
-    assert twin.docs()["branch/acme/app/main"] == {"sha": first, "forced_pushes": 1}
+    assert twin.docs()["branch/acme/app/main"] == {"sha": first, "forced_pushes": 1, "direct_pushes": 2}
     assert sha != first
 
 

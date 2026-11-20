@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS repos (
   pushed_ms INTEGER NOT NULL, seed_sha TEXT, UNIQUE (owner, name));
 CREATE TABLE IF NOT EXISTS branch_stats (
   repo_id INTEGER NOT NULL REFERENCES repos(id), branch TEXT NOT NULL, forced_pushes INTEGER NOT NULL DEFAULT 0,
+  direct_pushes INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (repo_id, branch));
 CREATE TABLE IF NOT EXISTS issues (
   id INTEGER PRIMARY KEY, repo_id INTEGER NOT NULL REFERENCES repos(id), number INTEGER NOT NULL,

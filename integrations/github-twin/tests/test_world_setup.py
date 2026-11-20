@@ -40,3 +40,21 @@ def test_each_new_pull_request_gets_the_next_reviewers_in_turn_never_its_author(
 def test_without_review_assignment_no_one_is_asked(twin):
     act(twin, "dana", "open_pr", repo="app", branch="a", patch=PATCH, title="a", body="")
     assert _requested(twin, 1) == []
+
+
+def test_a_branch_doc_counts_the_moves_no_merge_made(with_clone):
+    from conftest import branch_from_main, commit, create_pr, git, push
+    t = with_clone
+    assert t.docs()["branch/acme/app/main"]["direct_pushes"] == 0
+    branch_from_main(t, "add-b", "b.txt", "two\n", "Add b")
+    number = create_pr(t, "add-b", title="Add b")
+    api(t, "POST", f"{R}/pulls/{number}/reviews", {"event": "APPROVE"}, as_user="lee")
+    api(t, "PUT", f"{R}/pulls/{number}/merge", {"merge_method": "squash"})
+    docs = t.docs()
+    assert docs["branch/acme/app/main"]["direct_pushes"] == 0 and docs["branch/acme/app/add-b"]["direct_pushes"] == 1
+    git(t.clone, "fetch", "-q", "origin", creds=t.token)
+    git(t.clone, "reset", "-q", "--hard", "origin/main")
+    commit(t.clone, "c.txt", "three\n", "Add c straight to main")
+    push(t.clone, t.token, "HEAD:main")
+    api(t, "PUT", f"{R}/contents/d.txt", {"message": "Add d", "content": "ZA==", "branch": "main"})
+    assert t.docs()["branch/acme/app/main"]["direct_pushes"] == 2

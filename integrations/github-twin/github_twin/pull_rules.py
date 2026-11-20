@@ -173,7 +173,8 @@ def merge(v, repo, pr, by: str, method: str = "merge", title: str | None = None,
     fn, base = full_name(repo), pull_shapes.base_sha(v, repo, pr)
     new = merging.merge(v.repos, fn, base, pr["head_sha"], method, _message(pr, method, title, message, repo["owner"]),
                         v.person(by))
-    events.moved(v.ctx, repo, lambda: v.repos.update_ref(fn, f"refs/heads/{pr['base_ref']}", new, base), by=by)
+    events.moved(v.ctx, repo, lambda: v.repos.update_ref(fn, f"refs/heads/{pr['base_ref']}", new, base), by=by,
+                 merge=True)
     records.set_pull(v.db, pr["id"], merged=1, merged_ms=v.now(), merged_by=by, merge_commit_sha=new, base_sha=base,
                      reviewed_at_merge=int(bool(approvals)), approvals_at_merge=json.dumps(approvals))
     records.close(v.db, pr["id"], by, v.now())
