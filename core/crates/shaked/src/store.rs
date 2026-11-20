@@ -10,7 +10,7 @@ use tokio::sync::{broadcast, Mutex as AsyncMutex};
 use tokio_postgres::{types::ToSql, Row};
 
 use crate::{
-    auth::{Caller, SystemJob},
+    auth::{Caller, SystemScope},
     layer::{Layer, LocalLayer},
     model::*,
     overhead::Overhead,
@@ -185,7 +185,7 @@ impl Store {
             [EventKind::RunStart, EventKind::ToolCall, EventKind::Check].map(|k| k.as_str());
         let sql =
             format!("SELECT {EVENT_COLS} FROM events WHERE kind = ANY($1) ORDER BY branch_id, seq");
-        let tx = self.system_tx(SystemJob::StartupGc).await?;
+        let tx = self.system_tx(SystemScope::startup_gc()).await?;
         let rows = tx.query(&sql, &[&kinds.as_slice()]).await?;
         tx.commit().await?;
         rows.iter().map(event_from).collect()

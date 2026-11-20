@@ -332,3 +332,15 @@ pub async fn serve_app(store: Store) -> (String, ServeHandle) {
     };
     (base, handle)
 }
+
+/// Who a system job's transaction runs as: the login and whether it bypasses row-level security
+/// (one fixed query; a test cannot open a system transaction of its own).
+pub async fn system_job_login(store: &Store) -> anyhow::Result<(String, bool)> {
+    let tx = store
+        .system_tx(crate::auth::SystemScope::startup_gc())
+        .await?;
+    let sql = "SELECT current_user::text, rolbypassrls FROM pg_roles WHERE rolname = current_user";
+    let row = tx.query_one(sql, &[]).await?;
+    tx.commit().await?;
+    Ok((row.get(0), row.get(1)))
+}

@@ -2,7 +2,7 @@
 
 use anyhow::Result;
 
-use crate::{auth::SystemJob, store::Store};
+use crate::{auth::SystemScope, store::Store};
 
 /// What was running when shaked last stopped won't go on: branches are interrupted, built-in
 /// suites and experiments get no more runs, and reviews won't finish.
@@ -17,7 +17,7 @@ UPDATE reviews SET status = 'error', finished_at = now(), error = 'shaked stoppe
 
 /// Marks what was running when shaked last stopped as interrupted (at start, before any run).
 pub async fn interrupt_at_start(store: &Store) -> Result<()> {
-    let tx = store.system_tx(SystemJob::InterruptAtStart).await?;
+    let tx = store.system_tx(SystemScope::interrupt_at_start()).await?;
     tx.batch(INTERRUPT).await?;
     tx.commit().await
 }
