@@ -4,7 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { createExperiment } from '@/api/experiments';
 import { Button } from '@/components/ui/button';
 import { PageBody } from '@/components/ui/page';
-import { Segmented } from '@/components/ui/segmented';
+import { Input } from '@/components/ui/input';
 import { ErrorState } from '@/components/ui/state';
 import { type ConnectFrom, type ConnectReturn, connectedLabel, connectedTeams } from '@/features/connect/connect';
 import { setupFor, useCodeTeams } from '@/features/connect/connections';
@@ -23,7 +23,7 @@ import type { NewExperiment } from '@/model/experiment';
 import { missingFor, runnerProblem, worldName } from '@/model/summary';
 import { teamForRun } from '@/model/team';
 import type { Health, Team } from '@/model/types';
-import { DEFAULT_RUNS, MAX_SETUPS, RUN_CHOICES, type SetupDraft, newDraft, settleDrafts, setupTeam, setupsProblem } from './model';
+import { DEFAULT_RUNS, MAX_RUNS, MAX_SETUPS, type SetupDraft, newDraft, runsProblem, settleDrafts, setupTeam, setupsProblem } from './model';
 import SetupCard, { type TeamChoices } from './SetupCard';
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
@@ -86,6 +86,9 @@ function useDrafts(firstTeam: string | undefined, initial: SetupDraft[], keys: s
   };
 }
 
+/** The first reason the experiment can't start, or null. */
+const firstProblem = (why: (string | null | undefined)[]): string | null => why.find((w) => !!w) ?? null;
+
 /** Everything the page holds, what it comes to, and why it can't start yet. */
 function useNewExperiment(health: Health | null) {
   const { tasks, error: tasksError } = useTasks();
@@ -101,7 +104,7 @@ function useNewExperiment(health: Health | null) {
   const scenario = useScenario(task ? [task.id] : []);
   const built = drafts.drafts.map((x) => { const base = teams.choices.find((c) => c.key === x.teamId)?.team; return base ? setupTeam(base, x) : null; });
   const missing = built.flatMap((t) => (t ? setupMissing(t, health) : []));
-  const problem = setupsProblem(drafts.drafts) ?? scenario.problem ?? missing[0] ?? null;
+  const problem = firstProblem([setupsProblem(drafts.drafts), runsProblem(runs), scenario.problem, missing[0]]);
   // The world this page shows: the experiment is made on it, even if another is chosen elsewhere meanwhile.
   const benchmark = useBenchmark().data?.name;
   const body = (): NewExperiment | null => (task && built.every(Boolean) ? {
@@ -174,7 +177,7 @@ function RunBar({ f, s }: { f: Form; s: ReturnType<typeof useStart> }) {
   const why = s.error ?? f.problem;
   return (
     <div className="sticky bottom-0 -mx-4 flex flex-wrap items-center gap-3 border-t border-line bg-bg/90 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6">
-      <span className="text-sm text-muted">{n} setup{n === 1 ? '' : 's'} × {f.runs} run{f.runs === 1 ? '' : 's'} = <span className="font-medium text-fg">{n * f.runs} runs</span></span>
+      <span className="text-sm text-muted">{n} setup{n === 1 ? '' : 's'} × {Number.isNaN(f.runs) ? '–' : f.runs} run{f.runs === 1 ? '' : 's'} = <span className="font-medium text-fg">{Number.isNaN(f.runs) ? '–' : n * f.runs} runs</span></span>
       {why && <span role="status" className="min-w-0 text-sm font-medium text-alarm">⚠ {why}</span>}
       <Button variant="primary" className="ml-auto h-9 px-5 text-sm" onClick={() => s.start(f.body())} disabled={!f.body() || !!f.problem || s.busy}>
         <Play />{s.busy ? 'Starting…' : 'Run experiment'}
@@ -183,7 +186,7 @@ function RunBar({ f, s }: { f: Form; s: ReturnType<typeof useStart> }) {
   );
 }
 
-/** Pick the scenario, write 1–4 agent setups, choose how many runs each, and run them all. */
+/** Pick the scenario, write one or more agent setups, choose how many runs each, and run them all. */
 export default function NewExperimentPage() {
   const health = useHealth();
   const preview = useWorldPreview();
@@ -201,7 +204,8 @@ export default function NewExperimentPage() {
       <Scenario f={f} world={world} busy={s.busy} />
       <Setups f={f} busy={s.busy} onImport={setImportFor} onConnect={connect} />
       <Section title="Runs per setup">
-        <Segmented label="Runs per setup" value={f.runs} onChange={f.setRuns} disabled={s.busy} options={RUN_CHOICES.map((n) => ({ id: n, label: String(n) }))} />
+        <Input type="number" className="w-28 tabular-nums" min={1} max={MAX_RUNS} step={1} aria-label="Runs per setup" title={`From 1 to ${MAX_RUNS}`}
+          value={Number.isNaN(f.runs) ? '' : f.runs} disabled={s.busy} onChange={(e) => f.setRuns(e.target.value === '' ? NaN : Number(e.target.value))} />
       </Section>
       <RunBar f={f} s={s} />
       <ImportDialog open={importFor != null} onOpenChange={(o) => { if (!o) setImportFor(null); }}

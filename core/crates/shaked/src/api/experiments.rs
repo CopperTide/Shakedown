@@ -15,10 +15,9 @@ use super::{check_disk, detached, providers_of, settle_providers, JsonBody};
 use super::{ApiError, ApiResult};
 use crate::{
     app::AppState,
-    experiment::{self, Detail, Listed, DEFAULT_RUNS, MAX_SETUPS},
+    experiment::{self, Detail, Listed, DEFAULT_RUNS, MAX_RUNS, MAX_SETUPS},
     model::{team, Runner, Team},
     store::{NewExperiment, NewSetup},
-    suite::MAX_REPEATS,
 };
 
 pub(super) fn router() -> Router<Arc<AppState>> {
@@ -121,10 +120,8 @@ fn validate(state: &AppState, req: &mut NewExperimentReq) -> Result<Vec<String>,
             "an experiment has 1 to {MAX_SETUPS} setups"
         )));
     }
-    if !(1..=MAX_REPEATS).contains(&req.runs) {
-        return Err(ApiError::bad(format!(
-            "runs must be from 1 to {MAX_REPEATS}"
-        )));
+    if !(1..=MAX_RUNS).contains(&req.runs) {
+        return Err(ApiError::bad(format!("runs must be from 1 to {MAX_RUNS}")));
     }
     let asked: Vec<Option<&str>> = req.setups.iter().map(|s| s.name.as_deref()).collect();
     let names = experiment::setup_names(&asked).map_err(ApiError::bad)?;

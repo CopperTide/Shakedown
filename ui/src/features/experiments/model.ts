@@ -204,9 +204,15 @@ export function checkMatrix(reports: SetupReport[]): CheckRow[] {
 
 // ---- New experiment ----
 
-export const MAX_SETUPS = 4;
-export const RUN_CHOICES = [1, 3, 5, 10] as const;
+/** Safety caps, as shaked's (`experiment::MAX_SETUPS`, `MAX_RUNS`), not limits of the comparison. */
+export const MAX_SETUPS = 50;
+export const MAX_RUNS = 1000;
 export const DEFAULT_RUNS = 5;
+
+/** Why the runs per setup can't be used, or null: a whole number from 1 to `MAX_RUNS`. */
+export function runsProblem(runs: number): string | null {
+  return Number.isInteger(runs) && runs >= 1 && runs <= MAX_RUNS ? null : `Runs per setup is a whole number from 1 to ${MAX_RUNS}.`;
+}
 
 /** A Claude Code model for every Claude Code agent of a setup; '' keeps the team's own. */
 export const MODELS = [
@@ -225,7 +231,12 @@ export interface SetupDraft {
   rules: string;
 }
 
-export const setupLetter = (i: number) => String.fromCharCode(65 + i);
+/** Setup `i`'s letters (from 0), as shaked names them: A to Z, then AA, AB, … */
+export function setupLetter(i: number): string {
+  let s = '';
+  for (let n = i + 1; n > 0; n = Math.floor((n - 1) / 26)) s = String.fromCharCode(65 + ((n - 1) % 26)) + s;
+  return s;
+}
 
 export function newDraft(i: number, teamId: string, from?: SetupDraft): SetupDraft {
   return { key: `${Date.now()}-${i}`, name: `Setup ${setupLetter(i)}`, teamId, model: from?.model ?? '', rules: from?.rules ?? '' };

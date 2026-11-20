@@ -1,4 +1,4 @@
-//! Experiments: one task of the benchmark in one scenario, run by 1 to 4 agent setups, each the
+//! Experiments: one task of the benchmark in one scenario, run by one or more agent setups, each the
 //! same number of times. Each setup is stored as a suite of that one task (its team, its runner,
 //! repeats = the runs), tagged with the experiment, so suite reports, outcomes and comparisons
 //! serve experiments as they are. shaked drives an experiment's runs one at a time, interleaved
@@ -15,8 +15,11 @@ use serde::Serialize;
 pub use drive::{spawn, stop};
 pub use view::{detail, legacy_detail, list, Detail, Head, Listed, SetupLine};
 
-/// The most setups an experiment compares.
-pub const MAX_SETUPS: usize = 4;
+/// The most setups an experiment compares: a safety cap against a runaway request, not a limit
+/// of the comparison.
+pub const MAX_SETUPS: usize = 50;
+/// The most runs each setup gets: a safety cap, like [`MAX_SETUPS`].
+pub const MAX_RUNS: i32 = 1000;
 /// How many runs each setup gets when the request does not say.
 pub const DEFAULT_RUNS: i32 = 5;
 /// Why an experiment someone stopped ended early.
@@ -53,16 +56,30 @@ impl Experiment {
 /// An error when two are the same.
 pub fn setup_names(asked: &[Option<&str>]) -> Result<Vec<String>, String> {
     let mut names: Vec<String> = vec![];
-    for (letter, name) in ('A'..).zip(asked) {
+    for (i, name) in asked.iter().enumerate() {
         let name = name
             .and_then(crate::model::trimmed)
-            .unwrap_or_else(|| format!("Setup {letter}"));
+            .unwrap_or_else(|| format!("Setup {}", setup_letter(i)));
         if names.contains(&name) {
             return Err(format!("two setups are called {name:?}"));
         }
         names.push(name);
     }
     Ok(names)
+}
+
+/// The letters of setup `i` (from 0), as spreadsheet columns: A to Z, then AA, AB, ...
+pub fn setup_letter(i: usize) -> String {
+    let mut letters = vec![];
+    let mut n = i + 1;
+    while n > 0 {
+        let rest = (n - 1) % 26;
+        letters.push(char::from(
+            b'A' + u8::try_from(rest).expect("a remainder of 26 fits in u8"),
+        ));
+        n = (n - 1) / 26;
+    }
+    letters.iter().rev().collect()
 }
 
 /// The experiment's name: the one asked for, trimmed, else its setups' names joined by ` vs `.
@@ -98,6 +115,18 @@ mod tests {
         assert!(e.contains("Setup B"), "{e}");
         assert_eq!(name_of(None, &names[..2]), "Setup A vs Rules");
         assert_eq!(name_of(Some(" Mine "), &names), "Mine");
+    }
+
+    #[test]
+    fn setups_past_z_are_named_aa_ab_and_so_on() {
+        let letters: Vec<String> = [0, 25, 26, 27, 51, 52, 701, 702].map(setup_letter).into();
+        assert_eq!(letters, ["A", "Z", "AA", "AB", "AZ", "BA", "ZZ", "AAA"]);
+        let names = setup_names(&vec![None; MAX_SETUPS]).unwrap();
+        assert_eq!(
+            (names[25].as_str(), names[26].as_str()),
+            ("Setup Z", "Setup AA")
+        );
+        assert_eq!(names[MAX_SETUPS - 1], "Setup AX");
     }
 
     #[test]

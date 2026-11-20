@@ -1,4 +1,4 @@
-//! Experiments: one task in one scenario, 1 to 4 agent setups, each run N times, the runs
+//! Experiments: one task in one scenario, 1 to 50 agent setups, each run N times, the runs
 //! interleaved setup by setup. Without a model: the setups' agents call a provider nothing
 //! answers on (each run ends `infra_error` at its first model call) or one that never answers
 //! (the run stays running until it is stopped). What is refused, the order the runs are made in,
@@ -91,9 +91,14 @@ async fn refused(fx: &AppFx, body: Value, says: &str) {
 /// Refused: too few or many setups, setups with one name, an external runner, a team that
 /// can't run.
 async fn refuse_bad_setups(fx: &AppFx) {
-    refused(fx, json!({"task": "t1", "setups": []}), "1 to 4 setups").await;
-    let five: Vec<Value> = (0..5).map(|i| setup_of(None, &format!("t{i}"))).collect();
-    refused(fx, json!({"task": "t1", "setups": five}), "1 to 4 setups").await;
+    refused(fx, json!({"task": "t1", "setups": []}), "1 to 50 setups").await;
+    let too_many: Vec<Value> = (0..51).map(|i| setup_of(None, &format!("t{i}"))).collect();
+    refused(
+        fx,
+        json!({"task": "t1", "setups": too_many}),
+        "1 to 50 setups",
+    )
+    .await;
     let twins = [setup_of(Some("Same"), "a"), setup_of(Some(" Same "), "b")];
     refused(fx, json!({"task": "t1", "setups": twins}), "Same").await;
     let mut external = setup_of(None, "a");
@@ -111,12 +116,10 @@ fn experiments_refuse_what_they_cannot_run() {
         let one = || vec![setup_of(None, "a")];
         refuse_bad_setups(&fx).await;
         refused(&fx, json!({"task": "t9", "setups": one()}), "t9").await;
-        refused(
-            &fx,
-            json!({"task": "t1", "runs": 0, "setups": one()}),
-            "runs",
-        )
-        .await;
+        for runs in [0, 1001] {
+            let body = json!({"task": "t1", "runs": runs, "setups": one()});
+            refused(&fx, body, "runs must be from 1 to 1000").await;
+        }
         let scenario = json!({"disruptions": [{"id": "flood"}]});
         let body = json!({"task": "t1", "scenario": scenario, "setups": one()});
         refused(&fx, body, "disruption").await;
@@ -404,6 +407,29 @@ fn stopping_an_experiment_stops_its_running_run() {
         let again = fx.stop(id).await;
         let said = (&again["ended_at"], &again["error"]);
         assert_eq!(said, (&done["ended_at"], &json!("stopped")));
+    });
+}
+
+/// More than the old limits of 4 setups and 100 runs: five setups of 101 runs each are made (named
+/// A to E), then stopped.
+#[test]
+fn an_experiment_takes_more_than_four_setups_and_a_hundred_runs() {
+    run(async {
+        let fx = setup("xmany", &silent_provider().await).await;
+        let setups: Vec<Value> = (0..5).map(|i| setup_of(None, &format!("t{i}"))).collect();
+        let v = fx
+            .experiment(json!({"task": "t2", "runs": 101, "setups": setups}))
+            .await;
+        let made = v["setups"].as_array().unwrap();
+        let names: Vec<&str> = made.iter().map(|s| s["name"].as_str().unwrap()).collect();
+        assert_eq!(
+            names,
+            ["Setup A", "Setup B", "Setup C", "Setup D", "Setup E"]
+        );
+        assert!(made.iter().all(|s| s["repeats"] == 101), "{v}");
+        let id = v["id"].as_str().unwrap();
+        first_running(&fx, id).await;
+        assert_eq!(fx.stop(id).await["status"], "stopped");
     });
 }
 

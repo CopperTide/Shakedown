@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { duration, fmt } from '@/lib/format';
 import type { RunOutcome, RunRow, SetupReport, Spread } from '@/model/report';
 import type { Team } from '@/model/types';
-import { METRICS, bestOf, checkLabel, checkMatrix, columnOf, settleDrafts, setupTeam, setupsProblem, wilson } from './model';
+import { MAX_RUNS, METRICS, bestOf, checkLabel, checkMatrix, columnOf, newDraft, runsProblem, settleDrafts, setupLetter, setupTeam, setupsProblem, wilson } from './model';
 
 const outcome = (passed: boolean, over: Partial<RunOutcome> = {}): RunOutcome => ({
   status: passed ? 'passed' : 'failed', error: null, checks: [], scored: true,
@@ -90,6 +90,14 @@ describe('new experiment setups', () => {
     expect(setupsProblem([d('A'), d('B')])).toBeNull();
     expect(setupsProblem([d('A'), d(' ')])).toBe('Every setup needs a name.');
     expect(setupsProblem([d('A'), d('A ')])).toBe('Two setups are called “A”.');
+  });
+  it('names setups past Z as shaked does: AA, AB, …', () => {
+    expect([0, 25, 26, 27, 51, 52, 701, 702].map(setupLetter)).toEqual(['A', 'Z', 'AA', 'AB', 'AZ', 'BA', 'ZZ', 'AAA']);
+    expect(newDraft(26, 's:team').name).toBe('Setup AA');
+  });
+  it('takes any whole number of runs from 1 to the cap', () => {
+    expect([1, 7, 250, MAX_RUNS].map(runsProblem)).toEqual([null, null, null, null]);
+    expect([0, MAX_RUNS + 1, 2.5, NaN].map((n) => !!runsProblem(n))).toEqual([true, true, true, true]);
   });
 });
 

@@ -9,8 +9,8 @@ import { type CheckCell, type CheckRow, type Column, METRICS, type Metric, SAFET
 import PassRate from './PassRate';
 import RunStrip from './RunStrip';
 
-/** The checks' label column, then one column per setup. */
-const gridOf = (n: number): CSSProperties => ({ gridTemplateColumns: `minmax(140px, 200px) repeat(${n}, minmax(0, 1fr))` });
+/** The checks' label column, then one column per setup; past four setups each keeps a readable width and the panel scrolls sideways. */
+const gridOf = (n: number): CSSProperties => ({ gridTemplateColumns: `minmax(140px, 200px) repeat(${n}, minmax(${n > 4 ? '96px' : '0'}, 1fr))` });
 
 function Row({ label, n, children, className }: { label: ReactNode; n: number; children: ReactNode; className?: string }) {
   return (
@@ -21,8 +21,9 @@ function Row({ label, n, children, className }: { label: ReactNode; n: number; c
   );
 }
 
-/** Cards side by side, as many columns as setups once there is room. */
+/** Cards side by side, as many columns as setups once there is room; more than four wrap, four to a row. */
 const COLS: Record<number, string> = { 1: '', 2: 'sm:grid-cols-2', 3: 'md:grid-cols-3', 4: 'md:grid-cols-2 xl:grid-cols-4' };
+const colsFor = (n: number) => COLS[Math.min(n, 4)];
 
 function Figure({ m, c, best }: { m: Metric; c: Column; best: boolean }) {
   const bad = !!m.abnormal?.(c);
@@ -60,7 +61,7 @@ export function Setups({ cols, measures = [] }: { cols: Column[]; measures?: Mea
   const bests = new Map(figures.map((m) => [m.id, bestOf(cols, m)]));
   return (
     <div className="flex flex-col gap-2">
-      <div className={cn('grid gap-4', COLS[cols.length])}>
+      <div className={cn('grid gap-4', colsFor(cols.length))}>
         {cols.map((c, i) => <SetupCard key={c.id} c={c} i={i} measures={measures} figures={figures} quiet={quiet} best={(m) => !!bests.get(m.id)?.has(i)} />)}
       </div>
       <MeasureLegend rows={measures} />
