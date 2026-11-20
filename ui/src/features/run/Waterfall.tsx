@@ -3,7 +3,7 @@ import { cn } from '@/lib/cn';
 import type { Event } from '@/model/types';
 import { type Trace, type TraceSpan, spanLength, traceOf } from './waterfall';
 
-/** A bar's fill: the turn neutral, a step in the alarm colour when abnormal, writes darker than reads, arena's own work lightest. */
+/** A bar's fill: the turn neutral, a step in the alarm colour when abnormal, writes darker than reads, Shakedown's own work lightest. */
 function barClass(s: TraceSpan): string {
   if (s.kind === 'turn') return 'bg-line-strong';
   if (s.abnormal) return 'bg-alarm';
@@ -46,7 +46,7 @@ function Axis({ trace }: { trace: Trace }) {
   );
 }
 
-/** The selected step's turn as a trace waterfall: the turn, its steps, and arena's own work in each. */
+/** The selected step's turn as a trace waterfall: the turn, its steps, and Shakedown's own work in each. */
 export default function Waterfall({ events, selected, onSelect }: { events: Event[]; selected: number | null; onSelect: (seq: number) => void }) {
   const trace = selected == null ? null : traceOf(events, selected);
   if (selected == null) return <EmptyState title="Select a step to see its turn" hint="Click a mark on the timeline, or move with ←/→ (j/k). The waterfall shows the model call and every step it led to." />;

@@ -25,7 +25,7 @@ pub struct Config {
     pub providers: ProviderConfig,
     /// This service's own base URL (e.g. `http://127.0.0.1:8787`), used by the open agent loop.
     pub self_base: String,
-    /// New runs and forks are refused (507) once the arena's saves use at least this many bytes.
+    /// New runs and forks are refused (507) once the Shakedown's saves use at least this many bytes.
     pub max_db_bytes: u64,
     /// The wait before an open agent retries a model call its provider turned down as
     /// overloaded or rate-limited, doubling for each further retry (unless it says how long).
@@ -250,7 +250,7 @@ impl AppState {
         self.hub.bench_describe(name).await
     }
 
-    /// True when the arena's saves use at least the configured limit: new runs are refused.
+    /// True when the Shakedown's saves use at least the configured limit: new runs are refused.
     pub async fn saves_over_limit(&self) -> anyhow::Result<bool> {
         let bytes = crate::gc::usage(&self.hub, &self.benchmark()).await?;
         Ok(bytes >= self.config.max_db_bytes)

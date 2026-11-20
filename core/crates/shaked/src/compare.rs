@@ -31,7 +31,7 @@ pub fn summary(branch: &Branch, events: &[Event]) -> Value {
     let seconds = branch
         .ended_at
         .map(|t| (t - branch.created_at).num_milliseconds() as f64 / 1000.0);
-    // Tokens as arena's metrics count them (a client's calls once each), not the ends' own sums.
+    // Tokens as Shakedown's metrics count them (a client's calls once each), not the ends' own sums.
     let m = metrics(branch, events, prices::table(), chrono::Utc::now());
     json!({
         "status": branch.status,

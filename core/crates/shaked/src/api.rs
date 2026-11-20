@@ -273,7 +273,7 @@ async fn list_providers(State(state): State<Arc<AppState>>) -> Json<Vec<Provider
     Json(providers::statuses(&state.config.providers, &state.http).await)
 }
 
-/// 507 when the arena's saves already use at least the configured limit.
+/// 507 when the Shakedown's saves already use at least the configured limit.
 async fn check_disk(state: &AppState) -> Result<(), ApiError> {
     if state.saves_over_limit().await? {
         return Err(ApiError::insufficient_storage(SAVES_FULL));

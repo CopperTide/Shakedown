@@ -70,7 +70,7 @@ async fn app(hub: &Arc<Hub>, tag: &str) -> (Arc<AppState>, Cleanup) {
 }
 
 /// Runs the team to its end (up to `polls` × 200 ms); asserts what Arena owes any run of it, and
-/// prints the checks and metrics (measured time, arena's overhead, the estimate in production).
+/// prints the checks and metrics (measured time, Shakedown's overhead, the estimate in production).
 async fn run_and_report(hub: &Arc<Hub>, live: &Live, polls: usize) {
     let bench = hub.bench_describe("factory").await.unwrap();
     let (state, _clean) = app(hub, "live").await;

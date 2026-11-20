@@ -1,4 +1,4 @@
-"""The clock helpers: a fixed-step clock and a JSON-state part on the arena clock."""
+"""The clock helpers: a fixed-step clock and a JSON-state part on the world clock."""
 import pytest
 
 from shakedown_part import FixedStep

@@ -256,7 +256,7 @@ fn run_start_records_these_keys() {
     })
 }
 
-/// The arena's own time is recorded on the events: `RunStart` carries the world's restore, the
+/// The Shakedown's own time is recorded on the events: `RunStart` carries the world's restore, the
 /// next event the time `RunStart` took to record, and the check the time scoring took.
 #[test]
 fn a_runs_overhead_goes_on_its_events() {

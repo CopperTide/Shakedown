@@ -171,7 +171,7 @@ class JsonStatePart(DocsPart):
 
 
 class ClockedJsonStatePart(JsonStatePart):
-    """A JsonStatePart on the arena clock. Its state keeps `clock_ms` (how far the world has run; a fresh
+    """A JsonStatePart on the world clock. Its state keeps `clock_ms` (how far the world has run; a fresh
     instance starts at the start's clock) and `queued` (the events found on the way, which wait for the next
     `advance`). Give `step(config, state, clock_ms)`: it runs the state from `state["clock_ms"]` to
     `clock_ms`, moving `state["clock_ms"]`, and gives the events on the way. Every call runs the world to its

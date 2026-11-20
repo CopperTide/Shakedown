@@ -17,7 +17,7 @@ use parts::{Hub, Registry};
 
 use super::pg::{drop_databases, on_own_runtime, pg_url};
 
-/// The arena folder (this crate is core/crates/shaked).
+/// The repository folder (this crate is core/crates/shaked).
 pub fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../..")
@@ -33,7 +33,7 @@ pub fn bin_dir() -> PathBuf {
         .unwrap_or_else(|| repo().join("core/target/debug"))
 }
 
-/// The roots `SHAKEDOWN_PACKAGES` would name: `<arena>/integrations` and `<arena>/benchmarks`.
+/// The roots `SHAKEDOWN_PACKAGES` would name: `<repo>/integrations` and `<repo>/benchmarks`.
 pub fn package_roots() -> Vec<PathBuf> {
     vec![repo().join("integrations"), repo().join("benchmarks")]
 }

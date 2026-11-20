@@ -1,6 +1,6 @@
 # Integrations
 
-An integration is a program that puts one kind of system in the arena's world: a database, a folder, an ERP, a
+An integration is a program that puts one kind of system in the Shakedown's world: a database, a folder, an ERP, a
 simulator. It works like a device driver. shaked (the core) knows nothing about the system. It speaks the
 protocol `shakedown-part/1` to the program, and the program does the rest: start an instance, run tool calls, save
 the state, restore it, show it, compare it. The protocol is in `docs/protocol.md`; read that for every method and
@@ -24,10 +24,10 @@ The table is in the main `README.md`, with what was verified. Each folder has a 
 | `erpnext` | an ERPNext site per instance |
 | `twenty-crm` | a Twenty CRM server per instance, on its own database |
 | `sculptured` | a CopperTide server (approvals) per instance |
-| `ridgeline-hub` | the factory's outside companies, on the arena clock |
+| `ridgeline-hub` | the factory's outside companies, on the world clock |
 | `isaac-sim` | the factory plant on Isaac Sim, or a stand-in |
 | `isaac-sim-mirror` | a read-only view of a running plant |
-| `utility` | a simulated electric utility and site meter, on the arena clock |
+| `utility` | a simulated electric utility and site meter, on the world clock |
 | `ot-network` | a simulated plant OT network and IT/OT remote-access gateway |
 | `shift-roster` | a simulated shift roster with certifications |
 | `github-twin` | a GitHub-compatible code host (GHES mode) over real git repositories |

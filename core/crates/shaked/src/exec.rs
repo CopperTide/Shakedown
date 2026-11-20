@@ -34,12 +34,12 @@ pub use roster::Roster;
 pub use setup::SETUP_ACTOR;
 pub use talk::{handoff_schema, mail_for, said_text, HANDOFF, INBOX, MESSAGE};
 
-/// One running branch: its world, team, arena clock and per-agent handoff notes.
+/// One running branch: its world, team, world clock and per-agent handoff notes.
 pub struct BranchCtx {
     pub branch_id: String,
     pub world: Arc<World>,
     pub task_id: String,
-    /// The branch's arena clock (from 0 at the run's start, from the fork point on a fork).
+    /// The branch's world clock (from 0 at the run's start, from the fork point on a fork).
     pub clock: BranchClock,
     /// The rules the branch runs under (from its run's `RunStart`).
     pub rules: Rules,
@@ -55,7 +55,7 @@ pub struct BranchCtx {
     pub mailbox: Mailbox,
     /// Its ticker and how far it is through its life.
     pub lifecycle: Lifecycle,
-    /// The arena's time on this branch since its last event (see [`crate::overhead`]).
+    /// The Shakedown's time on this branch since its last event (see [`crate::overhead`]).
     pub overhead: Ledger,
     /// A finish held until the run's world time window ends (see [`crate::window`]).
     pub window: std::sync::Mutex<Option<crate::window::Held>>,
@@ -89,7 +89,7 @@ impl BranchCtx {
         self
     }
 
-    /// The same branch with `clock` as its arena clock.
+    /// The same branch with `clock` as its world clock.
     pub fn with_clock(mut self, clock: BranchClock) -> BranchCtx {
         self.clock = clock;
         self
@@ -126,7 +126,7 @@ impl BranchCtx {
         self.append(store, agent, P::KIND, payload).await
     }
 
-    /// Records an event of this branch with the world clock paused: recording is arena's work.
+    /// Records an event of this branch with the world clock paused: recording is Shakedown's work.
     pub async fn append(
         &self,
         store: &Store,
@@ -167,7 +167,7 @@ impl BranchCtx {
     }
 
     /// Resumes a paused branch: the calls that wait go on and the clock runs again. Records
-    /// `Resume` with how long the pause lasted (counted as arena's time, not the run's); false
+    /// `Resume` with how long the pause lasted (counted as Shakedown's time, not the run's); false
     /// when the branch wasn't paused.
     pub async fn resume(&self, store: &Store) -> anyhow::Result<bool> {
         let Some(lasted) = self.flow.resume() else {
@@ -183,7 +183,7 @@ impl BranchCtx {
         Ok(true)
     }
 
-    /// Waits for the branch gate, counting the wait as arena's overhead.
+    /// Waits for the branch gate, counting the wait as Shakedown's overhead.
     async fn gate_timed(&self) -> tokio::sync::MutexGuard<'_, ()> {
         let since = std::time::Instant::now();
         let guard = self.gate.lock().await;

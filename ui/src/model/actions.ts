@@ -66,7 +66,7 @@ function partOf(p: Record<string, unknown>, known: ToolInfo | undefined): string
 const INBOX = 'inbox';
 const MESSAGES: SystemInfo = { kind: 'messages', product: "Shakedown's messages between agents" };
 
-/** What the run recorded about a tool; arena's inbox reads messages. */
+/** What the run recorded about a tool; Shakedown's inbox reads messages. */
 function toolInfo(info: WorldInfo, tool: string): ToolInfo | undefined {
   return info.tools[tool] ?? (tool === INBOX ? { effect: 'read' } : undefined);
 }

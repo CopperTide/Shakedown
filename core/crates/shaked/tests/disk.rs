@@ -114,7 +114,7 @@ async fn run_with_fork(fx: &AppFx, live: &Live) -> (String, Vec<String>) {
 }
 
 /// Deleting a run drops every save its branches' events name, and only those: the base and gold
-/// saves stay, and the arena's disk use falls.
+/// saves stay, and the Shakedown's disk use falls.
 #[test]
 #[ignore = "live: runs a real model (support/live.rs)"]
 fn live_delete_run_drops_all_part_saves() {

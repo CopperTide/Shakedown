@@ -92,7 +92,7 @@ Environment variables, read once at startup by shaked (each also under its old n
 - `SHAKEDOWN_PACKAGES`: `:`-separated folders whose subfolders hold an `shakedown-package.toml` (default
   `integrations:benchmarks` in the repository root).
 - `SHAKEDOWN_BIN_DIR`: what `${SHAKEDOWN_BIN_DIR}` in a manifest stands for (default `core/target/release`).
-- `${SHAKEDOWN_DIR}` in a manifest's command stands for the arena folder (the one above `core`).
+- `${SHAKEDOWN_DIR}` in a manifest's command stands for the repository folder (the one above `core`).
 - `SHAKEDOWN_SAVES`: where saves are kept (default `core/saves`, ignored by git). Integrations that run in Docker or
   on their own servers also keep data elsewhere.
 - `SHAKEDOWN_MAX_DB_BYTES`: disk limit, see [Disk](#disk) (default 5 GiB, `5368709120`).

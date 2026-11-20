@@ -417,7 +417,7 @@ impl Crew {
 }
 
 /// A wake's payload: `{reason, mail, idle_wake?, input}` (`mail`: the seqs of the recorded
-/// mail it delivers; arena's own notices are in the input only).
+/// mail it delivers; Shakedown's own notices are in the input only).
 fn wake_payload(reason: Reason, mail: &[Mail], input: &str) -> WakePayload {
     let (word, idle_wake) = match reason {
         Reason::Start => ("start", None),

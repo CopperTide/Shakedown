@@ -321,7 +321,7 @@ fn assert_resolver_input(evs: &[Event]) {
 }
 
 /// The retail benchmark's own team on task 27: the run starts, each agent runs once in order,
-/// every step is recorded, the arena's overhead is timed, the check is computed against the
+/// every step is recorded, the Shakedown's overhead is timed, the check is computed against the
 /// gold world, and the branch is no longer live.
 #[test]
 #[ignore = "live: runs a real model (support/live.rs)"]

@@ -1,6 +1,6 @@
 """Recording the plant to MP4 (config `record`): where the file goes, which camera, and when frames fall.
 
-A frame is rendered every `physics_hz / record_fps` physics steps, so the MP4 runs in arena time whatever the
+A frame is rendered every `physics_hz / record_fps` physics steps, so the MP4 runs in world time whatever the
 render costs. Rendering is the backend's (only `isaac` can); this module is plain Python."""
 from pathlib import Path
 

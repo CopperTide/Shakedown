@@ -85,8 +85,8 @@ which serves the world and scores each task by its checks (`shakedown_part.expec
 - Templates: the ones shipped with the builder are in `benchmarks/world/library/` (its manifest passes
   `--templates library`; `small-manufacturer`, see its README), beside its own `templates/` (none yet).
 - `SHAKEDOWN_TEMPLATES`: `:`-separated folders of more templates (each `<id>/template.yaml`).
-- `SHAKEDOWN_WORLDS`: where built worlds are written (default `<arena>/core/worlds`, git-ignored), scanned at start like
-  `SHAKEDOWN_PACKAGES`. A built world's command names `${SHAKEDOWN_DIR}`, the arena folder.
+- `SHAKEDOWN_WORLDS`: where built worlds are written (default `<repo>/core/worlds`, git-ignored), scanned at start like
+  `SHAKEDOWN_PACKAGES`. A built world's command names `${SHAKEDOWN_DIR}`, the repository folder.
 
 shaked asks the first builder installed (by name) for templates and previews, writes a built world into
 `SHAKEDOWN_WORLDS`, installs it while it runs and prepares its base in the background (`docs/reference.md`,

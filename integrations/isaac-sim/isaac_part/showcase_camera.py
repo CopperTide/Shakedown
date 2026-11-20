@@ -1,5 +1,5 @@
 """The showcase's camera plan, plain Python: establishing shots while nothing is wrong, and cuts on the plant's events
-during a failure. `Director.update` takes the factory's new events and arena time, and returns the shot to show and
+during a failure. `Director.update` takes the factory's new events and world time, and returns the shot to show and
 how far through it the camera is, so a recording of the same run always cuts at the same frames."""
 from dataclasses import dataclass
 

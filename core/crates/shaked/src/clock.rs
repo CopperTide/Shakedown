@@ -1,4 +1,4 @@
-//! The arena clock of a live branch: milliseconds that run with real time × speed while agents
+//! The world clock of a live branch: milliseconds that run with real time × speed while agents
 //! work, and stand still while the world is paused (saving or restoring).
 
 use std::{

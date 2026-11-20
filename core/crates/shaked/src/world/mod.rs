@@ -120,7 +120,7 @@ pub struct StartingPart(pub String);
 pub struct Called {
     pub output: ToolOutput,
     pub part: Option<String>,
-    /// Milliseconds spent checking the world's gates before the call (arena's own work).
+    /// Milliseconds spent checking the world's gates before the call (Shakedown's own work).
     pub gate_ms: f64,
 }
 
@@ -495,7 +495,7 @@ impl World {
         self.parts.iter().map(|p| p.name.clone()).collect()
     }
 
-    /// True when some part uses the arena clock.
+    /// True when some part uses the world clock.
     pub fn uses_clock(&self) -> bool {
         self.parts.iter().any(|p| p.describe.uses_clock)
     }

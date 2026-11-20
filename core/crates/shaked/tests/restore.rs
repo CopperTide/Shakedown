@@ -1,5 +1,5 @@
 //! Rerunning worlds whose parts restore in different ways: exact and approximate saves, replay,
-//! fingerprints, the arena clock and the restore plan. The worlds are made of the kit's `counter`
+//! fingerprints, the world clock and the restore plan. The worlds are made of the kit's `counter`
 //! example (in its restore flavours) and toy parts. Each task's setup (the world's own calls,
 //! made before any agent) puts the world in the state a fork must restore, and the agents are
 //! real models (see `support/live.rs`) that mostly only read, so what is restored doesn't depend

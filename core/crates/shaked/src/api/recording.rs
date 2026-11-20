@@ -1,5 +1,5 @@
 //! A branch's plant recording, for the world view's video panel: an MP4 a recording part wrote
-//! (Isaac Sim's frames fall on arena time, so the video's second t is the branch's arena second t)
+//! (Isaac Sim's frames fall on world time, so the video's second t is the branch's arena second t)
 //! and its JSON sidecar, found in `SHAKEDOWN_RECORDINGS` by the branch id in the file's name (the
 //! plant part names it `<stem>-b_<branch>_<part>.mp4`). A fork without one of its own shows its
 //! parent's. `GET /api/branches/{id}/recording` says what there is; `.../recording.mp4` serves the

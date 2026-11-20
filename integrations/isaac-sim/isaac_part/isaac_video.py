@@ -1,4 +1,4 @@
-"""A recording on the `isaac` backend, driven on the arena clock instead of run.py's wall clock: a Replicator render
+"""A recording on the `isaac` backend, driven on the world clock instead of run.py's wall clock: a Replicator render
 product on the main camera, piped to ffmpeg (the factory's `record.py`), headless RTX (RaytracedLighting). What is on
 screen is the factory's own visuals (`visuals.py`) or, with `scene: showcase`, the showcase's (`showcase_visuals.py`)."""
 import atexit

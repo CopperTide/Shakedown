@@ -55,7 +55,7 @@ def save_dir(saves_root, save):
 
 def test_scenario_alarm_on_arena_clock():
     """test_scenario.py trips PR-A1 55 to 66 s after the start, after zone C and then D; check_physics.py has
-    zone C near 33 s for seed 7 (measured here: 33.7 s of arena time, the scenario starting at arena 0)."""
+    zone C near 33 s for seed 7 (measured here: 33.7 s of world time, the scenario starting at arena 0)."""
     part = started()
     first = part.advance("i1", 30_000)
     assert [e["kind"] for e in first["events"][:2]] == ["plant", "scenario"] and first["changed"]
@@ -98,7 +98,7 @@ def test_advance_split_does_not_matter():
 
 
 def same_inputs(part, instance):
-    """The same tool calls and advances on the arena clock (the part's inputs, no agent); every
+    """The same tool calls and advances on the world clock (the part's inputs, no agent); every
     result and event, in order."""
     out = [part.call_tool(instance, "set_line_status", {"line": "LINE-B", "status": "running", "rate": 1.2}, 2_000),
            part.advance(instance, 4_000),
@@ -273,7 +273,7 @@ REFUSALS = [  # (tool, args, text in the error): each changes nothing
      "task is 'inspect' or 'repair'"),
     ("set_line_status", {"line": "LINE-A", "status": "sideways"}, "status is running, stopped or down"),
     ("set_line_status", {"line": "LINE-Q", "status": "stopped"}, "unknown line LINE-Q"),
-    ("predict_move", {"order": "A-1", "to_line": "LINE-F"}, "without ERPNext in the arena"),
+    ("predict_move", {"order": "A-1", "to_line": "LINE-F"}, "without ERPNext in this world"),
     ("vibration_spectrum", {"machine": "PR-A1", "seconds": "lots"}, "seconds"),
 ]
 

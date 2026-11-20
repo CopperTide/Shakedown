@@ -67,7 +67,7 @@ function AgentsTable({ m }: { m: Metrics }) {
   );
 }
 
-/** The branch's deployment numbers: time in production, arena's overhead, tokens and cost per agent. */
+/** The branch's deployment numbers: time in production, Shakedown's overhead, tokens and cost per agent. */
 export default function MetricsPanel({ m }: { m: Metrics }) {
   return (
     <div className="flex flex-col gap-3 p-3">

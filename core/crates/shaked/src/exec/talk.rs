@@ -1,5 +1,5 @@
 //! The tools agents talk to each other with: `handoff`, `message` and `inbox`, and in a dispatch
-//! run `delegate`, `report` and `finish` in place of `handoff` (see `dispatch`). They are arena's,
+//! run `delegate`, `report` and `finish` in place of `handoff` (see `dispatch`). They are Shakedown's,
 //! not the world's: optional, recorded when used, and never a condition for anything (except in
 //! runs recorded before they were optional, where every agent but the last had to hand off, and
 //! the lead's `finish`, which ends a dispatch run).

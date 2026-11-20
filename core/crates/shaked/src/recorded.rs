@@ -84,7 +84,7 @@ pub fn world_epoch_ms(events: &[Event]) -> i64 {
     recorded.unwrap_or_else(|| start.at.timestamp_millis())
 }
 
-/// The arena clock just before step `before_seq`: the `clock_ms` of the last event before it
+/// The world clock just before step `before_seq`: the `clock_ms` of the last event before it
 /// that has one (a tool call or world event), else 0.
 pub fn clock_at(events: &[Event], before_seq: i64) -> i64 {
     events

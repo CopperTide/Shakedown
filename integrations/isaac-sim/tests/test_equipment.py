@@ -1,4 +1,4 @@
-"""The robot cells and the load the arena adds to the factory's plant (isaac_part/equipment.py), on the stand-in."""
+"""The robot cells and the load Shakedown adds to the factory's plant (isaac_part/equipment.py), on the stand-in."""
 import json
 from pathlib import Path
 

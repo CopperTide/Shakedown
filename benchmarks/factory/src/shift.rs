@@ -13,7 +13,7 @@ pub fn data() -> &'static Value {
     DATA.get_or_init(|| serde_json::from_str(SHIFT).expect("data/shift.json is JSON"))
 }
 
-/// The plant clock at arena time 0, shared by every part.
+/// The plant clock at world time 0, shared by every part.
 pub fn plant_start() -> &'static str {
     data()["plant_start"]
         .as_str()

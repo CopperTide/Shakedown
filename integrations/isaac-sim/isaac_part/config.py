@@ -23,7 +23,7 @@ class Config:
     scenario: bool
     record: str | None = None  # the MP4 to render to (isaac only); relative to the part's save folder
     camera: str = "auto"  # the factory's camera: a rig in layout.CAMERAS, "auto" (cuts to events) or "free"
-    record_fps: int = 30  # frames per second of arena time; the MP4 plays at this rate, so in arena time
+    record_fps: int = 30  # frames per second of world time; the MP4 plays at this rate, so in world time
     scene: str = "ridgeline"  # what the plant looks like: the factory's own scene, or "showcase" (visuals only)
     record_height: int = 720  # the MP4's height in pixels; the width follows at 16:9
     cells: tuple = ()  # robot cells the arena adds beside the factory's presses (equipment.py)

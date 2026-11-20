@@ -1,4 +1,4 @@
-"""One instance's plant: the factory's Factory on the arena clock, stepped at a fixed physics rate."""
+"""One instance's plant: the factory's Factory on the world clock, stepped at a fixed physics rate."""
 from datetime import datetime, timedelta, timezone
 
 from shakedown_part import errors
@@ -10,7 +10,7 @@ from .log import log
 
 class ArenaClock:
     """What the names `time` and `datetime` are inside the factory module (the factory itself is never edited):
-    both read the arena clock of the plant being driven, so the plant clock Factory.reset takes, the promised
+    both read the world clock of the plant being driven, so the plant clock Factory.reset takes, the promised
     dates and each event's `wall` are the same in every run. One per process; a Plant points it at itself
     before calling into its Factory."""
 
@@ -64,7 +64,7 @@ class Plant:
             return fn(self.factory)
 
     def begin(self, seed: int, scenario: bool) -> None:
-        """The arena seed seeds the factory's randomness (the floor noise); start_scenario resets with it too."""
+        """The world seed seeds the factory's randomness (the floor noise); start_scenario resets with it too."""
         self.seed = seed
         self.act(lambda f: f.start_scenario(seed) if scenario else f.reset(seed))
 
@@ -120,7 +120,7 @@ class Plant:
         self.backend.stop(self.io)
 
     def new_events(self) -> list:
-        """Factory events since the last call, as arena events."""
+        """Factory events since the last call, as Shakedown events."""
         events = [e for e in self.factory.events if e["seq"] > self.last_seq]
         if events:
             self.last_seq = events[-1]["seq"]
@@ -132,7 +132,7 @@ class Plant:
         return {"changed": bool(n or events), "events": events}
 
     def state(self) -> dict:
-        """The factory's state, with the cells and the load the arena adds."""
+        """The factory's state, with the cells and the load Shakedown adds."""
         return self.act(lambda f: {**f.state(), **self.equipment.state(f)})
 
 

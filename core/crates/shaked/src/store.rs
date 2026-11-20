@@ -254,7 +254,7 @@ impl Store {
             .await
     }
 
-    /// Records an event of a branch; an object payload also gets `overhead`, the arena's time
+    /// Records an event of a branch; an object payload also gets `overhead`, the Shakedown's time
     /// since the branch's last event, as `overhead_ms`.
     pub async fn append_with(
         &self,

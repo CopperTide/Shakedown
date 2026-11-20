@@ -224,7 +224,7 @@ The names and arguments are those of the factory's `mcp/src/ridgeline_mcp/floor.
   benchmark's link (`docs/protocol.md`, "Links between parts"), and then agents don't get the tool.
 - The plant runs without ERPNext in Shakedown, so it has no Work Orders. `orders` is empty, and `predict_move`
   refuses: "predict_move needs the plant's Work Orders, which come from ERPNext; the plant runs without ERPNext
-  in the arena".
+  in this world".
 - Records the factory would file in ERPNext (lockouts, statements, inspection notes) come out as events saying
   they were not filed ("no ERPNext link"). That is the factory's `--no-erp` behaviour.
 - Refusals come back as a tool-level `error` and change nothing. They cover:

@@ -41,7 +41,7 @@ pub enum MailKind {
     Delegation,
     Report,
     Message,
-    /// arena's own notice to the lead: an agent failed, or work for it could not be delivered.
+    /// Shakedown's own notice to the lead: an agent failed, or work for it could not be delivered.
     Notice,
 }
 

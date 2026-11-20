@@ -1,4 +1,4 @@
-//! A branch's numbers for deployment estimates: the wall time measured, arena's own overhead in
+//! A branch's numbers for deployment estimates: the wall time measured, Shakedown's own overhead in
 //! it, the time estimated in production (measured minus overhead), and tokens and cost per agent
 //! and model. Only the branch's own events count (`seq >= start_seq`), as in compare: the
 //! inherited prefix belongs to its parent.
@@ -173,7 +173,7 @@ impl Tally {
     }
 
     /// Tokens of the run: its ends', or its model calls' when it never ended (or kept no split).
-    /// Calls its client reported one by one, by message id, are arena's own record of them, so
+    /// Calls its client reported one by one, by message id, are Shakedown's own record of them, so
     /// their sums win over the totals the client added up itself at the end.
     fn settle(&mut self) {
         let calls = &self.calls;

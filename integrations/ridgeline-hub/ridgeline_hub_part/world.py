@@ -1,4 +1,4 @@
-"""One instance's world: the hub's Market on the arena clock, with an adapter for its `factory`."""
+"""One instance's world: the hub's Market on the world clock, with an adapter for its `factory`."""
 from datetime import datetime, timedelta
 
 from shakedown_part import FixedStep

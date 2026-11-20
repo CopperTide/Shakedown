@@ -46,7 +46,7 @@ impl Hub {
         self
     }
 
-    /// The arena folder `${SHAKEDOWN_DIR}` names in package commands.
+    /// The repository folder `${SHAKEDOWN_DIR}` names in package commands.
     pub fn with_repo_dir(mut self, dir: PathBuf) -> Hub {
         self.repo_dir = dir;
         self

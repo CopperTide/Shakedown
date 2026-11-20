@@ -1,14 +1,14 @@
 //! Arena's own time, kept apart from the agents' and the world's so a run's numbers can estimate
-//! production. Each piece of arena's work adds its milliseconds to the branch's ledger (its
+//! production. Each piece of Shakedown's work adds its milliseconds to the branch's ledger (its
 //! `BranchCtx::overhead`); the next event recorded for the branch carries what built up since the
 //! one before, as `overhead_ms`, and the ledger starts again. Summing `overhead_ms` over a
-//! branch's events gives the time arena added to it.
+//! branch's events gives the time Shakedown added to it.
 
 use std::{sync::Mutex, time::Instant};
 
 use serde::{Deserialize, Serialize};
 
-/// The kinds of arena work that are timed.
+/// The kinds of Shakedown work that are timed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Cat {
     /// Saving parts after a step (the world clock is paused meanwhile).
@@ -33,7 +33,7 @@ pub enum Cat {
     Pause,
 }
 
-/// Milliseconds per kind of arena work; a kind with none is left out.
+/// Milliseconds per kind of Shakedown work; a kind with none is left out.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
 pub struct Overhead {
     #[serde(default, skip_serializing_if = "is_zero")]
@@ -133,7 +133,7 @@ pub struct Ledger {
 }
 
 impl Ledger {
-    /// Adds `ms` of arena work of kind `cat` to the branch's next recorded event.
+    /// Adds `ms` of Shakedown work of kind `cat` to the branch's next recorded event.
     pub fn add(&self, cat: Cat, ms: f64) {
         self.pending.lock().unwrap().add(cat, ms);
     }

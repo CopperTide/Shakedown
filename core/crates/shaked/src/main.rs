@@ -14,19 +14,19 @@
 //! benchmark; a remembered one that can't describe itself is logged and passed over), and where the
 //! parts are:
 //! - `SHAKEDOWN_PACKAGES`: `:`-separated folders whose subfolders hold `shakedown-package.toml`
-//!   (default `<arena>/integrations:<arena>/benchmarks`);
+//!   (default `<repo>/integrations:<repo>/benchmarks`);
 //! - `SHAKEDOWN_BIN_DIR`: substituted for `${SHAKEDOWN_BIN_DIR}` in package commands
-//!   (default `<arena>/core/target/release`; build with `cargo build --release` in `<arena>`);
-//!   `${SHAKEDOWN_DIR}` stands for `<arena>`;
-//! - `SHAKEDOWN_SAVES`: save storage (default `<arena>/core/saves`).
+//!   (default `<repo>/core/target/release`; build with `cargo build --release` in `<repo>`);
+//!   `${SHAKEDOWN_DIR}` stands for `<repo>`;
+//! - `SHAKEDOWN_SAVES`: save storage (default `<repo>/core/saves`).
 //! - `SHAKEDOWN_WORLDS`: where built worlds are written, installed from at start like a package
-//!   root, and where the current benchmark is remembered (default `<arena>/core/worlds`).
+//!   root, and where the current benchmark is remembered (default `<repo>/core/worlds`).
 //! - `SHAKEDOWN_TEMPLATES`: more template folders for the world builder (passed on to it).
 //! - `SHAKEDOWN_RUN_<PACKAGE>`: a command line (`/bin/sh -c`) run in place of a package's `run`,
 //!   e.g. `ssh <host> -- <command>` for a part on another machine (`docs/protocol.md`).
 //!
-//! `<arena>` is the folder above `core`, fixed when shaked is built (from `CARGO_MANIFEST_DIR`,
-//! which is `<arena>/core/crates/shaked`, or `<arena>/core/crates/arenad-alias` for `arenad`), so
+//! `<repo>` is the folder above `core`, fixed when shaked is built (from `CARGO_MANIFEST_DIR`,
+//! which is `<repo>/core/crates/shaked`, or `<repo>/core/crates/arenad-alias` for `arenad`), so
 //! the defaults hold wherever shaked is started from.
 
 use std::{path::PathBuf, sync::Arc};

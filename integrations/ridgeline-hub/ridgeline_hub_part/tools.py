@@ -111,12 +111,12 @@ def _claim_body(a):
 
 
 def _wait_s():
-    return Param("wait_s", "integer", 0)  # accepted and ignored: agents poll, the arena clock runs on
+    return Param("wait_s", "integer", 0)  # accepted and ignored: agents poll, the world clock runs on
 
 
 TOOLS = {t.name: t for t in [
     Tool("request_quotes", "Send a request for quotes for a part to the suppliers that stock it. Quotes "
-         "arrive over about a minute (arena time).", "write",
+         "arrive over about a minute (world time).", "write",
          (Param("part", "string"), Param("qty", "integer", 1), Param("need_by", "string", None)),
          "rfq", _pick("part", "qty", "need_by"), _writes(_key("rfq", "rfq", "result"))),
     Tool("get_quotes", "The quotes received for a request and who has not answered yet. Returns at once; "
