@@ -84,12 +84,14 @@ pub struct Launched {
 }
 
 impl Launched {
+    /// The end of the driver's stdout, tokens redacted (it is recorded).
     pub fn stdout_tail(&self) -> String {
-        self.stdout.lock().unwrap().text()
+        crate::auth::tokens::redact_tokens(&self.stdout.lock().unwrap().text())
     }
 
+    /// The end of the driver's stderr, tokens redacted (it is recorded).
     pub fn stderr_tail(&self) -> String {
-        self.stderr.lock().unwrap().text()
+        crate::auth::tokens::redact_tokens(&self.stderr.lock().unwrap().text())
     }
 
     /// How the driver exited, once it has.

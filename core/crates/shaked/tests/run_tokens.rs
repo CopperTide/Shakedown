@@ -331,3 +331,36 @@ fn run_tokens_reach_only_their_branch() {
         );
     })
 }
+
+#[test]
+fn a_long_pause_extends_proxy_tickets_and_run_tokens() {
+    run(async {
+        let fx = AppFx::idle("runtokens", "pauseextends").start().await;
+        let (branch, _) = external_agent(&fx).await;
+        let soon = std::time::Instant::now() + std::time::Duration::from_millis(300);
+        let ticket = fx.state.proxy.tickets.issue(&branch, Some("a"), soon);
+        assert_eq!(
+            fx.post(&format!("/api/branches/{branch}/pause"), json!({}))
+                .await
+                .0,
+            200
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        assert_eq!(
+            fx.post(&format!("/api/branches/{branch}/resume"), json!({}))
+                .await
+                .0,
+            200
+        );
+        assert!(
+            fx.state.proxy.tickets.holder(&ticket).is_some(),
+            "the pause did not count"
+        );
+        let sql = format!("SELECT (expires_at - created_at > interval '24 hours')::text FROM shakedown.run_tokens WHERE branch_id = '{branch}'");
+        assert_eq!(
+            pg::query_text(&fx.db, &sql).await.as_deref(),
+            Some("true"),
+            "the run token moved by the pause"
+        );
+    })
+}

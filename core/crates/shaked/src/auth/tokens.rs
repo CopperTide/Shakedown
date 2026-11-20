@@ -89,3 +89,56 @@ async fn service_account(tx: &crate::store::Tx, sa: Uuid, org: Uuid) -> Result<O
         team: r.get(1),
     }))
 }
+
+/// `text` with every token shaked makes (`sd_`, `sdr_`, `sda_`, `sdw_`, `sdt_` and 64 hex digits)
+/// replaced by its prefix and `••••`: what a driver's output or error is recorded as.
+pub fn redact_tokens(text: &str) -> String {
+    const PREFIXES: [&str; 5] = ["sd_", "sdr_", "sda_", "sdw_", "sdt_"];
+    let (mut out, mut rest) = (String::with_capacity(text.len()), text);
+    while let Some(i) = rest.find("sd") {
+        out.push_str(&rest[..i]);
+        rest = &rest[i..];
+        let token = PREFIXES.iter().find_map(|p| {
+            let hex = rest.strip_prefix(p)?.get(..64)?;
+            hex.bytes()
+                .all(|b| b.is_ascii_hexdigit())
+                .then_some(p.len() + 64)
+                .map(|n| (*p, n))
+        });
+        match token {
+            Some((prefix, n)) => {
+                out.push_str(prefix);
+                out.push_str("••••");
+                rest = &rest[n..];
+            }
+            None => {
+                out.push_str("sd");
+                rest = &rest[2..];
+            }
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tokens_in_text_are_redacted_and_the_rest_kept() {
+        let t = new_secret("sda_");
+        let r = new_secret("sdr_");
+        let text = format!(
+            "Authorization: Bearer {t}\nrun {r} ok; sd_short and sdx_{} stay",
+            "0".repeat(64)
+        );
+        let got = redact_tokens(&text);
+        assert!(!got.contains(&t[4..]) && !got.contains(&r[4..]), "{got}");
+        assert!(
+            got.contains("Bearer sda_••••") && got.contains("run sdr_•••• ok"),
+            "{got}"
+        );
+        assert!(got.contains("sd_short") && got.contains("sdx_"), "{got}");
+    }
+}

@@ -148,6 +148,7 @@ impl Store {
         anyhow::ensure!(!urls.app.is_empty(), "hosted mode needs SHAKEDOWN_PG_URL");
         open::migrate_hosted(migrate).await?;
         let store = Store::with_pools(open::pool(&urls.app)?, open::pool(system)?, false);
+        open::refuse_bypassing_login(&store.app).await?;
         crate::jobs::interrupt_at_start(&store).await?;
         Ok(store)
     }

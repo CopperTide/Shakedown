@@ -165,3 +165,20 @@ fn a_hosted_store_migrates_shakedown_and_never_seeds_the_local_owner() {
         );
     })
 }
+
+#[test]
+fn a_hosted_app_login_that_bypasses_row_level_security_is_refused() {
+    run(async {
+        let (name, _clean, login) = gateway_database().await;
+        let urls = DbUrls {
+            app: pg::admin().db_url(&name),
+            system: Some(login.db_url(&name)),
+            migrate: Some(pg::admin().db_url(&name)),
+        };
+        let err = Store::open_hosted(&urls)
+            .await
+            .err()
+            .expect("a superuser app login is refused");
+        assert!(format!("{err:#}").contains("row-level security"), "{err:#}");
+    })
+}

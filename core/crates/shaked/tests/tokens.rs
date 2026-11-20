@@ -188,3 +188,25 @@ fn cli_token_create_prints_a_working_token() {
             .is_none());
     })
 }
+
+#[test]
+fn read_tokens_and_viewers_cannot_write() {
+    run(async {
+        let fx = AppFx::idle("tokens", "readonly").hosted().start().await;
+        let read = token_of(&fx, "a_owner", "read").await;
+        assert_eq!(
+            with_token(&fx, "DELETE", "/api/runs/nope", &read, None).await,
+            403
+        );
+        let fork = json!({"at_seq": 1});
+        let (status, _) = fx
+            .signed("POST", "/api/branches/nope/fork", "a_viewer", Some(fork))
+            .await;
+        assert_eq!(status, 403, "a viewer cannot fork");
+        assert_eq!(
+            mint(&fx, "a_viewer", &["read"]).await.0,
+            200,
+            "but may mint its own read token"
+        );
+    })
+}

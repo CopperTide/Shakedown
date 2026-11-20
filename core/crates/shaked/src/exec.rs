@@ -199,8 +199,16 @@ impl BranchCtx {
     /// `Resume` with how long the pause lasted (counted as Shakedown's time, not the run's); false
     /// when the branch wasn't paused.
     pub async fn resume(&self, store: &Store) -> anyhow::Result<bool> {
+        Ok(self.resume_lasting(store).await?.is_some())
+    }
+
+    /// `resume`, saying how long the pause lasted (None: the branch wasn't paused).
+    pub async fn resume_lasting(
+        &self,
+        store: &Store,
+    ) -> anyhow::Result<Option<std::time::Duration>> {
         let Some(lasted) = self.flow.resume() else {
-            return Ok(false);
+            return Ok(None);
         };
         let ms = lasted.as_secs_f64() * 1000.0;
         self.overhead.add(Cat::Pause, ms);
@@ -210,7 +218,7 @@ impl BranchCtx {
             paused_ms: ms.round() as i64,
         };
         self.record(store, None, &resumed).await?;
-        Ok(true)
+        Ok(Some(lasted))
     }
 
     /// Waits for the branch gate, counting the wait as Shakedown's overhead.

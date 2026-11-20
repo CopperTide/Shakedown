@@ -73,6 +73,9 @@ pub async fn hosted(State(state): State<Arc<AppState>>, mut req: Request, next: 
     if let Err((status, error)) = run_token_reach(&scope, req.uri().path()) {
         return refuse(status, error);
     }
+    if !may_write(&scope, req.method(), req.uri().path()) {
+        return refuse(StatusCode::FORBIDDEN, "your role or token may only read");
+    }
     req.extensions_mut().insert(Arc::new(scope));
     next.run(req).await
 }
@@ -97,6 +100,28 @@ fn run_token_reach(scope: &Scope, path: &str) -> Result<(), (StatusCode, &'stati
             "a run token reaches only its own run",
         )),
     }
+}
+
+/// Whether the request may change anything: reads always; a caller's own tokens by their own
+/// rules (`api::tokens`); every other write needs a role that writes (owner, admin, member) and,
+/// for an API token, a scope that does (run or admin).
+fn may_write(scope: &Scope, method: &axum::http::Method, path: &str) -> bool {
+    use axum::http::Method;
+    if [Method::GET, Method::HEAD, Method::OPTIONS].contains(method)
+        || path.starts_with("/api/tokens")
+    {
+        return true;
+    }
+    if matches!(scope.principal(), super::Principal::RunToken { .. }) {
+        return true; // its own branch's run-internal routes only (run_token_reach)
+    }
+    let write = super::Action::CreateOrgWide(super::ResourceKind::Run);
+    super::can(
+        scope.principal(),
+        &write,
+        &super::Target::Org(scope.org()),
+        &Default::default(),
+    )
 }
 
 /// What a request presents: a bearer token, and a good gateway signature's (user, org).

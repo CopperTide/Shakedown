@@ -63,7 +63,13 @@ async fn resume(
     Path(id): Path<String>,
 ) -> ApiResult<Value> {
     let ctx = live(&state, &caller, &id).await?;
-    paused(&ctx, ctx.resume(&state.store).await?)
+    let lasted = ctx.resume_lasting(&state.store).await?;
+    if let Some(by) = lasted {
+        // Expiry counts only unpaused time: the branch's proxy tickets and run tokens move too.
+        state.proxy.tickets.extend(&id, by);
+        ctx.records(&state.store).extend_run_tokens(&id, by).await?;
+    }
+    paused(&ctx, lasted.is_some())
 }
 
 /// `POST /api/branches/{id}/stop`: the run ends `stopped`, unscored. shaked's own runner ends

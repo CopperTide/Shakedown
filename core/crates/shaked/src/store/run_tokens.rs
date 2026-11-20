@@ -40,6 +40,14 @@ impl Scoped<'_> {
         Ok(token)
     }
 
+    /// Moves `branch`'s live tokens' expiry `by` later (the branch was paused that long).
+    pub async fn extend_run_tokens(&self, branch: &str, by: std::time::Duration) -> Result<u64> {
+        let sql = "UPDATE run_tokens SET expires_at = expires_at + make_interval(secs => $3)
+                   WHERE branch_id = $1 AND org_id = $2 AND revoked_at IS NULL";
+        self.execute(sql, &[&branch, &self.org(), &by.as_secs_f64()])
+            .await
+    }
+
     /// Revokes `branch`'s live tokens (only `agent`'s, when given): how many.
     pub async fn revoke_run_tokens(&self, branch: &str, agent: Option<&str>) -> Result<u64> {
         let sql = "UPDATE run_tokens SET revoked_at = now()

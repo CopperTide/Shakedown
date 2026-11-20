@@ -163,3 +163,21 @@ pub(super) async fn migrate_hosted(url: &str) -> Result<()> {
     let _ = task.await;
     done.map(drop).context("migrating stream shakedown")
 }
+
+/// A hosted request login must be under row-level security: not a superuser, not BYPASSRLS, and in
+/// `shaked_app` (fail closed).
+pub(super) async fn refuse_bypassing_login(app: &Pool) -> Result<()> {
+    let c = app
+        .get()
+        .await
+        .context("connecting with SHAKEDOWN_PG_URL")?;
+    let sql = "SELECT rolsuper OR rolbypassrls,
+                      CASE WHEN to_regrole('shaked_app') IS NULL THEN false ELSE pg_has_role('shaked_app', 'MEMBER') END
+                 FROM pg_roles WHERE rolname = current_user";
+    let row = c.query_one(sql, &[]).await?;
+    let (bypasses, member): (bool, bool) = (row.get(0), row.get(1));
+    if bypasses || !member {
+        bail!("SHAKEDOWN_PG_URL's login must be in shaked_app and under row-level security (not a superuser, not BYPASSRLS)");
+    }
+    Ok(())
+}

@@ -166,3 +166,25 @@ fn every_test_that_starts_shaked_sets_the_guard() {
         }
     }
 }
+
+/// `--hosted` opens the hosted store (no more "not available"): with nowhere to connect, it stops
+/// naming the database it could not reach, before serving anything.
+#[test]
+fn hosted_mode_opens_its_three_logins() {
+    let shaked = PathBuf::from(env!("CARGO_BIN_EXE_shaked"));
+    let nowhere = "postgres://nobody:nothing@127.0.0.1:9/postgres";
+    let out = Command::new(shaked)
+        .arg("--hosted")
+        .env("SHAKEDOWN_TEST_GUARD", "1")
+        .env("SHAKEDOWN_PG_URL", nowhere)
+        .env("SHAKEDOWN_SYSTEM_PG_URL", nowhere)
+        .env("SHAKEDOWN_MIGRATE_PG_URL", nowhere)
+        .env("SHAKEDOWN_PORT", free_port().to_string())
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert!(!out.status.success());
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(!err.contains("not available in this build"), "{err}");
+    assert!(err.contains("connecting to migrate"), "{err}");
+}

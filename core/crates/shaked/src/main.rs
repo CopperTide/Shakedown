@@ -146,13 +146,6 @@ fn mode_and_bind() -> anyhow::Result<(Mode, Bind)> {
     );
     let bind = shaked::mode::bind_from(|k| parts::settings::var(k).ok(), mode == Mode::Hosted)
         .map_err(anyhow::Error::msg)?;
-    if mode == Mode::Hosted {
-        // Hosted needs the org-aware store and request auth, which land later in milestone 1.
-        anyhow::bail!(
-            "hosted mode is not available in this build yet: {}",
-            shaked::mode::HOSTED_REFUSAL
-        );
-    }
     Ok((mode, bind))
 }
 
