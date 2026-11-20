@@ -235,6 +235,8 @@ pub async fn start_world(
     new_id: &str,
     rerun: &mut Rerun,
 ) -> Result<World, ForkError> {
+    crate::mode::local_only(state.store.layer().policy(), "starting a world's parts")
+        .map_err(|e| ForkError::Internal(anyhow::Error::msg(e)))?;
     let from = WorldFrom::Saves(start_saves(rerun)?);
     let (hub, seed) = (state.hub.clone(), rerun.run.seed);
     let mut planned = match rerun.world.take() {

@@ -25,12 +25,17 @@ use crate::{
 };
 
 pub(super) fn router() -> Router<Arc<AppState>> {
-    let agent = "/api/branches/{id}/agents/{agent}";
     Router::new()
         .route("/api/branches/{id}/agents", post(register))
-        .route(&format!("{agent}/end"), post(end_agent))
-        .route(&format!("{agent}/usage"), post(report_usage))
-        .route(&format!("{agent}/reasoning"), post(report_reasoning))
+        .route("/api/branches/{id}/agents/{agent}/end", post(end_agent))
+        .route(
+            "/api/branches/{id}/agents/{agent}/usage",
+            post(report_usage),
+        )
+        .route(
+            "/api/branches/{id}/agents/{agent}/reasoning",
+            post(report_reasoning),
+        )
         .route("/api/branches/{id}/finish", post(finish))
 }
 

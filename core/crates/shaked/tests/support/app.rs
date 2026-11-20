@@ -7,6 +7,7 @@ use std::sync::Arc;
 use parts::Hub;
 use shaked::{
     app::{self, AppState, Config},
+    layer::Layer,
     providers::ProviderConfig,
     store::Store,
 };
@@ -22,9 +23,31 @@ pub async fn meta_store(kind: &str, tag: &str) -> (Arc<Store>, Cleanup) {
 
 /// `meta_store`, with the database's name.
 pub async fn meta_store_named(kind: &str, tag: &str) -> (String, Arc<Store>, Cleanup) {
+    meta_store_with(kind, tag, None).await
+}
+
+/// `meta_store`, the store calling `layer` at its hooks.
+pub async fn meta_store_layered(
+    kind: &str,
+    tag: &str,
+    layer: Arc<dyn Layer>,
+) -> (Arc<Store>, Cleanup) {
+    let (_, store, clean) = meta_store_with(kind, tag, Some(layer)).await;
+    (store, clean)
+}
+
+/// `meta_store_named`, with `layer` when given.
+pub async fn meta_store_with(
+    kind: &str,
+    tag: &str,
+    layer: Option<Arc<dyn Layer>>,
+) -> (String, Arc<Store>, Cleanup) {
     let clean = Cleanup::new();
     let meta = super::pg::fresh_db(&format!("{kind}_{tag}"), &clean).await;
-    let store = Store::open_named(&admin(), &meta).await.unwrap();
+    let mut store = Store::open_named(&admin(), &meta).await.unwrap();
+    if let Some(l) = layer {
+        store = store.with_layer(l);
+    }
     (meta, Arc::new(store), clean)
 }
 

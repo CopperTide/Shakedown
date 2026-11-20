@@ -81,18 +81,18 @@ pub fn engine_check(c: &Caller, a: &Action, t: &Target<'_>) -> Decision {
     }
 }
 
-/// `read` views, `run` also starts, forks, stops and records, `admin` does everything; no token
-/// takes the run-internal actions.
+/// `read` views, `run` also starts, forks, stops and records (and drives a run it started:
+/// registers agents, reports, finishes), `admin` does everything; no API token calls tools or
+/// models or links a sandbox.
 fn by_scope(scopes: &[TokenScope], a: &Action) -> Decision {
     use Action::*;
     let needs = match a {
         Read => TokenScope::Read,
-        Create | Start | Fork | Stop | Record | UseInRun | Rename | ChangeSetup | DeleteFork => {
-            TokenScope::Run
-        }
+        Create | Start | Fork | Stop | Record | UseInRun | Rename | ChangeSetup | DeleteFork
+        | RegisterAgent | Report | Finish => TokenScope::Run,
         ReplaceSecret | Delete | ManageTokens | InstanceAdmin => TokenScope::Admin,
-        RegisterAgent | Report | Finish | CallTools | CallModel | WorkerLink => {
-            return forbidden("an API token does not act inside a run")
+        CallTools | CallModel | WorkerLink => {
+            return forbidden("an API token does not call tools or models")
         }
     };
     let rank = |s: &TokenScope| match s {
@@ -183,7 +183,7 @@ mod tests {
             branch: "b",
         };
         assert!(matches!(
-            engine_check(&admin, &Action::Finish, &branch),
+            engine_check(&admin, &Action::CallModel, &branch),
             Decision::Forbidden(_)
         ));
     }

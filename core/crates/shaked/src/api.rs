@@ -16,9 +16,11 @@ use serde_json::{json, Value};
 
 use crate::{
     app::AppState,
-    auth::{Action, Caller, Decision, ResourceKind, Target, Who},
+    auth::{Action, Caller, Decision, Target, Who},
     fork::{self, ForkError},
-    gc, metrics,
+    gc,
+    layer::{Costly, KeySource, Meter, Usage},
+    metrics,
     model::*,
     prices, prompts,
     providers::{self, ProviderStatus},
@@ -36,6 +38,7 @@ mod me;
 mod names;
 mod recording;
 mod review;
+pub mod routes;
 mod rows;
 mod sandbox;
 mod stream;
@@ -124,13 +127,28 @@ impl From<anyhow::Error> for ApiError {
     }
 }
 
-/// The engine's own check of `caller` doing `action` on `target` (`auth::engine_check`): 404 when
-/// not found, 403 when refused.
-pub(crate) fn allowed(caller: &Caller, action: Action, target: Target<'_>) -> Result<(), ApiError> {
-    match crate::auth::engine_check(caller, &action, &target) {
+/// Whether `caller` may do `action` on `target`: the engine's own checks (`auth::engine_check`),
+/// then the layer's `authorize`. 404 when not found, 403 when refused.
+pub async fn authorize(
+    state: &AppState,
+    caller: &Caller,
+    action: Action,
+    target: Target<'_>,
+) -> Result<(), ApiError> {
+    let decision = match crate::auth::engine_check(caller, &action, &target) {
+        Decision::Allow => state.store.layer().authorize(caller, action, target).await,
+        refused => refused,
+    };
+    match decision {
         Decision::Allow => Ok(()),
         Decision::NotFound => Err(ApiError::not_found("not found".to_string())),
         Decision::Forbidden(why) => Err(ApiError(StatusCode::FORBIDDEN, why)),
+    }
+}
+
+impl From<crate::layer::Refusal> for ApiError {
+    fn from(r: crate::layer::Refusal) -> ApiError {
+        ApiError(r.status, r.message)
     }
 }
 
@@ -486,13 +504,11 @@ async fn create_external_run(
     external::create_run(state, caller, permit, bench, run, scenario, limits).await
 }
 
-/// A new run's benchmark and scenario (its seed checked), once the caller may start runs.
+/// A new run's benchmark and scenario (its seed checked).
 async fn new_run_world(
     state: &AppState,
-    caller: &Caller,
     req: &mut NewRun,
 ) -> Result<(String, crate::scenario::Scenario), ApiError> {
-    allowed(caller, Action::Start, Target::Kind(ResourceKind::Run))?;
     settle_providers(&mut req.team);
     let bench = benchmark_asked(state, req.benchmark.as_deref())?;
     let mut scenario = twin::scenario_of(state, &bench, req.scenario.as_ref()).await?;
@@ -511,8 +527,27 @@ async fn create_run(
     headers: axum::http::HeaderMap,
     JsonBody(req): JsonBody<NewRun>,
 ) -> ApiResult<Value> {
-    allowed(&caller, Action::Start, Target::Kind(ResourceKind::Run))?;
-    start_run(state, caller, permit, headers, req).await
+    let warning = crate::layer::admit(&state.store, &caller, Costly::StartRun).await?;
+    let Json(mut v) = start_run(state.clone(), caller.clone(), permit, headers, req).await?;
+    let (run, branch) = (v["run_id"].as_str(), v["branch_id"].as_str());
+    let key = format!("run:{}", run.unwrap_or_default());
+    crate::layer::meter(&state.store, &caller, runs_usage(key, run, branch)).await;
+    if let Some(w) = warning {
+        v["warning"] = json!(w);
+    }
+    Ok(Json(v))
+}
+
+/// One run (or fork) started, for the layer's `runs` meter.
+fn runs_usage<'a>(key: String, run: Option<&'a str>, branch: Option<&'a str>) -> Usage<'a> {
+    Usage {
+        meter: Meter::Runs,
+        quantity: 1,
+        key,
+        run,
+        branch,
+        paid_by: KeySource::Environment,
+    }
 }
 
 async fn start_run(
@@ -522,7 +557,7 @@ async fn start_run(
     headers: axum::http::HeaderMap,
     mut req: NewRun,
 ) -> ApiResult<Value> {
-    let (bench, scenario) = new_run_world(&state, &caller, &mut req).await?;
+    let (bench, scenario) = new_run_world(&state, &mut req).await?;
     if req.connection.is_some() {
         return create_code_run(state, caller, permit, &headers, req, bench, scenario).await;
     }
@@ -614,13 +649,31 @@ async fn guard_code_fork(
     }
 }
 
+/// `POST /api/branches/{id}/fork`: admitted and metered by the layer.
 async fn fork_branch(
     State(state): State<Arc<AppState>>,
     Who(caller): Who,
     Path(id): Path<String>,
     permit: StartPermit,
     headers: axum::http::HeaderMap,
-    JsonBody(mut req): JsonBody<ForkReq>,
+    JsonBody(req): JsonBody<ForkReq>,
+) -> ApiResult<fork::ForkResponse> {
+    crate::layer::admit(&state.store, &caller, Costly::Fork { branch: &id }).await?;
+    let (st, who) = (state.clone(), caller.clone());
+    let Json(resp) = fork_admitted(st, who, id, permit, headers, req).await?;
+    let key = format!("fork:{}", resp.branch_id);
+    let usage = runs_usage(key, None, Some(&resp.branch_id));
+    crate::layer::meter(&state.store, &caller, usage).await;
+    Ok(Json(resp))
+}
+
+async fn fork_admitted(
+    state: Arc<AppState>,
+    caller: Arc<Caller>,
+    id: String,
+    permit: StartPermit,
+    headers: axum::http::HeaderMap,
+    mut req: ForkReq,
 ) -> ApiResult<fork::ForkResponse> {
     let parent = forkable(&state, &caller, &id).await?;
     guard_code_fork(&state, &caller, &headers, &id).await?;

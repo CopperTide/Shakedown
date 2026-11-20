@@ -1,4 +1,7 @@
-use std::{collections::HashMap, sync::Mutex};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 
 use anyhow::{anyhow, Context, Result};
 use deadpool_postgres::Pool;
@@ -8,6 +11,7 @@ use tokio_postgres::{types::ToSql, Row};
 
 use crate::{
     auth::{Caller, SystemJob},
+    layer::{Layer, LocalLayer},
     model::*,
     overhead::Overhead,
     pg::Admin,
@@ -88,6 +92,8 @@ pub struct Store {
     pool: Pool,
     /// Background jobs' connections, when they need their own (a hosting layer's); else `pool`.
     system: Option<Pool>,
+    /// The deployment's hooks (`crate::layer`): [`LocalLayer`] unless [`Store::with_layer`].
+    layer: Arc<dyn Layer>,
     tx: broadcast::Sender<Event>,
     // Per-branch locks make `max(seq)+1` appends atomic within this process.
     locks: Mutex<HashMap<String, std::sync::Arc<AsyncMutex<()>>>>,
@@ -131,11 +137,28 @@ impl Store {
         Ok(store)
     }
 
+    /// A store over pools a hosting binary opened (and migrated), with its layer.
+    pub fn from_pools(pool: Pool, system: Option<Pool>, layer: Arc<dyn Layer>) -> Store {
+        Store::with_pools(pool, system).with_layer(layer)
+    }
+
+    /// This store, calling `layer` at its hooks.
+    pub fn with_layer(mut self, layer: Arc<dyn Layer>) -> Store {
+        self.layer = layer;
+        self
+    }
+
+    /// The deployment's hooks.
+    pub fn layer(&self) -> &Arc<dyn Layer> {
+        &self.layer
+    }
+
     fn with_pools(pool: Pool, system: Option<Pool>) -> Store {
         let (tx, _) = broadcast::channel(1024);
         Store {
             pool,
             system,
+            layer: Arc::new(LocalLayer),
             tx,
             locks: Mutex::new(HashMap::new()),
         }

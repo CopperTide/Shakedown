@@ -1,9 +1,10 @@
 //! API tokens in the metadata database: made here (the secret is shown once), listed without their
-//! hash, revoked.
+//! hash, revoked; each change audited through the layer, in the transaction that made it.
 
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::Serialize;
+use serde_json::json;
 use uuid::Uuid;
 
 use super::Scoped;
@@ -11,6 +12,7 @@ use crate::auth::{
     tokens::{hash, new_secret, prefix_of, Minted, API_PREFIX},
     TokenScope,
 };
+use crate::layer::AuditEvent;
 
 /// A token as lists show it: never the token or its hash.
 #[derive(Debug, Clone, Serialize)]
@@ -29,7 +31,7 @@ const INSERT: &str = "INSERT INTO api_tokens (name, token_hash, token_prefix, sc
 const LIST: &str = "SELECT id, name, token_prefix, scopes, created_at, last_used_at, expires_at
      FROM api_tokens WHERE revoked_at IS NULL ORDER BY created_at DESC, id";
 const REVOKE: &str =
-    "UPDATE api_tokens SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL RETURNING id";
+    "UPDATE api_tokens SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL RETURNING token_prefix";
 
 impl Scoped<'_> {
     /// Makes a token: the token, shown once.
@@ -44,7 +46,11 @@ impl Scoped<'_> {
         let scopes: Vec<&str> = scopes.iter().map(|s| s.as_str()).collect();
         let params: [&(dyn tokio_postgres::types::ToSql + Sync); 5] =
             [&name, &hash(&token), &prefix, &scopes, &expires];
-        let id: Uuid = self.query_one(INSERT, &params).await?.get(0);
+        let tx = self.store.tx(self.caller).await?;
+        let id: Uuid = tx.query_one(INSERT, &params).await?.get(0);
+        let detail = json!({"name": name, "prefix": prefix, "scopes": scopes});
+        self.audit(&tx, "token.created", &id, detail).await?;
+        tx.commit().await?;
         Ok(Minted { id, token, prefix })
     }
 
@@ -67,6 +73,29 @@ impl Scoped<'_> {
 
     /// Revokes token `id`: false when there is no such live token.
     pub async fn revoke_api_token(&self, id: Uuid) -> Result<bool> {
-        Ok(self.query_opt(REVOKE, &[&id]).await?.is_some())
+        let tx = self.store.tx(self.caller).await?;
+        let Some(row) = tx.query_opt(REVOKE, &[&id]).await? else {
+            return Ok(false);
+        };
+        let detail = json!({"prefix": row.get::<_, String>(0)});
+        self.audit(&tx, "token.revoked", &id, detail).await?;
+        tx.commit().await?;
+        Ok(true)
+    }
+
+    async fn audit(
+        &self,
+        tx: &crate::store::Tx,
+        action: &'static str,
+        id: &Uuid,
+        detail: serde_json::Value,
+    ) -> Result<()> {
+        let id = id.to_string();
+        let e = AuditEvent {
+            action,
+            target: ("api_token", &id),
+            detail,
+        };
+        self.store.layer().audit(tx, self.caller, e).await
     }
 }

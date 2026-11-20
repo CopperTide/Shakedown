@@ -15,8 +15,11 @@ pub mod flow;
 pub mod fork;
 pub mod gateway;
 pub mod gc;
+#[cfg(feature = "harness")]
+pub mod harness;
 pub mod jobs;
 pub mod launch;
+pub mod layer;
 pub mod live;
 pub mod mcp;
 pub mod metrics;
@@ -37,6 +40,7 @@ pub mod runner;
 pub mod saves;
 pub mod scenario;
 pub mod secrets;
+pub mod serve;
 pub mod store;
 pub mod suite;
 #[cfg(test)]

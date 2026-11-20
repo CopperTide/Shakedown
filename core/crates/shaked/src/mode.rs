@@ -103,6 +103,17 @@ pub fn loopback_hosts() -> Vec<String> {
     LOOPBACK_NAMES.iter().map(|h| h.to_string()).collect()
 }
 
+/// `Err` naming `what` where packages and code connections run only in sandboxes (a layer whose
+/// policy says so).
+pub fn local_only(policy: &crate::layer::Policy, what: &str) -> Result<(), String> {
+    match policy.runs_packages_here {
+        true => Ok(()),
+        false => Err(format!(
+            "{what}: this shaked runs packages only in sandboxes"
+        )),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

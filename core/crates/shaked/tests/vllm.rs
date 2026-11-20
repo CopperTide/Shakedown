@@ -200,3 +200,87 @@ fn a_cloudflare_timeout_is_recorded_and_passed_on() {
         assert!(of(&fx, &branch, &[EventKind::Reasoning]).await.is_empty());
     })
 }
+
+/// `external_on`, on an app whose store calls `spy`, with the agent on `provider`.
+async fn external_spied(
+    tag: &str,
+    providers: ProviderConfig,
+    spy: &shaked::harness::SpyLayer,
+    provider: &str,
+) -> (AppFx, String, String) {
+    let fx = AppFx::idle("vllm", tag)
+        .providers(providers)
+        .layer(std::sync::Arc::new(spy.clone()))
+        .start()
+        .await;
+    let team = json!({"id": "own", "name": "Own", "agents": []});
+    let body = json!({"task_id": "27", "team": team, "runner": "external"});
+    let (status, v) = fx.post("/api/runs", body).await;
+    assert_eq!(status, 200, "{v}");
+    let branch = v["branch_id"].as_str().unwrap().to_string();
+    let join = json!({"id": "a", "provider": provider, "model": "openai/gpt-oss-120b"});
+    let (status, reg) = fx
+        .post(&format!("/api/branches/{branch}/agents"), join)
+        .await;
+    assert_eq!(status, 200, "{reg}");
+    let gateway = reg["gateway_url"].as_str().unwrap().to_string();
+    (fx, branch, gateway)
+}
+
+#[test]
+fn every_recorded_model_call_is_metered_once() {
+    use shaked::{harness::Call, layer::Meter};
+    run(async {
+        let llm = fake_llm(vec![(200, gpt_oss("t", None))]).await;
+        let spy = shaked::harness::SpyLayer::new();
+        let (fx, branch, gw) =
+            external_spied("meter", pod(&llm.base, None), &spy, "local:pod").await;
+        let (status, _) = chat(&fx, &gw, ask(user("go"))).await;
+        assert_eq!(status, 200);
+        let calls = of(&fx, &branch, &[EventKind::ModelCall]).await;
+        let key = format!("gateway:{branch}:{}", calls[0].seq);
+        let meters: Vec<Call> = spy
+            .calls()
+            .into_iter()
+            .filter(|c| {
+                matches!(
+                    c,
+                    Call::Meter(Meter::ModelUsdMicros | Meter::ModelTokens, _)
+                )
+            })
+            .collect();
+        let want = [
+            Call::Meter(Meter::ModelUsdMicros, key.clone()),
+            Call::Meter(Meter::ModelTokens, format!("{key}:tokens")),
+        ];
+        assert_eq!(meters, want);
+        assert!(spy
+            .calls()
+            .iter()
+            .any(|c| matches!(c, Call::Admit(op) if op.starts_with("ModelCall"))));
+    })
+}
+
+#[test]
+fn an_agent_without_a_key_gets_the_layer_fallback() {
+    use shaked::{harness::Call, layer::Fallback};
+    run(async {
+        let llm = fake_llm(vec![(200, gpt_oss("t", None))]).await;
+        let lent = pod(&llm.base, None).resolve(Some("local:pod")).unwrap();
+        let spy = shaked::harness::SpyLayer::new().lending(Fallback {
+            provider: lent,
+            source: "trial",
+        });
+        let keyless = ProviderConfig::with_upstream(support::app::NOWHERE);
+        let (fx, _branch, gw) = external_spied("fallback", keyless, &spy, "openrouter").await;
+        let (status, answer) = chat(&fx, &gw, ask(user("go"))).await;
+        assert_eq!(status, 200, "{answer}");
+        assert_eq!(
+            llm.seen.lock().unwrap().len(),
+            1,
+            "the lent provider answered"
+        );
+        let asked = Call::Fallback("openai/gpt-oss-120b".into());
+        assert!(spy.calls().contains(&asked), "{:?}", spy.calls());
+    })
+}

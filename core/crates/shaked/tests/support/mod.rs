@@ -82,6 +82,7 @@ pub struct AppSetup {
     hub: Option<TestHub>,
     root: Option<ToyRoot>,
     bench: Option<String>,
+    layer: Option<Arc<dyn shaked::layer::Layer>>,
     tweak: Tweak,
 }
 
@@ -96,6 +97,7 @@ impl AppFx {
             hub: None,
             root: None,
             bench: None,
+            layer: None,
             tweak: Box::new(|_| {}),
         }
     }
@@ -150,6 +152,12 @@ impl AppSetup {
         self
     }
 
+    /// The store calls `layer` at its hooks.
+    pub fn layer(mut self, layer: Arc<dyn shaked::layer::Layer>) -> AppSetup {
+        self.layer = Some(layer);
+        self
+    }
+
     /// New runs use the benchmark `bench` (else the only one installed).
     pub fn bench(mut self, bench: &str) -> AppSetup {
         self.bench = Some(bench.into());
@@ -173,7 +181,7 @@ impl AppSetup {
 
     pub async fn start(self) -> AppFx {
         let hub = self.hub.unwrap_or_else(|| TestHub::new(&[]));
-        let (db, store, clean) = app::meta_store_named(&self.kind, &self.tag).await;
+        let (db, store, clean) = app::meta_store_with(&self.kind, &self.tag, self.layer).await;
         let (h, bench) = (hub.hub.clone(), self.bench.as_deref());
         let (state, base) = match self.configured {
             true => app::app_for(store, h, bench, self.tweak).await,

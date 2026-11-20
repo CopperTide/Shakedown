@@ -12,9 +12,10 @@ use serde_json::{json, Value};
 use crate::{
     app::AppState,
     exec::BranchCtx,
+    layer::{Costly, KeySource, Meter, ModelWant, Usage},
     model::*,
     overhead::{ms_since, Cat},
-    providers::{Provider, Upstream},
+    providers::{Provider, ProviderKind, Upstream},
     reasoning,
     store::Store,
 };
@@ -280,20 +281,115 @@ async fn handle(
             "request body must be a JSON object",
         );
     }
-    let provider = state.config.providers.resolve(provider.as_deref());
-    ctx.roster.note_model_call(&agent);
-    let (upstream, upstream_ms) = timed_upstream(&state, &provider, &body).await;
+    let model = body["model"].as_str().unwrap_or_default();
+    let asked = provider.as_deref().unwrap_or_default();
+    let op = Costly::ModelCall {
+        branch: &branch,
+        provider: asked,
+        model,
+    };
+    if let Err(r) = crate::layer::admit(&state.store, &ctx.caller, op).await {
+        return error_response(r.status, r.message);
+    }
+    call(&state, &ctx, &agent, body, provider.as_deref(), since).await
+}
+
+/// The call itself, once admitted: to the provider, recorded, charged and metered.
+async fn call(
+    state: &AppState,
+    ctx: &BranchCtx,
+    agent: &str,
+    body: Value,
+    asked: Option<&str>,
+    since: Instant,
+) -> Response {
+    let (provider, paid_by) = provider_for(state, ctx, asked, &body).await;
+    ctx.roster.note_model_call(agent);
+    let (upstream, upstream_ms) = timed_upstream(state, &provider, &body).await;
     let (status, payload) = model_call_payload(body, &provider, &upstream);
     // The gateway's own handling: all but the provider's answer and the time recording takes.
     ctx.overhead.add_besides(Cat::Gateway, since, upstream_ms);
-    charge(&ctx, &agent, &provider, &payload);
-    if let Err(e) = record(&ctx, &state.store, &agent, &payload).await {
-        return error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("recording model call: {e}"),
-        );
-    }
+    charge(ctx, agent, &provider, &payload);
+    let seq = match record(ctx, &state.store, agent, &payload).await {
+        Ok(seq) => seq,
+        Err(e) => {
+            let why = format!("recording model call: {e}");
+            return error_response(StatusCode::INTERNAL_SERVER_ERROR, why);
+        }
+    };
+    meter_call(state, ctx, &provider, &payload, seq, paid_by).await;
     reply(status, payload.response, &upstream)
+}
+
+/// The provider `asked` names and whose key pays: the layer's fallback when that provider needs a
+/// key the environment does not have.
+async fn provider_for(
+    state: &AppState,
+    ctx: &BranchCtx,
+    asked: Option<&str>,
+    body: &Value,
+) -> (Result<Provider, String>, KeySource) {
+    let found = state.config.providers.resolve(asked);
+    let keyed = [
+        ProviderKind::OpenRouter,
+        ProviderKind::OpenAi,
+        ProviderKind::Anthropic,
+    ];
+    let keyless = matches!(&found, Ok(p) if keyed.contains(&p.kind) && p.endpoint.key.is_none());
+    if keyless {
+        let model = body["model"].as_str().unwrap_or_default();
+        let want = ModelWant {
+            provider: asked,
+            model,
+        };
+        if let Some(f) = state
+            .store
+            .layer()
+            .fallback_provider(&ctx.caller, want)
+            .await
+        {
+            return (Ok(f.provider), KeySource::Fallback(f.source));
+        }
+    }
+    (found, KeySource::Environment)
+}
+
+/// The layer's meters for one recorded call: its cost in micro-USD and its tokens.
+async fn meter_call(
+    state: &AppState,
+    ctx: &BranchCtx,
+    provider: &Result<Provider, String>,
+    p: &ModelCallPayload,
+    seq: i64,
+    paid_by: KeySource,
+) {
+    let key = format!("gateway:{}:{seq}", ctx.branch_id);
+    let micros = (call_cost(provider, p).unwrap_or(0.0) * 1e6).round() as i64;
+    let count = |k: &str| p.usage[k].as_i64().unwrap_or(0);
+    let tokens = p.usage["total_tokens"]
+        .as_i64()
+        .unwrap_or_else(|| count("prompt_tokens") + count("completion_tokens"));
+    let usage = |meter, quantity, key| Usage {
+        meter,
+        quantity,
+        key,
+        run: None,
+        branch: Some(&ctx.branch_id),
+        paid_by,
+    };
+    let store = &state.store;
+    crate::layer::meter(
+        store,
+        &ctx.caller,
+        usage(Meter::ModelUsdMicros, micros, key.clone()),
+    )
+    .await;
+    crate::layer::meter(
+        store,
+        &ctx.caller,
+        usage(Meter::ModelTokens, tokens, format!("{key}:tokens")),
+    )
+    .await;
 }
 
 /// The agent's answer: `status` and `body`, with the provider's `retry-after` when it failed.

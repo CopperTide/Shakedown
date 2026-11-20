@@ -12,10 +12,10 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use uuid::Uuid;
 
-use super::{allowed, ApiError, ApiResult, JsonBody};
+use super::{ApiError, ApiResult, JsonBody};
 use crate::{
     app::AppState,
-    auth::{Action, Target, TokenScope, Who},
+    auth::{TokenScope, Who},
     store::ApiTokenRow,
 };
 
@@ -34,7 +34,6 @@ struct NewToken {
 }
 
 async fn list(State(state): State<Arc<AppState>>, Who(caller): Who) -> ApiResult<Vec<ApiTokenRow>> {
-    allowed(&caller, Action::ManageTokens, Target::Instance)?;
     Ok(Json(state.store.at(&caller).list_api_tokens().await?))
 }
 
@@ -53,7 +52,6 @@ async fn create(
     Who(caller): Who,
     JsonBody(req): JsonBody<NewToken>,
 ) -> ApiResult<Value> {
-    allowed(&caller, Action::ManageTokens, Target::Instance)?;
     let name = req.name.trim();
     if name.is_empty() || name.len() > 80 {
         return Err(ApiError::bad("name must be 1 to 80 bytes"));
@@ -77,7 +75,6 @@ async fn revoke(
     Who(caller): Who,
     Path(id): Path<String>,
 ) -> ApiResult<Value> {
-    allowed(&caller, Action::ManageTokens, Target::Instance)?;
     let gone = || ApiError::not_found(format!("there is no token \"{id}\""));
     let uuid: Uuid = id.parse().map_err(|_| gone())?;
     match state.store.at(&caller).revoke_api_token(uuid).await? {

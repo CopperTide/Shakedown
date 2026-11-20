@@ -6,7 +6,10 @@ use deadpool_postgres::Object;
 use tokio_postgres::{types::ToSql, Row};
 
 use super::Store;
-use crate::auth::{Caller, SystemJob};
+use crate::{
+    auth::{Caller, SystemJob},
+    layer::TxFor,
+};
 
 /// An open transaction.
 pub struct Tx {
@@ -64,22 +67,24 @@ impl Drop for Tx {
 }
 
 impl Store {
-    /// A transaction for `_c`'s request.
-    pub async fn tx(&self, _c: &Caller) -> Result<Tx> {
-        self.begin(&self.pool).await
+    /// A transaction for `c`'s request: `BEGIN`, then the layer's `begin`.
+    pub async fn tx(&self, c: &Caller) -> Result<Tx> {
+        self.begin(&self.pool, TxFor::Caller(c)).await
     }
 
     /// A transaction of a system job: on the system pool when there is one.
-    pub async fn system_tx(&self, _job: SystemJob) -> Result<Tx> {
-        self.begin(self.system.as_ref().unwrap_or(&self.pool)).await
+    pub async fn system_tx(&self, job: SystemJob) -> Result<Tx> {
+        let pool = self.system.as_ref().unwrap_or(&self.pool);
+        self.begin(pool, TxFor::System(job)).await
     }
 
-    async fn begin(&self, pool: &deadpool_postgres::Pool) -> Result<Tx> {
+    async fn begin(&self, pool: &deadpool_postgres::Pool, on: TxFor<'_>) -> Result<Tx> {
         let tx = Tx {
             conn: Some(pool.get().await?),
             committed: false,
         };
         tx.batch("BEGIN").await?;
+        self.layer.begin(&tx, on).await?;
         Ok(tx)
     }
 

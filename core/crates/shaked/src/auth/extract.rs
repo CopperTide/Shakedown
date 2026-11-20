@@ -14,17 +14,21 @@ use super::Caller;
 #[derive(Debug, Clone)]
 pub struct Who(pub Arc<Caller>);
 
+/// The answer to a request no caller was put on (a route outside the auth layer): fail closed.
+pub fn no_caller() -> (StatusCode, Json<serde_json::Value>) {
+    (
+        StatusCode::UNAUTHORIZED,
+        Json(serde_json::json!({"error": "no caller"})),
+    )
+}
+
 impl<S: Send + Sync> FromRequestParts<S> for Who {
     type Rejection = (StatusCode, Json<serde_json::Value>);
 
     async fn from_request_parts(parts: &mut Parts, _: &S) -> Result<Who, Self::Rejection> {
         match parts.extensions.get::<Arc<Caller>>() {
             Some(c) => Ok(Who(c.clone())),
-            // A route outside the auth layer: fail closed.
-            None => Err((
-                StatusCode::UNAUTHORIZED,
-                Json(serde_json::json!({"error": "no caller"})),
-            )),
+            None => Err(no_caller()),
         }
     }
 }
