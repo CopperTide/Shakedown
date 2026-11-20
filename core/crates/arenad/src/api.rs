@@ -433,8 +433,8 @@ async fn create_code_run(
     connections::create_run(state, permit, headers, (&id, req.runner), run).await
 }
 
-/// `POST /api/runs` with `runner: external` (see `external::create_run`): its spend limit and
-/// world time window checked.
+/// `POST /api/runs` with `runner: external` (see `external::create_run`, which checks its spend
+/// limit and world time window).
 async fn create_external_run(
     state: Arc<AppState>,
     permit: StartPermit,
@@ -442,11 +442,11 @@ async fn create_external_run(
     bench: String,
     scenario: crate::scenario::Scenario,
 ) -> ApiResult<Value> {
-    let rules = Rules::new(Runner::External)
-        .with_max_cost(max_cost(req.max_cost_usd)?)
-        .with_world_minutes(world_minutes(req.world_minutes)?);
-    let run = (req.task_id, req.team);
-    external::create_run(state, permit, bench, run, scenario, rules).await
+    let (run, limits) = (
+        (req.task_id, req.team),
+        (req.max_cost_usd, req.world_minutes),
+    );
+    external::create_run(state, permit, bench, run, scenario, limits).await
 }
 
 async fn create_run(

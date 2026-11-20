@@ -35,17 +35,21 @@ pub(super) fn router() -> Router<Arc<AppState>> {
 
 /// Starts a run whose agents an external system drives: its world started, its clock ticking,
 /// the team's agents (there may be none yet) registered. Answers `{run_id, branch_id, agents}`
-/// with each agent's endpoints.
+/// with each agent's endpoints. `(max_cost_usd, world_minutes)` are checked after the team and
+/// the disk, the order external runs have always been refused in.
 pub(super) async fn create_run(
     state: Arc<AppState>,
     permit: StartPermit,
     benchmark: String,
     (task_id, team): (String, Team),
     scenario: crate::scenario::Scenario,
-    rules: Rules,
+    (max_cost_usd, world_minutes): (Option<f64>, Option<f64>),
 ) -> ApiResult<Value> {
     team::validate_agents(providers_of(&state), &team.agents)?;
     permit.check_disk(&state).await?;
+    let rules = Rules::new(Runner::External)
+        .with_max_cost(super::max_cost(max_cost_usd)?)
+        .with_world_minutes(super::world_minutes(world_minutes)?);
     detached(async move {
         let _permit = permit;
         let spec = LaunchSpec {
