@@ -76,6 +76,28 @@ fn a_refused_run_is_refused_before_its_world_is_looked_up() {
     })
 }
 
+/// I9: a run that names a Code connection in its body asks the layer whether the caller may use
+/// it in a run, not only whether they can see it.
+#[test]
+fn a_run_naming_a_connection_asks_to_use_it_in_a_run() {
+    run(async {
+        let spy = SpyLayer::new();
+        let fx = AppFx::idle("layer", "useinrun")
+            .layer(Arc::new(spy.clone()))
+            .start()
+            .await;
+        let mut body = external_run();
+        body["connection"] = json!("someconn0001");
+        let (status, v) = fx.post("/api/runs", body).await;
+        assert_ne!(status, 200, "{v}");
+        assert!(
+            spy.asked(shaked::auth::Action::UseInRun),
+            "{:?}",
+            spy.calls()
+        );
+    })
+}
+
 #[test]
 fn an_admitted_run_is_metered_once() {
     run(async {

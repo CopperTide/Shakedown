@@ -570,6 +570,11 @@ async fn start_run(
     headers: axum::http::HeaderMap,
     mut req: NewRun,
 ) -> ApiResult<Value> {
+    if let Some(id) = req.connection.as_deref() {
+        let kind = crate::auth::ResourceKind::Connection;
+        let named = Target::Resource { kind, id };
+        authorize(&state, &caller, Action::UseInRun, named).await?;
+    }
     let (bench, scenario) = new_run_world(&state, &mut req).await?;
     if req.connection.is_some() {
         return create_code_run(state, caller, permit, &headers, req, bench, scenario).await;
