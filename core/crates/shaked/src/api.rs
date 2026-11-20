@@ -117,14 +117,21 @@ impl ApiError {
 
 impl From<anyhow::Error> for ApiError {
     /// A write the database refused for this caller (SQLSTATE 42501, insufficient privilege: a
-    /// hosting layer's policies) is 403; anything else is 500.
+    /// hosting layer's policies) is 403; a unique violation (23505) is 409, naming the constraint;
+    /// anything else is 500 (its text hidden where the layer serves others, see `app::router`).
     fn from(e: anyhow::Error) -> ApiError {
-        let refused = (e.chain())
-            .filter_map(|c| c.downcast_ref::<tokio_postgres::Error>())
-            .any(|p| p.code() == Some(&tokio_postgres::error::SqlState::INSUFFICIENT_PRIVILEGE));
-        match refused {
-            true => ApiError(StatusCode::FORBIDDEN, "you may not do that".into()),
-            false => ApiError(StatusCode::INTERNAL_SERVER_ERROR, format!("{e:#}")),
+        use tokio_postgres::error::SqlState;
+        let pg = (e.chain()).find_map(|c| c.downcast_ref::<tokio_postgres::Error>());
+        match pg.and_then(|p| p.code()) {
+            Some(c) if *c == SqlState::INSUFFICIENT_PRIVILEGE => {
+                ApiError(StatusCode::FORBIDDEN, "you may not do that".into())
+            }
+            Some(c) if *c == SqlState::UNIQUE_VIOLATION => {
+                let db = pg.and_then(|p| p.as_db_error());
+                let which = db.and_then(|d| d.constraint()).unwrap_or("a unique key");
+                ApiError::conflict(format!("that already exists ({which})"))
+            }
+            _ => ApiError(StatusCode::INTERNAL_SERVER_ERROR, format!("{e:#}")),
         }
     }
 }

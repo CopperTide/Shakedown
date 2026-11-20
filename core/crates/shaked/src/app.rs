@@ -380,6 +380,28 @@ fn is_loopback_host(host: &str) -> bool {
     crate::mode::host_allowed(host, &crate::mode::loopback_hosts())
 }
 
+/// Where the layer serves others, a 500's text (a query's error, a path, a constraint) stays in
+/// the log: the answer is a generic message with a reference to find the detail by.
+async fn hide_internal_errors(
+    req: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    let path = req.uri().path().to_string();
+    let r = next.run(req).await;
+    if r.status() != axum::http::StatusCode::INTERNAL_SERVER_ERROR {
+        return r;
+    }
+    let detail = axum::body::to_bytes(r.into_body(), 64 * 1024).await;
+    let detail = detail.unwrap_or_default();
+    let reference = uuid::Uuid::new_v4().simple().to_string()[..12].to_string();
+    let detail = String::from_utf8_lossy(&detail);
+    eprintln!("shaked: 500 on {path} (ref {reference}): {detail}");
+    let error = format!("something went wrong on our side (ref {reference})");
+    let status = axum::http::StatusCode::INTERNAL_SERVER_ERROR;
+    (status, axum::Json(serde_json::json!({ "error": error }))).into_response()
+}
+
 /// DNS-rebinding guard: a web page on another origin can resolve its own name to this machine, so
 /// the browser would send that name in `Host`. Only the allowed names reach the API.
 async fn allowed_host(
@@ -492,10 +514,14 @@ pub fn router(state: Arc<AppState>) -> Router {
     let api = api
         .layer(axum::middleware::from_fn_with_state(hosts, allowed_host))
         .layer(axum::middleware::from_fn_with_state(origins, cors));
-    crate::mcp::router()
+    let all = crate::mcp::router()
         .merge(crate::gateway::router())
-        .merge(api)
-        .with_state(state)
+        .merge(api);
+    let all = match state.store.layer().policy().serves_others {
+        true => all.layer(axum::middleware::from_fn(hide_internal_errors)),
+        false => all,
+    };
+    all.with_state(state)
 }
 
 #[cfg(test)]

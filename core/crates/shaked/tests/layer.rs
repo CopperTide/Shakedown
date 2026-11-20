@@ -324,3 +324,59 @@ fn a_layer_that_serves_others_has_no_default_vault() {
         }
     })
 }
+
+/// A route whose error carries the database's text, as a failed query's does.
+fn failing_routes() -> Router<Arc<AppState>> {
+    let fail = || async {
+        let e = anyhow::anyhow!("relation \"shakedown.secret_table\" does not exist");
+        shaked::api::ApiError::from(e.context("reading the secret table"))
+    };
+    Router::new().route("/api/spy/fails", get(fail))
+}
+
+/// A shaked that serves others answers a 500 with a generic message and a reference, and logs the
+/// detail; locally the detail is the answer.
+#[test]
+fn a_serving_layer_answers_500s_without_their_detail() {
+    run(async {
+        let serving = Policy {
+            serves_others: true,
+            ..Policy::LOCAL
+        };
+        for (policy, shown) in [(Policy::LOCAL, true), (serving, false)] {
+            let spy = SpyLayer::new()
+                .with_policy(policy)
+                .with_routes(failing_routes);
+            let fx = AppFx::idle("layer", "hide500")
+                .layer(Arc::new(spy))
+                .start()
+                .await;
+            let (status, v) = fx.get("/api/spy/fails").await;
+            assert_eq!(status, 500, "{v}");
+            let text = v["error"].as_str().unwrap_or_default();
+            assert_eq!(text.contains("secret_table"), shown, "{policy:?}: {text}");
+        }
+    })
+}
+
+/// A unique violation the database raised is 409 (the record exists), never 500.
+#[test]
+fn a_unique_violation_is_a_conflict() {
+    use axum::response::IntoResponse;
+    run(async {
+        let fx = AppFx::idle("layer", "unique").start().await;
+        let url = support::pg::admin().db_url(&fx.db);
+        let (c, conn) = tokio_postgres::connect(&url, tokio_postgres::NoTls)
+            .await
+            .unwrap();
+        let task = tokio::spawn(conn);
+        c.batch_execute("CREATE TEMP TABLE u (x int CONSTRAINT u_x_key UNIQUE); INSERT INTO u VALUES (1)")
+            .await
+            .unwrap();
+        let e = c.execute("INSERT INTO u VALUES (1)", &[]).await.unwrap_err();
+        let r = shaked::api::ApiError::from(anyhow::Error::from(e).context("adding")).into_response();
+        assert_eq!(r.status(), StatusCode::CONFLICT);
+        drop(c);
+        let _ = task.await;
+    })
+}
