@@ -56,6 +56,10 @@ pub struct NewExperiment<'a> {
     pub setups: &'a [NewSetup<'a>],
     /// Each run's model-spend limit in USD.
     pub max_cost_usd: Option<f64>,
+    /// The base of the runs' paired seeds: run i of every setup starts from the same seed.
+    pub seed: u64,
+    /// Each run's world time window in minutes.
+    pub world_minutes: Option<f64>,
 }
 
 fn experiment_from(r: &Row) -> Experiment {
@@ -107,6 +111,8 @@ impl Store {
             let of = SetupOf {
                 experiment: &id,
                 ord,
+                base_seed: new.seed,
+                world_minutes: new.world_minutes,
             };
             suites.push(self.insert_suite(&suite, Some(of)).await?);
         }

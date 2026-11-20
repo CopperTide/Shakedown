@@ -332,8 +332,9 @@ async fn start_run(
     conn_id: &str,
 ) -> Result<Option<crate::launch::Launched>> {
     let _permit = slots::permit(state, suite, slot).await?;
-    let rules = rules_for(conn_id, suite.max_cost_usd, None);
-    let start = crate::launch::launch(state, suite::slot_spec(suite, slot, rules));
+    let rules = rules_for(conn_id, suite.max_cost_usd, suite.world_minutes);
+    let scenario = suite.slot_scenario(slot);
+    let start = crate::launch::launch(state, suite::slot_spec(suite, slot, &scenario, rules));
     match slots::run_slot(state, suite, slot, start).await? {
         SlotOutcome::Filled(l) => Ok(Some(l)),
         SlotOutcome::Failed(_) => Ok(None),

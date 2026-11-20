@@ -245,19 +245,15 @@ async fn stored_suite(store: &Store) -> String {
 async fn stored(store: &Store) -> (String, String) {
     let legacy = stored_suite(store).await;
     let (a, b, scenario) = (data_team("a"), data_team("b"), Default::default());
+    let setup = |name, team, runner| NewSetup {
+        name,
+        team,
+        runner,
+        connection: None,
+    };
     let setups = [
-        NewSetup {
-            name: "A",
-            team: &a,
-            runner: Runner::Chain,
-            connection: None,
-        },
-        NewSetup {
-            name: "B",
-            team: &b,
-            runner: Runner::Concurrent,
-            connection: None,
-        },
+        setup("A", &a, Runner::Chain),
+        setup("B", &b, Runner::Concurrent),
     ];
     let new = NewExperiment {
         name: "A vs B",
@@ -267,6 +263,8 @@ async fn stored(store: &Store) -> (String, String) {
         scenario: &scenario,
         setups: &setups,
         max_cost_usd: None,
+        seed: 7,
+        world_minutes: None,
     };
     let (e, suites) = store.create_experiment(new).await.unwrap();
     assert_eq!(suites.len(), 2);
@@ -431,5 +429,109 @@ fn an_experiment_left_running_is_stopped_when_arenad_starts_again() {
         for s in store.experiment_suites(&exp).await.unwrap() {
             assert!(s.ended_at.is_some() && s.error.is_some(), "{s:?}");
         }
+    });
+}
+
+// ---------------------------------------------------------------- paired seeds and the window
+
+/// Runs `body` as an experiment to its end: its detail.
+async fn finished(fx: &AppFx, body: Value) -> Value {
+    let v = fx.experiment(body).await;
+    let id = v["id"].as_str().unwrap().to_string();
+    fx.until(&id, |v| v["status"] != "running").await
+}
+
+/// The `RunStart` of each run of setup `i`, in repeat order.
+async fn run_starts(fx: &AppFx, done: &Value, i: usize) -> Vec<RunStartPayload> {
+    let mut out = vec![];
+    for row in done["setups"][i]["runs"].as_array().unwrap() {
+        let branch = row["branch_id"].as_str().unwrap();
+        let evs = fx.state.store.events(branch).await.unwrap();
+        out.push(RunStartPayload::of(&evs).expect("a RunStart"));
+    }
+    out
+}
+
+fn seeds(starts: &[RunStartPayload]) -> Vec<u64> {
+    starts.iter().map(|s| s.seed).collect()
+}
+
+/// Run i of every setup has one seed, the repeats' seeds differ, and each run row shows its seed.
+async fn assert_paired(fx: &AppFx, done: &Value) {
+    let (a, b) = (run_starts(fx, done, 0).await, run_starts(fx, done, 1).await);
+    assert_eq!(seeds(&a), seeds(&b), "run i of A and of B share a seed");
+    let mut distinct = seeds(&a);
+    distinct.sort_unstable();
+    distinct.dedup();
+    assert_eq!(distinct.len(), 3, "{:?}", seeds(&a));
+    let rows = done["setups"][0]["runs"].as_array().unwrap();
+    let shown: Vec<u64> = rows.iter().map(|r| r["seed"].as_u64().unwrap()).collect();
+    assert_eq!(shown, seeds(&a));
+}
+
+#[test]
+fn setups_share_a_seed_per_repeat() {
+    run(async {
+        let fx = setup("xseeds", app::NOWHERE).await;
+        let setups = [setup_of(None, "a"), setup_of(None, "b")];
+        let done = finished(
+            &fx,
+            json!({"task": "t1", "runs": 3, "seed": 7, "setups": setups}),
+        )
+        .await;
+        assert_eq!(done["seed"], 7, "{done}");
+        assert_paired(&fx, &done).await;
+    });
+}
+
+#[test]
+fn an_experiment_passes_its_window_to_every_run() {
+    run(async {
+        let fx = setup("xwindow", app::NOWHERE).await;
+        let setups = [setup_of(None, "a"), setup_of(None, "b")];
+        let body = json!({"task": "t1", "runs": 2, "world_minutes": 0.05, "max_cost_usd": 1.5, "setups": setups});
+        let done = finished(&fx, body).await;
+        for i in 0..2 {
+            for s in run_starts(&fx, &done, i).await {
+                assert_eq!(s.world_minutes, Some(0.05));
+            }
+        }
+        let head = (&done["world_minutes"], &done["max_cost_usd"]);
+        assert_eq!(head, (&json!(0.05), &json!(1.5)), "{done}");
+        assert!(done["seed"].is_u64(), "{done}");
+    });
+}
+
+#[test]
+fn an_experiment_without_a_seed_draws_one_and_records_it() {
+    run(async {
+        let fx = setup("xdrawn", app::NOWHERE).await;
+        let setups = [setup_of(None, "a"), setup_of(None, "b")];
+        let done = finished(&fx, json!({"task": "t1", "runs": 3, "setups": setups})).await;
+        assert!(done["seed"].as_u64().is_some_and(|s| s < 1 << 53), "{done}");
+        assert_paired(&fx, &done).await;
+        let listed = fx.get("/api/experiments").await.1;
+        assert_eq!(listed[0]["seed"], done["seed"]);
+    });
+}
+
+#[test]
+fn an_experiments_seed_and_window_are_checked() {
+    run(async {
+        let fx = setup("xseedbad", app::NOWHERE).await;
+        let one = [setup_of(None, "a")];
+        refused(
+            &fx,
+            json!({"task": "t1", "seed": 1u64 << 53, "setups": one}),
+            "seed must be at most 2^53 - 1",
+        )
+        .await;
+        let body = json!({"task": "t1", "world_minutes": 0, "setups": one});
+        refused(
+            &fx,
+            body,
+            "world_minutes must be from 0 to 1440 minutes of world time",
+        )
+        .await;
     });
 }

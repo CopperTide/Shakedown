@@ -30,11 +30,21 @@ pub struct Head {
     pub status: &'static str,
     /// True for a suite made on its own, shown as a one-setup experiment.
     pub legacy: bool,
+    /// The base of the runs' paired seeds (None: each run's seed is random).
+    pub seed: Option<u64>,
+    /// Each run's world time window in minutes.
+    pub world_minutes: Option<f64>,
+    /// Each run's model-spend limit in USD.
+    pub max_cost_usd: Option<f64>,
 }
 
 impl Head {
-    fn of(e: &Experiment) -> Head {
+    /// The experiment's head; its seed, window and spend limit are its setups' (`first`).
+    fn of(e: &Experiment, first: Option<&Suite>) -> Head {
         Head {
+            seed: first.and_then(|s| s.base_seed),
+            world_minutes: first.and_then(|s| s.world_minutes),
+            max_cost_usd: first.and_then(|s| s.max_cost_usd),
             id: e.id.clone(),
             name: e.name.clone(),
             tasks: vec![e.task_id.clone()],
@@ -48,6 +58,9 @@ impl Head {
 
     fn of_legacy(s: &Suite, status: &'static str) -> Head {
         Head {
+            seed: s.base_seed,
+            world_minutes: s.world_minutes,
+            max_cost_usd: s.max_cost_usd,
             id: s.id.clone(),
             name: s.name.clone(),
             tasks: s.tasks.clone(),
@@ -120,11 +133,11 @@ pub async fn list(store: &Store) -> Result<Vec<Listed>> {
     for e in store.experiments().await? {
         let mut suites = of_experiment.remove(&e.id).unwrap_or_default();
         suites.sort_by_key(|s| s.setup_ord);
+        let head = Head::of(&e, suites.first());
         let mut setups = vec![];
         for s in suites {
             setups.push(SetupLine::of(suite::listed(store, s).await?));
         }
-        let head = Head::of(&e);
         out.push(Listed { head, setups });
     }
     out.sort_by_key(|l| std::cmp::Reverse(l.head.created_at));
@@ -148,7 +161,7 @@ pub async fn detail(store: &Store, e: &Experiment) -> Result<Detail> {
     }
     let scenario = setups.first().map(|r| r.suite.scenario.clone());
     Ok(Detail {
-        head: Head::of(e),
+        head: Head::of(e, setups.first().map(|r| &r.suite)),
         ended_at: e.ended_at,
         error: e.error.clone(),
         scenario: scenario.unwrap_or_default(),

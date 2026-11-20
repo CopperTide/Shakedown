@@ -10,6 +10,18 @@ use tokio::sync::OwnedRwLockReadGuard;
 use super::{Slot, Suite};
 use crate::{app::AppState, launch::Launched, runner::RunError};
 
+/// The world seed of a suite's repeat `repeat` when the suite has the base seed `base`:
+/// splitmix64 of `base + repeat`, at most `runner::MAX_SEED`. Every setup of an experiment has
+/// the same base, so run i of each starts from the same seed.
+pub fn paired_seed(base: u64, repeat: i32) -> u64 {
+    let mut z = base
+        .wrapping_add(repeat as u64)
+        .wrapping_add(0x9e37_79b9_7f4a_7c15);
+    z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+    (z ^ (z >> 31)) & crate::runner::MAX_SEED
+}
+
 /// How a slot's run start went, as recorded on the slot.
 pub enum SlotOutcome {
     /// The run started; the slot names it.
@@ -56,5 +68,20 @@ pub async fn run_slot(
             state.store.slot_failed(&suite.id, slot.ord, &why).await?;
             Ok(SlotOutcome::Failed(e))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::runner::MAX_SEED;
+
+    #[test]
+    fn paired_seed_is_stable_and_below_2_53() {
+        assert_eq!(paired_seed(7, 1), paired_seed(7, 1));
+        let seeds: std::collections::BTreeSet<u64> = (0..100).map(|r| paired_seed(7, r)).collect();
+        assert_eq!(seeds.len(), 100, "every repeat its own seed");
+        assert!(seeds.iter().all(|s| *s <= MAX_SEED));
+        assert_ne!(paired_seed(7, 1), paired_seed(8, 1));
     }
 }

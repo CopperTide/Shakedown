@@ -39,6 +39,8 @@ pub struct RunOutcome {
     pub cost_usd: Option<f64>,
     /// The most context any of its model calls was sent with (prompt tokens).
     pub peak_context: Option<i64>,
+    /// The seed its world started from (its `RunStart`'s).
+    pub seed: Option<u64>,
 }
 
 /// The checks of a `check` event: the benchmark's named checks, or one `matches_gold` check for a
@@ -95,6 +97,7 @@ pub fn outcome(
         tokens: m.tokens,
         cost_usd: m.cost.usd,
         peak_context: peak_context(&m),
+        seed: crate::model::RunStartPayload::of(events).map(|r| r.seed),
     }
 }
 

@@ -33,6 +33,8 @@ pub struct RunRow {
     pub status: String,
     pub error: Option<String>,
     pub outcome: Option<RunOutcome>,
+    /// The seed its world started from, once it has a run.
+    pub seed: Option<u64>,
 }
 
 /// How often one check of one task passed over the suite's scored runs of that task.
@@ -190,6 +192,7 @@ fn row(s: &SlotRun) -> RunRow {
         status: row_status(s),
         error: s.slot.error.clone(),
         outcome: s.outcome.clone(),
+        seed: s.outcome.as_ref().and_then(|o| o.seed),
     }
 }
 

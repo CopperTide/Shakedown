@@ -68,9 +68,25 @@ pub struct Suite {
     /// suite's runner is then `external`, driven by arenad.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub connection: Option<String>,
+    /// The seed repeat i's run starts from is `slots::paired_seed(base_seed, i)`; None: random.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_seed: Option<u64>,
+    /// Each run's world time window in minutes (`crate::window`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub world_minutes: Option<f64>,
 }
 
 impl Suite {
+    /// The scenario a slot's run starts in (`scenario_of`), with its repeat's paired seed when
+    /// the suite has a base seed.
+    pub fn slot_scenario(&self, slot: &Slot) -> Scenario {
+        let mut s = self.scenario_of(slot).clone();
+        if let Some(base) = self.base_seed {
+            s.seed = Some(slots::paired_seed(base, slot.repeat));
+        }
+        s
+    }
+
     /// The scenario a slot's run starts in: its variant's, else the suite's one scenario.
     pub fn scenario_of(&self, slot: &Slot) -> &Scenario {
         let variant = usize::try_from(slot.variant).ok();

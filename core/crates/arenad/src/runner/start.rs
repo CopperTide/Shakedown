@@ -21,7 +21,7 @@ use crate::{
 pub const MAX_SEED: u64 = (1 << 53) - 1;
 
 /// A new branch seed: random, below 2^53 so every JSON reader keeps it exact.
-fn new_seed() -> u64 {
+pub fn new_seed() -> u64 {
     (uuid::Uuid::new_v4().as_u128() as u64) & ((1 << 53) - 1)
 }
 

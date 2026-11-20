@@ -43,6 +43,8 @@ ALTER TABLE suites ADD COLUMN IF NOT EXISTS experiment_id text;
 ALTER TABLE suites ADD COLUMN IF NOT EXISTS setup_ord integer;
 ALTER TABLE suites ADD COLUMN IF NOT EXISTS max_cost_usd double precision;
 ALTER TABLE suites ADD COLUMN IF NOT EXISTS connection text;
+ALTER TABLE suites ADD COLUMN IF NOT EXISTS base_seed bigint;
+ALTER TABLE suites ADD COLUMN IF NOT EXISTS world_minutes double precision;
 "#;
 
 /// Built-in suites arenad was driving when it stopped get no more runs.
@@ -52,14 +54,16 @@ pub(super) const INTERRUPT: &str = "UPDATE suites SET ended_at = now(), \
 
 pub(super) const SUITE_COLS: &str =
     "id, name, team, tasks, repeats, runner, benchmark, created_at, ended_at, error, scenario, variants, \
-     experiment_id, setup_ord, max_cost_usd, connection";
+     experiment_id, setup_ord, max_cost_usd, connection, base_seed, world_minutes";
 /// Inserts a suite (`$1`..`$7`, `$11` the scenario, `$12` the variants, `$14` its experiment,
-/// `$15` its place there, `$16` its runs' spend limit and `$17` its Code connection) and its slots (`$8`..`$10` and `$13`,
-/// in arrays).
+/// `$15` its place there, `$16` its runs' spend limit, `$17` its Code connection, `$18` its base
+/// seed and `$19` its world time window) and its slots (`$8`..`$10` and `$13`, in arrays).
 const INSERT_SUITE: &str =
     "WITH s AS (INSERT INTO suites (id, name, team, tasks, repeats, runner, benchmark, scenario, variants,
-                                   experiment_id, setup_ord, max_cost_usd, connection)
-                       VALUES ($1, $2, $3, $4, $5, $6, $7, $11, $12, $14, $15, $16, $17) RETURNING id)
+                                   experiment_id, setup_ord, max_cost_usd, connection, base_seed,
+                                   world_minutes)
+                       VALUES ($1, $2, $3, $4, $5, $6, $7, $11, $12, $14, $15, $16, $17, $18, $19)
+                    RETURNING id)
            INSERT INTO suite_runs (suite_id, ord, task_id, repeat, variant)
            SELECT s.id, u.o, u.t, u.r, u.v
            FROM s, unnest($8::int[], $9::text[], $10::int[], $13::int[]) AS u(o, t, r, v)";
@@ -80,11 +84,15 @@ pub struct NewSuite<'a> {
     pub connection: Option<&'a str>,
 }
 
-/// Where an experiment's setup sits: the experiment, and the setup's place in it (from 0).
+/// Where an experiment's setup sits: the experiment, and the setup's place in it (from 0); and
+/// what the experiment gives each of its runs: the base of their paired seeds
+/// (`slots::paired_seed`) and their world time window in minutes.
 #[derive(Debug, Clone, Copy)]
 pub(super) struct SetupOf<'a> {
     pub experiment: &'a str,
     pub ord: i32,
+    pub base_seed: u64,
+    pub world_minutes: Option<f64>,
 }
 
 /// A new suite's slots as the arrays `INSERT_SUITE` unnests.
@@ -136,6 +144,8 @@ pub(super) fn suite_from(r: &Row) -> Result<Suite> {
         setup_ord: r.get("setup_ord"),
         max_cost_usd: r.get("max_cost_usd"),
         connection: r.get("connection"),
+        base_seed: r.get::<_, Option<i64>>("base_seed").map(|s| s as u64),
+        world_minutes: r.get("world_minutes"),
     })
 }
 
@@ -167,8 +177,7 @@ impl Store {
         let id = new_id();
         let slots = slots_of(new.tasks, variant_count(new.variants), new.repeats);
         let cols = SlotColumns::of(&slots);
-        let (experiment, ord) = (of.map(|o| o.experiment), of.map(|o| o.ord));
-        let params: [&(dyn tokio_postgres::types::ToSql + Sync); 17] = [
+        let params: [&(dyn tokio_postgres::types::ToSql + Sync); 19] = [
             &id,
             &new.name,
             &serde_json::to_value(new.team)?,
@@ -182,15 +191,21 @@ impl Store {
             &serde_json::to_value(new.scenario)?,
             &serde_json::to_value(new.variants)?,
             &cols.variants,
-            &experiment,
-            &ord,
+            &of.map(|o| o.experiment),
+            &of.map(|o| o.ord),
             &new.max_cost_usd,
             &new.connection,
+            &of.map(|o| o.base_seed as i64), // at most 2^53 - 1
+            &of.and_then(|o| o.world_minutes),
         ];
         self.client.execute(INSERT_SUITE, &params).await?;
-        self.suite(&id)
-            .await?
-            .ok_or_else(|| anyhow!("the suite just stored is gone"))
+        self.just_stored(&id).await
+    }
+
+    /// The suite `id`, just stored.
+    async fn just_stored(&self, id: &str) -> Result<Suite> {
+        let found = self.suite(id).await?;
+        found.ok_or_else(|| anyhow!("the suite just stored is gone"))
     }
 
     /// Every suite, newest first.

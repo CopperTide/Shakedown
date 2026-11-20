@@ -73,6 +73,23 @@ struct NewExperimentReq {
     /// The benchmark it is made on (absent: the current one); 409 when it isn't installed.
     #[serde(default)]
     benchmark: Option<String>,
+    /// The base of the runs' paired seeds (at most 2^53 - 1; drawn when absent).
+    #[serde(default)]
+    seed: Option<u64>,
+    /// Each run's world time window in minutes (`crate::window`).
+    #[serde(default)]
+    world_minutes: Option<f64>,
+}
+
+/// The experiment's base seed: the one asked for (400 past 2^53 - 1), else a random one.
+fn base_seed(asked: Option<u64>) -> Result<u64, ApiError> {
+    match asked {
+        Some(s) if s > crate::runner::MAX_SEED => {
+            Err(ApiError::bad("seed must be at most 2^53 - 1"))
+        }
+        Some(s) => Ok(s),
+        None => Ok(crate::runner::new_seed()),
+    }
 }
 
 /// 400 unless arenad can run the setup itself: a built-in runner and a team it can run. The
@@ -139,6 +156,17 @@ async fn check_connections(
     Ok(())
 }
 
+/// The setups to store, named.
+fn new_setups<'a>(names: &'a [String], setups: &'a [SetupReq]) -> Vec<NewSetup<'a>> {
+    let setup = |(name, s): (&'a String, &'a SetupReq)| NewSetup {
+        name,
+        team: &s.team,
+        runner: s.runner,
+        connection: s.connection.as_deref(),
+    };
+    names.iter().zip(setups).map(setup).collect()
+}
+
 /// `POST /api/experiments`: stores the experiment (a suite per setup) and starts running it.
 /// Answers its detail.
 async fn create(
@@ -149,18 +177,15 @@ async fn create(
     let names = validate(&state, &mut req)?;
     check_connections(&state, &headers, &names, &req.setups).await?;
     let max_cost_usd = super::max_cost(req.max_cost_usd)?;
+    let (seed, world_minutes) = (
+        base_seed(req.seed)?,
+        super::world_minutes(req.world_minutes)?,
+    );
     let bench = super::benchmark_asked(&state, req.benchmark.as_deref())?;
     super::suites::suite_tasks(&state, &bench, vec![req.task.clone()]).await?;
     let scenario = super::twin::scenario_of(&state, &bench, req.scenario.as_ref()).await?;
     check_disk(&state).await?;
-    let setups: Vec<NewSetup> = (names.iter().zip(&req.setups))
-        .map(|(name, s)| NewSetup {
-            name,
-            team: &s.team,
-            runner: s.runner,
-            connection: s.connection.as_deref(),
-        })
-        .collect();
+    let setups = new_setups(&names, &req.setups);
     let new = NewExperiment {
         name: &experiment::name_of(req.name.as_deref(), &names),
         task: &req.task,
@@ -169,6 +194,8 @@ async fn create(
         scenario: &scenario,
         setups: &setups,
         max_cost_usd,
+        seed,
+        world_minutes,
     };
     let (stored, suites) = state.store.create_experiment(new).await?;
     experiment::spawn(&state, stored.id.clone(), suites);

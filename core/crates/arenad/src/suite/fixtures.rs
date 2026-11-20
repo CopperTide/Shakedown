@@ -14,6 +14,8 @@ pub fn suite(id: &str, tasks: &[&str], repeats: i32) -> Suite {
     Suite {
         max_cost_usd: None,
         connection: None,
+        base_seed: None,
+        world_minutes: None,
         id: id.into(),
         name: id.into(),
         team: Team {
@@ -68,6 +70,7 @@ pub fn ran(checks: &[Chk], measured_s: f64, tokens: i64, cost_usd: Option<f64>) 
         tokens,
         cost_usd,
         peak_context: Some(tokens / 2),
+        seed: None,
     }
 }
 

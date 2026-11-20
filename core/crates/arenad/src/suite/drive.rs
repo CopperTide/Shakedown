@@ -6,6 +6,8 @@
 use std::{sync::Arc, time::Duration};
 
 use anyhow::Result;
+
+use crate::scenario::Scenario;
 use serde::Serialize;
 
 use super::{
@@ -68,20 +70,27 @@ pub(crate) async fn start_builtin(
 ) -> Result<Option<String>> {
     let _permit = slots::permit(state, suite, slot).await?;
     let rules = Rules::new(suite.runner).with_max_cost(suite.max_cost_usd);
-    let start = launch(state, slot_spec(suite, slot, rules));
+    let scenario = suite.slot_scenario(slot);
+    let start = launch(state, slot_spec(suite, slot, &scenario, rules));
     match slots::run_slot(state, suite, slot, start).await? {
         SlotOutcome::Filled(l) => Ok(Some(l.branch_id)),
         SlotOutcome::Failed(_) => Ok(None),
     }
 }
 
-/// The run of `suite`'s `slot` under `rules`: its task, the suite's team, the slot's scenario.
-pub(crate) fn slot_spec<'a>(suite: &'a Suite, slot: &'a Slot, rules: Rules) -> LaunchSpec<'a> {
+/// The run of `suite`'s `slot` in `scenario` (`Suite::slot_scenario`) under `rules` (with the
+/// suite's world time window): its task, the suite's team.
+pub(crate) fn slot_spec<'a>(
+    suite: &'a Suite,
+    slot: &'a Slot,
+    scenario: &'a Scenario,
+    rules: Rules,
+) -> LaunchSpec<'a> {
     LaunchSpec {
         task_id: &slot.task_id,
         team: suite.team.clone(),
-        scenario: suite.scenario_of(slot),
-        rules,
+        scenario,
+        rules: rules.with_world_minutes(suite.world_minutes),
         driver: None,
         benchmark: Some(&suite.benchmark),
     }
@@ -118,8 +127,8 @@ pub async fn claim_external(
     let Some(slot) = state.store.claim_slot(&suite.id).await? else {
         return Ok(None);
     };
-    let rules = Rules::new(Runner::External);
-    let start = launch(state, slot_spec(suite, &slot, rules));
+    let (rules, scenario) = (Rules::new(Runner::External), suite.slot_scenario(&slot));
+    let start = launch(state, slot_spec(suite, &slot, &scenario, rules));
     match slots::run_slot(state, suite, &slot, start).await? {
         SlotOutcome::Filled(l) => Ok(Some(ExternalClaim {
             task_id: slot.task_id,
