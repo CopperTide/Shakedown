@@ -1,911 +1,916 @@
-# Hosted Shakedown M1: foundation in `shaked` and object storage — Implementation Plan
+# Hosted Shakedown M1, revised for D16: a personal-use engine in Shakedown, the cloud layer in Cloud — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make `shaked` multi-tenant underneath, while local single-user Shakedown keeps working as it does today.
-That means one schema crate, orgs on every row with RLS, principals and `can()`, API, run and agent tokens, a
-configurable bind with a hosted mode, per-org model keys, quotas and usage, and a storage layer that works with any
-object store.
+**Goal:** Open-source `shaked` keeps only personal-use tables and code, names no org anywhere, and exposes hooks;
+the CopperTide-Cloud repo plugs a cloud layer into those hooks (identity, org columns, RLS, `can()`, signing v2,
+quotas, usage, the trial credit, org routes) and builds the hosted binary.
 
-**Architecture:** A new crate `coppertide-schema` holds the SQL migrations for each stream and a migrator that
-does not care which Postgres driver calls it. `shaked` applies the `identity` and `shakedown` streams at start
-and seeds the local org. It moves from one `Client` to a deadpool pool, and every query runs in
-`Store::tx(&Scope)`, which sets the `app.*` GUCs. An auth layer turns each request into a `Principal`: in local
-mode the built-in owner, in hosted mode a gateway signature or a token. It then builds the `Scope`. Hosted mode
-is off by default and fails closed, so every task lands dark.
+**Architecture:** Part A reworks branch `factory` (Shakedown): the migrator becomes generic (streams are names),
+the base `shakedown` stream drops every org, the engine's caller is a person, an API token or a run token, and a
+`Layer` trait is called at fixed points (authenticate, begin, authorize, admit, meter, fallback provider, audit,
+routes, me, object prefix) with `LocalLayer` as the default. Part B, on branch `hosted-shakedown` of
+CopperTide-Cloud, adds `crates/coppertide-schema` (identity, cloud and `shakedown_hosted` streams) and
+`crates/shaked-hosted` (`HostedLayer` and the `shaked-hosted` binary), path-depending on Shakedown's crates. The cloud
+schema is a strict superset of the base, checked mechanically.
 
 **Tech Stack:** Rust (axum 0.8, tokio, tokio-postgres, deadpool-postgres, ring, object_store), Postgres 17,
 React 18 + TypeScript + vitest, Python SDK (httpx).
 
-**Spec:** in `~/MLSys/CopperTide/CopperTide-Cloud/docs/superpowers/specs/` (uncommitted there; read the files, not
-`origin/main`):
-- `2026-11-19-hosted-shakedown-design.md`: the M1 section and Security S1–S6.
-- `2026-11-19-accounts-and-schema-design.md` and `2026-11-19-schema.sql`, which is the DDL. These two supersede
-  the hosted spec's "Tenancy" paragraph, so where they differ, `tenant` means `org_id`.
-- `2026-11-19-sandbox-provider-analysis.md` §6. `SandboxBackend` models template snapshots and belongs to M2.
-  Nothing here may assume a live fork.
+**Spec:** in `~/MLSys/CopperTide/CopperTide-Cloud/docs/superpowers/specs/` (uncommitted in the main checkout; read
+them there, never copy them into a worktree):
+- `2026-11-19-accounts-and-schema-design.md`: "The subset rule", "The engine and the cloud layer", §3, §5, §7.
+- `2026-11-19-schema-base.sql` (Part A's DDL) and `2026-11-19-schema-cloud.sql` (Part B's DDL).
+- `2026-11-19-hosted-shakedown-design.md`: §M1 and Security S1–S6.
+- `2026-11-19-sandbox-provider-analysis.md` §6: `SandboxBackend` is M2; nothing here assumes a live fork.
+
+## Where things stand
+
+Branch `factory` at a217411 has the old plan's Tasks 1–10 and the final review's fixes (ledger:
+`.superpowers/sdd/2026-11-20-hosted-m1-foundation/progress.md`; every ruling and deferred minor is there). Tasks 11–14
+were not started. On 2026-11-20 the owner decided (D16): "The idea of organizations and stuff should only be in the
+cloud, the open source is a subset that only focuses on personal use consumption. Ideally its a strict subset of the
+schema." Nothing of `factory` is on `main` or released, so its migrations can be rewritten.
+
+**Keep, move, remove** (sources for "move" are read with `git -C ~/MLSys/CopperTide/Shakedown/.worktrees/factory
+show a217411:<path>`):
+
+| Old task | Keep in Shakedown | Move to Cloud (Part B) | Remove from Shakedown |
+|---|---|---|---|
+| 1 schema crate | migrator, `Conn`, checksums, advisory locks, `requires`, `also_accept`, `tests/files.rs`, `shakedown` 1, the legacy-move test and `shaked-bb8e7e8.sql` fixture | `identity` 1–2 and `bootstrap.sql` → `coppertide-schema` (B1, edited: no `local` org kind); the Cloud-0015 drift test (against Cloud's own `migrations/`); `a_missing_setting_matches_no_row` | the `Stream` enum (→ names, A2); the copied `fixtures/cloud-0015` |
+| 2 pool, seed | deadpool pool, template test databases, `jobs::interrupt_at_start`, the test guard (`SHAKEDOWN_DB`, `SHAKEDOWN_TEST_GUARD`) | — | the local seed (`LOCAL_USER_ID`, `LOCAL_ORG_ID`), the roles check and bootstrap run, `set_role`, the identity search-path entries |
+| 3 bind, modes | `SHAKEDOWN_BIND`, `SHAKEDOWN_PUBLIC_URL`, allowed hosts, the package and connection refusals (now by `Policy`) | the hosted gate (B3, B4) | `--hosted`, `SHAKEDOWN_MODE`, `Mode::Hosted` (A1) |
+| 4 `can()` | run-token reach and token-scope caps, as the engine's own checks (A3) | the org matrix, levels, seats, grants, principals → `HostedLayer` (B3, B5) | `OrgRole`, `SeatRole`, `OrgFlags`, `Grant` in shaked |
+| 5 RLS, `tx` | `Store::tx`, `system_tx`, `Tx` (now with the `begin` hook) | org columns, RLS, grants, quotas, usage, sandboxes, org settings → `shakedown_hosted` 1 (B2); `tests/rls.rs` (B2); the GUCs → `begin` (B3) | `Scope`, `test_scope`, `shakedown/0002_orgs.sql` |
+| 6 scoped store | `Store::at`, the caller extractor, child-through-root joins, `BranchCtx` carrying its starter | — | every `org_id` in engine SQL, `shakedown/0003_validate.sql`, `tests/support/orgs.rs`, `tests/fixtures/orgs.toml` |
+| 7 hosted auth | `/api/me` (base shape) | `auth/signing.rs` (v2 and its vector), `auth/identity.rs`, `open_hosted`, `DbUrls`, the hosted-login check, `tests/auth.rs` → B3, B4 | — |
+| 8 API tokens | `sd_` tokens, hashing, scopes, list and revoke, `shaked token create`, SDK `token=` | the token's org and holder, `auth/audit.rs` rows, the viewer rules, the hosted cases of `tests/tokens.rs` → B4, B5 | the ruling "a Bearer header is ignored locally" |
+| 9 agent and run tokens | all of it: carriage per kind, roster, ticket expiry, pause extension, output redaction, run-token reach | run tokens' org (a cloud column), the deleted-org check (B4) | — |
+| 10 quotas, usage | the per-run spend cap (`budget.rs`, older than this plan) | `quotas.rs`, `store/usage.rs`, `api/usage.rs`, `docs/quotas.toml`, `tests/quotas.rs` → B7 | the quota and meter calls in `api.rs` and `gateway.rs` (→ `admit` and `meter`, A4) |
 
 ## Calls made
 
 | Call | Why | Cost if wrong |
 |---|---|---|
-| The migrator talks to the database through a two-method `Conn` trait. M1 builds only the tokio-postgres impl, and Cloud's plan writes the sqlx impl. The spec said "shaked adds sqlx". | Keeps sqlx's heavy build off the shared machine and out of local `shaked`. | Cloud writes a ~40-line adapter. If the trait doesn't fit sqlx, it changes before Cloud's R2. |
-| A migration may list `also_accept` checksums of earlier texts. | `identity` 1 is written here from Cloud's tables. If Cloud's drift test finds a difference before R2, the file can be fixed without bricking local databases that already applied it. | A reviewer has to approve each accepted old checksum. |
-| `org_id` defaults to the local org in `shakedown` 2, and the default is dropped in `shakedown` 3 (Task 6). The DDL drops it in the same migration. | Code that doesn't pass `org_id` yet stays green between Tasks 5 and 6. Dropping a default is a contract change anyway. | One extra migration. |
-| `reviews` keeps `PRIMARY KEY (key)` and gains `UNIQUE (org_id, key)`. The DDL swaps the primary key. | Swapping a PK is a contract change, and review keys already embed globally unique run and branch ids. | None functionally. The text differs from the DDL; noted in the migration. |
-| `saves` and `worlds` get `store text` next to `object_key`. | Owner: R2 and S3 must switch instantly. A row names a store, never a URL. | One column. |
-| Local `shaked` needs a superuser login (as with the compose Postgres today), or `bootstrap.sql` already run. Without either it refuses to start, naming that file. | RLS policies name the roles `shaked_app` and friends, so the roles must exist before the migrations run. | Someone with a non-superuser local Postgres runs one SQL file once. |
-| Locally there is one login, and each transaction does `SET LOCAL ROLE shaked_app` (or `shaked_system`). Hosted uses two logins: `SHAKEDOWN_PG_URL` in `shaked_app` and `SHAKEDOWN_SYSTEM_PG_URL` in `shaked_system`. Migrations run over `SHAKEDOWN_MIGRATE_PG_URL`. | Tests and local runs then go through RLS exactly as hosted does. | None. |
-| Tokens carry a prefix for each kind: `sd_` API, `sdr_` run, `sda_` agent, `sdw_` worker, `sdt_` ticket, each followed by 64 hex characters. Agent tokens are checked against an in-memory map of hashes; the database keeps only the hash. | Routing and secret scanning by prefix; no database round trip on every MCP or model call. | Changing a prefix later breaks issued tokens. They are short-lived, except API tokens. |
-| Claude Code gets its token in a 0600 `--mcp-config` file, not in argv. Codex gets it through `bearer_token_env_var` pointing at `SHAKEDOWN_AGENT_TOKEN`. | argv is visible to other local users in `ps`. | One temp file per agent, deleted when the agent ends. |
-| `shaked` verifies `signing` v2 itself (`auth/signing.rs`, ring HMAC) against a fixed test vector that the CopperTide `signing` crate must also pass. The header names live in one const block. | Local `shaked` must build without another repo. The phase-3 rename may rename `x-sculptured-*`. | Two implementations could drift. The shared vector catches that. |
-| Model keys are sealed with AAD `provider_key:<org_id>:<name>` (Cloud `vault.rs` format v1, key from `SHAKEDOWN_VAULT_KEY[_FILE]`). Names are immutable. | Owner: bound to the org and the key name. | Renaming a key means re-sealing it. |
-| Quota presets live in `docs/quotas.toml` (built in, overridable with `SHAKEDOWN_QUOTAS`). Plan `beta` holds the S4 numbers; plan `local` caps branches at 24 h and nothing else. Numbers the owner hasn't set: trial credit `0` (trial off), monthly model spend and seats unlimited in `shaked`. | No hard-coded domain data. D9 gives only the S4 numbers. | The owner edits one file. |
-| A new meter, `trial_usd_micros`, is added to the `usage` and `quotas` checks in `shakedown` 2. | D8: a free trial on our keys has to be metered apart from the org's own spend. | One CHECK value. |
-| Object storage: nothing moves in M1. Saves stay on the parts' disk (M2's worker uploads them), transcripts start in M2/M6, and exports stay client-side. M1 ships the layer, the key layout, `saves` rows, `shaked store copy` and a startup probe in hosted mode. | Saves are made by parts, not by `shaked`. Moving them needs the worker. | M2 is the first real writer. The live MinIO test covers the S3 path until then. |
-| Hosted M1 refuses world and benchmark changes (`/api/worlds/*/use`, builds, prepare) and refuses to launch parts and Code connections. The current world per org (`org_settings.current_world_id`) arrives with M2. | `AppState.current` is global, and hosted runs need sandboxes anyway. | Hosted M1 can't run anything, and that's intended. |
-| The crate lives at `core/crates/coppertide-schema`, a member of the `core` workspace. | D16 (recommended). | Moving it later is a path change in two repos. |
-
-## Owner decisions this plan assumes (recommended option; the tasks marked ⚑ change if the answer differs)
-
-- **D15** (the database on the gateway box now): ⚑ Task 2 (pool URLs and the migrate URL), ⚑ Task 7 (identity read live
-  from the same database).
-- **D16** (the crate in the Shakedown repo): ⚑ Task 1.
-- **D17** (customer admins invite people with no account, within the seat quota): ⚑ Task 10 (the `seats` meter is
-  only a hook in `shaked`; the gateway enforces it).
-- **D18** (personal orgs are single-member): ⚑ Task 4 (a personal org's owner is an ordinary owner), ⚑ Task 14 (the
-  switcher lists the personal org first).
-- **D19** (retention 30 days, audit 13 months): ⚑ Task 5 (`org_settings.retention_days` defaults to 30), ⚑ Task 12
-  (`saves.expires_at`). There is no audit-retention code in M1.
-- **D20** (opt-in copy of model keys): ⚑ Task 11 (the seal format matches Cloud's vault, so a later copy is just a
-  re-seal; nothing else to build).
-- **D21** (guest membership later): ⚑ Task 4 (grants only within one org; no guest principal).
+| `factory`'s `identity` 1–2 and `shakedown` 2–3 are retired, not reverted by a migration. `shakedown` 1 stays byte-identical. A database that applied a retired file is refused at start with a message naming step O1. | Unreleased; a reverting migration would put org DDL into open source. | The few dev and test databases that applied them are converted by hand once (O1). |
+| The crate becomes `shakedown-schema` (`core/crates/shakedown-schema`). Cloud's crate of the cloud streams keeps the name `coppertide-schema`. The advisory-lock key stays `'coppertide-schema:' \|\| stream`. | It now holds only Shakedown's stream and a generic migrator; D22 "one crate" is Cloud's crate, which lists every stream of the one database. The key keeps mixed revisions locking alike. | A rename in two Cargo files. |
+| Hosted-only tables live in Postgres schema `shakedown_hosted`; in schema `shakedown` the cloud adds only `org_id`, `team_id`, `created_by` (and two `api_tokens` holder columns), constraints, indexes, policies. | The subset check stays a plain catalog diff. | One more schema on the search path. |
+| The base declares no UNIQUE on a name. shaked checks name clashes under `pg_advisory_xact_lock(hashtext('<table>:name:' \|\| name))`; the cloud adds `UNIQUE (org_id, name)`. | A base UNIQUE (name) would forbid two orgs the same key name, and the cloud may not drop base constraints. | A code check instead of a constraint locally (single user). |
+| The cloud fills its columns with `DEFAULT authz.org_id()` etc. (NULL when unset), not `current_setting('app.org_id')::uuid`. | Same fail-closed insert, without "unrecognized parameter" or `''::uuid` errors after an earlier transaction on the same connection. | None. |
+| The layer is `Arc<dyn Layer>` with boxed-future methods, held by `Store` (every path reaches it); `AppState::layer()` delegates. | No generic parameter through `AppState`, and no `async-trait` crate (`futures-util` is already a dependency). | One allocation per hook call. |
+| Engine queries carry no org filter; the twice-enforced rule is the layer's `authorize` at every route plus RLS, as the owner approved. The engine's own checks (token scope, run-token reach) run before the layer's. | The engine has no org. | A forgotten `authorize` is caught by the deny-everything test (A4), a forgotten filter by RLS. |
+| A local Bearer token, when sent, is checked and capped (401 bad or revoked; `read` cannot write); no Bearer is the person at the keyboard. | Makes `read` tokens meaningful locally and lets the base test run-token reach without a cloud. Owner decision needed (accounts design, question 3). | Revert one branch of `LocalLayer::authenticate`. |
+| Provider keys are sealed to `provider_key:<id>:key` (row id), replacing "bound to org and name". | The base cannot name an org; a row id is unique in the cloud and never changes. Owner question 2. | Re-seal on first use if the owner wants the old context. |
+| The hosted binary is built in Cloud from `crates/shaked-hosted`, which calls `shaked::serve::run`; the open-source binary has no hosted code path and refuses a non-loopback bind. | D16. | None. |
+| Cloud's crates form a virtual workspace at `crates/Cargo.toml` (own `Cargo.lock`, `crates/target`), not members of the gateway package. | The gateway's Docker build copies only its own files; a workspace change there would break `main`'s deploy. | One more lockfile. |
+| Cloud path-depends on `../../../shakedown/core/crates/{shaked,shakedown-schema}` (the server layout, `/opt/sculptured/repos/shakedown`). Locally a symlink `CopperTide-Cloud/.worktrees/shakedown` → this worktree. | Same pattern as the gateway's `../sculptured/crates/signing`. | M3 adds the Shakedown repo to update.sh's `REPOS`. |
+| `signing` v2 lives in `crates/shaked-hosted/src/signing.rs` (moved from shaked), exported for the gateway's later `/sd/*` route, with the same fixed vector. | Both signer and verifier are Cloud code now; no change to the CopperTide repo's `signing` crate. | The gateway imports it from there in M3. |
+| D23's trial is one $30 credit per org (each user's personal org gets one). Preset `trial_usd_micros = 30000000`, period `none`, hard. | "Per org or user": per org covers every user through their personal org. Owner question 1. | One preset line. |
 
 ## Global Constraints
 
-- Paths as of `factory` at 52ecaac. The phase-3 rename (headers, MCP name, crate names) is still running: at the
-  start of each task, run `git -C .worktrees/factory ls-files core/crates | cut -d/ -f3 | sort -u` and use the
-  current crate directories.
-- Gate for each commit: in `core/`, `cargo clippy --workspace --all-targets -- -D warnings` and
-  `cargo test --workspace --no-fail-fast`. Postgres for tests is container `deploy-pg-1` on 127.0.0.1:5544
-  (`docker start deploy-pg-1`). UI: `npx tsc -b && npx vitest run --maxWorkers=1`. SDK: `uv run --all-extras pytest -q` in
-  `sdk/python`.
-- Shared machine: `CARGO_BUILD_JOBS=2`, `CARGO_PROFILE_DEV_DEBUG=0`, one cargo build at a time, output to a file
-  and read its tail. Never start `shaked` while tests run.
-- clippy `too_many_lines` = 30, enforced by `-D warnings`. Never `#[allow]` it.
-- New dependencies, ruled: `deadpool-postgres` (spec), `object_store` with features `aws` + `fs` (owner: any store),
-  `sha2` in the crate. Nothing else without a ledger line in this plan.
-- Local mode behaves as it does today after every task, except that agents carry tokens (from Task 9 on). Hosted
-  mode is `shaked --hosted` or `SHAKEDOWN_MODE=hosted`. It is off by default and fails closed.
+- **Part A** works in `~/MLSys/CopperTide/Shakedown/.worktrees/factory`, branch `factory`. **Part B** works in
+  `~/MLSys/CopperTide/CopperTide-Cloud/.worktrees/hosted-shakedown`, branch `hosted-shakedown`, created from
+  `origin/main` (B1, step 1). Never edit, stage or commit in the main Cloud checkout: it holds someone else's
+  uncommitted edits.
+- Gate, Part A: in `core/`, `cargo clippy --workspace --all-targets -- -D warnings` and `cargo test --workspace
+  --no-fail-fast`; UI `npx tsc -b && npx vitest run --maxWorkers=1`; SDK `uv run --all-extras pytest -q` in
+  `sdk/python`. Gate, Part B: in `crates/`, the same two cargo commands. Postgres for tests is container
+  `deploy-pg-1` on 127.0.0.1:5544 (`docker start deploy-pg-1`); root-workspace and Cloud tests use
+  `SHAKEDOWN_PG_URL=postgres://arena:arena@127.0.0.1:5544/postgres` (ledger baseline ruling).
+- Shared machine: `CARGO_BUILD_JOBS=2`, `CARGO_PROFILE_DEV_DEBUG=0`, one cargo build at a time, output to a file and
+  read its tail. Never start `shaked` while tests run. When Part B ends, `rm -rf crates/target` in the Cloud worktree.
+- clippy `too_many_lines` = 30, enforced by `-D warnings`. Never `#[allow]` it. Cloud's crates copy Shakedown's
+  `clippy.toml` into `crates/clippy.toml`.
+- New dependencies, ruled: `object_store` with features `aws` + `fs` (A6), `http` (already through axum, for
+  `Extensions`). Cloud crates: only what the moved code already used (`ring`, `hex`-free hex helpers as in shaked,
+  `toml`, `chrono`, `uuid`, `reqwest`). Nothing else without a ledger line.
+- Open source names no org: `core/crates/shaked/tests/no_orgs.rs` (A3) fails on `org_id`, `\borgs?\b`, `tenant`,
+  `membership`, `ROW LEVEL SECURITY` or `set_config('app.` in `core/crates/shaked/src`,
+  `core/crates/shakedown-schema/{src,migrations}`, `ui/src` or `sdk/python/src`, except lines listed in
+  `core/crates/shaked/tests/no_orgs_allow.txt`.
+- The subset rule (accounts design): no cloud migration changes or removes a base table, column, constraint or
+  index; `crates/coppertide-schema/tests/subset.rs` (B2) checks it.
 - Migrations are append-only. `DROP`, `RENAME`, `SET NOT NULL` or `TYPE` needs `-- contract: unused since <sha>`.
-  Every migration sets `lock_timeout = '5s'` and `statement_timeout = '60s'`.
-- Tokens and sealed values never reach events, logs, error messages or exports. Lists show `token_prefix` and
-  `key_last4` only.
-- Tests: never a real model; Docker-only tests are `#[ignore]` and named `live_*`; every database, container and
-  folder a test makes is dropped, even when it fails. Test databases connect through `SET ROLE shaked_app`.
+  Every migration sets no timeouts itself (the migrator sets `lock_timeout = '5s'`, `statement_timeout = '60s'`).
+- Tokens and sealed values never reach events, logs, error messages, recorded driver output or exports. Lists show
+  `token_prefix` and `key_last4` only.
+- Tests: never a real model; Docker-only tests are `#[ignore]` and named `live_*`; every database, container, login
+  and folder a test makes is dropped, even when it fails; no test opens the default databases (the guard stays).
+  Cloud tests connect through `SET ROLE shaked_app`.
 - No hard-coded domain data: quota presets, fixtures and org names go in data files.
-- Commits: plain sentences in the repo's style. `git add <paths>` only (another agent commits in this worktree).
-  End with the attribution lines from the session. No push, no merge to `main`.
+- Commits: plain sentences in the repo's style, `git add <paths>` only (another agent commits in the Shakedown
+  worktree), ending with the session's attribution lines. No push, no merge to `main`.
 
 ## Review Focus
 
-1. **Old local databases.** Records in `public`, in a database named `arena` or `shakedown`, made by any earlier
-   `shaked`, migrate in place on the first start. Every run still lists, loads and forks, and a second start
-   changes nothing. Test: Task 2, `an_old_public_database_moves_to_shakedown_and_keeps_its_runs`.
-2. **A branch paused longer than its token's lifetime.** On resume, its agents' tokens and proxy tickets still
-   work, because expiry counts only unpaused time. Test: Task 9, `a_long_pause_does_not_expire_agent_tokens`.
-3. **`custom` model servers on localhost.** Allowed in local mode (a vLLM on 127.0.0.1 is the normal case).
-   Refused in hosted mode for private, link-local and metadata addresses, checked at Test time and on each call.
-   Test: Task 11, `custom_urls_local_ok_hosted_private_refused`.
-4. **A `shaked store copy` interrupted and run again.** It skips objects already verified, and it never repoints a
-   row whose object failed verification. Test: Task 12, `copy_reruns_idempotently_and_never_repoints_a_bad_object`.
-5. **A token in a recorded run.** No `sd_`, `sdr_` or `sda_` string appears in events, in a Code connection's
-   recorded stderr, or in the agent CLI's argv. Test: Task 9, `no_token_reaches_events_or_argv`.
+1. **Old local databases.** Records in `public`, in a database named `arena` or `shakedown`, made by any released
+   `shaked`, move into schema `shakedown` on the first start; every run still lists, loads and forks, and a second
+   start changes nothing. Test: A3, `an_old_public_database_moves_to_shakedown_and_keeps_its_runs` (kept).
+2. **A database migrated by the retired `factory` build.** It is refused before anything is written, with a message
+   that names step O1 and no connection string. Test: A3,
+   `a_database_from_the_retired_factory_build_is_refused_naming_the_fix`.
+3. **A route added later that never asks the layer.** With a layer that denies everything, every `/api` route but
+   the public ones answers 404, and the route table names every route. Test: A4, `every_api_route_asks_the_layer`.
+4. **A base change the cloud was not written for** (a new table, a UNIQUE on a name). Cloud's tests fail, and a
+   hosted start on a database whose newest base table has no wall refuses to serve. Tests: B2, `subset_holds` and
+   `every_shakedown_table_is_walled`; B3, `hosted_start_refuses_a_newest_base_table_without_a_wall`.
+5. **An insert with no org setting** (a system job or a forgotten `begin`). It fails `NOT NULL`, and never lands in
+   another org. Test: B2, `an_insert_without_an_org_setting_fails`.
+
+## Step O1 (owner or coordinator, not an agent task): databases that applied the retired migrations
+
+Before A3's gate. Agents never touch these databases.
+- `shakedown_tpl_*` (test templates): stale once checksums change; the test harness builds a new one and drops stale
+  ones itself (Task 2 ruling). Nothing to do.
+- `shakedown_sdk_live` (the SDK's live-test database): drop it; the next SDK run recreates it.
+- `arena` on deploy-pg-1 (shared dev database, 14 runs, backup `work-local/db-backups/arena-20261120T0638Z.dump`):
+  take a fresh dump; then drop schemas `identity` and `authz`, drop the policies and RLS flags on schema `shakedown`,
+  drop the tables the retired `shakedown` 2 created (`provider_keys`, `worlds`, `org_settings`, `saves`,
+  `sandboxes`, `api_tokens`, `run_tokens`, `grants`, `quotas`, `usage`, `usage_monthly`), drop the columns it added
+  (`org_id`, `team_id`, `created_by`, `world_id`, `placement`, `sealed_env`) and its constraints, and delete the
+  `schema_meta.migrations` rows of stream `identity` and of `shakedown` 2 and 3. The next `shaked` applies the new
+  `shakedown` 2. Any other database on deploy-pg-1 with those `schema_meta` rows: the same.
 
 ---
 
-### Task 1: Crate `coppertide-schema`: migrator, `identity` 1–2, `shakedown` 1 (⚑ D16)
+## Part A: Shakedown repo, branch `factory`
+
+### Task A1: Take hosted mode out of open source
 
 **Files:**
-- Create: `core/crates/coppertide-schema/{Cargo.toml, src/lib.rs, src/migrator.rs, src/stream.rs, src/pg.rs}`
-- Create: `core/crates/coppertide-schema/bootstrap.sql`: section 0 of the DDL (four NOLOGIN roles, `CREATE SCHEMA`
-  with AUTHORIZATION).
-- Create: `core/crates/coppertide-schema/migrations/identity/0001_baseline.sql`: for each of `users`,
-  `identities`, `invites`, `sessions`, `login_flows`, `limits` and `admin_audit`, `ALTER TABLE public.x SET SCHEMA
-  identity` when `to_regclass('public.x')` exists, else `CREATE TABLE identity.x` exactly as Cloud's 0001–0015
-  leave it.
-- Create: `.../migrations/identity/0002_orgs.sql`: `authz.*` functions, `orgs`, `memberships`, `teams`,
-  `team_members`, `service_accounts`, `audit_log`, the `invites` org columns, `sessions.active_org_id`, identity
-  grants and RLS (DDL §2, §3, §6, §7 identity part).
-- Create: `.../migrations/shakedown/0001_baseline.sql`: `CREATE SCHEMA IF NOT EXISTS shakedown`; move `public.{runs,
-  branches, events, suites, suite_runs, experiments, reviews, connections}` when present; `SET LOCAL search_path =
-  shakedown`; then the `SCHEMA` strings of `store.rs` and `store/{suites,experiments,reviews,connections}.rs`
-  copied verbatim, in that order.
-- Create: `core/crates/coppertide-schema/tests/{migrate.rs, files.rs}`, and `tests/fixtures/cloud-0015/*.sql`
-  (copied from CopperTide-Cloud `origin/main:migrations/0001–0015`).
-- Modify: `core/Cargo.toml` (members), `Cargo.lock`.
+- Delete: `core/crates/shaked/src/auth/signing.rs`, `src/quotas.rs`, `src/store/usage.rs`, `src/api/usage.rs`,
+  `docs/quotas.toml`, `core/crates/shaked/tests/auth.rs`, `tests/quotas.rs`.
+- Modify: `src/auth/middleware.rs` (keep only the local layer), `src/auth/identity.rs` (drop `orgs_of_user`),
+  `src/auth/system.rs` (drop `ListOrgsOfUser`), `src/mode.rs` (no `Mode`; `bind_from(get, serves_others: bool)`),
+  `src/app.rs` (`Config` loses `mode`, `gateway_secret`; one `/api` layer), `src/main.rs` (no hosted branch, no
+  `gateway_secret()`), `src/store/open.rs` (drop `DbUrls`, `HOSTED_PLAN`, `migrate_hosted`, `refuse_bypassing_login`),
+  `src/store.rs` (`open_hosted` gone), `src/api.rs` (no quota check or meter in `create_run`, no `usage::router`),
+  `src/gateway.rs` (no monthly quota check or meter), `src/api/me.rs` (answers `{mode: "local", user: {name: "You"},
+  features: []}`).
+- Modify tests: `tests/modes.rs` (drop the hosted cases; `a_public_bind_needs_hosted` becomes
+  `a_public_bind_is_refused`), `tests/names.rs` (drop `hosted_mode_opens_its_three_logins`), `tests/schema.rs` (drop
+  `open_hosted` and hosted-login tests), `tests/tokens.rs` and `tests/run_tokens.rs` (drop the cases that call
+  `AppSetup::hosted`), `tests/support/app.rs` (drop `AppSetup::hosted`).
+
+**Interfaces:**
+- Produces: `pub fn bind_from(get: impl Fn(&str) -> Option<String>, serves_others: bool) -> Result<Bind, String>`
+  (error for a non-loopback bind when `serves_others` is false: "binding beyond this machine needs a layer that
+  authenticates callers; the open-source shaked serves only this machine"). A4 passes `layer.policy().serves_others`.
+
+- [ ] **Step 1: Change the tests first:** delete the files and cases above; rename and rewrite
+  `a_public_bind_is_refused`:
+
+```rust
+#[test] fn a_public_bind_is_refused() {
+    let e = bind_from(env(&[("SHAKEDOWN_BIND", "0.0.0.0:4510")]), false).unwrap_err();
+    assert!(e.contains("serves only this machine"), "{e}");
+}
+#[tokio::test] async fn me_is_personal() { /* GET /api/me => 200 {mode:"local", user:{name:"You"}, features:[]} */ }
+```
+
+- [ ] **Step 2: Run them and see them fail:** `cargo test -p shaked --test modes --test api` (compile error: the new
+  `bind_from` arity; `me_is_personal` fails on the old body).
+- [ ] **Step 3: Implement** the removals and the two changes.
+- [ ] **Step 4: Run the gate.** Expect the old counts minus the deleted tests; the ledger records both.
+- [ ] **Step 5: Commit:** "The open-source shaked has no hosted mode: no signed requests, quotas or usage meters, and a bind beyond this machine is refused".
+
+### Task A2: A generic migrator in the `shakedown-schema` crate
+
+**Files:**
+- Move: `core/crates/coppertide-schema` → `core/crates/shakedown-schema` (`git mv`); package `shakedown-schema`, lib
+  `shakedown_schema`. Modify `core/Cargo.toml` (members), `Cargo.lock`, `core/crates/shaked/Cargo.toml`, every
+  `coppertide_schema::` use, the bootstrap hint's path.
+- Modify: `src/stream.rs` (`Stream` is a name; `Files` sets), `src/migrator.rs` (every entry point takes the
+  migrations; `META_DDL` checks the name pattern), `src/lib.rs`.
+- Create: `tests/fixtures/extra/0001_extra.sql` (a third stream for tests: `CREATE SCHEMA extra; CREATE TABLE
+  extra.t (id int)`, `-- requires: shakedown >= 1`).
+- Test: `tests/files.rs`, `tests/migrate.rs` (+2).
 
 **Interfaces:**
 - Produces:
 ```rust
-pub enum Stream { Identity, Cloud, Shakedown }               // as_str(): "identity" | "cloud" | "shakedown"
-pub struct Migration { pub stream: Stream, pub version: u32, pub name: &'static str, pub sql: &'static str,
-    pub checksum: [u8; 32], pub requires: Vec<(Stream, u32)>, pub no_transaction: bool,
-    pub also_accept: &'static [[u8; 32]] }
-pub fn migrations() -> &'static [Migration];                  // LazyLock over include_str!, sorted (stream, version)
-pub struct Applied { pub stream: Stream, pub version: u32, pub checksum: Vec<u8> }
-pub trait Conn: Send {                                        // native async fn in trait; no async-trait
-    async fn batch(&mut self, sql: &str) -> Result<(), Error>;          // simple-query protocol
-    async fn applied(&mut self) -> Result<Vec<Applied>, Error>;         // empty when schema_meta is missing
-}
-pub struct Plan<'a> { pub apply: &'a [Stream], pub require: &'a [(Stream, u32)], pub applied_by: &'a str }
-pub struct Report { pub applied: Vec<(Stream, u32)>, pub newer: Vec<(Stream, u32)> }   // newer: logged, fine
-pub async fn migrate(c: &mut impl Conn, plan: &Plan<'_>) -> Result<Report, Error>;
-pub async fn check(c: &mut impl Conn, plan: &Plan<'_>) -> Result<Report, Error>;      // never writes
-pub async fn wait_ready(c: &mut impl Conn, plan: &Plan<'_>, every: Duration, give_up: Duration) -> Result<Report, Error>;
-pub enum Error { Checksum { stream: Stream, version: u32, name: String }, Behind { stream: Stream, have: u32, need: u32 },
-    BadFile(String), Sql(String) }
-pub const BOOTSTRAP_SQL: &str;
-#[cfg(feature = "tokio-postgres")] impl Conn for tokio_postgres::Client {}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Stream(pub &'static str);                   // ^[a-z][a-z_]{0,31}$ (checked by load())
+pub const SHAKEDOWN: Stream = Stream("shakedown");
+pub struct Files { pub stream: Stream, pub files: &'static [(&'static str, &'static str)],   // (file name, text)
+                   pub also_accept: &'static [(u32, &'static [[u8; 32]])] }
+pub fn load(sets: &[&Files]) -> Result<Vec<Migration>, Error>;   // parsed, sorted (stream, version); BadFile on a bad name
+pub fn base() -> &'static [Migration];                 // LazyLock over load(&[&BASE]); BASE is the shakedown stream
+pub async fn migrate(c: &mut impl Conn, plan: &Plan<'_>, set: &[Migration]) -> Result<Report, Error>;
+pub async fn check(c: &mut impl Conn, plan: &Plan<'_>, set: &[Migration]) -> Result<Report, Error>;
+pub async fn wait_ready(c: &mut impl Conn, plan: &Plan<'_>, set: &[Migration], every: Duration, give_up: Duration) -> Result<Report, Error>;
+// Migration, Applied, Plan, Report, Error, Conn, BOOTSTRAP_SQL: as before, with Stream the new type.
 ```
-- Migrator algorithm. Run `CREATE SCHEMA IF NOT EXISTS schema_meta` and the `schema_meta.migrations` DDL with `IF NOT
-  EXISTS`. For each owned stream: `SELECT pg_advisory_lock(hashtext('coppertide-schema:' || stream))`, read
-  `applied()`, and fail with `Checksum` if a stored checksum is neither the embedded one nor in `also_accept`.
-  Apply each missing version in order. Normal files run as `BEGIN; SET LOCAL lock_timeout='5s'; SET LOCAL
-  statement_timeout='60s'; <sql>; INSERT INTO schema_meta.migrations …; COMMIT`. Files marked
-  `-- no-transaction` run without the BEGIN/COMMIT, and the INSERT follows. Then `pg_advisory_unlock`. Header
-  lines: `-- requires: <stream> >= <n>`, `-- no-transaction`, `-- contract: unused since <sha>`.
-  `applied_by` must match `^[a-z0-9 ._-]{1,80}$` (it is formatted into SQL).
+- `META_DDL`'s check becomes `CHECK (stream ~ '^[a-z][a-z_]{0,31}$')`. Until A3 the crate also exports
+  `pub fn retiring_identity() -> &'static [Migration]` (the two identity files) so shaked keeps working; A3 deletes it.
 
-- [ ] **Step 1: Write the failing tests** (each on its own scratch database, dropped on exit)
+- [ ] **Step 1: Write the failing tests**
 
 ```rust
-// tests/files.rs: no database
-#[test] fn every_file_parses_and_versions_are_dense_from_1() { /* per stream: 1..=n, names match NNNN_name.sql */ }
-#[test] fn every_requires_names_an_existing_migration() {}
-#[test] fn destructive_statements_carry_a_contract_marker() {
-    // DROP / RENAME / SET NOT NULL / TYPE outside comments => the file has "-- contract: unused since "
-}
-#[test] fn every_file_sets_no_timeouts_itself() {} // the migrator sets them; a file's SET would override
 // tests/migrate.rs
-#[test] fn empty_to_latest_then_again_is_a_no_op() { /* 2nd migrate(): report.applied.is_empty() */ }
-#[test] fn a_changed_checksum_refuses_and_also_accept_admits() { /* UPDATE schema_meta... => Error::Checksum */ }
-#[test] fn a_missing_required_stream_reports_behind_and_wait_ready_gives_up() {
-    // Plan{apply:[Shakedown], require:[(Identity,2)]} on a db with identity 1 => Error::Behind{have:1,need:2}
-    // wait_ready(every=10ms, give_up=50ms) => Err(Behind)
+#[tokio::test] async fn a_stream_the_crate_does_not_know_applies_after_the_base() {
+    // EXTRA = Files{stream: Stream("extra"), files: &[("0001_extra.sql", include_str!("fixtures/extra/0001_extra.sql"))], ..}
+    // set = load(&[&BASE_FILES, &EXTRA]); migrate(Plan{apply: &[SHAKEDOWN, Stream("extra")], ..}, &set)
+    // => schema_meta has ("extra", 1); to_regclass('extra.t') is not null
 }
-#[test] fn two_concurrent_migrators_apply_each_version_once() { /* join two tasks; count(*) per version == 1 */ }
-#[test] fn newer_versions_than_the_binary_knows_are_reported_not_refused() {}
-#[test] fn identity_1_create_path_matches_cloud_0015_moved_path() {
-    // db A: apply fixtures/cloud-0015 into public, then migrate identity; db B: migrate identity fresh.
-    // assert_eq!(fingerprint(A, "identity"), fingerprint(B, "identity"))
-    // fingerprint = sorted rows of columns (name, type, nullable, default), pg_get_constraintdef, pg_get_indexdef
+#[tokio::test] async fn a_binary_that_knows_only_the_base_reports_the_other_stream_as_newer_not_an_error() {
+    // after the above: migrate(Plan{apply:&[SHAKEDOWN], require: &[]}, base()) => Ok, report.applied empty
 }
-#[test] fn shakedown_1_is_idempotent_over_tables_made_by_todays_shaked() {
-    // apply today's SCHEMA strings into public; migrate; tables now in schema shakedown with their rows
-}
-#[test] fn a_missing_setting_matches_no_row() { /* under SET ROLE shaked_app, no GUCs: SELECT count(*) FROM identity.orgs == 0 */ }
+// tests/files.rs: every existing test runs over every embedded set, plus:
+#[test] fn stream_names_are_checked() { assert!(matches!(load(&[&Files{stream: Stream("Bad-Name"), ..}]), Err(Error::BadFile(_)))) }
 ```
 
-- [ ] **Step 2: Run them and see them fail:** `cargo test -p coppertide-schema` (it doesn't compile: the crate is missing).
-- [ ] **Step 3: Implement** the interfaces above. `pg.rs` is the tokio-postgres `Conn` behind feature
-  `tokio-postgres`, which is on by default for `shaked`'s use. Tests that need roles run `BOOTSTRAP_SQL` first
-  (the test login is a superuser).
-- [ ] **Step 4: Run them and see them pass:** `cargo test -p coppertide-schema`, then the gate.
-- [ ] **Step 5: Commit:** "The coppertide-schema crate applies the identity and shakedown migration streams with checksums, advisory locks and required versions".
-
-### Task 2: `shaked` on the migrator, with a pool, the local seed and template test databases (⚑ D15)
-
-**Files:**
-- Modify: `core/crates/shaked/Cargo.toml` (`coppertide-schema`, `deadpool-postgres`).
-- Modify: `core/crates/shaked/src/store.rs` and `store/*.rs`: drop the `SCHEMA` consts and `migrate()`. `Store`
-  holds `app: Pool`, `system: Pool`, `set_role: bool`, and each method does `self.app.get().await?`.
-- Create: `core/crates/shaked/src/store/open.rs` (connect, roles check, migrate, seed) and `src/store/seed.rs`.
-- Modify: `core/crates/shaked/src/main.rs` (the interrupt step moves to `jobs::interrupt_at_start`).
-- Create: `core/crates/shaked/src/jobs.rs`.
-- Modify: `core/crates/shaked/tests/support/pg.rs`: `fresh_db(tag)` = `CREATE DATABASE … TEMPLATE
-  shakedown_tpl_<first 8 hex of the combined checksum>`, made once per binary under an advisory lock.
-- Test: `core/crates/shaked/tests/schema.rs`.
-
-**Interfaces:**
-- Consumes: Task 1 `migrate`, `Plan`, `BOOTSTRAP_SQL`.
-- Produces:
-```rust
-pub const LOCAL_USER_ID: Uuid = uuid!("00000000-0000-0000-0000-00000000000a");
-pub const LOCAL_ORG_ID:  Uuid = uuid!("00000000-0000-0000-0000-00000000000b");
-pub struct DbUrls { pub app: String, pub system: Option<String>, pub migrate: Option<String> }  // hosted: all three
-impl Store {
-    pub async fn open(admin: &Admin) -> Result<Store>;                 // unchanged signature (local)
-    pub async fn open_named(admin: &Admin, name: &str) -> Result<Store>; // unchanged signature (local)
-    pub async fn open_hosted(urls: &DbUrls) -> Result<Store>;          // Task 3 calls it; no seed, require identity >= 2
-}
-pub(crate) async fn seed_local(c: &tokio_postgres::Client) -> Result<()>;   // the 3 INSERTs at the DDL's end, idempotent
-```
-- Pool connections get `options = "-c search_path=shakedown,identity,authz,public"`. The local order is: check
-  `rolsuper` (else check that the role `shaked_app` exists, else stop with "run core/crates/coppertide-schema/
-  bootstrap.sql once"); run `BOOTSTRAP_SQL` when the login is a superuser; migrate `[Identity]`; `seed_local`;
-  migrate `[Shakedown]`. `set_role = rolsuper`. `applied_by = "shaked <git sha or version>"`.
-
-- [ ] **Step 1: Write the failing tests**
-
-```rust
-#[test] fn an_old_public_database_moves_to_shakedown_and_keeps_its_runs() {
-    // support::legacy makes a db with today's public tables and a recorded run; Store::open_named;
-    // list_runs() has it; get_branch(...).events == before; open_named again: schema_meta rows unchanged
-}
-#[test] fn a_fresh_database_has_the_local_owner() {
-    // identity.memberships (LOCAL_ORG_ID, LOCAL_USER_ID) role == "owner"; orgs.kind == "local"; plan == "local"
-}
-#[test] fn running_branches_are_interrupted_at_start() { /* as today, now through jobs::interrupt_at_start */ }
-#[test] fn a_non_superuser_without_roles_is_refused_naming_bootstrap_sql() {}
-```
-
-- [ ] **Step 2: Run them and see them fail:** `cargo test -p shaked --test schema`
-- [ ] **Step 3: Implement.** Store methods keep their signatures and only swap `self.client` for a pooled
-  connection. Switch every test helper that makes a store to `fresh_db`.
-- [ ] **Step 4: Run the gate.** All existing tests pass unchanged.
-- [ ] **Step 5: Commit:** "shaked keeps its records in the shakedown schema through coppertide-schema, on a connection pool, with the built-in local owner".
-
-### Task 3: Bind, public URL, allowed hosts and modes
-
-**Files:**
-- Create: `core/crates/shaked/src/mode.rs`.
-- Modify: `src/main.rs` (bind from settings; `--hosted`); `src/app.rs` (`Config` gains `mode`, `public_url`,
-  `allowed_hosts`; `loopback_host_only` becomes `allowed_host`; `install_default_drivers` and `agent_base` derive
-  from `public_url`); `src/external.rs` (`endpoints` takes the public URL); `src/driver.rs` and the part launch in
-  `src/world/*` (refused in hosted mode); `src/api/worlds.rs` (use, build and prepare refused in hosted mode).
-- Test: `core/crates/shaked/tests/modes.rs`, plus unit tests in `mode.rs`.
-
-**Interfaces:**
-- Produces:
-```rust
-pub enum Mode { Local, Hosted }
-pub struct Bind { pub addr: SocketAddr, pub public_url: Url, pub allowed_hosts: Vec<String> }
-pub fn bind_from(get: impl Fn(&str) -> Option<String>, hosted: bool) -> Result<Bind, String>;
-// SHAKEDOWN_BIND (default 127.0.0.1:4510; old SHAKEDOWN_PORT still read as 127.0.0.1:<port>),
-// SHAKEDOWN_PUBLIC_URL (default http://<bind>), SHAKEDOWN_ALLOWED_HOSTS (comma list; default loopback names +
-// the public URL's host). Non-loopback bind without hosted => Err("… needs --hosted").
-pub fn host_allowed(host: &str, allowed: &[String]) -> bool;   // replaces is_loopback_host, same parsing rules
-pub const HOSTED_REFUSAL: &str = "runs on the control box only in a sandbox (not yet available)";
-```
-- The hosted `/api` layer answers 401 `{"error":"sign in through the gateway or send an API token"}` to every
-  request until Task 7. It fails closed.
-
-- [ ] **Step 1: Write the failing tests**
-
-```rust
-#[test] fn defaults_are_todays() { /* addr 127.0.0.1:4510, public http://127.0.0.1:4510, loopback hosts */ }
-#[test] fn old_port_setting_still_binds() { /* SHAKEDOWN_PORT=4600 => 127.0.0.1:4600 */ }
-#[test] fn a_public_bind_needs_hosted() { /* SHAKEDOWN_BIND=0.0.0.0:4510, hosted=false => Err contains "--hosted" */ }
-#[test] fn agent_urls_derive_from_the_public_url() {
-    // PUBLIC_URL=https://sd.example => endpoints(..).mcp_url starts "https://sd.example/mcp/"; same for gateway, http agent base
-}
-#[test] fn allowed_hosts_keep_the_dns_rebinding_guard() { /* every case of today's loopback_hosts test, plus listed host */ }
-#[test] fn hosted_refuses_every_api_call_and_part_launch() {
-    // AppFx hosted: GET /api/runs => 401; driver::launch => Err(HOSTED_REFUSAL); POST /api/worlds/x/use => 403
-}
-```
-
-- [ ] **Step 2: Run them and see them fail:** `cargo test -p shaked --test modes` and `cargo test -p shaked mode::`
-- [ ] **Step 3: Implement** the interfaces above.
+- [ ] **Step 2: Run them and see them fail:** `cargo test -p shakedown-schema` (does not compile: crate renamed, no `load`).
+- [ ] **Step 3: Implement** the interfaces above. `migrate_set` disappears into `migrate`.
 - [ ] **Step 4: Run the gate.**
-- [ ] **Step 5: Commit:** "shaked binds where SHAKEDOWN_BIND says, hands out SHAKEDOWN_PUBLIC_URL, and a hosted shaked refuses everything until it can tell who is calling".
+- [ ] **Step 5: Commit:** "The schema crate is shakedown-schema: its migrator knows no stream names and applies whatever sets a binary passes, so another repo can add streams on top of Shakedown's".
 
-### Task 4: Principals, levels and `can` (⚑ D18, D21)
-
-**Files:**
-- Create: `core/crates/shaked/src/auth/{mod.rs, principal.rs, can.rs}`.
-- Test: unit tests in `can.rs`.
-
-**Interfaces:**
-- Produces:
-```rust
-pub enum OrgRole { Owner, Admin, Member, Viewer, Billing }
-pub enum SeatRole { Maintainer, Member }
-pub enum Level { None, View, Run, Edit, Admin }                      // Ord
-pub enum TokenScope { Read, Run, Admin }
-pub enum RunTokenKind { Run, Agent, Worker, Ticket }
-pub enum Principal {
-    User { user: Uuid, org: Uuid, role: OrgRole, seats: Vec<(Uuid, SeatRole)> },
-    ServiceAccount { sa: Uuid, org: Uuid, role: OrgRole, team: Option<Uuid> },
-    ApiToken { token: Uuid, holder: Box<Principal>, scopes: Vec<TokenScope>, team: Option<Uuid> },
-    RunToken { org: Uuid, run: String, branch: String, kind: RunTokenKind, agent: Option<String>, sandbox: Option<Uuid> },
-}
-pub enum Action { // resource actions (spec §3 table) …
-    Read, Start, Fork, Stop, Record, UseInRun, Rename, ChangeSetup, ReplaceSecret, DeleteFork, Share, MoveTeam, Delete,
-    // … run-internal (run tokens only) …
-    RegisterAgent, Report, Finish, CallTools, CallModel, WorkerLink,
-    // … org-level (matrix rows)
-    SeeOrg, CreateOrgWide(ResourceKind), CreateTeam, ManageSeats(Uuid), Invite, ChangeRole { target: OrgRole },
-    ServiceAccounts, AnyTokens, OwnTokens, Audit, Usage, Billing, OrgSettings, DeleteOrg }
-pub enum ResourceKind { Run, Experiment, Suite, World, ProviderKey, Connection }
-pub struct Resource { pub kind: ResourceKind, pub org: Uuid, pub id: String, pub team: Option<Uuid>,
-    pub created_by: Option<Uuid>, pub grants: Vec<Grant> }
-pub struct Grant { pub to: Grantee, pub level: Level }               // Grantee::User(Uuid) | Grantee::Team(Uuid)
-pub enum Target<'a> { Org(Uuid), Resource(&'a Resource), Branch { org: Uuid, run: &'a str, branch: &'a str } }
-pub struct OrgFlags { pub members_create_teams: bool }
-pub fn level(p: &Principal, r: &Resource) -> Level;
-pub fn required(a: &Action) -> Level;
-pub fn can(p: &Principal, a: &Action, t: &Target<'_>, flags: &OrgFlags) -> bool;
-```
-- The rules are the accounts spec §3, verbatim. The level is the max of: admin role, org-wide member `run`, team
-  seat `edit` (maintainer `admin`), creator `admin`, and grants. Then caps apply: viewer → view, billing → none,
-  token scopes (`read` → view, `run` → edit, `admin` → uncapped), team-bound → its team plus org-wide only. A
-  principal of another org gets `None`. Run tokens allow only run-internal actions on their own branch, and an
-  `Agent` token only `CallTools` and `CallModel` for its agent.
-
-- [ ] **Step 1: Write the failing tests.** These are table-driven: one row for each cell of the org matrix and for
-  each row of the resource-action table.
-
-```rust
-#[test] fn org_matrix() { for (role, action, want) in MATRIX { assert_eq!(can(&user(role), &action, &Target::Org(A), &F), want, "{role:?} {action:?}") } }
-#[test] fn admins_cannot_change_owners() { assert!(!can(&user(Admin), &Action::ChangeRole{target: Owner}, &Target::Org(A), &F)) }
-#[test] fn members_create_teams_only_when_the_org_allows() {}
-#[test] fn levels() {
-    assert_eq!(level(&user(Member), &org_wide_run()), Level::Run);
-    assert_eq!(level(&seat(Maintainer), &team_run()), Level::Admin);
-    assert_eq!(level(&user(Viewer), &granted(Level::Admin)), Level::View);       // cap
-    assert_eq!(level(&user(Billing), &org_wide_run()), Level::None);
-    assert_eq!(level(&user_of(B), &org_wide_run()), Level::None);                 // other org
-    assert_eq!(level(&api_token(&[Read], user(Owner)), &org_wide_run()), Level::View);
-    assert_eq!(level(&team_bound_sa(T2), &team_run_of(T1)), Level::None);
-}
-#[test] fn run_tokens_reach_only_their_branch_and_agent() {
-    assert!(can(&agent_tok("b1","a"), &Action::CallTools, &branch(A,"r","b1"), &F));
-    assert!(!can(&agent_tok("b1","a"), &Action::CallTools, &branch(A,"r","b2"), &F));
-    assert!(!can(&agent_tok("b1","a"), &Action::Read, &Target::Resource(&org_wide_run()), &F));
-}
-```
-
-- [ ] **Step 2: Run them and see them fail:** `cargo test -p shaked auth::can`
-- [ ] **Step 3: Implement** the interfaces above.
-- [ ] **Step 4: Run them and see them pass,** then the gate.
-- [ ] **Step 5: Commit:** "shaked decides who may do what with one can(principal, action, target), by org role, team seat, authorship, grant and token scope".
-
-### Task 5: `shakedown` 2: orgs on every row, the new tables and RLS; `Store::tx` and `SystemScope` (⚑ D19)
+### Task A3: Personal-use schema and engine: no org anywhere in open source
 
 **Files:**
-- Create: `core/crates/coppertide-schema/migrations/shakedown/0002_orgs.sql` (`-- requires: identity >= 2`).
-  Existing tables get `org_id uuid NOT NULL DEFAULT '<LOCAL_ORG_ID>'`, `team_id uuid`, `created_by uuid` (root
-  tables), the `(org_id, id)` uniques and the DDL's FKs as `NOT VALID`. `reviews` gets `UNIQUE (org_id, key)` and
-  keeps its PK. The new tables (`provider_keys`, `worlds`, `org_settings`, `saves`, `sandboxes`, `api_tokens`,
-  `run_tokens`, `grants`, `quotas`, `usage`, `usage_monthly`) come from the DDL. `saves` and `worlds` also get
-  `store text NOT NULL`. The meter checks gain `trial_usd_micros`. Privileges and RLS are DDL §6–§7, shakedown part.
-- Create: `core/crates/shaked/src/auth/scope.rs`, `src/store/tx.rs`.
-- Test: `core/crates/shaked/tests/rls.rs`; `core/crates/coppertide-schema/tests/migrate.rs` (+1 test).
+- Delete: `core/crates/shakedown-schema/migrations/identity/`, `migrations/shakedown/0002_orgs.sql`,
+  `0003_validate.sql`, `bootstrap.sql`, `tests/fixtures/cloud-0015/`, the identity tests in `tests/migrate.rs`
+  (`identity_1_create_path_matches_cloud_0015_moved_path`, `a_missing_setting_matches_no_row`), `retiring_identity`.
+- Create: `migrations/shakedown/0002_keys_worlds_saves_tokens.sql`: section "shakedown 2" of `schema-base.sql`
+  (`ALTER TABLE` for `runs.world_id`, `runs.placement`, `connections.sealed_env`; `CREATE TABLE` for the five
+  tables; the indexes). Create `src/retired.rs`: the retired checksums below.
+- Delete in shaked: `src/store/seed.rs`, `src/auth/scope.rs`, `src/auth/identity.rs`, `src/auth/audit.rs`,
+  `src/auth/principal.rs`; `tests/rls.rs`, `tests/support/orgs.rs`, `tests/fixtures/orgs.toml`.
+- Create in shaked: `src/auth/caller.rs`; rewrite `src/auth/can.rs` (engine checks only); `tests/no_orgs.rs`,
+  `tests/no_orgs_allow.txt`, `tests/fixtures/retired/` (the five a217411 files: `identity/0001_baseline.sql`,
+  `identity/0002_orgs.sql`, `shakedown/0002_orgs.sql`, `shakedown/0003_validate.sql`, and the bootstrap, as test data).
+- Modify in shaked: `src/store/open.rs` (no roles, no seed, no identity: migrate `base()`, `ALTER DATABASE … SET
+  search_path = shakedown, public`), `src/store/tx.rs` (no GUCs, no `SET ROLE`), `src/store.rs` and `store/*.rs`
+  (no `org_id` in any SQL; `BRANCHES_OF_RUNS` joins on `r.id = b.run_id` only), `src/store/api_tokens.rs` and
+  `run_tokens.rs` (no org; no audit), `src/auth/{mod,extract,middleware,tokens,run_tokens,system}.rs`, `src/exec.rs`
+  (`BranchCtx.caller: Arc<Caller>`), every `Scope` user (`api/*`, runners, suites, experiments, review, dispatch,
+  gc), `tests/support/{mod,pg,app}.rs` (`records(&store)` = `store.at(&Caller::person())`; no `identity_only`).
+- Test: `tests/schema.rs`, `tests/tokens.rs`, `tests/run_tokens.rs`, `tests/store.rs`, unit tests in `can.rs`.
 
 **Interfaces:**
-- Consumes: Task 4 `Principal`, `OrgRole`.
+- Consumes: A2 `base()`, `migrate`.
 - Produces:
 ```rust
-pub struct Scope { /* private: org, user: Option<Uuid>, role: OrgRole, teams: Vec<Uuid>, principal: Principal */ }
-impl Scope {
-    pub(in crate::auth) fn of(p: Principal) -> Scope;   // team-bound => teams=[team], user=None, role=Member
-    pub fn org(&self) -> Uuid; pub fn user(&self) -> Option<Uuid>; pub fn principal(&self) -> &Principal;
+// auth/caller.rs
+#[derive(Debug, Clone)] pub struct Caller { pub kind: CallerKind, pub ext: http::Extensions }
+#[derive(Debug, Clone, PartialEq)] pub enum CallerKind {
+    Person,                                                     // locally: whoever sits at this machine
+    ApiToken { id: Uuid, scopes: Vec<TokenScope> },
+    RunToken { run: String, branch: String, kind: RunTokenKind, agent: Option<String> },
 }
-pub fn local_owner() -> Scope;                           // in auth; Principal::User{LOCAL_USER_ID, LOCAL_ORG_ID, Owner, []}
-#[cfg(any(test, feature = "testkit"))] pub fn test_scope(p: Principal) -> Scope;  // tests only
-pub struct SystemScope { job: SystemJob }               // constructors pub(crate) per job, in auth::system
-pub enum SystemJob { InterruptAtStart, StartupGc, ResolveToken, ListOrgsOfUser, StoreCopy }
-pub struct Tx { /* Option<deadpool_postgres::Object>, committed: bool */ }
-impl Tx { pub async fn query(&self, sql: &str, p: &[&(dyn ToSql + Sync)]) -> Result<Vec<Row>>;
-          pub async fn query_opt(..) -> Result<Option<Row>>; pub async fn query_one(..) -> Result<Row>;
-          pub async fn execute(..) -> Result<u64>; pub async fn commit(self) -> Result<()>; }
-// Drop without commit: deadpool_postgres::Object::take(conn); the connection closes, never goes back mid-transaction.
-impl Store { pub async fn tx(&self, s: &Scope) -> Result<Tx>; pub async fn system_tx(&self, s: &SystemScope) -> Result<Tx>; }
+impl Caller { pub fn person() -> Caller; pub fn api_token(id: Uuid, scopes: Vec<TokenScope>) -> Caller;
+              pub fn run_token(run: &str, branch: &str, kind: RunTokenKind, agent: Option<&str>) -> Caller; }
+pub enum TokenScope { Read, Run, Admin }                       // unchanged names and parsing
+pub enum RunTokenKind { Run, Agent, Worker, Ticket }           // unchanged
+// auth/can.rs: the engine's own checks, before any layer
+pub enum Action { Read, Create, Start, Fork, Stop, Record, UseInRun, Rename, ChangeSetup, ReplaceSecret, DeleteFork,
+                  Delete, ManageTokens, InstanceAdmin, RegisterAgent, Report, Finish, CallTools, CallModel, WorkerLink }
+pub enum ResourceKind { Run, Experiment, Suite, World, ProviderKey, Connection, Review, ApiToken }
+pub enum Target<'a> { Resource { kind: ResourceKind, id: &'a str }, Branch { run: &'a str, branch: &'a str },
+                      Kind(ResourceKind), Instance }
+pub enum Decision { Allow, NotFound, Forbidden(String) }
+pub fn engine_check(c: &Caller, a: &Action, t: &Target<'_>) -> Decision;
+// Person: Allow. ApiToken: read => Read only; run => also Create/Start/Fork/Stop/Record/UseInRun/Rename/ChangeSetup/
+// DeleteFork; admin => everything. RunToken: RegisterAgent/Report/Finish (kind Run), WorkerLink (Worker, Ticket),
+// CallTools/CallModel (Agent) on Target::Branch whose branch is its own; another branch NotFound; anything else Forbidden.
+// auth/extract.rs
+pub struct Who(pub Arc<Caller>);                               // axum extractor; 401 "no caller" when missing
+// store
+impl Store { pub fn at<'a>(&'a self, c: &'a Caller) -> Scoped<'a>;          // as before, a Caller instead of a Scope
+             pub async fn tx(&self, c: &Caller) -> Result<Tx>; pub async fn system_tx(&self, job: SystemJob) -> Result<Tx>; }
+pub enum SystemJob { InterruptAtStart, StartupGc, ResolveToken, StoreCopy }
+// shakedown-schema src/retired.rs
+pub const RETIRED: &[(&str, u32, &str)] = &[            // (stream, version, sha256 hex) of factory files never released
+    ("shakedown", 2, "34552019c2a5a894b68b5c1007c139dbf5bfd559a88f37cca0811394dc31c68b"),
+    ("shakedown", 3, "24fce61a85a57593c4cdb503551bc810349315eeeac66ce9c68c240ab050d3b5"),
+    ("identity",  1, "2c29d43e2e4da0ed602400d0e5b34947373e2784bf3d19274bf41f712a1b778f"),
+    ("identity",  2, "16e522f6d2dcfa5034004d87457d499a3d74cbce6c8b0335847430599f22cc99"),
+];
+pub fn retired_in(applied: &[Applied]) -> bool;
 ```
-- `test_scope` reaches integration tests through `[dev-dependencies] shaked = { path = ".", features = ["testkit"] }`.
-- `tx` runs `BEGIN`, then `SET LOCAL ROLE shaked_app` when `set_role` is true, then the DDL §5 `set_config` line
-  (`app.team_ids` is the comma list, `app.org_role` the lowercase role). `system_tx` uses the `system` pool and
-  `SET LOCAL ROLE shaked_system`.
-- `jobs::interrupt_at_start` now uses `system_tx(SystemJob::InterruptAtStart)`.
+- The local `/api` middleware puts `Arc::new(Caller::person())` on every request past the Host guard (A4 makes it a
+  hook). `Store` holds `pool: Pool, system: Option<Pool>`; `system_tx` uses `system` when set, else `pool`.
+- `Store::open_named`: before migrating, if `retired_in(applied)`, fail with "this database was migrated by an
+  unreleased factory build of shaked (2026-11-20); convert it as docs/superpowers/plans/2026-11-20-hosted-m1-
+  foundation.md, step O1, says, or point SHAKEDOWN_DB at another database".
 
 - [ ] **Step 1: Write the failing tests**
 
 ```rust
-// tests/rls.rs: fixtures/orgs.toml seeds org A and org B, a team in each, owner/member/viewer/billing users
-#[test] fn every_shakedown_table_has_forced_rls() {
-    // SELECT relname FROM pg_class WHERE relnamespace='shakedown'::regnamespace AND relkind IN ('r','p')
-    //   AND NOT (relrowsecurity AND relforcerowsecurity)  => empty
+// tests/schema.rs
+#[tokio::test] async fn a_fresh_database_has_only_shakedown_s_schemas() {
+    // SELECT nspname FROM pg_namespace WHERE nspname NOT LIKE 'pg_%' AND nspname <> 'information_schema'
+    // == {"public", "schema_meta", "shakedown"}; schema_meta rows == [("shakedown",1), ("shakedown",2)]
 }
-#[test] fn every_identity_org_table_has_rls() { /* orgs, memberships, teams, team_members, service_accounts, users, audit_log */ }
-#[test] fn rls_refuses_cross_org_reads_and_writes_on_every_table() {
-    for t in SHAKEDOWN_TABLES {          // compared with pg_class: the list must name every table
-        insert_fixture_row(t, A).await;
-        let b = store.tx(&owner_of(B)).await?;
-        assert_eq!(count(&b, t).await, 0, "{t} read");
-        assert_eq!(b.execute(&update_all(t), &[]).await?, 0, "{t} update");
-        assert_eq!(b.execute(&delete_all(t), &[]).await?, 0, "{t} delete");
-        assert!(insert_row_for(&b, t, A).await.is_err(), "{t} insert into A");
+#[tokio::test] async fn a_plain_login_that_owns_its_database_opens_it() {
+    // TempLogin LOGIN CREATEDB (not superuser) creates its db; Store::open_named => Ok; create_run works
+}
+#[tokio::test] async fn a_database_from_the_retired_factory_build_is_refused_naming_the_fix() {
+    // apply tests/fixtures/retired/* as a superuser, record them in schema_meta with their sha256 (as the old binary did)
+    // Store::open_named => Err; msg contains "unreleased factory build" and "step O1"; msg has no "postgres://"
+    // schema_meta row count unchanged
+}
+// tests/no_orgs.rs
+#[test] fn open_source_names_no_orgs() {
+    // walk the four trees; regex (?i)org_id|\borgs?\b|tenant|membership|row level security|set_config\('app\.
+    // every hit must be a line in no_orgs_allow.txt ("<path>:<trimmed line>"); and every allow line must still hit
+}
+// tests/tokens.rs (local now)
+#[tokio::test] async fn a_token_is_shown_once_and_stored_hashed() { /* as before, local */ }
+#[tokio::test] async fn cli_token_create_prints_a_working_token() { /* as before */ }
+// can.rs unit tests
+#[test] fn read_tokens_only_read() {
+    let c = Caller::api_token(Uuid::nil(), vec![TokenScope::Read]);
+    assert_eq!(engine_check(&c, &Action::Read, &Target::Kind(ResourceKind::Run)), Decision::Allow);
+    assert!(matches!(engine_check(&c, &Action::Start, &Target::Kind(ResourceKind::Run)), Decision::Forbidden(_)));
+}
+#[test] fn run_tokens_reach_only_their_branch() {
+    let c = Caller::run_token("r", "b1", RunTokenKind::Run, None);
+    assert_eq!(engine_check(&c, &Action::Finish, &Target::Branch { run: "r", branch: "b1" }), Decision::Allow);
+    assert_eq!(engine_check(&c, &Action::Finish, &Target::Branch { run: "r", branch: "b2" }), Decision::NotFound);
+    assert!(matches!(engine_check(&c, &Action::Read, &Target::Kind(ResourceKind::Run)), Decision::Forbidden(_)));
+}
+#[test] fn an_agent_token_calls_tools_and_models_only() {}
+```
+
+- [ ] **Step 2: Run them and see them fail:** `cargo test -p shaked --test schema --test no_orgs --lib auth::can` and
+  `cargo test -p shakedown-schema`.
+- [ ] **Step 3: Implement** in one compiler-driven sweep (as old Task 6): delete the org types, let the compiler
+  list every use, replace each with `Caller`. Keep every existing assertion; tests that built org scopes use
+  `Caller::person()`. The SQL in each store method loses its `org_id` parameter and filter, nothing else.
+- [ ] **Step 4: Run the gate.** Needs step O1 done first for the SDK run (`shakedown_sdk_live`). Check with
+  `core/scripts/leakcheck.sh` that no test database or login is left.
+- [ ] **Step 5: Commit:** "Open-source Shakedown keeps only personal-use tables: no identity stream, roles, org columns or row-level security, and a database from the unreleased factory build is refused with the way to convert it".
+
+### Task A4: The layer: hooks the engine calls, `LocalLayer`, the library entry point and a harness for embedders
+
+**Files:**
+- Create: `core/crates/shaked/src/layer.rs` (trait and `LocalLayer`), `src/layer/types.rs` (`Policy`, `Costly`,
+  `Admission`, `Usage`, `Meter`, `KeySource`, `ModelWant`, `Fallback`, `AuditEvent`, `MeExtra`, `Refusal`, `TxFor`),
+  `src/serve.rs` (main's start-up moved into the library), `src/harness.rs` (feature `harness`).
+- Modify: `src/main.rs` (`shaked::serve::run(Arc::new(LocalLayer), …)`), `src/app.rs` (`/api` = engine routes merged
+  with `layer.routes()`, one auth middleware; `/api/health` outside it), `src/auth/middleware.rs` (Bearer → engine
+  resolution → `layer.authenticate`), `src/auth/tokens.rs` and `run_tokens.rs` (resolve to a `Caller` through
+  `system_tx(ResolveToken)`), `src/store/tx.rs` (`begin` after `BEGIN`), `src/store.rs` (`Store::with_layer`,
+  `from_pools`, `layer()`), `src/api.rs` and `src/api/*.rs` (every handler calls `authorize` before acting),
+  `src/api/tokens.rs` (`audit` on create and revoke), `src/api/me.rs` (`me` hook), `src/api.rs::create_run` and
+  `src/fork/start.rs` (`admit` then `meter` `runs`), `src/gateway.rs` (`admit` `ModelCall`, `meter`
+  `ModelUsdMicros` and `ModelTokens` per recorded call, key `gateway:<branch>:<seq>` and `…:tokens`),
+  `src/providers/mod.rs` (`resolve` falls back to `layer.fallback_provider`; `LocalLayer`'s answer is today's env
+  lookup), `src/mode.rs` (`bind_from` called with `policy.serves_others`; `local_only` reads
+  `policy.runs_packages_here`), `core/crates/shaked/Cargo.toml` (feature `harness`; dev-dependency on itself with it).
+- Test: `core/crates/shaked/tests/layer.rs`, `tests/routes.rs`.
+
+**Interfaces:**
+- Consumes: A3 `Caller`, `engine_check`, `Action`, `Target`, `Decision`, `Tx`, `SystemJob`.
+- Produces: the trait exactly as in the accounts design, "The engine and the cloud layer", and:
+```rust
+pub type BoxFuture<'a, T> = futures_util::future::BoxFuture<'a, T>;
+pub struct Policy { pub serves_others: bool, pub private_model_urls: bool, pub runs_packages_here: bool }
+pub struct Refusal { pub status: StatusCode, pub message: String }
+pub enum Meter { Runs, ModelUsdMicros, ModelTokens, SavesBytes, SandboxSeconds }
+pub enum KeySource { Own(Uuid), Environment, Fallback(&'static str) }
+pub struct ModelWant<'a> { pub provider: Option<&'a str>, pub model: &'a str }
+pub struct Fallback { pub provider: Provider, pub source: &'static str }
+pub struct AuditEvent<'a> { pub action: &'static str, pub target: (&'static str, &'a str), pub detail: serde_json::Value }
+pub struct MeExtra { pub mode: &'static str, pub features: Vec<String>, pub account: Option<serde_json::Value> }
+pub struct LocalLayer;                                  // policy {false, true, true}; defaults per the spec's table
+// The one helper every handler uses: engine_check, then layer.authorize; NotFound => 404, Forbidden => 403.
+pub async fn authorize(state: &AppState, who: &Who, a: Action, t: Target<'_>) -> Result<(), ApiError>;
+impl Store { pub fn with_layer(self, l: Arc<dyn Layer>) -> Store; pub fn from_pools(app: Pool, system: Option<Pool>, l: Arc<dyn Layer>) -> Store;
+             pub fn layer(&self) -> &Arc<dyn Layer>; }
+// serve.rs
+pub struct ServeOptions { /* bind, worlds dir, hub settings: what main.rs read from the environment */ }
+impl ServeOptions { pub fn from_env(policy: &Policy) -> anyhow::Result<ServeOptions>; }
+pub async fn run(store: Store, opts: ServeOptions) -> anyhow::Result<()>;   // the layer comes with the store
+// harness.rs (feature "harness", for this crate's tests and Cloud's)
+pub const ROUTES: &[RouteCase];                         // every /api route: method, path, the Action and target kind it asks
+pub struct RouteCase { pub method: &'static str, pub path: &'static str, pub action: Action, pub public: bool }
+pub struct SpyLayer { /* records every hook call; answers set per test */ }
+pub async fn scratch_db(tag: &str, sets: &[Migration]) -> ScratchDb;   // template per set checksum; dropped on Drop; guard-aware
+pub async fn serve_app(store: Store) -> (String /* base url */, ServeHandle);
+pub use crate::testkit_fake_llm::FakeLlm;               // the fake model server the gateway tests use
+```
+- Public routes (no `authorize`): `GET /api/health`, `GET /api/me`. MCP and gateway routes are authenticated by
+  agent tokens; their transactions, `admit` and `meter` use `BranchCtx.caller`.
+
+- [ ] **Step 1: Write the failing tests**
+
+```rust
+// tests/routes.rs
+#[test] fn the_route_table_names_every_route() {
+    // scan src/api.rs, src/api/*.rs for `.route("…"` (with method chains); each (method, path) is in harness::ROUTES and back
+}
+#[tokio::test] async fn every_api_route_asks_the_layer() {
+    let spy = SpyLayer::deny(Decision::NotFound);
+    for r in ROUTES.iter().filter(|r| !r.public) {
+        let s = call(&app_with(spy.clone()), r.method, &fill(r.path), body_for(r.path)).await.status();
+        assert_eq!(s, 404, "{} {}", r.method, r.path);
+        assert!(spy.asked(r.action), "{} {} never asked for {:?}", r.method, r.path, r.action);
     }
 }
-#[test] fn root_visibility_by_team_seat_creator_and_grant() {
-    // member without seat: team-scoped run invisible; with seat visible; creator sees own; team grant shows it
+// tests/layer.rs
+#[tokio::test] async fn begin_runs_in_every_transaction_with_its_caller() {
+    // spy counts begin calls: one per store call; interrupt_at_start => TxFor::System(InterruptAtStart)
 }
-#[test] fn viewers_and_billing_cannot_write() { /* viewer INSERT runs => error; billing SELECT runs => 0 */ }
-#[test] fn no_scope_no_rows() { /* raw shaked_app connection without set_config => 0 rows everywhere */ }
-#[test] fn an_uncommitted_tx_never_returns_its_connection() { /* drop Tx mid-way; pool status: size decreased */ }
-// coppertide-schema tests/migrate.rs
-#[test] fn shakedown_2_on_todays_data_gives_every_row_the_local_org() {}
+#[tokio::test] async fn a_refused_admission_starts_nothing() {
+    // spy admit(StartRun) => Refuse{429, "runs quota reached"}; POST /api/runs => 429, body error == that; list_runs empty
+}
+#[tokio::test] async fn every_recorded_model_call_is_metered_once() {
+    // FakeLlm through the gateway, one call => spy meters [ModelUsdMicros key gateway:<b>:<seq>, ModelTokens key …:tokens]; resend => no new
+}
+#[tokio::test] async fn an_agent_without_a_key_gets_the_layer_fallback() { /* spy fallback => FakeLlm provider; call succeeds; KeySource::Fallback */ }
+#[tokio::test] async fn local_bearer_tokens_are_checked_and_capped() {
+    // no header => 200; sd_ read token: GET /api/runs 200, POST /api/runs 403; revoked => 401; unknown => 401
+    // sdr_ token of branch b1: POST /api/branches/b2/finish => 404; GET /api/runs => 403
+}
+#[tokio::test] async fn layer_routes_sit_behind_authenticate() { /* spy routes /api/spy; authenticate refuses => 401; allows => 200 */ }
+#[tokio::test] async fn token_changes_are_audited_through_the_layer_without_the_secret() {}
+#[tokio::test] async fn health_needs_no_caller() { /* spy authenticate refuses everything; GET /api/health => 200 */ }
+#[test] fn a_public_bind_needs_a_layer_that_serves_others() {}
 ```
 
-- [ ] **Step 2: Run them and see them fail:** `cargo test -p shaked --test rls`
-- [ ] **Step 3: Implement** the migration and the interfaces above. Store methods stay unscoped for now and still
-  work through the local org default.
+- [ ] **Step 2: Run them and see them fail:** `cargo test -p shaked --features harness --test routes --test layer`
+- [ ] **Step 3: Implement** the interfaces above, route by route; each handler's (Action, Target) is its
+  `ROUTES` row. `LocalLayer::authenticate` returns `found` or `Caller::person()`.
 - [ ] **Step 4: Run the gate.**
-- [ ] **Step 5: Commit:** "Every Shakedown record belongs to an org, row-level security keeps orgs apart, and queries run in a transaction scoped to who asks".
+- [ ] **Step 5: Commit:** "shaked calls a layer at fixed points (who calls, every transaction, every route, costly steps, metering, fallback models, audit, extra routes) and the open-source binary passes the personal-use LocalLayer".
 
-### Task 6: Every store query under a `Scope`; `shakedown` 3
-
-**Files:**
-- Modify: `core/crates/shaked/src/store.rs` and `store/*.rs`. Public methods move from `impl Store` to `impl
-  Scoped<'_>`. Inserts set `org_id = scope.org()` (and `created_by` on root tables). Every SELECT, UPDATE and DELETE
-  also filters `org_id = $org`. A child getter joins its root (`branches` JOIN `runs`), so a branch of an invisible
-  run is "not found".
-- Modify: the callers, about 92 call sites in 35 files: `api/*` take `Caller`; `exec.rs` `BranchCtx` gains `scope:
-  Arc<Scope>`; runners, suites, experiments, review jobs and dispatch use `ctx.scope` or their starter's scope;
-  `gc.rs` uses `SystemJob::StartupGc`. Tests: about 139 uses, switched to `store.at(&local_owner())`.
-- Create: `core/crates/shaked/src/auth/extract.rs`.
-- Create: `core/crates/coppertide-schema/migrations/shakedown/0003_validate.sql`: `VALIDATE CONSTRAINT` for each
-  NOT VALID FK, then `ALTER COLUMN org_id DROP DEFAULT` with `-- contract: unused since <Task 6 sha>`.
-- Test: `core/crates/shaked/tests/store.rs` (+), `tests/rls.rs` (+).
-
-**Interfaces:**
-- Consumes: Task 5 `Scope`, `Tx`, `Store::tx`, `local_owner`.
-- Produces:
-```rust
-pub struct Scoped<'a> { store: &'a Store, scope: &'a Scope }
-impl Store { pub fn at<'a>(&'a self, scope: &'a Scope) -> Scoped<'a>; }   // the only way to the record methods
-pub struct Caller(pub Arc<Scope>);   // axum FromRequestParts: reads the Arc<Scope> the auth layer put in extensions
-// local mode: the /api layer inserts Arc::new(local_owner()) for every request that passed the host guard.
-```
-- Handlers that act on a resource call `can()` before acting, and answer 404 for `Level::None` (it never says
-  "forbidden" about another org's id) and 403 for a lower level.
-
-- [ ] **Step 1: Write the failing tests**
-
-```rust
-#[test] fn org_b_cannot_read_or_append_to_org_a_branches_through_the_store() {
-    let a = store.at(&owner_of(A)).create_run("t", &team).await?;   // + branch, event
-    assert!(store.at(&owner_of(B)).find_branch(&br).await?.is_none());
-    assert!(store.at(&owner_of(B)).append(&br, None, EventKind::Note, json!({})).await.is_err());
-    assert!(store.at(&owner_of(B)).list_runs().await?.is_empty());
-}
-#[test] fn a_branch_of_an_invisible_run_is_not_found() { /* member w/o seat, team-scoped run */ }
-#[test] fn inserts_without_org_fail_after_shakedown_3() { /* raw INSERT INTO runs (id, task_id, team) => error */ }
-```
-
-- [ ] **Step 2: Run them and see them fail:** `cargo test -p shaked --test store --test rls`
-- [ ] **Step 3: Implement.** Make the change in one sweep, so the compiler finds every call site (`Store` keeps no
-  public record method). Commit when the gate is green.
-- [ ] **Step 4: Run the gate.**
-- [ ] **Step 5: Commit:** "Every query shaked makes names its org and runs under the caller's scope, and new records must say whose they are".
-
-### Task 7: Hosted request auth: `signing` v2, live role and teams, `/api/me` (⚑ D15)
+### Task A5: Your own model keys and OpenAI-compatible servers
 
 **Files:**
-- Create: `core/crates/shaked/src/auth/{signing.rs, middleware.rs, identity.rs}`; `src/api/me.rs`.
-- Modify: `src/app.rs` (the hosted `/api` layer replaces Task 3's blanket 401), `src/main.rs` (`--hosted` →
-  `Store::open_hosted`, `SHAKEDOWN_GATEWAY_SECRET_FILE` required).
-- Test: `core/crates/shaked/tests/auth.rs`.
+- Create: `core/crates/shaked/src/vault.rs` (port of Cloud `origin/main:src/vault.rs`: format v1, AES-256-GCM,
+  `SHAKEDOWN_VAULT_KEY` / `SHAKEDOWN_VAULT_KEY_FILE`, else `<repo>/core/vault.key`, created 0600 on first seal and
+  listed in `.gitignore`), `src/store/provider_keys.rs`, `src/api/models.rs`, `src/providers/keys.rs`,
+  `src/providers/reach.rs` (public-address check).
+- Modify: `src/providers/mod.rs` (`resolve`: your key, then `layer.fallback_provider`), `src/gateway.rs`,
+  `src/agents/open.rs` (resolve with `ctx.caller`), `src/api.rs` (`/api/providers` lists your keys beside the
+  environment's), `src/harness.rs` (`ROUTES` rows for the new routes).
+- Test: `core/crates/shaked/tests/provider_keys.rs`; unit tests in `vault.rs`, `reach.rs`.
 
 **Interfaces:**
+- Consumes: A4 `fallback_provider`, `authorize`, `audit`, `Policy::private_model_urls`.
 - Produces:
 ```rust
-// auth/signing.rs: header names in one place (phase-3 rename may change them)
-pub const USER_HEADER: &str = "x-sculptured-user"; pub const ORG_HEADER: &str = "x-sculptured-org";
-pub const TS_HEADER: &str = "x-sculptured-ts";     pub const SIG_HEADER: &str = "x-sculptured-sig";
-pub const MAX_SKEW_SECS: i64 = 60;
-pub fn sign_v2(secret: &[u8], method: &str, path_and_query: &str, user: &str, org: &str, ts: i64) -> String; // hex HMAC-SHA256 of "METHOD\npath\nuser\norg\nts"
-pub fn verify_v2(secret: &[u8], method: &str, path_and_query: &str, user: &str, org: &str, ts: i64, sig: &str, now: i64) -> bool; // constant-time
-pub const V2_VECTOR: (&str, &str, &str, &str, &str, i64, &str);  // secret, method, path, user, org, ts, expected hex: shared with CopperTide `signing`
-// auth/identity.rs
-pub async fn principal_of_user(store: &Store, user: Uuid, org: Uuid) -> Result<Option<Principal>>; // live membership + seats; None if not a member / org deleted
-pub async fn orgs_of_user(store: &Store, user: Uuid) -> Result<Vec<OrgSummary>>;                    // SystemJob::ListOrgsOfUser
-pub struct OrgSummary { pub id: Uuid, pub slug: String, pub name: String, pub kind: String, pub role: OrgRole }
-// GET /api/me => {mode, user:{id,name,email}, org:OrgSummary, role, orgs:[OrgSummary] (hosted only), features:[..], switch_org_url?:String}
-```
-- The middleware strips any inbound `x-sculptured-*` in local mode. In hosted mode, the order is: a Bearer token
-  (Task 8), else a signature; neither gives 401. A bad signature or skew also gives 401. A signed user who is not a
-  member of the signed org gets 403 `{"error":"not a member of this org"}`.
-
-- [ ] **Step 1: Write the failing tests**
-
-```rust
-#[test] fn v2_vector_verifies_and_any_field_change_fails() { /* V2_VECTOR; flip org => false; ts+61 => false */ }
-#[test] fn hosted_signed_member_lists_only_their_orgs_runs() { /* AppFx::hosted with two orgs from fixtures */ }
-#[test] fn hosted_removed_member_is_refused_on_the_next_request() { /* DELETE membership; next call => 403 */ }
-#[test] fn hosted_deleted_org_is_refused() { /* orgs.deleted_at set => 403 */ }
-#[test] fn local_ignores_signature_headers() { /* forged x-sculptured-org header has no effect; still local org */ }
-#[test] fn a_viewer_gets_403_starting_a_run_and_404_for_other_orgs() { /* signed viewer of A: POST /api/runs 403; A's run id as B 404 */ }
-#[test] fn me_says_mode_and_org() { /* local: mode "local", org.kind "local", no orgs list */ }
-```
-
-- [ ] **Step 2: Run them and see them fail:** `cargo test -p shaked --test auth`
-- [ ] **Step 3: Implement** the interfaces above. `tests/support/app.rs` gains `AppSetup::hosted(fixtures)`.
-- [ ] **Step 4: Run the gate.**
-- [ ] **Step 5: Commit:** "A hosted shaked takes requests the gateway signed for a user and an org, and reads that user's role and teams on every request".
-
-### Task 8: API tokens: create, list, revoke, `shaked token create`, bearer auth, SDK `token=`
-
-**Files:**
-- Create: `core/crates/shaked/src/auth/tokens.rs`, `src/store/api_tokens.rs`, `src/api/tokens.rs`, `src/cli.rs`.
-- Modify: `src/main.rs` (subcommands go through `cli.rs`: `base`, `token create`, and later `store copy`),
-  `src/auth/middleware.rs`.
-- Modify: `sdk/python/src/shakedown/client.py` (`Shakedown(url, token=None)`, falling back to `SHAKEDOWN_TOKEN`,
-  sent as `Authorization: Bearer`; never in `repr` or errors); `sdk/python/tests/test_units.py`.
-- Test: `core/crates/shaked/tests/tokens.rs`.
-
-**Interfaces:**
-- Consumes: Task 4 `TokenScope`, Task 5 `SystemJob::ResolveToken`.
-- Produces:
-```rust
-pub struct Minted { pub id: Uuid, pub token: String, pub prefix: String }   // token shown once
-pub fn new_secret(prefix: &'static str) -> String;        // prefix + 64 hex (ring SystemRandom, 32 bytes)
-pub fn hash(token: &str) -> String;                       // sha256 hex
-pub async fn resolve_api_token(store: &Store, bearer: &str) -> Result<Option<Principal>>; // one fixed query on token_hash; refuses revoked/expired/disabled SA/removed member; bumps last_used_at at most once a minute
-impl Scoped<'_> { pub async fn create_api_token(&self, name: &str, scopes: &[TokenScope], team: Option<Uuid>, expires: Option<DateTime<Utc>>) -> Result<Minted>;
-                  pub async fn list_api_tokens(&self) -> Result<Vec<ApiTokenRow>>;  // no hash, no secret
-                  pub async fn revoke_api_token(&self, id: Uuid) -> Result<bool>; }
-// routes: GET/POST /api/tokens, DELETE /api/tokens/{id}; POST body {name, scopes, expires_days?}; answer {id, token, prefix} once
-// CLI: shaked token create --name <n> [--scope read|run|admin ...] [--expires-days N]  -> prints the token only (local owner)
-pub async fn audit(tx: &Tx, scope: &Scope, action: &str, target: (&str, &str), detail: Value) -> Result<()>;
-// auth::audit: one identity.audit_log row (actor from the scope's principal; system writes: actor_kind "system").
-// Written for token.created / token.revoked here, provider_key.added / .replaced / .deleted in Task 11. Never secrets.
-```
-
-- [ ] **Step 1: Write the failing tests**
-
-```rust
-#[test] fn a_token_is_shown_once_and_stored_hashed() { /* list has prefix "sd_xxxxx", no "token"; db token_hash == hash(token) */ }
-#[test] fn bearer_tokens_act_as_their_holder_capped_by_scope() {
-    // hosted: read token GET /api/runs 200, POST /api/runs 403; run token POST 2xx; revoked => 401; expired => 401
-}
-#[test] fn removing_a_member_kills_their_tokens() { /* DELETE membership => row gone (FK cascade) => 401 */ }
-#[test] fn creating_and_revoking_a_token_is_audited_without_the_secret() { /* 2 audit_log rows; detail has prefix, not token */ }
-#[test] fn a_viewer_may_mint_read_tokens_only() { /* scopes ["run"] => 403 */ }
-#[test] fn cli_token_create_prints_a_working_token() { /* run the built binary on a fresh db; GET /api/me with it => 200 */ }
-```
-```python
-def test_token_is_sent_and_never_shown(monkeypatch): ...  # header "Bearer sd_x"; "sd_x" not in repr(client) nor str(error)
-```
-
-- [ ] **Step 2: Run them and see them fail:** `cargo test -p shaked --test tokens`; `uv run pytest -q -k token` in `sdk/python`
-- [ ] **Step 3: Implement** the interfaces above.
-- [ ] **Step 4: Run the gate**, plus the SDK tests.
-- [ ] **Step 5: Commit:** "API tokens: sd_ tokens shown once and stored hashed, capped by read, run or admin, made in the API or with shaked token create, and taken by the SDK".
-
-### Task 9: Run, agent and worker tokens for every agent kind; proxy tickets expire; no tokenless calls
-
-**Files:**
-- Create: `core/crates/shaked/src/auth/run_tokens.rs`, `src/store/run_tokens.rs`.
-- Modify: `src/exec/roster.rs` (`tokens` becomes `HashMap<String, Held { hash, expires: Instant, revoked }>`;
-  `token_ok` is false for an agent never given a token); `src/exec.rs` (mint at branch start, revoke at end);
-  `src/window.rs`; `src/agents/mod.rs` (`Mcp` gains `token`); `src/agents/claude.rs` (0600 mcp-config file with
-  `headers`); `src/agents/codex.rs` (`bearer_token_env_var`); `src/agents/open.rs` (Authorization on gateway
-  calls, built-in and Bedrock); `src/agents/http.rs` (the existing `token`, new `gateway_url`); `src/external.rs`
-  (`Endpoints.token`, `Started.run_token`); `src/driver.rs` (`SHAKEDOWN_RUN_TOKEN` and one `SHAKEDOWN_AGENT_TOKEN_<AGENT>`
-  for each agent); `src/proxy/tickets.rs`, `src/proxy/env.rs`; `src/auth/middleware.rs` (`sdr_` and `sdw_` on
-  run-internal `/api` routes); `src/mcp.rs`, `src/gateway.rs`.
-- Modify: `docs/agents.md`, `docs/protocol.md` (`gateway_url` in the HTTP run request; tokens in the register answer).
-- Test: `core/crates/shaked/tests/run_tokens.rs`; `tests/cli.rs` (+); `tests/proxy.rs` (+).
-
-**Interfaces:**
-- Consumes: Task 8 `new_secret`, `hash`; Task 4 `RunTokenKind`, `can`.
-- Produces:
-```rust
-impl Roster {
-    pub fn issue_token(&self, agent: &str, ttl: Duration) -> String;   // "sda_…"; replaces the uuid token
-    pub fn token_of(&self, agent: &str) -> Option<String>;             // plain, in memory only, for handing to the agent
-    pub fn revoke_token(&self, agent: &str); pub fn revoke_all(&self);
-    pub fn extend(&self, by: Duration);                                // called by FlowControl on resume with the paused time
-    pub fn token_ok(&self, agent: &str, authorization: Option<&str>) -> bool;  // false: none issued, revoked, expired, mismatch
-}
-impl Scoped<'_> { pub async fn mint_run_token(&self, run: &str, branch: &str, kind: RunTokenKind, agent: Option<&str>,
-                      sandbox: Option<Uuid>, expires: DateTime<Utc>) -> Result<String>;   // stores hash only
-                  pub async fn revoke_run_tokens(&self, branch: &str, agent: Option<&str>) -> Result<u64>; }
-pub async fn resolve_run_token(store: &Store, bearer: &str) -> Result<Option<Principal>>;   // sdr_/sdw_ via ResolveToken
-impl Rules { pub fn token_ttl(&self, branch_max: Duration) -> Duration; }   // the run's own limit, else quota branch_seconds_max
-impl Tickets { pub fn issue(&self, branch: &str, agent: Option<&str>, expires: Instant) -> String;
-               pub fn revoke(&self, branch: &str, agent: Option<&str>); pub fn extend(&self, branch: &str, by: Duration); }
-pub const AGENT_TOKEN_ENV: &str = "SHAKEDOWN_AGENT_TOKEN";
-```
-- Carriage (hosted spec M1 table):
-
-| Kind | MCP | Model gateway |
-|---|---|---|
-| built-in, Bedrock | `Authorization: Bearer` (in process) | same |
-| Claude Code | the `headers` of its `--mcp-config` file | — (M2) |
-| Codex | `-c mcp_servers.<s>.bearer_token_env_var="SHAKEDOWN_AGENT_TOKEN"` | — (M2) |
-| HTTP | `token` in the run request | `gateway_url` in the run request |
-| external, SDK, drivers | `token` in each agent's register answer and `Started` | same |
-
-- [ ] **Step 1: Write the failing tests**
-
-```rust
-#[test] fn tokenless_mcp_and_gateway_calls_get_401_for_every_kind() {
-    for kind in ["open", "bedrock", "claude-code", "codex", "http", "external", "driver"] {
-        // start a live branch with one agent of `kind` (fake binaries / fake_llm / toy driver)
-        assert_eq!(post(mcp_url, no_auth).status(), 401, "{kind} mcp");
-        assert_eq!(post(gateway_url, no_auth).status(), 401, "{kind} gateway");
-        assert_eq!(post(mcp_url, bearer(&token_of(kind))).status(), 200, "{kind} with token");
-    }
-}
-#[test] fn claude_gets_its_token_in_a_private_config_file() {
-    // args contain "--mcp-config" <path>; mode 0o600; json mcpServers.<s>.headers.Authorization == "Bearer sda_…"; file gone after the run
-}
-#[test] fn codex_reads_its_token_from_the_env() { /* arg bearer_token_env_var="SHAKEDOWN_AGENT_TOKEN"; env has it */ }
-#[test] fn tokens_and_tickets_die_with_the_agent_and_the_branch() { /* after end: 401; proxy 407 */ }
-#[test] fn a_long_pause_does_not_expire_agent_tokens() { /* ttl 200ms, pause 400ms, resume => 200 */ }
-#[test] fn an_expired_ticket_is_refused_by_the_proxy() {}
-#[test] fn no_token_reaches_events_or_argv() {
-    // after a run of each kind: no event payload, recorded stderr, or Command argv contains "sd_" / "sdr_" / "sda_"
-}
-#[test] fn run_tokens_reach_only_their_branch() { /* hosted: sdr_ of b1 POST /api/branches/b2/finish => 404 */ }
-#[test] fn a_worker_token_needs_its_sandbox() { /* mint kind Worker with a 'fake' sandboxes row; resolves to RunToken{kind: Worker} */ }
-```
-
-- [ ] **Step 2: Run them and see them fail:** `cargo test -p shaked --test run_tokens --test cli --test proxy`
-- [ ] **Step 3: Implement** the interfaces above. Change the tests that called MCP or the gateway without a token
-  to use `token_of`. Don't loosen their assertions.
-- [ ] **Step 4: Run the gate.**
-- [ ] **Step 5: Commit:** "Every agent carries a token that dies with it: no MCP or model gateway call gets in without one, and proxy tickets expire with it".
-
-### Task 10: Quotas and usage: presets, metering, checks (⚑ D17)
-
-**Files:**
-- Create: `docs/quotas.toml` (plans `local` and `beta`), `core/crates/shaked/src/quotas.rs`, `src/store/usage.rs`.
-- Modify: `src/gateway.rs` (meter `model_usd_micros` and `model_tokens` for each recorded call), `src/api.rs`
-  (`create_run` meters `runs` and checks it), `src/budget.rs` (monthly spend check beside the per-run one).
-- Test: `core/crates/shaked/tests/quotas.rs`; unit test for parsing `docs/quotas.toml`.
-
-**Interfaces:**
-- Produces:
-```rust
-pub enum Meter { ConcurrentSandboxes, SandboxSeconds, BranchSecondsMax, SavesBytes, ModelUsdMicros, TrialUsdMicros, Runs, Seats, ModelTokens }
-pub struct Limit { pub value: u64, pub hard: bool, pub period: Period }      // Period::Month | Period::None
-pub struct Presets(BTreeMap<String, BTreeMap<Meter, Limit>>);
-impl Presets { pub fn built_in() -> &'static Presets; pub fn load(path: Option<&Path>) -> Result<Presets>; } // SHAKEDOWN_QUOTAS overrides
-pub enum Verdict { Ok, Warn(String), Refuse(String) }                        // message names the meter and the limit
-impl Scoped<'_> {
-    pub async fn limit(&self, m: Meter) -> Result<Option<Limit>>;            // quotas row, else the org plan's preset; None = unlimited
-    pub async fn meter(&self, m: Meter, qty: i64, source: &str, key: &str, run: Option<&str>, branch: Option<&str>) -> Result<bool>; // idempotent on key; upserts usage_monthly in the same tx; false = duplicate
-    pub async fn check(&self, m: Meter, adding: u64) -> Result<Verdict>;     // reads usage_monthly / live rows
-    pub async fn usage_by_month(&self) -> Result<Vec<(NaiveDate, Meter, i64)>>; // can(Usage) checked by the route
-}
-// GET /api/usage/org => this org's monthly totals (owner/admin/billing; member gets own runs' cost)
-```
-- `docs/quotas.toml`, `beta`: `concurrent_sandboxes 2`, `sandbox_seconds 180000/month`, `branch_seconds_max
-  3600`, `saves_bytes 21474836480`, `trial_usd_micros 0` (owner sets it). `model_usd_micros` and `seats` are
-  absent, which means unlimited in `shaked`. `local`: `branch_seconds_max 86400` and nothing else.
-
-- [ ] **Step 1: Write the failing tests**
-
-```rust
-#[test] fn built_in_presets_parse_and_beta_has_the_s4_numbers() {}
-#[test] fn metering_is_idempotent_and_totals_monthly() { /* same key twice => one usage row; usage_monthly == qty */ }
-#[test] fn an_override_row_beats_the_preset() {}
-#[test] fn over_a_hard_runs_quota_a_run_is_refused_naming_the_quota() { /* POST /api/runs => 429, error contains "runs" */ }
-#[test] fn a_soft_quota_warns_and_lets_the_run_start() {}
-#[test] fn every_recorded_model_call_is_metered_once() { /* fake_llm call through gateway => 1 model_usd_micros row with key gateway:<branch>:<seq> */ }
-#[test] fn local_runs_are_unlimited_but_metered() {}
-```
-
-- [ ] **Step 2: Run them and see them fail:** `cargo test -p shaked --test quotas`
-- [ ] **Step 3: Implement** the interfaces above. The idempotency keys are `gateway:<branch>:<seq>` and `api:run:<run_id>`.
-- [ ] **Step 4: Run the gate.**
-- [ ] **Step 5: Commit:** "Each org's usage is metered once per call and per run, summed by month, and checked against its plan's quotas from docs/quotas.toml".
-
-### Task 11: Per-org provider keys: vault, API, Test, lookup, trial credit (⚑ D20)
-
-**Files:**
-- Create: `core/crates/shaked/src/vault.rs` (a port of Cloud `vault.rs`: same format and errors, env
-  `SHAKEDOWN_VAULT_KEY` / `SHAKEDOWN_VAULT_KEY_FILE`; local default `<arena>/core/vault.key`, created 0600 on first
-  seal and added to `.gitignore`; hosted refuses to start without it).
-- Create: `src/store/provider_keys.rs`, `src/api/models.rs`, `src/providers/org_keys.rs`, `src/providers/reach.rs` (public-address check).
-- Modify: `src/providers/mod.rs` (`resolve` consults the org's keys first), `src/gateway.rs` and `src/agents/open.rs`
-  (resolve with `ctx.scope`), `src/api.rs` (`/api/providers` lists org keys beside the env ones).
-- Test: `core/crates/shaked/tests/provider_keys.rs`; unit tests in `vault.rs` and `reach.rs`.
-
-**Interfaces:**
-- Consumes: Task 10 `Scoped::meter`, `check`, `Meter::TrialUsdMicros`; Task 5 `Scope`.
-- Produces:
-```rust
-pub struct Vault; impl Vault { pub fn from_hex(h: &str) -> Result<Vault, String>; pub fn from_env(mode: Mode) -> Result<Option<Vault>, String>;
+pub struct Vault; impl Vault { pub fn from_hex(h: &str) -> Result<Vault, String>; pub fn from_env() -> Result<Vault, String>;
     pub fn seal(&self, context: &str, plain: &[u8]) -> Vec<u8>; pub fn open(&self, context: &str, sealed: &[u8]) -> Result<Zeroed, String>; }
-pub fn key_context(org: Uuid, name: &str) -> String;          // "provider_key:<org>:<name>"
+pub fn key_context(id: Uuid) -> String;                    // "provider_key:<id>:key"
 pub enum KeyKind { Anthropic, OpenAi, OpenRouter, Bedrock, Custom }
 pub struct NewKey<'a> { pub name: &'a str, pub kind: KeyKind, pub secret: &'a str, pub base_url: Option<&'a str>,
-                        pub model: Option<&'a str>, pub prices: Option<&'a Value>, pub team: Option<Uuid> }
+                        pub model: Option<&'a str>, pub prices: Option<&'a serde_json::Value> }
 pub struct KeyRow { pub id: Uuid, pub name: String, pub kind: KeyKind, pub base_url: Option<String>, pub key_last4: String,
-                    pub checked_ok: Option<bool>, pub checked_at: Option<DateTime<Utc>>, pub created_at: DateTime<Utc> } // never the secret
-impl Scoped<'_> { pub async fn add_key(&self, v: &Vault, k: NewKey<'_>) -> Result<KeyRow>;
+                    pub checked_ok: Option<bool>, pub checked_at: Option<DateTime<Utc>>, pub created_at: DateTime<Utc> }
+impl Scoped<'_> { pub async fn add_key(&self, v: &Vault, k: NewKey<'_>) -> Result<KeyRow>;   // name clash => Err "a key named …"
                   pub async fn replace_key_secret(&self, v: &Vault, id: Uuid, secret: &str) -> Result<bool>;
                   pub async fn list_keys(&self) -> Result<Vec<KeyRow>>; pub async fn delete_key(&self, id: Uuid) -> Result<bool>;
-                  pub async fn test_key(&self, v: &Vault, http: &reqwest::Client, id: Uuid) -> Result<KeyRow>; } // one-token call; stores checked_ok/detail (provider message redacted)
-pub enum KeySource { Org(Uuid), Env, Trial }
-pub async fn provider_for(state: &AppState, scope: &Scope, id: Option<&str>) -> Result<(Provider, KeySource), String>;
-// order: org key (id "anthropic"/"openai"/"openrouter"/"bedrock:<region>"/"custom:<name>") -> Env (local only) -> Trial (hosted, env key, trial check Ok)
-pub fn public_https(url: &Url) -> Result<(), String>;        // hosted custom URLs: https + every resolved IP public (no private, loopback, link-local, 169.254.169.254, fc00::/7)
+                  pub async fn test_key(&self, v: &Vault, http: &reqwest::Client, id: Uuid) -> Result<KeyRow>; }
+pub fn reachable(url: &Url, policy: &Policy) -> Result<(), String>;   // private allowed only when policy.private_model_urls
 // routes: GET/POST /api/models/keys, POST /api/models/keys/{id}/secret, POST /api/models/keys/{id}/test, DELETE /api/models/keys/{id}
 ```
-- Bedrock's secret is JSON `{access_key_id, secret_access_key, session_token?}`; `base_url` holds the region.
-  `custom:<name>` takes over from `SHAKEDOWN_LOCAL_MODELS`, which is still read in local mode. Trial calls meter
-  `trial_usd_micros`, and the call is refused with 402 once the trial is spent.
+- `add_key` takes `pg_advisory_xact_lock(hashtext('provider_keys:name:' || $1))`, then checks the name, in one
+  transaction. The id is generated in Rust before sealing, so the context names it. Bedrock's secret is JSON
+  `{access_key_id, secret_access_key, session_token?}` and `base_url` holds the region. `custom:<name>` takes over
+  from `SHAKEDOWN_LOCAL_MODELS`, which is still read. `audit` on add, replace and delete.
 
 - [ ] **Step 1: Write the failing tests**
 
 ```rust
-#[test] fn a_sealed_key_opens_only_for_its_org_and_name() { /* context of org B or name "y" => Err; bytes don't contain the secret */ }
-#[test] fn keys_are_write_only() { /* POST then GET /api/models/keys: no "secret", "sealed_key"; key_last4 == last 4 */ }
-#[test] fn the_org_key_wins_over_the_env_locally_and_env_is_never_used_hosted() {
-    // local: org anthropic key -> KeySource::Org; deleted -> Env; hosted no key, trial 0 -> Err naming Settings → Models
+#[test] fn a_sealed_key_opens_only_for_its_row() { /* context of another id => Err; sealed bytes don't contain the secret */ }
+#[tokio::test] async fn keys_are_write_only() { /* POST then GET /api/models/keys: no "secret", no "sealed_key"; key_last4 == last 4 */ }
+#[tokio::test] async fn two_keys_cannot_share_a_name() { /* second POST same name => 409, names it */ }
+#[tokio::test] async fn your_key_wins_over_the_environment() { /* key => KeySource::Own; deleted => KeySource::Environment */ }
+#[tokio::test] async fn test_makes_a_one_token_call_and_records_the_outcome() { /* FakeLlm sees max_tokens 1; bad key => checked_ok false, detail has no key */ }
+#[tokio::test] async fn private_urls_are_fine_here_and_refused_when_the_policy_says_so() {
+    // LocalLayer: http://127.0.0.1:8000 ok; SpyLayer policy{private_model_urls:false}: http://… refused,
+    // https://10.0.0.5 refused, https://169.254.169.254 refused, https://[fc00::1] refused
 }
-#[test] fn trial_credit_is_metered_and_runs_out() { /* hosted, trial 10 micros, fake_llm cost 6 => 2nd call 402 */ }
-#[test] fn test_makes_a_one_token_call_and_records_the_outcome() { /* fake_llm sees max_tokens 1; checked_ok true; bad key => false, detail without key */ }
-#[test] fn custom_urls_local_ok_hosted_private_refused() {
-    // local http://127.0.0.1:8000 ok; hosted http://… refused; hosted https://10.0.0.5 refused; https://169.254.169.254 refused
-}
-#[test] fn org_b_cannot_list_use_or_test_org_a_keys() { /* 404s; an agent of org B naming custom:<A's name> => unknown provider */ }
-#[test] fn a_viewer_cannot_add_keys_and_a_member_cannot_add_org_wide_ones() { /* matrix: create org-wide keys owner/admin only */ }
+#[tokio::test] async fn a_read_token_cannot_add_keys() {}
 ```
 
-- [ ] **Step 2: Run them and see them fail:** `cargo test -p shaked --test provider_keys` and `cargo test -p shaked vault:: reach::`
+- [ ] **Step 2: Run them and see them fail:** `cargo test -p shaked --features harness --test provider_keys` and `cargo test -p shaked vault:: reach::`
 - [ ] **Step 3: Implement** the interfaces above.
 - [ ] **Step 4: Run the gate.**
-- [ ] **Step 5: Commit:** "Each org keeps its own model keys and OpenAI-compatible servers, sealed and write-only, with a Test call, and a hosted trial on our keys is metered".
+- [ ] **Step 5: Commit:** "You keep your own model keys and OpenAI-compatible servers in shaked, sealed and write-only, with a Test call, and agents use them before anything from the environment".
 
-### Task 12: Object storage layer (⚑ D19)
+### Task A6: Object storage layer
+
+As the old Task 12, with three changes: the key prefix comes from `layer.object_prefix(caller)` (`local` with
+`LocalLayer`), `record_save`'s retention is 30 days (D19) unless the caller's layer says otherwise later (no hook in
+M1), and `copy`'s repoint runs under `system_tx(SystemJob::StoreCopy)`.
 
 **Files:**
 - Create: `core/crates/shaked/src/objects/{mod.rs, url.rs, keys.rs, copy.rs}`, `src/store/saves.rs`.
 - Modify: `core/crates/shaked/Cargo.toml` (`object_store = { version = "0.12", default-features = false, features
-  = ["aws", "fs"] }`: check for the newest 0.x at task start and pin it); `src/app.rs` (`AppState.objects:
-  Option<Arc<ObjectStores>>`); `src/main.rs` (hosted startup probe); `src/cli.rs` (`store copy`).
-- Test: `core/crates/shaked/tests/objects.rs` (memory, file, and `live_minio_*`); unit tests in `url.rs` and `keys.rs`.
+  = ["aws", "fs"] }`; check for the newest 0.x at task start and pin it), `src/app.rs` (`AppState.objects:
+  Option<Arc<ObjectStores>>`), `src/serve.rs` (probe the write store at start when `policy.serves_others`),
+  `src/cli.rs` (`store copy`).
+- Test: `core/crates/shaked/tests/objects.rs` (memory, file, and `live_minio_*`); unit tests in `url.rs`, `keys.rs`.
 
 **Interfaces:**
-- Consumes: Task 5 `saves` table (`store`, `object_key`, `sha256`, `bytes`, `state`, `expires_at`);
-  `SystemJob::StoreCopy`.
-- Produces:
-```rust
-pub struct StoreName(String);                       // ^[a-z][a-z0-9-]{0,31}$
-pub struct ObjectKey(String);                       // "<org_uuid>/<kind>/…", no "..", no leading "/"
-pub struct ObjectRef { pub store: StoreName, pub key: ObjectKey }   // what rows keep
-pub fn parse_spec(spec: &str, env: impl Fn(&str) -> Option<String>) -> Result<Vec<(StoreName, Arc<dyn ObjectStore>)>, String>;
-// SHAKEDOWN_OBJECT_STORE = "name=url,name=url" or one bare url (name "default"); the first is the write store unless
-// SHAKEDOWN_OBJECT_STORE_WRITE names another. URLs:
-//   r2://<bucket>?account=<id>[&prefix=p]       -> AmazonS3 at https://<id>.r2.cloudflarestorage.com, region "auto"
-//   s3://<bucket>?region=<r>[&endpoint=<u>][&allow_http=true][&prefix=p]
-//   file:///abs/dir      memory://
-// Credentials only from env: SHAKEDOWN_OBJECT_STORE_<NAME>_ACCESS_KEY_ID / _SECRET_ACCESS_KEY, else AWS_* ; a URL with userinfo or a
-// secret-looking query key is refused (URLs reach logs).
-pub struct ObjectStores { write: StoreName, all: BTreeMap<StoreName, Arc<dyn ObjectStore>> }
-impl ObjectStores {
-    pub fn from_env() -> Result<Option<ObjectStores>, String>;
-    pub async fn put(&self, key: &ObjectKey, body: impl Stream<Item = io::Result<Bytes>>) -> Result<Stored>; // to the write store, multipart, sha256 on the fly
-    pub async fn get(&self, r: &ObjectRef) -> Result<BoxStream<'static, Result<Bytes>>>;                  // any registered store
-    pub async fn delete_prefix(&self, store: &StoreName, prefix: &str) -> Result<u64>;
-    pub async fn probe(&self) -> Result<()>;                         // put/get/delete "_probe/<uuid>" on the write store
-}
-pub struct Stored { pub r: ObjectRef, pub bytes: u64, pub sha256: String }
-pub struct CopyReport { pub copied: u64, pub skipped: u64, pub failed: Vec<(String, String)>, pub repointed: u64 }
-pub async fn copy(stores: &ObjectStores, from: &StoreName, to: &StoreName, prefix: Option<&str>, repoint: Option<&Store>) -> Result<CopyReport>;
-// For each object: skip if the destination exists with the same size and sha256 (recorded in saves.sha256, else
-// recomputed). Else stream-copy, re-read the destination, compare sha256. With repoint, UPDATE saves SET store=to
-// only for verified keys, under system_tx(StoreCopy).
-pub mod keys { pub fn save(org: Uuid, integration: &str, save_id: &str) -> ObjectKey;   // <org>/saves/<integration>/<save_id>/
-               pub fn transcript(org: Uuid, run: &str, branch: &str, agent: &str) -> ObjectKey; // <org>/transcripts/<run>/<branch>/<agent>.jsonl
-               pub fn export(org: Uuid, id: &str) -> ObjectKey; }                     // <org>/exports/<id>/
-impl Scoped<'_> { pub async fn record_save(&self, run: &str, branch: &str, integration: &str, save_id: &str, seq: i64,
-                      s: &Stored, retention: Duration) -> Result<Uuid>; }            // state ready, expires_at = now + org retention_days
-// CLI: shaked store copy --from <name> --to <name> [--prefix <org>/] [--repoint]   (exit 1 if any failed)
-```
-- What moves in M1: nothing (see Calls made). M2's worker is the first caller of `put` and `record_save`.
+- Consumes: A3 `saves` table (`store`, `object_key`, `sha256`, `bytes`, `state`, `expires_at`); A4 `object_prefix`.
+- Produces: the old Task 12 interfaces, with `keys::save(prefix: &str, integration: &str, save_id: &str) ->
+  ObjectKey` (`<prefix>/saves/<integration>/<save_id>/`), `keys::transcript(prefix, run, branch, agent)`,
+  `keys::export(prefix, id)`; `ObjectKey` refuses `..`, a leading `/` and an empty prefix.
 
-- [ ] **Step 1: Write the failing tests**
-
-```rust
-#[test] fn urls_parse_to_the_right_backends() {
-    // r2://b?account=acc => endpoint "https://acc.r2.cloudflarestorage.com", region "auto"; s3://b?region=eu-west-1;
-    // "s3://AKIA:secret@b" => Err; "s3://b?secret_access_key=x" => Err; "ftp://x" => Err; two names, WRITE picks
-}
-#[test] fn keys_stay_under_their_org() { /* "../" or absolute segments => Err; save(org,..) starts with "<org>/saves/" */ }
-#[test] fn put_get_roundtrip_with_checksum_on_memory_and_file() {}
-#[test] fn reads_come_from_the_store_a_row_names_after_the_write_store_changes() {
-    // put on "a"; restart with write "b" (a still registered); get(ObjectRef{a,key}) ok
-}
-#[test] fn copy_verifies_and_repoints() { /* memory a -> file b; report.copied==n; saves.store=="b" for all */ }
-#[test] fn copy_reruns_idempotently_and_never_repoints_a_bad_object() {
-    // corrupt one dest object between runs (wrong bytes): 2nd run skipped==n-1, failed==[that key], its row still "a"
-}
-#[test] fn hosted_start_probes_the_write_store() { /* unreachable store => start fails naming the store, not the URL's credentials */ }
-#[test] #[ignore] fn live_minio_s3_put_get_copy() {
-    // docker run --rm -d --name shaked-minio-<uuid> minio/minio server /data; s3://bucket?endpoint=http://127.0.0.1:<port>&region=us-east-1&allow_http=true
-    // roundtrip a 12 MiB multipart object; copy minio -> file and verify; container removed in Drop
-}
-```
-
-- [ ] **Step 2: Run them and see them fail:** `cargo test -p shaked --test objects`, then `cargo test -p shaked --test objects -- --ignored live_minio`
-- [ ] **Step 3: Implement** the interfaces above.
-- [ ] **Step 4: Run the gate**, plus the live test once.
+- [ ] **Step 1: Write the failing tests:** the old Task 12 list (`urls_parse_to_the_right_backends`,
+  `put_get_roundtrip_with_checksum_on_memory_and_file`,
+  `reads_come_from_the_store_a_row_names_after_the_write_store_changes`, `copy_verifies_and_repoints`,
+  `copy_reruns_idempotently_and_never_repoints_a_bad_object`, `a_start_that_serves_others_probes_the_write_store`,
+  `#[ignore] live_minio_s3_put_get_copy`), with `keys_stay_under_their_prefix`
+  (`save("p", …)` starts with `"p/saves/"`; `"../"` and absolute segments are `Err`).
+- [ ] **Step 2: Run them and see them fail:** `cargo test -p shaked --test objects`
+- [ ] **Step 3: Implement.** Nothing moves in M1: saves stay on the parts' disk; M2's worker is the first writer.
+- [ ] **Step 4: Run the gate**, plus `cargo test -p shaked --test objects -- --ignored live_minio` once.
 - [ ] **Step 5: Commit:** "Saves, transcripts and exports have a storage layer over R2, S3, files or memory, switchable by name, with a verified shaked store copy".
 
-### Task 13: Tenant router test: org B gets 404 for org A's ids on every route
-
-**Files:**
-- Create: `core/crates/shaked/tests/tenants.rs`, `tests/fixtures/orgs.toml` (two orgs, a team each, one user per
-  role; extends Task 5's file).
-- Modify: route handlers found to leak. Each fix is in the handler and comes with its row.
-
-**Interfaces:**
-- Consumes: Tasks 6–12 routes; `AppSetup::hosted`; Task 7 `sign_v2`.
-
-- [ ] **Step 1: Write the failing test**
-
-```rust
-const ROUTES: &[(&str, &str)] = &[ ("GET", "/api/branches/{branch}"), ("POST", "/api/branches/{branch}/fork"), /* … every route … */ ];
-#[test] fn the_table_names_every_route() {
-    // scan src/api.rs, src/api/*.rs, src/mcp.rs, src/gateway.rs for `.route("…"` strings (incl. method chains);
-    // assert each (method, path) is in ROUTES, and each ROUTES entry exists
-}
-#[test] fn org_b_gets_404_for_org_a_ids_on_every_route() {
-    // org A (signed owner) makes a run, branch, fork, suite, experiment, review, connection, key, token, world row, save row
-    for (m, p) in ROUTES {
-        let url = fill(p, &a_ids);                    // org A's ids
-        let r = call_signed(m, &url, B_OWNER).await;  // org B's owner, valid JSON bodies from body_for(p)
-        assert!(matches!(r.status().as_u16(), 404 | 405), "{m} {p} => {}", r.status());  // 405 only for org-free routes listed in ORG_FREE
-        assert!(!r.text().await.contains(&a_ids.run), "{m} {p} leaks an id");
-    }
-}
-#[test] fn org_b_lists_show_none_of_org_a() { /* GET list routes with B: no A ids in the bodies */ }
-#[test] fn org_b_tokens_cannot_reach_org_a() { /* same loop with an sd_ token of B, and an sdr_ run token of B's branch */ }
-```
-
-- [ ] **Step 2: Run it and see it fail:** `cargo test -p shaked --test tenants`. Every route that answers anything
-  but 404 is a bug to fix.
-- [ ] **Step 3: Fix** each leaking handler: the resource lookup goes through `Scoped` and `can()`.
-- [ ] **Step 4: Run the gate.**
-- [ ] **Step 5: Commit:** "Another org's ids are not found on any route, under a signature, an API token or a run token".
-
-### Task 14: UI: API tokens, Models, org switcher (hosted, dark); docs (⚑ D18)
+### Task A7: UI: API tokens, Models, the account menu; docs
 
 **Files:**
 - Create: `ui/src/api/{me.ts, tokens.ts, models.ts}`, `ui/src/features/settings/{SettingsPage.tsx, TokensPage.tsx,
-  ModelsPage.tsx, settings.test.tsx}`, `ui/src/app/OrgSwitcher.tsx`, `ui/src/app/OrgSwitcher.test.tsx`.
-- Modify: `ui/src/App.tsx` (routes `/settings/tokens` and `/settings/models`), `ui/src/app/TopBar.tsx` (the
-  switcher, and a Settings entry), `ui/src/app/palette.ts` (palette entries).
-- Modify: `README.md` "Old names" (rows: `SHAKEDOWN_PORT` → `SHAKEDOWN_BIND`; `SHAKEDOWN_AGENT_BASE` →
-  `SHAKEDOWN_PUBLIC_URL`; `SHAKEDOWN_LOCAL_MODELS` → custom model servers in Settings → Models, still read locally;
-  tables in `public` → schema `shakedown`, moved on first start), `docs/reference.md` (settings, `/api/me`,
-  `/api/tokens`, `/api/models/keys`, `/api/usage/org`, `shaked token create`, `shaked store copy`,
-  `SHAKEDOWN_OBJECT_STORE*`, `SHAKEDOWN_VAULT_KEY*`, `SHAKEDOWN_MODE`), `docs/sdk.md` (`token=`), `docs/agents.md`
-  (an agent's token for each kind).
+  ModelsPage.tsx, settings.test.tsx}`, `ui/src/app/AccountMenu.tsx`, `ui/src/app/AccountMenu.test.tsx`.
+- Modify: `ui/src/App.tsx` (routes `/settings/tokens`, `/settings/models`), `ui/src/app/TopBar.tsx` (Settings entry;
+  `AccountMenu` when `/api/me` has `account`), `ui/src/app/palette.ts`.
+- Modify docs: `README.md` "Old names" (`SHAKEDOWN_PORT` → `SHAKEDOWN_BIND`; `SHAKEDOWN_AGENT_BASE` →
+  `SHAKEDOWN_PUBLIC_URL`; `SHAKEDOWN_LOCAL_MODELS` → custom model servers in Settings → Models, still read; tables
+  in `public` → schema `shakedown`, moved on first start), `docs/reference.md` (`/api/me`, `/api/tokens`,
+  `/api/models/keys`, `shaked token create`, `shaked store copy`, `SHAKEDOWN_BIND`, `SHAKEDOWN_PUBLIC_URL`,
+  `SHAKEDOWN_ALLOWED_HOSTS`, `SHAKEDOWN_OBJECT_STORE*`, `SHAKEDOWN_VAULT_KEY*`, `SHAKEDOWN_DB`), `docs/sdk.md`
+  (`token=`), `docs/agents.md` (each kind's token), and a short `docs/embedding.md` (the `Layer` hooks, what
+  `LocalLayer` does, `shaked::serve::run`).
 
 **Interfaces:**
-- Consumes: `GET /api/me` (Task 7), `/api/tokens` (Task 8), `/api/models/keys` (Task 11).
-- Produces: `fetchMe(): Promise<Me>` with `Me = { mode: 'local' | 'hosted'; org: OrgSummary; role: OrgRole; orgs?:
-  OrgSummary[]; features: string[]; switch_org_url?: string }`. The switcher renders only when `mode === 'hosted' &&
-  features.includes('org_switcher') && (orgs?.length ?? 0) > 1`. It lists the personal org first, and choosing an
-  org POSTs `{org_id}` to `switch_org_url` (the gateway owns the session; Cloud's plan adds that route).
+- Consumes: `GET /api/me` (A4), `/api/tokens` (A3), `/api/models/keys` (A5).
+- Produces: `fetchMe(): Promise<Me>` with `Me = { mode: string; user: { name: string }; features: string[];
+  account?: { label: string; items: { label: string; current?: boolean; post?: string; body?: unknown }[] } }`.
+  `AccountMenu` renders `account.label` and its items; an item with `post` POSTs `body` there (credentials
+  included) and reloads. It knows nothing else: the hosted layer fills it (B4).
 
 - [ ] **Step 1: Write the failing tests**
 
 ```tsx
-it('shows a new token once, then only its prefix', async () => { /* after create: token text visible + copy; after reload: "sd_xxxxx…" only */ });
-it('offers only read scope to a viewer', async () => {});
-it('adds a custom server with a URL and runs Test', async () => { /* POST body {kind:'custom', base_url}; shows "Works" / provider detail */ });
-it('never renders a key secret after saving', async () => { /* the secret input is cleared; list shows "…last4" */ });
-it('hides the org switcher locally and without the flag', async () => {});
-it('lists the personal org first and switches through switch_org_url', async () => {});
+it('shows a new token once, then only its prefix', async () => {});
+it('offers read, run and admin scopes and names what each allows', async () => {});
+it('adds a custom server with a URL and runs Test', async () => { /* POST body {kind:'custom', base_url}; shows "Works" or the detail */ });
+it('never renders a key secret after saving', async () => { /* input cleared; list shows "…last4" */ });
+it('shows no account menu when /api/me has no account', async () => {});
+it('posts the chosen item of the account menu and reloads', async () => {});
 ```
 
-- [ ] **Step 2: Run them and see them fail:** `cd ui && npx vitest run --maxWorkers=1 src/features/settings src/app/OrgSwitcher.test.tsx`
-- [ ] **Step 3: Implement** the pages with existing components (`PageHeader`, `PageBody`, forms in the
-  ConnectPage style). Use the plain copy above; the UI follows simplicity first.
-- [ ] **Step 4: Run** `npx tsc -b && npx vitest run --maxWorkers=1`, and check that every name in the docs matches
-  the code: `grep -rn "SHAKEDOWN_BIND\|SHAKEDOWN_OBJECT_STORE" docs README.md`.
-- [ ] **Step 5: Commit:** "Settings has API tokens and Models pages, a hosted org switcher waits behind its flag, and the docs list the new settings and the old names they replace".
+- [ ] **Step 2: Run them and see them fail:** `cd ui && npx vitest run --maxWorkers=1 src/features/settings src/app/AccountMenu.test.tsx`
+- [ ] **Step 3: Implement** with existing components (`PageHeader`, `PageBody`, ConnectPage-style forms); plain
+  copy, simplicity first.
+- [ ] **Step 4: Run** `npx tsc -b && npx vitest run --maxWorkers=1`, the `no_orgs` test, and
+  `grep -rn "SHAKEDOWN_BIND\|SHAKEDOWN_OBJECT_STORE" docs README.md` to check every documented name exists in code.
+- [ ] **Step 5: Commit:** "Settings has API tokens and Models pages, the top bar shows an account menu when the layer gives one, and the docs list the new settings, the old names they replace and the layer hooks".
+
+### Task A8: The final review's deferred engine minors
+
+**Files:** `src/agents/claude.rs`, `src/driver.rs`, `src/proxy/tickets.rs`; tests in `tests/run_tokens.rs`,
+`tests/proxy.rs`, `tests/cli.rs`.
+
+- [ ] **Step 1: Write the failing tests**
+
+```rust
+#[tokio::test] async fn claude_does_not_start_when_its_config_file_cannot_be_written() { /* read-only workdir => agent error names the file; no inline tokenless config */ }
+#[test] fn two_agent_ids_with_the_same_env_name_are_refused() { /* "a-b" and "a_b" in one team => Err naming both */ }
+#[tokio::test] async fn a_branch_s_tickets_are_forgotten_when_it_ends() { /* Tickets::len() back to 0 */ }
+```
+
+- [ ] **Step 2: Run them and see them fail:** `cargo test -p shaked --test run_tokens --test proxy --test cli`
+- [ ] **Step 3: Implement** the three fixes.
+- [ ] **Step 4: Run the gate.**
+- [ ] **Step 5: Commit:** "Claude Code never falls back to a tokenless config, two agents cannot share a token variable, and an ended branch's proxy tickets are forgotten".
+
+---
+
+## Part B: CopperTide-Cloud repo, branch `hosted-shakedown`
+
+Starts after A4 (B8 also needs A5). Every Part B commit is in the worktree below, never in the main checkout.
+
+### Task B1: The worktree, the crates workspace, and `coppertide-schema` with stream `identity`
+
+**Files** (paths relative to the Cloud worktree):
+- Create: `crates/Cargo.toml` (virtual workspace: `coppertide-schema`, `shaked-hosted`), `crates/clippy.toml`,
+  `crates/coppertide-schema/{Cargo.toml, bootstrap.sql, src/lib.rs, src/streams.rs}`,
+  `crates/coppertide-schema/migrations/identity/{0001_baseline.sql, 0002_orgs.sql}` (from a217411's
+  `core/crates/coppertide-schema/migrations/identity/`, then edited per `schema-cloud.sql`: `orgs.kind` is
+  `personal | customer`, no `orgs_one_local`, `authz.place_team()` added; invites get RLS in B2),
+  `crates/coppertide-schema/migrations/cloud/` (empty; Cloud's R2 writes `cloud` 1), `tests/{files.rs, drift.rs,
+  support/mod.rs}`.
+- `crates/shaked-hosted/` gets only `Cargo.toml` and an empty `src/lib.rs` here, so the workspace builds.
+
+**Interfaces:**
+- Consumes: A2 `Files`, `load`, `migrate`, `base()`.
+- Produces:
+```rust
+pub const IDENTITY: Stream = Stream("identity"); pub const CLOUD: Stream = Stream("cloud");
+pub const SHAKEDOWN_HOSTED: Stream = Stream("shakedown_hosted");
+pub fn all() -> &'static [Migration];          // base() + identity + cloud + shakedown_hosted, sorted
+pub const BOOTSTRAP_SQL: &str;                  // roles and schemas, schema-cloud.sql section 0
+```
+
+- [ ] **Step 1: Make the worktree and the link:**
+  `git -C ~/MLSys/CopperTide/CopperTide-Cloud fetch origin && git -C ~/MLSys/CopperTide/CopperTide-Cloud worktree add
+  .worktrees/hosted-shakedown -b hosted-shakedown origin/main`, then `ln -s
+  ~/MLSys/CopperTide/Shakedown/.worktrees/factory ~/MLSys/CopperTide/CopperTide-Cloud/.worktrees/shakedown`.
+  Check: `ls .worktrees/shakedown/core/crates/shakedown-schema/Cargo.toml` from the Cloud checkout.
+- [ ] **Step 2: Write the failing tests**
+
+```rust
+// tests/files.rs: every cloud file parses, versions dense from 1, requires resolve within all(), contract markers
+#[test] fn every_cloud_file_parses_and_names_a_known_stream() {}
+// tests/drift.rs (moved from shakedown-schema tests/migrate.rs, reading Cloud's own ../../migrations/*.sql at test time)
+#[tokio::test] async fn identity_1_create_path_matches_cloud_0015_moved_path() {}
+#[tokio::test] async fn a_missing_setting_matches_no_row() { /* SET ROLE shaked_app, no GUCs: count(*) FROM identity.orgs == 0 */ }
+```
+
+- [ ] **Step 3: Run them and see them fail:** `cd crates && cargo test -p coppertide-schema`
+- [ ] **Step 4: Implement** the interfaces above. `support::scratch_db` runs `BOOTSTRAP_SQL` (the test login is a
+  superuser), drops the database on exit, and honours `SHAKEDOWN_TEST_GUARD`.
+- [ ] **Step 5: Run the Part B gate; commit:** "Cloud's coppertide-schema crate holds the identity stream and the roles, on top of Shakedown's migrator and base stream".
+
+### Task B2: Stream `shakedown_hosted` 1, the subset test and the walls
+
+**Files:**
+- Create: `crates/coppertide-schema/migrations/shakedown_hosted/0001_orgs.sql` (`-- requires: identity >= 2`,
+  `-- requires: shakedown >= 2`; sections 5–8 of `schema-cloud.sql` that touch `shakedown` and `shakedown_hosted`,
+  plus the identity write policies and the invites RLS), `tests/subset.rs`, `tests/subset_uniques.txt`,
+  `tests/walls.rs`, `tests/rls.rs` (moved from a217411 `core/crates/shaked/tests/rls.rs`, rewritten on raw
+  connections under `SET ROLE shaked_app` with `set_config`, since the engine no longer sets GUCs),
+  `tests/fixtures/orgs.toml` (moved from a217411 `core/crates/shaked/tests/fixtures/orgs.toml`).
+
+**Interfaces:**
+- Consumes: B1 `all()`, `BOOTSTRAP_SQL`.
+- Produces: `pub fn as_org(org: Uuid, user: Option<Uuid>, teams: &[Uuid], role: &str, place: Option<Uuid>) -> String`
+  in `tests/support` (the five `set_config` calls), reused by B3's `begin` test.
+
+- [ ] **Step 1: Write the failing tests**
+
+```rust
+// tests/subset.rs: the five checks of the accounts design, "The subset rule"
+#[tokio::test] async fn subset_holds() {
+    let a = fingerprint(&scratch(&base()).await).await;               // base only
+    let b = fingerprint(&scratch_with_bootstrap(all()).await).await;  // everything
+    for x in &a.items { assert!(b.items.contains(x), "the cloud changed or removed {x}"); }
+    for t in b.tables.difference(&a.tables) { panic!("cloud stream created table shakedown.{t}"); }
+    for c in b.columns_not_in(&a) { assert!(ALLOWED_CLOUD_COLUMNS.contains(&c.name.as_str()), "{c}"); }
+}
+#[tokio::test] async fn every_base_unique_is_reviewed() { /* each unique constraint/index of A is in subset_uniques.txt */ }
+// tests/walls.rs
+#[tokio::test] async fn every_shakedown_table_is_walled() {
+    // for every relkind r/p in shakedown and shakedown_hosted: org_id NOT NULL, relrowsecurity, relforcerowsecurity,
+    // a policy named org_wall
+}
+#[tokio::test] async fn an_insert_without_an_org_setting_fails() {
+    // SET ROLE shaked_app, no settings: INSERT INTO shakedown.runs (id, task_id, team) => error (not-null org_id)
+    // with org A's settings: the row's org_id == A; read as org B: 0 rows
+}
+// tests/rls.rs (moved): rls_refuses_cross_org_reads_and_writes_on_every_table (list compared with pg_class),
+// root_visibility_by_team_seat_creator_and_grant, a_grant_shows_a_team_run, viewers_and_billing_cannot_write,
+// no_scope_no_rows, a_branch_s_org_must_be_its_run_s (composite FK refuses a branch of A pointing at B's run)
+```
+
+- [ ] **Step 2: Run them and see them fail:** `cd crates && cargo test -p coppertide-schema --test subset --test walls --test rls`
+- [ ] **Step 3: Implement** the migration.
+- [ ] **Step 4: Run the Part B gate.**
+- [ ] **Step 5: Commit:** "Stream shakedown_hosted gives every Shakedown table an org, filled from the transaction, with forced row-level security, and a test proves the cloud schema keeps every base table, column, constraint and index".
+
+### Task B3: `shaked-hosted`: opening the database, `begin`, principals, `can()`, the binary
+
+**Files:**
+- Create: `crates/shaked-hosted/{Cargo.toml, src/lib.rs, src/main.rs, src/open.rs, src/begin.rs, src/principal.rs,
+  src/can.rs}`; `src/principal.rs` and `src/can.rs` from a217411 `core/crates/shaked/src/auth/{principal,can}.rs`
+  (the org matrix and its tests, verbatim where they still fit), `src/open.rs` from a217411
+  `core/crates/shaked/src/store/open.rs` (`DbUrls`, the hosted plan now `apply: [shakedown, shakedown_hosted]`,
+  `require: [(identity, 2)]`, waiting 5 s × 2 min, `refuse_bypassing_login`) plus the startup wall check.
+- `Cargo.toml`: `shaked = { path = "../../../shakedown/core/crates/shaked" }`, `shakedown-schema` and
+  `coppertide-schema` by path; dev-dependency `shaked` with feature `harness`.
+- Test: `crates/shaked-hosted/tests/{begin.rs, open.rs}`, unit tests in `can.rs`.
+
+**Interfaces:**
+- Consumes: A4 `Layer`, `Store::from_pools`, `serve::run`, `ServeOptions`, `SystemJob`; B2 the schema.
+- Produces:
+```rust
+pub struct HostedLayer { /* pools, gateway secret, presets, trial key path */ }
+impl HostedLayer { pub async fn open(urls: &DbUrls, cfg: HostedConfig) -> anyhow::Result<(HostedLayer, Store)>; }
+pub struct HostedConfig { pub gateway_secret_file: PathBuf, pub quotas_file: Option<PathBuf>, pub trial_key_file: Option<PathBuf> }
+pub struct Principal { /* User, ServiceAccount, ApiToken, RunToken as the old auth::principal */ }   // rides in Caller.ext
+pub fn can(p: &Principal, a: &OrgAction, t: &OrgTarget<'_>, flags: &OrgFlags) -> bool;           // the matrix, unchanged
+// begin: SET LOCAL ROLE shaked_app + the five set_config for TxFor::Caller (from the Principal in ext; a caller
+// without one => Err, so the transaction never runs); SET LOCAL ROLE shaked_system for TxFor::System.
+```
+- Hosted policy: `{ serves_others: true, private_model_urls: false, runs_packages_here: false }`. Until B4,
+  `authenticate` refuses everything with 401 "sign in through the gateway or send an API token".
+- `main.rs`: read `SHAKEDOWN_PG_URL`, `SHAKEDOWN_SYSTEM_PG_URL`, `SHAKEDOWN_MIGRATE_PG_URL`,
+  `SHAKEDOWN_GATEWAY_SECRET_FILE` (≥ 32 bytes), `SHAKED_HOSTED_QUOTAS`, `SHAKED_HOSTED_TRIAL_KEY_FILE`; open; run.
+
+- [ ] **Step 1: Write the failing tests**
+
+```rust
+#[tokio::test] async fn begin_sets_the_org_settings_and_role() {
+    // a Caller with a User principal of org A: inside store.tx, current_setting('app.org_id') == A, current_user == shaked_app
+}
+#[tokio::test] async fn a_caller_without_a_principal_gets_no_transaction() {}
+#[tokio::test] async fn a_hosted_app_login_that_bypasses_row_level_security_is_refused() {}   // moved
+#[tokio::test] async fn hosted_start_waits_for_identity_then_gives_up() {}                     // identity 1 only => Behind
+#[tokio::test] async fn hosted_start_refuses_a_newest_base_table_without_a_wall() {
+    // apply all(); then as superuser ALTER TABLE shakedown.events NO FORCE ROW LEVEL SECURITY; open => Err naming events
+}
+#[test] fn org_matrix() {} #[test] fn levels() {} #[test] fn admins_cannot_change_owners() {}    // moved unit tests
+```
+
+- [ ] **Step 2: Run them and see them fail:** `cd crates && cargo test -p shaked-hosted`
+- [ ] **Step 3: Implement** the interfaces above.
+- [ ] **Step 4: Run the Part B gate.**
+- [ ] **Step 5: Commit:** "shaked-hosted runs the Shakedown engine with a cloud layer: it migrates the hosted streams, refuses a login that bypasses row-level security, sets each transaction's org and role, and decides by the org matrix".
+
+### Task B4: Who calls: `signing` v2, live membership, org-bound tokens, `/api/me`, audit
+
+**Files:**
+- Create: `crates/shaked-hosted/src/{signing.rs, authenticate.rs, identity.rs, audit.rs, me.rs}`: `signing.rs` from
+  a217411 `core/crates/shaked/src/auth/signing.rs` (v2, `V2_VECTOR`, the header names), `identity.rs` from
+  a217411 `auth/identity.rs` (`principal_of_user`, `orgs_of_user` on the layer's system pool), `audit.rs` from
+  a217411 `auth/audit.rs`.
+- Test: `crates/shaked-hosted/tests/{auth.rs, tokens.rs}`, moved from a217411 `core/crates/shaked/tests/auth.rs` and
+  the hosted cases of `tests/tokens.rs` and `tests/run_tokens.rs`.
+
+**Interfaces:**
+- Consumes: A4 `authenticate(req, found)`, `audit`, `me`; B3 `Principal`, `HostedLayer`.
+- Produces: `authenticate`: `found` = `ApiToken{id}` → read the row's `org_id`, `user_id`, `service_account_id`,
+  `team_id` (system pool), refuse a removed member, a disabled user or service account, a deleted org (401);
+  `RunToken` → its org, refuse a deleted org; else a good v2 signature → `principal_of_user` (403 "not a member of
+  this org"); else 401. `me`: `{mode: "hosted", features: <org features>, account: {label: <org name>, items:
+  <orgs of the user, personal first>, each {label, current, post: SHAKED_HOSTED_SWITCH_ORG_URL, body: {org_id}}}}`.
+  `audit`: one `identity.audit_log` row, actor from the principal, never a secret.
+
+- [ ] **Step 1: Write the failing tests** (moved, plus the two marked new)
+
+```rust
+#[test] fn v2_vector_verifies_and_any_field_change_fails() {}
+#[tokio::test] async fn hosted_signed_member_lists_only_their_orgs_runs() {}
+#[tokio::test] async fn a_bad_or_late_signature_is_refused() {}
+#[tokio::test] async fn hosted_removed_member_is_refused_on_the_next_request() {}
+#[tokio::test] async fn hosted_deleted_org_is_refused() {}
+#[tokio::test] async fn removing_a_member_kills_their_tokens() {}
+#[tokio::test] async fn creating_and_revoking_a_token_is_audited_without_the_secret() {}
+#[tokio::test] async fn a_run_token_of_a_deleted_org_is_refused() {}                      // new (deferred minor)
+#[tokio::test] async fn me_lists_the_personal_org_first_and_marks_the_current_one() {}    // new
+```
+
+- [ ] **Step 2: Run them and see them fail:** `cd crates && cargo test -p shaked-hosted --test auth --test tokens`
+- [ ] **Step 3: Implement** the interfaces above.
+- [ ] **Step 4: Run the Part B gate.**
+- [ ] **Step 5: Commit:** "Hosted shaked takes requests the gateway signed for a user and an org, or a token whose holder is still a member, and audits token changes".
+
+### Task B5: `authorize`: levels on every route
+
+**Files:**
+- Create: `crates/shaked-hosted/src/authorize.rs` (map the engine's `Action`/`Target` to the matrix and to resource
+  levels: read the resource's `team_id`, `created_by` and grants in the caller's transaction; `may_write` from
+  a217411 `auth/middleware.rs`).
+- Test: `crates/shaked-hosted/tests/levels.rs`.
+
+**Interfaces:**
+- Consumes: A4 `authorize(c, a, t)`, `harness::ROUTES`; B3 `can`, `level`.
+- Produces: `Decision::NotFound` for `Level::None`, `Forbidden` for a lower level; `Target::Kind` with
+  `Action::Create` checks the matrix row (`CreateOrgWide` or the team in `app.place_team_id`).
+
+- [ ] **Step 1: Write the failing tests**
+
+```rust
+#[tokio::test] async fn a_viewer_gets_403_starting_a_run_and_404_for_other_orgs() {}   // moved
+#[tokio::test] async fn read_tokens_and_viewers_cannot_write() {}                      // moved (viewer half)
+#[tokio::test] async fn a_member_cannot_delete_another_member_s_team_run_without_admin() {}   // the final review's I1 remainder
+#[tokio::test] async fn a_team_bound_token_cannot_mint_tokens() { /* 403, not 500 (deferred minor) */ }
+#[tokio::test] async fn a_member_cannot_create_an_org_wide_key() {}
+```
+
+- [ ] **Step 2: Run them and see them fail:** `cd crates && cargo test -p shaked-hosted --test levels`
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run the Part B gate.**
+- [ ] **Step 5: Commit:** "Every hosted route checks the caller's level on the resource: viewers read, members run, editors change, admins share and delete".
+
+### Task B6: Org routes: members, teams, seats, invites, grants
+
+**Files:**
+- Create: `crates/shaked-hosted/src/routes/{mod.rs, org.rs, teams.rs, invites.rs, grants.rs}` (mounted by
+  `Layer::routes`).
+- Test: `crates/shaked-hosted/tests/org_routes.rs`.
+
+**Interfaces:**
+- Produces: `GET /api/org` (org, members with roles, teams); `PATCH /api/org/members/{user}` `{role}`; `DELETE
+  /api/org/members/{user}`; `POST/PATCH/DELETE /api/teams[/{id}]`; `PUT/DELETE /api/teams/{id}/seats/{user}`
+  `{role}`; `GET/POST /api/invites`, `DELETE /api/invites/{id}` (POST body `{email, role, team_id?}`, answer `{id,
+  url}` once: `<SHAKED_HOSTED_INVITE_BASE>/invite/<token>`, the gateway accepts it in Cloud's R3); `GET/POST
+  /api/grants`, `DELETE /api/grants/{id}`; `PATCH /api/resources/{kind}/{id}/team` `{team_id | null}`. Each checks
+  `can()` and audits. The last owner cannot be removed or demoted (`FOR UPDATE` on the org's owner rows). A personal
+  org refuses invites and teams (D18). An invite needs a free seat (D17; seats = members + open invites ≤ the
+  `seats` quota). A team that still scopes resources cannot be deleted (409 naming how many).
+
+- [ ] **Step 1: Write the failing tests**
+
+```rust
+#[tokio::test] async fn admins_invite_within_seats_and_the_invite_shows_once() {}
+#[tokio::test] async fn a_personal_org_takes_no_invites_or_teams() {}
+#[tokio::test] async fn the_last_owner_stays() {}
+#[tokio::test] async fn admins_cannot_change_owners_through_the_route() {}
+#[tokio::test] async fn a_team_with_runs_cannot_be_deleted_until_they_move() {}
+#[tokio::test] async fn a_grant_shares_one_run_with_a_team_and_removal_revokes_it() {}
+#[tokio::test] async fn maintainers_manage_seats_and_members_do_not() {}
+```
+
+- [ ] **Step 2: Run them and see them fail:** `cd crates && cargo test -p shaked-hosted --test org_routes`
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run the Part B gate.**
+- [ ] **Step 5: Commit:** "Hosted Shakedown manages an org's members, teams, seats, invites and grants, keeps at least one owner, and keeps personal orgs to one person".
+
+### Task B7: Quotas and usage: `admit` and `meter`
+
+**Files:**
+- Create: `crates/shaked-hosted/quotas.toml` (from a217411 `docs/quotas.toml`, plus `trial_usd_micros = 30000000`,
+  period `none`, hard, in plan `beta`), `src/quotas.rs` and `src/usage.rs` (from a217411
+  `core/crates/shaked/src/{quotas.rs, store/usage.rs}`, on `shakedown_hosted.*`), `src/routes/usage.rs` (from
+  a217411 `src/api/usage.rs`).
+- Test: `crates/shaked-hosted/tests/quotas.rs` (moved from a217411 `core/crates/shaked/tests/quotas.rs`).
+
+**Interfaces:**
+- Consumes: A4 `admit(c, Costly)`, `meter(c, Usage)`.
+- Produces: `admit`: `StartRun`/`Fork` check `runs` (hard → 429 naming the quota; soft → `Warn`); `ModelCall` checks
+  monthly `model_usd_micros` (402); `StoreSave` checks `saves_bytes`. Each check and the following meter of the same
+  meter run under `pg_advisory_xact_lock(hashtext('quota:' || org || ':' || meter))`, so concurrent starts cannot both
+  pass the last slot (deferred minor). `meter` writes `usage` and upserts `usage_monthly` in one transaction,
+  idempotent on the key. `GET /api/usage/org` as before.
+
+- [ ] **Step 1: Write the failing tests:** the moved list (`built_in_presets_parse_and_beta_has_the_s4_numbers`,
+  `metering_is_idempotent_and_totals_monthly`, `an_override_row_beats_the_preset`,
+  `over_a_hard_runs_quota_a_run_is_refused_naming_the_quota`, `a_soft_quota_warns_and_lets_the_run_start`,
+  `every_recorded_model_call_is_metered_once`, `org_usage_is_for_owners_and_billing_and_members_see_their_own`), plus
+  `two_concurrent_starts_cannot_both_take_the_last_run` (quota 1, two parallel POSTs → one 2xx, one 429).
+- [ ] **Step 2: Run them and see them fail:** `cd crates && cargo test -p shaked-hosted --test quotas`
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run the Part B gate.**
+- [ ] **Step 5: Commit:** "Hosted orgs are metered once per run and per model call and held to their plan's quotas, without overshooting a hard limit under concurrent starts".
+
+### Task B8: The trial credit and org keys (D23)
+
+**Files:**
+- Create: `crates/shaked-hosted/src/trial.rs` (`fallback_provider`), `src/keys.rs` (who may create which keys).
+- Test: `crates/shaked-hosted/tests/trial.rs`.
+
+**Interfaces:**
+- Consumes: A5 `KeySource`, `Provider`, the engine's model gateway; A4 `fallback_provider`, `admit`, `meter`; B7.
+- Produces: `fallback_provider(c, want)`: `None` unless the org has no key for the provider `want` names; then an
+  OpenRouter provider on the key in `SHAKED_HOSTED_TRIAL_KEY_FILE`, model `want.model` as asked, `source: "trial"`.
+  `admit(ModelCall)` on a trial call: remaining = limit − lifetime `trial_usd_micros`; refuse with 402 "the trial
+  credit is used up; add a key in Settings → Models" at ≤ 0. `meter` records the call's cost from OpenRouter's
+  reported `usage.cost` (requested with `usage: {include: true}`) as `trial_usd_micros`, not `model_usd_micros`.
+  No trial key file: no trial (the fallback is `None`), logged once at start.
+
+- [ ] **Step 1: Write the failing tests**
+
+```rust
+#[tokio::test] async fn an_org_without_a_key_runs_on_the_trial_with_the_model_it_asks_for() { /* FakeLlm as OpenRouter; request model == asked */ }
+#[tokio::test] async fn trial_credit_is_metered_and_runs_out() { /* limit 10 micros, cost 6 => 2nd call 402 with the Settings → Models text */ }
+#[tokio::test] async fn an_org_key_is_used_before_the_trial() {}
+#[tokio::test] async fn trial_spend_is_its_own_meter() { /* usage rows: trial_usd_micros, no model_usd_micros */ }
+#[tokio::test] async fn each_org_has_its_own_trial() { /* org A spent; org B still runs */ }
+```
+
+- [ ] **Step 2: Run them and see them fail:** `cd crates && cargo test -p shaked-hosted --test trial`
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run the Part B gate.**
+- [ ] **Step 5: Commit:** "Each hosted org gets a $30 trial on any OpenRouter model, used only without a key of its own, metered apart and refused once spent".
+
+### Task B9: The router isolation test: org B gets 404 for org A's ids on every route
+
+**Files:**
+- Create: `crates/shaked-hosted/tests/tenants.rs` (from the old Task 13, on `shaked::harness::ROUTES` plus the
+  layer's own routes).
+- Modify: whatever leaks; each fix in the layer's `authorize` or, if the engine reads a child without its root, in
+  Shakedown (a separate commit there, by path, with its own test).
+
+**Interfaces:**
+- Consumes: A4 `harness::ROUTES`, `serve_app`; B4 `sign_v2`; B6 routes.
+
+- [ ] **Step 1: Write the failing tests**
+
+```rust
+#[test] fn the_table_names_every_layer_route() {}
+#[tokio::test] async fn org_b_gets_404_for_org_a_ids_on_every_route() {
+    // org A's owner makes a run, branch, fork, suite, experiment, review, connection, key, token, world row, save row, team, invite, grant
+    for r in all_routes() { let res = call_signed(r.method, &fill(r.path, &a_ids), B_OWNER).await;
+        assert!(matches!(res.status().as_u16(), 404 | 405), "{} {} => {}", r.method, r.path, res.status());
+        assert!(!res.text().await.contains(&a_ids.run), "{} {} leaks an id", r.method, r.path); }
+}
+#[tokio::test] async fn org_b_lists_show_none_of_org_a() {}
+#[tokio::test] async fn org_b_tokens_cannot_reach_org_a() { /* the same loop with an sd_ token of B and an sdr_ token of B's branch */ }
+```
+
+- [ ] **Step 2: Run them and see them fail:** `cd crates && cargo test -p shaked-hosted --test tenants`
+- [ ] **Step 3: Fix** each leak.
+- [ ] **Step 4: Run both gates** (Part A if Shakedown changed). Then `rm -rf crates/target`.
+- [ ] **Step 5: Commit:** "Another org's ids are not found on any hosted route, under a signature, an API token or a run token".
 
 ---
 
@@ -913,23 +918,28 @@ it('lists the personal org first and switches through switch_org_url', async () 
 
 | # | Task | Depends on | Size |
 |---|---|---|---|
-| 1 | schema crate | — | 2 d |
-| 2 | shaked on migrator + pool | 1 | 1.5 d |
-| 3 | bind and modes | 2 | 1 d |
-| 4 | principals and `can` | — (parallel to 2–3) | 1 d |
-| 5 | `shakedown` 2, RLS, `tx` | 2, 4 | 2 d |
-| 6 | scoped store, `shakedown` 3 | 5 | 2.5 d |
-| 7 | hosted auth, `/api/me` | 3, 6 | 1.5 d |
-| 8 | API tokens | 7 | 1.5 d |
-| 9 | run/agent/worker tokens | 6, 8 | 2.5 d |
-| 10 | quotas and usage | 6 | 1.5 d |
-| 11 | provider keys | 10 | 2.5 d |
-| 12 | object storage | 5, 6 | 2 d |
-| 13 | tenant router test | 7–12 | 1.5 d |
-| 14 | UI and docs | 7, 8, 11 | 2 d |
+| O1 | convert the retired databases (owner) | — | 1 h |
+| A1 | hosted mode out | — | 0.5 d |
+| A2 | generic migrator, `shakedown-schema` | A1 | 1 d |
+| A3 | personal-use schema and engine | A2, O1 for the gate | 2.5 d |
+| A4 | the layer and its hooks | A3 | 2.5 d |
+| A5 | your own model keys | A4 | 2 d |
+| A6 | object storage | A4 | 2 d |
+| A7 | UI and docs | A4, A5 | 2 d |
+| A8 | deferred engine minors | A3 | 0.5 d |
+| B1 | worktree, `coppertide-schema`, identity | A3 | 1 d |
+| B2 | `shakedown_hosted` 1, subset, walls, RLS | B1 | 1.5 d |
+| B3 | `shaked-hosted`: open, begin, `can()`, binary | A4, B2 | 1.5 d |
+| B4 | authenticate, tokens, `/api/me`, audit | B3 | 1.5 d |
+| B5 | authorize, levels | B4 | 1.5 d |
+| B6 | org routes | B5 | 2 d |
+| B7 | quotas and usage | B4 | 1 d |
+| B8 | trial credit, org keys | A5, B7 | 1.5 d |
+| B9 | router isolation | B5–B8, A6 | 1.5 d |
 
-About 25 engineer-days, five weeks for one person. The hosted spec's "about two weeks" left out the schema crate,
-object storage and the UI. Every task leaves local mode as it is today, apart from agent tokens in Task 9. Hosted
-mode refuses everything until Task 7, and after that it still can't run worlds or code (M2). `update.sh` doesn't
-build Shakedown yet (that is M3), so nothing here reaches production. The first production use of this crate is
-Cloud's R2, in Cloud's own plan, once `factory` is merged to `main`.
+About 26 engineer-days. Part A runs in the Shakedown worktree, where another agent also commits; Part B can start
+once A4 lands and then runs beside A5–A8 in its own repo. Nothing reaches production: `factory` and
+`hosted-shakedown` are unmerged, the open-source binary has no hosted path, and `update.sh` builds neither
+`shaked-hosted` nor the Shakedown repo until M3. Cloud's R1–R5 (the gateway adopting `coppertide-schema`, personal
+orgs for existing users, invite acceptance, the active-org route) are Cloud's own plan; the hosted binary requires
+`identity >= 2`, so it cannot start against production before R3.
