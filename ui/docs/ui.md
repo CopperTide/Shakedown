@@ -15,13 +15,13 @@ secondary metadata lines, few borders, plenty of whitespace.
   more (the box shows on hover) to **Compare** their setups side by side. Empty: one line on what an
   experiment is and **New experiment**.
 - **New experiment** (`/experiments/new`): the name inline as the page title; **Scenario** (the
-  task by plain name, then disruptions as a picker); **Agent setups**, 1 to 4 cards (name, team,
+  task by plain name, then disruptions as a picker); **Agent setups**, 1 to 50 cards (name, team,
   model for Claude Code agents, rules added to every prompt; a dashed card adds one, copying the
-  last); **Runs per setup** (1, 3, 5, 10; default 5); a bottom bar with "2 setups × 5 runs = 10 runs",
+  last); **Runs per setup** (a number from 1 to 1000; default 5); a bottom bar with "2 setups × 5 runs = 10 runs",
   what blocks starting, and **Run experiment**.
 - **Experiment** (`/experiments/:id`, `/experiments/compare?ids=`): the name, status and scenario
   line; **Stop** while it runs. The page is as wide as its setups need (two fit a narrow page, four a
-  wide one). One card per setup (`features/experiments/Results.tsx`, model in `features/experiments/model.ts`): name
+  wide one; more wrap, four to a row, and the checks scroll sideways). One card per setup (`features/experiments/Results.tsx`, model in `features/experiments/model.ts`): name
   and team; the pass rate at 40 px over one bar (passes in the result ink, failures in the alarm
   ink) with the 95% Wilson range as a whisker under it; a square per run (ink passed, red ✕ failed,
   ! not scored, pulsing running, dashed not run yet, a dot for a safety violation; hover shows its
@@ -53,7 +53,7 @@ secondary metadata lines, few borders, plenty of whitespace.
   per line, masked unless focused), or a Bedrock model and region; **Test connection**
   (`POST /api/agents/check`: the agent's name and round trip, or the reason with ⚠), then **Use this
   agent** goes back with a one-agent team selected. Any edit means testing again. This browser keeps
-  the agent arenad answered (`arena.connected.v1`; header values only as arenad's secret references,
+  the agent shaked answered (`arena.connected.v1`; header values only as shaked's secret references,
   never the values), listed as "<name> (connected)" in both pickers.
 - **Build a world** (`/worlds/new`, `features/build/`): from ⋯ ("Build a world…"), ⌘K, or the last option of the
   world picker. A stepper (Template, Company, Systems, People, Events, Review; done steps ✓ and clickable; on
@@ -71,13 +71,13 @@ secondary metadata lines, few borders, plenty of whitespace.
 - **Compare runs** (`/compare/:a/:b`), **World view** (`/world/…`), **Process view** (`/control/…`)
   and the **Team editor** (`/team`) are one click away under ⋯ and ⌘K.
 
-**Which core.** The UI talks to the Shakedown core (arenad) it is served from. A build can name another
+**Which core.** The UI talks to the Shakedown core (shaked) it is served from. A build can name another
 with `VITE_ARENA_URL=<url>`, and the address can switch with `?core=<url>` (this browser remembers it;
 `?core=` with nothing goes back to the serving core); every `/api` request and the event stream go
 there (`src/api/core.ts`), and the ⋯ menu says which core is in use. A UI served from another
 origin needs the core started with `ARENA_CORS_ORIGIN=<the UI's origin>`.
 
-Pause and Stop are arenad's (`POST /api/branches/{id}/pause`, `/resume`, `/stop`): while paused, the
+Pause and Stop are shaked's (`POST /api/branches/{id}/pause`, `/resume`, `/stop`): while paused, the
 branch's tool calls and gateway model calls wait and the world clock stops; `pause` and `resume` are
 events, drawn on the timeline as a shaded band.
 
@@ -148,7 +148,7 @@ These are shadcn-style components: the code is ours, built on Radix primitives w
 
 ## Code layout (`src`)
 
-- `api/`: the HTTP client and the core address. `model/`: arenad's types and the pure event model
+- `api/`: the HTTP client and the core address. `model/`: shaked's types and the pure event model
   (actions, lanes, permits, restores, reports). `hooks/`: data and state shared by pages.
 - `lib/`: small helpers with no domain (class names, keys, formats, marks, errors). `components/ui`:
   the primitives above; `components/`: domain pieces several pages share (status marks, provider fields).
@@ -224,10 +224,10 @@ Logic lives in pure modules with tests, and components only render. For example:
   agent, its group or the team; places, groups and hands-work-to connections kept; agents put in work
   order; an agent whose `data_access.writes` is empty is read-only) or a Shakedown team, picked, dropped
   or pasted. A kind Shakedown can't run (OpenCode) is refused by name. The board is kept with the team in
-  this browser and never sent to arenad. **Edit** opens the team editor (`/team`).
+  this browser and never sent to shaked. **Edit** opens the team editor (`/team`).
 - **Scenario builder** (`scenario/`). On Run once and New experiment as a picker, from the benchmark's
   `scenario_options` (`GET /api/benchmark`): a toggle and parameters per disruption (label and
-  description filled with them, as arenad fills the template), and a plain-words preview.
+  description filled with them, as shaked fills the template), and a plain-words preview.
 - **Outcome comparison** (`compare/`). Under What matters on the compare page: valid plan, safety
   violations, orders on time and transport cost (the twin's `orders_covered` and `transport_cost`
   KPIs at the end), agent cost (as the agents reported it, labelled reported, and illustrative for
@@ -235,7 +235,7 @@ Logic lives in pure modules with tests, and components only render. For example:
   divergence strip on one step axis is under Details. World
   views are not steps: the timeline, run figures, process view and divergence skip them.
 - **Fixtures.** A build with `VITE_ARENA_FIXTURES=1` answers `/api` from the pharma fixtures
-  (`dev/fixtureApi.ts`), for screenshots without arenad.
+  (`dev/fixtureApi.ts`), for screenshots without shaked.
 - **Trends.** Actions per minute for each system kind, tokens, cost and tool latency as sparklines,
   and context per model call as a chart. A cost the record does not give per call draws no line.
 - **Data tables.** Rows open with a click or Enter; ⌘K finds any run or experiment.

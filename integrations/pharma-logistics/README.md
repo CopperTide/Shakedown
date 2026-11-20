@@ -49,7 +49,7 @@ refused, the director rejects shipments on it); `transit_delay {carrier, origin,
 and the shipments already booked on the lane arrive `extra_days` later); `reject_next {action, note?}` (the director
 rejects the next decision on `stock_reallocation` or `cold_chain_shipment`, with `note`); `customer_escalation {order,
 note?}` (a customer's urgent request about `order` waits on the desk, `customer_requests`). While a disruption waits, each
-call it counts writes the internal key `_disruption/<id>`, so arenad saves the count with the step without making it a write.
+call it counts writes the internal key `_disruption/<id>`, so shaked saves the count with the step without making it a write.
 
 ## Tests
 

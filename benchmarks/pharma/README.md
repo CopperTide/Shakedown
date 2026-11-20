@@ -88,7 +88,7 @@ carriers (each lane's shipments left, availability and delay) and the approvals 
 shipments as flows from lot to order; KPIs: orders at risk, orders covered, safety violations so far (the safety
 checks over the current state) and transport cost (the booked quotes). It reads the ERP's lots, open orders, work
 orders and non-conformances at once through the reports' readers, and the LIMS, carriers and approvals from the docs
-arenad passes (`describe.view.docs`).
+shaked passes (`describe.view.docs`).
 
 ## Scoring
 
@@ -116,7 +116,7 @@ named by its PO number or its ERP sales order.
 
 `data/teams.json` holds the three deployments the benchmark suggests, as data a design (a CopperTide board, an
 external runner) can use: each role's short prompt, the tool groups its decisions need, the change actions it proposes,
-and the arenad runner its prompts are written for. Shakedown imposes none of it. arenad offers the first as its default
+and the shaked runner its prompts are written for. Shakedown imposes none of it. shaked offers the first as its default
 team and the others one click away (`teams` in `describe`; `arena-pharma --team dispatch` or `--team team` makes
 another the default).
 
@@ -135,10 +135,10 @@ Prompts are tool-agnostic and short; the shared rules (`src/team.rs`) are under 
 ```bash
 export CARGO_TARGET_DIR=/path/target ARENA_BIN_DIR=/path/target/debug ARENA_SAVES=/path/saves
 cargo build -p arena-pharma -p arena-erpnext -p arena-twenty-crm -p arena-sculptured
-(cd core && ARENA_BENCHMARK=pharma cargo run -p arenad -- base)
+(cd core && ARENA_BENCHMARK=pharma cargo run -p shaked -- base)
 ```
 It needs the Postgres of `deploy/compose.yml`, `uv` (the simulated parts are Python), a CopperTide program on `PATH`,
-the ERPNext and Twenty images, and arenad stopped. It is `opt_in`.
+the ERPNext and Twenty images, and shaked stopped. It is `opt_in`.
 
 ## Tests
 
@@ -147,7 +147,7 @@ the ERPNext and Twenty images, and arenad stopped. It is `opt_in`.
   the data, the scenarios' setup, the documents the seed writes, the deployments.
 - `PHARMA_ERP_CONNECT=erp.json cargo test -p arena-pharma --test live_seed -- --ignored` seeds an ERPNext site that is
   already running (its `connect` info in the file) and reads the reports back.
-- `(cd core && cargo test -p arenad --test pharma -- --ignored live_ --nocapture)` runs the whole world with the
+- `(cd core && cargo test -p shaked --test pharma -- --ignored live_ --nocapture)` runs the whole world with the
   coordinated team on a real model (Claude Code with `haiku` by default; see `docs/reference.md`, "Tests"): the base
   incident, recorded, gated and scored with every check, and the base incident with Tundra full after its first
   quote, whose disruption must show in the twin's views once it fires. Which end states pass which check (the right
@@ -167,7 +167,7 @@ the ERPNext and Twenty images, and arenad stopped. It is `opt_in`.
 - `pharma-lims` and `pharma-logistics`: their pytest suites and `arena-part-check`.
 
 **Verified (Linux, 2026-11-07):** `cargo test -p arena-pharma` passes (32 tests, the twin's and the options' included).
-`live_pharma_a_disruption_shows_in_the_twin` (arenad's `tests/pharma.rs`, with the CopperTide build of 2026-11-04 as
+`live_pharma_a_disruption_shows_in_the_twin` (shaked's `tests/pharma.rs`, with the CopperTide build of 2026-11-04 as
 `ARENA_SCULPTURED_BINARY`; the one on `PATH` from 2026-10-24 lacks the changes route the approvals part needs) passed
 once: the base incident with Tundra full after its first quote, with the coordinated team scripted (each role's part
 written as code, no model; Shakedown no longer has that team, and the live tests with a real model have not run on this
@@ -176,7 +176,7 @@ lane going from available to no capacity and orders covered from 0 to 7 of 8; fr
 27 ms on average, 86 ms at most (event timestamps, so the view call and its recording). The older live test of the
 three paths was not rerun.
 
-**Not run (2026-11-06):** the arenad live test (`tests/pharma.rs`), so not the CRM seed, `arenad base`, the links and the gate
+**Not run (2026-11-06):** the shaked live test (`tests/pharma.rs`), so not the CRM seed, `shaked base`, the links and the gate
 inside a run, or a run of any scenario: the machine had under 20 GB free when it was ready. No real agent or model has
 run this world.
 

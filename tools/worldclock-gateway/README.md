@@ -18,7 +18,7 @@ clock from the `clock.json` the `live-service` part writes at each advance (`int
   the timeline again. Without a clock file, world time is wall time.
 - **Queries** (`QUERY_ADDR`, default `0.0.0.0:4319`): `ANY /q/{prometheus|loki|tempo}/{*path}` to `PROMETHEUS_URL`,
   `LOKI_URL`, `TEMPO_URL`, or any path at the root of a host whose first label names the store
-  (`prometheus.<domain>`; `X-Forwarded-Host`, as arenad's proxy sends it, wins over `Host`). Parameters may be in the
+  (`prometheus.<domain>`; `X-Forwarded-Host`, as shaked's proxy sends it, wins over `Host`). Parameters may be in the
   URL or, for a POST, a form.
   - Without `X-Shakedown-Shift` (agents): Prometheus and Loki instant queries without `time` are asked at world now;
     ranges without `end` end at world now (Loki and Tempo ranges without `start` too start an hour before).

@@ -5,7 +5,7 @@ the world clock: one Docker Compose project whose containers read the world's ti
 report what they watch as world events. Everything in `service`'s README holds here too (volumes, save strategies,
 `live_copy`, `images`, `probes`, `http`). Its `describe` differs: `name: live-service`, `uses_clock: true`, and one
 world tool, `service_deploy` (`effect: write`; a world's links call it, agents don't get it). A world with two
-live-service parts has two tools of that name, which arenad refuses.
+live-service parts has two tools of that name, which shaked refuses.
 
 A live instance comes up with `docker compose up -d` and is up once every container is healthy (or running without
 a health check) and every one-shot (a seed) has exited 0, at most `deploy_wait_s`; compose's own `--wait` is not used,

@@ -5,7 +5,7 @@ run is recorded, scored and compared.
 
 Three nouns and one verb. An **environment** is the simulated systems (a benchmark's world). A **scenario** is
 what happens to it (a task and its disruptions). An **agent setup** is a model, a team structure and its rules.
-An **experiment** runs each of 1 to 4 setups N times on the same environment and scenario and compares them.
+An **experiment** runs each of its setups (any number, up to a safety cap of 50) N times on the same environment and scenario and compares them.
 
 Shakedown is a staging environment. It observes and never dictates: it knows every agent so that it can monitor,
 record and save it, but it imposes no team shape, order, permission or handoff protocol of its own; limits are
@@ -27,17 +27,17 @@ are in [reference.md](reference.md).
 - **Run**: one task, one team, one world. A run has one or more branches; its first branch is the original.
 - **Step**: one recorded event of a branch (an agent start, a model call, a tool call, a handoff, ...),
   numbered by `seq`.
-- **Save**: after a step that wrote to a part, and for every clocked part whose state changed, arenad saves
+- **Save**: after a step that wrote to a part, and for every clocked part whose state changed, shaked saves
   those parts and records the save ids with the step. Parts that can only replay are never saved.
 - **Fork**: a new branch of a run that starts at step N of an existing branch with a change (an agent's prompt,
   model or kind). The world is restored to how it was just before the fork point, and the branch reruns from
   there.
 - **Restore**: a fork restores the world exactly or approximately (see [Restore modes](#restore-modes)).
-- **Scoring**: when a branch ends, arenad saves every part and diffs the world with the task's gold world (the
+- **Scoring**: when a branch ends, shaked saves every part and diffs the world with the task's gold world (the
   base world plus the task's gold actions, made once and kept). The branch passes when no key differs and at
   least one part could be checked.
-- **Experiment**: one task and scenario, 1 to 4 agent setups, N runs each (default 5). Each setup is stored as a
-  suite; arenad runs the setups interleaved (round 1 of every setup, then round 2, ...), one run at a time, so
+- **Experiment**: one task and scenario, 1 to 50 agent setups, N runs each (default 5, at most 1000). Each setup is stored as a
+  suite; shaked runs the setups interleaved (round 1 of every setup, then round 2, ...), one run at a time, so
   they meet the same conditions. The UI's main screen (`/api/experiments`; see [reference.md](reference.md)).
 - **Suite**: one team run over a set of a benchmark's tasks, each repeated, on the same seeded world and scored
   by the same checks, then aggregated (see [Test suites](#test-suites)). Suites made before experiments show up as
@@ -72,15 +72,15 @@ A fork asks for one restore mode for the whole world. Each integration declares 
 | approximate only | refused, naming the part | from its save, approximately |
 | none | refused | refused |
 
-The table is implemented in `core/crates/arenad/src/restore.rs`. `GET /api/branches/{id}/restore-plan` and the
+The table is implemented in `core/crates/shaked/src/restore.rs`. `GET /api/branches/{id}/restore-plan` and the
 rerun panel show, per part, how it will be restored and, for a replay, an estimate of the time.
 
 ## When the world is saved
 
-By default arenad saves a part after every step that wrote to it, so a fork can start at any step. A part whose
+By default shaked saves a part after every step that wrote to it, so a fork can start at any step. A part whose
 `describe` says `save_at: "points"` (a whole stack, where each save is costly) is saved only at **save points**:
 
-- before a model call through arenad's gateway, when the part changed since its last save;
+- before a model call through shaked's gateway, when the part changed since its last save;
 - when a driver asks (`POST /api/branches/{id}/save`, answered `{"seq", "saves"}`; `seq` is null when nothing
   changed);
 - at the run's end, with the final saves.
@@ -115,14 +115,14 @@ has its own set, below):
 
 **Who drives the agents** is the run's runner, chosen when it starts and recorded in its `RunStart`:
 
-- `chain` (the default): arenad runs the agents one after another, in the team's order. Each agent's input is the
+- `chain` (the default): shaked runs the agents one after another, in the team's order. Each agent's input is the
   task's ticket, the benchmark's instructions, and the handoff notes left for it so far.
-- `concurrent`: arenad starts every agent at once with the ticket and instructions. The branch is scored when all
+- `concurrent`: shaked starts every agent at once with the ticket and instructions. The branch is scored when all
   of them are done.
 - `dispatch`: a lead and its team (see [Dispatch runs](#dispatch-runs)).
 - `external`: the design's own code drives the agents (see [External designs](#external-designs)).
 
-An agent already deployed elsewhere joins a team as an `http` agent (arenad POSTs it the run and its MCP
+An agent already deployed elsewhere joins a team as an `http` agent (shaked POSTs it the run and its MCP
 endpoint, and it answers when done) or a Bedrock agent (API mode on provider `bedrock:<region>`); see
 [agents.md](agents.md).
 
@@ -139,19 +139,19 @@ short note on how the run works; every other agent starts idle. The talk tools a
 - `finish {summary}` (the lead only): ends the run, recorded as a `finish` event. No other call goes through
   after it.
 
-An agent wakes whenever work, a report or a message arrives for it while it is idle: arenad records a `wake`
+An agent wakes whenever work, a report or a message arrives for it while it is idle: shaked records a `wake`
 (`{reason, mail, idle_wake?, input}`: `mail` the steps whose mail the turn takes, `input` what the agent was
 given) and starts a turn with that mail. Mail for an agent that is working waits and comes, all of it, in its next
-turn. When a turn ends arenad records an `idle` (`{ok, error?, text}`): the agent waits, it isn't done. An agent
+turn. When a turn ends shaked records an `idle` (`{ok, error?, text}`): the agent waits, it isn't done. An agent
 that ends a turn without reporting has what it said last passed on to the lead as its report (a `report` with
 `turn_end: true`). Agents keep their context across turns: Claude Code runs as one long-lived headless process
 (`-p` with `stream-json` in and out, with the same isolation as in the other runners; each model call its stream
 shows is recorded as a `model_call` reported by the client), and an API-mode agent keeps its conversation in
-arenad's loop (at most 40 model calls a turn). Codex can't keep a session yet, so a dispatch team refuses it.
+shaked's loop (at most 40 model calls a turn). Codex can't keep a session yet, so a dispatch team refuses it.
 Agents work at the same time; their world steps go through the branch's step lock as in every runner, so the
 record is one ordered sequence.
 
-The lead's `finish` ends the run: arenad refuses every later call, gives agents still working up to 45 seconds to
+The lead's `finish` ends the run: shaked refuses every later call, gives agents still working up to 45 seconds to
 end their turn, stops every agent, records each agent's end (tokens, cost, and the time it spent working), then
 freezes and scores the world. Guard rails (see `ARENA_DISPATCH_*` in [reference.md](reference.md#configuration)):
 a time limit for the run (60 minutes by default, time paused left out), and an idle rule: when every agent has
@@ -174,11 +174,11 @@ agent.
 
 An agent's `kind` picks its mode:
 
-- **CLI mode** (`claude_code` or `codex`): arenad starts the CLI headless and gives it only the world's tools
-  (the benchmark's tools plus any tools the parts declare) and the talk tools, through an MCP endpoint of arenad.
+- **CLI mode** (`claude_code` or `codex`): shaked starts the CLI headless and gives it only the world's tools
+  (the benchmark's tools plus any tools the parts declare) and the talk tools, through an MCP endpoint of shaked.
   It records every tool call (arguments, result, keys read and written), every note and message, and the tokens
   and cost the CLI reports. It does not see the raw model calls.
-- **API mode** (`open`): arenad runs the agent loop itself and sends each model call through its gateway to
+- **API mode** (`open`): shaked runs the agent loop itself and sends each model call through its gateway to
   the agent's **provider**. It records everything CLI mode does, plus every model call. Each agent picks one:
   - `openrouter` (the default, also for agents and runs made before providers): needs `OPENROUTER_API_KEY`;
     the model is an OpenRouter model id, `deepseek/deepseek-chat-v3.1` when none is set.
@@ -192,8 +192,8 @@ An agent's `kind` picks its mode:
   compare treat all providers alike. The details, and what each provider costs, are in
   [reference.md](reference.md#model-providers). No API-mode run has been measured yet with any provider.
 
-Isolation of the CLI agents (`core/crates/arenad/src/agents/`; checked live by the `live_` tests in
-`core/crates/arenad/tests/cli.rs`):
+Isolation of the CLI agents (`core/crates/shaked/src/agents/`; checked live by the `live_` tests in
+`core/crates/shaked/tests/cli.rs`):
 
 - Claude Code: settings sources empty, strict MCP config, slash commands off, built-in tools off (`--tools ""`),
   so the only tools are the MCP tools.
@@ -250,7 +250,7 @@ A design that lives in its own code (or in CopperTide) drives a run itself, and 
    endpoint (the world's tools and the talk tools, streamable HTTP) and its gateway (an OpenAI-compatible base
    URL whose calls go to the agent's provider). Its kind is `external` unless it says otherwise.
 3. The design drives its agents however it likes, through those endpoints. Every tool call, model call, note and
-   message is recorded as in arenad's own runners. A CLI agent's model calls don't pass through the gateway, so
+   message is recorded as in shaked's own runners. A CLI agent's model calls don't pass through the gateway, so
    the design reports each one its client saw (`POST .../agents/{agent}/usage`: the call's tokens, cache tokens
    included, and the model's context window; or a compaction of its context), and Shakedown records it as a
    `model_call` without request or response. `POST .../agents/{agent}/reasoning` records what an agent thought
@@ -266,14 +266,14 @@ the new branch live. When a Code connection drove the run, Shakedown starts its 
 branch, with `ARENA_FORK_OF` set to the branch it came from (the answer says `driver: "relaunched"`); the
 driver's agents restart from the fork point, and `run.history(agent_id)` gives what each did before it. Its answer gives each agent's recorded history before the fork point and its endpoints on the
 new branch, so the design resumes its agents its own way. A branch whose design never calls `finish` stays running
-until arenad restarts (it is then `interrupted`).
+until shaked restarts (it is then `interrupted`).
 
 ## Pausing and stopping
 
-Any live branch can be paused (`POST /api/branches/{id}/pause`), whoever drives its agents: arenad's own runners,
+Any live branch can be paused (`POST /api/branches/{id}/pause`), whoever drives its agents: shaked's own runners,
 in CLI or API mode, or an external system. While it is paused, every new tool call and every model call through
 the gateway waits (it doesn't fail), and the world clock stands still; `resume` lets them go on. A CLI agent's
-own model calls don't pass through arenad, so it may think on, but it can't act until the branch resumes; time
+own model calls don't pass through shaked, so it may think on, but it can't act until the branch resumes; time
 paused doesn't count against its time limit. `pause` and `resume` are recorded as events, and the pause's length
 is counted as overhead (`pause`), so the estimate in production leaves it out. `stop` ends a live branch
 `stopped` without scoring it: the agents are dropped where they are and calls that wait are refused.
@@ -283,7 +283,7 @@ is counted as overhead (`pause`), so the estimate in production leaves it out. `
 A run may have a model-spend limit, `max_cost_usd` (on `POST /api/runs`, `/api/suites` and `/api/experiments`, for
 each of their runs; else `ARENA_MAX_COST_USD`, else none). It is recorded in `RunStart` and enforced while agents
 work, not after:
-- Each model call is priced as arenad sees it, at the list prices of `docs/prices.toml` (with their cache and
+- Each model call is priced as shaked sees it, at the list prices of `docs/prices.toml` (with their cache and
   long-context rates): a Claude Code agent's calls from its stream-json `usage` (dispatch sessions), an API-mode
   agent's calls through the gateway (the provider's own cost when it reports one). The sum is the run's running
   estimate (`GET /api/branches/{id}`'s `budget.estimate_usd` while it runs). A turn's reported cost, when it comes,
@@ -292,7 +292,7 @@ work, not after:
   agent is stopped, and the run ends `budget_exceeded`, scored as the world stood: a failure, counted in suites as a
   scored run. An agent stopped mid-turn records its live estimate as its cost (label `list_price_estimate`, or
   `api_equivalent_estimate+list_price_estimate` with its earlier turns'), so the run's cost is known.
-- Agents whose usage arenad sees only at a turn's end (`claude -p` in a chain or concurrent run, Codex, `http`
+- Agents whose usage shaked sees only at a turn's end (`claude -p` in a chain or concurrent run, Codex, `http`
   agents) are checked when that turn ends. A fork starts its own estimate from zero under the same limit.
 - A run an external system drives (or a Code connection's driver) keeps its limit too: once the estimate is past
   it, the gateway answers each further model call 402 `{error}` without sending it upstream, and the first refusal
@@ -303,7 +303,7 @@ work, not after:
 
 A run an external system drives may have a world time window, `world_minutes` (on `POST /api/runs`, more than 0 and
 at most 1440; recorded in `RunStart`, and given to a Code connection's driver as `ARENA_WORLD_MINUTES`). When its
-branch clock reaches the window's end, arenad records the world event `window/time_up` and scores the run as
+branch clock reaches the window's end, shaked records the world event `window/time_up` and scores the run as
 `finish` would, whatever its driver is doing, so runs of different designs are scored at the same world time. A
 paused clock stands still, so a pause extends the window; a fork keeps its run's window (it counts from the run's
 clock 0). A driver that finishes earlier is held: `finish` answers `{status: "running", held_until_clock_ms}`, the
@@ -339,7 +339,7 @@ before scripted drivers were removed; not yet checked again with real agents.
 A built world is a benchmark made from a template in the UI (**Build a world**, `/worlds/new`): pick a template,
 name the company, set its size, choose its systems, edit its simulated people, choose its events, review, build.
 The world builder (`benchmarks/world`, a package of `kind = "builder"`) generates it from the template, the choices
-and a seed, the same way every time, and arenad writes it to `ARENA_WORLDS` as a benchmark package, installs it,
+and a seed, the same way every time, and shaked writes it to `ARENA_WORLDS` as a benchmark package, installs it,
 makes its base saves in the background and then makes it the current benchmark (new runs use it). Runs, suites
 and experiments keep the benchmark they were created with, so choosing another world never changes a run that is
 going. Run once and New experiment have a world picker; the choice is remembered across a restart (unless
@@ -354,10 +354,10 @@ from the same seeded world and is scored by the same checks, so what varies betw
 are not deterministic, so a suite measures how reliable the deployment is: how often each check passes, how often
 it does something unsafe, and how much its runs vary.
 
-- **Runners.** With `chain` or `concurrent`, arenad makes the runs itself, one after another (each waits for the
+- **Runners.** With `chain` or `concurrent`, shaked makes the runs itself, one after another (each waits for the
   previous one to end). With `external`, the design's own system claims each next run (`POST
-  /api/suites/{id}/claim`), and arenad starts it as an external run that the system drives as described in
-  [External designs](#external-designs). A built-in suite that arenad was running when it stopped is `stopped`
+  /api/suites/{id}/claim`), and shaked starts it as an external run that the system drives as described in
+  [External designs](#external-designs). A built-in suite that shaked was running when it stopped is `stopped`
   at the next start; the runs it had made keep their results.
 - **What is counted.** Only scored runs (ended with a `check` event) count in rates and spreads; runs that ended
   without one (an infrastructure error, an interruption) are `unscored`. A run scored against the task's gold
@@ -371,7 +371,7 @@ it does something unsafe, and how much its runs vary.
   a pass rate counts; time, tokens and cost count only beyond 10% of the first suite's mean, as runs vary a little.
   A suite whose task lacks a check the other has shows it as `incomparable`.
 
-Verified by `core/crates/arenad/tests/suites.rs` (`live_`) on a toy world with agents on a real model (Claude Code,
+Verified by `core/crates/shaked/tests/suites.rs` (`live_`) on a toy world with agents on a real model (Claude Code,
 haiku): a built-in suite of 2 tasks, whose report must add up its runs' checks; a comparison whose verdicts must
 follow each check's pass rates; and an external suite claimed and driven over HTTP with Claude Code as its agent.
 Only the built-in suite has been run (2026-11-07).
@@ -407,20 +407,20 @@ start_seq`), as compare does:
 Optional, and off with `ARENA_REVIEW=off` or in the web UI's Advanced menu. A real model (Claude Code Sonnet by
 default) reads a compact digest of a run's record and says where it went wrong (each claim citing steps), what to
 change (a prompt, the team, a tool, the model or the process; for a prompt change the sentences to add) and what
-went well; for two runs or two suites, the few differences that matter and which did better. arenad checks every
+went well; for two runs or two suites, the few differences that matter and which did better. shaked checks every
 citation against the record and stores the review. Details in [reference.md](reference.md#ai-review).
 
 ## Cost labels
 
 - `openrouter`: the cost OpenRouter reports (API mode on OpenRouter).
 - `local (no API charge)`: API mode on a local server; the cost is 0 and the UI shows `no API charge`.
-- No label and no dollar figure on API mode with OpenAI or Anthropic: they report no price and arenad keeps no
+- No label and no dollar figure on API mode with OpenAI or Anthropic: they report no price and shaked keeps no
   price table, so only tokens are recorded; the UI shows the cost as `unknown`.
 - These labels are the providers' own. The metrics above also estimate a cost from `docs/prices.toml` where no
   provider reported one.
 - `api_equivalent_estimate`: Claude Code's own `total_cost_usd`. It is what the same tokens would cost at API
   prices, not what a subscription pays.
-- `list_price_estimate`: arenad's own estimate of an agent's calls at `docs/prices.toml` prices, for a turn stopped
+- `list_price_estimate`: shaked's own estimate of an agent's calls at `docs/prices.toml` prices, for a turn stopped
   before Claude Code reported its cost (a spend limit, a time limit); `api_equivalent_estimate+list_price_estimate`
   when earlier turns had reported theirs. See [Spend limits](#spend-limits).
 - No label and no dollar figure: Codex reports tokens only.

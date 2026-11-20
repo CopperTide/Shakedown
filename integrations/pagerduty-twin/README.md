@@ -2,7 +2,7 @@
 
 **A twin.** Puts a PagerDuty-compatible pager in the world: the REST API v2 subset agents and the `pagerduty`
 Python client use (incidents, notes, services, on-call, users, schedules) and the Events API v2
-(`POST /v2/enqueue`). Agents reach it only through arenad's recording proxy, on the host names its config gives
+(`POST /v2/enqueue`). Agents reach it only through shaked's recording proxy, on the host names its config gives
 (`docs/protocol.md`, "Serving HTTP"): the first host is the REST API, the second the Events API (one server
 answers both). `describe.system` is `{kind: "paging", product: "PagerDuty twin (REST v2, Events v2)",
 stands_in_for: "PagerDuty", simulated: true}`. Restore: exact from a save (one SQLite store); saved at save
@@ -55,4 +55,4 @@ body with `routing_key` also works), and `pagerduty_act {person, action, args}`:
 notes, filters and paging, on-call rotation in world time, the world tool and acts, read-only agents, every covered
 answer against PagerDuty's descriptions (fetched and pinned), and the `pagerduty` client 7.2 (`RestApiV2Client`),
 unchanged, listing, acknowledging (`rput` on the incident's `self`) and writing notes against the twin through a
-transport standing in for the proxy. Not yet verified through arenad's proxy.
+transport standing in for the proxy. Not yet verified through shaked's proxy.

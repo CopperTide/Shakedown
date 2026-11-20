@@ -3,7 +3,7 @@
 **A twin.** Puts a Jira-compatible tracker in the world: the platform REST API under
 `/rest/api/{2,3,latest}` and the agile API under `/rest/agile/1.0` that the `jira` Python client
 (pycontribs) and REST agents call, in Cloud mode (default) or Server mode. Agents reach it only through
-arenad's recording proxy, on the host names its config gives (`docs/protocol.md`, "Serving HTTP").
+shaked's recording proxy, on the host names its config gives (`docs/protocol.md`, "Serving HTTP").
 `describe.system` is `{kind: "tracker", product: "Jira twin (Cloud or Server mode)", stands_in_for: "Jira",
 simulated: true}`. Restore: exact from a save (one SQLite store); saved at save points; `uses_clock`: true,
 and every time it stamps (created, updated, resolved, comments, sprints) and every relative JQL date is world
@@ -67,4 +67,4 @@ assignee?, priority?, labels?}`, `transition {key, to}` (a status or a transitio
 read-only agents, every covered answer against Atlassian's descriptions (v2, v3, Software; fetched and pinned,
 see `tests/schemas/SOURCE.md`), and the `jira` client 3.10.5, unchanged, against the twin in-process with a
 transport standing in for the proxy (`tests/test_client.py`, `tests/fixtures/clients/jira_flow.py`). Not yet
-verified through arenad's proxy (the core live test waits for the proxy's agent header).
+verified through shaked's proxy (the core live test waits for the proxy's agent header).

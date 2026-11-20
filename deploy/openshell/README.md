@@ -1,8 +1,8 @@
 # Claude Code agents in an NVIDIA OpenShell sandbox
 
 [OpenShell](https://docs.nvidia.com/openshell/latest/) (Apache 2.0) runs a program in a sandbox whose network,
-files and processes follow a YAML policy, and logs every denial. With this folder first in arenad's `PATH`,
-every Claude Code agent arenad starts runs in a fresh sandbox under a policy, and the sandbox's denials are
+files and processes follow a YAML policy, and logs every denial. With this folder first in shaked's `PATH`,
+every Claude Code agent shaked starts runs in a fresh sandbox under a policy, and the sandbox's denials are
 recorded on the run's timeline as world events (part `sandbox`, kind `denial`) with their reasons.
 
 | File | What it is |
@@ -25,7 +25,7 @@ What was verified on 2026-11-08, with OpenShell v0.1.7 and Claude Code 2.1.319 o
    start `openshell-gateway --config config/gateway.toml` (with `OPENSHELL_LOCAL_TLS_DIR` set to that folder),
    then `openshell gateway add https://127.0.0.1:17670 --local --name arena`.
 4. Build the image (see `Dockerfile`) and tag it `openshell-arena-claude:latest`.
-5. Start arenad with `PATH=<this folder>:$PATH OPENSHELL_HOME=...` (optionally `ARENA_OPENSHELL_POLICY`,
+5. Start shaked with `PATH=<this folder>:$PATH OPENSHELL_HOME=...` (optionally `ARENA_OPENSHELL_POLICY`,
    `ARENA_OPENSHELL_IMAGE`).
 
 ## How it works, and its limits

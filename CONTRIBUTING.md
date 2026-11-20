@@ -16,9 +16,9 @@ You need [Rust](https://rustup.rs/) (stable), [Node.js](https://nodejs.org/) 24,
 ```bash
 git clone https://github.com/CopperTide/Shakedown.git
 cd Shakedown
-docker compose -f deploy/compose.yml up -d     # Postgres on 127.0.0.1:5544, used by arenad and the tests
+docker compose -f deploy/compose.yml up -d     # Postgres on 127.0.0.1:5544, used by shaked and the tests
 cargo build --release                          # integrations and benchmarks, into core/target/release
-(cd core && cargo run -p arenad)               # API on http://127.0.0.1:4510
+(cd core && cargo run -p shaked)               # API on http://127.0.0.1:4510
 (cd ui && npm ci && npm run dev)               # UI on http://127.0.0.1:4520
 ```
 
@@ -26,13 +26,13 @@ cargo build --release                          # integrations and benchmarks, in
 
 | Path | What it holds |
 |---|---|
-| `core/` | arenad (`crates/arenad`) and the package host and checker (`crates/parts`, `arena-part-check`). No code for any particular system. |
+| `core/` | shaked (`crates/shaked`) and the package host and checker (`crates/parts`, `arena-part-check`). No code for any particular system. |
 | `kits/rust`, `kits/python` | The kits integrations and benchmarks are written with: crate `arena-part`, package `arena_part`. |
 | `integrations/<name>/` | One package per kind of system (Postgres, a folder, Docker Compose, MariaDB, ERPNext, ...). |
 | `benchmarks/<name>/` | Benchmarks: tasks, tools, seed data and gold actions. `benchmarks/retail` is the included example. |
 | `ui/` | The web UI (React, Vite). |
 | `docs/` | The protocol, concepts, reference and measurements. |
-| `deploy/compose.yml` | The Postgres arenad and the tests use. |
+| `deploy/compose.yml` | The Postgres shaked and the tests use. |
 
 The core never depends on an integration or a benchmark, and they never depend on a `core/` crate: they use only the kits. `core/crates/parts/tests/isolation.rs` checks this.
 
@@ -40,7 +40,7 @@ The core never depends on an integration or a benchmark, and they never depend o
 
 1. Branch from `main`.
 2. Write a test that fails without your change, then make it pass.
-3. Run the checks (with the Postgres above running, and arenad stopped: its startup cleanup drops databases the tests make):
+3. Run the checks (with the Postgres above running, and shaked stopped: its startup cleanup drops databases the tests make):
    ```bash
    cargo fmt --all --check && (cd core && cargo fmt --all --check)
    cargo clippy --workspace --all-targets && (cd core && cargo clippy --workspace --all-targets)
@@ -57,7 +57,7 @@ Tests that need Docker services, real servers, GPUs or real models are `#[ignore
 
 ## The protocol
 
-arenad talks to every integration and benchmark over `arena-part/1`: JSON-RPC 2.0, one message per line, on the program's stdin and stdout. [docs/protocol.md](docs/protocol.md) is the specification. A change to the protocol updates `docs/protocol.md`, the kits and `arena-part-check` together, in one pull request.
+shaked talks to every integration and benchmark over `arena-part/1`: JSON-RPC 2.0, one message per line, on the program's stdin and stdout. [docs/protocol.md](docs/protocol.md) is the specification. A change to the protocol updates `docs/protocol.md`, the kits and `arena-part-check` together, in one pull request.
 
 ## Write an integration
 
@@ -86,12 +86,12 @@ These are the rules reviewers hold changes to; [AGENTS.md](AGENTS.md) has the sa
 - **Python follows the same rules:** short functions, one responsibility per module, no copy-pasted logic.
 - **Tests never call a real model** unless they are `live_`.
 - **Tests clean up after themselves:** every database, container and folder they create is dropped, even when an assertion fails.
-- **One target directory.** Both Cargo workspaces build into `core/target` (`.cargo/config.toml`), where arenad finds the programs; never add another.
+- **One target directory.** Both Cargo workspaces build into `core/target` (`.cargo/config.toml`), where shaked finds the programs; never add another.
 - **Say only what was verified.** Docs and READMEs keep what was run, and on what, separate from what is designed or assumed.
 
 ## Commit messages
 
-Start the subject with the area it changes and say what the change does: `arenad: register live branch before releasing the cleanup guard`, `postgres: ...`, `ui: ...`, `docs: ...`. Explain why in the body.
+Start the subject with the area it changes and say what the change does: `shaked: register live branch before releasing the cleanup guard`, `postgres: ...`, `ui: ...`, `docs: ...`. Explain why in the body.
 
 ## License
 

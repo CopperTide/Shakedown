@@ -2,7 +2,7 @@
 
 Follows a factory plant that is already running, and puts its state and events in the world. It does not make a
 plant, has no tools, and only ever sends GET requests. Restore: none. Exact is `none` and approximate is false, so
-arenad refuses to rerun a world that contains it, in either mode (`core/crates/arenad/src/restore.rs`).
+shaked refuses to rerun a world that contains it, in either mode (`core/crates/shaked/src/restore.rs`).
 `uses_clock`: true (each `advance` reads the plant's new events). Verified offline only: a pytest test
 (`test_mirror_mode_has_no_tools_and_relays_events` in `integrations/isaac-sim/tests/test_part.py`) runs it against
 a stub HTTP server. It has never followed a real plant, and never an Isaac Sim one. That test is in the isaac-sim

@@ -26,11 +26,11 @@ helper this integration uses: `arena_part::helpers::mariadb`).
 - **Settings:** the install's settings come from env (`ARENA_ERPNEXT_DB_CONTAINER`, `_DB_PORT`,
   `_DB_VOLUME`, `_DB_PASSWORD`, `_PROJECT`, `_PORT`, `_IMAGE`, `_COMPOSE`) else the defaults above, and
   the config of the first start may override them with `db_container`, `db_port`, `db_volume`,
-  `db_root_password`, `project`, `http_port` (arenad runs programs with a cleared environment). One
+  `db_root_password`, `project`, `http_port` (shaked runs programs with a cleared environment). One
   install per program: a later start whose config names another is -32602. Per instance:
   `diff_doctypes` (default `Item, Supplier, Customer, Purchase Order, Sales Order, Work Order,
   Journal Entry`) and `dump_after_bytes` (default 64 MiB, as mariadb).
-- **Sites folder:** the bench's `sites` is `$ARENA_SAVES/erpnext/.sites` (a dot folder: arenad's
+- **Sites folder:** the bench's `sites` is `$ARENA_SAVES/erpnext/.sites` (a dot folder: shaked's
   sweep skips it), bind-mounted into the containers, so a site's files are copied with the folder
   helper. The integration writes `common_site_config.json` (db `db:3306`, the two Redis) and
   `apps.txt`. The image runs as uid 1000, so the folder must belong to uid 1000 (checked: else
@@ -96,7 +96,7 @@ helper this integration uses: `arena_part::helpers::mariadb`).
   mariadb's code (the kit's `Dumps::reroot_standing`) and has not been run live on this integration.
 - **usage** is this server's binlog plus the `eb_*` and `ev_*` databases. The mariadb integration does
   not count this server, so nothing is counted twice. The sites folder, saves, dumps and the base are
-  under `ARENA_SAVES`, which arenad counts; the server's own data volume and the Redis volumes are not
+  under `ARENA_SAVES`, which shaked counts; the server's own data volume and the Redis volumes are not
   counted.
 - **connect** gives `{url, site, api_key, api_secret, admin_password}`: send `Host: <site>` (or log in to
   the web pages as Administrator).

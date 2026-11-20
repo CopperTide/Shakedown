@@ -26,7 +26,7 @@ Templates written as data, worlds generated from them, and the benchmark a built
   and list lengths. A template that can't be read, whatever is wrong with it, is logged and left out of the list.
 
 A gate's `key` and `require` and `scenario_options` are passed through as written: their `{arg}` placeholders
-are arenad's.
+are shaked's.
 
 ## Verified
 

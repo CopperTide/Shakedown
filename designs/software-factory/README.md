@@ -7,8 +7,8 @@ Two agent designs for Shakedown's software-factory world, compared on what reach
 
 Both are customer-style agent code: each is a driver (`python -m factory_designs.team_a`,
 `python -m factory_designs.solo_b`) that joins the run Shakedown started for it through
-`arena.driver`, and builds its framework's model and tools with part 1's adapters
-(`arena.adapters.langgraph`, `arena.adapters.openai_agents`) unchanged.
+`shakedown.driver`, and builds its framework's model and tools with part 1's adapters
+(`shakedown.adapters.langgraph`, `shakedown.adapters.openai_agents`) unchanged.
 
 ## What the designs share, and only that
 
@@ -63,5 +63,5 @@ Verified on 2026-11-19, on Linux with Python 3.14 and Docker: the test suite; th
 the clients import); and `tests/test_live_workbench.py` (marked `live`, skipped without Docker or the image),
 where a command in the container reaches a stand-in proxy through the bridge with the agent's ticket as
 `Proxy-Authorization`, cannot reach the network directly, and cannot write its root. `curl` reads only the
-lower-case `http_proxy`; arenad gives both forms. Not yet verified: a run against a live arenad, and the
+lower-case `http_proxy`; shaked gives both forms. Not yet verified: a run against a live shaked, and the
 designs on a real model.

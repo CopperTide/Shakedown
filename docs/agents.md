@@ -7,7 +7,7 @@ the benchmark's checks and keeps the run. Two kinds of team member do this:
 | Kind | Team member | What runs the agent |
 |---|---|---|
 | `http` | `{kind: "http", url, headers?}` | Your service, behind a URL |
-| `bedrock` | `{kind: "bedrock", model_id, region}` | arenad's own tool-use loop on Amazon Bedrock's Converse API |
+| `bedrock` | `{kind: "bedrock", model_id, region}` | shaked's own tool-use loop on Amazon Bedrock's Converse API |
 
 Either can be one member of a team next to Claude Code or API-mode agents, under the `chain` or `concurrent`
 runner, in a single run or an experiment. In the web UI: **Connect your agent** in the team picker of New
@@ -17,15 +17,15 @@ experiment and Run once, then **Test connection** and **Use this agent**.
 
 An agent system written in LangGraph, CrewAI, the OpenAI Agents SDK or anything else comes in through a
 **driver**: a short program that registers each of your agents with Shakedown and hands your framework the
-agent's tools and model. Your agent code stays as it is. The adapters (`arena.adapters`, one extra each:
-`pip install 'arena-sdk[langgraph]'`, `[crewai]`, `[openai-agents]`) turn an agent's tools into the
+agent's tools and model. Your agent code stays as it is. The adapters (`shakedown.adapters`, one extra each:
+`pip install 'shakedown[langgraph]'`, `[crewai]`, `[openai-agents]`) turn an agent's tools into the
 framework's own tool objects and its model gateway into the framework's chat model. Every tool call runs in
 the world as that agent and is recorded; a refused call reaches the agent as `error: …`, so it can react.
 
 ```python
 from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.prebuilt import create_react_agent
-from arena.adapters import langgraph as sd
+from shakedown.adapters import langgraph as sd
 
 with sd.run() as run:
     def member(id, prompt):
@@ -40,7 +40,7 @@ with sd.run() as run:
 ```
 
 Each of your framework's agents is one Shakedown agent (`run.agent("<id>")`), so the run shows who did what.
-The model's key stays in arenad: the gateway holds it and the framework's client sends a placeholder. The
+The model's key stays in shaked: the gateway holds it and the framework's client sends a placeholder. The
 CrewAI adapter's `step_callback(agent)` records each step's thought; Shakedown also records reasoning from the
 model responses it passes on (reasoning and thinking content, and what the model says alongside its tool
 calls). The CrewAI adapter turns CrewAI's own telemetry off; the OpenAI Agents adapter turns the SDK's trace
@@ -65,7 +65,7 @@ curl -s localhost:4510/api/connections -H 'content-type: application/json' -d '{
 
 The driver gets the run's ids (`ARENA_URL`, `ARENA_RUN`, `ARENA_BRANCH`, `ARENA_TASK`, `ARENA_CONNECTION`), the
 connection's `env`, and only `PATH`, `HOME`, `USER`, `LANG`, `LC_ALL`, `TMPDIR`, `UV_CACHE_DIR`,
-`XDG_CACHE_HOME` and `RUST_LOG` of arenad's own environment: model keys stay in arenad, behind the gateway.
+`XDG_CACHE_HOME` and `RUST_LOG` of shaked's own environment: model keys stay in shaked, behind the gateway.
 If the driver exits before it finishes the run, the run is scored and ends `failed` with the exit code and the
 end of its stderr. If it is still running 30 s after its run ended, it is killed with whatever it started.
 Its exit is recorded as a `driver` world event. `POST /api/connections/{id}/test` runs the benchmark's first
@@ -110,7 +110,7 @@ request is recorded as an `http` step of the part that serves its host: inspecta
 
 ## HTTP agents (`arena-agent/1`)
 
-**Run.** When the agent's turn starts, arenad sends one `POST` to its URL, with its headers:
+**Run.** When the agent's turn starts, shaked sends one `POST` to its URL, with its headers:
 
 ```json
 {
@@ -147,18 +147,18 @@ gateway in front of the agent with a shorter timeout (AWS API Gateway cuts at 29
 | An error status | `infra_error` | `the agent at <host> answered HTTP 502: <start of its body>` |
 | Not reachable | `infra_error` | `could not reach the agent at <host>: …` |
 
-Time the branch spends paused doesn't count. Once arenad stops waiting, the token no longer opens the endpoint.
+Time the branch spends paused doesn't count. Once shaked stops waiting, the token no longer opens the endpoint.
 
 **Hello.** **Test connection** (`POST /api/agents/check`) sends `{"protocol": "arena-agent/1", "type": "hello"}`
 with the same headers and waits up to 10 s; any 2xx is a handshake, and `{"name": "…"}` names the agent.
 
-**Secrets.** Header values never reach a log, an API answer or a saved run. arenad keeps each value in memory the
+**Secrets.** Header values never reach a log, an API answer or a saved run. shaked keeps each value in memory the
 moment it reads it, and everywhere else it stands as a reference, `{"secret": "<ref>"}`, which can be sent back in
-its place. A reference lasts until arenad stops; a team that names one from before is refused with "connect the
+its place. A reference lasts until shaked stops; a team that names one from before is refused with "connect the
 agent again". Errors name the URL's host, never its path or query, but the URL itself is stored with the team:
 put credentials in headers, not in the URL.
 
-**Where the agent runs.** arenad listens on 127.0.0.1 only. An agent on another machine reaches `mcp_url` through
+**Where the agent runs.** shaked listens on 127.0.0.1 only. An agent on another machine reaches `mcp_url` through
 a tunnel you run; set `ARENA_AGENT_BASE` to the tunnel's base URL and `mcp_url` uses it.
 
 **Example.** `sdk/python/examples/agent_server.py` is a complete HTTP agent in about 70 lines: it takes the run
@@ -170,16 +170,16 @@ set, else through Claude Code (`claude -p` with the MCP endpoint and token in it
 ```
 
 **Verified (2026-11-08):** the example on Claude Code, model `haiku`, one run of the Factory-01 task
-`supplier-delay` through a local arenad: it read the schedule, stock and suppliers, reserved the 24 free motors,
+`supplier-delay` through a local shaked: it read the schedule, stock and suppliers, reserved the 24 free motors,
 was refused the USD 2,000 purchase (`PO_LIMIT_EXCEEDED`), raised a flag for a human, and the run passed every
 check, in 24 s, 43k tokens, USD 0.0048 as Claude Code reported it. The header value used was in no record. The
 example's Claude API path has not been run (no key on that machine). The protocol is tested in
-`core/crates/arenad/tests/http_agent.rs` with a protocol client that calls the MCP tools (no model, no decisions).
+`core/crates/shaked/tests/http_agent.rs` with a protocol client that calls the MCP tools (no model, no decisions).
 
 ## Bedrock agents
 
 `{kind: "bedrock", model_id, region}` becomes an API-mode agent on provider `bedrock:<region>` (stored as
-`{kind: "open", provider: "bedrock:us-east-1", model: "<model_id>"}`): arenad's own tool-use loop, with every
+`{kind: "open", provider: "bedrock:us-east-1", model: "<model_id>"}`): shaked's own tool-use loop, with every
 model call recorded through its gateway, translated to the Converse API (`POST
 https://bedrock-runtime.<region>.amazonaws.com/model/<model_id>/converse`) and signed with Signature Version 4.
 
@@ -191,7 +191,7 @@ five minutes before they expire. **Test connection** makes one Converse call of 
 
 **Untested live.** No Bedrock call has been made. The signing passes AWS's own test vector (`get-vanilla`), and
 the request and answer translation, the signed request and the error path are tested against a local server
-standing in for Bedrock (`core/crates/arenad/src/providers/bedrock*`). On the machine it was built on, the AWS
+standing in for Bedrock (`core/crates/shaked/src/providers/bedrock*`). On the machine it was built on, the AWS
 session had expired, and Test connection said so: "no usable AWS credentials: the aws CLI says: … Your session
-has expired". Costs of Bedrock calls are not known to arenad and show as unknown. Claude's thinking blocks are
+has expired". Costs of Bedrock calls are not known to shaked and show as unknown. Claude's thinking blocks are
 not sent back across turns (the loop doesn't ask for thinking).

@@ -38,7 +38,7 @@ changes the fingerprint.
   program fail clearly at the second start. `arena-part-check` needs three live instances, so it can't pass on
   `isaac` as written.
 - Stopping an `isaac` instance points the physics callback at a no-op and stops the timeline. A new plant starts
-  the same way, then builds a new stage, so a later plant never steps an old one. arenad's usual base, then
+  the same way, then builds a new stage, so a later plant never steps an old one. shaked's usual base, then
   branch sequence is one plant after another, which this allows.
 
 ## Config
@@ -63,7 +63,7 @@ changes the fingerprint.
 
 | key | default |
 |---|---|
-| `record` | none. An MP4 path, relative to `$ARENA_SAVES/isaac-sim/`. Each instance writes `<stem>-<instance>.mp4` (arenad runs a base, then a branch) |
+| `record` | none. An MP4 path, relative to `$ARENA_SAVES/isaac-sim/`. Each instance writes `<stem>-<instance>.mp4` (shaked runs a base, then a branch) |
 | `camera` | `auto`: the factory's camera director, which cuts to events. Or `free`, or a rig in the factory's `layout.CAMERAS` |
 | `record_fps` | 30: frames per second of Shakedown time. The MP4 plays at this rate, so it runs in Shakedown time |
 | `record_height` | 720: the MP4's height; the width follows at 16:9 |
@@ -114,7 +114,7 @@ starts (`isaac_part/showcase_*.py`). It changes only what is seen:
 - `camera: auto` follows a plan (`showcase_camera.py`): establishing shots while nothing is wrong, then cuts to PR-A1
   on its zone C and zone D warnings and on the trip (the press, the beacon, the backed-up infeed, the empty outfeed). Any
   shot name holds that shot.
-- `remote/render_showcase.py` drives the part (start, advance, stop) without arenad, for a video or stills.
+- `remote/render_showcase.py` drives the part (start, advance, stop) without shaked, for a video or stills.
 
 **Ran on Isaac Sim (RunPod, 2026-11-05).** An NVIDIA RTX A5000 (24 GB, driver 595.91.07), the image
 `nvcr.io/nvidia/isaac-sim:6.2.0`, `remote/render_showcase.py --seconds 100` (seed 7, 1280x720, 30 fps, RaytracedLighting):
@@ -127,7 +127,7 @@ starts (`isaac_part/showcase_*.py`). It changes only what is seen:
 - Seen on 6.2: changing a material's `emissive_intensity` while running did not show in the render (texture and
   visibility changes did), so lit lamps are separate meshes that are shown or hidden.
 - The first start, with empty caches, took 265 s; later starts 45 to 48 s.
-- Not run with the showcase scene: arenad, a branch from a save, the dock and the truck (they come later in the
+- Not run with the showcase scene: shaked, a branch from a save, the dock and the truck (they come later in the
   scenario than 100 s).
 
 
@@ -304,7 +304,7 @@ plant as before (no extra keys, events or load).
   - 221 kB after it, mostly the frozen pre-trip window;
   - 250 kB at 10 min, because the 1 Hz telemetry grows up to its 2 h cap.
 
-  arenad saves at every step, so a run of a few hundred steps after the trip costs tens of MB.
+  shaked saves at every step, so a run of a few hundred steps after the trip costs tens of MB.
 
 ## Mirror mode: package `isaac-sim-mirror`
 
@@ -318,12 +318,12 @@ factory (config `plant_url`, default `http://127.0.0.1:8090`) and only ever GETs
 - `inspect` returns pieces of `GET /state`, under the same keys as above. `save` stores the current `/state`
   for display (`exact: false`).
 - Restore is `{exact: "none", approximate: false}`. A live plant can't be rewound, so a start `from` a save is
-  -32001, and arenad's restore table refuses to fork a world that contains the mirror.
+  -32001, and shaked's restore table refuses to fork a world that contains the mirror.
 - It has no `[[example]]`, so `arena-part-check` can't run on it. Its test uses a stub HTTP server on a free port.
 
 ## Running on another machine: `ARENA_RUN_ISAAC_SIM`
 
-arenad replaces a package's run command with the command line in `ARENA_RUN_<PACKAGE>` (here
+shaked replaces a package's run command with the command line in `ARENA_RUN_<PACKAGE>` (here
 `ARENA_RUN_ISAAC_SIM`), run by `/bin/sh -c` (`docs/protocol.md`). Pointed at `ssh <host> -- <command>`, the part
 runs on a GPU machine with the protocol on the ssh session's stdio:
 
@@ -335,8 +335,8 @@ export ARENA_RUN_ISAAC_SIM="exec ssh -p <port> -i <key> -o BatchMode=yes isaac@<
 - The remote machine needs this folder, `kits/python` and the factory's `isaac/` and `data/` in the same layout
   (`arena/` next to `CopperTide-Examples/`), since the default paths and the fingerprint are relative to it.
 - Saves and recordings stay on the remote machine, under its `ARENA_SAVES`: `save` writes to
-  `$ARENA_SAVES/isaac-sim/<save>` (the protocol's convention) rather than arenad's `dir`, which is a local path.
-  arenad's own count of save bytes doesn't see them.
+  `$ARENA_SAVES/isaac-sim/<save>` (the protocol's convention) rather than shaked's `dir`, which is a local path.
+  shaked's own count of save bytes doesn't see them.
 - The `nvcr.io/nvidia/isaac-sim:6.2.0` image has no sshd and runs as uid 1234 without root, so `remote/sshd.py`
   is a small SSH server (asyncssh, key login only, one command per session) to start inside the container.
 
@@ -347,9 +347,9 @@ export ARENA_RUN_ISAAC_SIM="exec ssh -p <port> -i <key> -o BatchMode=yes isaac@<
   - an NVIDIA GeForce RTX 3090 (24 GB), driver 580.95.05;
   - the image `nvcr.io/nvidia/isaac-sim:6.2.0`, whose `plant/sim.isaac_version` reads `6.2.0.rc.14.6`;
   - a 40 GB container disk and no volume.
-- Everything else ran on a Linux workstation: arenad (`live_factory_gold_path_report`), the factory benchmark with
+- Everything else ran on a Linux workstation: shaked (`live_factory_gold_path_report`), the factory benchmark with
   `--backend isaac`, ERPNext (`frappe/erpnext:v16.53.0`), `ridgeline-hub` and CopperTide.
-- arenad started the part over `ssh` (`ARENA_RUN_ISAAC_SIM`, `remote/sshd.py` on the pod), with
+- shaked started the part over `ssh` (`ARENA_RUN_ISAAC_SIM`, `remote/sshd.py` on the pod), with
   `ARENA_CLOCK_SPEED=0.1` and `{"record": "factory-gold.mp4", "camera": "auto", "record_fps": 10}`.
 - The team was the scripted, no-model team, on the gold path. Shakedown no longer has that team: the factory's live
   test (now `live_factory_team_runs_the_incident_and_arena_scores_it`) runs the benchmark's team on a real model,

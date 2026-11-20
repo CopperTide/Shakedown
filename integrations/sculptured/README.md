@@ -27,7 +27,7 @@ API.
   build (`--version`), the port, the scratch folder (a fresh `/tmp/arena-sc-<16 hex>`) and the processes:
   serve's pid and group, and the runner's pid from `host-local/hostd.pid`. A restarted program still
   reaches, saves and stops the instance from that record. `.live` is a dot folder: `gc` and
-  arenad's sweep leave it alone (a `live` folder would look like a save id).
+  shaked's sweep leave it alone (a `live` folder would look like a save id).
 - **Team:** made on the first start of a fresh server: `POST /api/teams` `{template: "blank", name}` (its id
   is its name; no agents) and `PUT /api/teams/{team}/settings` with `question_timeout_min: 1440`. A
   restored server already has it. The team has no rules, so every change waits for a person's decision.

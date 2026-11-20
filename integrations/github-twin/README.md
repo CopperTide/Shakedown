@@ -3,7 +3,7 @@
 **A twin.** Puts a GitHub-compatible code host in the world, in GitHub Enterprise Server mode: real bare git
 repositories served over smart HTTP (`git http-backend`), the REST API under `/api/v3` that `gh`, PyGithub and
 Octokit call, and the GraphQL API at `/api/graphql` that `gh pr` and `gh issue` call. Agents reach it only
-through arenad's recording proxy, on the host names its config gives
+through shaked's recording proxy, on the host names its config gives
 (`docs/protocol.md`, "Serving HTTP"). `describe.system` is `{kind: "code", product: "GitHub twin (GHES mode)",
 stands_in_for: "GitHub Enterprise Server", simulated: true}`. Restore: exact from a save (the SQLite store, and the
 repositories with their git objects hard-linked between saves); saved at save points; `uses_clock`: true.
@@ -106,7 +106,7 @@ approval refused, the reviewer's approval, squash merge); and, marked `live`, gh
 `pr view --json`, `pr review --approve` as the author (refused) and as the reviewer, `pr merge --squash
 --delete-branch`; a read-only agent's `pr list` served and `pr merge` refused. Because the front listens on a
 port (not 443), gh cannot match the clone's remote to `GH_HOST`, so the tests pass `-R <host:port>/acme/app`.
-Not yet verified through arenad's proxy (it does not send `X-Arena-Agent` yet).
+Not yet verified through shaked's proxy (it does not send `X-Arena-Agent` yet).
 
 Actions: `tests/test_actions_*.py` on a fake Docker (runs, needs and `if`, deploy result and world-time timeout,
 cancel, re-run, a run caught by a save run again after restore, the same runs from two twins giving the same docs);

@@ -1,7 +1,7 @@
 # Integrations
 
 An integration is a program that puts one kind of system in the arena's world: a database, a folder, an ERP, a
-simulator. It works like a device driver. arenad (the core) knows nothing about the system. It speaks the
+simulator. It works like a device driver. shaked (the core) knows nothing about the system. It speaks the
 protocol `arena-part/1` to the program, and the program does the rest: start an instance, run tool calls, save
 the state, restore it, show it, compare it. The protocol is in `docs/protocol.md`; read that for every method and
 error code.
@@ -43,13 +43,13 @@ Examples to copy: `kits/rust/examples/counter.rs` and `kits/python/examples/coun
 Each integration says, in `describe`, how it restores:
 
 - `exact: "save"`: it can save its state exactly and start from that save.
-- `exact: "replay"`: it can't save exactly. arenad starts it again with the same seed and repeats every
+- `exact: "replay"`: it can't save exactly. shaked starts it again with the same seed and repeats every
   recorded input. The part must be deterministic for this to work.
 - `exact: "none"`: no exact restore.
 - `approximate: true`: it can also start from a save that may miss some state. A rerun that uses this is
   labelled "approximate restore".
 
-A rerun asks for `exact` (the default) or `approximate`. `core/crates/arenad/src/restore.rs` holds the table.
+A rerun asks for `exact` (the default) or `approximate`. `core/crates/shaked/src/restore.rs` holds the table.
 
 ## Write one: the counter, step by step
 
@@ -68,8 +68,8 @@ The counter holds one integer per instance. Its Rust code is `kits/rust/examples
    changes nothing.
 7. `save` writes `state.json` into `dir` and returns `{bytes, exact: true}`. `inspect`, `diff`, `drop_save`, `stop`
    and `usage` are small. A part whose saves all sit in `ARENA_SAVES` reports `usage` 0.
-8. Build it, then check it (below). Put the folder where arenad looks (`ARENA_PACKAGES`, default `integrations/`
-   and `benchmarks/`) and start arenad.
+8. Build it, then check it (below). Put the folder where shaked looks (`ARENA_PACKAGES`, default `integrations/`
+   and `benchmarks/`) and start shaked.
 
 Python is the same with `arena_part.Part` and `arena_part.serve(Counter())`. A manifest for it is
 `kits/python/examples/arena-package.toml`.

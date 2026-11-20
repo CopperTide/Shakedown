@@ -1,7 +1,7 @@
 # slack-twin
 
 **A twin.** Puts a Slack-compatible workspace in the world: the Web API methods (`/api/<method>`) that
-`slack_sdk` and chat agents call. Agents reach it only through arenad's recording proxy, on the host names its
+`slack_sdk` and chat agents call. Agents reach it only through shaked's recording proxy, on the host names its
 config gives (`docs/protocol.md`, "Serving HTTP"). `describe.system` is `{kind: "chat", product: "Slack twin
 (Web API)", stands_in_for: "Slack", simulated: true}`. Restore: exact from a save (one SQLite store); saved at
 save points; `uses_clock`: true, and every `ts` is world time (µs, unique in the workspace).
@@ -54,4 +54,4 @@ author left out.
 `uv run --with pytest pytest -q` (39 tests): the methods with `slack_sdk` 3.47 `WebClient` unchanged (base URL
 set to the twin, the proxy's headers added), errors, threads, reactions, search, mentions, acts, apps' posts, read-only agents,
 save and restore, and every method's success and error answers against Slack's description. Not yet verified
-through arenad's proxy.
+through shaked's proxy.

@@ -47,11 +47,11 @@ is `{name, save: "tar"}` and saves exactly as above). `save` is one of:
 
 Each save has `save.json` (`{volumes: [{name, save}], helper_image?, env?}`; `env` keeps only `PATH` and `DOCKER_*` of the config's
 `env`, what the helper's `docker` needs once the instance is gone — never the compose file's other variables). The last save of each
-instance is kept in `.last/<instance>.json`. `describe.save_at` is `points`: arenad saves the part at save points
+instance is kept in `.last/<instance>.json`. `describe.save_at` is `points`: shaked saves the part at save points
 (before a model call, on request, at run end), not after every request. `http: [{host, service, port, env?,
 reads?}]` makes `http_routes` answer each host with the port Docker published for `service` (`docker compose port`),
-once that port accepts connections (at most 60 s), so agents reach it through arenad's proxy. A save that stops a
-service restarts it on a new port; arenad asks `http_routes` again after each save. The live test `live_service_strategies` (Postgres, a hard-linked volume
+once that port accepts connections (at most 60 s), so agents reach it through shaked's proxy. A save that stops a
+service restarts it on a new port; shaked asks `http_routes` again after each save. The live test `live_service_strategies` (Postgres, a hard-linked volume
 and a cache) passed on Docker 29.1 with `postgres:17-alpine` and `redis:6.2-alpine`: an unchanged file is one inode
 in two saves, the live instance's digests equal its last save's, and a start from the first save has its row and file.
 

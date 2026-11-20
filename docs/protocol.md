@@ -1,11 +1,11 @@
 # `arena-part/1`
 
-The protocol between arenad and an integration (or benchmark) program, in any language. Kits: Rust
+The protocol between shaked and an integration (or benchmark) program, in any language. Kits: Rust
 (`kits/rust`, crate `arena-part`) and Python (`kits/python`). Wire types for Rust: `arena_part::proto`.
 
 ## Transport
 
-JSON-RPC 2.0, one message per line, over the program's stdin and stdout. arenad starts the program;
+JSON-RPC 2.0, one message per line, over the program's stdin and stdout. shaked starts the program;
 stderr is its log. The program exits when stdin closes. Requests may be in flight at the same time and
 answered in any order; match them by `id`. Each response is one whole line.
 
@@ -21,7 +21,7 @@ protocol = 1
 run = { command = ["${ARENA_BIN_DIR}/arena-postgres"] }    # or: run = { image = "..." }
 needs = { gpu_vram_gb = 0, services = [] }    # e.g. services = ["host.docker.internal:5544"], network = "host"
 config_schema = { ... }      # JSON Schema of the part's config in a world
-opt_in = true                # optional, for a benchmark: arenad uses it only when ARENA_BENCHMARK names it
+opt_in = true                # optional, for a benchmark: shaked uses it only when ARENA_BENCHMARK names it
 
 [[example]]                  # tool calls the conformance check runs
 tool = "get"
@@ -31,31 +31,31 @@ args = {}
 `command` runs as a local program, for integrations installed from a folder you trust, and may contain
 `${ARENA_BIN_DIR}`. `image` runs boxed in a container: no network at all unless `needs.network = "host"`,
 which gives it the host's network (every service the host can reach, not only those in `needs.services`;
-arenad does not enforce `services`); no environment from arenad; disk only under its own save folder,
+shaked does not enforce `services`); no environment from shaked; disk only under its own save folder,
 mounted at `/saves`.
 
-`ARENA_RUN_<PACKAGE>` in arenad's environment (the name upper-cased, `-` as `_`; `ARENA_RUN_ISAAC_SIM` for
-`isaac-sim`) replaces `run`. arenad runs it with `/bin/sh -c`, as a `command` (in the package folder, with the same
+`ARENA_RUN_<PACKAGE>` in shaked's environment (the name upper-cased, `-` as `_`; `ARENA_RUN_ISAAC_SIM` for
+`isaac-sim`) replaces `run`. shaked runs it with `/bin/sh -c`, as a `command` (in the package folder, with the same
 environment, and `${ARENA_BIN_DIR}` substituted). Use it for a part on another machine, such as
 `ssh <host> -- <command>`, whose stdin and stdout carry the protocol. Such a part keeps its saves under its own
-`ARENA_SAVES` there, by the convention below, and arenad doesn't count their bytes.
+`ARENA_SAVES` there, by the convention below, and shaked doesn't count their bytes.
 
 ## Ids and keys
 
-- Instance and save ids are chosen by arenad and match `^[a-z0-9_]{1,63}$`. The kits answer `-32602` to any
+- Instance and save ids are chosen by shaked and match `^[a-z0-9_]{1,63}$`. The kits answer `-32602` to any
   other id.
 - Package names match `^[a-z0-9-]{1,40}$`.
 - Keys name a piece of a part's state, `<kind>/<id>` (for Postgres, `orders/#W1`). The part decides what
   its keys are.
 - **Internal keys.** A key whose kind starts with `_` (`_disruption/courier-capacity`) is the part's own
   bookkeeping, which no agent's call is about (a scheduled disruption's count of calls). A call that changes one
-  names it in `writes` like any key, and arenad saves the part with that step, so an exact restore keeps it. But
-  such a key doesn't make the step a write: arenad records it under the step's `internal` instead of `writes`, a
+  names it in `writes` like any key, and shaked saves the part with that step, so an exact restore keeps it. But
+  such a key doesn't make the step a write: shaked records it under the step's `internal` instead of `writes`, a
   step that changed only internal keys counts as the read (or refusal) it is, no world view follows it
   ([The world's view](#the-worlds-view)), and a comparison of two final worlds leaves internal keys out of the
   differing rows. `inspect` and `diff` show them as usual.
 
-## Calls from arenad to the part
+## Calls from shaked to the part
 
 | Method | Params | Result |
 |---|---|---|
@@ -81,10 +81,10 @@ real product. Each tool's `effect` already says whether it reads or writes.
 
 - `ToolSchema` is the MCP shape (`name`, `description`, `inputSchema`) plus `effect: "read"|"write"`. Tool
   names must be unique across a world; a world that has a clash is refused.
-- `dir` is a folder arenad creates for that save under `ARENA_SAVES/<part>/<save>/`. A part that keeps
+- `dir` is a folder shaked creates for that save under `ARENA_SAVES/<part>/<save>/`. A part that keeps
   saves natively (Postgres `snap_` databases) ignores it and reports `bytes` itself.
 - **Save folders by convention:** a part finds any save's folder at `$ARENA_SAVES/<package name>/<save>/`.
-  arenad passes env `ARENA_SAVES` to the program, and `save.dir` is that same path. So a part that has
+  shaked passes env `ARENA_SAVES` to the program, and `save.dir` is that same path. So a part that has
   been restarted can still start from, inspect or diff an older save that is not in its memory; it answers
   `-32002` only when the folder is missing.
 - `advance` moves the part's clock to `clock_ms`. Parts with `uses_clock: false` never get it. Events the
@@ -93,16 +93,16 @@ real product. Each tool's `effect` already says whether it reads or writes.
   something to report at once (`advance` is the other way; parts without the clock have only this one).
 - A refused call (`error`) usually has empty `writes`. A part that changed anyway (a scheduled disruption fired
   before it answered, see [Scheduled disruptions](#scheduled-disruptions)) names what it wrote and may give
-  `events`: arenad saves the part with that step, as for any write, so a fork after it keeps the change.
+  `events`: shaked saves the part with that step, as for any write, so a fork after it keeps the change.
 - `save` reports `exact: false` when the save may not capture everything (an approximate save).
 - `inspect` with an empty `keys` list returns every key the part has for that target.
-- `usage` counts only what the part keeps outside `ARENA_SAVES` (databases, files elsewhere). arenad
+- `usage` counts only what the part keeps outside `ARENA_SAVES` (databases, files elsewhere). shaked
   measures the save folders under `ARENA_SAVES` itself, so a part whose saves all live there reports 0.
 - `drop_save` of a save the part doesn't have answers `-32002` or succeeds; it is never another error.
-  arenad calls it without checking first and treats `-32002` as "already gone", which counts as success.
+  shaked calls it without checking first and treats `-32002` as "already gone", which counts as success.
 - `gc` drops the saves not in `keep` (and instances that are not running). A `keep` entry is a save id,
   or an id prefix followed by `*`: `base_*` keeps every save whose id starts with `base_`. After a
-  `gc`, arenad removes the folders under `ARENA_SAVES/<part>/` whose names `keep` does not keep.
+  `gc`, shaked removes the folders under `ARENA_SAVES/<part>/` whose names `keep` does not keep.
 
 ## Benchmark calls
 
@@ -117,14 +117,14 @@ A benchmark program speaks the same transport.
 | `score` (with `scored: true`) | `{task, docs: {part: {key: doc}}}` | `{checks: [{name, passed, detail?, safety?, measure?}]}` (`safety: true`: a hard safety check, an unsafe action rather than a missed goal, reported apart from the score; `measure`: a number the check measured, see [Scoring by named checks](#scoring-by-named-checks)) |
 | `view` (with `view`) | `{connections: {part: info}, docs: {part: {key: doc}}}` | `{view: TwinView}`: the world's digital twin now ([The world's view](#the-worlds-view)) |
 
-- `instructions_title` is the heading over `instructions` in each agent's input; arenad uses
+- `instructions_title` is the heading over `instructions` in each agent's input; shaked uses
   `Instructions` when it is absent.
 - `team` is the team the benchmark suggests, `{id, name, agents: [{id, name, prompt, read_only?, tools?}]}` (ids
-  match `^[a-z0-9_-]+$`; the order is the order arenad's chain runner runs them in). Every agent may use
-  every tool unless `read_only` is true, which keeps it to read tools, or `tools` lists the world tools it gets; no agent has to hand off. arenad
+  match `^[a-z0-9_-]+$`; the order is the order shaked's chain runner runs them in). Every agent may use
+  every tool unless `read_only` is true, which keeps it to read tools, or `tools` lists the world tools it gets; no agent has to hand off. shaked
   offers it as the default team, each agent run by Claude Code with model `sonnet` unless the request names
-  another kind, model or provider; when it is absent arenad offers one agent with a generic prompt. A team
-  may say `runner`, the arenad runner its prompts are written for (`chain`, `concurrent` or `dispatch`; in a
+  another kind, model or provider; when it is absent shaked offers one agent with a generic prompt. A team
+  may say `runner`, the shaked runner its prompts are written for (`chain`, `concurrent` or `dispatch`; in a
   `dispatch` run the first agent leads).
 - `teams` are more teams the benchmark suggests beside `team`, in the same shape, offered one click away
   (`GET /api/teams`).
@@ -133,14 +133,14 @@ A benchmark program speaks the same transport.
 
 ### Links between parts
 
-Parts never call each other. A benchmark's `describe` may declare `links`, and arenad makes the calls:
+Parts never call each other. A benchmark's `describe` may declare `links`, and shaked makes the calls:
 
 ```json
 {"from": "hub", "event": "shipment_booked", "to": "plant", "tool": "add_shipment",
  "args": {"part": "/part", "origin": "/origin", "note": "a constant"}}
 ```
 
-- When `from` gives an event of kind `event` (from `advance`, or in a `call_tool` result), arenad calls `to`'s
+- When `from` gives an event of kind `event` (from `advance`, or in a `call_tool` result), shaked calls `to`'s
   `tool` with `clock_ms` set to the event's time. In `args`, a string starting with `/` is a JSON pointer into
   the event's `data`; anything else is a constant. An argument the event lacks makes the step an error, and the
   part is not called.
@@ -157,7 +157,7 @@ Parts never call each other. A benchmark's `describe` may declare `links`, and a
 
 ### A task's setup
 
-A task may name `setup`, calls arenad makes on a run's world right after it starts from the base save, before any
+A task may name `setup`, calls shaked makes on a run's world right after it starts from the base save, before any
 agent: the task's scenario or its scripted disruptions, so tasks of one benchmark can meet different worlds that
 start from the same base.
 
@@ -179,7 +179,7 @@ start from the same base.
 ### A task's clock
 
 A task whose world keeps its own calendar (a plant dated March 2026 while the model's environment says it is November)
-names `clock_start`: the world's date and time at clock 0, `YYYY-MM-DDTHH:MM:SS` in the world's local time. arenad then
+names `clock_start`: the world's date and time at clock 0, `YYYY-MM-DDTHH:MM:SS` in the world's local time. shaked then
 opens every agent's first input with a "World clock" section (the world's date and time now, which is `clock_start`
 plus the branch clock, how fast that clock runs, and that it is not today's date), ends each later input of a dispatch
 run with the world time then, and gives `clock_start` in `GET /api/tasks` for external agents. It is the same for every
@@ -211,7 +211,7 @@ builder shows them, and a run or suite names the ones it chose.
 - `base` are the task ids a scenario may start from. A param is `kind: "int"` (with optional `min` and `max`) or
   `kind: "choice"` (one of `choices`), and has a `default`. `default: true` on a disruption means a builder offers it
   selected.
-- A run (`POST /api/runs`) or suite (`POST /api/suites`) asks for `scenario: {disruptions: [{id, params?}]}`. arenad
+- A run (`POST /api/runs`) or suite (`POST /api/suites`) asks for `scenario: {disruptions: [{id, params?}]}`. shaked
   checks each choice (an option the benchmark lists, chosen once, its params known, in range or among the choices; a
   param left out takes its default) and fills the option's `template`: in its strings, `{param}` is the param's
   value; a string that is exactly one placeholder takes the value as it is (a number stays a number). The same
@@ -236,9 +236,9 @@ may list more). The Python kit implements this convention (`arena_part.disruptio
   for nothing. It fires once, deterministically, **before** the part answers the counted call that crosses the count,
   so that call already sees the changed world, and fires even if that call is then refused. One with `after_calls` 0
   and no `tool` fires as it is armed, in the setup call.
-- When one fires, the call's `events` get `{kind: "disruption", text, data: {id, ...do}}`, which arenad records as a
+- When one fires, the call's `events` get `{kind: "disruption", text, data: {id, ...do}}`, which shaked records as a
   world event at that moment. While one waits, each call it counts names the internal key `_disruption/<id>` in
-  `writes`, so arenad saves the count with the step without making the step a write: the schedule is part of the
+  `writes`, so shaked saves the count with the step without making the step a write: the schedule is part of the
   part's state, so forks and replays meet the same schedule. `inspect` shows `_disruption/<id>` with its count
   (`seen`) and whether it `fired`.
 - `do.kind` is the part's own. pharma-logistics: `lane_capacity {carrier, origin, destination, capacity}`,
@@ -253,7 +253,7 @@ may list more). The Python kit implements this convention (`arena_part.disruptio
 
 A benchmark whose `describe` has `view: {docs: [part]}` draws the world's digital twin. After a run's setup, and after
 every step that wrote anything (an agent's, a link's or a setup's step, a disruption's included; internal keys don't
-count), arenad calls `view`
+count), shaked calls `view`
 and records an event `{kind: "world_view", payload: {seq_of, view}}` right after that step (and its world events and
 link steps): `seq_of` is the seq of the step the view follows (of `RunStart` when the setup wrote nothing). One view
 follows an agent's step and the link steps it set off. A failing or late (10 s) `view` is logged, records nothing and
@@ -285,7 +285,7 @@ decision bind another part without either knowing the other:
  "require": {"/decision/approved": true, "/action": "freight_booking", "/payload/amount": "{amount}"}}
 ```
 
-- Before running `tool` for an agent, arenad reads `key` with `inspect` on `part`'s live instance. In `key`,
+- Before running `tool` for an agent, shaked reads `key` with `inspect` on `part`'s live instance. In `key`,
   `{arg}` is the call's argument `arg`. Each entry of `require` is a JSON pointer into the document and the value
   it must have; the string `"{arg}"` is the call's argument. Numbers count as equal within 0.005.
 - A missing argument or document, or a value that differs, is the tool's `error`. The tool's part is not called,
@@ -297,7 +297,7 @@ decision bind another part without either knowing the other:
 ### Scoring by named checks
 
 Usually a branch is scored by comparing the world with a gold world. A benchmark whose end state can't be compared
-that way (ids a part makes up, the time things happened at) says `scored: true`. arenad then makes no gold world:
+that way (ids a part makes up, the time things happened at) says `scored: true`. shaked then makes no gold world:
 it saves every part's final state, gives the benchmark every part's `inspect` with no keys, and records the
 answer as the branch's check, which passes when there is at least one check and all of them pass. `differing_rows`
 lists the checks that failed.
@@ -343,7 +343,7 @@ A benchmark's tools reach parts only through `connect` info. Only parts with exa
 ### Denials and flags
 
 A suite's report counts two safety figures per run from its tool calls, apart from the checks
-(`core/crates/arenad/src/suite/safety.rs`). They follow from how a part words its tool errors and names its
+(`core/crates/shaked/src/suite/safety.rs`). They follow from how a part words its tool errors and names its
 tools, so a benchmark that wants them counted follows this convention:
 
 - **Denial:** a tool call (by any agent, or the world's links) whose `error` says it was refused rather than
@@ -387,7 +387,7 @@ options: {system: {name: value}}, people: {counts: {role: n}, edits: {id: {name}
 ## Serving HTTP
 
 A part whose instance is a web service (a code host, an issue tracker) answers `http_routes` with the hosts it
-serves. Agents' own clients (`git`, `gh`, `curl`, SDKs) reach those hosts through arenad's recording proxy, and each
+serves. Agents' own clients (`git`, `gh`, `curl`, SDKs) reach those hosts through shaked's recording proxy, and each
 request is recorded as a step named `http` owned by the part. A part that answers `-32601` serves none.
 
 - `host` is the world's name for the service (`github.acme.test`, `[a-z0-9.-]+`). It comes from the part's config and
@@ -398,7 +398,7 @@ request is recorded as a step named `http` owned by the part. A part that answer
 - `reads` lists `METHOD glob` patterns of requests that only read (`POST */git-upload-pack`; `*` matches any run of
   characters, `/` included). GET, HEAD and OPTIONS are reads; any other method is a write unless a pattern matches.
 - The upstream may answer with the header `X-Arena-Effect: read|write`, which has the last word on the effect (a
-  GraphQL query is a `POST` that reads). arenad strips it before the client sees the answer.
+  GraphQL query is a `POST` that reads). shaked strips it before the client sees the answer.
 - The proxy keeps `Host: <host>` and adds `X-Forwarded-Proto`, `X-Forwarded-Host` and `X-Forwarded-Port`. Every
   absolute URL a part mints (`html_url`, `next` links) must be built from them, never from its upstream address: the
   kits' `public_base` does this. A client's own `X-Forwarded-*`, `Forwarded` and `X-Arena-*` headers are dropped, so
@@ -416,17 +416,17 @@ request is recorded as a step named `http` owned by the part. A part that answer
 - Recorded HTTP requests are never sent again: a part that serves HTTP must restore from saves. A world with a part
   that serves HTTP and restores by replay is refused.
 
-## When arenad saves
+## When shaked saves
 
-`describe.save_at` says when arenad saves a part. `step` (the default, and what a part that leaves it out gets)
+`describe.save_at` says when shaked saves a part. `step` (the default, and what a part that leaves it out gets)
 saves it after every step that wrote to it. `points` saves it only at save points: before a model call through
-arenad's gateway when it changed since its last save, when a driver asks (`POST /api/branches/{id}/save`), and at
+shaked's gateway when it changed since its last save, when a driver asks (`POST /api/branches/{id}/save`), and at
 the run's end. A fork whose point has no save of the part starts at the last save point before it. `points` suits a
 part whose save is costly (a whole stack) and whose writes come in bursts between model calls.
 
 ## World time
 
-`start` gives a part `world_time: {epoch_ms, speed}` when arenad knows the world's time: `epoch_ms` is the unix time
+`start` gives a part `world_time: {epoch_ms, speed}` when shaked knows the world's time: `epoch_ms` is the unix time
 in ms of clock 0 (the task's `clock_start` read as UTC, else the run's start; a fork keeps its run's), and `speed`
 how many world ms pass per wall ms. A part stamps what it emits (metrics, logs, traces) with
 `epoch_ms + clock_ms`, so its telemetry follows the world clock and stands still while the branch is paused.
@@ -465,7 +465,7 @@ internally in fixed increments up to t. Advancing to 2500 in one call or in five
 ## Determinism contract for `exact: "replay"`
 
 Given the same `seed`, the same `fingerprint`, and the same ordered inputs (`call_tool` at `clock_ms`,
-`advance` to `clock_ms`), the part reaches the same state and gives the same results. arenad replays by
+`advance` to `clock_ms`), the part reaches the same state and gives the same results. shaked replays by
 `start` with the original seed at clock 0, then for each recorded input `advance` to its `clock_ms` and
 repeat the call. A result that differs from the recorded one stops the replay with "replay diverged". A
 replay is refused when the `fingerprint` differs from the one recorded at the run's start. The conformance
@@ -473,12 +473,12 @@ check (`arena-part-check`) tests this.
 
 So anything that changes how the part behaves must be in its `fingerprint` (its code, data files, the
 version of a program it drives) or checked at `start`: a `config` that points at other code or data than
-`describe` hashed is refused with `-32003` there. arenad also refuses an exact rerun when a replayed part's
+`describe` hashed is refused with `-32003` there. shaked also refuses an exact rerun when a replayed part's
 `{integration, config}` in the benchmark's world differs from the one the run recorded.
 
 ## Worked example
 
-A `counter` part (`kits/rust/examples/counter.rs`). `>` is arenad to the part, `<` the reply.
+A `counter` part (`kits/rust/examples/counter.rs`). `>` is shaked to the part, `<` the reply.
 
 ```
 > {"jsonrpc":"2.0","id":1,"method":"describe","params":{}}

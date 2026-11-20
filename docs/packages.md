@@ -1,7 +1,7 @@
 # Packages: integrations and benchmarks
 
 Everything system-specific in Shakedown is a package: a folder with an `arena-package.toml` and a program that
-speaks [`arena-part/1`](protocol.md). arenad finds packages under the `ARENA_PACKAGES` roots (default
+speaks [`arena-part/1`](protocol.md). shaked finds packages under the `ARENA_PACKAGES` roots (default
 `integrations/` and `benchmarks/`) and starts their programs itself. The core never depends on a package, and a
 package never depends on the core: it uses only the kits.
 
@@ -27,7 +27,7 @@ and `drop_save`. It prints a JSON report and exits 0 if all passed, 1 if not, 2 
 Install a package by putting its folder under one of the `ARENA_PACKAGES` roots. A `command` run is for
 programs you trust; it runs in the package folder with only `PATH`, `HOME`, `ARENA_PG_URL`, `UV_CACHE_DIR`,
 `XDG_CACHE_HOME`, `RUST_LOG` and `ARENA_SAVES` in its environment. An `image` run is boxed in a container: no
-network unless the manifest asks for host networking (`needs.network = "host"`), no environment from arenad,
+network unless the manifest asks for host networking (`needs.network = "host"`), no environment from shaked,
 and only its own saves folder, mounted at `/saves`.
 
 ## Write a benchmark
@@ -40,10 +40,10 @@ transport (`docs/protocol.md`, "Benchmark calls"). It answers:
   Optionally `instructions_title`, the heading over the instructions in each agent's input (default
   `Instructions`), and `team`, the team it suggests (`{id, name, agents: [{id, name, prompt}]}`).
   The CLIs know the world's MCP server by the benchmark's name.
-- `seed`: load the starting data into fresh instances. arenad saves the result once as the base world that
+- `seed`: load the starting data into fresh instances. shaked saves the result once as the base world that
   every run starts from.
 - `call_tool`: run one of its tools and say which part it touched and which keys it read and wrote.
-- `gold_actions`: the tool calls that solve a task. arenad applies them to the base world once per task to make
+- `gold_actions`: the tool calls that solve a task. shaked applies them to the base world once per task to make
   the gold world that branches are scored against.
 
 A benchmark's tools reach parts only through the parts' `connect` info (for `postgres`, `{url}`), so only parts
@@ -54,7 +54,7 @@ with exact saves may be connected. In Rust, implement `arena_part::Benchmark` an
 `postgres` part named `retail`; `src/load.rs` seeds it from `data/retail/db.json`, `src/tools/` holds the tools,
 and `src/tasks.rs` reads the tasks and gold actions from `data/retail/tasks.json` (the tasks offered are the
 ids in `data/retail/demo_tasks.json`); `src/team.rs` holds the team it suggests and the `Store policy` heading
-over its policy. Its tests are in `benchmarks/retail/tests`. arenad runs one benchmark at a time, chosen with
+over its policy. Its tests are in `benchmarks/retail/tests`. shaked runs one benchmark at a time, chosen with
 `ARENA_BENCHMARK`.
 
 `benchmarks/factory` is a benchmark over eight integrations (`erpnext`, `twenty-crm`, `ridgeline-hub`, the stand-in
@@ -81,13 +81,13 @@ safety checks (`safety: true`). See `benchmarks/pharma/README.md`.
 copies under `files/`. Its program is the same Python package run as `python -m worldbench --world world.json`,
 which serves the world and scores each task by its checks (`arena_part.expect`).
 
-- `kind = "builder"`: the package arenad asks for templates, previews and builds.
+- `kind = "builder"`: the package shaked asks for templates, previews and builds.
 - Templates: the ones shipped with the builder are in `benchmarks/world/library/` (its manifest passes
   `--templates library`; `small-manufacturer`, see its README), beside its own `templates/` (none yet).
 - `ARENA_TEMPLATES`: `:`-separated folders of more templates (each `<id>/template.yaml`).
 - `ARENA_WORLDS`: where built worlds are written (default `<arena>/core/worlds`, git-ignored), scanned at start like
   `ARENA_PACKAGES`. A built world's command names `${ARENA_DIR}`, the arena folder.
 
-arenad asks the first builder installed (by name) for templates and previews, writes a built world into
+shaked asks the first builder installed (by name) for templates and previews, writes a built world into
 `ARENA_WORLDS`, installs it while it runs and prepares its base in the background (`docs/reference.md`,
 `/api/templates` and `/api/worlds`).

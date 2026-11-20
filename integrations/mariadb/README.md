@@ -66,7 +66,7 @@ database.
 - **inspect / diff:** keys `<table>/<pk>` for tables with a one-column primary key (asking for a key of
   another table is -32602); `diff` compares rows by key and, for tables without one, a hash of the whole
   table (`<table>/*`). A save is read by rebuilding it into a scratch database `mx_<pid>_<n>`.
-- **Re-rooting:** arenad keeps every benchmark's base and gold saves (`base_*`, `gold_*`), which would hold the
+- **Re-rooting:** shaked keeps every benchmark's base and gold saves (`base_*`, `gold_*`), which would hold the
   binlog from their positions for good. So `gc` rewrites the saves `keep` keeps by a pattern as full dumps once
   they alone hold more than 256 MiB of binlog (nothing else on the server needs those bytes; a save that restores
   from a dump needs no binlog). The check is tested without a server, the rewrite by
@@ -78,7 +78,7 @@ database.
   both with an error rather than purging on a guess. Use one `ARENA_SAVES` per
   server: saves under another root are not seen and their binlog may be purged.
 - **usage** is the binlog files plus the `mi_*` and `mx_*` databases (saves and dumps live under
-  `ARENA_SAVES`, which arenad counts).
+  `ARENA_SAVES`, which shaked counts).
 - **connect** gives `{url}` (`mysql://mi_<instance>:<password, percent-encoded>@127.0.0.1:<port>/mi_<instance>`),
   the instance's own account.
 - **fingerprint** `{server_version}` is the image's version, `11.8`.

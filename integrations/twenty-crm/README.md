@@ -12,7 +12,7 @@ about 0.1 s and 20 MB of database, on the database server's Docker volume. A ser
 - **Database server:** compose project `arena_twenty` from `compose.yml`: `postgres:17-alpine` (never pulled), volume
   `arena-twenty-db`, container `arena-twenty-db`, on `127.0.0.1:5546`, network `arena-twenty`. It comes up on the first
   start or the first call that needs it, and stays up. Env `ARENA_TWENTY_PROJECT`, `ARENA_TWENTY_DB_PORT` and
-  `ARENA_TWENTY_IMAGE` change it, or the first start's config (`project`, `db_port`), since arenad runs programs with a cleared
+  `ARENA_TWENTY_IMAGE` change it, or the first start's config (`project`, `db_port`), since shaked runs programs with a cleared
   environment. A later start whose config names another server is -32602.
 - **Base** (made once, kept as the database `tb_base`, with its sign-in in `$ARENA_SAVES/twenty-crm/.base/api.json`): a server
   on an empty database runs the image's migrations, the app's sign-up makes the workspace and an Admin API key, the server

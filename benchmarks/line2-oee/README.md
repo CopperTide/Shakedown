@@ -60,7 +60,7 @@ random configs rarely beat today's. It is a number beside the score (`goal_reach
 
 ## Results
 
-One experiment, 2026-11-09, recorded by arenad on this branch: the three designs, 5 runs each, every agent
+One experiment, 2026-11-09, recorded by shaked on this branch: the three designs, 5 runs each, every agent
 Claude Code on Haiku (`claude-haiku-5-5`), runs interleaved. Verified OEE is the recommendation's, re-simulated
 on 20 new replications. Cost is Claude Code's own API-equivalent estimate.
 
@@ -79,7 +79,7 @@ earlier trial run). Five runs per setup is a small sample: the pass rates' 95% r
 ## Run it
 
 ```
-ARENA_BENCHMARK=line2-oee cargo run -p arenad      # from core/; the parts run with uv
+ARENA_BENCHMARK=line2-oee cargo run -p shaked      # from core/; the parts run with uv
 (cd integrations/line-sim && uv run --with pytest pytest -q)
 (cd benchmarks/line2-oee && uv run --with pytest pytest -q)
 (cd benchmarks/line2-oee && uv run python scripts/reference.py 10)   # remakes data/reference.json

@@ -20,5 +20,5 @@ checks written as end-state checks (`checks/supplier-delay.yaml`); the three saf
 
 `uv run --with pytest pytest -q tests/test_small_manufacturer.py` in `benchmarks/world` (the checks over the
 real `factory-01-erp` part after Factory-01's gold actions, and untouched). Built, installed, prepared and
-current through arenad in 266 ms (`cargo test -p arenad --test worlds -- --ignored live_`, Linux, Intel Core
+current through shaked in 266 ms (`cargo test -p shaked --test worlds -- --ignored live_`, Linux, Intel Core
 Ultra 9 185H, 2026-11-19).

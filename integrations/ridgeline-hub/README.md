@@ -4,7 +4,7 @@ Puts the Ridgeline factory's outside companies in the world (suppliers, carriers
 factory hub's `Market` running on the Shakedown clock. Restore: exact from a save (one `state.json`); approximate: no.
 `uses_clock`: true. Verified offline only: its pytest suite (`uv run --with pytest pytest -q`) imports the real
 `market.py` from the factory demo folder and runs the `arena-part-check` conformance check. No service or
-container is involved. No arenad test or run has used it.
+container is involved. No shaked test or run has used it.
 
 **The factory example this package wraps is not public yet.** Its default `hub_path` points into a private
 `CopperTide-Examples` checkout next to the `Shakedown` checkout; without one the package can't start and every test in

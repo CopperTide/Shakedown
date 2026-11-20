@@ -27,42 +27,41 @@
 **Shakedown tests agent systems in a simulated copy of the world they will be deployed in.** An *environment* is the
 systems the agents work with (an ERP, a database, suppliers, a plant), made of real software or simulators. A
 *scenario* is what happens to it: a task and the disruptions along the way. An *agent setup* is a model, a team
-structure and its rules. An **experiment** runs each of 1 to 4 setups several times on the same environment and
+structure and its rules. An **experiment** runs each of any number of setups as many times as needed on the same environment and
 scenario, and shows them side by side: pass rate (with its range), the checks each run passed, cost, time, and
 safety (actions the environment denied, flags raised for a human, safety checks violated). Limits live in the
 environment, not in the agent's prompt, and are enforced deterministically; scoring is by deterministic checks,
-never by a model. arenad, the Shakedown service, records every step of every run, so any run can be opened and read
+never by a model. shaked, the Shakedown service, records every step of every run, so any run can be opened and read
 step by step.
 
-Shakedown (code name `arena`): the service is still `arenad`, the Python package `arena` (`arena-sdk`), the protocol
-`arena-part/1` and the environment variables `ARENA_*`. Those internal names are
-renamed later, in one pass.
+The service is `shaked` and the Python SDK `shakedown`; their old names still work ([Old names](#old-names)).
 
 ## Use Shakedown from code
 
 The core runs headless; no UI is needed. With the Python SDK ([docs/sdk.md](docs/sdk.md), `sdk/python`):
 
 ```python
-from arena import Arena, Agent
+from shakedown import Shakedown, Agent
 
-with Arena.local(benchmark="retail", bin_dir="core/target/release") as arena:   # or Arena("http://127.0.0.1:4510")
-    branch = arena.run("72", team=[Agent.claude_code("support", model="haiku")], seed=7)
-    for event in branch.stream():                 # every step, live
+with Shakedown.local(benchmark="retail", bin_dir="core/target/release") as sd:   # or Shakedown("http://127.0.0.1:4510")
+    run = sd.run("72", team=[Agent.claude_code("support", model="haiku")], seed=7)
+    for event in run.events():                    # every event, live, until the run ends
         print(event.summary())
-    print(branch.check())                         # passed?, named checks, safety violations
-    branch.export("data/run-72")                  # JSONL dataset with a schema
+    print(run.check())                            # passed?, named checks, safety violations
+    fork = run.rewind(event=40).fork(model="sonnet")   # back to just before event 40, one thing changed
+    run.export("data/run-72")                     # JSONL dataset with a schema
 ```
 
-Bring your own agents instead (`arena.external_run(...)`: each agent gets an MCP endpoint with the world's tools
+Bring your own agents instead (`sd.external_run(...)`: each agent gets an MCP endpoint with the world's tools
 and an OpenAI-compatible gateway), run experiments (`POST /api/experiments`), or drive a world step by step as a multi-agent RL environment
-(`arena.env.ArenaParallelEnv`). Any other language uses the [HTTP API](docs/reference.md#http-api).
+(`shakedown.env.ShakedownParallelEnv`). Any other language uses the [HTTP API](docs/reference.md#http-api).
 
 ## Bring your own agent
 
 Test the agent system you already run. Add it to a team as an `http` agent, `{kind: "http", url, headers?}`:
-when the run starts, arenad POSTs the task, an MCP endpoint with the world's tools and a token to the URL; the
+when the run starts, shaked POSTs the task, an MCP endpoint with the world's tools and a token to the URL; the
 agent works through that endpoint, every call recorded, and answers the POST when it is done. Or name a model on
-Amazon Bedrock, `{kind: "bedrock", model_id, region}`, and arenad runs the tool-use loop with your AWS
+Amazon Bedrock, `{kind: "bedrock", model_id, region}`, and shaked runs the tool-use loop with your AWS
 credentials. In the UI it is **Connect your agent** in the team picker, then **Test connection**. Header values
 never reach a log or a saved run. `sdk/python/examples/agent_server.py` is a working example; the Bedrock path is
 untested live. See [docs/agents.md](docs/agents.md).
@@ -76,14 +75,14 @@ untested live. See [docs/agents.md](docs/agents.md).
   environment and recorded: every denied action is a step with its reason, counted per run.
 - **Deterministic scoring.** Each benchmark's checks (goal checks and safety checks, apart) decide pass or fail.
   An optional AI review explains a run; it never scores one.
-- **Rewind the world, not just the transcript.** After each step that changes the world, arenad saves the parts
+- **Rewind the world, not just the transcript.** After each step that changes the world, shaked saves the parts
   that changed (a part that can only replay is replayed instead). A fork puts each part back as it was just
   before the fork point, and the team continues from there.
 - **Honest restores.** Each integration declares what it can do: an exact save, a deterministic replay, an
   approximate save, or nothing. A fork that can't restore a part in the mode you asked for is refused, naming
   the part; approximately restored branches are labelled in the run page, the branch list and compare.
 - **Any harness, one team.** Run agents as headless Claude Code or Codex CLIs that see only the world's tools
-  through an MCP endpoint (CLI mode), or in arenad's own loop with every model call recorded (API mode). Mix them
+  through an MCP endpoint (CLI mode), or in shaked's own loop with every model call recorded (API mode). Mix them
   in one team and swap one for the other in a fork.
 - **Any model provider.** Each API-mode agent picks its provider: OpenRouter, the OpenAI API, the Claude API, or a
   model on your own machine through any OpenAI-compatible server (Ollama, vLLM, LM Studio, llama.cpp's server).
@@ -106,7 +105,7 @@ untested live. See [docs/agents.md](docs/agents.md).
   </tr>
   <tr>
     <td><sub><b>Experiment.</b> One column per setup: pass rate, every run, checks, safety, cost, time.</sub></td>
-    <td><sub><b>New experiment.</b> A scenario, 1 to 4 setups, runs per setup.</sub></td>
+    <td><sub><b>New experiment.</b> A scenario, any number of setups, runs per setup.</sub></td>
   </tr>
   <tr>
     <td width="50%"><img src="docs/images/run.png" alt="A run: its time, cost, checks and safety, the AI review's one line, and every step on a timeline"></td>
@@ -133,10 +132,10 @@ flowchart LR
 
   subgraph team["Team of agents"]
     CLI["CLI mode<br/>Claude Code · Codex"]
-    OPEN["API mode<br/>arenad's agent loop"]
+    OPEN["API mode<br/>shaked's agent loop"]
   end
 
-  subgraph engine["arenad · core/"]
+  subgraph engine["shaked · core/"]
     API["HTTP API + SSE<br/>127.0.0.1:4510"]
     MCP["MCP endpoint<br/>per agent"]
     GW["Model gateway"]
@@ -165,12 +164,12 @@ flowchart LR
 ```
 
 The world is made of **integrations**: isolated programs that each put one kind of system in the world and
-speak the `arena-part/1` protocol with arenad ([docs/protocol.md](docs/protocol.md)). Each one starts
+speak the `arena-part/1` protocol with shaked ([docs/protocol.md](docs/protocol.md)). Each one starts
 instances, runs tool calls, saves an instance's state, starts from a save, shows the state and compares two
 states. A **benchmark** names the world it runs in (its **parts**) and brings the tasks, the tools, the data and
-the gold actions. When a branch ends, arenad diffs its world with the task's gold world; it passes when no key
-differs and at least one part could be checked. The core (arenad, the protocol, the kits) depends on no UI: the
-web UI is one client of arenad's HTTP API, and the Python SDK and CopperTide's Shakedown control workspace are others.
+the gold actions. When a branch ends, shaked diffs its world with the task's gold world; it passes when no key
+differs and at least one part could be checked. The core (shaked, the protocol, the kits) depends on no UI: the
+web UI is one client of shaked's HTTP API, and the Python SDK and CopperTide's Shakedown control workspace are others.
 
 Read [docs/concepts.md](docs/concepts.md) for the full model: runs, branches, steps, saves, the restore table,
 teams and handoffs, forking rules and cost labels.
@@ -187,27 +186,27 @@ CLIs on your PATH for CLI agents; for API agents, a key (`OPENROUTER_API_KEY`, `
 git clone https://github.com/CopperTide/Shakedown.git && cd Shakedown
 docker compose -f deploy/compose.yml up -d     # Postgres on 127.0.0.1:5544 (loopback only)
 cargo build --release                          # the Rust integrations and benchmarks, into core/target/release
-(cd core && cargo run -p arenad)               # API on http://127.0.0.1:4510
+(cd core && cargo run -p shaked)               # API on http://127.0.0.1:4510
 (cd ui && npm install && npm run dev)          # UI on http://127.0.0.1:4520 (proxies /api to 4510)
 ```
 
-arenad keeps its records in the database `arena` on that Postgres. It starts the integration and benchmark
+shaked keeps its records in the database `arena` on that Postgres. It starts the integration and benchmark
 programs itself, from `ARENA_BIN_DIR` (default `core/target/release`), and refuses to start if the benchmark
 can't be described (package missing or not built). It listens on 127.0.0.1 only. `GET /api/health` shows the
 benchmark, which CLIs were found, each model provider and whether API mode is available, and the disk use;
 `GET /api/providers` also asks the local servers and lists the models each provider offers.
 
 The UI is optional: everything works from code ([docs/sdk.md](docs/sdk.md)). A UI served from another origin
-can call arenad when that origin is in `ARENA_CORS_ORIGIN`. Or build the UI and let arenad serve it:
+can call shaked when that origin is in `ARENA_CORS_ORIGIN`. Or build the UI and let shaked serve it:
 
 ```bash
 (cd ui && npm install && npm run build)
-(cd core && ARENA_UI_DIST=../ui/dist cargo run -p arenad)    # UI and API on :4510
+(cd core && ARENA_UI_DIST=../ui/dist cargo run -p shaked)    # UI and API on :4510
 ```
 
 Then:
 
-1. **New experiment:** pick the scenario (a task and any disruptions), add 1 to 4 agent setups (team, model,
+1. **New experiment:** pick the scenario (a task and any disruptions), add as many agent setups as you compare (team, model,
    rules), choose runs per setup, and press Run experiment.
 2. **Read the results:** one column per setup: pass rate, a square per run, checks, safety, cost and time. Click
    a square to open that run.
@@ -226,7 +225,7 @@ the prefix `live_` and needs Docker or a real server. Each folder's README has t
 
 | Name | What it puts in the world | Exact | Approx. | Clock | Verified |
 |---|---|---|---|---|---|
-| `postgres` | A Postgres database per instance | save | no | no | Tests against the `postgres:17-alpine` server of `deploy/compose.yml`, with the `arena-part-check` run (`integrations/postgres/tests/part.rs`); the retail example runs on it through arenad |
+| `postgres` | A Postgres database per instance | save | no | no | Tests against the `postgres:17-alpine` server of `deploy/compose.yml`, with the `arena-part-check` run (`integrations/postgres/tests/part.rs`); the retail example runs on it through shaked |
 | `folder` | A folder of files per instance | save | no | no | Tests on local disk with the `arena-part-check` run (`integrations/folder/tests/part.rs`); no service involved |
 | `service` | Any Docker Compose project per instance | save | no | no | `live_service_roundtrip` against a real Redis 6.2 project in Docker. No `arena-part-check` run |
 | `live-service` | A Docker Compose platform on the world clock (clock file, deploys as a world tool, probes and watches) | save | no | yes | `live_platform_deploys_a_new_image` against the software factory's real platform: deploy, world-time telemetry, save and restore |
@@ -234,16 +233,16 @@ the prefix `live_` and needs Docker or a real server. Each folder's README has t
 | `erpnext` | An ERPNext site per instance (saves are binary-log positions plus the site's files) | save | no | no | `live_erpnext_roundtrip` against ERPNext v16.53.0 in Docker, including `arena-part-check` |
 | `twenty-crm` | A Twenty CRM server per instance (saves are copies of its Postgres database) | save | no | no | `live_twenty_roundtrip` against Twenty v2.51.0 in Docker, including `arena-part-check` |
 | `sculptured` | A CopperTide server per instance, for approvals | save | no | no | `live_sculptured_roundtrip` against a real `sculptured` build; `arena-part-check` passed once by hand |
-| `ridgeline-hub` | A factory's simulated suppliers, carriers, insurer and customers | save | no | yes | Python tests against the real hub `market.py`, with `arena-part-check`. No services, no arenad run |
+| `ridgeline-hub` | A factory's simulated suppliers, carriers, insurer and customers | save | no | yes | Python tests against the real hub `market.py`, with `arena-part-check`. No services, no shaked run |
 | `isaac-sim` | A factory plant, on Isaac Sim physics or a stand-in | replay | yes | yes | **Stand-in only.** Python tests with `arena-part-check`. The `isaac` backend has never run on Isaac Sim |
 | `isaac-sim-mirror` | A read-only view of a running plant | none | no | yes | One Python test against a stub HTTP server. A world containing it can't be rerun |
-| `utility` | A simulated electric utility: the site meter fed from the plant's load, tariff, demand-response events | save | no | yes | Python tests with `arena-part-check`. No arenad run |
-| `ot-network` | A simulated plant OT network: zones, conduits, the IT/OT gateway's sessions, the incident playbook | save | no | no | Python tests with `arena-part-check`. No arenad run |
-| `shift-roster` | A simulated shift roster: stations, operators, certifications, call-outs and call-ins | save | no | no | Python tests with `arena-part-check`. No arenad run |
-| `line-sim` | A plant's discrete-event simulation model for an optimisation study: simulate configs, a budget, hard limits, a verified recommendation | save | no | no | Python tests (model determinism and common random numbers, limits, budget, verification, saves); real Claude Code runs through arenad with `benchmarks/line2-oee` |
-| `counter` (Rust), `counter-py` (Python) | Kit examples: one integer per instance | save (flavours: replay, approximate) | no (flavour) | yes | Kit and core tests (`kits/*/tests`, `core/crates/parts/tests`, arenad tests) |
+| `utility` | A simulated electric utility: the site meter fed from the plant's load, tariff, demand-response events | save | no | yes | Python tests with `arena-part-check`. No shaked run |
+| `ot-network` | A simulated plant OT network: zones, conduits, the IT/OT gateway's sessions, the incident playbook | save | no | no | Python tests with `arena-part-check`. No shaked run |
+| `shift-roster` | A simulated shift roster: stations, operators, certifications, call-outs and call-ins | save | no | no | Python tests with `arena-part-check`. No shaked run |
+| `line-sim` | A plant's discrete-event simulation model for an optimisation study: simulate configs, a budget, hard limits, a verified recommendation | save | no | no | Python tests (model determinism and common random numbers, limits, budget, verification, saves); real Claude Code runs through shaked with `benchmarks/line2-oee` |
+| `counter` (Rust), `counter-py` (Python) | Kit examples: one integer per instance | save (flavours: replay, approximate) | no (flavour) | yes | Kit and core tests (`kits/*/tests`, `core/crates/parts/tests`, shaked tests) |
 
-Only `postgres` (through the retail example) has been used in an arenad run with agents. The other
+Only `postgres` (through the retail example) has been used in a shaked run with agents. The other
 integrations are checked on their own, not inside a team's run. Three of them need code that is not public yet:
 `sculptured` runs the CopperTide program, and `ridgeline-hub` and `isaac-sim` (with its mirror) wrap the Ridgeline
 factory example. Without those, their tests are skipped.
@@ -272,18 +271,18 @@ factory example. Without those, their tests are skipped.
 
 ## Project status
 
-Shakedown is early. Only `postgres` has been used in an arenad run with agents, through the retail example; every
+Shakedown is early. Only `postgres` has been used in a shaked run with agents, through the retail example; every
 other integration is checked on its own, and API mode has not been measured.
 
 <details>
 <summary><b>Limits and not built yet</b></summary>
 
-- Only `postgres` has been used in an arenad run with agents; every other integration is checked on its own.
+- Only `postgres` has been used in a shaked run with agents; every other integration is checked on its own.
 - Two benchmarks are included: the retail example and `benchmarks/factory`, which needs a factory example that is
-  not public yet. arenad runs one benchmark at a time.
-- arenad's own runners run a team one after another or all at once; any other shape needs the design's own code
+  not public yet. shaked runs one benchmark at a time.
+- shaked's own runners run a team one after another or all at once; any other shape needs the design's own code
   to drive the run through the external API (`docs/concepts.md`, "External designs"), which is tested with
-  Claude Code as the external system's agent (`core/crates/arenad/tests/external.rs`, `live_`). Any agent may
+  Claude Code as the external system's agent (`core/crates/shaked/tests/external.rs`, `live_`). Any agent may
   write unless its team marks it `read_only`.
 - The production estimate (measured time minus Shakedown's overhead) has been checked by tests only, not against a
   production deployment. Costs not reported by a provider are estimated only for the models in
@@ -306,6 +305,20 @@ other integration is checked on its own, and API mode has not been measured.
 - Dashboards.
 
 </details>
+
+## Old names
+
+These were renamed on 2026-11-19. The old names still work, so code and scripts written before keep running:
+
+| Old name | New name | What still works under the old name |
+|---|---|---|
+| `arenad`, the service (`core/crates/arenad`) | `shaked` (`core/crates/shaked`) | `cargo run -p arenad`, `cargo build -p arenad` and the program `core/target/<profile>/arenad`: the package `core/crates/arenad-alias` builds the same program under the old name |
+| the Python SDK `arena` (distribution `arena-sdk`, class `Arena`) | `shakedown` (distribution `shakedown`, class `Shakedown`) | `import arena` and `from arena.<module> import ...` give the same objects and warn once; `Arena`, `LocalArena`, `ArenaError`, `ArenaParallelEnv`; `sdk/python/compat/arena-sdk` installs `shakedown` under the old distribution name; `Shakedown.local(arenad=...)`, and a build named `arenad` is found |
+| `deploy/runpod`: `arenad_provider` in `pod.toml`, `gpupod --arenad`, `--through-arenad` | `shaked_provider`, `--shaked`, `--through-shaked` | the old key and flags are read |
+
+Still under their old names, to be renamed with a migration: the protocols `arena-part/1` and `arena-agent/1`,
+`arena-package.toml`, the package programs `arena-<package>`, the Python kit `arena_part`, the environment
+variables `ARENA_*`, the browser storage keys and the Postgres user and database `arena`.
 
 ## Contributing
 

@@ -59,7 +59,7 @@ Task 13): `template.yaml` and the files it includes, read by the world builder (
   edited), and every check over `tests/software_factory/fixtures/end_states.yaml`: base (each check as expected),
   gold (all pass), direct_push (a commit pushed to main: only the review check fails), bitten (all fail), and no check passing on parts with no docs but `no_open_incidents`.
 - Not run: `tests/software_factory/test_live_world.py` (live): it needs the `factory` branch's Rust work (the
-  live-service part, the world-time gateway) and arenad's links running the whole world.
+  live-service part, the world-time gateway) and shaked's links running the whole world.
 
 - Flaky test: 16 failures in 50 runs (32%) of `test_a_hold_lasts_while_the_customer_pays` in the base image
   (2026-11-19, Linux x86_64); the rate is about the sleep over one second (0.25), plus the request time.

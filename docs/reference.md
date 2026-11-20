@@ -1,6 +1,6 @@
 # Reference
 
-arenad's HTTP API, its settings, what uses disk, and how to run the tests. For the ideas behind them see
+shaked's HTTP API, its settings, what uses disk, and how to run the tests. For the ideas behind them see
 [concepts.md](concepts.md).
 
 ## HTTP API
@@ -17,19 +17,19 @@ All JSON on `http://127.0.0.1:4510`, except the event stream. Errors are `{error
 | `GET /api/templates/{id}` | the template's form (its choices and defaults); 404 for an unknown template |
 | `POST /api/templates/{id}/preview` | body: the choices; what the world would be: name, title, parts, hosts, people, events, tasks, what is dropped, the images and memory it needs, and its `problems` |
 | `POST /api/worlds` | `{template, choices}`: builds a world. 202 `{name, state: "preparing"}`: it is written to `ARENA_WORLDS/<name>` (generated into a hidden temporary folder first), installed, and its base saves are made in the background, after which it is the current benchmark unless another was chosen since the build was asked for (that choice stands); 422 `{problems}` when the choices have problems (nothing is written); 409 `{error, suggested}` when a world or package has that name (`suggested` is the first free `<name>-N`) |
-| `GET /api/worlds` | the benchmarks a user can choose between (those not opt-in, every built world and the current one): `[{name, title, template: {id, name} \| null, built, current, state}]`, `state` being `preparing`, `ready` or `failed` for a world prepared since arenad started, else `ready` when its base saves exist and `not_prepared` when they don't |
+| `GET /api/worlds` | the benchmarks a user can choose between (those not opt-in, every built world and the current one): `[{name, title, template: {id, name} \| null, built, current, state}]`, `state` being `preparing`, `ready` or `failed` for a world prepared since shaked started, else `ready` when its base saves exist and `not_prepared` when they don't |
 | `GET /api/worlds/{name}` | that row plus `elapsed_ms` (how long its preparation took, or has taken) and `error`; 404 for an unknown benchmark |
 | `POST /api/worlds/{name}/use` | makes it the benchmark of new runs (runs, suites and experiments made before keep theirs), remembered across a restart in `ARENA_WORLDS/.current`; answers its row; 404 for an unknown benchmark |
 | `POST /api/worlds/{name}/prepare` | makes its base saves again (after a failure) and then makes it current (unless another was chosen since): 202; 409 while it is being prepared |
 | `GET /api/team/default[?kind=&model=&provider=]` | the default team; the query runs every agent with that kind, model or provider instead of Claude Code with `sonnet` |
-| `GET /api/teams[?kind=&model=&provider=]` | every team the benchmark suggests, the default first: `[{id, name, agents, runner}]`, `runner` being the runner the team's prompts are written for (`chain` when the benchmark names none or one arenad doesn't know); the query as for `/api/team/default` |
+| `GET /api/teams[?kind=&model=&provider=]` | every team the benchmark suggests, the default first: `[{id, name, agents, runner}]`, `runner` being the runner the team's prompts are written for (`chain` when the benchmark names none or one shaked doesn't know); the query as for `/api/team/default` |
 | `GET /api/runs` | the runs with their branches |
 | `POST /api/agents/check` | `{kind: "http", url, headers?}` or `{kind: "bedrock", model_id, region}`, with an optional `name`: reaches the agent once (an `arena-agent/1` hello, or one Converse call of one token) and answers 200 `{ok: true, agent, name?, ms}`, `agent` being the team member as a team stores it (header values as `{secret: ref}`), or `{ok: false, error, ms}`; 400 for any other kind or a bad URL ([agents.md](agents.md)) |
-| `POST /api/runs` | `{task_id, team, runner?, scenario?, seed?, benchmark?}`: start a run; returns `{run_id, branch_id}`. `benchmark` is the benchmark it runs on (the page's world; absent, the current one, read once when the run is asked for), its task and scenario checked against it; 409 when no benchmark of that name is installed. `max_cost_usd` (optional, a positive number) is the run's model-spend limit ([concepts](concepts.md#spend-limits)); absent, `ARENA_MAX_COST_USD` applies; 400 for zero or less. `world_minutes` (optional, more than 0 and at most 1440; else 400 "world_minutes must be from 0 to 1440 minutes of world time") is an external or Code run's world time window ([concepts](concepts.md#world-time-windows)), recorded in `RunStart.world_minutes`; arenad's own runners ignore it. `seed` (0 to 2^53 - 1) is the seed the run's world starts its parts with, recorded in `RunStart.seed`; random when absent (every run starts from the same seeded base world either way; the seed reaches parts that draw from it, such as simulators). `scenario` is `{disruptions: [{id, params?: {name: value}}]}`, options of `GET /api/benchmark`'s `scenario_options` (params left out take their defaults): arenad expands each with its template, adds it to the task's setup and records the expanded scenario in `RunStart` (`scenario`); 400 for an unknown option or param, a value out of range or not among the choices, or an option chosen twice. `runner` is `chain` (default: one agent after another), `concurrent` (all at once), `dispatch` (a lead delegates to the team; see concepts, "Who drives the agents") or `external` (see below; the team may be empty and the answer adds `agents`, each agent's endpoints). `connection` (a Code connection's id) makes arenad launch that connection's driver for the run (the runner is then `external`; the answer adds `connection` and `driver`: `launched`, or `failed` when it couldn't start, the run then ending `failed` saying why); 404 for an unknown connection, 415/403 as for `POST /api/connections`. Each agent is `{id, name, kind, model, prompt, provider?, read_only?, lead?, tools?}`, or an `http` agent `{…, url, headers?}`, or a Bedrock agent `{…, kind: "bedrock", model_id, region}` ([agents.md](agents.md)) (`read_only`, default false, gives the agent only read tools; `tools`, a list of world tool names, gives it only those (the runner's talk tools always come), and a call of another world tool is refused; `lead` marks the agent that leads a dispatch run, else the first does); 400 when a dispatch team marks two leads or has a Codex or `http` agent (neither can keep a session across turns), or when an API-mode agent's provider is unknown or unavailable, or has no default model and the agent names none |
+| `POST /api/runs` | `{task_id, team, runner?, scenario?, seed?, benchmark?}`: start a run; returns `{run_id, branch_id}`. `benchmark` is the benchmark it runs on (the page's world; absent, the current one, read once when the run is asked for), its task and scenario checked against it; 409 when no benchmark of that name is installed. `max_cost_usd` (optional, a positive number) is the run's model-spend limit ([concepts](concepts.md#spend-limits)); absent, `ARENA_MAX_COST_USD` applies; 400 for zero or less. `world_minutes` (optional, more than 0 and at most 1440; else 400 "world_minutes must be from 0 to 1440 minutes of world time") is an external or Code run's world time window ([concepts](concepts.md#world-time-windows)), recorded in `RunStart.world_minutes`; shaked's own runners ignore it. `seed` (0 to 2^53 - 1) is the seed the run's world starts its parts with, recorded in `RunStart.seed`; random when absent (every run starts from the same seeded base world either way; the seed reaches parts that draw from it, such as simulators). `scenario` is `{disruptions: [{id, params?: {name: value}}]}`, options of `GET /api/benchmark`'s `scenario_options` (params left out take their defaults): shaked expands each with its template, adds it to the task's setup and records the expanded scenario in `RunStart` (`scenario`); 400 for an unknown option or param, a value out of range or not among the choices, or an option chosen twice. `runner` is `chain` (default: one agent after another), `concurrent` (all at once), `dispatch` (a lead delegates to the team; see concepts, "Who drives the agents") or `external` (see below; the team may be empty and the answer adds `agents`, each agent's endpoints). `connection` (a Code connection's id) makes shaked launch that connection's driver for the run (the runner is then `external`; the answer adds `connection` and `driver`: `launched`, or `failed` when it couldn't start, the run then ending `failed` saying why); 404 for an unknown connection, 415/403 as for `POST /api/connections`. Each agent is `{id, name, kind, model, prompt, provider?, read_only?, lead?, tools?}`, or an `http` agent `{…, url, headers?}`, or a Bedrock agent `{…, kind: "bedrock", model_id, region}` ([agents.md](agents.md)) (`read_only`, default false, gives the agent only read tools; `tools`, a list of world tool names, gives it only those (the runner's talk tools always come), and a call of another world tool is refused; `lead` marks the agent that leads a dispatch run, else the first does); 400 when a dispatch team marks two leads or has a Codex or `http` agent (neither can keep a session across turns), or when an API-mode agent's provider is unknown or unavailable, or has no default model and the agent names none |
 | `POST /api/runs/{id}/name` | `{name}` sets an optional display name (1–300 bytes after trimming); 404 for a missing run. `GET /api/runs` includes `name` when set; task ids and event records are unchanged |
 | `DELETE /api/runs/{id}` | delete a run and what it saved (409 while a branch runs) |
 | `GET /api/branches/{id}` | a branch with its events, `budget` (`{max_cost_usd, estimate_usd}`: its spend limit, and its running estimate while it runs) and `metrics`: `{measured_s, overhead_ms: {save?, restore?, record?, gateway?, gate?, link?, mcp?, wait?, score?, pause?}, overhead_s, overhead_recorded, estimated_s, tokens, cost, agents: [{agent, kind, model, provider, tokens, prompt_tokens, completion_tokens, cost, model_calls, peak_prompt_tokens, compactions, overhead_s}]}`, each `cost` `{usd, label, source, as_of}` (see concepts, "Overhead and estimates"); `peak_prompt_tokens` is the largest `usage.prompt_tokens` of the agent's model calls, `overhead_s` the overhead recorded on its own events |
-| `POST /api/branches/{id}/agents` | external runs: `{id, name?, kind?, model?, provider?, prompt?, read_only?}` registers an agent (kind `external` by default), or starts a registered one again; returns `{agent, mcp_url, gateway_url, tools, spec}`. 404 when the branch isn't live, 409 when arenad runs its agents |
+| `POST /api/branches/{id}/agents` | external runs: `{id, name?, kind?, model?, provider?, prompt?, read_only?}` registers an agent (kind `external` by default), or starts a registered one again; returns `{agent, mcp_url, gateway_url, tools, spec}`. 404 when the branch isn't live, 409 when shaked runs its agents |
 | `POST /api/branches/{id}/agents/{agent}/end` | external runs: `{ok?, error?, prompt_tokens?, completion_tokens?, cost_usd?, cost_source?, seconds?}` records the agent's end |
 | `POST /api/branches/{id}/agents/{agent}/usage` | external runs: `{message_id?, model?, input_tokens?, cache_creation_input_tokens?, cache_read_input_tokens?, output_tokens?, context_window?}` records one model call the agent's client saw (a CLI's per-message usage, such as Claude Code's `stream-json`) as a `model_call` with `request` and `response` null, `reported_by: "client"`, and `usage` whose `prompt_tokens` is the whole input (fresh, cache-written and cache-read tokens); `{compaction: {trigger?, pre_tokens?}}` records that the client compacted the agent's context (a `model_call` with empty `usage`). 404 for an agent the branch doesn't have |
 | `POST /api/branches/{id}/agents/{agent}/reasoning` | external runs: `{items: [{text, kind?: "thinking"\|"step"\|"plan", model_call_seq?}]}` (1 to 100 items) records one `reasoning` event per item with `source: "agent"`; blank items are skipped and text over 32 768 characters is cut (`truncated: true`). Answers `{seqs}`. 400 for no items, too many or an unknown `kind`; 404 for an agent the branch doesn't have |
@@ -50,14 +50,14 @@ All JSON on `http://127.0.0.1:4510`, except the event stream. Errors are `{error
 | `GET /api/branches/{id}/recording.mp4` | that MP4, with byte ranges (so a player can seek); 404 when there is none |
 | `GET /api/branches/{id}/restore-plan?at_seq=N&restore=exact\|approximate` | `{parts: [{part, how, estimate_seconds?}]}`, or 409 with the refusal |
 | `GET /api/compare?a=<branch>&b=<branch>` | `{a, b, first_divergent_seq, differing_rows, not_compared}` |
-| `POST /api/experiments` | `{task, setups: [{team, runner?, name?, connection?}], runs?, scenario?, name?, max_cost_usd?, benchmark?, seed?, world_minutes?}` (`benchmark` as for `POST /api/runs`): an experiment (`max_cost_usd`: each run's spend limit, shown on each setup; `seed`, at most 2^53 - 1, drawn at random when absent: run i of every setup starts its world from the same seed, splitmix64 of `seed + i` below 2^53, recorded in each run's `RunStart.seed` and shown on each run row as `seed`; `world_minutes`, as for `POST /api/runs`: every run's world time window, recorded in its `RunStart`, enforced for Code setups' runs; the detail's and the list's head show `seed`, `world_minutes` and `max_cost_usd`), one task of the benchmark in one scenario (as for `POST /api/runs`, expanded once) run by 1 to 4 agent setups, each `runs` times (default 5, at most 100). Each setup is stored as a suite of that task (`repeats` = `runs`, the setup's team and runner, `experiment_id` and `setup_ord` set). arenad makes the runs one at a time, interleaved: every setup's first run, then every setup's second, and so on. Setup names default to `Setup A`, `Setup B`, … and must be unique (trimmed); the name defaults to the setups' names joined by ` vs `. `runner` is `chain` (default), `concurrent` or `dispatch`; a setup may instead name a Code connection (`{connection, name?, team?}`): arenad launches its driver for each of the setup's runs (404 for an unknown connection, 415/403 as for `POST /api/connections`); 400 for `external` without a connection, an unknown task, too few or many setups, or a team `POST /api/runs` would refuse (the error names the setup). Returns its detail (below) |
+| `POST /api/experiments` | `{task, setups: [{team, runner?, name?, connection?}], runs?, scenario?, name?, max_cost_usd?, benchmark?, seed?, world_minutes?}` (`benchmark` as for `POST /api/runs`): an experiment (`max_cost_usd`: each run's spend limit, shown on each setup; `seed`, at most 2^53 - 1, drawn at random when absent: run i of every setup starts its world from the same seed, splitmix64 of `seed + i` below 2^53, recorded in each run's `RunStart.seed` and shown on each run row as `seed`; `world_minutes`, as for `POST /api/runs`: every run's world time window, recorded in its `RunStart`, enforced for Code setups' runs; the detail's and the list's head show `seed`, `world_minutes` and `max_cost_usd`), one task of the benchmark in one scenario (as for `POST /api/runs`, expanded once) run by 1 to 50 agent setups, each `runs` times (default 5, at most 1000; both caps are safety limits). Each setup is stored as a suite of that task (`repeats` = `runs`, the setup's team and runner, `experiment_id` and `setup_ord` set). shaked makes the runs one at a time, interleaved: every setup's first run, then every setup's second, and so on. Setup names default to `Setup A`, `Setup B`, … (`Setup AA` after `Setup Z`) and must be unique (trimmed); the name defaults to the setups' names joined by ` vs `. `runner` is `chain` (default), `concurrent` or `dispatch`; a setup may instead name a Code connection (`{connection, name?, team?}`): shaked launches its driver for each of the setup's runs (404 for an unknown connection, 415/403 as for `POST /api/connections`); 400 for `external` without a connection, an unknown task, too few or many setups, or a team `POST /api/runs` would refuse (the error names the setup). Returns its detail (below) |
 | `GET /api/experiments` | every experiment, newest first: `{id, name, tasks, benchmark, runs, created_at, status, legacy, setups: [{suite_id, name, team_name, runner, runs, ended, passed}]}`. `status` is `running`, `finished` or `stopped`. A suite made on its own is listed too, as a one-setup experiment with the suite's id and `legacy: true` |
 | `GET /api/experiments/{id}` | `{id, name, tasks, benchmark, runs, created_at, ended_at, error, status, legacy, scenario, setups}`: `scenario` expanded, `setups` each setup's suite report (as `GET /api/suites/{id}`) in setup order. A suite made on its own answers the same shape with one setup |
 | `POST /api/experiments/{id}/stop` | no further run starts, the run that is running now is stopped (as `POST /api/branches/{id}/stop`), and the experiment and its suites end with `error: "stopped"`. Returns its detail; stopping one that ended changes nothing. 409 for a suite made on its own |
-| `POST /api/suites` | `{team, tasks?, repeats?, runner?, name?, scenario?, scenarios?, max_cost_usd?, benchmark?}` (`benchmark` as for `POST /api/runs`): a test suite (`max_cost_usd`: each run's spend limit, in the suite's report) (`scenario` as for `POST /api/runs`, expanded once and used by every run; the suite's report has it, expanded, as `scenario`; or `scenarios`, at most 20, each expanded: every task × repeat runs once in each, so the suite has tasks × scenarios × repeats runs, and its report has them as `variants`; both at once is a 400), the team run over the benchmark's `tasks` (all when absent), each `repeats` times (default 1, at most 100); returns its report (below). `runner` is `chain` (default), `concurrent` or `dispatch`, and arenad then makes the runs one after another, or `external`, and an external system claims each run. The team is checked as `POST /api/runs` checks it; 400 for an unknown or repeated task |
+| `POST /api/suites` | `{team, tasks?, repeats?, runner?, name?, scenario?, scenarios?, max_cost_usd?, benchmark?}` (`benchmark` as for `POST /api/runs`): a test suite (`max_cost_usd`: each run's spend limit, in the suite's report) (`scenario` as for `POST /api/runs`, expanded once and used by every run; the suite's report has it, expanded, as `scenario`; or `scenarios`, at most 20, each expanded: every task × repeat runs once in each, so the suite has tasks × scenarios × repeats runs, and its report has them as `variants`; both at once is a 400), the team run over the benchmark's `tasks` (all when absent), each `repeats` times (default 1, at most 100); returns its report (below). `runner` is `chain` (default), `concurrent` or `dispatch`, and shaked then makes the runs one after another, or `external`, and an external system claims each run. The team is checked as `POST /api/runs` checks it; 400 for an unknown or repeated task |
 | `GET /api/suites` | every suite, newest first: its definition with `status`, `runs`, `ended` and `passed` |
-| `GET /api/suites/{id}` | the suite's report: `{id, name, team, tasks, repeats, runner, benchmark, created_at, ended_at, error, status, finished_s, runs, checks, summary, spread}`. `status` is `running`, `finished` or `stopped` (a built-in suite that ended before its last run: arenad stopped, or the saves reached the limit); `finished_s` the seconds from its creation to its last run's end. `runs`: per task × variant × repeat `{task_id, variant, repeat, run_id, branch_id, status, error, outcome}` (`variant`: the index in `variants`, 0 without them), `status` being `pending`, `starting`, `error` (it could not start), `missing` (its run was deleted) or the branch's status, and `outcome` `{status, scored, checks, checks_passed, checks_total, safety_violations, denials, flags, measured_s, estimated_s, tokens, cost_usd, peak_context}`. `checks`: per task and check `{task_id, name, safety, passed, runs, pass_rate}`. `summary`: `{runs, ended, scored, unscored, passed, pass_rate, score, safety_violations, runs_with_violation, denials, runs_with_denial, flags, runs_with_flag}` (`denials` and `flags` as [docs/protocol.md](protocol.md#denials-and-flags) defines them, summed over the scored runs) and the spread of each figure; `spread`: per task `{task_id, runs}` and the spread of each figure. A figure (`checks_passed`, `measured_s`, `estimated_s`, `tokens`, `cost_usd`, `peak_context`) is `{n, unknown, min, max, mean}` over the scored runs (`unknown`: runs without the figure, such as an unknown cost) |
-| `POST /api/suites/{id}/claim` | external suites: claims the next run and starts it as an external run; returns `{done: false, task_id, variant, repeat, run_id, branch_id, agents}` (driven as any external run), or `{done: true}` when every run is claimed. 409 for a suite arenad runs itself |
+| `GET /api/suites/{id}` | the suite's report: `{id, name, team, tasks, repeats, runner, benchmark, created_at, ended_at, error, status, finished_s, runs, checks, summary, spread}`. `status` is `running`, `finished` or `stopped` (a built-in suite that ended before its last run: shaked stopped, or the saves reached the limit); `finished_s` the seconds from its creation to its last run's end. `runs`: per task × variant × repeat `{task_id, variant, repeat, run_id, branch_id, status, error, outcome}` (`variant`: the index in `variants`, 0 without them), `status` being `pending`, `starting`, `error` (it could not start), `missing` (its run was deleted) or the branch's status, and `outcome` `{status, scored, checks, checks_passed, checks_total, safety_violations, denials, flags, measured_s, estimated_s, tokens, cost_usd, peak_context}`. `checks`: per task and check `{task_id, name, safety, passed, runs, pass_rate}`. `summary`: `{runs, ended, scored, unscored, passed, pass_rate, score, safety_violations, runs_with_violation, denials, runs_with_denial, flags, runs_with_flag}` (`denials` and `flags` as [docs/protocol.md](protocol.md#denials-and-flags) defines them, summed over the scored runs) and the spread of each figure; `spread`: per task `{task_id, runs}` and the spread of each figure. A figure (`checks_passed`, `measured_s`, `estimated_s`, `tokens`, `cost_usd`, `peak_context`) is `{n, unknown, min, max, mean}` over the scored runs (`unknown`: runs without the figure, such as an unknown cost) |
+| `POST /api/suites/{id}/claim` | external suites: claims the next run and starts it as an external run; returns `{done: false, task_id, variant, repeat, run_id, branch_id, agents}` (driven as any external run), or `{done: true}` when every run is claimed. 409 for a suite shaked runs itself |
 | `GET /api/suites/compare?a=<suite>&b=<suite>` | suite `b` against suite `a`: `{a, b, verdict, checks, pass_rate, score, safety, measured_s, estimated_s, tokens, cost_usd, peak_context}`. Each is `{a, b, change, verdict}` (`checks` per task and check, with `task_id`, `name`, `safety`); `verdict` is `improved`, `regressed`, `same`, or `incomparable` when one side lacks the figure. Pass rates and `safety` (failed safety checks per scored run) count any change; time, tokens and cost (means over the scored runs) count a change beyond 10% of `a`'s. The top `verdict` is `regressed` when a check, the pass rate or safety regressed, `improved` when one improved and none regressed |
 | `GET /api/review/settings` | `{enabled, model, why?}`: whether AI review is on and with which reviewer (see [AI review](#ai-review)) |
 | `POST /api/branches/{id}/review[?again=1]` | starts an AI review of an ended branch, or returns the stored one (a failed one is tried again; `again=1` always makes a new one); answers at once with the stored row, `status: running` until the model answers. 404 for an unknown branch, 409 while it runs or when AI review is off |
@@ -70,13 +70,13 @@ All JSON on `http://127.0.0.1:4510`, except the event stream. Errors are `{error
 
 New runs and forks answer 507 once the saves reach the disk limit. The `/api` routes answer only
 requests whose `Host` is a loopback address. The agents' MCP endpoints (`/mcp/{branch}/{agent}`) and the
-API-mode gateway (`/gateway/{branch}/{agent}/v1/chat/completions`) are for arenad's own agents.
+API-mode gateway (`/gateway/{branch}/{agent}/v1/chat/completions`) are for shaked's own agents.
 
 ## Configuration
 
-Environment variables, read once at startup by arenad:
+Environment variables, read once at startup by shaked:
 
-- `ARENA_PG_URL`: the Postgres server for arenad's records, passed on to integration programs (default
+- `ARENA_PG_URL`: the Postgres server for shaked's records, passed on to integration programs (default
   `postgres://arena:arena@127.0.0.1:5544/postgres`).
 - `ARENA_PORT`: HTTP port (default 4510).
 - `ARENA_BENCHMARK`: the benchmark new runs use, by package name (default: the only installed benchmark,
@@ -127,27 +127,27 @@ Environment variables, read once at startup by arenad:
 - `ARENA_RECORDINGS`: a folder of plant recordings fetched from a recording part (Isaac Sim writes
   `<record>-b_<branch>_plant.mp4` and its `.json` sidecar), which the world view shows as "Plant (Isaac Sim)" beside
   the twin, held at the Shakedown second of the step on screen. Optional.
-- `ARENA_UI_DIST`: a built UI folder for arenad to serve at `/`. Optional: arenad is fully usable without a UI
+- `ARENA_UI_DIST`: a built UI folder for shaked to serve at `/`. Optional: shaked is fully usable without a UI
   (from code, see [sdk.md](sdk.md)), and the UI can be served from anywhere else.
 - `ARENA_CORS_ORIGIN`: web origins, comma-separated (`http://127.0.0.1:5173,https://ui.example`), whose pages
   may call `/api` from a browser, for a UI served from elsewhere. Exact matches only; `*` and anything that isn't
   `http(s)://host[:port]` is skipped with a warning (a wildcard would let any web page drive this machine's Shakedown).
   Unset: same origin only. The `/api` routes still answer only a loopback `Host`.
 - `ARENA_AGENT_BASE`: the base URL an `http` agent is told to reach its MCP endpoint at (`mcp_url`), for an agent
-  on another machine reaching arenad through a tunnel. Unset: arenad's own address ([agents.md](agents.md)).
+  on another machine reaching shaked through a tunnel. Unset: shaked's own address ([agents.md](agents.md)).
 
 A blank key counts as unset. A key a header can't carry is reported at startup (by its variable's name) and
-ignored. arenad never logs, records or returns a key. The CLI agents don't get them: each CLI keeps only its own
+ignored. shaked never logs, records or returns a key. The CLI agents don't get them: each CLI keeps only its own
 vendor's key (see [concepts.md](concepts.md#teams-and-agents)).
 
-Default paths are relative to the repository root, fixed when arenad is built, so they hold wherever arenad is started
+Default paths are relative to the repository root, fixed when shaked is built, so they hold wherever shaked is started
 from. The retail example reads its data from `data/retail` (relative to its package folder, `../../data/retail`);
-`ARENA_RETAIL_DATA` overrides that when you run its program directly, but arenad does not pass it on.
+`ARENA_RETAIL_DATA` overrides that when you run its program directly, but shaked does not pass it on.
 
 ## Model providers
 
 An API-mode agent (`kind: "open"`) names its provider in `provider`; without one it uses `openrouter`, so teams
-and runs made before providers keep their meaning. The agent loop speaks OpenAI chat completions to arenad's
+and runs made before providers keep their meaning. The agent loop speaks OpenAI chat completions to shaked's
 gateway, and the gateway talks to the provider:
 
 | Provider | Endpoint | Key | Models listed by `/api/providers` | Default model |
@@ -162,7 +162,7 @@ A local provider is any server that speaks the OpenAI chat-completions API, such
 llama.cpp's server. For example:
 
 ```bash
-cd core && ARENA_LOCAL_MODELS="ollama=http://127.0.0.1:11434/v1,vllm=http://127.0.0.1:8000/v1" cargo run -p arenad
+cd core && ARENA_LOCAL_MODELS="ollama=http://127.0.0.1:11434/v1,vllm=http://127.0.0.1:8000/v1" cargo run -p shaked
 ```
 
 Then pick `local:ollama` or `local:vllm` as an agent's provider and name a model the server serves (for Ollama, a
@@ -198,13 +198,13 @@ What the gateway does per provider:
   with the category when Claude gives one.
 
 Cost per provider: OpenRouter's is the cost it reports (`cost_source: "openrouter"`). OpenAI and Anthropic
-report no price and arenad keeps no price table, so their tokens are recorded and the cost is unknown
+report no price and shaked keeps no price table, so their tokens are recorded and the cost is unknown
 (`cost_usd: null`); the UI shows `unknown`. A local server's cost is 0 with
 `cost_source: "local (no API charge)"`; the UI shows `no API charge`.
 
 ## AI review
 
-Optional. A real model reads a compact digest of the record and answers in JSON, which arenad checks:
+Optional. A real model reads a compact digest of the record and answers in JSON, which shaked checks:
 
 - **What it reads.** For a branch: the task and its ticket, the team (each agent's kind, model and prompt) and
   runner, the fork's parent and point, the checks (each with its detail; safety flagged), refused and failed tool
@@ -227,7 +227,7 @@ Optional. A real model reads a compact digest of the record and answers in JSON,
   bounded), and every cited step must be a step of the branch (of A for `steps_a`, of B for `steps_b`; a suite
   review's runs must be runs of that suite): others are dropped and listed in `issues`, and an item whose every
   citation was dropped is marked `unverified`. A review is stored per branch, pair of branches or pair of suites,
-  and redone only when asked. Reviews running when arenad stops are marked failed when it starts again.
+  and redone only when asked. Reviews running when shaked stops are marked failed when it starts again.
 - **In the web UI.** Advanced → AI review turns it off in that browser. On the Run screen and the run page a
   Review card shows under the result; a run watched to its end there is reviewed at once, an older one has a
   "Review this run" button. Each cited step selects it; a prompt or team suggestion has "Rewind and try this",
@@ -253,10 +253,10 @@ delete the run. The Rust build directory `core/target` also grows; `cd core && c
   `curl -X DELETE http://127.0.0.1:4510/api/runs/<run_id>`. This drops its saves, stops its live instances and
   removes its recorded events. The shared base and gold saves stay. A run with a running branch can't be
   deleted.
-- At startup arenad asks each integration of the benchmark's world to drop saves that no recorded event names
+- At startup shaked asks each integration of the benchmark's world to drop saves that no recorded event names
   (left by crashes), and logs `gc: dropped N saves (X MB)`. An integration without `gc` is skipped.
   `POST /api/gc` runs the same cleanup. Neither has a deadline: an integration's `gc` may stop instances, so
-  new runs and forks wait (409) until every integration has answered, however long that takes. Start arenad
+  new runs and forks wait (409) until every integration has answered, however long that takes. Start shaked
   only when no test is running, since tests make unreferenced saves.
 - The tests drop what they create, even when an assertion fails. `core/scripts/leakcheck.sh` (run from `core`)
   runs each of the core's test binaries and fails if one leaves databases behind: Postgres `pi_`, `ps_`,
@@ -270,15 +270,15 @@ delete the run. The Rust build directory `core/target` also grows; `cd core && c
 cargo test                                     # at the repository root: kit, integrations, benchmarks (some need the Postgres)
 cargo test -- --ignored live_                  # live integration tests: they start Docker containers or real servers
 (cd integrations/ridgeline-hub && uv run --with pytest pytest -q)    # likewise integrations/isaac-sim and kits/python
-(cd core && cargo test -- --ignored live_ --test-threads 1)   # live arenad tests: real models (see below); they cost money
+(cd core && cargo test -- --ignored live_ --test-threads 1)   # live shaked tests: real models (see below); they cost money
 (cd ui && npx vitest run && npm run build)
-(cd sdk/python && uv run pytest -q)            # SDK: unit tests, and integration tests against a real arenad
+(cd sdk/python && uv run pytest -q)            # SDK: unit tests, and integration tests against a real shaked
 ```
 
-The SDK's integration tests start an arenad on the retail example (`ARENA_SDK_BIN_DIR`, default
+The SDK's integration tests start a shaked on the retail example (`ARENA_SDK_BIN_DIR`, default
 `core/target/release`, then `core/target/debug`; Postgres at `ARENA_SDK_PG_URL`, default the compose one) or use
 the running one at `ARENA_SDK_URL`, and are skipped without either. They drive the API directly and call no model.
-The arenad they start runs the startup cleanup, so give them a Postgres no other test run uses at the time.
+The shaked they start runs the startup cleanup, so give them a Postgres no other test run uses at the time.
 
 The tests of `integrations/ridgeline-hub` and `integrations/isaac-sim` read the Ridgeline factory example from
 `CopperTide-Examples/factory` next to the `Shakedown` checkout (their READMEs say which folders). **That example is not
@@ -286,17 +286,17 @@ public yet**: without it every test of those two packages is skipped, and the pa
 program that `integrations/sculptured` runs is not published yet either; its live test is skipped without it.
 
 Tests never call a real model unless they are `live_`, and no test uses a fake model server or a scripted
-agent: everything an agent does in a test is done by a real model. arenad's `live_` tests
-(`core/crates/arenad/tests/support/live.rs`) run on Claude Code (`claude`, signed in) with `ARENA_LIVE_MODEL`
-(default `haiku`), or on arenad's own agent loop when a provider key is set (`ANTHROPIC_API_KEY`,
+agent: everything an agent does in a test is done by a real model. shaked's `live_` tests
+(`core/crates/shaked/tests/support/live.rs`) run on Claude Code (`claude`, signed in) with `ARENA_LIVE_MODEL`
+(default `haiku`), or on shaked's own agent loop when a provider key is set (`ANTHROPIC_API_KEY`,
 `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, or `ARENA_LOCAL_MODELS` with `ARENA_LIVE_MODEL`); `ARENA_LIVE_AGENT=claude`
-or `=api` picks one. A test that needs arenad's own loop (its model calls recorded, a fork resuming
+or `=api` picks one. A test that needs shaked's own loop (its model calls recorded, a fork resuming
 mid-conversation, a provider's request and cost) skips without a key, and every live test prints `skipped: …` and
 passes when no model is available. Models vary from run to run, so these tests check what Shakedown records and
 enforces (every step and its fields, gates, checks, restores), never one path through a task; where a model did not
 make the call a check needs, the test prints `note: …`. What the fakes used to cover that a real model can't be
 made to do (arguments cut off, a refusal, an overloaded provider, a model list over the bound) is tested on the
-functions that handle it. Never start arenad while tests run: the tests make databases that arenad's startup
+functions that handle it. Never start shaked while tests run: the tests make databases that shaked's startup
 cleanup would drop.
 
 CI (`.github/workflows/ci.yml`) runs the format, Clippy and test checks of both Cargo workspaces, the Python
