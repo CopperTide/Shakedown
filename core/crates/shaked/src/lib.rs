@@ -28,7 +28,6 @@ pub mod prices;
 pub mod prompts;
 pub mod providers;
 pub mod proxy;
-pub mod quotas;
 pub mod reasoning;
 pub mod recorded;
 pub mod replay;

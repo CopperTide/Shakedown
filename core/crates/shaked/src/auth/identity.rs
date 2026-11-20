@@ -5,7 +5,7 @@ use anyhow::Result;
 use serde::Serialize;
 use uuid::Uuid;
 
-use super::{OrgRole, Principal, Scope, SeatRole, SystemScope};
+use super::{OrgRole, Principal, Scope, SeatRole};
 use crate::store::Store;
 
 /// An org as `/api/me` lists it, with the caller's role there.
@@ -64,19 +64,6 @@ fn seat_role(s: &str) -> SeatRole {
         "maintainer" => SeatRole::Maintainer,
         _ => SeatRole::Member,
     }
-}
-
-/// The orgs `user` belongs to, the personal one first (owner decision D18: a personal org is the
-/// user's own), then by name. A system job: it reads across orgs.
-pub async fn orgs_of_user(store: &Store, user: Uuid) -> Result<Vec<OrgSummary>> {
-    let sql = "SELECT o.id, o.slug, o.name, o.kind, m.role FROM identity.memberships m
-                 JOIN identity.orgs o ON o.id = m.org_id
-                WHERE m.user_id = $1 AND o.deleted_at IS NULL
-                ORDER BY (o.kind = 'personal') DESC, o.name, o.id";
-    let tx = store.system_tx(&SystemScope::list_orgs_of_user()).await?;
-    let rows = tx.query(sql, &[&user]).await?;
-    tx.commit().await?;
-    Ok(rows.iter().map(summary_of).collect())
 }
 
 /// The scope's own org, as the scope itself reads it.

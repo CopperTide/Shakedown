@@ -1,24 +1,19 @@
-//! Where shaked listens, the URLs it hands agents, and hosted mode's refusals.
+//! Where shaked listens and the URLs it hands agents; a bind beyond this machine is refused.
 
 use std::collections::BTreeMap;
 
-use shaked::{
-    app::Config,
-    driver::{self, RunIds},
-    mode::{bind_from, Mode, HOSTED_REFUSAL},
-    store::Connection,
-};
+use shaked::{app::Config, mode::bind_from};
 use support::{run, AppFx};
 
 mod support;
 
 /// `bind_from` over the given settings only.
-fn bind(vars: &[(&str, &str)], hosted: bool) -> Result<shaked::mode::Bind, String> {
+fn bind(vars: &[(&str, &str)], serves_others: bool) -> Result<shaked::mode::Bind, String> {
     let vars: BTreeMap<String, String> = vars
         .iter()
         .map(|(k, v)| (k.to_string(), v.to_string()))
         .collect();
-    bind_from(|k| vars.get(k).cloned(), hosted)
+    bind_from(|k| vars.get(k).cloned(), serves_others)
 }
 
 #[test]
@@ -43,11 +38,28 @@ fn old_port_setting_still_binds() {
 }
 
 #[test]
-fn a_public_bind_needs_hosted() {
-    let err = bind(&[("SHAKEDOWN_BIND", "0.0.0.0:4510")], false).unwrap_err();
-    assert!(err.contains("--hosted"), "{err}");
+fn a_public_bind_is_refused() {
+    let e = bind(&[("SHAKEDOWN_BIND", "0.0.0.0:4510")], false).unwrap_err();
+    assert!(e.contains("serves only this machine"), "{e}");
     let b = bind(&[("SHAKEDOWN_BIND", "0.0.0.0:4510")], true).unwrap();
-    assert_eq!(b.addr.to_string(), "0.0.0.0:4510");
+    assert_eq!(
+        b.addr.to_string(),
+        "0.0.0.0:4510",
+        "a layer that authenticates callers may"
+    );
+}
+
+#[test]
+fn me_is_personal() {
+    run(async {
+        let fx = AppFx::idle("modes", "me").start().await;
+        let (status, v) = fx.get("/api/me").await;
+        assert_eq!(status, 200, "{v}");
+        assert_eq!(
+            v,
+            serde_json::json!({"mode": "local", "user": {"name": "You"}, "features": []})
+        );
+    })
 }
 
 #[test]
@@ -119,54 +131,10 @@ fn allowed_hosts_keep_the_dns_rebinding_guard() {
     }
 }
 
-fn connection() -> Connection {
-    Connection {
-        id: "c1".into(),
-        name: "driver".into(),
-        kind: "code".into(),
-        command: vec!["true".into()],
-        workdir: None,
-        env: BTreeMap::new(),
-        created_at: chrono::Utc::now(),
-    }
-}
-
-#[test]
-fn hosted_refuses_every_api_call_and_part_launch() {
-    run(async {
-        let fx = AppFx::idle("modes", "hosted")
-            .config(|c| c.mode = Mode::Hosted)
-            .start()
-            .await;
-        let (status, v) = fx.get("/api/runs").await;
-        assert_eq!(status, 401, "{v}");
-        assert_eq!(
-            v["error"],
-            "sign in through the gateway or send an API token"
-        );
-        assert_eq!(fx.post("/api/runs", serde_json::json!({})).await.0, 401);
-        let (status, v) = fx.post("/api/worlds/x/use", serde_json::json!({})).await;
-        assert_eq!(status, 403, "{v}");
-        assert_eq!(v["error"], HOSTED_REFUSAL);
-        let ids = RunIds {
-            run_id: "r",
-            branch_id: "b",
-            task_id: "t",
-            fork_of: None,
-        };
-        match driver::launch(&fx.state, &connection(), ids).await {
-            Ok(_) => panic!("a hosted shaked launched a Code connection"),
-            Err(e) => assert!(format!("{e:#}").contains(HOSTED_REFUSAL), "{e:#}"),
-        }
-        assert!(shaked::mode::local_only(&fx.state.config, "starting a world").is_err());
-    })
-}
-
 #[test]
 fn local_mode_still_answers_the_api() {
     run(async {
         let fx = AppFx::idle("modes", "local").start().await;
         assert_eq!(fx.get("/api/runs").await.0, 200);
-        assert!(shaked::mode::local_only(&fx.state.config, "starting a world").is_ok());
     })
 }

@@ -8,7 +8,6 @@ pub enum SystemJob {
     InterruptAtStart,
     StartupGc,
     ResolveToken,
-    ListOrgsOfUser,
     StoreCopy,
 }
 
@@ -34,13 +33,6 @@ impl SystemScope {
     pub(crate) fn resolve_token() -> SystemScope {
         SystemScope {
             job: SystemJob::ResolveToken,
-        }
-    }
-
-    /// Listing the orgs a user belongs to (`/api/me`).
-    pub(crate) fn list_orgs_of_user() -> SystemScope {
-        SystemScope {
-            job: SystemJob::ListOrgsOfUser,
         }
     }
 

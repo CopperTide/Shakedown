@@ -30,9 +30,6 @@ use pg::Cleanup;
 static RT: LazyLock<tokio::runtime::Runtime> =
     LazyLock::new(|| tokio::runtime::Runtime::new().unwrap());
 
-/// The gateway secret hosted test apps verify signatures with (a test value).
-pub const TEST_GATEWAY_SECRET: &[u8] = b"shakedown-test-gateway-secret";
-
 /// Runs `f` to the end on the tests' shared runtime.
 pub fn run<F: Future>(f: F) -> F::Output {
     RT.block_on(f)
@@ -132,69 +129,6 @@ impl AppFx {
     pub fn orgs(&self) -> &orgs::Orgs {
         self.orgs.as_ref().expect("a hosted app (AppSetup::hosted)")
     }
-
-    /// `method path` with `body`, as the gateway signs it for fixture user `user` in their org now.
-    pub async fn signed(
-        &self,
-        method: &str,
-        path: &str,
-        user: &str,
-        body: Option<Value>,
-    ) -> (u16, Value) {
-        let ts = chrono::Utc::now().timestamp();
-        app::send(self.signed_request(method, path, user, ts, TEST_GATEWAY_SECRET, body)).await
-    }
-
-    /// `signed` at the unix time `ts`, without a body.
-    pub async fn signed_at(&self, method: &str, path: &str, user: &str, ts: i64) -> (u16, Value) {
-        app::send(self.signed_request(method, path, user, ts, TEST_GATEWAY_SECRET, None)).await
-    }
-
-    /// `signed` with another secret, without a body.
-    pub async fn signed_with(
-        &self,
-        method: &str,
-        path: &str,
-        user: &str,
-        secret: &[u8],
-    ) -> (u16, Value) {
-        let ts = chrono::Utc::now().timestamp();
-        app::send(self.signed_request(method, path, user, ts, secret, None)).await
-    }
-
-    /// `method path` with no signature or token.
-    pub async fn unsigned(&self, method: &str, path: &str) -> (u16, Value) {
-        let m = reqwest::Method::from_bytes(method.as_bytes()).unwrap();
-        app::send(self.http.request(m, format!("{}{path}", self.base))).await
-    }
-
-    fn signed_request(
-        &self,
-        method: &str,
-        path: &str,
-        user: &str,
-        ts: i64,
-        secret: &[u8],
-        body: Option<Value>,
-    ) -> reqwest::RequestBuilder {
-        use shaked::auth::signing::*;
-        let (u, org) = (
-            self.orgs().user(user),
-            self.orgs().org(&self.orgs().user(user).org),
-        );
-        let (uid, oid) = (u.id.to_string(), org.id.to_string());
-        let sig = sign_v2(secret, method, path, &uid, &oid, ts);
-        let m = reqwest::Method::from_bytes(method.as_bytes()).unwrap();
-        let req = self.http.request(m, format!("{}{path}", self.base));
-        let req = req.header(USER_HEADER, uid).header(ORG_HEADER, oid);
-        let req = req
-            .header(TS_HEADER, ts.to_string())
-            .header(SIG_HEADER, sig);
-        match body {
-            Some(b) => req.json(&b),
-            None => req,
-        }
-    }
 }
 
 /// The app's state outlives the test (its servers run on the shared runtime): its branches' CA
@@ -230,17 +164,6 @@ impl AppSetup {
     pub fn bench(mut self, bench: &str) -> AppSetup {
         self.bench = Some(bench.into());
         self
-    }
-
-    /// A hosted app: the org fixtures seeded, requests signed with [`TEST_GATEWAY_SECRET`].
-    pub fn hosted(mut self) -> AppSetup {
-        self.hosted = true;
-        self.config(|c| {
-            c.mode = shaked::mode::Mode::Hosted;
-            c.gateway_secret = Some(shaked::auth::signing::GatewaySecret(
-                TEST_GATEWAY_SECRET.to_vec(),
-            ));
-        })
     }
 
     /// Adjusts the app's config before it starts (after the adjustments asked for before).

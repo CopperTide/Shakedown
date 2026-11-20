@@ -4,8 +4,7 @@
 //! Environment: `SHAKEDOWN_PG_URL`, `SHAKEDOWN_BIND` (`127.0.0.1:4510`; the old `SHAKEDOWN_PORT`
 //! still binds `127.0.0.1:<port>`), `SHAKEDOWN_PUBLIC_URL` (the base of every URL handed out;
 //! default `http://<bind>`), `SHAKEDOWN_ALLOWED_HOSTS` (more Host names `/api` answers; see
-//! `shaked::mode`), `SHAKEDOWN_MODE=hosted` or `--hosted` (a bind beyond loopback needs it),
-//! `SHAKEDOWN_PROXY_PORT` (the recording proxy,
+//! `shaked::mode`; a bind beyond loopback is refused), `SHAKEDOWN_PROXY_PORT` (the recording proxy,
 //! on 127.0.0.1; default: a free port), `SHAKEDOWN_PROXY_TIMEOUT_SECS` (300: how long a proxied
 //! request may take before it is answered 504),
 //! the model providers of open agents (`OPENROUTER_API_KEY`, `OPENAI_API_KEY`,
@@ -38,9 +37,9 @@ use std::{path::PathBuf, sync::Arc};
 use parts::{proto::BenchDescribe, Hub, Registry};
 use shaked::{
     app::{self, AppState, Config},
-    mode::{Bind, Mode},
+    mode::Bind,
     pg::Admin,
-    store::{DbUrls, Store},
+    store::Store,
 };
 
 fn repo_dir() -> PathBuf {
@@ -94,40 +93,16 @@ fn hub(pg_url: &str, worlds: &std::path::Path) -> anyhow::Result<Hub> {
 }
 
 /// The store and the hub.
-async fn app_state(url: &str, bind: &Bind, mode: Mode) -> anyhow::Result<Arc<AppState>> {
-    let store = Arc::new(match mode {
-        Mode::Local => Store::open(&Admin::lazy(url)).await?,
-        Mode::Hosted => {
-            Store::open_hosted(&DbUrls::from_env(|k| parts::settings::var(k).ok())).await?
-        }
-    });
+async fn app_state(url: &str, bind: &Bind) -> anyhow::Result<Arc<AppState>> {
+    let store = Arc::new(Store::open(&Admin::lazy(url)).await?);
     let worlds = worlds_dir()?;
     let hub = Arc::new(hub(url, &worlds)?);
     let mut config = Config::new();
     config.self_base = format!("http://{}", loopback_of(bind.addr));
     config.public_url = bind.public_url.to_string();
     config.allowed_hosts = bind.allowed_hosts.clone();
-    config.mode = mode;
     config.worlds_dir = Some(worlds);
-    if mode == Mode::Hosted {
-        config.gateway_secret = Some(gateway_secret()?);
-        config.switch_org_url = parts::settings::var("SHAKEDOWN_SWITCH_ORG_URL").ok();
-    }
     Ok(Arc::new(AppState::new(store, hub, config)))
-}
-
-/// The Cloud gateway's signing secret, from `SHAKEDOWN_GATEWAY_SECRET_FILE` (hosted mode needs it).
-fn gateway_secret() -> anyhow::Result<shaked::auth::signing::GatewaySecret> {
-    use anyhow::Context;
-    let path = parts::settings::var("SHAKEDOWN_GATEWAY_SECRET_FILE")
-        .context("hosted mode needs SHAKEDOWN_GATEWAY_SECRET_FILE")?;
-    let secret = std::fs::read(&path).with_context(|| format!("reading {path}"))?;
-    let secret = String::from_utf8_lossy(&secret).trim().as_bytes().to_vec();
-    anyhow::ensure!(
-        secret.len() >= 32,
-        "the gateway secret in {path} is shorter than 32 bytes"
-    );
-    Ok(shaked::auth::signing::GatewaySecret(secret))
 }
 
 /// Where shaked reaches itself: `addr`, or loopback on its port when it listens on every address.
@@ -138,15 +113,9 @@ fn loopback_of(addr: std::net::SocketAddr) -> std::net::SocketAddr {
     }
 }
 
-/// The mode (`--hosted`, `SHAKEDOWN_MODE`) and where to listen.
-fn mode_and_bind() -> anyhow::Result<(Mode, Bind)> {
-    let mode = Mode::from_args_and_env(
-        std::env::args(),
-        parts::settings::var("SHAKEDOWN_MODE").ok(),
-    );
-    let bind = shaked::mode::bind_from(|k| parts::settings::var(k).ok(), mode == Mode::Hosted)
-        .map_err(anyhow::Error::msg)?;
-    Ok((mode, bind))
+/// Where to listen: this machine only (the open-source shaked authenticates no one).
+fn bind() -> anyhow::Result<Bind> {
+    shaked::mode::bind_from(|k| parts::settings::var(k).ok(), false).map_err(anyhow::Error::msg)
 }
 
 /// The modes this machine can run, for the startup line.
@@ -212,12 +181,10 @@ async fn start_proxy(state: &std::sync::Arc<shaked::app::AppState>) -> anyhow::R
 fn listening_line(
     state: &AppState,
     bind: &Bind,
-    bench: Option<&BenchDescribe>,
+    bench: &BenchDescribe,
     ui: Option<&std::path::Path>,
 ) -> String {
-    let bench = bench.map_or("none (hosted)".to_string(), |b| {
-        format!("{} {}", b.name, b.version)
-    });
+    let bench = format!("{} {}", bench.name, bench.version);
     format!(
         "shaked: listening on http://{} as {} (benchmark: {bench}; modes: {}; ui: {})",
         bind.addr,
@@ -241,18 +208,14 @@ async fn main() -> anyhow::Result<()> {
     if let Some(done) = shaked::cli::run(&args).await {
         return done;
     }
-    let (mode, bind) = mode_and_bind()?;
+    let bind = bind()?;
     let url = shaked::pg::configured_url().await;
     let ui_dist = ui_dist_from_env();
 
-    let state = app_state(&url, &bind, mode).await?;
-    let bench = match mode {
-        Mode::Local => Some(local_start(&state).await?),
-        // A hosted shaked starts no package program on the control box (they run in sandboxes).
-        Mode::Hosted => None,
-    };
-    if let (Some(bench), Some("base")) = (&bench, std::env::args().nth(1).as_deref()) {
-        return build_base(&state, bench).await;
+    let state = app_state(&url, &bind).await?;
+    let bench = local_start(&state).await?;
+    if std::env::args().nth(1).as_deref() == Some("base") {
+        return build_base(&state, &bench).await;
     }
     app::install_default_drivers(&state);
 
@@ -264,7 +227,7 @@ async fn main() -> anyhow::Result<()> {
     start_proxy(&state).await?;
     println!(
         "{}",
-        listening_line(&state, &bind, bench.as_ref(), ui_dist.as_deref())
+        listening_line(&state, &bind, &bench, ui_dist.as_deref())
     );
     axum::serve(listener, router)
         .with_graceful_shutdown(shutdown_on_ctrl_c(state))

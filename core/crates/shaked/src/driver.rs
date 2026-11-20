@@ -215,8 +215,6 @@ fn agent_tokens(ctx: &crate::exec::BranchCtx) -> BTreeMap<String, String> {
 
 /// Starts `conn`'s command for the run `ids` and watches it (see the module's notes).
 pub async fn launch(state: &Arc<AppState>, conn: &Connection, ids: RunIds<'_>) -> Result<Launched> {
-    crate::mode::local_only(&state.config, "a Code connection's driver")
-        .map_err(anyhow::Error::msg)?;
     let world_env = launch_env(state, ids.branch_id).await;
     let mut cmd = command_for(state.config.public_base(), conn, &ids, &world_env)?;
     let what = || format!("starting the driver `{}`", conn.command.join(" "));

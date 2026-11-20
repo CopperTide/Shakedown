@@ -53,18 +53,12 @@ pub struct Config {
     /// The benchmark to start on (`SHAKEDOWN_BENCHMARK`); it wins over the one remembered in
     /// `worlds_dir`. None: the remembered one, else the only one installed.
     pub start_benchmark: Option<String>,
-    /// Local (one user, the default) or hosted (`crate::mode`).
-    pub mode: crate::mode::Mode,
     /// The base URL every URL handed to an agent or a caller starts with (`SHAKEDOWN_PUBLIC_URL`,
     /// set by shaked's main). Empty means `self_base`.
     pub public_url: String,
     /// The Host names `/api` answers (`SHAKEDOWN_ALLOWED_HOSTS` plus the public URL's host).
     /// Empty means this machine's loopback names only.
     pub allowed_hosts: Vec<String>,
-    /// The secret the Cloud gateway signs requests with (hosted; `SHAKEDOWN_GATEWAY_SECRET_FILE`).
-    pub gateway_secret: Option<crate::auth::signing::GatewaySecret>,
-    /// Where the UI posts `{org_id}` to switch orgs (hosted; `SHAKEDOWN_SWITCH_ORG_URL`).
-    pub switch_org_url: Option<String>,
 }
 
 pub const DEFAULT_DRIVER_GRACE: Duration = Duration::from_secs(30);
@@ -110,11 +104,8 @@ impl Config {
             start_benchmark: parts::settings::var("SHAKEDOWN_BENCHMARK")
                 .ok()
                 .filter(|b| !b.is_empty()),
-            mode: crate::mode::Mode::Local,
             public_url: String::new(),
             allowed_hosts: Vec::new(),
-            gateway_secret: None,
-            switch_org_url: None,
         }
     }
 
@@ -458,14 +449,7 @@ fn preflight_answer() -> axum::response::Response {
 pub fn router(state: Arc<AppState>) -> Router {
     let origins = Arc::new(state.config.cors_origins.clone());
     let hosts = Arc::new(state.config.hosts());
-    let api = match state.config.mode {
-        crate::mode::Mode::Hosted => crate::api::router().layer(
-            axum::middleware::from_fn_with_state(state.clone(), crate::auth::middleware::hosted),
-        ),
-        crate::mode::Mode::Local => {
-            crate::api::router().layer(axum::middleware::from_fn(crate::auth::middleware::local))
-        }
-    };
+    let api = crate::api::router().layer(axum::middleware::from_fn(crate::auth::middleware::local));
     let api = api
         .layer(axum::middleware::from_fn_with_state(hosts, allowed_host))
         .layer(axum::middleware::from_fn_with_state(origins, cors));

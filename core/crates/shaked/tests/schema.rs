@@ -5,7 +5,7 @@ use serde_json::json;
 use shaked::{
     model::*,
     pg::Admin,
-    store::{DbUrls, Store, LOCAL_ORG_ID, LOCAL_USER_ID},
+    store::{Store, LOCAL_ORG_ID, LOCAL_USER_ID},
 };
 use support::{legacy, pg, run};
 
@@ -118,67 +118,5 @@ fn a_non_superuser_without_roles_is_refused_naming_bootstrap_sql() {
             !msg.contains(&login.password),
             "the message never shows the password: {msg}"
         );
-    })
-}
-
-/// A database with only stream identity (as the gateway leaves it), its guard, and a login in
-/// both shaked roles.
-async fn gateway_database() -> (String, pg::Cleanup, pg::TempLogin) {
-    let clean = pg::Cleanup::new();
-    let name = pg::db_name("hostedopen");
-    clean.add(&name);
-    pg::admin()
-        .create_db_from(&name, "template1")
-        .await
-        .unwrap();
-    pg::identity_only(&name).await;
-    let roles = ["shaked_app", "shaked_system"];
-    let login = pg::TempLogin::member("hostedopen", &name, &roles).await;
-    (name, clean, login)
-}
-
-#[test]
-fn a_hosted_store_migrates_shakedown_and_never_seeds_the_local_owner() {
-    run(async {
-        let (name, _clean, login) = gateway_database().await;
-        let urls = DbUrls {
-            app: login.db_url(&name),
-            system: Some(login.db_url(&name)),
-            migrate: Some(pg::admin().db_url(&name)),
-        };
-        drop(Store::open_hosted(&urls).await.unwrap());
-        let local = format!("SELECT count(*) FROM identity.orgs WHERE id = '{LOCAL_ORG_ID}'");
-        assert_eq!(rows(&name, &local).await, ["0"]);
-        let shakedown = "SELECT count(*) FROM schema_meta.migrations WHERE stream = 'shakedown'";
-        assert_ne!(rows(&name, shakedown).await, ["0"]);
-        let missing = DbUrls {
-            migrate: None,
-            ..urls
-        };
-        let err = Store::open_hosted(&missing)
-            .await
-            .err()
-            .expect("hosted needs a migrate URL");
-        assert!(
-            format!("{err:#}").contains("SHAKEDOWN_MIGRATE_PG_URL"),
-            "{err:#}"
-        );
-    })
-}
-
-#[test]
-fn a_hosted_app_login_that_bypasses_row_level_security_is_refused() {
-    run(async {
-        let (name, _clean, login) = gateway_database().await;
-        let urls = DbUrls {
-            app: pg::admin().db_url(&name),
-            system: Some(login.db_url(&name)),
-            migrate: Some(pg::admin().db_url(&name)),
-        };
-        let err = Store::open_hosted(&urls)
-            .await
-            .err()
-            .expect("a superuser app login is refused");
-        assert!(format!("{err:#}").contains("row-level security"), "{err:#}");
     })
 }

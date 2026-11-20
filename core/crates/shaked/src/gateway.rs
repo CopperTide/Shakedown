@@ -183,68 +183,6 @@ async fn record(
     Ok(ev.seq)
 }
 
-/// Records the call and meters it for the branch's org.
-async fn record_and_meter(
-    ctx: &BranchCtx,
-    store: &Store,
-    agent: &str,
-    provider: &Result<Provider, String>,
-    payload: &ModelCallPayload,
-) -> Result<(), String> {
-    let seq = record(ctx, store, agent, payload).await?;
-    meter(ctx, store, provider, payload, seq).await;
-    Ok(())
-}
-
-/// Why the org may make no more model calls this month (its `model_usd_micros` quota is used up),
-/// when it may not.
-async fn over_monthly_spend(state: &AppState, ctx: &BranchCtx) -> Option<String> {
-    let checked = ctx
-        .records(&state.store)
-        .check(crate::quotas::Meter::ModelUsdMicros, 0)
-        .await;
-    match checked {
-        Ok(crate::quotas::Verdict::Refuse(why)) => Some(why),
-        _ => None,
-    }
-}
-
-/// Meters the call recorded at `seq` for the branch's org: its tokens, and its cost in micro-USD
-/// when known, each once (`gateway:<branch>:<seq>`). A failure is logged; the call goes on.
-async fn meter(
-    ctx: &BranchCtx,
-    store: &Store,
-    provider: &Result<Provider, String>,
-    p: &ModelCallPayload,
-    seq: i64,
-) {
-    use crate::quotas::Meter;
-    let key = format!("gateway:{}:{seq}", ctx.branch_id);
-    let n = |k: &str| p.usage[k].as_i64().unwrap_or(0);
-    let tokens = n("total_tokens").max(n("prompt_tokens") + n("completion_tokens"));
-    let usd = call_cost(provider, p).map(|usd| (usd * 1e6).round() as i64);
-    let records = ctx.records(store);
-    let branch = Some(ctx.branch_id.as_str());
-    let mut done = records
-        .meter(
-            Meter::ModelTokens,
-            tokens,
-            "gateway",
-            &format!("{key}:tokens"),
-            None,
-            branch,
-        )
-        .await;
-    if let (Ok(_), Some(micros)) = (&done, usd) {
-        done = records
-            .meter(Meter::ModelUsdMicros, micros, "gateway", &key, None, branch)
-            .await;
-    }
-    if let Err(e) = done {
-        eprintln!("gateway: metering {key}: {e:#}");
-    }
-}
-
 /// Why a call is turned away before it reaches a provider: its status and message.
 type Refused = (StatusCode, &'static str);
 
@@ -284,10 +222,7 @@ async fn held_back(state: &AppState, ctx: &BranchCtx) -> Option<Response> {
     if ctx.flow.go().await.is_err() {
         return Some(error_response(StatusCode::CONFLICT, crate::flow::STOPPED));
     }
-    let why = match over_the_limit(state, ctx).await {
-        Some(why) => why,
-        None => over_monthly_spend(state, ctx).await?,
-    };
+    let why = over_the_limit(state, ctx).await?;
     Some(error_response(StatusCode::PAYMENT_REQUIRED, why))
 }
 
@@ -352,7 +287,7 @@ async fn handle(
     // The gateway's own handling: all but the provider's answer and the time recording takes.
     ctx.overhead.add_besides(Cat::Gateway, since, upstream_ms);
     charge(&ctx, &agent, &provider, &payload);
-    if let Err(e) = record_and_meter(&ctx, &state.store, &agent, &provider, &payload).await {
+    if let Err(e) = record(&ctx, &state.store, &agent, &payload).await {
         return error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             format!("recording model call: {e}"),

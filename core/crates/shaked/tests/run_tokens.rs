@@ -269,69 +269,6 @@ fn a_worker_token_needs_its_sandbox() {
     })
 }
 
-/// A branch of org A made through the store, and an sdr_ run token for it.
-async fn org_a_run_token(fx: &AppFx) -> (String, String) {
-    let scope = shaked::auth::test_scope(fx.orgs().principal("a_owner"));
-    let at = fx.state.store.at(&scope);
-    let team = shaked::model::Team {
-        id: "t".into(),
-        name: "T".into(),
-        agents: vec![],
-    };
-    let run_id = at.create_run("t", &team).await.unwrap();
-    let branch = at
-        .create_branch(&run_id, None, &team, &json!([]), None)
-        .await
-        .unwrap();
-    let t = at
-        .mint_run_token(&run_id, &branch, RunTokenKind::Run, None, None, soon())
-        .await;
-    (t.unwrap(), branch)
-}
-
-async fn with_bearer(fx: &AppFx, method: &str, path: &str, token: &str) -> (u16, Value) {
-    let m = reqwest::Method::from_bytes(method.as_bytes()).unwrap();
-    let req = fx
-        .http
-        .request(m, format!("{}{path}", fx.base))
-        .bearer_auth(token);
-    support::app::send(req.json(&json!({"id": "x"}))).await
-}
-
-#[test]
-fn run_tokens_reach_only_their_branch() {
-    run(async {
-        let fx = AppFx::idle("runtokens", "hostedreach")
-            .hosted()
-            .start()
-            .await;
-        let (token, branch) = org_a_run_token(&fx).await;
-        let (status, v) = with_bearer(
-            &fx,
-            "POST",
-            &format!("/api/branches/{branch}/finish"),
-            &token,
-        )
-        .await;
-        assert_eq!(status, 404, "{v}");
-        assert!(
-            v["error"].as_str().unwrap().contains("no live branch"),
-            "its own branch reaches the route: {v}"
-        );
-        assert_eq!(
-            with_bearer(&fx, "GET", "/api/runs", &token).await.0,
-            403,
-            "no org reads"
-        );
-        let (status, v) = with_bearer(&fx, "POST", "/api/branches/other/finish", &token).await;
-        assert_eq!(status, 404, "{v}");
-        assert!(
-            !v["error"].as_str().unwrap().contains("no live branch"),
-            "refused before the route: {v}"
-        );
-    })
-}
-
 #[test]
 fn a_long_pause_extends_proxy_tickets_and_run_tokens() {
     run(async {

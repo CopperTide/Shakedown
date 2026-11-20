@@ -43,7 +43,6 @@ mod suites;
 mod tokens;
 mod twin;
 mod ui;
-mod usage;
 mod world;
 mod worlds;
 
@@ -82,7 +81,6 @@ fn modules() -> Router<Arc<AppState>> {
         .merge(flow::router())
         .merge(me::router())
         .merge(tokens::router())
-        .merge(usage::router())
         .merge(suites::router())
         .merge(experiments::router())
         .merge(review::router())
@@ -516,8 +514,7 @@ async fn new_run_world(
     Ok((bench, scenario))
 }
 
-/// `POST /api/runs`: within the org's `runs` quota (over a hard one: 429 naming it; over a soft one
-/// the answer has a `warning`), the run started and metered once (`api:run:<run_id>`).
+/// `POST /api/runs`.
 async fn create_run(
     State(state): State<Arc<AppState>>,
     Caller(caller): Caller,
@@ -529,27 +526,7 @@ async fn create_run(
         &caller,
         crate::auth::Action::CreateOrgWide(crate::auth::ResourceKind::Run),
     )?;
-    let records = state.store.at(&caller);
-    let warning = match records.check(crate::quotas::Meter::Runs, 1).await? {
-        crate::quotas::Verdict::Refuse(why) => {
-            return Err(ApiError(StatusCode::TOO_MANY_REQUESTS, why))
-        }
-        crate::quotas::Verdict::Warn(why) => Some(why),
-        crate::quotas::Verdict::Ok => None,
-    };
-    let Json(mut answer) = start_run(state.clone(), caller.clone(), permit, headers, req).await?;
-    if let Some(run) = answer["run_id"].as_str() {
-        let key = format!("api:run:{run}");
-        state
-            .store
-            .at(&caller)
-            .meter(crate::quotas::Meter::Runs, 1, "api", &key, Some(run), None)
-            .await?;
-    }
-    if let Some(w) = warning {
-        answer["warning"] = json!(w);
-    }
-    Ok(Json(answer))
+    start_run(state, caller, permit, headers, req).await
 }
 
 async fn start_run(

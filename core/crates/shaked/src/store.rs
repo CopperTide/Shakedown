@@ -23,11 +23,10 @@ mod run_tokens;
 mod seed;
 mod suites;
 mod tx;
-mod usage;
 pub use api_tokens::ApiTokenRow;
 pub use connections::{is_secret, Connection, NewConnection, REDACTED};
 pub use experiments::{NewExperiment, NewSetup};
-pub use open::{prepare_db, template_key, DbUrls};
+pub use open::{prepare_db, template_key};
 pub use reviews::{ReviewDone, StoredReview};
 pub use seed::{LOCAL_ORG_ID, LOCAL_USER_ID};
 pub use suites::NewSuite;
@@ -133,22 +132,6 @@ impl Store {
         prepare_db(admin, name).await?;
         let url = admin.db_url(name);
         let store = Store::with_pools(open::pool(&url)?, open::pool(&url)?, true);
-        crate::jobs::interrupt_at_start(&store).await?;
-        Ok(store)
-    }
-
-    /// Opens a hosted shaked's database (`DbUrls`, every one needed): migrates stream shakedown
-    /// once stream identity is at 2, never seeds the local owner, and runs requests and system
-    /// jobs on their own logins (members of `shaked_app` and `shaked_system`).
-    pub async fn open_hosted(urls: &DbUrls) -> Result<Store> {
-        let migrate =
-            (urls.migrate.as_deref()).context("hosted mode needs SHAKEDOWN_MIGRATE_PG_URL")?;
-        let system =
-            (urls.system.as_deref()).context("hosted mode needs SHAKEDOWN_SYSTEM_PG_URL")?;
-        anyhow::ensure!(!urls.app.is_empty(), "hosted mode needs SHAKEDOWN_PG_URL");
-        open::migrate_hosted(migrate).await?;
-        let store = Store::with_pools(open::pool(&urls.app)?, open::pool(system)?, false);
-        open::refuse_bypassing_login(&store.app).await?;
         crate::jobs::interrupt_at_start(&store).await?;
         Ok(store)
     }
