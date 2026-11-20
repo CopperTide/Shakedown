@@ -16,7 +16,8 @@ Templates written as data, worlds generated from them, and the benchmark a built
   holds no links and never holds or sits in another one copied.
 - A system may have no parts of its own and an `apply` (the events' ops, plus `merge`, which updates an object in
   a part's config): a chosen system's ops are applied, in template order, before the events'. A task's check may
-  name the systems it `needs`; without them it is dropped (and listed in `dropped`).
+  name the systems it `needs` and the `events` it belongs to; without them (or with one of those events off) it
+  is dropped, and listed in `dropped`.
 - An event may be written in its own file (`events: ["@events/x.yaml"]`, held to the event's schema). A `fixed`
   event is a fact of the template's data (a flaky test in a repository, say): always on, it may apply nothing, and
   turning it off is a problem.

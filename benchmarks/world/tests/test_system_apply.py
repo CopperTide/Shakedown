@@ -118,3 +118,15 @@ def test_a_fixed_event_is_part_of_the_data_and_cannot_be_turned_off(fixtures, tm
     with pytest.raises(TemplateError, match="an event that isn't fixed applies something") as e:
         load_template(copy_with(t.dir, tmp_path / "bad", {"events.1.apply": []}))
     assert e.value.path == "events[1].apply"
+
+
+def test_a_check_of_an_event_is_kept_only_while_the_event_is_on(fixtures, tmp_path):
+    checks = [{"name": "late_noticed", "events": ["slow-supplier"], "check": {"part": "alpha", "key": "a"}}]
+    t = _with_systems(fixtures, tmp_path, **{"tasks.0.checks": checks, "events.0.default": True})
+    assert [c for c in generate(t, {}).world["tasks"][0]["checks"]] == [
+        {"name": "late_noticed", "check": {"part": "alpha", "key": "a"}}]
+    r = generate(t, {"events": {"slow-supplier": {"on": False}}})
+    assert r.world["tasks"][0]["checks"] == []
+    assert {"what": "check late_noticed of task alpha-task", "why": "needs the event slow-supplier, not on"} in r.dropped
+    with pytest.raises(TemplateError, match="no event omega"):
+        load_template(copy_with(t.dir, tmp_path / "bad", {"tasks.0.checks.0.events": ["omega"]}))

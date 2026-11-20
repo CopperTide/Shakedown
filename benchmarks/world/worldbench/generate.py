@@ -78,7 +78,7 @@ def _build(t, c: Choices, kept: select.Kept, people: list) -> tuple[dict, list]:
     world = {"format": FORMAT, "name": company["slug"], "title": c.company, "seed": c.seed,
              "template": {"id": t.id, "name": t.name, "version": t.version}, "choices": c.to_json(),
              "company": company, "people": people, "parts": _parts(t, c, fill),
-             "tasks": [_task(t, task, company, fill, _Checks(c.systems, kept.dropped)) for task in kept.tasks],
+             "tasks": [_task(t, task, company, fill, _Checks(c.systems, c.events, kept.dropped)) for task in kept.tasks],
              "links": [fill(_without_needs(x), _at(t.data["links"], x, "links")) for x in kept.links],
              "gates": [_without_needs(g) for g in kept.gates],
              "instructions": fill(t.data.get("instructions", ""), "instructions"),
@@ -106,20 +106,30 @@ def _parts(t, c: Choices, fill) -> list:
 
 @dataclass
 class _Checks:
-    """Which of a task's checks stay: those whose `needs` were all chosen; the rest go to `dropped`."""
+    """Which of a task's checks stay: those whose `needs` were all chosen and whose `events` are all on; the rest
+    go to `dropped`."""
     systems: list
+    events: dict
     dropped: list
 
     def keep(self, task_id: str, checks: list) -> list:
         kept = []
         for item in checks:
-            missing = [s for s in item.get("needs", []) if s not in self.systems]
-            if missing:
-                self.dropped.append({"what": f"check {item.get('name')} of task {task_id}",
-                                     "why": f"needs {select.systems_phrase(missing)}, not chosen"})
+            why = self._why_not(item)
+            if why:
+                self.dropped.append({"what": f"check {item.get('name')} of task {task_id}", "why": why})
             else:
-                kept.append({k: v for k, v in item.items() if k != "needs"})
+                kept.append({k: v for k, v in item.items() if k not in ("needs", "events")})
         return kept
+
+    def _why_not(self, item: dict) -> str | None:
+        missing = [s for s in item.get("needs", []) if s not in self.systems]
+        if missing:
+            return f"needs {select.systems_phrase(missing)}, not chosen"
+        off = [e for e in item.get("events", []) if not self.events.get(e, {}).get("on")]
+        if off:
+            return f"needs the event{'s' if len(off) > 1 else ''} {', '.join(off)}, not on"
+        return None
 
 
 def _task(t, task: dict, company: dict, fill, checks: _Checks) -> dict:

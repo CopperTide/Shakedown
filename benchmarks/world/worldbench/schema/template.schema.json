@@ -788,6 +788,10 @@
         },
         "needs": {
           "$ref": "#/$defs/ids"
+        },
+        "events": {
+          "$ref": "#/$defs/ids",
+          "$comment": "kept only while these events are on"
         }
       }
     },

@@ -60,7 +60,7 @@ def _included(data, folder: Path) -> None:
     a check names only the template's systems."""
     if isinstance(data.get("names"), str):
         _included_file(data["names"], folder, "names", "namePools")
-    known = {s["id"] for s in data["systems"]}
+    known = ({s["id"] for s in data["systems"]}, {e["id"] for e in data.get("events", [])})
     for i, task in enumerate(data["tasks"]):
         path, checks = f"tasks[{i}].checks", task["checks"]
         if isinstance(checks, str):
@@ -75,11 +75,13 @@ def _included_file(include: str, folder: Path, path: str, definition: str):
     return value
 
 
-def _check_needs(checks: list, known: set, path: str) -> None:
+def _check_needs(checks: list, known: tuple, path: str) -> None:
+    """A check's `needs` names the template's systems and its `events` its events."""
     for i, item in enumerate(checks):
-        for j, sid in enumerate(item.get("needs", [])):
-            if sid not in known:
-                raise TemplateError(f"{path}[{i}].needs[{j}]", f"no system {sid}")
+        for (field, what), ids in zip((("needs", "system"), ("events", "event")), known):
+            for j, x in enumerate(item.get(field, [])):
+                if x not in ids:
+                    raise TemplateError(f"{path}[{i}].{field}[{j}]", f"no {what} {x}")
 
 
 def _first_repeat(items, key: str, path: str) -> None:
