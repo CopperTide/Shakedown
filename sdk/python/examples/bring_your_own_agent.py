@@ -52,7 +52,7 @@ def gateway_loop(agent, prompt: str, model: str, max_turns: int = 30) -> None:
     agent.end(ok=True)
 
 
-with connect() as arena:
+with connect() as sd:
     task = sd.task(task_arg(sd))
     if via == "claude-code":
         if not claude_code.available():

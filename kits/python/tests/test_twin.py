@@ -33,7 +33,7 @@ def test_twin_serves_its_hosts_and_answers_through_the_router(notes):
     routes = notes.http_routes("i")["routes"]
     assert routes[0]["host"] == "notes.acme.test" and routes[0]["upstream"].startswith("http://127.0.0.1:")
     assert routes[0]["env"] == {"NOTES_URL": "https://notes.acme.test"}
-    r = http(routes[0]["upstream"], "POST", "/notes", {"text": "hi"}, headers={**FORWARDED, "X-Arena-Agent": "coder"})
+    r = http(routes[0]["upstream"], "POST", "/notes", {"text": "hi"}, headers={**FORWARDED, "X-Shakedown-Agent": "coder"})
     assert r.status == 201
     assert r.json() == {"id": 1, "text": "hi", "by": "coder", "url": "https://notes.acme.test/notes/1"}
 
@@ -86,8 +86,8 @@ def test_an_unknown_act_is_refused(notes):
 
 
 def test_effect_header_is_sent_when_set(notes):
-    assert http(up(notes), "GET", "/notes?as=write").headers["x-arena-effect"] == "write"
-    assert "x-arena-effect" not in http(up(notes), "GET", "/notes").headers
+    assert http(up(notes), "GET", "/notes?as=write").headers["x-shakedown-effect"] == "write"
+    assert "x-shakedown-effect" not in http(up(notes), "GET", "/notes").headers
 
 
 def test_describe_names_the_act_tool_and_save_points(notes):
@@ -168,7 +168,7 @@ def test_a_request_knows_it_comes_from_a_read_only_agent(notes):
         return Response(200, {"agent": req.agent, "readonly": req.readonly})
 
     try:
-        r = http(up(notes), "GET", "/whoami", headers={"X-Arena-Agent": "auditor", "X-Arena-Readonly": "1"})
+        r = http(up(notes), "GET", "/whoami", headers={"X-Shakedown-Agent": "auditor", "X-Shakedown-Readonly": "1"})
         assert r.json() == {"agent": "auditor", "readonly": True}
         assert http(up(notes), "GET", "/whoami").json()["readonly"] is False
     finally:

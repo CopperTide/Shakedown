@@ -99,7 +99,7 @@ def test_branch_record_and_export_rows():
     assert rec.seed == 42 and rec.ended and rec.check.differing_rows == ["orders/#W1"]
     assert rec.tool_calls("a")[0].tool == "get_user_details"
     row = branch_row(rec)
-    assert row["format"] == "arena-dataset/1" and row["task_id"] == "72" and row["passed"] is False
+    assert row["format"] == "shakedown-dataset/1" and row["task_id"] == "72" and row["passed"] is False
     assert row["checks"] == [{"name": "matches_gold", "passed": False, "detail": "", "safety": False}]
     rows = list(event_rows(rec))
     assert [r["inherited"] for r in rows] == [True, True, False, False]
@@ -182,7 +182,7 @@ def test_agent_endpoint_reads_proxy_and_env():
     from shakedown import Shakedown
     from shakedown.client import AgentEndpoint
 
-    proxy = "http://arena:t@127.0.0.1:5"
+    proxy = "http://shakedown:t@127.0.0.1:5"
     d = {"agent": "a", "mcp_url": "http://x/mcp/b1/a", "gateway_url": "http://x/gateway/b1/a/v1",
          "proxy_url": proxy, "env": {"HTTPS_PROXY": proxy, "TOY_URL": "https://toy.test"}}
     a = AgentEndpoint.from_answer(Branch(Shakedown("http://127.0.0.1:1"), "b1", "r1"), d)
@@ -419,3 +419,13 @@ print(len([x for x in w if issubclass(x.category, DeprecationWarning) and "shake
     out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
     assert out.returncode == 0, out.stderr
     assert out.stdout.strip() == "1"
+
+
+def test_a_branch_suite_and_env_keep_their_connection_as_arena_too():
+    from shakedown.client import Branch, Shakedown, Suite
+
+    sd = Shakedown("http://127.0.0.1:1")
+    b = Branch(sd, "b1", "r1")
+    assert b.shakedown is sd and b.arena is sd
+    s = Suite(sd, {"id": "s1"})
+    assert s.arena is sd

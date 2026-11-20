@@ -191,10 +191,10 @@ impl Mcp {
 }
 
 /// The name the CLIs give the world's MCP server: the benchmark's name, each character outside
-/// `[A-Za-z0-9_-]` (what Claude Code and Codex accept) replaced by `_`; `arena` if it is empty.
+/// `[A-Za-z0-9_-]` (what Claude Code and Codex accept) replaced by `_`; `shakedown` if it is empty.
 pub fn server_name(benchmark: &str) -> String {
     if benchmark.is_empty() {
-        return "arena".into();
+        return "shakedown".into();
     }
     benchmark
         .chars()
@@ -324,6 +324,6 @@ mod tests {
         assert_eq!(server_name("retail"), "retail");
         assert_eq!(server_name("toy-bench_2"), "toy-bench_2");
         assert_eq!(server_name("My bench.v2/é"), "My_bench_v2__");
-        assert_eq!(server_name(""), "arena");
+        assert_eq!(server_name(""), "shakedown");
     }
 }

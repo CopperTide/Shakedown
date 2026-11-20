@@ -1,9 +1,9 @@
-"""Owner ruling (2026-11-19): a read-only agent's requests reach the twin marked `X-Arena-Readonly: 1`;
+"""Owner ruling (2026-11-19): a read-only agent's requests reach the twin marked `X-Shakedown-Readonly: 1`;
 the twin serves its reads and refuses its writes itself."""
 from conftest import api_raw, commit, raw
 
 R = "/api/v3/repos/acme/app"
-RO = {"X-Arena-Readonly": "1"}
+RO = {"X-Shakedown-Readonly": "1"}
 
 
 def test_the_twin_says_it_honours_read_only(twin):
@@ -19,7 +19,7 @@ def test_a_read_only_agent_cannot_write(twin):
     r = api_raw(twin, "POST", f"{R}/issues", {"title": "Sneaky"}, as_user="auditor", headers=RO)
     assert (r.status, r.json()["message"]) == (403, "Resource not accessible by integration")
     assert r.json()["documentation_url"].startswith("https://docs.github.com/")
-    assert r.headers["x-arena-effect"] == "read"
+    assert r.headers["x-shakedown-effect"] == "read"
     assert api_raw(twin, "GET", f"{R}/issues").json() == []
     assert twin.part.advance("i", 100)["changed"] is False
 
@@ -36,4 +36,4 @@ def test_a_read_only_agent_clones_but_cannot_push(twin, clone):
     commit(clone, "b.txt", "two")
     push = raw(twin.up, "POST", "/acme/app.git/git-receive-pack", b"0000",
                {**auth, "Content-Type": "application/x-git-receive-pack-request"})
-    assert (push.status, push.headers["x-arena-effect"]) == (403, "read")
+    assert (push.status, push.headers["x-shakedown-effect"]) == (403, "read")

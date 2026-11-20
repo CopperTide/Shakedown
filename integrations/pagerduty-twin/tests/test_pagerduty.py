@@ -114,12 +114,12 @@ def test_the_world_tool_and_acts(pd):
 def test_a_read_only_agent_reads_but_cannot_acknowledge(pd):
     enqueue(pd, "trigger", "k1")
     assert pd.part.http_routes("i")["routes"][0]["honours_readonly"] is True
-    ro = {"X-Arena-Readonly": "1"}
+    ro = {"X-Shakedown-Readonly": "1"}
     status, headers, _ = raw(pd, "GET", "/incidents", as_user="auditor", headers=ro)
-    assert status == 200 and headers["x-arena-effect"] == "read"
+    assert status == 200 and headers["x-shakedown-effect"] == "read"
     status, headers, body = raw(pd, "PUT", "/incidents/P1", {"incident": {"type": "incident_reference",
                                                                           "status": "acknowledged"}}, headers=ro)
-    assert (status, body["error"]["code"], headers["x-arena-effect"]) == (403, 2010, "read")
+    assert (status, body["error"]["code"], headers["x-shakedown-effect"]) == (403, 2010, "read")
     status, _, _ = raw(pd, "POST", "/v2/enqueue", {"routing_key": KEY, "event_action": "resolve", "dedup_key": "k1"},
                        host=EVENTS_HOST, token=None, sender=None, headers=ro)
     assert status == 403 and pd.docs()["incident/P1"]["status"] == "triggered"

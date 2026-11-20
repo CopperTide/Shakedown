@@ -74,7 +74,7 @@ def test_relative_dates_are_world_time(jira):
 
 def test_post_search_is_a_read(jira):
     r = call(jira, "POST", "/rest/api/2/search/jql", {"jql": "key = AC-1", "fields": ["summary"], "expand": None})
-    assert r.status == 200 and r.headers["x-arena-effect"] == "read"
+    assert r.status == 200 and r.headers["x-shakedown-effect"] == "read"
     assert r.json()["issues"][0]["fields"] == {"summary": "Add the login form"}
     assert jira.part.advance("i", 0)["changed"] is False
 

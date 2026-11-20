@@ -1,5 +1,5 @@
 """Runs a GraphQL request over the twin's schema with graphql-core: validation errors in graphql-ruby
-words, the query or mutation root, and whether it wrote (`X-Arena-Effect`).
+words, the query or mutation root, and whether it wrote (`X-Shakedown-Effect`).
 
 Fields resolve to the attribute or method of the field's name in snake case on the object (a dict:
 the key of the field's name). A field an object lacks answers its type's empty value: null, or for a

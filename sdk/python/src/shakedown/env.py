@@ -4,7 +4,7 @@ It follows PettingZoo's parallel API (``reset``/``step``/``close``, dicts keyed 
 depending on PettingZoo. Shakedown supplies the world, the record and the score; **your policy** (an LLM
 or anything else) picks the actions. Shakedown supplies no agent.
 
-    env = ShakedownParallelEnv(arena, task="72", agents=["support"])
+    env = ShakedownParallelEnv(shakedown, task="72", agents=["support"])
     obs, infos = env.reset(seed=7)
     while env.agents:
         actions = {a: my_policy(obs[a]) for a in env.agents}   # {"name": tool, "arguments": {...}}
@@ -32,7 +32,7 @@ from __future__ import annotations
 import copy
 from typing import Any, Callable, Optional, Sequence, Union
 
-from .client import AgentEndpoint, Shakedown, Branch
+from .client import AgentEndpoint, Branch, OldConnectionName, Shakedown
 from .models import Agent, CheckResult, Event, Task
 
 #: The action that says an agent is done.
@@ -41,12 +41,12 @@ END = "__end__"
 Shaping = Callable[["ShakedownParallelEnv", str, Any, dict], float]
 
 
-class ShakedownParallelEnv:
+class ShakedownParallelEnv(OldConnectionName):
     metadata = {"name": "arena_parallel_v0", "is_parallelizable": False}
 
     def __init__(
         self,
-        arena: Shakedown,
+        shakedown: Shakedown,
         task: Union[str, Task],
         agents: Sequence[Union[str, Agent]],
         scenario: Any = None,
@@ -57,8 +57,8 @@ class ShakedownParallelEnv:
     ):
         if reward not in ("pass", "score"):
             raise ValueError("reward is 'pass' or 'score'")
-        self.arena = arena
-        self.task = task if isinstance(task, Task) else arena.task(str(task))
+        self.shakedown = shakedown
+        self.task = task if isinstance(task, Task) else shakedown.task(str(task))
         self._specs = [a if isinstance(a, Agent) else Agent.external(a) for a in agents]
         self.possible_agents = [a.id for a in self._specs]
         self.agents: list[str] = []
@@ -91,7 +91,7 @@ class ShakedownParallelEnv:
         """Finishes the previous episode if it is still live, starts a new external run of the task
         (with ``seed``), and registers the agents."""
         self._finish_live()
-        self.branch = self.arena.external_run(
+        self.branch = self.shakedown.external_run(
             self.task, agents=self._specs, scenario=self.scenario, seed=seed
         )
         self._endpoints = dict(self.branch.agents)

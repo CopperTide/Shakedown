@@ -1,5 +1,5 @@
 [project]
-name = "shakedown"
+name = "shakedown-sdk"
 version = "0.1.0"
 description = "Build, drive, observe and export Shakedown environments from Python"
 readme = "README.md"

@@ -5,7 +5,7 @@ description = "Two agent designs for Shakedown's software-factory world: a LangG
 requires-python = ">=3.11"
 # Pinned: the designs are compared, so both run on the same frameworks every time.
 dependencies = [
-    "shakedown[langgraph,openai-agents]",
+    "shakedown-sdk[langgraph,openai-agents]",
     "langgraph==1.2.22",
     "langchain-core==1.7.7",
     "langchain-openai==1.7.4",
@@ -18,7 +18,7 @@ dependencies = [
 dev = ["pytest==9.2.0"]
 
 [tool.uv.sources]
-shakedown = { path = "../../sdk/python", editable = true }
+shakedown-sdk = { path = "../../sdk/python", editable = true }
 
 [build-system]
 requires = ["hatchling"]

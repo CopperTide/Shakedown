@@ -104,14 +104,14 @@ def raw(up, method, path, body=None, headers=None) -> Answer:
 
 
 def call(twin, method, path, body=None, as_user=None, auth=None, headers=None, forwarded=True) -> Answer:
-    """A request as the proxy forwards it: the public host in X-Forwarded-*, the agent in X-Arena-Agent."""
+    """A request as the proxy forwards it: the public host in X-Forwarded-*, the agent in X-Shakedown-Agent."""
     h = {"Content-Type": "application/json", "Accept": "application/json"}
     if auth != "":
         h["Authorization"] = auth or basic()
     if forwarded:
         h.update({"X-Forwarded-Proto": "https", "X-Forwarded-Host": HOST})
     if as_user:
-        h["X-Arena-Agent"] = as_user
+        h["X-Shakedown-Agent"] = as_user
     h.update(headers or {})
     return raw(twin.up, method, path, body, h)
 

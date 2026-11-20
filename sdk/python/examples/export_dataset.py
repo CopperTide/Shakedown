@@ -17,9 +17,9 @@ from common import connect
 if len(sys.argv) < 2:
     sys.exit(__doc__)
 target = sys.argv[1]
-out = sys.argv[2] if len(sys.argv) > 2 else f"arena-dataset-{target[:8]}"
+out = sys.argv[2] if len(sys.argv) > 2 else f"shakedown-dataset-{target[:8]}"
 
-with connect() as arena:
+with connect() as sd:
     try:
         suite = sd.get_suite(target)
         suite.export(out)

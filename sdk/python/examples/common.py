@@ -38,7 +38,7 @@ def need_claude() -> None:
         sys.exit("skipped: this example runs Claude Code agents; install `claude` and sign in")
 
 
-def task_arg(arena: Shakedown, default_index: int = 0) -> str:
+def task_arg(sd: Shakedown, default_index: int = 0) -> str:
     """The task id from argv[1], else the benchmark's first (or ``default_index``th) task."""
     if len(sys.argv) > 1 and sys.argv[1] != "-":
         return sys.argv[1]

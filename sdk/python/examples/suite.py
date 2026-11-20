@@ -16,7 +16,7 @@ repeats = int(sys.argv[2]) if len(sys.argv) > 2 else 1
 model = sys.argv[3] if len(sys.argv) > 3 else "haiku"
 against = sys.argv[4] if len(sys.argv) > 4 else None
 
-with connect() as arena:
+with connect() as sd:
     if tasks_arg in (None, ""):
         tasks = [sd.tasks()[0].id]
     elif tasks_arg == "all":

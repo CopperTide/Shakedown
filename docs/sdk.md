@@ -17,7 +17,7 @@ Code, Codex, or an API model does the work, and Shakedown records, restores and 
 
 ```bash
 cd sdk/python && uv sync          # or, from another project:
-uv add "shakedown @ git+https://github.com/CopperTide/Shakedown#subdirectory=sdk/python"
+uv add "shakedown-sdk @ git+https://github.com/CopperTide/Shakedown#subdirectory=sdk/python"
 ```
 
 Python 3.10 or newer; one dependency, `httpx`. You also need a core: a running shaked, or a build of this

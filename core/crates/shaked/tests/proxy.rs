@@ -25,7 +25,9 @@ async fn echo_host(h: HeaderMap) -> axum::Json<Value> {
         "x-forwarded-port",
         "x-forwarded-for",
         "forwarded",
-        "x-arena-effect",
+        "x-shakedown-effect",
+        "x-shakedown-agent",
+        "x-shakedown-readonly",
         "x-arena-agent",
         "x-arena-readonly",
     ];
@@ -41,10 +43,24 @@ async fn echo_auth(h: HeaderMap) -> String {
     auth.unwrap_or("").to_string()
 }
 
+/// A part from before 2026-11-19: it says it only read under the old header name.
+async fn old_read() -> ([(&'static str, &'static str); 1], &'static str) {
+    ([("x-arena-effect", "read")], "{}")
+}
+
 /// The upstream the toy part routes `toy.test` to.
 async fn upstream() -> String {
-    let graphql = || async { ([("x-arena-effect", "read")], "{\"data\":{}}") };
-    let app = Router::new()
+    let app = upstream_app();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    base
+}
+
+/// The upstream's routes.
+fn upstream_app() -> Router {
+    let graphql = || async { ([("x-shakedown-effect", "read")], "{\"data\":{}}") };
+    Router::new()
         .route("/hello", get(|| async { "hi" }))
         .route("/echo-host", get(echo_host))
         .route("/echo-auth", get(echo_auth))
@@ -53,19 +69,22 @@ async fn upstream() -> String {
             post(|b: String| async { (StatusCode::CREATED, b) }),
         )
         .route("/graphql", post(graphql))
+        .route("/old-read", post(old_read))
         .route("/hang", get(std::future::pending::<String>))
         .route(
             "/read",
-            post(|h| async { ([("x-arena-effect", "read")], echo_host(h).await) }),
+            post(|h| async { ([("x-shakedown-effect", "read")], echo_host(h).await) }),
         )
         .route(
             "/write",
-            post(|| async { (StatusCode::CREATED, [("x-arena-effect", "write")], "done") }),
-        );
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let base = format!("http://{}", listener.local_addr().unwrap());
-    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
-    base
+            post(|| async {
+                (
+                    StatusCode::CREATED,
+                    [("x-shakedown-effect", "write")],
+                    "done",
+                )
+            }),
+        )
 }
 
 /// An upstream that answers `GET /name` with `name` and takes `POST /items`.
@@ -185,13 +204,13 @@ fn a_client_cannot_set_the_forwarding_headers() {
             .header("X-Forwarded-Proto", "https")
             .header("x-forwarded-for", "10.0.0.1")
             .header("forwarded", "host=evil.test")
-            .header("x-arena-effect", "read")
+            .header("x-shakedown-effect", "read")
             .send()
             .await;
         let v: Value = r.unwrap().json().await.unwrap();
         let want = json!({"host": "toy.test", "x-forwarded-host": "toy.test",
                           "x-forwarded-proto": "http", "x-forwarded-port": "80",
-                          "x-arena-agent": "planner"});
+                          "x-shakedown-agent": "planner", "x-arena-agent": "planner"});
         assert_eq!(v, want);
     })
 }
@@ -250,7 +269,7 @@ fn the_upstream_sees_the_worlds_host_name() {
         let v: Value = r.unwrap().json().await.unwrap();
         let want = json!({"host": "toy.test", "x-forwarded-host": "toy.test",
                           "x-forwarded-proto": "http", "x-forwarded-port": "80",
-                          "x-arena-agent": "planner"});
+                          "x-shakedown-agent": "planner", "x-arena-agent": "planner"});
         assert_eq!(v, want);
     })
 }
@@ -259,7 +278,7 @@ fn the_upstream_sees_the_worlds_host_name() {
 /// chunks of 16 KiB. The status line of the final answer.
 async fn post_chunked_with_expect(addr: std::net::SocketAddr, ticket: &str, body: &[u8]) -> String {
     use base64::Engine;
-    let auth = base64::engine::general_purpose::STANDARD.encode(format!("arena:{ticket}"));
+    let auth = base64::engine::general_purpose::STANDARD.encode(format!("shakedown:{ticket}"));
     let mut s = tokio::net::TcpStream::connect(addr).await.unwrap();
     let head = format!(
         "POST http://toy.test/items HTTP/1.1\r\nHost: toy.test\r\nProxy-Authorization: Basic {auth}\r\n\
@@ -322,7 +341,7 @@ fn a_request_without_the_ticket_is_turned_away_unrecorded() {
         let before = fx.events().await.len();
         let addr = fx.fx.state.proxy.addr().unwrap();
         let bare = reqwest::Proxy::all(format!("http://{addr}")).unwrap();
-        let wrong = reqwest::Proxy::all(format!("http://arena:nope@{addr}")).unwrap();
+        let wrong = reqwest::Proxy::all(format!("http://shakedown:nope@{addr}")).unwrap();
         for proxy in [bare, wrong] {
             let c = reqwest::Client::builder().proxy(proxy).build().unwrap();
             let r = c.get("http://toy.test/hello").send().await.unwrap();
@@ -343,7 +362,7 @@ fn an_origin_form_request_is_told_to_send_absolute_urls() {
     run(async {
         let fx = ProxyFx::new("origin", &upstream().await, &[]).await;
         use base64::Engine;
-        let ticket = format!("arena:{}", fx.ticket(Some("planner")));
+        let ticket = format!("shakedown:{}", fx.ticket(Some("planner")));
         let auth = base64::engine::general_purpose::STANDARD.encode(ticket);
         let addr = fx.fx.state.proxy.addr().unwrap();
         let r = fx.fx.http.get(format!("http://{addr}/hello"));
@@ -388,13 +407,23 @@ fn the_upstream_is_told_which_agent_sent_each_request() {
         let fx = ProxyFx::new("agent", &upstream().await, &[]).await;
         for agent in ["planner", "reader"] {
             let r = (fx.client(agent).get("http://toy.test/echo-host"))
+                .header("x-shakedown-agent", "boss")
+                .header("x-shakedown-readonly", "0")
                 .header("x-arena-agent", "boss")
                 .header("x-arena-readonly", "0")
                 .send()
                 .await;
             let v: Value = r.unwrap().json().await.unwrap();
-            assert_eq!(v["x-arena-agent"], agent, "{v}");
-            assert!(v.get("x-arena-readonly").is_none(), "{v}");
+            // Under both names, for parts written before 2026-11-19; a client's own copies dropped.
+            assert_eq!(
+                (&v["x-shakedown-agent"], &v["x-arena-agent"]),
+                (&json!(agent), &json!(agent)),
+                "{v}"
+            );
+            assert!(
+                v.get("x-shakedown-readonly").is_none() && v.get("x-arena-readonly").is_none(),
+                "{v}"
+            );
         }
     })
 }
@@ -407,15 +436,16 @@ fn a_read_only_post_goes_marked_to_a_route_that_honours_read_only() {
         let (status, v) = post_json(&fx.client("reader"), "http://toy.test/read").await;
         assert_eq!(status, 200);
         assert_eq!(
-            (&v["x-arena-agent"], &v["x-arena-readonly"]),
+            (&v["x-shakedown-agent"], &v["x-shakedown-readonly"]),
             (&json!("reader"), &json!("1"))
         );
+        assert_eq!(v["x-arena-readonly"], json!("1"), "the old name too: {v}");
         let e = fx.last_tool_call().await;
         assert!(e.payload["error"].is_null(), "{}", e.payload);
         assert_eq!(e.payload["reads"], json!(["http/toy.test"]));
         let (_, v) = post_json(&fx.client("planner"), "http://toy.test/read").await;
         assert!(
-            v.get("x-arena-readonly").is_none(),
+            v.get("x-shakedown-readonly").is_none(),
             "only a read-only agent's: {v}"
         );
     })
@@ -439,7 +469,8 @@ fn a_read_only_request_the_part_says_wrote_is_a_violation_that_fails_the_branch(
             .await;
         assert_eq!(r.unwrap().status().as_u16(), 201);
         let e = fx.last_tool_call().await;
-        let why = "a read-only agent's request wrote: the box part answered X-Arena-Effect: write \
+        let why =
+            "a read-only agent's request wrote: the box part answered X-Shakedown-Effect: write \
                    to POST http://toy.test/write";
         assert_eq!(
             (e.agent.as_deref(), &e.payload["error"]),
@@ -472,6 +503,27 @@ fn secrets_in_headers_are_not_recorded() {
     })
 }
 
+/// A part written before 2026-11-19 says the effect under the old header name; it counts, and the
+/// client sees neither name.
+#[test]
+fn the_effect_header_under_its_old_name_still_counts() {
+    run(async {
+        let fx = ProxyFx::new("oldeffect", &upstream().await, &[]).await;
+        let r = fx
+            .client("planner")
+            .post("http://toy.test/old-read")
+            .send()
+            .await
+            .unwrap();
+        assert!(!r.headers().contains_key("x-arena-effect"));
+        let e = fx.last_tool_call().await;
+        assert_eq!(
+            (&e.payload["reads"], &e.payload["writes"]),
+            (&json!(["http/toy.test"]), &json!([]))
+        );
+    })
+}
+
 #[test]
 fn the_part_says_when_a_post_only_read() {
     run(async {
@@ -484,7 +536,7 @@ fn the_part_says_when_a_post_only_read() {
             .await;
         let r = r.unwrap();
         assert_eq!(r.status().as_u16(), 200);
-        assert!(!r.headers().contains_key("x-arena-effect"));
+        assert!(!r.headers().contains_key("x-shakedown-effect"));
         let e = fx.last_tool_call().await;
         let effect = (&e.payload["reads"], &e.payload["writes"]);
         assert_eq!(effect, (&json!(["http/toy.test"]), &json!([])));
@@ -623,7 +675,7 @@ fn an_agents_register_answer_has_its_proxy_only_in_a_world_that_serves_http() {
             .join(json!({"id": "planner", "name": "Planner"}))
             .await;
         let proxy = a["proxy_url"].as_str().unwrap();
-        assert!(proxy.starts_with("http://arena:"), "{a}");
+        assert!(proxy.starts_with("http://shakedown:"), "{a}");
         assert_eq!(
             (&a["env"]["HTTPS_PROXY"], &a["env"]["TOY_URL"]),
             (&json!(proxy), &json!("https://toy.test"))
@@ -742,7 +794,7 @@ fn https_forwarding_says_https_on_443() {
             .unwrap();
         let want = json!({"host": "toy.test", "x-forwarded-host": "toy.test",
                           "x-forwarded-proto": "https", "x-forwarded-port": "443",
-                          "x-arena-agent": "planner"});
+                          "x-shakedown-agent": "planner", "x-arena-agent": "planner"});
         assert_eq!(v, want);
     })
 }

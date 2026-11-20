@@ -39,7 +39,7 @@ def test_live_commands_reach_only_the_proxy(settings):
         pytest.skip(f"no Docker or no {settings.workbench_image} (workbench/build.sh)")
     proxy = ThreadingHTTPServer(("127.0.0.1", 0), _Proxy)
     threading.Thread(target=proxy.serve_forever, daemon=True).start()
-    url = f"http://arena:t1@127.0.0.1:{proxy.server_address[1]}"
+    url = f"http://shakedown:t1@127.0.0.1:{proxy.server_address[1]}"
     with tempfile.TemporaryDirectory() as d:
         sock, root = Path(d) / "p.sock", Path(d) / "ws"
         try:

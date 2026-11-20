@@ -167,7 +167,7 @@ fn a_driver_in_a_world_that_serves_http_gets_the_proxy_and_the_hosts() {
         let env = dumped_env("envrouted", &args).await;
         let proxy = env["HTTP_PROXY"].as_str().unwrap();
         assert!(
-            proxy.starts_with("http://arena:") && proxy.contains("@127.0.0.1:"),
+            proxy.starts_with("http://shakedown:") && proxy.contains("@127.0.0.1:"),
             "{proxy}"
         );
         assert_eq!(

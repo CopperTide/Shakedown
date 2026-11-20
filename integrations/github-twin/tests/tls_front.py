@@ -1,6 +1,6 @@
 """A TLS front for the twin on 127.0.0.1, standing in for shaked's proxy in client tests: a test CA,
 and per agent one HTTPS listener that forwards each request to the twin with `X-Forwarded-Proto`,
-`X-Forwarded-Host` and that agent's `X-Arena-Agent` (a client-sent one is dropped), as the proxy does.
+`X-Forwarded-Host` and that agent's `X-Shakedown-Agent` (a client-sent one is dropped), as the proxy does.
 It records the GraphQL requests it forwards."""
 import http.client
 import json
@@ -13,7 +13,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
 
-HOP = {"connection", "keep-alive", "transfer-encoding", "content-length", "x-arena-agent", "x-arena-readonly",
+HOP = {"connection", "keep-alive", "transfer-encoding", "content-length", "x-shakedown-agent", "x-shakedown-readonly",
        "x-forwarded-proto", "x-forwarded-host", "host"}
 
 
@@ -55,9 +55,9 @@ class _Forward(BaseHTTPRequestHandler):
         front.note(self.server.agent, self.path, body)
         headers = {k: v for k, v in self.headers.items() if k.lower() not in HOP}
         headers.update({"X-Forwarded-Proto": "https", "X-Forwarded-Host": self.headers.get("Host", ""),
-                        "X-Arena-Agent": self.server.agent, "Content-Length": str(len(body or b""))})
+                        "X-Shakedown-Agent": self.server.agent, "Content-Length": str(len(body or b""))})
         if self.server.readonly:
-            headers["X-Arena-Readonly"] = "1"
+            headers["X-Shakedown-Readonly"] = "1"
         up = http.client.HTTPConnection(front.upstream.hostname, front.upstream.port, timeout=60)
         try:
             up.request(self.command, self.path, body=body, headers=headers)

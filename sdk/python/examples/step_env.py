@@ -105,7 +105,7 @@ def make_policy(tools, prompt):
     sys.exit("skipped: no policy model: set ANTHROPIC_API_KEY, or install Claude Code (`claude`) and sign in")
 
 
-with connect() as arena:
+with connect() as sd:
     task = task_arg(sd)
     env = ShakedownParallelEnv(sd, task, agents=["support"], max_steps=MAX_STEPS, reward="score")
     obs, infos = env.reset(seed=3)

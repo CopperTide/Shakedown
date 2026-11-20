@@ -99,9 +99,9 @@ CREATE_PR = """mutation PullRequestCreate($input: CreatePullRequestInput!) {
 
 def test_queries_are_reads_and_mutations_writes(with_clone):
     branch_from_main(with_clone, "f", "f.txt", "f\n")
-    assert gql_raw(with_clone, "{ viewer { login } }").headers["x-arena-effect"] == "read"
+    assert gql_raw(with_clone, "{ viewer { login } }").headers["x-shakedown-effect"] == "read"
     vars_ = {"input": {"repositoryId": repo_id(with_clone), "baseRefName": "main", "headRefName": "f", "title": "F"}}
-    assert gql_raw(with_clone, CREATE_PR, vars_).headers["x-arena-effect"] == "write"
+    assert gql_raw(with_clone, CREATE_PR, vars_).headers["x-shakedown-effect"] == "write"
 
 
 def test_create_pull_request_returns_its_url(with_clone):
@@ -116,7 +116,7 @@ def test_create_pull_request_returns_its_url(with_clone):
 def test_a_refused_mutation_changes_nothing(with_clone):
     vars_ = {"input": {"repositoryId": repo_id(with_clone), "baseRefName": "main", "headRefName": "nope", "title": "F"}}
     r = gql_raw(with_clone, CREATE_PR, vars_)
-    assert r.headers["x-arena-effect"] == "read"
+    assert r.headers["x-shakedown-effect"] == "read"
     out = r.json()
     assert out["data"] == {"createPullRequest": None} and out["errors"][0]["type"] == "UNPROCESSABLE"
     assert api(with_clone, "GET", f"{R}/pulls?state=all") == []
@@ -126,11 +126,11 @@ def test_a_read_only_agent_queries_but_its_mutations_are_refused(with_clone):
     branch_from_main(with_clone, "f", "f.txt", "f\n")
     vars_ = {"input": {"repositoryId": repo_id(with_clone), "baseRefName": "main", "headRefName": "f", "title": "F"}}
     with_clone.part.advance("i", 50)
-    ro = {"X-Arena-Readonly": "1"}
+    ro = {"X-Shakedown-Readonly": "1"}
     r = gql_raw(with_clone, '{ repository(owner: "acme", name: "app") { id } }', as_user="auditor", headers=ro)
-    assert r.headers["x-arena-effect"] == "read" and "errors" not in r.json()
+    assert r.headers["x-shakedown-effect"] == "read" and "errors" not in r.json()
     r = gql_raw(with_clone, CREATE_PR, vars_, as_user="auditor", headers=ro)
-    assert r.headers["x-arena-effect"] == "read"
+    assert r.headers["x-shakedown-effect"] == "read"
     assert r.json()["errors"][0] | {"locations": None} == {
         "type": "FORBIDDEN", "path": ["createPullRequest"], "locations": None,
         "message": "Resource not accessible by integration"}

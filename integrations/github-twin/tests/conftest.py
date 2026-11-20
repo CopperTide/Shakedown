@@ -96,7 +96,7 @@ def api_raw(twin, method, path, body=None, forwarded=("https", HOST), as_user=No
     if forwarded:
         h.update({"X-Forwarded-Proto": forwarded[0], "X-Forwarded-Host": forwarded[1]})
     if as_user:
-        h["X-Arena-Agent"] = as_user
+        h["X-Shakedown-Agent"] = as_user
     h.update(headers or {})
     return raw(twin.up, method, path, body, h)
 

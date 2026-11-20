@@ -1,10 +1,10 @@
-# shakedown
+# shakedown-sdk (import `shakedown`)
 
 Build, drive, observe and export [Shakedown](https://github.com/CopperTide/Shakedown) environments from Python.
 Shakedown's core (shaked) is headless; this SDK talks to its HTTP API. No UI needed.
 
 ```bash
-uv add "shakedown @ git+https://github.com/CopperTide/Shakedown#subdirectory=sdk/python"   # or: uv pip install -e sdk/python
+uv add "shakedown-sdk @ git+https://github.com/CopperTide/Shakedown#subdirectory=sdk/python"   # or: uv pip install -e sdk/python
 ```
 
 ```python

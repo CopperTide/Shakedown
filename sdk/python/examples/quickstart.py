@@ -12,7 +12,7 @@ from common import connect, need_claude, task_arg
 need_claude()
 model = sys.argv[2] if len(sys.argv) > 2 else "haiku"
 
-with connect() as arena:
+with connect() as sd:
     bench = sd.benchmark()
     task = task_arg(sd)
     team = sd.default_team(model=model)          # the benchmark's suggested team, every agent on `model`

@@ -8,7 +8,7 @@ from conftest import FORWARDED, HOST, START_MS, chan_id, ok, raw_call, slack_cal
 
 
 def client(slack, agent="dev"):
-    return WebClient(token=slack.token, base_url=slack.base + "/api/", headers={**FORWARDED, "X-Arena-Agent": agent})
+    return WebClient(token=slack.token, base_url=slack.base + "/api/", headers={**FORWARDED, "X-Shakedown-Agent": agent})
 
 
 def test_slack_sdk_round_trip(slack):
@@ -146,11 +146,11 @@ def test_acts_post_and_react(slack):
 
 def test_a_read_only_agent_reads_but_cannot_post(slack):
     assert slack.part.http_routes("i")["routes"][0]["honours_readonly"] is True
-    ro = {"X-Arena-Readonly": "1"}
+    ro = {"X-Shakedown-Readonly": "1"}
     status, headers, body = raw_call(slack, "conversations.list", {}, as_user="auditor", headers=ro)
-    assert body["ok"] is True and headers["x-arena-effect"] == "read"
+    assert body["ok"] is True and headers["x-shakedown-effect"] == "read"
     status, headers, body = raw_call(slack, "chat.postMessage", {"channel": "#eng", "text": "x"}, as_user="auditor", headers=ro)
-    assert (status, body["ok"], body["error"], headers["x-arena-effect"]) == (200, False, "missing_scope", "read")
+    assert (status, body["ok"], body["error"], headers["x-shakedown-effect"]) == (200, False, "missing_scope", "read")
     assert slack.part.advance("i", 0)["changed"] is False
 
 

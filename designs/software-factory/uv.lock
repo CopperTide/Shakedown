@@ -399,7 +399,7 @@ dependencies = [
     { name = "openai" },
     { name = "openai-agents" },
     { name = "pyyaml" },
-    { name = "shakedown", extra = ["langgraph", "openai-agents"] },
+    { name = "shakedown-sdk", extra = ["langgraph", "openai-agents"] },
 ]
 
 [package.dev-dependencies]
@@ -415,7 +415,7 @@ requires-dist = [
     { name = "openai", specifier = "==2.54.0" },
     { name = "openai-agents", specifier = "==0.20.0" },
     { name = "pyyaml", specifier = "==6.0.3" },
-    { name = "shakedown", extras = ["langgraph", "openai-agents"], editable = "../../sdk/python" },
+    { name = "shakedown-sdk", extras = ["langgraph", "openai-agents"], editable = "../../sdk/python" },
 ]
 
 [package.metadata.requires-dev]
@@ -1619,7 +1619,7 @@ wheels = [
 ]
 
 [[package]]
-name = "shakedown"
+name = "shakedown-sdk"
 version = "0.1.0"
 source = { editable = "../../sdk/python" }
 dependencies = [

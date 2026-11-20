@@ -39,7 +39,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "httpx" },
-    { name = "shakedown" },
+    { name = "shakedown-sdk" },
 ]
 
 [package.dev-dependencies]
@@ -50,7 +50,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "httpx", specifier = "==0.28.1" },
-    { name = "shakedown", editable = "../../sdk/python" },
+    { name = "shakedown-sdk", editable = "../../sdk/python" },
 ]
 
 [package.metadata.requires-dev]
@@ -155,7 +155,7 @@ wheels = [
 ]
 
 [[package]]
-name = "shakedown"
+name = "shakedown-sdk"
 version = "0.1.0"
 source = { editable = "../../sdk/python" }
 dependencies = [

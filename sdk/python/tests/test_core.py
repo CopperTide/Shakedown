@@ -65,7 +65,7 @@ def ended(arena):
 def test_external_run_endpoints_and_record(arena, ended):
     branch, agent, live = ended["branch"], ended["agent"], ended["live"]
     assert agent.mcp_url.endswith(f"/mcp/{branch.id}/probe") and "/gateway/" in agent.gateway_url
-    assert agent.mcp_config()["mcpServers"]["arena"]["url"] == agent.mcp_url
+    assert agent.mcp_config()["mcpServers"]["shakedown"]["url"] == agent.mcp_url
     assert {"handoff", "message", "inbox"} <= {t.name for t in agent.tools}
     assert live.status == "running" and live.seed == 7 and live.run_start["runner"] == "external"
     assert [c.tool for c in live.tool_calls("probe")] == [ended["tool"]]
@@ -101,7 +101,7 @@ def test_export_dataset(ended, tmp_path):
     events = read_jsonl(os.path.join(out, "events.jsonl"))
     assert rows[0]["branch_id"] == branch.id and rows[0]["seed"] == 7
     assert rows[0]["events"] == len(events) and events[0]["kind"] == "run_start"
-    assert "arena-dataset/1" in open(os.path.join(out, "SCHEMA.md")).read()
+    assert "shakedown-dataset/1" in open(os.path.join(out, "SCHEMA.md")).read()
 
 
 def test_live_stream_follows_a_running_branch(arena, cleanup):

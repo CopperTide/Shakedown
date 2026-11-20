@@ -6,17 +6,17 @@ from factory_designs.workbench import Completed, Workbench, container_env
 
 
 def test_container_env_points_proxies_at_the_bridge_and_keeps_the_ticket():
-    env = {"HTTPS_PROXY": "http://arena:t1@127.0.0.1:4600", "http_proxy": "http://arena:t1@127.0.0.1:4600/",
-           "SHAKEDOWN_PROXY": "http://arena:t1@127.0.0.1:4600", "GH_HOST": "github.acme.test"}
+    env = {"HTTPS_PROXY": "http://shakedown:t1@127.0.0.1:4600", "http_proxy": "http://shakedown:t1@127.0.0.1:4600/",
+           "SHAKEDOWN_PROXY": "http://shakedown:t1@127.0.0.1:4600", "GH_HOST": "github.acme.test"}
     assert container_env(env) == {
-        "HTTPS_PROXY": "http://arena:t1@127.0.0.1:3128", "http_proxy": "http://arena:t1@127.0.0.1:3128/",
-        "SHAKEDOWN_PROXY": "http://arena:t1@127.0.0.1:3128", "GH_HOST": "github.acme.test"}
+        "HTTPS_PROXY": "http://shakedown:t1@127.0.0.1:3128", "http_proxy": "http://shakedown:t1@127.0.0.1:3128/",
+        "SHAKEDOWN_PROXY": "http://shakedown:t1@127.0.0.1:3128", "GH_HOST": "github.acme.test"}
 
 
 def test_the_container_command_line(tmp_path: Path, settings):
     ca = tmp_path / "ca.pem"
     ca.write_text("cert")
-    env = {"HTTPS_PROXY": "http://arena:t1@127.0.0.1:4600", "SSL_CERT_FILE": str(ca)}
+    env = {"HTTPS_PROXY": "http://shakedown:t1@127.0.0.1:4600", "SSL_CERT_FILE": str(ca)}
     docker = FakeDocker()
     wb = Workbench("coder", env, tmp_path / "ws", tmp_path / "p.sock", settings, docker)
     (tmp_path / "ws" / "coder" / "app").mkdir(parents=True)
@@ -27,7 +27,7 @@ def test_the_container_command_line(tmp_path: Path, settings):
         "--tmpfs", "/tmp:size=256m", "--memory", "1g", "--pids-limit", "256", "--user", "1000:1000",
         "-v", f"{ws}:/work", "-v", f"{tmp_path / 'p.sock'}:/run/arena-proxy.sock", "-w", "/work/app",
         "-v", f"{ca}:{ca}:ro",
-        "-e", "HTTPS_PROXY=http://arena:t1@127.0.0.1:3128", "-e", f"SSL_CERT_FILE={ca}",
+        "-e", "HTTPS_PROXY=http://shakedown:t1@127.0.0.1:3128", "-e", f"SSL_CERT_FILE={ca}",
         "shakedown-workbench:1", "timeout", "600", "sh", "-euc", "git status"]]
 
 
@@ -109,7 +109,7 @@ def test_benches_make_one_workspace_per_agent_with_its_env(tmp_path: Path, setti
     from factory_designs.workbench import RealDocker, benches
 
     class Ep:
-        env = {"HTTPS_PROXY": "http://arena:t2@127.0.0.1:4600"}
+        env = {"HTTPS_PROXY": "http://shakedown:t2@127.0.0.1:4600"}
 
     monkeypatch.setenv("FACTORY_WORKSPACES", str(tmp_path / "ws"))
     wb = benches(settings, push_gate=True)("coder", Ep())

@@ -1,4 +1,6 @@
-# Shakedown dataset (`arena-dataset/1`)
+# Shakedown dataset (`shakedown-dataset/1`)
+
+Exports made before 2026-11-19 say `arena-dataset/1`: the layout is the same.
 
 A folder exported by the Shakedown SDK (`Branch.export`, `Suite.export`, `shakedown.export.export_branches`). Every
 line of a `.jsonl` file is one JSON object. Times are ISO 8601 in UTC. Fields a core did not record are `null`
@@ -8,7 +10,7 @@ or absent, never guessed.
 
 | Field | Meaning |
 |---|---|
-| `format` | `arena-dataset/1` |
+| `format` | `shakedown-dataset/1` |
 | `run_id`, `branch_id` | ids; a run's first branch has `parent_id: null` |
 | `parent_id`, `start_seq` | for a fork: the branch it was forked from and the step it starts at |
 | `task_id`, `benchmark` | the benchmark's task the run works on |

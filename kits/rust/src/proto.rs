@@ -144,15 +144,21 @@ pub struct WorldTimeParams {
 
 /// The header an upstream answers a proxied request with to say whether it read or wrote
 /// (`read` or `write`); shaked strips it before the client sees the answer.
-pub const EFFECT_HEADER: &str = "x-arena-effect";
+pub const EFFECT_HEADER: &str = "x-shakedown-effect";
+/// Its name until 2026-11-19, still read from an upstream.
+pub const OLD_EFFECT_HEADER: &str = "x-arena-effect";
 
 /// The header shaked's proxy names the agent behind a request with (a client's own copy is
 /// dropped); none for a driver's request no agent's model call came before.
-pub const AGENT_HEADER: &str = "x-arena-agent";
+pub const AGENT_HEADER: &str = "x-shakedown-agent";
+/// Its name until 2026-11-19, sent too, for parts written before.
+pub const OLD_AGENT_HEADER: &str = "x-arena-agent";
 
 /// The header (`1`) shaked's proxy marks a read-only agent's request with, sent only to routes
 /// that say `honours_readonly`: the part must then refuse its writes itself.
-pub const READONLY_HEADER: &str = "x-arena-readonly";
+pub const READONLY_HEADER: &str = "x-shakedown-readonly";
+/// Its name until 2026-11-19, sent too, for parts written before.
+pub const OLD_READONLY_HEADER: &str = "x-arena-readonly";
 
 /// A host an instance serves through shaked's proxy: requests to `host` go to `upstream`. `env`
 /// is what drivers and agents are given to find it (`GITHUB_API_URL`); each of `reads` is a

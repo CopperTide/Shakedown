@@ -272,13 +272,13 @@ def test_backlog_board_issues_and_rank(jira):
 
 
 def test_a_read_only_agent_reads_and_searches_but_cannot_write(jira):
-    ro = {"X-Arena-Readonly": "1"}
+    ro = {"X-Shakedown-Readonly": "1"}
     assert jira.part.http_routes("i")["routes"][0]["honours_readonly"] is True
     read = call(jira, "GET", "/rest/api/2/issue/AC-1", as_user="auditor", headers=ro)
-    assert read.status == 200 and read.headers["x-arena-effect"] == "read"
+    assert read.status == 200 and read.headers["x-shakedown-effect"] == "read"
     assert call(jira, "POST", "/rest/api/2/search/jql", {"jql": "project = AC"}, headers=ro).status == 200
     r = call(jira, "POST", "/rest/api/2/issue/AC-1/comment", {"body": "sneaky"}, as_user="auditor", headers=ro)
-    assert r.status == 403 and r.headers["x-arena-effect"] == "read" and r.json()["errorMessages"]
+    assert r.status == 403 and r.headers["x-shakedown-effect"] == "read" and r.json()["errorMessages"]
     assert api(jira, "GET", "issue/AC-1/comment")["total"] == 0
     assert jira.part.advance("i", 0)["changed"] is False
 

@@ -1,5 +1,5 @@
 """`POST /api/graphql`: the token checked, the caller made a user, the request run, and the answer
-given GitHub's headers and `X-Arena-Effect`."""
+given GitHub's headers and `X-Shakedown-Effect`."""
 from shakedown_part.twin import Response
 
 from .. import auth, users

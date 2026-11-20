@@ -23,7 +23,14 @@ from .models import BranchRecord
 if TYPE_CHECKING:
     from .client import Shakedown
 
-FORMAT = "arena-dataset/1"
+FORMAT = "shakedown-dataset/1"
+#: The format's name until 2026-11-19; an export made then has the same layout.
+OLD_FORMAT = "arena-dataset/1"
+
+
+def is_dataset_format(name: str) -> bool:
+    """True for a ``format`` this SDK writes or wrote: the layout is the same under both names."""
+    return name in (FORMAT, OLD_FORMAT)
 
 
 def branch_row(rec: BranchRecord) -> dict[str, Any]:
@@ -84,7 +91,7 @@ def schema_text() -> str:
 
 
 def export_branches(
-    arena: "Shakedown",
+    shakedown: "Shakedown",
     branch_ids: Iterable[str],
     path: str,
     suite: Optional[dict[str, Any]] = None,
@@ -96,7 +103,7 @@ def export_branches(
         os.path.join(path, "branches.jsonl"), "w", encoding="utf-8"
     ) as br:
         for bid in branch_ids:
-            rec = BranchRecord.from_dict(arena.get(f"/api/branches/{bid}"))
+            rec = BranchRecord.from_dict(shakedown.get(f"/api/branches/{bid}"))
             br.write(json.dumps(branch_row(rec), default=str) + "\n")
             for row in event_rows(rec):
                 ev.write(json.dumps(row, default=str) + "\n")

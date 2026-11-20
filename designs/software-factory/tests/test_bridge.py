@@ -20,7 +20,7 @@ def test_bridge_pipes_bytes_both_ways():
     with tempfile.TemporaryDirectory() as d:
         sock = Path(d) / "proxy.sock"
         try:
-            with ProxyBridge(f"http://arena:t1@127.0.0.1:{port}", sock):
+            with ProxyBridge(f"http://shakedown:t1@127.0.0.1:{port}", sock):
                 for word in (b"connect github.acme.test:443", b"second"):
                     with socket.socket(socket.AF_UNIX) as c:
                         c.connect(str(sock))

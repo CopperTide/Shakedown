@@ -20,7 +20,7 @@ def proxied(jira, monkeypatch):
         url = urlsplit(request.url)
         if url.netloc == HOST:
             request.url = urlunsplit((up.scheme, up.netloc, url.path, url.query, ""))
-            request.headers.update({"X-Forwarded-Proto": url.scheme, "X-Forwarded-Host": HOST, "X-Arena-Agent": "dev"})
+            request.headers.update({"X-Forwarded-Proto": url.scheme, "X-Forwarded-Host": HOST, "X-Shakedown-Agent": "dev"})
         return _send(self, request, **kw)
 
     monkeypatch.setattr(requests.adapters.HTTPAdapter, "send", send)

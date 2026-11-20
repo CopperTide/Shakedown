@@ -47,7 +47,7 @@ impl Proxy {
         let _ = self.addr.set(addr);
     }
 
-    /// The proxy URL that carries `ticket` (`http://arena:<ticket>@127.0.0.1:<port>`).
+    /// The proxy URL that carries `ticket` (`http://shakedown:<ticket>@127.0.0.1:<port>`).
     pub fn url(&self, ticket: &str) -> Option<String> {
         let port = self.addr()?.port();
         Some(format!(

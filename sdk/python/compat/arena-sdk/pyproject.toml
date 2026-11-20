@@ -1,19 +1,19 @@
-# `arena-sdk`, the SDK's distribution name until 2026-11-19: it installs `shakedown` (whose wheel also
-# carries the old `arena` import as an alias) and nothing else. New projects depend on shakedown.
+# `arena-sdk`, the SDK's distribution name until 2026-11-19: it installs `shakedown-sdk` (whose wheel also
+# carries the old `arena` import as an alias) and nothing else. New projects depend on shakedown-sdk.
 [project]
 name = "arena-sdk"
 version = "0.1.0"
-description = "The old name of the Shakedown SDK: installs shakedown"
+description = "The old name of the Shakedown SDK: installs shakedown-sdk"
 requires-python = ">=3.10"
-dependencies = ["shakedown @ git+https://github.com/CopperTide/Shakedown#subdirectory=sdk/python"]
+dependencies = ["shakedown-sdk @ git+https://github.com/CopperTide/Shakedown#subdirectory=sdk/python"]
 
 [project.optional-dependencies]
-langgraph = ["shakedown[langgraph] @ git+https://github.com/CopperTide/Shakedown#subdirectory=sdk/python"]
-crewai = ["shakedown[crewai] @ git+https://github.com/CopperTide/Shakedown#subdirectory=sdk/python"]
-openai-agents = ["shakedown[openai-agents] @ git+https://github.com/CopperTide/Shakedown#subdirectory=sdk/python"]
+langgraph = ["shakedown-sdk[langgraph] @ git+https://github.com/CopperTide/Shakedown#subdirectory=sdk/python"]
+crewai = ["shakedown-sdk[crewai] @ git+https://github.com/CopperTide/Shakedown#subdirectory=sdk/python"]
+openai-agents = ["shakedown-sdk[openai-agents] @ git+https://github.com/CopperTide/Shakedown#subdirectory=sdk/python"]
 
 [tool.uv.sources]
-shakedown = { path = "../..", editable = true }
+shakedown-sdk = { path = "../..", editable = true }
 
 [build-system]
 requires = ["hatchling"]

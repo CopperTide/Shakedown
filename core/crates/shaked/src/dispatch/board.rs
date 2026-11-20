@@ -351,7 +351,7 @@ impl Board {
         let lead = self.lead_id().to_string();
         let notice = Mail {
             seq,
-            from: "arena".into(),
+            from: "shakedown".into(),
             kind: MailKind::Notice,
             text,
         };

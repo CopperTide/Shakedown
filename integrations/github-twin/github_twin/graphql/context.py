@@ -1,5 +1,5 @@
 """What every resolver of one GraphQL request works with: the caller, the public base, and whether a
-mutation wrote anything (the answer's `X-Arena-Effect`)."""
+mutation wrote anything (the answer's `X-Shakedown-Effect`)."""
 from ..view import View
 
 

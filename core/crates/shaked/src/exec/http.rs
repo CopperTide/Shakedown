@@ -332,7 +332,7 @@ fn violation(
         return None;
     }
     let why = format!(
-        "a read-only agent's request wrote: the {} part answered X-Arena-Effect: write to {} {}",
+        "a read-only agent's request wrote: the {} part answered X-Shakedown-Effect: write to {} {}",
         admitted.route.part,
         call.method,
         call.url()

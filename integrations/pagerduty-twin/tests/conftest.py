@@ -64,7 +64,7 @@ def raw(twin, method, path, body=None, host=API_HOST, token=TOKEN, sender="ops@a
     if sender:
         h["From"] = sender
     if as_user:
-        h["X-Arena-Agent"] = as_user
+        h["X-Shakedown-Agent"] = as_user
     data = None if body is None else json.dumps(body).encode()
     req = urllib.request.Request(twin.up + path, data=data, method=method, headers=h)
     try:

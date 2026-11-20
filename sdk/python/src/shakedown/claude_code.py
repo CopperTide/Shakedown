@@ -63,7 +63,7 @@ def command(agent: AgentEndpoint, prompt: str, model: str, config_path: str,
         "--strict-mcp-config", "--mcp-config", config_path,
         "--disable-slash-commands",
         "--tools", "",
-        "--allowedTools", "mcp__arena__*",
+        "--allowedTools", "mcp__shakedown__*",
         "--no-session-persistence",
     ]
     if max_turns:
@@ -89,7 +89,7 @@ def run(
     try:
         cfg = os.path.join(workdir, "mcp.json")
         with open(cfg, "w", encoding="utf-8") as f:
-            json.dump(agent.mcp_config("arena"), f)
+            json.dump(agent.mcp_config("shakedown"), f)
         proc = subprocess.Popen(
             command(agent, prompt, model, cfg, max_turns),
             cwd=workdir, env={k: v for k, v in os.environ.items() if k not in SCRUB},

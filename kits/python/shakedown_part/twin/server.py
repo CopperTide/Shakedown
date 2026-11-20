@@ -9,7 +9,7 @@ from urllib.parse import parse_qs, urlsplit
 from ..forwarded import agent_of, public_base, readonly_of
 from .router import Headers, Request, Response
 
-EFFECT_HEADER = "X-Arena-Effect"
+EFFECT_HEADER = "X-Shakedown-Effect"
 READ_METHODS = ("GET", "HEAD", "OPTIONS")
 
 

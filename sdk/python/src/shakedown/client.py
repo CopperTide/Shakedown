@@ -35,8 +35,8 @@ TeamLike = Union[Team, Sequence[Agent], dict, None]
 class Shakedown:
     """A connection to a running shaked.
 
-    >>> arena = Shakedown("http://127.0.0.1:4510")
-    >>> arena.benchmark().name
+    >>> shakedown = Shakedown("http://127.0.0.1:4510")
+    >>> shakedown.benchmark().name
     'retail'
 
     Use :meth:`Shakedown.local` to start a shaked of your own for the length of a ``with`` block.
@@ -359,23 +359,38 @@ def _poll(
     return value
 
 
+class OldConnectionName:
+    """``.arena``: the old name of ``.shakedown``, the connection (the SDK was ``arena`` until
+    2026-11-19)."""
+
+    shakedown: Shakedown
+
+    @property
+    def arena(self) -> Shakedown:
+        return self.shakedown
+
+    @arena.setter
+    def arena(self, value: Shakedown) -> None:
+        self.shakedown = value
+
+
 def _bid(b: Union[str, "Branch"]) -> str:
     return b.id if isinstance(b, Branch) else b
 
 
-class Branch:
+class Branch(OldConnectionName):
     """A branch of a run: the original run, or a fork. Cheap to make; reads go to shaked each time."""
 
     def __init__(
         self,
-        arena: Shakedown,
+        shakedown: Shakedown,
         branch_id: str,
         run_id: str,
         task_id: Optional[str] = None,
         record: Optional[dict[str, Any]] = None,
         fork: Optional[ForkInfo] = None,
     ):
-        self.arena = arena
+        self.shakedown = shakedown
         self.id = branch_id
         self.run_id = run_id
         self.task_id = task_id
@@ -395,7 +410,7 @@ class Branch:
 
     def record(self) -> BranchRecord:
         """The branch now: status, team, every event, metrics."""
-        rec = BranchRecord.from_dict(self.arena.get(f"/api/branches/{self.id}"))
+        rec = BranchRecord.from_dict(self.shakedown.get(f"/api/branches/{self.id}"))
         if self.task_id is None:
             self.task_id = rec.run_start.get("task_id")
         return rec
@@ -423,14 +438,14 @@ class Branch:
 
     def views(self) -> list[dict[str, Any]]:
         """The world's views (the digital twin) after each step: ``[{seq, event_seq, view}]``."""
-        return self.arena.get(f"/api/branches/{self.id}/views")
+        return self.shakedown.get(f"/api/branches/{self.id}/views")
 
     def rows(self, seq: int, keys: Sequence[str], part: Optional[str] = None) -> dict[str, Any]:
         """The state of ``keys`` (``<kind>/<id>``, at most 50) just after step ``seq``."""
         q: dict[str, Any] = {"seq": seq, "keys": ",".join(keys)}
         if part:
             q["part"] = part
-        return self.arena.get(f"/api/branches/{self.id}/rows", **q)
+        return self.shakedown.get(f"/api/branches/{self.id}/rows", **q)
 
     def stream(self, reconnect: int = 5) -> Iterator[Event]:
         """The branch's events as they happen: first those recorded so far, then each new one,
@@ -460,7 +475,7 @@ class Branch:
         end."""
         self.final = None
         path = f"/api/branches/{self.id}/stream"
-        with self.arena._http.stream("GET", path, timeout=httpx.Timeout(None, connect=10.0)) as r:
+        with self.shakedown._http.stream("GET", path, timeout=httpx.Timeout(None, connect=10.0)) as r:
             if r.status_code >= 400:
                 r.read()
                 raise from_status(r.status_code, r.text, "GET", path)
@@ -491,7 +506,7 @@ class Branch:
     async def astream(self) -> AsyncIterator[Event]:
         """:meth:`stream` for asyncio (no reconnect)."""
         async with httpx.AsyncClient(
-            base_url=self.arena.url, timeout=httpx.Timeout(None, connect=10.0)
+            base_url=self.shakedown.url, timeout=httpx.Timeout(None, connect=10.0)
         ) as client:
             async with client.stream("GET", f"/api/branches/{self.id}/stream") as r:
                 if r.status_code >= 400:
@@ -520,13 +535,13 @@ class Branch:
         ``issues`` (citations shaked dropped). Stored with the branch; ``again=True`` asks for a new
         one. Runs a real model (it costs what the model costs); 409 when AI review is off."""
         path = f"/api/branches/{self.id}/review"
-        return self.arena._review(path, {}, again, wait, timeout, poll)
+        return self.shakedown._review(path, {}, again, wait, timeout, poll)
 
     # -------------------------------------------------------------- forks
 
     def restore_plan(self, at_seq: int, restore: str = "exact") -> dict[str, Any]:
         """How each part would be restored for a fork at ``at_seq`` (409 with the refusal)."""
-        return self.arena.get(
+        return self.shakedown.get(
             f"/api/branches/{self.id}/restore-plan", at_seq=at_seq, restore=restore
         )
 
@@ -554,9 +569,9 @@ class Branch:
             }
         if team is not None:
             body["team"] = as_team(team)
-        ans = self.arena.post(f"/api/branches/{self.id}/fork", body)
+        ans = self.shakedown.post(f"/api/branches/{self.id}/fork", body)
         info = ForkInfo(ans["start_seq"], ans.get("moved_from"), ans.get("reason"))
-        b = Branch(self.arena, ans["branch_id"], self.run_id, task_id=self.task_id, fork=info)
+        b = Branch(self.shakedown, ans["branch_id"], self.run_id, task_id=self.task_id, fork=info)
         for ep in ans.get("agents") or []:
             b.agents[ep["agent"]] = AgentEndpoint.from_answer(b, ep)
         return b
@@ -569,7 +584,7 @@ class Branch:
         if isinstance(agent, str):
             agent = Agent(id=agent, kind=kw.pop("kind", "external"), **kw)
         body = {k: v for k, v in agent.to_dict().items() if v is not None}
-        ans = self.arena.post(f"/api/branches/{self.id}/agents", body)
+        ans = self.shakedown.post(f"/api/branches/{self.id}/agents", body)
         ep = AgentEndpoint.from_answer(self, ans)
         self.agents[ep.id] = ep
         return ep
@@ -581,7 +596,7 @@ class Branch:
         """External runs: freeze, score and stop the world. Returns ``{status, error}``. With
         ``error`` your system went wrong: the world is still scored, and the run ends ``failed``
         with that error."""
-        ans = self.arena.post(f"/api/branches/{self.id}/finish", {"error": error} if error else {})
+        ans = self.shakedown.post(f"/api/branches/{self.id}/finish", {"error": error} if error else {})
         self.final = ans
         return ans
 
@@ -589,7 +604,7 @@ class Branch:
 
     def _flow(self, what: str) -> dict[str, Any]:
         try:
-            return self.arena.post(f"/api/branches/{self.id}/{what}")
+            return self.shakedown.post(f"/api/branches/{self.id}/{what}")
         except NotFound as e:
             if "no such route" in e.message:
                 raise NotSupported(
@@ -609,7 +624,7 @@ class Branch:
     def clock(self) -> dict[str, Any]:
         """The live branch's clock and the world's time: ``{clock_ms, speed, paused,
         world_epoch_ms, world_ms}`` (``world_ms`` = ``world_epoch_ms`` + ``clock_ms``)."""
-        return self.arena.get(f"/api/branches/{self.id}/clock")
+        return self.shakedown.get(f"/api/branches/{self.id}/clock")
 
     def stop(self) -> dict[str, Any]:
         """Ends a live branch ``stopped``, unscored (newer cores only)."""
@@ -622,10 +637,10 @@ class Branch:
         ``SCHEMA.md``); see :mod:`shakedown.export`."""
         from .export import export_branches
 
-        return export_branches(self.arena, [self.id], path)
+        return export_branches(self.shakedown, [self.id], path)
 
     def delete_run(self) -> None:
-        self.arena.delete_run(self.run_id)
+        self.shakedown.delete_run(self.run_id)
 
 
 class Rewind:
@@ -710,7 +725,7 @@ class AgentEndpoint:
         self._tools = tools
         #: Set once :meth:`end` recorded the agent done.
         self.ended = False
-        self.mcp = McpClient(mcp_url, branch.arena._http)
+        self.mcp = McpClient(mcp_url, branch.shakedown._http)
 
     @classmethod
     def from_answer(cls, branch: Branch, d: dict[str, Any]) -> "AgentEndpoint":
@@ -737,13 +752,13 @@ class AgentEndpoint:
         """Records one model call your agent's client made outside the gateway: ``input_tokens``,
         ``output_tokens``, ``cache_creation_input_tokens``, ``cache_read_input_tokens``, ``model``,
         ``message_id``, ``context_window``. Returns the event's seq."""
-        return self.branch.arena.post(
+        return self.branch.shakedown.post(
             f"/api/branches/{self.branch.id}/agents/{self.id}/usage", usage
         )["seq"]
 
     def report_compaction(self, trigger: Optional[str] = None, pre_tokens: Optional[int] = None) -> int:
         c = {k: v for k, v in {"trigger": trigger, "pre_tokens": pre_tokens}.items() if v is not None}
-        return self.branch.arena.post(
+        return self.branch.shakedown.post(
             f"/api/branches/{self.branch.id}/agents/{self.id}/usage", {"compaction": c}
         )["seq"]
 
@@ -751,7 +766,7 @@ class AgentEndpoint:
         """Records that the agent is done; ``totals``: ``prompt_tokens``, ``completion_tokens``,
         ``cost_usd``, ``cost_source``, ``seconds``."""
         body = {"ok": ok, **({"error": error} if error else {}), **totals}
-        seq = self.branch.arena.post(
+        seq = self.branch.shakedown.post(
             f"/api/branches/{self.branch.id}/agents/{self.id}/end", body
         )["seq"]
         self.ended = True
@@ -773,20 +788,20 @@ class AgentEndpoint:
             if model_call_seq is not None:
                 item["model_call_seq"] = model_call_seq
             items = [item]
-        return self.branch.arena.post(
+        return self.branch.shakedown.post(
             f"/api/branches/{self.branch.id}/agents/{self.id}/reasoning", {"items": items}
         )["seqs"]
 
-    def mcp_config(self, name: str = "arena") -> dict[str, Any]:
+    def mcp_config(self, name: str = "shakedown") -> dict[str, Any]:
         """An ``mcpServers`` config for Claude Code (``--mcp-config``) and other MCP hosts."""
         return {"mcpServers": {name: {"type": "http", "url": self.mcp_url}}}
 
 
-class Suite:
+class Suite(OldConnectionName):
     """A test suite. ``report`` is the last report read; :meth:`refresh` reads it again."""
 
-    def __init__(self, arena: Shakedown, report: dict[str, Any]):
-        self.arena = arena
+    def __init__(self, shakedown: Shakedown, report: dict[str, Any]):
+        self.shakedown = shakedown
         self.id: str = report["id"]
         self.report = report
 
@@ -794,7 +809,7 @@ class Suite:
         return f"Suite({self.id!r}, status={self.report.get('status')!r})"
 
     def refresh(self) -> dict[str, Any]:
-        self.report = self.arena.get(f"/api/suites/{self.id}")
+        self.report = self.shakedown.get(f"/api/suites/{self.id}")
         return self.report
 
     @property
@@ -815,10 +830,10 @@ class Suite:
     def claim(self) -> Optional[Branch]:
         """External suites: claims the next run and starts it as an external run; None when every
         run is claimed. Register agents and drive it like :meth:`Shakedown.external_run`'s branch."""
-        ans = self.arena.post(f"/api/suites/{self.id}/claim")
+        ans = self.shakedown.post(f"/api/suites/{self.id}/claim")
         if ans.get("done"):
             return None
-        b = Branch(self.arena, ans["branch_id"], ans["run_id"], task_id=str(ans["task_id"]))
+        b = Branch(self.shakedown, ans["branch_id"], ans["run_id"], task_id=str(ans["task_id"]))
         b.suite_slot = {"variant": ans.get("variant"), "repeat": ans.get("repeat")}  # type: ignore[attr-defined]
         for ep in ans.get("agents") or []:
             b.agents[ep["agent"]] = AgentEndpoint.from_answer(b, ep)
@@ -826,11 +841,11 @@ class Suite:
 
     def compare(self, other: Union[str, "Suite"]) -> dict[str, Any]:
         """``other`` against this suite."""
-        return self.arena.compare_suites(self, other)
+        return self.shakedown.compare_suites(self, other)
 
     def branches(self) -> list[Branch]:
         return [
-            Branch(self.arena, r["branch_id"], r["run_id"], task_id=str(r["task_id"]))
+            Branch(self.shakedown, r["branch_id"], r["run_id"], task_id=str(r["task_id"]))
             for r in self.refresh()["runs"]
             if r.get("branch_id")
         ]
@@ -839,7 +854,7 @@ class Suite:
         """Every run of the suite as one dataset folder (see :mod:`shakedown.export`)."""
         from .export import export_branches
 
-        return export_branches(self.arena, [b.id for b in self.branches()], path, suite=self.report)
+        return export_branches(self.shakedown, [b.id for b in self.branches()], path, suite=self.report)
 
 
 #: The old name (the SDK was ``arena`` until 2026-11-19).

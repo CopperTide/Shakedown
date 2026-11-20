@@ -22,17 +22,17 @@ import sys
 from contextlib import contextmanager
 from typing import Iterator, Optional
 
-from .client import DEFAULT_URL, AgentEndpoint, Shakedown, Branch
+from .client import DEFAULT_URL, AgentEndpoint, Branch, OldConnectionName, Shakedown
 from .errors import Conflict
 from .models import Event, Task
 from .settings import setting
 
 
-class DriverRun:
+class DriverRun(OldConnectionName):
     """The run a driver drives: its branch, its task and the agents it registered."""
 
-    def __init__(self, arena: Shakedown, branch: Branch, task: Task, fork_of: Optional[str] = None):
-        self.arena = arena
+    def __init__(self, shakedown: Shakedown, branch: Branch, task: Task, fork_of: Optional[str] = None):
+        self.shakedown = shakedown
         self.branch = branch
         self.task = task
         #: The branch this one was forked from, when Shakedown relaunched the driver on a fork.
@@ -95,18 +95,18 @@ class DriverRun:
 def run(task: Optional[str] = None, url: Optional[str] = None) -> Iterator[DriverRun]:
     """Joins the run Shakedown started this driver for (``SHAKEDOWN_BRANCH``), or starts one of
     ``task`` (default ``SHAKEDOWN_TASK``, else the benchmark's first task). Finishes it at the end."""
-    arena = Shakedown(url or setting("SHAKEDOWN_URL") or DEFAULT_URL)
+    sd = Shakedown(url or setting("SHAKEDOWN_URL") or DEFAULT_URL)
     branch_id = setting("SHAKEDOWN_BRANCH")
     task_id = task or setting("SHAKEDOWN_TASK")
     if branch_id:
-        t = arena.task(task_id) if task_id else None
-        branch = Branch(arena, branch_id, setting("SHAKEDOWN_RUN", ""), task_id=task_id)
+        t = sd.task(task_id) if task_id else None
+        branch = Branch(sd, branch_id, setting("SHAKEDOWN_RUN", ""), task_id=task_id)
         if t is None:
-            t = arena.task(branch.record().run_start["task_id"])
+            t = sd.task(branch.record().run_start["task_id"])
     else:
-        t = arena.task(task_id) if task_id else arena.tasks()[0]
-        branch = arena.external_run(t)
-    dr = DriverRun(arena, branch, t, fork_of=setting("SHAKEDOWN_FORK_OF") or None)
+        t = sd.task(task_id) if task_id else sd.tasks()[0]
+        branch = sd.external_run(t)
+    dr = DriverRun(sd, branch, t, fork_of=setting("SHAKEDOWN_FORK_OF") or None)
     try:
         yield dr
     except BaseException as exc:
@@ -120,7 +120,7 @@ def run(task: Optional[str] = None, url: Optional[str] = None) -> Iterator[Drive
     else:
         _finish(dr)
     finally:
-        arena.close()
+        sd.close()
 
 
 def _finish(dr: DriverRun) -> None:

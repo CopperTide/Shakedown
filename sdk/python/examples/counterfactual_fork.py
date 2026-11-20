@@ -16,7 +16,7 @@ from common import connect, need_claude
 need_claude()
 model = sys.argv[2] if len(sys.argv) > 2 else "haiku"
 
-with connect() as arena:
+with connect() as sd:
     if len(sys.argv) > 1 and sys.argv[1] != "-":
         original = sd.branch(sys.argv[1])
     else:

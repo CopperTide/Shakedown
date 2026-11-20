@@ -18,7 +18,7 @@ experiment and Run once, then **Test connection** and **Use this agent**.
 An agent system written in LangGraph, CrewAI, the OpenAI Agents SDK or anything else comes in through a
 **driver**: a short program that registers each of your agents with Shakedown and hands your framework the
 agent's tools and model. Your agent code stays as it is. The adapters (`shakedown.adapters`, one extra each:
-`pip install 'shakedown[langgraph]'`, `[crewai]`, `[openai-agents]`) turn an agent's tools into the
+`pip install 'shakedown-sdk[langgraph]'`, `[crewai]`, `[openai-agents]`) turn an agent's tools into the
 framework's own tool objects and its model gateway into the framework's chat model. Every tool call runs in
 the world as that agent and is recorded; a refused call reaches the agent as `error: …`, so it can react.
 

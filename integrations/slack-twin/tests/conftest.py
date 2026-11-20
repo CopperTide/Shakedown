@@ -64,7 +64,7 @@ def raw_call(twin, method, args=None, token=TOKEN, as_user=None, form=False, hea
     if token:
         h["Authorization"] = f"Bearer {token}"
     if as_user:
-        h["X-Arena-Agent"] = as_user
+        h["X-Shakedown-Agent"] = as_user
     if form:
         data, h["Content-Type"] = urllib.parse.urlencode(args or {}).encode(), "application/x-www-form-urlencoded"
     else:
