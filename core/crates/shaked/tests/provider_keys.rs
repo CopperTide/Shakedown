@@ -225,6 +225,39 @@ fn private_urls_are_fine_here_and_refused_when_the_policy_says_so() {
     })
 }
 
+/// M1: the auth scheme is matched without case, so `bearer sd_…` is the token, capped by its
+/// scopes, and never the person at this machine; an Authorization header that is no Bearer is
+/// refused rather than read as no token at all.
+#[test]
+fn any_case_of_bearer_is_the_token_and_another_scheme_is_refused() {
+    run(async {
+        let fx = app("scheme").await;
+        let (_, made) = fx
+            .post("/api/tokens", json!({"name": "r", "scopes": ["read"]}))
+            .await;
+        let token = made["token"].as_str().unwrap();
+        let url = format!("{}/api/models/keys", fx.base);
+        let cases = [
+            (format!("bearer {token}"), 403),
+            (format!("BEARER  {token}"), 403),
+            (token.to_string(), 401),
+            (format!("Token {token}"), 401),
+            ("Basic eDp5".to_string(), 401),
+        ];
+        for (auth, want) in cases {
+            let req = fx.http.post(&url).header("authorization", &auth);
+            let r = req
+                .json(&openai_key("mine", "sk-x-9999"))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(r.status(), want, "{auth}");
+        }
+        let (_, list) = fx.get("/api/models/keys").await;
+        assert_eq!(list, json!([]));
+    })
+}
+
 #[test]
 fn a_read_token_cannot_add_keys() {
     run(async {

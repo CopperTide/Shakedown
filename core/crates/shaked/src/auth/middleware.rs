@@ -32,10 +32,27 @@ async fn resolve(store: &Store, bearer: &str) -> anyhow::Result<Option<Caller>> 
     }
 }
 
-/// The Bearer secret of `req`, if it sends one.
-fn bearer(req: &Request) -> Option<String> {
-    let value = req.headers().get(AUTHORIZATION)?.to_str().ok()?;
-    value.strip_prefix("Bearer ").map(|t| t.trim().to_string())
+/// The answer to an Authorization header that carries no Bearer token.
+const BEARER_WANTED: &str = "send the token as Authorization: Bearer <token>";
+
+/// The Bearer secret of `req`: `Ok(None)` without an Authorization header, `Err` when it has one
+/// that is no Bearer token. The scheme is matched without case (RFC 9110), and a header that is
+/// not understood is refused, never read as no token: locally no token is the person at this
+/// machine, so a token whose scheme was misspelt would otherwise act beyond its scopes.
+fn bearer(req: &Request) -> Result<Option<String>, ()> {
+    let Some(value) = req.headers().get(AUTHORIZATION) else {
+        return Ok(None);
+    };
+    let value = value.to_str().map_err(|_| ())?.trim();
+    match value.split_once(char::is_whitespace) {
+        Some((scheme, token)) if scheme.eq_ignore_ascii_case("bearer") => {
+            let token = token.trim();
+            (!token.is_empty())
+                .then(|| Some(token.to_string()))
+                .ok_or(())
+        }
+        _ => Err(()),
+    }
 }
 
 /// Removes every `x-sculptured-*` header of `req`.
@@ -83,7 +100,10 @@ pub async fn authenticate(
     if req.uri().path() == "/api/health" {
         return next.run(req).await;
     }
-    let found = match found_caller(&state.store, bearer(&req)).await {
+    let Ok(bearer) = bearer(&req) else {
+        return refuse(StatusCode::UNAUTHORIZED, BEARER_WANTED);
+    };
+    let found = match found_caller(&state.store, bearer).await {
         Ok(found) => found,
         Err(answer) => return *answer,
     };
