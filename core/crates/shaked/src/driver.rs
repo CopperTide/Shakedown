@@ -189,27 +189,35 @@ async fn launch_env(state: &Arc<AppState>, branch: &str) -> BTreeMap<String, Str
     world_env
 }
 
-/// `SHAKEDOWN_AGENT_TOKEN_<AGENT>` for each agent of the team (its id upper-cased, other
-/// characters `_`): what the driver hands each agent it runs.
-fn agent_tokens(ctx: &crate::exec::BranchCtx) -> BTreeMap<String, String> {
-    let name = |id: &str| -> String {
-        id.chars()
-            .map(|c| {
-                if c.is_ascii_alphanumeric() {
-                    c.to_ascii_uppercase()
-                } else {
-                    '_'
-                }
-            })
-            .collect()
-    };
-    (ctx.roster.team.agents.iter())
-        .map(|a| {
-            (
-                format!("{}_{}", crate::agents::codex::AGENT_TOKEN_ENV, name(&a.id)),
-                ctx.agent_token(&a.id),
-            )
+/// `SHAKEDOWN_AGENT_TOKEN_<AGENT>` for agent `id`: its id upper-cased, other characters `_`.
+pub fn token_env(id: &str) -> String {
+    let name: String = (id.chars())
+        .map(|c| match c.is_ascii_alphanumeric() {
+            true => c.to_ascii_uppercase(),
+            false => '_',
         })
+        .collect();
+    format!("{}_{name}", crate::agents::codex::AGENT_TOKEN_ENV)
+}
+
+/// Err naming both agents when two of `ids` would get the same token variable (`a-b`, `a_b`).
+pub fn check_token_envs<'a>(ids: impl IntoIterator<Item = &'a str>) -> Result<(), String> {
+    let mut seen: BTreeMap<String, &str> = BTreeMap::new();
+    for id in ids {
+        let env = token_env(id);
+        if let Some(other) = seen.insert(env.clone(), id) {
+            return Err(format!(
+                "agents {other:?} and {id:?} would share the token variable {env}: rename one"
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Each agent's token variable and token: what the driver hands each agent it runs.
+fn agent_tokens(ctx: &crate::exec::BranchCtx) -> BTreeMap<String, String> {
+    (ctx.roster.team.agents.iter())
+        .map(|a| (token_env(&a.id), ctx.agent_token(&a.id)))
         .collect()
 }
 
@@ -217,6 +225,10 @@ fn agent_tokens(ctx: &crate::exec::BranchCtx) -> BTreeMap<String, String> {
 pub async fn launch(state: &Arc<AppState>, conn: &Connection, ids: RunIds<'_>) -> Result<Launched> {
     crate::mode::local_only(state.store.layer().policy(), "a Code connection's driver")
         .map_err(anyhow::Error::msg)?;
+    if let Some(ctx) = state.live.get(ids.branch_id) {
+        let team = ctx.roster.team.agents.iter().map(|a| a.id.as_str());
+        check_token_envs(team).map_err(anyhow::Error::msg)?;
+    }
     let world_env = launch_env(state, ids.branch_id).await;
     let mut cmd = command_for(state.config.public_base(), conn, &ids, &world_env)?;
     let what = || format!("starting the driver `{}`", conn.command.join(" "));
@@ -459,6 +471,17 @@ pub async fn launch_or_fail(
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn two_agent_ids_with_the_same_env_name_are_refused() {
+        let e = check_token_envs(["planner", "a-b", "a_b"]).unwrap_err();
+        assert!(
+            e.contains("a-b") && e.contains("a_b") && e.contains("SHAKEDOWN_AGENT_TOKEN_A_B"),
+            "{e}"
+        );
+        assert!(check_token_envs(["a", "b-c"]).is_ok());
+        assert_eq!(token_env("b-c"), "SHAKEDOWN_AGENT_TOKEN_B_C");
+    }
     use super::*;
 
     #[test]

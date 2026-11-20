@@ -212,6 +212,8 @@ pub(super) async fn start_code_run(
     run: CodeRun,
 ) -> Result<(Value, Option<Launched>), ApiError> {
     team::validate_agents(&providers_of(&state, &caller).await, &run.team.agents)?;
+    let ids = run.team.agents.iter().map(|a| a.id.as_str());
+    crate::driver::check_token_envs(ids).map_err(ApiError::bad)?;
     permit.check_disk(&state).await?;
     detached(async move {
         let _permit = permit;

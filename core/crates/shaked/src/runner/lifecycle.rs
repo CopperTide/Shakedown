@@ -112,6 +112,7 @@ async fn leave_live(state: &AppState, ctx: &BranchCtx) {
     ctx.stop_ticker().await;
     ctx.world.stop().await;
     state.live.remove(&ctx.branch_id);
+    state.proxy.tickets.revoke(&ctx.branch_id, None);
     state.proxy.cas.drop_branch(&ctx.branch_id);
 }
 

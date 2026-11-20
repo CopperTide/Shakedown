@@ -140,7 +140,7 @@ fn finish_cli(
 pub(crate) async fn run_in_workdir(
     run: &AgentRun,
     timeout_secs: u64,
-    build: impl FnOnce(&std::path::Path) -> std::process::Command,
+    build: impl FnOnce(&std::path::Path) -> Result<std::process::Command, String>,
     parse: impl FnOnce(&str, i32) -> AgentResult,
 ) -> AgentResult {
     if run.resume.is_some() {
@@ -150,7 +150,10 @@ pub(crate) async fn run_in_workdir(
         Ok(d) => d,
         Err(e) => return fail(format!("cannot create workdir: {e}")),
     };
-    let r = run_cli(&run.branch.flow, build(&workdir), timeout_secs, parse).await;
+    let r = match build(&workdir) {
+        Ok(cmd) => run_cli(&run.branch.flow, cmd, timeout_secs, parse).await,
+        Err(why) => fail(why),
+    };
     let _ = std::fs::remove_dir_all(&workdir);
     r
 }

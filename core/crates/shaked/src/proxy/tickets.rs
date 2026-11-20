@@ -42,6 +42,16 @@ impl Tickets {
         ticket
     }
 
+    /// How many tickets are held (expired ones too, until their branch ends).
+    pub fn len(&self) -> usize {
+        self.held.lock().unwrap().len()
+    }
+
+    /// True when no ticket is held.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     /// Who holds `ticket`, while it is good.
     pub fn holder(&self, ticket: &str) -> Option<Holder> {
         let held = self.held.lock().unwrap();

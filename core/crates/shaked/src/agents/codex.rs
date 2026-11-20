@@ -172,8 +172,15 @@ impl Driver for CodexDriver {
         Box::pin(async move {
             let mcp = Mcp::of(&self.self_base, &run);
             let prompt = super::prompt_of(&run);
-            let build =
-                |workdir: &Path| command_with(&self.binary, &run.spec, &mcp, workdir, &prompt);
+            let build = |workdir: &Path| {
+                Ok(command_with(
+                    &self.binary,
+                    &run.spec,
+                    &mcp,
+                    workdir,
+                    &prompt,
+                ))
+            };
             super::run_in_workdir(&run, self.timeout_secs, build, parse).await
         })
     }

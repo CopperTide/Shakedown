@@ -591,10 +591,9 @@ fn a_paused_branch_holds_requests_until_it_resumes() {
             Duration::from_secs(10),
             get_text(&c, "http://toy.test/hello"),
         );
-        assert_eq!(
-            got.await.unwrap(),
-            (409, "the run is not running".to_string())
-        );
+        // The branch's tickets died with it.
+        let gone = "this proxy wants the ticket in the proxy URL Shakedown gave";
+        assert_eq!(got.await.unwrap(), (407, gone.to_string()));
     })
 }
 
@@ -653,6 +652,28 @@ fn after_a_save_requests_go_where_the_part_now_serves() {
         let (status, v) = fx.on("save").await;
         assert_eq!(status, 200, "{v}");
         assert_eq!(get_text(&c, "http://toy.test/name").await.1, "after");
+    })
+}
+
+#[test]
+fn a_branch_s_tickets_are_forgotten_when_it_ends() {
+    run(async {
+        let fx = ProxyFx::new("forget", &upstream().await, &[]).await;
+        fx.ticket(Some("planner"));
+        let tickets = &fx.fx.state.proxy.tickets;
+        assert!(!tickets.is_empty());
+        assert_eq!(fx.on("finish").await.0, 200);
+        for _ in 0..100 {
+            if fx.fx.state.live.get(&fx.branch).is_none() {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+        assert!(
+            fx.fx.state.live.get(&fx.branch).is_none(),
+            "the branch ended"
+        );
+        assert_eq!(tickets.len(), 0, "its tickets are forgotten");
     })
 }
 

@@ -62,6 +62,29 @@ pub fn command_in(
     ))
 }
 
+/// The one-shot command in `workdir`; Err (naming the file) when its MCP config cannot be
+/// written there: Claude Code never starts on a config without the agent's token.
+fn driver_command(
+    binary: &str,
+    spec: &AgentSpec,
+    mcp: &Mcp,
+    prompt: &str,
+    workdir: &std::path::Path,
+) -> Result<Command, String> {
+    let mut cmd = command_in(binary, spec, mcp, prompt, workdir).map_err(|e| {
+        let file = workdir.join(CONFIG_FILE);
+        format!(
+            "cannot write Claude Code's MCP config {}: {e}",
+            file.display()
+        )
+    })?;
+    cmd.current_dir(workdir);
+    Ok(cmd)
+}
+
+/// Where an agent's MCP config (with its token) is written in its work folder.
+const CONFIG_FILE: &str = ".shakedown-mcp.json";
+
 fn command_for(binary: &str, spec: &AgentSpec, mcp: &Mcp, config: &str, prompt: &str) -> Command {
     let mut c = isolated(binary, spec, mcp, config);
     // The prompt is positional and may start with "-": keep it apart from the flags.
@@ -83,7 +106,7 @@ fn config_arg(mcp: &Mcp, dir: &std::path::Path) -> std::io::Result<String> {
     let headers = json!({"Authorization": format!("Bearer {token}")});
     let config =
         json!({"mcpServers": {&mcp.server: {"type": "http", "url": mcp.url, "headers": headers}}});
-    let path = dir.join(".shakedown-mcp.json");
+    let path = dir.join(CONFIG_FILE);
     write_private(&path, config.to_string().as_bytes())?;
     Ok(path.to_string_lossy().into_owned())
 }
@@ -178,12 +201,37 @@ impl Driver for ClaudeDriver {
             let mcp = Mcp::of(&self.self_base, &run);
             let prompt = super::prompt_of(&run);
             let build = |workdir: &std::path::Path| {
-                let mut cmd = command_in(&self.binary, &run.spec, &mcp, &prompt, workdir)
-                    .unwrap_or_else(|_| command_with(&self.binary, &run.spec, &mcp, &prompt));
-                cmd.current_dir(workdir);
-                cmd
+                driver_command(&self.binary, &run.spec, &mcp, &prompt, workdir)
             };
             super::run_in_workdir(&run, self.timeout_secs, build, |out, _| parse(out)).await
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::AgentKind;
+
+    #[test]
+    fn claude_does_not_start_when_its_config_file_cannot_be_written() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join(format!("shaked-ro-{}", uuid::Uuid::new_v4().simple()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o500)).unwrap();
+        let mcp = Mcp {
+            server: "s".into(),
+            url: "http://127.0.0.1:9/mcp/b/a".into(),
+            token: Some("sda_secret".into()),
+        };
+        let spec = AgentSpec::new("a", AgentKind::ClaudeCode);
+        let made = driver_command("claude", &spec, &mcp, "go", &dir);
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+        std::fs::remove_dir_all(&dir).unwrap();
+        let e = made.expect_err("no command without its config file");
+        assert!(
+            e.contains(".shakedown-mcp.json") && !e.contains("sda_secret"),
+            "{e}"
+        );
     }
 }
