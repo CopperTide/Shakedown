@@ -167,6 +167,8 @@ pub(crate) fn prompt_of(run: &AgentRun) -> String {
 pub struct Mcp {
     pub server: String,
     pub url: String,
+    /// The agent's token (`sda_…`), sent as `Authorization: Bearer`; never put in argv.
+    pub token: Option<String>,
 }
 
 impl Mcp {
@@ -186,6 +188,7 @@ impl Mcp {
         Mcp {
             server: server_name(branch.world.bench()),
             url,
+            token: Some(branch.agent_token(agent)),
         }
     }
 }

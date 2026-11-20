@@ -77,7 +77,14 @@ impl AppFx {
         let body = json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
                           "params": {"name": name, "arguments": {}}});
         let url = format!("{}/mcp/{branch}/solo", self.base);
-        let (status, v) = send(reqwest::Client::new().post(url).json(&body)).await;
+        let token = self.state.live.get(branch).unwrap().agent_token("solo");
+        let (status, v) = send(
+            reqwest::Client::new()
+                .post(url)
+                .bearer_auth(token)
+                .json(&body),
+        )
+        .await;
         assert_eq!(status, 200, "{v}");
         v["result"].clone()
     }

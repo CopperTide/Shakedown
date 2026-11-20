@@ -45,6 +45,7 @@ fn mcp_named(server: &str, url: &str) -> Mcp {
     Mcp {
         server: server.into(),
         url: url.into(),
+        token: None,
     }
 }
 
@@ -252,7 +253,11 @@ fn driver_runs_binary_and_keeps_stderr_on_failure() {
 /// A fake CLI that writes its arguments, one per line, to a fresh file: (the CLI, the file).
 fn arg_recorder() -> (String, std::path::PathBuf) {
     let out = std::env::temp_dir().join(format!("fakeargs-{}", uuid::Uuid::new_v4().simple()));
-    let script = format!("printf '%s\\n' \"$@\" > {}; exit 1", out.display());
+    // A config file an argument names is recorded too (Claude Code's holds the agent's token).
+    let script = format!(
+        "for a in \"$@\"; do printf '%s\\n' \"$a\"; [ -f \"$a\" ] && cat \"$a\" && echo; done > {}; exit 1",
+        out.display()
+    );
     (fake(&script), out)
 }
 

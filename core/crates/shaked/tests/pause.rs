@@ -19,6 +19,7 @@ async fn setup(tag: &str) -> AppFx {
 struct Agent {
     mcp: String,
     chat: String,
+    token: String,
 }
 
 impl AppFx {
@@ -57,6 +58,7 @@ impl AppFx {
         let agent = Agent {
             mcp: a["mcp_url"].as_str().unwrap().to_string(),
             chat: format!("{}/chat/completions", a["gateway_url"].as_str().unwrap()),
+            token: a["token"].as_str().unwrap().to_string(),
         };
         (branch, agent)
     }
@@ -77,14 +79,22 @@ fn tool_call(fx: &AppFx, agent: &Agent) -> tokio::task::JoinHandle<Value> {
     let req = json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
                      "params": {"name": "exchange_delivered_order_items",
                                 "arguments": gold_action_args("27", "exchange_delivered_order_items")}});
-    let post = fx.http.post(&agent.mcp).json(&req);
+    let post = fx
+        .http
+        .post(&agent.mcp)
+        .bearer_auth(&agent.token)
+        .json(&req);
     tokio::spawn(async move { send(post).await.1["result"].clone() })
 }
 
 /// A model call through the agent's gateway, on its own task: its HTTP status.
 fn model_call(fx: &AppFx, agent: &Agent) -> tokio::task::JoinHandle<u16> {
     let body = json!({"model": "m", "messages": [{"role": "user", "content": "hi"}]});
-    let post = fx.http.post(&agent.chat).json(&body);
+    let post = fx
+        .http
+        .post(&agent.chat)
+        .bearer_auth(&agent.token)
+        .json(&body);
     tokio::spawn(async move { post.send().await.unwrap().status().as_u16() })
 }
 

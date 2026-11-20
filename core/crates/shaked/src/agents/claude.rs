@@ -41,16 +41,68 @@ pub fn command(spec: &AgentSpec, mcp: &Mcp, prompt: &str) -> Command {
 }
 
 fn command_with(binary: &str, spec: &AgentSpec, mcp: &Mcp, prompt: &str) -> Command {
-    let mut c = isolated(binary, spec, mcp);
+    command_for(binary, spec, mcp, &inline_config(mcp), prompt)
+}
+
+/// The command for a run in `dir`: an agent with a token gets its MCP config in a 0600 file there
+/// (in argv the token would show in `ps`).
+pub fn command_in(
+    binary: &str,
+    spec: &AgentSpec,
+    mcp: &Mcp,
+    prompt: &str,
+    dir: &std::path::Path,
+) -> std::io::Result<Command> {
+    Ok(command_for(
+        binary,
+        spec,
+        mcp,
+        &config_arg(mcp, dir)?,
+        prompt,
+    ))
+}
+
+fn command_for(binary: &str, spec: &AgentSpec, mcp: &Mcp, config: &str, prompt: &str) -> Command {
+    let mut c = isolated(binary, spec, mcp, config);
     // The prompt is positional and may start with "-": keep it apart from the flags.
     c.args(["--output-format", "json"]).args(["--", prompt]);
     c
 }
 
-/// Claude Code headless with only the world's MCP tools, and none of the user's settings,
-/// sessions, slash commands or built-in tools; its environment scrubbed of other secrets.
-fn isolated(binary: &str, spec: &AgentSpec, mcp: &Mcp) -> Command {
-    let config = json!({"mcpServers": {&mcp.server: {"type": "http", "url": mcp.url}}});
+/// The MCP config inline (no token).
+fn inline_config(mcp: &Mcp) -> String {
+    json!({"mcpServers": {&mcp.server: {"type": "http", "url": mcp.url}}}).to_string()
+}
+
+/// `--mcp-config`'s value: inline without a token; with one, a 0600 file in `dir` whose server
+/// entry carries the `Authorization` header (its path).
+fn config_arg(mcp: &Mcp, dir: &std::path::Path) -> std::io::Result<String> {
+    let Some(token) = &mcp.token else {
+        return Ok(inline_config(mcp));
+    };
+    let headers = json!({"Authorization": format!("Bearer {token}")});
+    let config =
+        json!({"mcpServers": {&mcp.server: {"type": "http", "url": mcp.url, "headers": headers}}});
+    let path = dir.join(".shakedown-mcp.json");
+    write_private(&path, config.to_string().as_bytes())?;
+    Ok(path.to_string_lossy().into_owned())
+}
+
+/// Writes `bytes` to a new file only its owner may read.
+fn write_private(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
+    use std::{io::Write, os::unix::fs::OpenOptionsExt};
+    let mut f = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(path)?;
+    f.write_all(bytes)
+}
+
+/// Claude Code headless with only the world's MCP tools (`config`), and none of the user's
+/// settings, sessions, slash commands or built-in tools; its environment scrubbed of other secrets.
+fn isolated(binary: &str, spec: &AgentSpec, mcp: &Mcp, config: &str) -> Command {
     let mut c = Command::new(binary);
     c.arg("-p")
         .arg("--model")
@@ -58,7 +110,7 @@ fn isolated(binary: &str, spec: &AgentSpec, mcp: &Mcp) -> Command {
         .args(["--setting-sources", ""])
         .arg("--strict-mcp-config")
         .arg("--mcp-config")
-        .arg(config.to_string())
+        .arg(config)
         .arg("--disable-slash-commands")
         .args(["--tools", ""])
         .arg("--allowedTools")
@@ -69,13 +121,18 @@ fn isolated(binary: &str, spec: &AgentSpec, mcp: &Mcp) -> Command {
 }
 
 /// A long-lived session (see `claude_session`): the isolated command taking its turns as a stream
-/// of user messages on stdin and answering in stream-json.
-pub fn session_command(binary: &str, spec: &AgentSpec, mcp: &Mcp) -> Command {
-    let mut c = isolated(binary, spec, mcp);
+/// of user messages on stdin and answering in stream-json; its MCP config in `dir`.
+pub fn session_command(
+    binary: &str,
+    spec: &AgentSpec,
+    mcp: &Mcp,
+    dir: &std::path::Path,
+) -> std::io::Result<Command> {
+    let mut c = isolated(binary, spec, mcp, &config_arg(mcp, dir)?);
     c.args(["--input-format", "stream-json"])
         .args(["--output-format", "stream-json"])
         .arg("--verbose");
-    c
+    Ok(c)
 }
 
 /// Parse `--output-format json` stdout. `seconds` is left 0 for the caller.
@@ -121,7 +178,8 @@ impl Driver for ClaudeDriver {
             let mcp = Mcp::of(&self.self_base, &run);
             let prompt = super::prompt_of(&run);
             let build = |workdir: &std::path::Path| {
-                let mut cmd = command_with(&self.binary, &run.spec, &mcp, &prompt);
+                let mut cmd = command_in(&self.binary, &run.spec, &mcp, &prompt, workdir)
+                    .unwrap_or_else(|_| command_with(&self.binary, &run.spec, &mcp, &prompt));
                 cmd.current_dir(workdir);
                 cmd
             };

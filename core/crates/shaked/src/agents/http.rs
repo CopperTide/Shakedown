@@ -233,13 +233,13 @@ impl HttpDriver {
             .branch(&branch.branch_id)
             .await?
             .run_id;
-        let mcp = crate::external::endpoints(
+        let ends = crate::external::endpoints(
             &self.agent_base,
             &branch.branch_id,
             &run.spec.id,
             Default::default(),
-        )
-        .mcp_url;
+        );
+        let (mcp, gateway) = (ends.mcp_url, ends.gateway_url);
         let deadline = chrono::Utc::now() + self.timeout;
         Ok(json!({
             "protocol": PROTOCOL,
@@ -249,6 +249,7 @@ impl HttpDriver {
             "agent": run.spec.id,
             "task": super::prompt_of(run),
             "mcp_url": mcp,
+            "gateway_url": gateway,
             "token": token,
             "deadline": deadline.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
         }))
@@ -258,7 +259,10 @@ impl HttpDriver {
         if run.resume.is_some() {
             return super::fail("an http agent can't resume in the middle of its run".into());
         }
-        let token = run.branch.roster.issue_token(&run.spec.id);
+        let token = run
+            .branch
+            .roster
+            .issue_token(&run.spec.id, run.branch.token_ttl());
         let result = self.call(run, &token).await;
         run.branch.roster.revoke_token(&run.spec.id);
         result

@@ -121,14 +121,24 @@ request is recorded as an `http` step of the part that serves its host: inspecta
   "agent": "planner",
   "task": "<the agent's prompt, the ticket, the instructions and any handoff notes>",
   "mcp_url": "http://127.0.0.1:4510/mcp/<branch>/<agent>",
-  "token": "<bearer token for mcp_url>",
+  "gateway_url": "http://127.0.0.1:4510/gateway/<branch>/<agent>/v1",
+  "token": "<the agent's token (sda_…) for mcp_url and gateway_url>",
   "deadline": "2026-11-09T04:18:33Z"
 }
 ```
 
 The agent works through `mcp_url`, an MCP endpoint (streamable HTTP, JSON answers) with the world's tools and
-the talk tools, sending `Authorization: Bearer <token>` on every call; a call without it gets 401. Every tool call
-is recorded as for any other agent, refusals included.
+the talk tools, sending `Authorization: Bearer <token>` on every call; a call without it gets 401. The same
+token opens `gateway_url`, the recording model gateway (OpenAI-compatible: `{gateway_url}/chat/completions`).
+Every tool call is recorded as for any other agent, refusals included.
+
+**Every agent has a token.** Since 2026-11-20 no MCP or gateway call gets in without the agent's token
+(`sda_…`), whatever kind the agent is: shaked's own loop and Bedrock agents send it in process; Claude Code reads
+it from the `headers` of its `--mcp-config` file (written 0600 in its working folder, never in argv); Codex from
+`SHAKEDOWN_AGENT_TOKEN` (`bearer_token_env_var`); an external system gets each agent's `token` in the register
+answer and the run's start, and a Code connection's driver gets `SHAKEDOWN_AGENT_TOKEN_<AGENT>` for each agent of
+its team. A token dies with its agent and branch, and a pause does not count against its lifetime. An external
+run's start also answers `run_token` (`sdr_…`), which registers agents, reports and finishes in hosted mode.
 
 **Done is the HTTP answer.** The agent answers the `POST` when it has finished: any 2xx means done, optionally
 with `{"ok": true, "usage": {"input_tokens": n, "output_tokens": n}, "cost_usd": x}`, which the run records as

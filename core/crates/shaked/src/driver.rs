@@ -181,7 +181,34 @@ async fn launch_env(state: &Arc<AppState>, branch: &str) -> BTreeMap<String, Str
         .map(|c| env_for(state, c, None))
         .unwrap_or_default();
     world_env.extend(time_env(state, branch, ctx.as_deref()).await);
+    if let Some(ctx) = &ctx {
+        world_env.extend(agent_tokens(ctx));
+    }
     world_env
+}
+
+/// `SHAKEDOWN_AGENT_TOKEN_<AGENT>` for each agent of the team (its id upper-cased, other
+/// characters `_`): what the driver hands each agent it runs.
+fn agent_tokens(ctx: &crate::exec::BranchCtx) -> BTreeMap<String, String> {
+    let name = |id: &str| -> String {
+        id.chars()
+            .map(|c| {
+                if c.is_ascii_alphanumeric() {
+                    c.to_ascii_uppercase()
+                } else {
+                    '_'
+                }
+            })
+            .collect()
+    };
+    (ctx.roster.team.agents.iter())
+        .map(|a| {
+            (
+                format!("{}_{}", crate::agents::codex::AGENT_TOKEN_ENV, name(&a.id)),
+                ctx.agent_token(&a.id),
+            )
+        })
+        .collect()
 }
 
 /// Starts `conn`'s command for the run `ids` and watches it (see the module's notes).

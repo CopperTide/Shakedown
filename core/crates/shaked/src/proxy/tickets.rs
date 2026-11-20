@@ -1,6 +1,10 @@
 //! Proxy tickets: the random secret in a proxy URL, and the branch (and agent) it stands for.
 
-use std::{collections::HashMap, sync::Mutex};
+use std::{
+    collections::HashMap,
+    sync::Mutex,
+    time::{Duration, Instant},
+};
 
 use base64::Engine;
 
@@ -14,28 +18,60 @@ pub struct Holder {
 /// The tickets shaked gave out.
 #[derive(Debug, Default)]
 pub struct Tickets {
-    held: Mutex<HashMap<String, Holder>>,
+    held: Mutex<HashMap<String, Held>>,
+}
+
+#[derive(Debug)]
+struct Held {
+    holder: Holder,
+    expires: Instant,
 }
 
 impl Tickets {
-    /// A new ticket (32 hex digits) for `agent` on `branch`.
-    pub fn issue(&self, branch: &str, agent: Option<&str>) -> String {
+    /// A new ticket for `agent` (None: the branch's driver) on `branch`, good until `expires`.
+    pub fn issue(&self, branch: &str, agent: Option<&str>, expires: Instant) -> String {
         let ticket = uuid::Uuid::new_v4().simple().to_string();
         let holder = Holder {
             branch: branch.to_string(),
             agent: agent.map(str::to_string),
         };
-        self.held.lock().unwrap().insert(ticket.clone(), holder);
+        self.held
+            .lock()
+            .unwrap()
+            .insert(ticket.clone(), Held { holder, expires });
         ticket
     }
 
-    /// Who `ticket` stands for; None for a ticket shaked never gave.
+    /// Who holds `ticket`, while it is good.
     pub fn holder(&self, ticket: &str) -> Option<Holder> {
-        self.held.lock().unwrap().get(ticket).cloned()
+        let held = self.held.lock().unwrap();
+        held.get(ticket)
+            .filter(|h| h.expires > Instant::now())
+            .map(|h| h.holder.clone())
+    }
+
+    /// Takes back the tickets of `agent` on `branch` (every one of the branch when None).
+    pub fn revoke(&self, branch: &str, agent: Option<&str>) {
+        let mine = |h: &Held| {
+            h.holder.branch == branch && (agent.is_none() || h.holder.agent.as_deref() == agent)
+        };
+        self.held.lock().unwrap().retain(|_, h| !mine(h));
+    }
+
+    /// Moves `branch`'s tickets' expiry `by` later (the branch was paused that long).
+    pub fn extend(&self, branch: &str, by: Duration) {
+        for h in self
+            .held
+            .lock()
+            .unwrap()
+            .values_mut()
+            .filter(|h| h.holder.branch == branch)
+        {
+            h.expires += by;
+        }
     }
 }
 
-/// The user name of every proxy URL shaked gives.
 pub const PROXY_USER: &str = "shakedown";
 /// The user name until 2026-11-19, still taken (a client may hold a URL from before).
 pub const OLD_PROXY_USER: &str = "arena";
@@ -77,8 +113,9 @@ mod tests {
     #[test]
     fn a_ticket_stands_for_its_branch_and_agent() {
         let t = Tickets::default();
-        let a = t.issue("b1", Some("planner"));
-        let d = t.issue("b1", None);
+        let later = Instant::now() + Duration::from_secs(60);
+        let a = t.issue("b1", Some("planner"), later);
+        let d = t.issue("b1", None, later);
         assert_ne!(a, d);
         assert_eq!(t.holder(&a).unwrap().agent.as_deref(), Some("planner"));
         assert_eq!(
@@ -89,5 +126,20 @@ mod tests {
             }
         );
         assert!(t.holder("nope").is_none());
+    }
+
+    #[test]
+    fn an_expired_ticket_is_refused_and_a_pause_extends_it() {
+        let t = Tickets::default();
+        let soon = Instant::now() + Duration::from_millis(50);
+        let a = t.issue("b1", Some("a"), soon);
+        t.extend("b1", Duration::from_millis(200));
+        std::thread::sleep(Duration::from_millis(100));
+        assert!(t.holder(&a).is_some(), "paused time does not count");
+        std::thread::sleep(Duration::from_millis(200));
+        assert!(t.holder(&a).is_none(), "expired");
+        let b = t.issue("b1", Some("b"), Instant::now() + Duration::from_secs(60));
+        t.revoke("b1", Some("b"));
+        assert!(t.holder(&b).is_none(), "revoked with its agent");
     }
 }

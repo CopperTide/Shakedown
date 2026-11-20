@@ -47,12 +47,14 @@ async fn external_on(tag: &str, llm: &FakeLlm, rate: Option<Rate>) -> (AppFx, St
 /// One chat call through the gateway with the run's bearer token: status and answer.
 async fn chat(fx: &AppFx, gateway: &str, body: Value) -> (u16, Value) {
     let req = fx.http.post(format!("{gateway}/chat/completions"));
-    let r = req
-        .bearer_auth("run-token")
-        .json(&body)
-        .send()
-        .await
+    // The agent `a`'s token, from its live branch (`<base>/gateway/<branch>/a/v1`).
+    let branch = gateway
+        .split("/gateway/")
+        .nth(1)
+        .and_then(|r| r.split('/').next())
         .unwrap();
+    let token = fx.state.live.get(branch).unwrap().agent_token("a");
+    let r = req.bearer_auth(token).json(&body).send().await.unwrap();
     let status = r.status().as_u16();
     (status, r.json().await.unwrap_or(Value::Null))
 }

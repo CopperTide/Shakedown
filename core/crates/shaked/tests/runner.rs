@@ -145,7 +145,14 @@ async fn mcp(fx: &AppFx, branch: &str, agent: &str, name: &str, args: Value) -> 
     let body = json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
                       "params": {"name": name, "arguments": args}});
     let url = format!("{}/mcp/{branch}/{agent}", fx.base);
-    let (status, v) = send(reqwest::Client::new().post(url).json(&body)).await;
+    let token = fx.state.live.get(branch).unwrap().agent_token(agent);
+    let (status, v) = send(
+        reqwest::Client::new()
+            .post(url)
+            .bearer_auth(token)
+            .json(&body),
+    )
+    .await;
     assert_eq!(status, 200, "{v}");
     assert_eq!(v["result"]["isError"], false, "{v}");
     v["result"]["structuredContent"].clone()

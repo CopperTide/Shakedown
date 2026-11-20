@@ -1,3 +1,4 @@
+mod agent_tokens;
 mod dispatch;
 mod http;
 mod lifecycle;
@@ -89,6 +90,17 @@ impl BranchCtx {
     pub fn with_scope(mut self, scope: Arc<crate::auth::Scope>) -> BranchCtx {
         self.scope = scope;
         self
+    }
+
+    /// How long an agent token of this branch lives (unpaused time): a day, the local plan's
+    /// longest branch.
+    pub fn token_ttl(&self) -> std::time::Duration {
+        std::time::Duration::from_secs(crate::auth::run_tokens::DEFAULT_TOKEN_SECS)
+    }
+
+    /// `agent`'s token on this branch, issued on first use.
+    pub fn agent_token(&self, agent: &str) -> String {
+        self.roster.ensure_token(agent, self.token_ttl())
     }
 
     /// The store's records as this branch's scope.
@@ -193,6 +205,7 @@ impl BranchCtx {
         let ms = lasted.as_secs_f64() * 1000.0;
         self.overhead.add(Cat::Pause, ms);
         self.clock.resume();
+        self.roster.extend(lasted);
         let resumed = ResumePayload {
             paused_ms: ms.round() as i64,
         };

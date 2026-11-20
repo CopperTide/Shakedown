@@ -55,7 +55,21 @@ pub fn command(spec: &AgentSpec, mcp: &Mcp, workdir: &Path, prompt: &str) -> Com
     command_with("codex", spec, mcp, workdir, prompt)
 }
 
-fn command_with(
+/// Codex reads the MCP server's bearer token from [`AGENT_TOKEN_ENV`] (set after the scrub).
+fn with_token(c: &mut Command, mcp: &Mcp) {
+    if mcp.token.is_some() {
+        let var = format!(
+            "mcp_servers.{}.bearer_token_env_var=\"{AGENT_TOKEN_ENV}\"",
+            mcp.server
+        );
+        c.args(["-c", &var]);
+    }
+}
+
+/// The environment variable a CLI agent reads its token from (never argv).
+pub const AGENT_TOKEN_ENV: &str = "SHAKEDOWN_AGENT_TOKEN";
+
+pub fn command_with(
     binary: &str,
     spec: &AgentSpec,
     mcp: &Mcp,
@@ -84,9 +98,13 @@ fn command_with(
     if let Some(m) = &spec.model {
         c.args(["-m", m]);
     }
+    with_token(&mut c, mcp);
     // The prompt is positional and may start with "-": keep it apart from the flags.
     c.args(["--", prompt]);
     super::scrub_env(&mut c, "OPENAI_API_KEY");
+    if let Some(token) = &mcp.token {
+        c.env(AGENT_TOKEN_ENV, token);
+    }
     c
 }
 

@@ -14,7 +14,8 @@ pub const NO_PROXY: &str = "127.0.0.1,localhost,::1";
 /// and the hosts' variables.
 pub fn env_for(state: &AppState, ctx: &BranchCtx, agent: Option<&str>) -> BTreeMap<String, String> {
     let hosts = ctx.world.hosts();
-    let ticket = state.proxy.tickets.issue(&ctx.branch_id, agent);
+    let expires = std::time::Instant::now() + ctx.token_ttl();
+    let ticket = state.proxy.tickets.issue(&ctx.branch_id, agent, expires);
     let Some(url) = (!hosts.is_empty())
         .then(|| state.proxy.url(&ticket))
         .flatten()

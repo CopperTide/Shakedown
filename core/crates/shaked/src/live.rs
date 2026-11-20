@@ -31,8 +31,11 @@ impl LiveBranches {
         self.0.write().unwrap().insert(id, ctx);
     }
 
+    /// The branch is no longer live: its agents' tokens die with it.
     pub fn remove(&self, branch: &str) {
-        self.0.write().unwrap().remove(branch);
+        if let Some(ctx) = self.0.write().unwrap().remove(branch) {
+            ctx.roster.revoke_all();
+        }
     }
 
     /// The live `branch`, when it has `agent` (one of its team, or one that joined).

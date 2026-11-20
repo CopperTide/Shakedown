@@ -18,6 +18,8 @@ struct SavesFx {
     branch: String,
     mcp: String,
     chat: String,
+    /// The agent's token, from its register answer.
+    token: String,
 }
 
 impl SavesFx {
@@ -45,11 +47,13 @@ impl SavesFx {
         assert_eq!(status, 200, "{a}");
         let mcp = a["mcp_url"].as_str().unwrap().to_string();
         let chat = format!("{}/chat/completions", a["gateway_url"].as_str().unwrap());
+        let token = a["token"].as_str().unwrap().to_string();
         SavesFx {
             fx,
             branch,
             mcp,
             chat,
+            token,
         }
     }
 
@@ -57,7 +61,14 @@ impl SavesFx {
     async fn poke(&self) {
         let req = json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
                          "params": {"name": "poke", "arguments": {}}});
-        let (status, v) = send(self.fx.http.post(&self.mcp).json(&req)).await;
+        let (status, v) = send(
+            self.fx
+                .http
+                .post(&self.mcp)
+                .bearer_auth(&self.token)
+                .json(&req),
+        )
+        .await;
         assert_eq!(status, 200, "{v}");
     }
 
@@ -67,6 +78,7 @@ impl SavesFx {
         self.fx
             .http
             .post(&self.chat)
+            .bearer_auth(&self.token)
             .json(&body)
             .send()
             .await
@@ -148,7 +160,8 @@ fn an_http_write_to_a_points_part_waits_for_the_save_point() {
             &["--save-at", "points", "--http-route", &route],
         )
         .await;
-        let ticket = fx.fx.state.proxy.tickets.issue(&fx.branch, Some("planner"));
+        let tickets = &fx.fx.state.proxy.tickets;
+        let ticket = tickets.issue(&fx.branch, Some("planner"), later());
         let proxy = reqwest::Proxy::all(fx.fx.state.proxy.url(&ticket).unwrap()).unwrap();
         let c = reqwest::Client::builder().proxy(proxy).build().unwrap();
         let r = c
@@ -260,4 +273,9 @@ fn a_setup_that_writes_a_points_part_is_saved_where_the_agents_start() {
             "the fork starts with the setup's write"
         );
     })
+}
+
+/// An hour from now: a ticket's expiry in these tests.
+fn later() -> std::time::Instant {
+    std::time::Instant::now() + std::time::Duration::from_secs(3600)
 }

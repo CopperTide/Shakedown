@@ -160,7 +160,11 @@ impl ProxyFx {
 
     /// A ticket of `agent` on the branch.
     fn ticket(&self, agent: Option<&str>) -> String {
-        self.fx.state.proxy.tickets.issue(&self.branch, agent)
+        self.fx
+            .state
+            .proxy
+            .tickets
+            .issue(&self.branch, agent, later())
     }
 
     /// A client that goes through the proxy as `agent`.
@@ -714,7 +718,15 @@ fn a_driver_ticket_request_is_the_latest_model_callers() {
         let a = fx.join(json!({"id": "planner", "name": "Planner"})).await;
         let chat = format!("{}/chat/completions", a["gateway_url"].as_str().unwrap());
         let body = json!({"model": "m", "messages": [{"role": "user", "content": "hi"}]});
-        fx.fx.http.post(chat).json(&body).send().await.unwrap();
+        let token = a["token"].as_str().unwrap();
+        fx.fx
+            .http
+            .post(chat)
+            .bearer_auth(token)
+            .json(&body)
+            .send()
+            .await
+            .unwrap();
         assert_eq!(get_text(&driver, "http://toy.test/hello").await.0, 200);
         let e = fx.last_tool_call().await;
         assert_eq!(e.agent.as_deref(), Some("planner"));
@@ -849,4 +861,9 @@ fn connect_on_another_port_is_refused() {
             "the host toy.test takes HTTPS on port 443 only"
         );
     })
+}
+
+/// An hour from now: a ticket's expiry in these tests.
+fn later() -> std::time::Instant {
+    std::time::Instant::now() + std::time::Duration::from_secs(3600)
 }

@@ -223,9 +223,16 @@ struct Answer {
     text: String,
 }
 
-async fn post(http: &reqwest::Client, url: &str, body: &Value) -> Result<Answer, Fault> {
+/// The agent's gateway: where it is and the agent's token for it.
+struct Gateway {
+    url: String,
+    token: String,
+}
+
+async fn post(http: &reqwest::Client, gw: &Gateway, body: &Value) -> Result<Answer, Fault> {
     let resp = http
-        .post(url)
+        .post(&gw.url)
+        .bearer_auth(&gw.token)
         .json(body)
         .send()
         .await
@@ -250,7 +257,7 @@ async fn post(http: &reqwest::Client, url: &str, body: &Value) -> Result<Answer,
 /// [`retry_wait`]) while the provider is overloaded or rate-limiting; the parsed response.
 async fn model_call(
     http: &reqwest::Client,
-    url: &str,
+    url: &Gateway,
     body: &Value,
     retry_base: Duration,
 ) -> Result<Value, Fault> {
@@ -303,7 +310,7 @@ struct Loop {
     state: Arc<AppState>,
     provider: Provider,
     model: String,
-    url: String,
+    url: Gateway,
     tools: Vec<Value>,
     branch: Arc<BranchCtx>,
     agent: String,
@@ -313,7 +320,10 @@ impl Loop {
     fn new(state: Arc<AppState>, branch: Arc<BranchCtx>, spec: &AgentSpec) -> Result<Loop, Fault> {
         let (provider, model) = provider_and_model(&state, spec)?;
         Ok(Loop {
-            url: gateway_url(&state, &branch.branch_id, &spec.id),
+            url: Gateway {
+                url: gateway_url(&state, &branch.branch_id, &spec.id),
+                token: branch.agent_token(&spec.id),
+            },
             tools: openai_tools(&branch, &spec.id),
             model: model.to_string(),
             provider,

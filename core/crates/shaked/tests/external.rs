@@ -578,12 +578,20 @@ async fn rated_pod(tag: &str, base: &str) -> AppFx {
 }
 
 /// The statuses of `n` model calls through the gateway `gateway_url`.
-async fn calls(fx: &AppFx, gateway_url: &str, n: usize) -> Vec<u16> {
-    let url = format!("{gateway_url}/chat/completions");
+async fn calls(fx: &AppFx, reg: &Value, n: usize) -> Vec<u16> {
+    let url = format!("{}/chat/completions", reg["gateway_url"].as_str().unwrap());
+    let token = reg["token"].as_str().unwrap();
     let call = json!({"model": "m", "messages": [{"role": "user", "content": "go"}]});
     let mut statuses = vec![];
     for _ in 0..n {
-        let r = fx.http.post(&url).json(&call).send().await.unwrap();
+        let r = fx
+            .http
+            .post(&url)
+            .bearer_auth(token)
+            .json(&call)
+            .send()
+            .await
+            .unwrap();
         statuses.push(r.status().as_u16());
     }
     statuses
@@ -598,7 +606,7 @@ fn a_run_over_its_spend_limit_is_refused_further_model_calls() {
         let branch = start_with(&fx, json!({"max_cost_usd": 0.01})).await;
         let join = json!({"id": "a", "provider": "local:pod", "model": "m"});
         let reg = register(&fx, &branch, join).await;
-        let statuses = calls(&fx, reg["gateway_url"].as_str().unwrap(), 3).await;
+        let statuses = calls(&fx, &reg, 3).await;
         assert_eq!(statuses, [200, 402, 402]);
         assert_eq!(llm.seen.lock().unwrap().len(), 1);
         let evs = fx.events(&branch).await;

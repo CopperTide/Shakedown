@@ -86,7 +86,11 @@ const SIGN_IN: &str = "sign in through the gateway or send an API token";
 async fn caller_of(state: &AppState, asked: Asked) -> Result<Scope, (StatusCode, String)> {
     let no = |status, error: &str| Err((status, error.to_string()));
     if let Some(token) = &asked.bearer {
-        return match tokens::resolve_api_token(&state.store, token).await {
+        let found = match token.starts_with(tokens::API_PREFIX) {
+            true => tokens::resolve_api_token(&state.store, token).await,
+            false => super::run_tokens::resolve_run_token(&state.store, token).await,
+        };
+        return match found {
             Ok(Some(p)) => Ok(Scope::of(p)),
             Ok(None) => no(
                 StatusCode::UNAUTHORIZED,

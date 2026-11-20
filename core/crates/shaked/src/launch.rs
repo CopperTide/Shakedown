@@ -38,6 +38,8 @@ pub struct Launched {
     pub branch_id: BranchId,
     pub agents: Vec<Endpoints>,
     pub driver: Option<driver::Launched>,
+    /// An external run's run token (`sdr_…`), for whoever drives it.
+    pub run_token: Option<String>,
 }
 
 /// Launches the Code connection `conn_id`'s driver for the branch `ids` names (a new run's, or a
@@ -73,6 +75,26 @@ async fn go(state: &Arc<AppState>, ctx: Arc<BranchCtx>) -> anyhow::Result<Vec<En
     Ok(vec![])
 }
 
+/// A run token for a run an external system drives (None for shaked's own runners), good as
+/// long as the branch's agent tokens.
+async fn run_token_of(
+    state: &AppState,
+    ctx: &BranchCtx,
+    run_id: &str,
+) -> anyhow::Result<Option<String>> {
+    if ctx.rules.runner != Runner::External {
+        return Ok(None);
+    }
+    let expires = chrono::Utc::now() + ctx.token_ttl();
+    let records = ctx.records(&state.store);
+    let kind = crate::auth::RunTokenKind::Run;
+    Ok(Some(
+        records
+            .mint_run_token(run_id, &ctx.branch_id, kind, None, None, expires)
+            .await?,
+    ))
+}
+
 /// The run's driver started, when it has one.
 async fn launch_driver_of(
     state: &Arc<AppState>,
@@ -98,6 +120,7 @@ pub async fn launch(state: &Arc<AppState>, spec: LaunchSpec<'_>) -> Result<Launc
     );
     let (run_id, ctx) = begun.await?;
     let branch_id = ctx.branch_id.clone();
+    let run_token = run_token_of(state, &ctx, &run_id).await?;
     let agents = go(state, Arc::new(ctx)).await?;
     let ids = RunIds {
         run_id: &run_id,
@@ -111,5 +134,6 @@ pub async fn launch(state: &Arc<AppState>, spec: LaunchSpec<'_>) -> Result<Launc
         branch_id,
         agents,
         driver,
+        run_token,
     })
 }

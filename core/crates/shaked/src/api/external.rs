@@ -64,7 +64,8 @@ pub(super) async fn create_run(
             benchmark: Some(&benchmark),
         };
         let l = launch(&state, spec).await?;
-        let started = external::Started::of(l.run_id, l.branch_id, l.agents);
+        let mut started = external::Started::of(l.run_id, l.branch_id, l.agents);
+        started.run_token = l.run_token;
         Ok(Json(serde_json::to_value(started)?))
     })
     .await
@@ -136,7 +137,8 @@ async fn register(
     }
     let spec = external::register(&state.store, &ctx, &join).await?;
     let env = env_for(&state, &ctx, Some(&spec.id));
-    let mut v = serde_json::to_value(endpoints(state.config.public_base(), &id, &spec.id, env))?;
+    let ends = endpoints(state.config.public_base(), &id, &spec.id, env);
+    let mut v = serde_json::to_value(ends.with_token(ctx.agent_token(&spec.id)))?;
     v["tools"] = json!(tool_schemas(&ctx, &spec.id));
     v["spec"] = serde_json::to_value(&spec)?;
     Ok(Json(v))

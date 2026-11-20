@@ -1,10 +1,7 @@
 //! Who is on a running branch: its team, the agents that joined it, and the bearer tokens their
 //! endpoints want.
 
-use std::{
-    collections::HashMap,
-    sync::{Mutex, RwLock},
-};
+use std::sync::{Mutex, RwLock};
 
 use crate::model::{AgentSpec, Team};
 
@@ -13,9 +10,8 @@ pub struct Roster {
     pub team: Team,
     /// Agents an external system registered while the branch runs (not in `team`).
     joined: RwLock<Vec<AgentSpec>>,
-    /// agent id -> the bearer token its MCP endpoint wants, for an agent given one (an `http`
-    /// agent, while shaked waits for it). Kept in memory only.
-    tokens: Mutex<HashMap<String, String>>,
+    /// The agents' tokens (`sda_…`), which their MCP endpoint and model gateway want.
+    tokens: super::agent_tokens::AgentTokens,
     /// The agent whose model call through the gateway came last (a driver's own HTTP requests
     /// are attributed to it).
     last_model_caller: Mutex<Option<String>>,
@@ -110,33 +106,39 @@ impl Roster {
         self.last_model_caller.lock().unwrap().clone()
     }
 
-    /// A new bearer token for `agent`'s MCP endpoint, which takes no call without it from now on.
-    pub fn issue_token(&self, agent: &str) -> String {
-        let token = uuid::Uuid::new_v4().simple().to_string();
-        self.tokens
-            .lock()
-            .unwrap()
-            .insert(agent.into(), token.clone());
-        token
+    /// A new token for `agent` (`sda_…`), valid for `ttl` of unpaused time.
+    pub fn issue_token(&self, agent: &str, ttl: std::time::Duration) -> String {
+        self.tokens.issue(agent, ttl)
     }
 
-    /// Takes back `agent`'s token: its endpoint answers no one until another is issued.
+    /// `agent`'s good token, else a new one valid for `ttl`.
+    pub fn ensure_token(&self, agent: &str, ttl: std::time::Duration) -> String {
+        self.tokens.ensure(agent, ttl)
+    }
+
+    /// `agent`'s token while it is good: in memory only, for handing to the agent.
+    pub fn token_of(&self, agent: &str) -> Option<String> {
+        self.tokens.token_of(agent)
+    }
+
+    /// Takes back `agent`'s token: its endpoints answer no one until another is issued.
     pub fn revoke_token(&self, agent: &str) {
-        self.tokens
-            .lock()
-            .unwrap()
-            .insert(agent.into(), String::new());
+        self.tokens.revoke(agent);
     }
 
-    /// True when a call to `agent`'s endpoint with `authorization` (the header's value) may go
-    /// through: the agent was never given a token, or this is it.
+    /// Takes back every agent's token (the branch ended).
+    pub fn revoke_all(&self) {
+        self.tokens.revoke_all();
+    }
+
+    /// Moves every token's expiry `by` later (the branch was paused that long).
+    pub fn extend(&self, by: std::time::Duration) {
+        self.tokens.extend(by);
+    }
+
+    /// True when a call to `agent`'s endpoints with `authorization` (the header's value) may go
+    /// through: it carries the agent's good token. An agent never given one gets nothing.
     pub fn token_ok(&self, agent: &str, authorization: Option<&str>) -> bool {
-        match self.tokens.lock().unwrap().get(agent) {
-            None => true,
-            Some(t) => {
-                let given = authorization.and_then(|a| a.strip_prefix("Bearer "));
-                !t.is_empty() && given == Some(t.as_str())
-            }
-        }
+        self.tokens.ok(agent, authorization)
     }
 }

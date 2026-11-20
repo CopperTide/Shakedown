@@ -29,6 +29,17 @@ pub struct Endpoints {
     pub proxy_url: Option<String>,
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub env: BTreeMap<String, String>,
+    /// The agent's token (`sda_…`) for its MCP endpoint and gateway: `Authorization: Bearer`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub token: Option<String>,
+}
+
+impl Endpoints {
+    /// The same endpoints with the agent's token.
+    pub fn with_token(mut self, token: String) -> Endpoints {
+        self.token = Some(token);
+        self
+    }
 }
 
 /// The endpoints of `agent` on `branch`, on the shaked at `self_base`, with the variables `env`
@@ -46,6 +57,7 @@ pub fn endpoints(
         gateway_url: format!("{base}/gateway/{branch}/{agent}/v1"),
         proxy_url: env.get("SHAKEDOWN_PROXY").cloned(),
         env,
+        token: None,
     }
 }
 
@@ -55,6 +67,9 @@ pub struct Started {
     pub run_id: RunId,
     pub branch_id: BranchId,
     pub agents: Vec<Endpoints>,
+    /// The run token (`sdr_…`): registers agents, reports and finishes, in hosted mode.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub run_token: Option<String>,
 }
 
 impl Started {
@@ -63,6 +78,7 @@ impl Started {
             run_id,
             branch_id,
             agents,
+            run_token: None,
         }
     }
 }
@@ -76,12 +92,8 @@ pub(crate) async fn go(state: &AppState, ctx: &Arc<BranchCtx>) -> anyhow::Result
         ctx.record(&state.store, Some(&spec.id), &start_payload(spec))
             .await?;
         let env = env_for(state, ctx, Some(&spec.id));
-        agents.push(endpoints(
-            state.config.public_base(),
-            &ctx.branch_id,
-            &spec.id,
-            env,
-        ));
+        let ends = endpoints(state.config.public_base(), &ctx.branch_id, &spec.id, env);
+        agents.push(ends.with_token(ctx.agent_token(&spec.id)));
     }
     Ok(agents)
 }

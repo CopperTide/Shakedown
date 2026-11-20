@@ -26,6 +26,8 @@ struct Fx {
     _clean: Cleanup,
     branch: String,
     url: String,
+    /// The live branch, which hands out its agents' tokens.
+    ctx: Arc<BranchCtx>,
 }
 
 async fn setup(tag: &str) -> Fx {
@@ -63,8 +65,13 @@ async fn setup_with(tag: &str, extra: &[PathBuf], bench: &str) -> Fx {
     let world = hub.start_world(bench, &branch).await;
     let state = AppState::new(store.clone(), hub.hub.clone(), Config::new());
     let state = Arc::new(state.with_benchmark(bench));
-    let ctx = BranchCtx::new(branch.clone(), world.clone(), team, "task".into());
-    state.live.insert(Arc::new(ctx));
+    let ctx = Arc::new(BranchCtx::new(
+        branch.clone(),
+        world.clone(),
+        team,
+        "task".into(),
+    ));
+    state.live.insert(ctx.clone());
     let (listener, base) = app::bind().await;
     app::serve(listener, &state);
     Fx {
@@ -74,6 +81,7 @@ async fn setup_with(tag: &str, extra: &[PathBuf], bench: &str) -> Fx {
         _clean: clean,
         branch,
         url: format!("{base}/mcp"),
+        ctx,
     }
 }
 
@@ -84,6 +92,7 @@ async fn teardown(fx: Fx) {
 async fn rpc(fx: &Fx, agent: &str, body: Value) -> (u16, Value) {
     let r = reqwest::Client::new()
         .post(format!("{}/{}/{}", fx.url, fx.branch, agent))
+        .bearer_auth(fx.ctx.agent_token(agent))
         .json(&body)
         .send()
         .await

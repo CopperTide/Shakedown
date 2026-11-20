@@ -149,6 +149,7 @@ fn gateway_refuses_unknown_branch_or_agent_without_calling_a_provider() {
         for (b, a) in [("nobranch", "solo"), (fx.ctx.branch_id.as_str(), "nobody")] {
             let r = reqwest::Client::new()
                 .post(gateway_url(&fx, b, a))
+                .bearer_auth(fx.ctx.agent_token(a))
                 .json(&body)
                 .send()
                 .await
@@ -168,7 +169,7 @@ fn gateway_refuses_unknown_branch_or_agent_without_calling_a_provider() {
 fn gateway_wants_the_agents_bearer_token_once_it_has_one() {
     run(async {
         let fx = setup("gwtoken", vec![agent("solo", Some("m"))], nowhere()).await;
-        let token = fx.ctx.roster.issue_token("solo");
+        let token = fx.ctx.roster.issue_token("solo", fx.ctx.token_ttl());
         let body = json!({"model": "m", "messages": [{"role": "user", "content": "x"}]});
         let url = gateway_url(&fx, &fx.ctx.branch_id, "solo");
         for bearer in [None, Some("wrong")] {
@@ -205,6 +206,7 @@ fn an_unknown_provider_is_recorded_as_a_failed_call() {
         let body = json!({"model": "m", "messages": [{"role": "user", "content": "x"}]});
         let r = reqwest::Client::new()
             .post(gateway_url(&fx, &fx.ctx.branch_id, "solo"))
+            .bearer_auth(fx.ctx.agent_token("solo"))
             .json(&body)
             .send()
             .await

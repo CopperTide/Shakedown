@@ -129,7 +129,8 @@ impl ClaudeSession {
     pub fn start(self_base: &str, binary: &str, s: SessionStart) -> Result<ClaudeSession, String> {
         let workdir = super::fresh_workdir().map_err(|e| format!("cannot create workdir: {e}"))?;
         let mcp = Mcp::for_agent(self_base, &s.branch, &s.spec.id);
-        let command = super::claude::session_command(binary, &s.spec, &mcp);
+        let command = super::claude::session_command(binary, &s.spec, &mcp, &workdir)
+            .map_err(|e| format!("writing the MCP config: {e}"))?;
         let p = spawn(command, &workdir).inspect_err(|_| {
             let _ = std::fs::remove_dir_all(&workdir);
         })?;
@@ -164,7 +165,9 @@ impl ClaudeSession {
             "branch {}: {}'s claude died before it said anything; starting it again",
             self.branch.branch_id, self.agent
         );
-        let command = super::claude::session_command(&self.binary, &self.spec, &self.mcp);
+        let command =
+            super::claude::session_command(&self.binary, &self.spec, &self.mcp, &self.workdir)
+                .map_err(|e| format!("writing the MCP config: {e}"))?;
         let p = spawn(command, &self.workdir)?;
         (self.child, self.stdin, self.lines, self.stderr) = (p.child, p.stdin, p.lines, p.stderr);
         self.send(text).await
