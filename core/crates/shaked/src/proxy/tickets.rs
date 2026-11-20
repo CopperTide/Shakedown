@@ -15,10 +15,26 @@ pub struct Holder {
     pub agent: Option<String>,
 }
 
-/// The tickets shaked gave out.
+/// The tickets shaked gave out, and those of branches that ended (kept [`ENDED_KEPT`], so a
+/// client still holding one is told its branch ended rather than asked for a ticket).
 #[derive(Debug, Default)]
 pub struct Tickets {
     held: Mutex<HashMap<String, Held>>,
+    ended: Mutex<HashMap<String, Instant>>,
+}
+
+/// How long a taken-back ticket is remembered as ended.
+pub const ENDED_KEPT: Duration = Duration::from_secs(3600);
+
+/// What a ticket stands for now.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Standing {
+    /// Good: its holder.
+    Good(Holder),
+    /// Its branch ended (or its agent's tickets were taken back) within [`ENDED_KEPT`].
+    Ended,
+    /// Never given, expired, or ended long ago.
+    Unknown,
 }
 
 #[derive(Debug)]
@@ -54,18 +70,45 @@ impl Tickets {
 
     /// Who holds `ticket`, while it is good.
     pub fn holder(&self, ticket: &str) -> Option<Holder> {
-        let held = self.held.lock().unwrap();
-        held.get(ticket)
-            .filter(|h| h.expires > Instant::now())
-            .map(|h| h.holder.clone())
+        match self.standing(ticket) {
+            Standing::Good(h) => Some(h),
+            _ => None,
+        }
     }
 
-    /// Takes back the tickets of `agent` on `branch` (every one of the branch when None).
+    /// What `ticket` stands for now.
+    pub fn standing(&self, ticket: &str) -> Standing {
+        let good = (self.held.lock().unwrap().get(ticket))
+            .filter(|h| h.expires > Instant::now())
+            .map(|h| h.holder.clone());
+        if let Some(h) = good {
+            return Standing::Good(h);
+        }
+        let ended = self.ended.lock().unwrap().get(ticket).copied();
+        match ended.is_some_and(|at| at.elapsed() < ENDED_KEPT) {
+            true => Standing::Ended,
+            false => Standing::Unknown,
+        }
+    }
+
+    /// Takes back the tickets of `agent` on `branch` (every one of the branch when None); they
+    /// are remembered as ended for [`ENDED_KEPT`].
     pub fn revoke(&self, branch: &str, agent: Option<&str>) {
         let mine = |h: &Held| {
             h.holder.branch == branch && (agent.is_none() || h.holder.agent.as_deref() == agent)
         };
-        self.held.lock().unwrap().retain(|_, h| !mine(h));
+        let mut taken = vec![];
+        self.held.lock().unwrap().retain(|t, h| match mine(h) {
+            true => {
+                taken.push(t.clone());
+                false
+            }
+            false => true,
+        });
+        let now = Instant::now();
+        let mut ended = self.ended.lock().unwrap();
+        ended.retain(|_, at| at.elapsed() < ENDED_KEPT);
+        ended.extend(taken.into_iter().map(|t| (t, now)));
     }
 
     /// Moves `branch`'s tickets' expiry `by` later (the branch was paused that long).
@@ -151,5 +194,18 @@ mod tests {
         let b = t.issue("b1", Some("b"), Instant::now() + Duration::from_secs(60));
         t.revoke("b1", Some("b"));
         assert!(t.holder(&b).is_none(), "revoked with its agent");
+    }
+
+    /// M2: a ticket of a branch that ended is known as ended (its proxy says so), not unknown.
+    #[test]
+    fn an_ended_branch_s_tickets_are_remembered_as_ended() {
+        let t = Tickets::default();
+        let a = t.issue("b1", Some("a"), Instant::now() + Duration::from_secs(60));
+        let other = t.issue("b2", None, Instant::now() + Duration::from_secs(60));
+        t.revoke("b1", None);
+        assert_eq!(t.standing(&a), Standing::Ended);
+        assert!(matches!(t.standing(&other), Standing::Good(_)));
+        assert_eq!(t.standing("never-given"), Standing::Unknown);
+        assert_eq!(t.len(), 1, "an ended ticket is not held");
     }
 }

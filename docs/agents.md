@@ -100,7 +100,8 @@ request is recorded as an `http` step of the part that serves its host: inspecta
   (`args.attributed: "latest model call"`), else as no agent's.
 - The proxy listens on 127.0.0.1 only (`SHAKEDOWN_PROXY_PORT`, default a free port). Its URL carries a ticket of the
   run; a request without one is answered 407. A request to a host no part serves is refused (403) and recorded. A
-  read-only agent's writes are refused. Requests wait while the run is paused and are answered 409 once it ended.
+  read-only agent's writes are refused. Requests wait while the run is paused, are answered 409 while it ends, and
+  410 ("the branch this proxy URL was for has ended") for an hour after.
 - HTTPS to a served host goes through the proxy too (`CONNECT host:443`): the proxy terminates TLS with a CA of the
   run's branch, and the same variables give `SSL_CERT_FILE`, `REQUESTS_CA_BUNDLE`, `CURL_CA_BUNDLE`,
   `NODE_EXTRA_CA_CERTS` and `GIT_SSL_CAINFO` naming its certificate. Shakedown never installs it in a system trust
