@@ -71,7 +71,8 @@ pub(super) async fn create_run(
         let l = launch(&state, spec).await?;
         let mut started = external::Started::of(l.run_id, l.branch_id, l.agents);
         started.run_token = l.run_token;
-        Ok(Json(serde_json::to_value(started)?))
+        let v = serde_json::to_value(started)?;
+        Ok(Json(super::with_warning(v, l.warning)))
     })
     .await
 }

@@ -85,6 +85,94 @@ fn an_admitted_run_is_metered_once() {
     })
 }
 
+/// The runs meter calls the spy saw.
+fn runs_metered(spy: &SpyLayer) -> Vec<Call> {
+    spy.calls()
+        .into_iter()
+        .filter(|c| matches!(c, Call::Meter(shaked::layer::Meter::Runs, _)))
+        .collect()
+}
+
+fn refused_runs() -> Admission {
+    Admission::Refuse {
+        status: StatusCode::TOO_MANY_REQUESTS,
+        message: "runs quota reached".into(),
+    }
+}
+
+/// An external suite of one run on task 27: its id.
+async fn external_suite(fx: &AppFx) -> String {
+    let body = json!({"team": team(), "tasks": ["27"], "repeats": 1, "runner": "external"});
+    let (status, v) = fx.post("/api/suites", body).await;
+    assert_eq!(status, 200, "{v}");
+    v["id"].as_str().unwrap().to_string()
+}
+
+#[test]
+fn a_claimed_suite_run_is_admitted_and_metered_once() {
+    run(async {
+        let spy = SpyLayer::new();
+        let fx = AppFx::idle("layer", "claimrun")
+            .layer(Arc::new(spy.clone()))
+            .start()
+            .await;
+        let id = external_suite(&fx).await;
+        let (status, c) = fx.post(&format!("/api/suites/{id}/claim"), json!({})).await;
+        assert_eq!(status, 200, "{c}");
+        let run_id = c["run_id"].as_str().unwrap();
+        assert!(spy.calls().contains(&Call::Admit("StartRun".into())), "{:?}", spy.calls());
+        let want = Call::Meter(shaked::layer::Meter::Runs, format!("run:{run_id}"));
+        assert_eq!(runs_metered(&spy), [want]);
+    })
+}
+
+#[test]
+fn a_refused_admission_starts_no_claimed_suite_run() {
+    run(async {
+        let spy = SpyLayer::new().admitting(refused_runs());
+        let fx = AppFx::idle("layer", "claimrefuse")
+            .layer(Arc::new(spy.clone()))
+            .start()
+            .await;
+        let id = external_suite(&fx).await;
+        let (status, v) = fx.post(&format!("/api/suites/{id}/claim"), json!({})).await;
+        assert_eq!((status, &v["error"]), (429, &json!("runs quota reached")));
+        assert!(records(&fx.state.store).runs().await.unwrap().is_empty());
+        assert!(runs_metered(&spy).is_empty());
+    })
+}
+
+#[test]
+fn a_refused_admission_starts_no_builtin_suite_run() {
+    run(async {
+        let spy = SpyLayer::new().admitting(refused_runs());
+        let fx = AppFx::idle("layer", "suiterefuse")
+            .layer(Arc::new(spy.clone()))
+            .start()
+            .await;
+        let agent = json!({"id": "planner", "name": "Planner", "kind": "open", "model": "m",
+                           "prompt": "Poke the box."});
+        let team = json!({"id": "o", "name": "Open", "agents": [agent]});
+        let body = json!({"team": team, "tasks": ["27"], "repeats": 1});
+        let (status, v) = fx.post("/api/suites", body).await;
+        assert_eq!(status, 200, "{v}");
+        let id = v["id"].as_str().unwrap();
+        let mut ended = false;
+        for _ in 0..100 {
+            let (_, s) = fx.get(&format!("/api/suites/{id}")).await;
+            if s["status"] != "running" {
+                ended = true;
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+        assert!(ended, "the suite ended");
+        assert!(spy.calls().contains(&Call::Admit("StartRun".into())), "{:?}", spy.calls());
+        assert!(records(&fx.state.store).runs().await.unwrap().is_empty());
+        assert!(runs_metered(&spy).is_empty());
+    })
+}
+
 /// `GET /api/runs` with `bearer`: the status.
 async fn runs_with(fx: &AppFx, bearer: &str) -> u16 {
     let r = fx

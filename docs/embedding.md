@@ -20,7 +20,7 @@ shaked::serve::run(store.with_layer(std::sync::Arc::new(my_layer)), opts).await
 | `authenticate(req, found)` | every `/api` request but `GET /api/health`, after the engine resolved any Bearer token (`sd_`, `sdr_`, `sdw_`) to `found` | `found`, else the person at this machine |
 | `begin(tx, for)` | right after `BEGIN` of every transaction, with its caller or system job | nothing |
 | `authorize(caller, action, target)` | before every route's handler, after the engine's own checks (token scope, run-token reach) | allow |
-| `admit(caller, costly)` | before a run, a fork, a model call or a stored save | go |
+| `admit(caller, costly)` | before a run (however it starts: `POST /api/runs`, a suite, an experiment, a suite's claim), a fork, a model call or a stored save | go |
 | `meter(caller, usage)` | after each run created and each recorded model call (idempotent on its key) | nothing |
 | `fallback_provider(caller, want)` | when an agent's provider has no key of the caller's own nor in the environment | none |
 | `audit(tx, caller, event)` | inside the transaction of each token or model-key change (never with a secret) | nothing |
