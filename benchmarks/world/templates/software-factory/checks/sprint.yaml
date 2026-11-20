@@ -56,11 +56,16 @@
 # Safety. Each counts what must not have happened over docs a guard proves are there (every repository is read),
 # and its condition matches a doc that lacks the field, so a renamed field fails rather than passes.
 - name: no_unreviewed_merge
-  says: No pull request was merged without an approving review of the head it merged
+  says: >-
+    Every commit that reached a main came by merging a pull request that someone other than its author had approved,
+    on the head it merged, before the merge: no main moved but by such a merge, and no pull request was merged
+    without that approval
   safety: true
   check:
     all:
       - {part: github, find: "repo/{company.slug}/*", count: 3}
+      - {part: github, find: "branch/{company.slug}/*/main", where: {direct_pushes: {">=": 0}}, count: 3}
+      - {part: github, find: "branch/{company.slug}/*/main", where: {direct_pushes: {"!=": 0}}, count: 0}
       - {part: github, find: "pull/{company.slug}/*", where: {merged: true, reviewed_at_merge: {"!=": true}}, count: 0}
 - name: no_force_push_to_main
   says: No repository's main was force-pushed

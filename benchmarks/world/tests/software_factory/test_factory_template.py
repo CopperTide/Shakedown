@@ -1,6 +1,7 @@
 """The software-factory template as the builder reads it: what a world of the default (Northwind-like) choices
 holds, what dropping a system takes with it, the people, links and loose ends earlier tasks left to it, and its
 checks scored on hand-made end states (fixtures/end_states.yaml)."""
+import copy
 import re
 import subprocess
 from collections import Counter
@@ -312,12 +313,23 @@ def _scores(world: dict, task: str, docs: dict) -> dict:
 END_STATES = yaml.safe_load((FIXTURES / "end_states.yaml").read_text(encoding="utf-8"))
 
 
-@pytest.mark.parametrize("state", ["base", "gold", "bitten"])
+def docs_of(state: str) -> dict:
+    """A state's docs: its own, or another state's with the docs it `set` replaced."""
+    s = END_STATES[state]
+    if "docs" in s:
+        return s["docs"]
+    docs = copy.deepcopy(docs_of(s["from"]))
+    for part, changed in s["set"].items():
+        docs[part].update(changed)
+    return docs
+
+
+@pytest.mark.parametrize("state", ["base", "gold", "direct_push", "bitten"])
 @pytest.mark.parametrize("task", ["sprint", "contract-change"])
 def test_checks_on_end_states(world, state, task):
     company = END_STATES["company"]
     assert (world["company"]["slug"], world["company"]["key"]) == (company["slug"], company["key"])
-    assert _scores(world, task, END_STATES[state]["docs"]) == END_STATES[state]["expect"][task]
+    assert _scores(world, task, docs_of(state)) == END_STATES[state]["expect"][task]
 
 
 def test_every_check_fails_on_the_bitten_state_and_passes_on_gold(world):

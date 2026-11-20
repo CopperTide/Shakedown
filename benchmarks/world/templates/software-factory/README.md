@@ -24,6 +24,8 @@ Task 13): `template.yaml` and the files it includes, read by the world builder (
   alone, `checks/contract-change.yaml`, 5 checks, 2 safety). A check that needs a system the world lacks, or whose
   trap is off, is dropped. "In production is what was merged": each service runs its main's commit, or still the
   seed image (`/version` says `seed`) while its main is the commit the repository was seeded with.
+  "Nothing merged without review": no main moved but by a pull request's merge (the twin's `direct_pushes` is 0)
+  and every merged pull request had an approval of its merged head (the twin refuses an author's own).
 - Links (template.yaml): CI's deploy → `service_deploy` and back, Alertmanager's paging alerts → PagerDuty Events,
   PagerDuty's and GitHub's notices → Slack's apps, people's acts → each twin, each twin's notices → people.
 - `images.yaml` also names the designs' workbench, built on the base image by `images/build.sh workbench`.
@@ -55,7 +57,7 @@ Task 13): `template.yaml` and the files it includes, read by the world builder (
   takes, the profile, the seed, the clock start, the stock against a week of orders, the patches applying, the
   workbench build line (fake Docker), the builder's preview and generate (the same bytes twice, with counts
   edited), and every check over `tests/software_factory/fixtures/end_states.yaml`: base (each check as expected),
-  gold (all pass), bitten (all fail), and no check passing on parts with no docs but `no_open_incidents`.
+  gold (all pass), direct_push (a commit pushed to main: only the review check fails), bitten (all fail), and no check passing on parts with no docs but `no_open_incidents`.
 - Not run: `tests/software_factory/test_live_world.py` (live): it needs the `factory` branch's Rust work (the
   live-service part, the world-time gateway) and arenad's links running the whole world.
 
