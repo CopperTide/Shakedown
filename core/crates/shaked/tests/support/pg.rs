@@ -6,9 +6,12 @@ use std::{future::Future, sync::Mutex};
 
 use shaked::pg::Admin;
 
+/// The server the tests use: as shaked finds it (`SHAKEDOWN_PG_URL`, else the default user
+/// `shakedown`, else the old `arena`), once per test binary.
 pub fn pg_url() -> String {
-    parts::settings::var("SHAKEDOWN_PG_URL")
-        .unwrap_or_else(|_| "postgres://arena:arena@127.0.0.1:5544/postgres".to_string())
+    static URL: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    URL.get_or_init(|| on_own_runtime(shaked::pg::configured_url))
+        .clone()
 }
 
 pub fn admin() -> Admin {

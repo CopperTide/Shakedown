@@ -4,7 +4,7 @@
 - a shaked the tests start (``Shakedown.local``) with the retail example benchmark, from
   ``SHAKEDOWN_SDK_BIN_DIR`` (default ``core/target/release``, then ``core/target/debug``; it needs
   ``shaked``, ``shakedown-retail`` and ``shakedown-postgres``) on the Postgres at ``SHAKEDOWN_SDK_PG_URL``
-  (default ``deploy/compose.yml``'s, ``postgres://arena:arena@127.0.0.1:5544/postgres``).
+  (default: the one shaked finds itself, ``SHAKEDOWN_PG_URL`` or ``deploy/compose.yml``'s on 127.0.0.1:5544).
 
 The shaked the tests start cleans up unreferenced saves when it starts, like any shaked, so point
 ``SHAKEDOWN_SDK_PG_URL`` at a Postgres server no other test run is using at the same time.
@@ -65,11 +65,12 @@ def arena():
         a.close()
         return
     bin_dir = _bin_dir()
-    pg = setting("SHAKEDOWN_SDK_PG_URL", "postgres://arena:arena@127.0.0.1:5544/postgres")
+    pg = setting("SHAKEDOWN_SDK_PG_URL")  # None: shaked finds its own
     if bin_dir is None:
         pytest.skip("no shaked build (set SHAKEDOWN_SDK_BIN_DIR or SHAKEDOWN_SDK_URL)")
-    if not _reachable(pg):
-        pytest.skip(f"no Postgres at {urlparse(pg).hostname}:{urlparse(pg).port} (set SHAKEDOWN_SDK_PG_URL)")
+    server = pg or setting("SHAKEDOWN_PG_URL") or "postgres://127.0.0.1:5544/postgres"
+    if not _reachable(server):
+        pytest.skip(f"no Postgres at {urlparse(server).hostname}:{urlparse(server).port} (set SHAKEDOWN_SDK_PG_URL)")
     saves = tempfile.mkdtemp(prefix="arena-sdk-test-saves-")
     a = Shakedown.local(
         benchmark="retail",

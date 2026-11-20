@@ -74,7 +74,7 @@ fn strip_db(url: &str) -> String {
 }
 
 impl Templates {
-    /// `admin_url` is a server URL such as `postgres://arena:arena@127.0.0.1:5544/postgres`; a
+    /// `admin_url` is a server URL such as `postgres://shakedown:shakedown@127.0.0.1:5544/postgres`; a
     /// trailing `/dbname` is ignored. Connects on first use.
     pub fn new(admin_url: &str) -> Templates {
         Templates {

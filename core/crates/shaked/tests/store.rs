@@ -16,7 +16,7 @@ fn team() -> Team {
 
 fn db_name(tag: &str) -> String {
     format!(
-        "arena_test_{}_{}",
+        "shakedown_test_{}_{}",
         tag,
         &uuid::Uuid::new_v4().simple().to_string()[..8]
     )
@@ -252,4 +252,24 @@ fn one_run_reads_as_the_list_has_it() {
         assert_eq!(store.run("nope").await.unwrap(), None);
         done(admin, name, store).await;
     })
+}
+
+/// The records stay where an install from before 2026-11-19 keeps them (`arena`) while the server
+/// has no `shakedown` database; else they go to the new one.
+#[test]
+fn the_store_keeps_an_old_named_database_until_a_new_one_exists() {
+    run(async {
+        let admin = pg::admin();
+        let (new, old) = (db_name("pick_new"), db_name("pick_old"));
+        let clean = pg::Cleanup::new();
+        clean.add(&new);
+        clean.add(&old);
+        let pick = || shaked::store::pick_db(&admin, &new, &old);
+        assert_eq!(pick().await.unwrap(), new, "neither: the new one is made");
+        admin.create_db_from(&old, "template1").await.unwrap();
+        assert_eq!(pick().await.unwrap(), old, "only the old one");
+        admin.create_db_from(&new, "template1").await.unwrap();
+        assert_eq!(pick().await.unwrap(), new, "both: the new one");
+        drop(clean);
+    });
 }

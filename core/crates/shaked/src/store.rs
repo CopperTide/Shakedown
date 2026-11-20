@@ -20,7 +20,19 @@ pub use suites::NewSuite;
 pub type RunId = String;
 pub type BranchId = String;
 
-pub const DEFAULT_DB: &str = "arena";
+/// The database shaked keeps its records in.
+pub const DEFAULT_DB: &str = "shakedown";
+/// Its name until 2026-11-19, still used while the server has no [`DEFAULT_DB`].
+pub const OLD_DEFAULT_DB: &str = "arena";
+
+/// The database to keep the records in: `name` when it exists, else `old` when that exists (an
+/// install from before the rename keeps its records), else `name` (to be made).
+pub async fn pick_db(admin: &Admin, name: &str, old: &str) -> Result<String> {
+    if !admin.exists(name).await? && admin.exists(old).await? {
+        return Ok(old.to_string());
+    }
+    Ok(name.to_string())
+}
 
 const SCHEMA: &str = r#"
 CREATE TABLE IF NOT EXISTS runs (
@@ -92,9 +104,14 @@ pub struct Store {
 }
 
 impl Store {
-    /// Opens (creating if needed) the `arena` metadata database.
+    /// Opens (creating if needed) the metadata database [`DEFAULT_DB`], or the old `arena` one
+    /// while there is no `shakedown` ([`pick_db`]).
     pub async fn open(admin: &Admin) -> Result<Store> {
-        Store::open_named(admin, DEFAULT_DB).await
+        let db = pick_db(admin, DEFAULT_DB, OLD_DEFAULT_DB).await?;
+        if db == OLD_DEFAULT_DB {
+            eprintln!("shaked: records in the database arena (its name until 2026-11-19); see README.md, Old names");
+        }
+        Store::open_named(admin, &db).await
     }
 
     /// Like `open`, with a custom database name (tests use a fresh one each).

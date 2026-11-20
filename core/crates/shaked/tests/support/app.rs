@@ -13,10 +13,10 @@ use shaked::{
 
 use super::pg::{admin, Cleanup};
 
-/// A store in a fresh `arena_test_<kind>_<tag>_<id>` database.
+/// A store in a fresh `shakedown_test_<kind>_<tag>_<id>` database.
 pub async fn meta_store(kind: &str, tag: &str) -> (Arc<Store>, Cleanup) {
     let id = &uuid::Uuid::new_v4().simple().to_string()[..8];
-    let meta = format!("arena_test_{kind}_{tag}_{id}");
+    let meta = format!("shakedown_test_{kind}_{tag}_{id}");
     let clean = Cleanup::new();
     clean.add(&meta);
     let store = Store::open_named(&admin(), &meta).await.unwrap();

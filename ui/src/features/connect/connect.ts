@@ -107,7 +107,7 @@ export const isConnectable = (a: AgentSpec) => a.kind === 'http' || (a.kind === 
 
 // ---- the connected agents, kept in this browser ----
 
-export const CONNECTED_KEY = 'arena.connected.v1';
+export const CONNECTED_KEY = 'shakedown.connected.v1';
 
 const validAgent = (x: unknown): x is AgentSpec => {
   const a = x as AgentSpec | null;

@@ -14,7 +14,7 @@ pub fn data_dir() -> PathBuf {
 
 pub fn pg_url() -> String {
     arena_part::settings::var("SHAKEDOWN_PG_URL")
-        .unwrap_or_else(|_| "postgres://arena:arena@127.0.0.1:5544/postgres".into())
+        .unwrap_or_else(|_| "postgres://shakedown:shakedown@127.0.0.1:5544/postgres".into())
 }
 
 pub fn retail() -> Retail {

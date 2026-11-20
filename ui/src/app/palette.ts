@@ -106,7 +106,7 @@ export function placeholderOf(mode: Mode): string {
 }
 
 /** Asks the app to open the palette in `mode` (a run's ⋯ → "Compare with another run…"). */
-export const PALETTE_EVENT = 'arena:palette';
+export const PALETTE_EVENT = 'shakedown:palette';
 
 export function openPalette(mode: Mode) {
   window.dispatchEvent(new CustomEvent<Mode>(PALETTE_EVENT, { detail: mode }));

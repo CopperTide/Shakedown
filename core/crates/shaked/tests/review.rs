@@ -27,7 +27,7 @@ mod support;
 
 fn db_name() -> String {
     format!(
-        "arena_test_review_{}",
+        "shakedown_test_review_{}",
         &uuid::Uuid::new_v4().simple().to_string()[..8]
     )
 }

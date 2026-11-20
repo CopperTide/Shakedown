@@ -3,7 +3,7 @@
 export type ThemePref = 'system' | 'light' | 'dark';
 export type Theme = 'light' | 'dark';
 
-export const THEME_KEY = 'arena.theme';
+export const THEME_KEY = 'shakedown.theme';
 
 export function resolveTheme(pref: ThemePref, systemDark: boolean): Theme {
   if (pref === 'system') return systemDark ? 'dark' : 'light';

@@ -1,9 +1,9 @@
-// The team new runs use, kept in this browser (`arena.team.v1`), else the benchmark's default.
+// The team new runs use, kept in this browser (`shakedown.team.v1`), else the benchmark's default.
 import { defaultTeam, suggestedTeams } from '@/api/benchmark';
 import { isUntouched } from '@/model/team';
 import type { Team } from '@/model/types';
 
-export const TEAM_KEY = 'arena.team.v1';
+export const TEAM_KEY = 'shakedown.team.v1';
 
 function valid(t: unknown): t is Team {
   const x = t as Team | null;

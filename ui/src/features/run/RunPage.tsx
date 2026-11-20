@@ -170,7 +170,7 @@ export default function Run() {
         {v.notice && <Notice onDismiss={() => v.setNotice(null)}>{v.notice}</Notice>}
         <RunErrorBanner error={error} onRetry={reload} detail={detail} />
         <RunReview d={detail} onStep={v.setSelected} />
-        <Split storageKey="arena.run.side" main={<Main detail={detail} timeline={timeline} selected={v.selected} onSelect={v.setSelected} models={models} setModels={setModels} />}
+        <Split storageKey="shakedown.run.side" main={<Main detail={detail} timeline={timeline} selected={v.selected} onSelect={v.setSelected} models={models} setModels={setModels} />}
           side={<Side runId={runId} detail={detail} event={event} forking={v.forking} setForking={v.setForking} autoRows={v.autoRows} choice={v.choice} />} />
         <More detail={detail} />
       </PageBody>

@@ -85,7 +85,7 @@ pub struct AppSetup {
 
 impl AppFx {
     /// An app that runs no agent (open mode offered on [`app::NOWHERE`] only); its store is
-    /// `arena_test_<kind>_<tag>_…`.
+    /// `shakedown_test_<kind>_<tag>_…`.
     pub fn idle(kind: &str, tag: &str) -> AppSetup {
         AppSetup {
             kind: kind.into(),

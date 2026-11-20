@@ -11,7 +11,7 @@ use std::sync::OnceLock;
 
 fn url() -> String {
     arena_part::settings::var("SHAKEDOWN_PG_URL")
-        .unwrap_or_else(|_| "postgres://arena:arena@127.0.0.1:5544/postgres".into())
+        .unwrap_or_else(|_| "postgres://shakedown:shakedown@127.0.0.1:5544/postgres".into())
 }
 
 fn arena() -> PathBuf {

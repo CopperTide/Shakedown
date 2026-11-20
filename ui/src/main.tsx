@@ -1,3 +1,4 @@
+import './app/storageNames';
 import '@fontsource-variable/inter';
 import '@fontsource-variable/jetbrains-mono';
 import { StrictMode } from 'react';

@@ -1,5 +1,5 @@
 //! The real packages (`arena-postgres`, `arena-retail`, built once per test binary) behind a hub
-//! of the test's own: its own Postgres namespace (`?arena_ns=` on `SHAKEDOWN_PG_URL`) and its own save
+//! of the test's own: its own Postgres namespace (`?shakedown_ns=` on `SHAKEDOWN_PG_URL`) and its own save
 //! folder, both removed when the `TestHub` drops, so tests never touch each other's databases or
 //! the live shaked's.
 #![allow(dead_code)]
@@ -149,7 +149,7 @@ fn hub_on(ns: &str, saves: &Path, extra: &[PathBuf]) -> Arc<Hub> {
     .with_arena_dir(arena())
     .with_env(vec![(
         "SHAKEDOWN_PG_URL".into(),
-        format!("{url}{sep}arena_ns={ns}"),
+        format!("{url}{sep}shakedown_ns={ns}"),
     )]);
     Arc::new(hub)
 }

@@ -3,7 +3,7 @@
 // remembers (`?core=` with nothing clears it). A core on another origin must allow this UI's
 // origin: start it with SHAKEDOWN_CORS_ORIGIN=<the UI's origin>.
 
-export const CORE_KEY = 'arena.core';
+export const CORE_KEY = 'shakedown.core';
 /** The core this build was made for: `VITE_SHAKEDOWN_URL`, else its old name `VITE_ARENA_URL`. */
 const BUILT_CORE: string | undefined = import.meta.env.VITE_SHAKEDOWN_URL ?? import.meta.env.VITE_ARENA_URL;
 

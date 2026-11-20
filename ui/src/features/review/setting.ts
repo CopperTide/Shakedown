@@ -4,7 +4,7 @@ import { useQuery } from '@/hooks/useQuery';
 import type { ReviewSettings } from '@/model/review';
 
 /** This browser's choice (⋯ → AI review): on unless turned off. */
-export const REVIEW_KEY = 'arena.review';
+export const REVIEW_KEY = 'shakedown.review';
 
 /** The stored choice read as on or off: anything but "off" is on. */
 export const parseOn = (v: string | null) => v !== 'off';

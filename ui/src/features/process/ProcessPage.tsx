@@ -62,7 +62,7 @@ export default function ProcessPage() {
         actions={<RunMenu runId={runId} d={d} page="process" step={selected} />} />
       <PageBody>
         <RunErrorBanner error={error} onRetry={reload} detail={d} />
-        <Split storageKey="arena.process.side" main={<Main d={d} timeline={timeline} selected={selected} onSelect={setSelected} models={models} setModels={setModels} />}
+        <Split storageKey="shakedown.process.side" main={<Main d={d} timeline={timeline} selected={selected} onSelect={setSelected} models={models} setModels={setModels} />}
           side={<StepSidePanel><Inspector branchId={d.id} event={d.events.find((e) => e.seq === selected) ?? null} team={d.team} events={d.events} /></StepSidePanel>} />
       </PageBody>
     </>

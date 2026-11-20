@@ -436,7 +436,7 @@ fn an_experiment_takes_more_than_four_setups_and_a_hundred_runs() {
 /// A fresh metadata database's name, dropped with the returned guard.
 fn fresh_db() -> (String, Cleanup) {
     let id = uuid::Uuid::new_v4().simple().to_string();
-    let name = format!("arena_test_experiments_restart_{}", &id[..8]);
+    let name = format!("shakedown_test_experiments_restart_{}", &id[..8]);
     let clean = Cleanup::new();
     clean.add(&name);
     (name, clean)

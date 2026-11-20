@@ -171,8 +171,7 @@ async fn start_proxy(state: &std::sync::Arc<shaked::app::AppState>) -> anyhow::R
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let url = parts::settings::var("SHAKEDOWN_PG_URL")
-        .unwrap_or_else(|_| "postgres://arena:arena@127.0.0.1:5544/postgres".to_string());
+    let url = shaked::pg::configured_url().await;
     let port = port_from_env()?;
     let ui_dist = ui_dist_from_env();
 

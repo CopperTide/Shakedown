@@ -277,7 +277,7 @@ async fn hub_env_overrides_reach_command_programs() {
     let hub = hub_for(std::slice::from_ref(&root), &saves).with_env(vec![
         (
             "SHAKEDOWN_PG_URL".into(),
-            "postgres://x/y?arena_ns=t_".into(),
+            "postgres://x/y?shakedown_ns=t_".into(),
         ),
         ("EXTRA".into(), "yes".into()),
     ]);
@@ -285,7 +285,7 @@ async fn hub_env_overrides_reach_command_programs() {
     match c.call::<Value>("describe", json!({})).await {
         Err(CallError::Stopped(m)) => {
             assert!(
-                m.contains("SHAKEDOWN_PG_URL=postgres://x/y?arena_ns=t_ EXTRA=yes"),
+                m.contains("SHAKEDOWN_PG_URL=postgres://x/y?shakedown_ns=t_ EXTRA=yes"),
                 "{m}"
             );
         }

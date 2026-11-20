@@ -54,7 +54,8 @@ class LocalShakedown(Shakedown):
         packages: folders whose subfolders hold ``shakedown-package.toml`` (``SHAKEDOWN_PACKAGES``); default:
             shaked's own (``integrations`` and ``benchmarks`` of its checkout).
         pg_url: the Postgres server for shaked's records (``SHAKEDOWN_PG_URL``); default shaked's
-            (``postgres://arena:arena@127.0.0.1:5544/postgres``, ``deploy/compose.yml``).
+            (``SHAKEDOWN_PG_URL``, else ``deploy/compose.yml``'s, ``postgres://shakedown:shakedown@127.0.0.1:5544/postgres``,
+            else the same server's old user ``arena``).
         saves: where saves go (``SHAKEDOWN_SAVES``); default a temporary folder removed on close.
         bin_dir: what ``${SHAKEDOWN_BIN_DIR}`` means in package manifests, and where to find shaked.
         shaked: the shaked binary (default: found in ``bin_dir``, ``$SHAKEDOWN_BIN_DIR`` or PATH).

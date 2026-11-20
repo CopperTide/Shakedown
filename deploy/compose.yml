@@ -2,8 +2,10 @@ services:
   pg:
     image: postgres:17-alpine
     environment:
-      POSTGRES_USER: arena
-      POSTGRES_PASSWORD: arena
+      # `shakedown` since 2026-11-19; a server made before keeps its user `arena`, which shaked
+      # still connects as when no URL is set (README.md, Old names).
+      POSTGRES_USER: shakedown
+      POSTGRES_PASSWORD: shakedown
     ports:
       - "127.0.0.1:5544:5432"
     volumes:
