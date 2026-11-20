@@ -18,8 +18,6 @@ use shakedown_part::{Part, PartError};
 use tokio_postgres::types::{ToSql, Type};
 use tokio_postgres::Client;
 
-const DEFAULT_URL: &str = "postgres://shakedown:shakedown@127.0.0.1:5544/postgres";
-
 pub struct Postgres {
     pg: Templates,
     ns: String,
@@ -82,8 +80,7 @@ impl Postgres {
     }
 
     pub fn from_env() -> Postgres {
-        let url = shakedown_part::settings::var("SHAKEDOWN_PG_URL")
-            .unwrap_or_else(|_| DEFAULT_URL.into());
+        let url = shakedown_part::helpers::pg::configured_url();
         // shaked passes `SHAKEDOWN_PG_URL` on to programs but not other variables, so the namespace can
         // also ride on the URL as `?shakedown_ns=<ns>`.
         let (url, from_url) = split_ns(&url);

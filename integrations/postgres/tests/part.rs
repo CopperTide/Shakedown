@@ -10,8 +10,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::OnceLock;
 
 fn url() -> String {
-    shakedown_part::settings::var("SHAKEDOWN_PG_URL")
-        .unwrap_or_else(|_| "postgres://shakedown:shakedown@127.0.0.1:5544/postgres".into())
+    shakedown_part::helpers::pg::configured_url()
 }
 
 fn repo() -> PathBuf {

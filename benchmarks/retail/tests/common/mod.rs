@@ -13,8 +13,7 @@ pub fn data_dir() -> PathBuf {
 }
 
 pub fn pg_url() -> String {
-    shakedown_part::settings::var("SHAKEDOWN_PG_URL")
-        .unwrap_or_else(|_| "postgres://shakedown:shakedown@127.0.0.1:5544/postgres".into())
+    shakedown_part::helpers::pg::configured_url()
 }
 
 pub fn retail() -> Retail {

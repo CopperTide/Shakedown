@@ -15,7 +15,7 @@ and instances not running.
 - Start with config `init_sql` runs it in a fresh empty database; start `from` a save copies it.
 - `inspect` keys are `<table>/<primary key>` (tables with a one-column primary key); `diff` compares all rows.
 - `connect` gives `{url}` for benchmarks to use.
-- The server is `SHAKEDOWN_PG_URL` (default `postgres://shakedown:shakedown@127.0.0.1:5544/postgres`); shaked always passes its own.
+- The server is `SHAKEDOWN_PG_URL` (default `postgres://shakedown:shakedown@127.0.0.1:5544/postgres`, else the old login `arena:arena` there when `shakedown` is refused, as shaked chooses); shaked always passes its own.
 - No tools by default, so agents get none from this package. `shakedown-postgres --sql-tools` lists and serves
   `sql_query` and `sql_execute`.
 - Old runs: an id naming an existing `snap_*`, `branch_*`, `gold_*` database or `world_base` is used as it is;
