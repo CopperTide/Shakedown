@@ -72,10 +72,24 @@ class McpError(ShakedownError):
 
 
 class McpClient:
-    def __init__(self, url: str, http: Optional[httpx.Client] = None, timeout: float = 600.0):
+    def __init__(
+        self,
+        url: str,
+        http: Optional[httpx.Client] = None,
+        timeout: float = 600.0,
+        token: Optional[str] = None,
+    ):
+        """``token``: the agent's token (``sda_…``), sent as ``Authorization: Bearer`` on each call."""
         self.url = url
+        self._token = token
         self._http = http or httpx.Client(timeout=timeout)
         self._ids = itertools.count(1)
+
+    def _headers(self) -> dict[str, str]:
+        h = {"accept": "application/json, text/event-stream"}
+        if self._token:
+            h["authorization"] = f"Bearer {self._token}"
+        return h
 
     def _rpc(self, method: str, params: Optional[dict[str, Any]] = None) -> Any:
         body = {"jsonrpc": "2.0", "id": next(self._ids), "method": method, "params": params or {}}
@@ -83,7 +97,7 @@ class McpClient:
             r = self._http.post(
                 self.url,
                 json=body,
-                headers={"accept": "application/json, text/event-stream"},
+                headers=self._headers(),
             )
         except httpx.TransportError as e:
             raise ConnectionFailed(f"MCP endpoint {self.url}: {e}") from e

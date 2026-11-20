@@ -40,4 +40,4 @@ def tools(agent: Any) -> list[StructuredTool]:
 def chat_model(agent: Any, model: str, **kw: Any) -> ChatOpenAI:
     """A chat model whose calls go through the agent's gateway (recorded, priced, and its
     reasoning kept)."""
-    return ChatOpenAI(model=model, base_url=agent.gateway_url, api_key=GATEWAY_KEY, **kw)
+    return ChatOpenAI(model=model, base_url=agent.gateway_url, api_key=getattr(agent, "token", None) or GATEWAY_KEY, **kw)

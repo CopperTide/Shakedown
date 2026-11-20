@@ -12,10 +12,13 @@ CALLS = 45
 READS = ("list_all_product_types",)
 
 
+HEADERS: dict = {}
+
+
 def rpc(url: str, method: str, params: dict, n: int) -> dict:
     body = json.dumps({"jsonrpc": "2.0", "id": n, "method": method, "params": params}).encode()
     req = urllib.request.Request(url, body, {"content-type": "application/json",
-                                             "accept": "application/json, text/event-stream"})
+                                             "accept": "application/json, text/event-stream", **HEADERS})
     with urllib.request.urlopen(req, timeout=60) as r:
         return json.loads(r.read()).get("result") or {}
 
@@ -30,8 +33,12 @@ def pick(tools: list) -> str:
 
 def main() -> None:
     args = sys.argv[1:]
-    config = json.loads(args[args.index("--mcp-config") + 1])
-    url = next(iter(config["mcpServers"].values()))["url"]
+    given = args[args.index("--mcp-config") + 1]
+    # Inline JSON, or (with the agent's token in its headers) the path of a config file.
+    config = json.loads(given if given.lstrip().startswith("{") else open(given).read())
+    server = next(iter(config["mcpServers"].values()))
+    url = server["url"]
+    HEADERS.update(server.get("headers") or {})
     rpc(url, "initialize", {"protocolVersion": "2025-06-18", "capabilities": {},
                             "clientInfo": {"name": "fake-claude"}}, 1)
     tool = pick(rpc(url, "tools/list", {}, 2)["tools"])

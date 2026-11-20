@@ -60,7 +60,7 @@ def tools(agent: Any) -> list[BaseTool]:
 
 def llm(agent: Any, model: str, **kw: Any) -> LLM:
     """An ``LLM`` whose calls go through the agent's gateway (OpenAI-compatible)."""
-    return LLM(model=f"openai/{model}", base_url=agent.gateway_url, api_key=GATEWAY_KEY, **kw)
+    return LLM(model=f"openai/{model}", base_url=agent.gateway_url, api_key=getattr(agent, "token", None) or GATEWAY_KEY, **kw)
 
 
 def step_callback(agent: Any) -> Callable[[Any], None]:

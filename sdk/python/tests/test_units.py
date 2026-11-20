@@ -454,3 +454,28 @@ def test_token_is_sent_and_never_shown(monkeypatch):
     assert from_env._http.headers.get("authorization") == "Bearer sd_fromenv"
     monkeypatch.delenv("SHAKEDOWN_TOKEN")
     assert "authorization" not in Shakedown("http://shaked.test")._http.headers
+
+
+def test_an_agents_token_reaches_its_mcp_calls_gateway_and_config():
+    import httpx
+
+    from shakedown import Shakedown
+    from shakedown.client import AgentEndpoint, Branch
+
+    seen = {}
+
+    def answer(request):
+        seen["auth"] = request.headers.get("authorization")
+        return httpx.Response(200, json={"jsonrpc": "2.0", "id": 1, "result": {"tools": []}})
+
+    sd = Shakedown("http://shaked.test", token="sd_api")
+    sd._http = httpx.Client(base_url=sd.url, transport=httpx.MockTransport(answer))
+    branch = Branch.__new__(Branch)
+    branch.shakedown, branch.id = sd, "b1"
+    answer_d = {"agent": "a", "mcp_url": "http://shaked.test/mcp/b1/a", "gateway_url": "http://shaked.test/gateway/b1/a/v1",
+                "token": "sda_agent"}
+    a = AgentEndpoint.from_answer(branch, answer_d)
+    a.mcp.list_tools()
+    assert seen["auth"] == "Bearer sda_agent", "the agent's own token, not the API token"
+    assert a.token == "sda_agent" and "sda_agent" not in repr(a)
+    assert a.mcp_config()["mcpServers"]["shakedown"]["headers"] == {"Authorization": "Bearer sda_agent"}

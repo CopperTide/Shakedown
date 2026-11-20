@@ -721,6 +721,7 @@ class AgentEndpoint:
         history: Optional[list[Event]] = None,
         proxy_url: Optional[str] = None,
         env: Optional[dict[str, str]] = None,
+        token: Optional[str] = None,
     ):
         self.branch = branch
         self.id = agent_id
@@ -736,14 +737,16 @@ class AgentEndpoint:
         self._tools = tools
         #: Set once :meth:`end` recorded the agent done.
         self.ended = False
-        self.mcp = McpClient(mcp_url, branch.shakedown._http)
+        #: The agent's token (``sda_…``) for ``mcp_url`` and ``gateway_url``; never shown.
+        self.token = token
+        self.mcp = McpClient(mcp_url, branch.shakedown._http, token=token)
 
     @classmethod
     def from_answer(cls, branch: Branch, d: dict[str, Any]) -> "AgentEndpoint":
         tools = [Tool.from_dict(t) for t in d["tools"]] if d.get("tools") is not None else None
         hist = [Event.from_dict(e) for e in d.get("history") or []]
         return cls(branch, d["agent"], d["mcp_url"], d["gateway_url"], tools, d.get("spec"), hist,
-                   d.get("proxy_url"), d.get("env"))
+                   d.get("proxy_url"), d.get("env"), d.get("token"))
 
     def __repr__(self) -> str:
         return f"AgentEndpoint({self.id!r}, branch={self.branch.id!r})"
@@ -805,7 +808,10 @@ class AgentEndpoint:
 
     def mcp_config(self, name: str = "shakedown") -> dict[str, Any]:
         """An ``mcpServers`` config for Claude Code (``--mcp-config``) and other MCP hosts."""
-        return {"mcpServers": {name: {"type": "http", "url": self.mcp_url}}}
+        server: dict[str, Any] = {"type": "http", "url": self.mcp_url}
+        if self.token:
+            server["headers"] = {"Authorization": f"Bearer {self.token}"}
+        return {"mcpServers": {name: server}}
 
 
 class Suite(OldConnectionName):

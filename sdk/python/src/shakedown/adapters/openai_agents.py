@@ -55,5 +55,5 @@ def model(agent: Any, model: str) -> OpenAIChatCompletionsModel:
     record is in Shakedown."""
     if not os.environ.get("OPENAI_API_KEY"):
         set_tracing_disabled(True)
-    client = AsyncOpenAI(base_url=agent.gateway_url, api_key=GATEWAY_KEY)
+    client = AsyncOpenAI(base_url=agent.gateway_url, api_key=getattr(agent, "token", None) or GATEWAY_KEY)
     return OpenAIChatCompletionsModel(model=model, openai_client=client)
