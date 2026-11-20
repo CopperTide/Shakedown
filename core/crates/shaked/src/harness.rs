@@ -49,6 +49,7 @@ struct Spy {
     /// The policy once packages are sandboxed (see [`SpyLayer::sandbox_packages`]).
     sandboxed: std::sync::OnceLock<Policy>,
     headers: Mutex<Vec<String>>,
+    digests: Mutex<Vec<Option<BodySha256>>>,
     shares_keys: std::sync::atomic::AtomicBool,
 }
 
@@ -120,6 +121,11 @@ impl SpyLayer {
         self
     }
 
+    /// The body digest `authenticate` was shown on each request, in order.
+    pub fn seen_digests(&self) -> Vec<Option<BodySha256>> {
+        self.0.digests.lock().unwrap().clone()
+    }
+
     /// The header names `authenticate` was shown, over every request.
     pub fn seen_headers(&self) -> Vec<String> {
         self.0.headers.lock().unwrap().clone()
@@ -158,6 +164,8 @@ impl Layer for SpyLayer {
         self.saw(Call::Authenticate);
         let names = req.headers.keys().map(|k| k.as_str().to_string());
         self.0.headers.lock().unwrap().extend(names);
+        let digest = req.extensions.get::<BodySha256>().copied();
+        self.0.digests.lock().unwrap().push(digest);
         let refused = self.0.refuse.lock().unwrap().clone();
         async move {
             match refused {

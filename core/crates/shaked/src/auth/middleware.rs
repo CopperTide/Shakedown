@@ -88,6 +88,27 @@ async fn found_caller(
     }
 }
 
+/// The largest body a request to a layer that serves others may carry: axum's own limit for the
+/// API's JSON bodies, which this buffering must not raise.
+const BODY_LIMIT: usize = 2 * 1024 * 1024;
+
+/// Reads `body` whole, puts its [`BodySha256`](crate::layer::BodySha256) in `parts` for the
+/// layer's `authenticate`, and hands the same bytes on; 413 past [`BODY_LIMIT`].
+async fn digested(
+    parts: &mut axum::http::request::Parts,
+    body: axum::body::Body,
+) -> Result<axum::body::Body, Box<Response>> {
+    let Ok(bytes) = axum::body::to_bytes(body, BODY_LIMIT).await else {
+        let too_large = StatusCode::PAYLOAD_TOO_LARGE;
+        return Err(Box::new(refuse(too_large, "the request body is too large")));
+    };
+    let sum = ring::digest::digest(&ring::digest::SHA256, &bytes);
+    let mut digest = [0u8; 32];
+    digest.copy_from_slice(sum.as_ref());
+    parts.extensions.insert(crate::layer::BodySha256(digest));
+    Ok(axum::body::Body::from(bytes))
+}
+
 /// Drops `x-sculptured-*` headers (locally), resolves a Bearer token, then asks the layer who calls.
 pub async fn authenticate(
     State(state): State<Arc<AppState>>,
@@ -107,7 +128,13 @@ pub async fn authenticate(
         Ok(found) => found,
         Err(answer) => return *answer,
     };
-    let (mut parts, body) = req.into_parts();
+    let (mut parts, mut body) = req.into_parts();
+    if state.store.layer().policy().serves_others {
+        body = match digested(&mut parts, body).await {
+            Ok(body) => body,
+            Err(answer) => return *answer,
+        };
+    }
     let who = state.store.layer().authenticate(&parts, found).await;
     match who {
         Ok(c) => {

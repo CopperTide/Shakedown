@@ -347,6 +347,37 @@ fn gateway_headers_reach_only_a_layer_that_serves_others() {
     })
 }
 
+/// I4: a layer that serves others is shown the SHA-256 of each request's body, so a signature
+/// can cover it, and the handler still reads the same body; a local layer is shown none.
+#[test]
+fn a_serving_layer_is_shown_the_body_digest() {
+    run(async {
+        let serving = Policy {
+            serves_others: true,
+            ..Policy::LOCAL
+        };
+        for (policy, shown) in [(Policy::LOCAL, false), (serving, true)] {
+            let spy = SpyLayer::new().with_policy(policy);
+            let fx = AppFx::idle("layer", "bodydigest")
+                .layer(Arc::new(spy.clone()))
+                .start()
+                .await;
+            let body = br#"{"name": "ci", "scopes": ["read"]}"#;
+            let r = fx.http.post(format!("{}/api/tokens", fx.base));
+            let r = r.header("content-type", "application/json").body(&body[..]);
+            let r = r.send().await.unwrap();
+            assert_eq!(r.status(), 200, "the handler read the body: {policy:?}");
+            let sum = ring::digest::digest(&ring::digest::SHA256, body);
+            let want = shown.then(|| shaked::layer::BodySha256(sum.as_ref().try_into().unwrap()));
+            assert_eq!(
+                spy.seen_digests().last().copied().flatten(),
+                want,
+                "{policy:?}"
+            );
+        }
+    })
+}
+
 /// The operator's environment: keys for OpenAI and Anthropic, and a local server.
 fn operator_env() -> shaked::providers::ProviderConfig {
     use shaked::providers::{Endpoint, LocalEndpoint, ProviderConfig, Secret};

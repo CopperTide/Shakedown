@@ -25,6 +25,11 @@ pub struct Policy {
     pub environment_keys: bool,
 }
 
+/// The SHA-256 of a request's body. A layer that serves others finds it in the request's
+/// extensions in `authenticate`, so a signature it checks can cover the body.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BodySha256(pub [u8; 32]);
+
 /// An answer that stops a request: its status and message.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Refusal {
