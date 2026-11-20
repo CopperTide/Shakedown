@@ -5,6 +5,9 @@
 //!   Studio, llama.cpp server), each the provider `local:<name>`;
 //! - `ARENA_LOCAL_KEY_<NAME>`: an optional key for `local:<name>` (`<NAME>` upper-cased, `-` as
 //!   `_`);
+//! - `ARENA_LOCAL_PRICE_<NAME>="<in>,<out>"`: an optional token rate for `local:<name>`, in USD per
+//!   million prompt and completion tokens, so its calls are priced (and count toward a run's
+//!   spend limit);
 //! - `ARENA_ANTHROPIC_MAX_TOKENS`: the output budget of a Claude call that names none (16000).
 //!
 //! Keys are held as [`Secret`]s: never logged, printed, serialized or recorded.
@@ -16,6 +19,7 @@ pub const OPENAI_BASE: &str = "https://api.openai.com/v1";
 pub const ANTHROPIC_BASE: &str = "https://api.anthropic.com/v1";
 pub const LOCAL_MODELS_ENV: &str = "ARENA_LOCAL_MODELS";
 pub const LOCAL_KEY_PREFIX: &str = "ARENA_LOCAL_KEY_";
+pub const LOCAL_PRICE_PREFIX: &str = "ARENA_LOCAL_PRICE_";
 pub const ANTHROPIC_MAX_TOKENS_ENV: &str = "ARENA_ANTHROPIC_MAX_TOKENS";
 /// The `max_tokens` of a Claude call that names none (the Messages API requires one).
 pub const DEFAULT_ANTHROPIC_MAX_TOKENS: u64 = 16_000;
@@ -62,6 +66,40 @@ impl Endpoint {
 pub struct LocalEndpoint {
     pub name: String,
     pub endpoint: Endpoint,
+    /// The token rate declared for it (`ARENA_LOCAL_PRICE_<NAME>`); None: its calls cost 0.
+    pub rate: Option<Rate>,
+}
+
+/// A declared token rate, in USD per million tokens.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Rate {
+    pub input_per_mtok: f64,
+    pub output_per_mtok: f64,
+}
+
+impl Rate {
+    /// What a call with the OpenAI-shape `usage` costs: prompt tokens (cached ones too) at the
+    /// input rate, completion tokens at the output rate.
+    pub fn cost(&self, usage: &serde_json::Value) -> f64 {
+        let n = |k: &str| usage[k].as_f64().unwrap_or(0.0);
+        n("prompt_tokens") * self.input_per_mtok / 1e6
+            + n("completion_tokens") * self.output_per_mtok / 1e6
+    }
+
+    /// `"<in>,<out>"`: two finite numbers at least 0.
+    fn parse(text: &str) -> Option<Rate> {
+        let (a, b) = text.trim().split_once(',')?;
+        let price = |t: &str| {
+            t.trim()
+                .parse::<f64>()
+                .ok()
+                .filter(|v| v.is_finite() && *v >= 0.0)
+        };
+        Some(Rate {
+            input_per_mtok: price(a)?,
+            output_per_mtok: price(b)?,
+        })
+    }
 }
 
 /// The providers' endpoints and keys.
@@ -106,6 +144,35 @@ pub fn local_key_env(name: &str) -> String {
     )
 }
 
+/// The name of the env var holding the token rate of `local:<name>`.
+pub fn local_price_env(name: &str) -> String {
+    format!(
+        "{LOCAL_PRICE_PREFIX}{}",
+        name.to_ascii_uppercase().replace('-', "_")
+    )
+}
+
+/// Each local server's rate from `get`; a value that is no rate is a problem naming its env var
+/// (never the value), and that server stays unrated.
+fn rate_locals(
+    locals: &mut [LocalEndpoint],
+    get: &impl Fn(&str) -> Option<String>,
+    problems: &mut Vec<String>,
+) {
+    for l in locals {
+        let var = local_price_env(&l.name);
+        let Some(text) = get(&var).filter(|v| !v.trim().is_empty()) else {
+            continue;
+        };
+        l.rate = Rate::parse(&text);
+        if l.rate.is_none() {
+            problems.push(format!(
+                "{var} must be the input and output prices in dollars per million tokens, two numbers at least zero (in,out); it was ignored"
+            ));
+        }
+    }
+}
+
 fn valid_local_name(name: &str) -> bool {
     !name.is_empty()
         && name
@@ -141,6 +208,7 @@ impl ProviderConfig {
         let (locals, bad) = parse_locals(&list, |name| key(&local_key_env(name)));
         config.locals = locals;
         problems.extend(bad.into_iter().map(|p| format!("{LOCAL_MODELS_ENV}: {p}")));
+        rate_locals(&mut config.locals, &get, &mut problems);
         match max_tokens(get(ANTHROPIC_MAX_TOKENS_ENV)) {
             Ok(n) => config.anthropic_max_tokens = n,
             Err(p) => problems.push(p),
@@ -167,6 +235,7 @@ impl ProviderConfig {
         self.locals.push(LocalEndpoint {
             name: CUSTOM_LOCAL.to_string(),
             endpoint: Endpoint::new(base, None),
+            rate: None,
         });
         self.default = format!("{LOCAL_PREFIX}{CUSTOM_LOCAL}");
     }
@@ -216,6 +285,7 @@ fn parse_locals(
             Ok((name, base)) => locals.push(LocalEndpoint {
                 endpoint: Endpoint::new(base, key_of(name)),
                 name: name.to_string(),
+                rate: None,
             }),
             Err(p) => problems.push(p),
         }
@@ -341,6 +411,45 @@ mod tests {
             "http://127.0.0.1:9/v1"
         );
         assert_eq!(local_key_env("my-box"), "ARENA_LOCAL_KEY_MY_BOX");
+    }
+
+    #[test]
+    fn local_prices_come_from_the_environment() {
+        let (c, problems) = config_of(&[
+            (LOCAL_MODELS_ENV, "pod=http://a/v1,box=http://b/v1"),
+            ("ARENA_LOCAL_PRICE_POD", " 0.15,0.60 "),
+        ]);
+        assert!(problems.is_empty(), "{problems:?}");
+        let rate = Rate {
+            input_per_mtok: 0.15,
+            output_per_mtok: 0.60,
+        };
+        assert_eq!((c.locals[0].rate, c.locals[1].rate), (Some(rate), None));
+        assert_eq!(local_price_env("my-box"), "ARENA_LOCAL_PRICE_MY_BOX");
+        for bad in ["-1,2", "x", "1", "1,2,3", "inf,1"] {
+            let (c, problems) = config_of(&[
+                (LOCAL_MODELS_ENV, "pod=http://a/v1"),
+                ("ARENA_LOCAL_PRICE_POD", bad),
+            ]);
+            assert_eq!((c.locals[0].rate, problems.len()), (None, 1), "{bad}");
+            assert!(
+                problems[0].starts_with("ARENA_LOCAL_PRICE_POD"),
+                "{problems:?}"
+            );
+            assert!(!problems[0].contains(bad), "{problems:?}");
+        }
+    }
+
+    #[test]
+    fn a_rate_prices_prompt_and_completion_tokens() {
+        let rate = Rate {
+            input_per_mtok: 0.15,
+            output_per_mtok: 0.60,
+        };
+        let usage = serde_json::json!({"prompt_tokens": 812, "completion_tokens": 64,
+                                       "prompt_tokens_details": {"cached_tokens": 768}});
+        assert!((rate.cost(&usage) - (812.0 * 0.15e-6 + 64.0 * 0.60e-6)).abs() < 1e-15);
+        assert_eq!(rate.cost(&serde_json::json!({})), 0.0);
     }
 
     #[test]

@@ -167,6 +167,7 @@ mod tests {
             kind: ProviderKind::Bedrock,
             endpoint: Endpoint::new(base, None),
             max_tokens: 1024,
+            rate: None,
         }
     }
 

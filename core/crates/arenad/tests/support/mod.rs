@@ -3,6 +3,7 @@
 #![allow(dead_code)]
 
 pub mod app;
+pub mod fake_llm;
 pub mod legacy;
 pub mod live;
 pub mod live_world;

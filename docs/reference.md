@@ -112,6 +112,10 @@ Environment variables, read once at startup by arenad:
   given twice after its first, is skipped with a warning on stderr that never shows the URL.
 - `ARENA_LOCAL_KEY_<NAME>`: an optional key for `local:<name>`, sent as a bearer token (`<NAME>` is the name
   upper-cased, with `-` as `_`).
+- `ARENA_LOCAL_PRICE_<NAME>`: an optional token rate for `local:<name>`, `<in>,<out>` in USD per million prompt and
+  completion tokens (cached prompt tokens at the input rate), so its calls are priced (cost source "rate set for this
+  local server") and count toward a run's `max_cost_usd`. Without it a local server's calls cost 0. A value that
+  isn't two numbers at least 0 is reported at startup (never the value) and the server stays unrated.
 - `ARENA_ANTHROPIC_MAX_TOKENS`: the `max_tokens` of a Claude call whose request names none (default 16000). A
   value that isn't a positive whole number is reported at startup and the default is used.
 - `ARENA_REVIEW`: `on` or `off` (default on when the reviewer can run). Off: no review is started and nothing is

@@ -16,9 +16,9 @@ use serde::Serialize;
 use serde_json::Value;
 
 pub use config::{
-    is_openrouter_url, local_key_env, Endpoint, LocalEndpoint, ProviderConfig, Secret,
-    ANTHROPIC_BASE, ANTHROPIC_MAX_TOKENS_ENV, DEFAULT_ANTHROPIC_MAX_TOKENS, LOCAL_KEY_PREFIX,
-    LOCAL_MODELS_ENV, OPENAI_BASE, OPENROUTER_BASE,
+    is_openrouter_url, local_key_env, local_price_env, Endpoint, LocalEndpoint, ProviderConfig,
+    Rate, Secret, ANTHROPIC_BASE, ANTHROPIC_MAX_TOKENS_ENV, DEFAULT_ANTHROPIC_MAX_TOKENS,
+    LOCAL_KEY_PREFIX, LOCAL_MODELS_ENV, OPENAI_BASE, OPENROUTER_BASE,
 };
 pub use listing::LIST_TIMEOUT;
 pub use status::{statuses, summary, ProviderStatus, KEY_REJECTED, NOT_CHECKED};
@@ -34,6 +34,8 @@ pub const CUSTOM_LOCAL: &str = "custom";
 /// The model of an OpenRouter agent that names none.
 pub const DEFAULT_OPENROUTER_MODEL: &str = "deepseek/deepseek-chat-v3.1";
 pub const LOCAL_COST_SOURCE: &str = "local (no API charge)";
+/// Where the cost of a call to a local server with a declared rate comes from.
+pub const LOCAL_RATE_COST_SOURCE: &str = "rate set for this local server";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -94,6 +96,8 @@ pub struct Provider {
     pub endpoint: Endpoint,
     /// The `max_tokens` of a call that names none, for an API that requires one (Claude's).
     pub max_tokens: u64,
+    /// A local server's declared token rate (`ARENA_LOCAL_PRICE_<NAME>`).
+    pub rate: Option<Rate>,
 }
 
 impl Provider {
@@ -103,6 +107,15 @@ impl Provider {
             kind,
             endpoint: endpoint.clone(),
             max_tokens: DEFAULT_ANTHROPIC_MAX_TOKENS,
+            rate: None,
+        }
+    }
+
+    /// A local server's provider `id`, with its rate.
+    fn local(id: impl Into<String>, l: &LocalEndpoint) -> Provider {
+        Provider {
+            rate: l.rate,
+            ..Provider::new(id, ProviderKind::Local, &l.endpoint)
         }
     }
 
@@ -134,12 +147,12 @@ impl Provider {
         }
     }
 
-    /// The cost of a successful call with `usage`: what OpenRouter reports, 0 on a local
-    /// server, unknown otherwise (no price table is kept).
+    /// The cost of a successful call with `usage`: what OpenRouter reports, a local server's
+    /// declared rate (else 0), unknown otherwise (no price table is kept).
     pub fn cost(&self, usage: &Value) -> Option<f64> {
         match self.kind {
             ProviderKind::OpenRouter => usage.get("cost").and_then(Value::as_f64),
-            ProviderKind::Local => Some(0.0),
+            ProviderKind::Local => Some(self.rate.map_or(0.0, |r| r.cost(usage))),
             ProviderKind::OpenAi | ProviderKind::Anthropic | ProviderKind::Bedrock => None,
         }
     }
@@ -148,6 +161,7 @@ impl Provider {
     pub fn cost_source(&self) -> Option<&'static str> {
         match self.kind {
             ProviderKind::OpenRouter => Some(OPENROUTER),
+            ProviderKind::Local if self.rate.is_some() => Some(LOCAL_RATE_COST_SOURCE),
             ProviderKind::Local => Some(LOCAL_COST_SOURCE),
             ProviderKind::OpenAi | ProviderKind::Anthropic | ProviderKind::Bedrock => None,
         }
@@ -175,7 +189,7 @@ impl ProviderConfig {
             _ => id
                 .strip_prefix(LOCAL_PREFIX)
                 .and_then(|name| self.local(name))
-                .map(|l| Provider::new(id, ProviderKind::Local, &l.endpoint)),
+                .map(|l| Provider::local(id, l)),
         };
         found.ok_or_else(|| {
             let known: Vec<String> = self.all().into_iter().map(|p| p.id).collect();
@@ -215,13 +229,9 @@ impl ProviderConfig {
             Provider::new(OPENAI, ProviderKind::OpenAi, &self.openai),
             self.anthropic(),
         ];
-        out.extend(self.locals.iter().map(|l| {
-            Provider::new(
-                format!("{LOCAL_PREFIX}{}", l.name),
-                ProviderKind::Local,
-                &l.endpoint,
-            )
-        }));
+        out.extend(
+            (self.locals.iter()).map(|l| Provider::local(format!("{LOCAL_PREFIX}{}", l.name), l)),
+        );
         out
     }
 
@@ -255,6 +265,7 @@ mod tests {
         c.locals.push(LocalEndpoint {
             name: "box".into(),
             endpoint: Endpoint::new("http://127.0.0.1:9/v1", None),
+            rate: None,
         });
         c
     }

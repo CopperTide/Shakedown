@@ -43,6 +43,7 @@ fn local(name: &str, base: &str, key: Option<&str>) -> LocalEndpoint {
     LocalEndpoint {
         name: name.into(),
         endpoint: Endpoint::new(base, key.map(Secret::new)),
+        rate: None,
     }
 }
 
