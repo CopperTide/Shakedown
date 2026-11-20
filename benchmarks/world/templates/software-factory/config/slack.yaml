@@ -1,0 +1,25 @@
+# The Slack twin (integrations/slack-twin): the engineering and incident channels, and the GitHub and PagerDuty
+# apps, which post what those systems tell the world (links in template.yaml). People are made users the first
+# time they post.
+hosts: [{host: "slack.{company.domain}"}]
+token: "{company.slug}-slack-token"
+default_user: "{company.slug}-admin"
+team: {name: "{company.name}", domain: "{company.slug}", email_domain: "{company.domain}"}
+channels:
+  - {name: eng, topic: Engineering, purpose: "Sprint work, reviews and deploys", general: true}
+  - {name: incidents, topic: Incidents, purpose: Pages and what on-call is doing}
+messages:
+  - {channel: eng, user: "{company.slug}-admin", text: "Sprint 14 has started: tickets are on the board.", at: -2d}
+apps:
+  - name: github
+    user: github
+    channel: "#eng"
+    messages:
+      pr_opened: "{/author} opened {/repo}#{/number}: {/title}"
+      pr_merged: "{/by} merged {/repo}#{/number}"
+  - name: pagerduty
+    user: pagerduty
+    channel: "#incidents"
+    messages:
+      incident_triggered: "{/incident} triggered on {/service}: {/summary} (paged {/assignee})"
+      alerts_cleared: "{/incident} on {/service}: alerts cleared"

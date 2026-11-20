@@ -29,7 +29,8 @@ read-only at `/app/traffic`, the contracts at `/app/contracts`, the clock at `/s
   of the repos' `contracts/`, checked by `test_traffic.py`) runs against the provider in production; failure lines
   are worded as `platform_lib.contracts` words them, plus no answer, a non-2xx status or a body that is not JSON.
 - Environment: `TRAFFIC_EVENTS` (`traffic-peak` or `traffic-peak@<minute>`, set by the template's
-  `events/traffic-peak.yaml`), `TRAFFIC_SEED`, `OTEL_EXPORTER_OTLP_ENDPOINT`, and for tests `TRAFFIC_CONFIG`,
+  `events/traffic-peak.yaml`), `TRAFFIC_SEED` (the template passes the world's seed as `world-<seed>`; a number
+  or text, empty for the data's), `OTEL_EXPORTER_OTLP_ENDPOINT`, and for tests `TRAFFIC_CONFIG`,
   `TRAFFIC_SERVICES`, `TRAFFIC_CONTRACTS`, `SHAKEDOWN_CLOCK_FILE`, `TRAFFIC_PORT`.
 
 ## Verified (2026-11-19, Linux x86_64, Docker Compose 5.0.2)

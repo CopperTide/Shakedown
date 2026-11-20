@@ -46,7 +46,9 @@ pdpyras at pinned versions.
 
 `run_tests` runs the repository's tests in this image, with no network. The world's application repositories
 need their own dependencies there. Build it on the image the world's CI uses for those tests:
-`WORKBENCH_BASE=<that image> workbench/build.sh`. On plain `python:3.12-slim` those tests fail to import.
+`WORKBENCH_BASE=<that image> workbench/build.sh`. On plain `python:3.12-slim` those tests fail to import. For the
+software-factory world, `benchmarks/world/templates/software-factory/images/build.sh workbench` does this with the
+world's base image (`shakedown-sf/base:1.0.0`, its `images.yaml`).
 
 ## Tests
 

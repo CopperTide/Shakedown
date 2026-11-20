@@ -1,0 +1,13 @@
+# The PagerDuty twin (integrations/pagerduty-twin): one service per production service (the alert link names it by
+# the alert's service_name), paging the on-call rotation of the world's on-call people. Resolve events only clear
+# an incident's alerts (auto_resolve: false), so on-call resolves it (rules/oncall.yaml).
+hosts: [{host: "api.pagerduty.{company.domain}"}, {host: "events.pagerduty.{company.domain}"}]
+token: "{company.slug}-pagerduty-token"
+default_user: "{company.slug}-admin"
+email_domain: "{company.domain}"
+schedules:
+  - {name: Primary, rotation: "{people.oncall.login}", shift_hours: 12, start: -1h}
+services:
+  - {name: storefront, schedule: Primary, integration_key: 3c1f8a2e9b7d4065a1e2f3c4d5b6a7e8, auto_resolve: false}
+  - {name: orders, schedule: Primary, integration_key: 7b2e9d4c1a8f4e36b5c0d9e8f7a6b5c4, auto_resolve: false}
+  - {name: inventory, schedule: Primary, integration_key: 9e4d2b7a3c1f4a58b6d0e2f1c3a5b7d9, auto_resolve: false}

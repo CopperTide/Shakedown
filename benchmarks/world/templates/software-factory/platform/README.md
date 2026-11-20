@@ -15,7 +15,8 @@ containers with the CI job and the traffic service, under 2600).
   no notifier; the `alerts/paging` watch turns paging alerts into world events.
 - GlitchTip 6.2.6, web and worker in one process (lean) or two containers (full), no Valkey; `glitchtip/init.sh`
   makes the organisation, the three projects with the apps' DSN keys and the probes' API token, then starts it.
-- `seed/`: the catalog and `PROD_ORDERS_ROWS` (default 300000) past orders, loaded once the services have migrated.
+- `seed/`: the catalog (stock for more than a world week of the traffic's orders) and `PROD_ORDERS_ROWS` past
+  orders (20000; the hot-table trap's `rows`, default 300000), loaded once the services have migrated.
 - `traffic/`: seeded synthetic users against production on the world clock, and the probes `slo/production`,
   `traffic/stats` and `contracts` (port 9100) run on `contracts/`, a copy of the consumers' contracts agents
   cannot change (see `traffic/README.md`).

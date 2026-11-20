@@ -1,0 +1,22 @@
+# On-call acknowledges a page within 5 world minutes and posts in #incidents, and resolves the incident when its
+# alerts clear (the template's PagerDuty services leave resolving to a person).
+format: shakedown-people/1
+role: oncall
+lines:
+  ack: ["Looking now.", "On it."]
+  resolved: ["Alerts are clear.", "All clear now."]
+rules:
+  - id: acknowledge-page
+    notice: {system: pagerduty, kind: incident_triggered, to: me}
+    after: {minutes: [0, 5]}
+    act:
+      - {system: pagerduty, action: ack, args: {incident: /incident}}
+      - system: slack
+        action: post
+        args: {channel: "#incidents", text: "{/incident} on {/service}: {/summary}. {pick:ack}"}
+  - id: resolve-when-clear
+    notice: {system: pagerduty, kind: alerts_cleared, to: me}
+    after: {minutes: [1, 10]}
+    act:
+      - {system: pagerduty, action: resolve, args: {incident: /incident}}
+      - {system: slack, action: post, args: {channel: "#incidents", text: "{/incident} resolved. {pick:resolved}"}}

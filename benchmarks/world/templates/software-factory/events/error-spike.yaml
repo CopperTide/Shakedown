@@ -1,0 +1,13 @@
+# An error spike after a deploy: a developer's rule (events/error-spike-rule.yaml) opens, at world minute
+# `after_minutes`, a change to orders that leaks database connections. Reviewed and merged by people, it deploys;
+# under traffic production's orders run out of connections, HighErrorRate fires, the alert link pages on-call.
+id: error-spike
+label: An error spike after a deploy
+description: A developer merges a change that leaks database connections; production alerts and pages on-call.
+kind: event
+default: true
+needs: [github, ci, production]
+params:
+  - {name: after_minutes, label: After (min), kind: int, min: 0, max: 600, default: 45}
+apply:
+  - {part: people, append: rules.developer.rules, value: "@events/error-spike-rule.yaml"}

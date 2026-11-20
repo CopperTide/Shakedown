@@ -27,7 +27,7 @@ def peak_factor(peaks: list, clock_ms: int) -> float:
     return factor
 
 
-def minute_arrivals(seed: int, minute: int, journey: str, per_minute: float) -> list[int]:
+def minute_arrivals(seed: int | str, minute: int, journey: str, per_minute: float) -> list[int]:
     if per_minute <= 0:
         return []
     rng, start = random.Random(f"{seed}:{minute}:{journey}"), minute * MINUTE_MS
@@ -39,7 +39,7 @@ def minute_arrivals(seed: int, minute: int, journey: str, per_minute: float) -> 
         out.append(int(at))
 
 
-def plan(seed: int, from_ms: int, to_ms: int, profile: dict) -> list[tuple[int, str]]:
+def plan(seed: int | str, from_ms: int, to_ms: int, profile: dict) -> list[tuple[int, str]]:
     """Every journey start in (from_ms, to_ms], in time order: `(clock ms, journey)`."""
     if to_ms <= from_ms:
         return []

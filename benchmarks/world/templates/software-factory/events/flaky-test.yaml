@@ -1,0 +1,10 @@
+# Trap: inventory's test_a_hold_lasts_while_the_customer_pays sleeps 0.25 s on a hold stored in whole seconds, so
+# it fails when the hold is placed late in a second (32% of 50 runs in the base image, the template README). It is
+# in the repository's tests, so it is fixed: always on.
+id: flaky-test
+label: A flaky test in inventory
+description: Fails about one run in four on timing; reruns pass.
+kind: trap
+fixed: true
+needs: [github, ci]
+apply: []

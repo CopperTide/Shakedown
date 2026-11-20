@@ -48,3 +48,8 @@ def test_service_addresses_and_the_collector_can_be_overridden(tmp_path):
     c = config(tmp_path, TRAFFIC_SERVICES="shop=http://127.0.0.1:9", OTEL_EXPORTER_OTLP_ENDPOINT="http://c:4318")
     assert c.services == {"shop": "http://127.0.0.1:9"} and c.otlp_endpoint == "http://c:4318"
     assert config(tmp_path).otlp_endpoint is None
+
+
+def test_a_world_seed_given_as_text_seeds_the_traffic(tmp_path):
+    assert config(tmp_path, TRAFFIC_SEED="world-7").seed == "world-7"
+    assert config(tmp_path, TRAFFIC_SEED="").seed == 1

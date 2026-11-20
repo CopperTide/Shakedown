@@ -57,7 +57,9 @@ def test_the_traffic_starts_once_production_is_up_and_seeded(platform):
 def test_the_scoring_probes_read_the_traffic_service(platform):
     probes = {p["key"]: p for p in load_yaml(platform / "service.yaml")["probes"]}
     assert {k: (p["service"], p["port"], p["path"]) for k, p in probes.items() if p["service"] == "traffic"} == {
-        "slo/production": ("traffic", 9100, "/slo?time={world_s}"), "traffic/stats": ("traffic", 9100, "/stats"),
+        # The builder expands service.yaml, so the part's own placeholder is written with doubled braces there
+        # (test_factory_template.py checks the world's probe reads `{world_s}`).
+        "slo/production": ("traffic", 9100, "/slo?time={{world_s}}"), "traffic/stats": ("traffic", 9100, "/stats"),
         "contracts": ("traffic", 9100, "/contracts")}
 
 

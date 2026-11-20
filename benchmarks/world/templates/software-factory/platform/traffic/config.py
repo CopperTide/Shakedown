@@ -16,7 +16,7 @@ class ConfigError(ValueError):
 @dataclass(frozen=True)
 class Config:
     data: dict
-    seed: int
+    seed: int | str
     profile: dict
     services: dict
     otlp_endpoint: str | None
@@ -53,6 +53,15 @@ def check(data: dict) -> None:
                 raise ConfigError(f"journey {name} step {n} names the service {step['service']}, not one listed")
 
 
+def seed_of(text: str, default: int) -> int | str:
+    """The builder passes the world's seed as text (`world-7`); a number stays a number, so its schedule is the same
+    as before."""
+    text = text.strip()
+    if not text:
+        return default
+    return int(text) if text.isdigit() else text
+
+
 def overrides(text: str) -> dict:
     return dict(pair.strip().split("=", 1) for pair in text.split(",") if pair.strip())
 
@@ -62,7 +71,7 @@ def load(path: Path, env: dict) -> Config:
     check(data)
     profile = {"journeys": {n: {"rpm": j["rpm"]} for n, j in data["journeys"].items()}, "day": data["day"],
                "peaks": peaks(data.get("events", {}), env.get("TRAFFIC_EVENTS", ""))}
-    return Config(data=data, seed=int(env.get("TRAFFIC_SEED") or data["seed"]), profile=profile,
+    return Config(data=data, seed=seed_of(env.get("TRAFFIC_SEED", ""), data["seed"]), profile=profile,
                   services={**data["services"], **overrides(env.get("TRAFFIC_SERVICES", ""))},
                   otlp_endpoint=env.get("OTEL_EXPORTER_OTLP_ENDPOINT") or None,
                   clock_file=Path(env.get("SHAKEDOWN_CLOCK_FILE", "/shakedown/clock.json")),
