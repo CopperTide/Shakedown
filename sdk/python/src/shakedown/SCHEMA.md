@@ -1,6 +1,6 @@
 # Shakedown dataset (`arena-dataset/1`)
 
-A folder exported by the Shakedown SDK (`Branch.export`, `Suite.export`, `arena.export.export_branches`). Every
+A folder exported by the Shakedown SDK (`Branch.export`, `Suite.export`, `shakedown.export.export_branches`). Every
 line of a `.jsonl` file is one JSON object. Times are ISO 8601 in UTC. Fields a core did not record are `null`
 or absent, never guessed.
 
@@ -17,7 +17,7 @@ or absent, never guessed.
 | `scenario` | the expanded disruptions added to the task (`{disruptions: [{id, label, part, params, disruption}]}`), or null |
 | `world` | the parts of the world: `[{part, integration, config?}]` |
 | `team` | `{id, name, agents: [{id, name, kind, model, prompt, provider?, read_only}]}` as the branch ran |
-| `status`, `error` | `passed`, `failed`, `infra_error`, `interrupted` (arenad restarted mid-run), `stopped` (newer cores), or `running` |
+| `status`, `error` | `passed`, `failed`, `infra_error`, `interrupted` (shaked restarted mid-run), `stopped` (newer cores), or `running` |
 | `created_at`, `ended_at` | wall-clock start and end |
 | `restore_mode`, `restored` | for a fork: `exact` or `approximate`, and how each part was restored (`save`, `replay`, `approximate`) |
 | `fork_note` | what changed in the fork |

@@ -11,8 +11,8 @@ from typing import Any, Callable, ContextManager, Iterator, Optional
 
 import openai
 
-from arena import driver
-from arena.errors import ArenaError, Conflict, NotFound
+from shakedown import driver
+from shakedown.errors import ShakedownError, Conflict, NotFound
 
 from .bridge import ProxyBridge, bridge_socket
 
@@ -60,7 +60,7 @@ def _report(run: Any, reason: str) -> None:
     for a in run.agents:
         try:
             a.report_reasoning(f"stopped: {reason}", kind="step")
-        except ArenaError:
+        except ShakedownError:
             pass  # the run already ended: nothing more to record
 
 

@@ -278,48 +278,6 @@ wheels = [
 ]
 
 [[package]]
-name = "arena-sdk"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "httpx" },
-]
-
-[package.optional-dependencies]
-crewai = [
-    { name = "crewai" },
-]
-langgraph = [
-    { name = "langchain-core", version = "1.7.7", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "langchain-core", version = "1.8.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
-    { name = "langchain-openai", version = "1.7.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "langchain-openai", version = "1.8.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
-    { name = "langgraph" },
-]
-openai-agents = [
-    { name = "openai-agents" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "pytest" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "crewai", marker = "extra == 'crewai'", specifier = ">=0.80" },
-    { name = "httpx", specifier = ">=0.27" },
-    { name = "langchain-core", marker = "extra == 'langgraph'", specifier = ">=0.3" },
-    { name = "langchain-openai", marker = "extra == 'langgraph'", specifier = ">=0.2" },
-    { name = "langgraph", marker = "extra == 'langgraph'", specifier = ">=0.2" },
-    { name = "openai-agents", marker = "extra == 'openai-agents'", specifier = ">=0.0.17" },
-]
-provides-extras = ["langgraph", "crewai", "openai-agents"]
-
-[package.metadata.requires-dev]
-dev = [{ name = "pytest", specifier = ">=8" }]
-
-[[package]]
 name = "async-timeout"
 version = "5.0.1"
 source = { registry = "https://pypi.org/simple" }
@@ -5512,6 +5470,48 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/80/ef/3a9f8e4279c7920af561deed4cb7ebebed2794a8f608cf404d5eef14a105/rpds_py-2026.9.1-pp312-pypy312_pp80-macosx_10_12_x86_64.whl", hash = "sha256:56c6952a9b15047466d0c2347c446a761d4527f89976156341e68f0ce5cc08b0", size = 357108, upload-time = "2026-10-04T16:32:31.641Z" },
     { url = "https://files.pythonhosted.org/packages/b7/55/4b2fa381a583760aea5c92841e4e928a358e1c6511b129219e9c2826a226/rpds_py-2026.9.1-pp312-pypy312_pp80-macosx_11_0_arm64.whl", hash = "sha256:b242c27c8f836305a4a72df9cdd564386ac57b807bd252a063223331c9316b37", size = 346877, upload-time = "2026-10-04T16:32:34.061Z" },
 ]
+
+[[package]]
+name = "shakedown"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "httpx" },
+]
+
+[package.optional-dependencies]
+crewai = [
+    { name = "crewai" },
+]
+langgraph = [
+    { name = "langchain-core", version = "1.7.7", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "langchain-core", version = "1.8.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "langchain-openai", version = "1.7.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "langchain-openai", version = "1.8.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "langgraph" },
+]
+openai-agents = [
+    { name = "openai-agents" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "crewai", marker = "extra == 'crewai'", specifier = ">=0.80" },
+    { name = "httpx", specifier = ">=0.27" },
+    { name = "langchain-core", marker = "extra == 'langgraph'", specifier = ">=0.3" },
+    { name = "langchain-openai", marker = "extra == 'langgraph'", specifier = ">=0.2" },
+    { name = "langgraph", marker = "extra == 'langgraph'", specifier = ">=0.2" },
+    { name = "openai-agents", marker = "extra == 'openai-agents'", specifier = ">=0.0.17" },
+]
+provides-extras = ["langgraph", "crewai", "openai-agents"]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=8" }]
 
 [[package]]
 name = "shellingham"

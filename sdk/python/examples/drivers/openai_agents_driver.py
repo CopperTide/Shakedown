@@ -3,7 +3,7 @@ import os
 
 from agents import Agent, Runner
 
-from arena.adapters import openai_agents as sd
+from shakedown.adapters import openai_agents as sd
 
 PROVIDER, MODEL = os.environ.get("ARENA_PROVIDER", "openai"), os.environ.get("ARENA_MODEL", "gpt-4.1-mini")
 

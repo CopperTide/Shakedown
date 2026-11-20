@@ -12,7 +12,7 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Callable, Optional
 
-from arena.mcp import Tool, ToolResult
+from shakedown.mcp import Tool, ToolResult
 
 from .workbench import Workbench
 

@@ -4,7 +4,7 @@ import os
 from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.prebuilt import create_react_agent
 
-from arena.adapters import langgraph as sd
+from shakedown.adapters import langgraph as sd
 
 PROVIDER, MODEL = os.environ.get("ARENA_PROVIDER", "openai"), os.environ.get("ARENA_MODEL", "gpt-4.1-mini")
 

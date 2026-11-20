@@ -1,4 +1,4 @@
-"""Start a shaked of your own as a subprocess (``Arena.local``)."""
+"""Start a shaked of your own as a subprocess (``Shakedown.local``)."""
 
 from __future__ import annotations
 
@@ -11,11 +11,11 @@ import tempfile
 import time
 from typing import Any, Mapping, Optional, Sequence
 
-from .client import Arena
-from .errors import ArenaError, ConnectionFailed
+from .client import Shakedown
+from .errors import ShakedownError, ConnectionFailed
 
 
-class StartFailed(ArenaError):
+class StartFailed(ShakedownError):
     """shaked exited or didn't answer while starting; the message ends with its log."""
 
 
@@ -44,8 +44,8 @@ def find_shaked(shaked: Optional[str], bin_dir: Optional[str]) -> str:
     )
 
 
-class LocalArena(Arena):
-    """An :class:`Arena` connected to a shaked this object started. Use it in a ``with`` block (or
+class LocalShakedown(Shakedown):
+    """A :class:`Shakedown` connected to a shaked this object started. Use it in a ``with`` block (or
     call :meth:`close`) so the process stops.
 
     Args:
@@ -161,10 +161,11 @@ class LocalArena(Arena):
             self._tmp_log = False
 
     def __repr__(self) -> str:
-        return f"LocalArena({self.url!r}, pid={self.process.pid})"
+        return f"LocalShakedown({self.url!r}, pid={self.process.pid})"
 
 
-#: Its old name.
+#: The old names (the SDK was ``arena`` and shaked ``arenad`` until 2026-11-19).
+LocalArena = LocalShakedown
 find_arenad = find_shaked
 
-__all__ = ["LocalArena", "StartFailed", "ConnectionFailed", "free_port", "find_shaked"]
+__all__ = ["LocalShakedown", "StartFailed", "ConnectionFailed", "free_port", "find_shaked"]

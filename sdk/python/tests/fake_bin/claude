@@ -1,0 +1,46 @@
+#!/usr/bin/env python3
+"""A stand-in for the `claude` CLI, for tests: no model. Given shaked's `claude -p ... --mcp-config
+<json> ... -- <prompt>`, it calls the world's MCP endpoint (one read tool, CALLS times), then prints
+the one JSON result `--output-format json` gives, as Claude Code does."""
+
+import json
+import sys
+import urllib.request
+
+CALLS = 45
+#: Read tools to call, the first the world offers (else its first tool that needs no arguments).
+READS = ("list_all_product_types",)
+
+
+def rpc(url: str, method: str, params: dict, n: int) -> dict:
+    body = json.dumps({"jsonrpc": "2.0", "id": n, "method": method, "params": params}).encode()
+    req = urllib.request.Request(url, body, {"content-type": "application/json",
+                                             "accept": "application/json, text/event-stream"})
+    with urllib.request.urlopen(req, timeout=60) as r:
+        return json.loads(r.read()).get("result") or {}
+
+
+def pick(tools: list) -> str:
+    names = [t["name"] for t in tools]
+    for want in READS:
+        if want in names:
+            return want
+    return next(t["name"] for t in tools if not (t.get("inputSchema") or {}).get("required"))
+
+
+def main() -> None:
+    args = sys.argv[1:]
+    config = json.loads(args[args.index("--mcp-config") + 1])
+    url = next(iter(config["mcpServers"].values()))["url"]
+    rpc(url, "initialize", {"protocolVersion": "2025-06-18", "capabilities": {},
+                            "clientInfo": {"name": "fake-claude"}}, 1)
+    tool = pick(rpc(url, "tools/list", {}, 2)["tools"])
+    for n in range(CALLS):
+        rpc(url, "tools/call", {"name": tool, "arguments": {}}, 3 + n)
+    print(json.dumps({"type": "result", "subtype": "success", "is_error": False,
+                      "result": f"I called {tool} {CALLS} times.", "total_cost_usd": 0.0,
+                      "num_turns": CALLS, "usage": {"input_tokens": 10, "output_tokens": 5}}))
+
+
+if __name__ == "__main__":
+    main()

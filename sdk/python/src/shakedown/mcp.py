@@ -13,7 +13,7 @@ from typing import Any, Optional
 
 import httpx
 
-from .errors import ArenaError, ConnectionFailed
+from .errors import ShakedownError, ConnectionFailed
 
 
 @dataclass
@@ -67,7 +67,7 @@ class ToolResult:
             return self.text
 
 
-class McpError(ArenaError):
+class McpError(ShakedownError):
     """The MCP endpoint answered a JSON-RPC error (unknown branch or agent, bad request)."""
 
 
@@ -98,7 +98,7 @@ class McpClient:
     def initialize(self) -> dict[str, Any]:
         return self._rpc(
             "initialize",
-            {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "arena-sdk"}},
+            {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "shakedown"}},
         )
 
     def list_tools(self) -> list[Tool]:

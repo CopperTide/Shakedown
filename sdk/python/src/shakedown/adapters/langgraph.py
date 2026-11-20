@@ -1,7 +1,7 @@
 """LangGraph and LangChain: an agent's tools as ``StructuredTool``\\ s and its gateway as a
 ``ChatOpenAI``.
 
-    from arena.adapters import langgraph as sd
+    from shakedown.adapters import langgraph as sd
     from langgraph.prebuilt import create_react_agent
 
     with sd.run() as run:

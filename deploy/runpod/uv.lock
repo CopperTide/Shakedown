@@ -16,28 +16,6 @@ wheels = [
 ]
 
 [[package]]
-name = "arena-sdk"
-version = "0.1.0"
-source = { editable = "../../sdk/python" }
-dependencies = [
-    { name = "httpx" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "crewai", marker = "extra == 'crewai'", specifier = ">=0.80" },
-    { name = "httpx", specifier = ">=0.27" },
-    { name = "langchain-core", marker = "extra == 'langgraph'", specifier = ">=0.3" },
-    { name = "langchain-openai", marker = "extra == 'langgraph'", specifier = ">=0.2" },
-    { name = "langgraph", marker = "extra == 'langgraph'", specifier = ">=0.2" },
-    { name = "openai-agents", marker = "extra == 'openai-agents'", specifier = ">=0.0.17" },
-]
-provides-extras = ["langgraph", "crewai", "openai-agents"]
-
-[package.metadata.requires-dev]
-dev = [{ name = "pytest", specifier = ">=8" }]
-
-[[package]]
 name = "certifi"
 version = "2026.10.23"
 source = { registry = "https://pypi.org/simple" }
@@ -60,8 +38,8 @@ name = "gpupod"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "arena-sdk" },
     { name = "httpx" },
+    { name = "shakedown" },
 ]
 
 [package.dev-dependencies]
@@ -71,8 +49,8 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "arena-sdk", editable = "../../sdk/python" },
     { name = "httpx", specifier = "==0.28.1" },
+    { name = "shakedown", editable = "../../sdk/python" },
 ]
 
 [package.metadata.requires-dev]
@@ -175,6 +153,28 @@ sdist = { url = "https://files.pythonhosted.org/packages/79/42/bb4641652e58dedea
 wheels = [
     { url = "https://files.pythonhosted.org/packages/51/39/1f5d8c8877a0fa327db959c19341d4be61660de1ab6b7391f9eb805bcd67/pytest-9.2.0-py3-none-any.whl", hash = "sha256:07acdcf88ec174f907dc01af70bf52d49b014bbab03faeeade31c96b18c2e588", size = 411776, upload-time = "2026-10-27T21:30:19.131Z" },
 ]
+
+[[package]]
+name = "shakedown"
+version = "0.1.0"
+source = { editable = "../../sdk/python" }
+dependencies = [
+    { name = "httpx" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "crewai", marker = "extra == 'crewai'", specifier = ">=0.80" },
+    { name = "httpx", specifier = ">=0.27" },
+    { name = "langchain-core", marker = "extra == 'langgraph'", specifier = ">=0.3" },
+    { name = "langchain-openai", marker = "extra == 'langgraph'", specifier = ">=0.2" },
+    { name = "langgraph", marker = "extra == 'langgraph'", specifier = ">=0.2" },
+    { name = "openai-agents", marker = "extra == 'openai-agents'", specifier = ">=0.0.17" },
+]
+provides-extras = ["langgraph", "crewai", "openai-agents"]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=8" }]
 
 [[package]]
 name = "typing-extensions"

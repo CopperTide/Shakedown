@@ -1,5 +1,5 @@
 //! A Code connection's driver, launched by shaked for one run: the team's own program, which
-//! joins the run through the external-runner routes (`arena.driver` in the Python SDK does it in
+//! joins the run through the external-runner routes (`shakedown.driver` in the Python SDK does it in
 //! a few lines). shaked starts it with the run's ids in its environment and watches it: if it
 //! exits while its run is still live, the run is scored and ends `failed` with the exit code and
 //! the tail of its stderr; if it is still running a grace period after its run ended, it is

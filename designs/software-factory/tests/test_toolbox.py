@@ -1,7 +1,7 @@
 import threading
 import time
 
-from arena.adapters import langgraph, openai_agents
+from shakedown.adapters import langgraph, openai_agents
 from fake_model import FakeModel, FakeRun
 from factory_designs.toolbox import TOOL_NAMES, ToolBox, wait_minutes
 

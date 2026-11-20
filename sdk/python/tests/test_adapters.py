@@ -9,7 +9,7 @@ from typing import Any, Optional
 
 import pytest
 
-from arena.mcp import Tool, ToolResult
+from shakedown.mcp import Tool, ToolResult
 
 GET_STOCK = Tool("get_stock", "Units in stock of a SKU.", {
     "type": "object", "properties": {"sku": {"type": "string"}}, "required": ["sku"]})
@@ -50,7 +50,7 @@ def by_name(tools, name):
 # ---------------------------------------------------------------- schemas
 
 def test_schema_required_and_optional():
-    from arena.adapters._schema import model_from_schema
+    from shakedown.adapters._schema import model_from_schema
 
     M = model_from_schema("reserve", RESERVE.input_schema)
     fields = M.model_fields
@@ -61,7 +61,7 @@ def test_schema_required_and_optional():
 
 
 def test_schema_odd_shapes_do_not_fail():
-    from arena.adapters._schema import model_from_schema
+    from shakedown.adapters._schema import model_from_schema
 
     odd = {"type": "object", "required": ["where", "lines", "mode", "anything"], "properties": {
         "where": {"type": "object", "properties": {"site": {"type": "string"}}},
@@ -77,7 +77,7 @@ def test_schema_odd_shapes_do_not_fail():
 
 
 def test_result_text_marks_errors():
-    from arena.adapters._schema import result_text
+    from shakedown.adapters._schema import result_text
 
     assert result_text(ToolResult("ok", False)) == "ok"
     assert result_text(ToolResult(REFUSED, True)) == f"error: {REFUSED}"
@@ -87,7 +87,7 @@ def test_result_text_marks_errors():
 
 def test_langgraph_tool_calls_the_endpoint():
     pytest.importorskip("langchain_core", reason="needs the langgraph extra")
-    from arena.adapters import langgraph
+    from shakedown.adapters import langgraph
 
     ep = FakeEndpoint()
     tools = langgraph.tools(ep)
@@ -99,7 +99,7 @@ def test_langgraph_tool_calls_the_endpoint():
 
 def test_langgraph_refusal_is_text():
     pytest.importorskip("langchain_core", reason="needs the langgraph extra")
-    from arena.adapters import langgraph
+    from shakedown.adapters import langgraph
 
     ep = FakeEndpoint()
     out = by_name(langgraph.tools(ep), "reserve").invoke({"order": "o1", "qty": 2})
@@ -109,7 +109,7 @@ def test_langgraph_refusal_is_text():
 
 def test_langgraph_chat_model_points_at_the_gateway():
     pytest.importorskip("langchain_openai", reason="needs the langgraph extra")
-    from arena.adapters import langgraph
+    from shakedown.adapters import langgraph
 
     m = langgraph.chat_model(FakeEndpoint(), "gpt-4.1-mini")
     assert m.model_name == "gpt-4.1-mini"
@@ -120,7 +120,7 @@ def test_langgraph_chat_model_points_at_the_gateway():
 
 def test_crewai_tool_calls_the_endpoint():
     pytest.importorskip("crewai", reason="needs the crewai extra")
-    from arena.adapters import crewai
+    from shakedown.adapters import crewai
 
     ep = FakeEndpoint()
     tools = crewai.tools(ep)
@@ -131,7 +131,7 @@ def test_crewai_tool_calls_the_endpoint():
 
 def test_crewai_refusal_is_text():
     pytest.importorskip("crewai", reason="needs the crewai extra")
-    from arena.adapters import crewai
+    from shakedown.adapters import crewai
 
     ep = FakeEndpoint()
     out = by_name(crewai.tools(ep), "reserve")._run(order="o1", qty=2)
@@ -140,7 +140,7 @@ def test_crewai_refusal_is_text():
 
 def test_crewai_llm_points_at_the_gateway():
     pytest.importorskip("crewai", reason="needs the crewai extra")
-    from arena.adapters import crewai
+    from shakedown.adapters import crewai
 
     llm = crewai.llm(FakeEndpoint(), "gpt-4.1-mini")
     assert llm.model.endswith("gpt-4.1-mini")
@@ -149,7 +149,7 @@ def test_crewai_llm_points_at_the_gateway():
 
 def test_crewai_step_callback_records_thought():
     pytest.importorskip("crewai", reason="needs the crewai extra")
-    from arena.adapters import crewai
+    from shakedown.adapters import crewai
 
     class Step:  # the fields of CrewAI's AgentAction the callback reads
         thought = "Check the stock before reserving."
@@ -164,7 +164,7 @@ def test_crewai_step_callback_records_thought():
 
 def test_openai_agents_tool_calls_the_endpoint():
     pytest.importorskip("agents", reason="needs the openai-agents extra")
-    from arena.adapters import openai_agents
+    from shakedown.adapters import openai_agents
 
     ep = FakeEndpoint()
     t = by_name(openai_agents.tools(ep), "get_stock")
@@ -176,7 +176,7 @@ def test_openai_agents_tool_calls_the_endpoint():
 
 def test_openai_agents_refusal_is_text():
     pytest.importorskip("agents", reason="needs the openai-agents extra")
-    from arena.adapters import openai_agents
+    from shakedown.adapters import openai_agents
 
     t = by_name(openai_agents.tools(FakeEndpoint()), "reserve")
     assert asyncio.run(t.on_invoke_tool(None, '{"order":"o1","qty":2}')) == f"error: {REFUSED}"
@@ -184,7 +184,7 @@ def test_openai_agents_refusal_is_text():
 
 def test_openai_agents_model_points_at_the_gateway():
     pytest.importorskip("agents", reason="needs the openai-agents extra")
-    from arena.adapters import openai_agents
+    from shakedown.adapters import openai_agents
 
     m = openai_agents.model(FakeEndpoint(), "gpt-4.1-mini")
     assert m.model == "gpt-4.1-mini"
@@ -192,10 +192,10 @@ def test_openai_agents_model_points_at_the_gateway():
 
 
 def test_each_adapter_offers_the_driver():
-    from arena import driver
+    from shakedown import driver
 
     for name in ("langgraph", "crewai", "openai_agents"):
-        mod = pytest.importorskip(f"arena.adapters.{name}")
+        mod = pytest.importorskip(f"shakedown.adapters.{name}")
         assert mod.run is driver.run
 
 
@@ -209,7 +209,7 @@ ODD = Tool("odd", "Odd property names.", {
 
 def test_openai_agents_arguments_that_are_not_an_object_are_text():
     pytest.importorskip("agents", reason="needs the openai-agents extra")
-    from arena.adapters import openai_agents
+    from shakedown.adapters import openai_agents
 
     t = by_name(openai_agents.tools(FakeEndpoint()), "get_stock")
     for args in ("[1]", "null", '"sku"'):
@@ -219,7 +219,7 @@ def test_openai_agents_arguments_that_are_not_an_object_are_text():
 
 def test_crewai_odd_property_names_reach_the_endpoint_as_named():
     pytest.importorskip("crewai", reason="needs the crewai extra")
-    from arena.adapters import crewai
+    from shakedown.adapters import crewai
 
     ep = FakeEndpoint()
     ep.tools = [ODD]

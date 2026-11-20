@@ -1,7 +1,7 @@
 """CrewAI: an agent's tools as CrewAI tools, its gateway as an ``LLM``, and a step callback that
 records what the agent thought at each step.
 
-    from arena.adapters import crewai as sd
+    from shakedown.adapters import crewai as sd
     from crewai import Agent, Crew, Task
 
     with sd.run() as run:

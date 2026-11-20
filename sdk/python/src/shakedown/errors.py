@@ -3,15 +3,19 @@
 from __future__ import annotations
 
 
-class ArenaError(Exception):
+class ShakedownError(Exception):
     """Base class of every error the SDK raises."""
 
 
-class ConnectionFailed(ArenaError):
+#: The old name (the SDK was ``arena`` until 2026-11-19).
+ArenaError = ShakedownError
+
+
+class ConnectionFailed(ShakedownError):
     """shaked could not be reached (not running, wrong URL, or it went away)."""
 
 
-class ApiError(ArenaError):
+class ApiError(ShakedownError):
     """shaked answered with an error status. ``status`` is the HTTP status, ``message`` shaked's
     ``{error}`` text."""
 
@@ -40,7 +44,7 @@ class DiskFull(ApiError):
     """507: the saves reached shaked's disk limit; delete old runs."""
 
 
-class NotSupported(ArenaError):
+class NotSupported(ShakedownError):
     """The connected shaked doesn't have this feature (for example pause and resume)."""
 
 

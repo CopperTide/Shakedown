@@ -24,7 +24,7 @@ import sys
 
 import httpx
 
-from arena.env import END, ArenaParallelEnv
+from shakedown.env import END, ShakedownParallelEnv
 from common import connect, task_arg
 
 MAX_STEPS = int(sys.argv[2]) if len(sys.argv) > 2 else 12
@@ -106,8 +106,8 @@ def make_policy(tools, prompt):
 
 
 with connect() as arena:
-    task = task_arg(arena)
-    env = ArenaParallelEnv(arena, task, agents=["support"], max_steps=MAX_STEPS, reward="score")
+    task = task_arg(sd)
+    env = ShakedownParallelEnv(sd, task, agents=["support"], max_steps=MAX_STEPS, reward="score")
     obs, infos = env.reset(seed=3)
     tools = [t for t in obs["support"]["tools"] if t["name"] not in ("handoff", "message", "inbox")]
     policy = make_policy(tools, obs["support"]["prompt"])

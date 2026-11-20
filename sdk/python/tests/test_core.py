@@ -10,9 +10,9 @@ import threading
 import httpx
 import pytest
 
-from arena import BadRequest, NotFound, NotSupported
-from arena.env import END, ArenaParallelEnv
-from arena.export import read_jsonl
+from shakedown import BadRequest, NotFound, NotSupported
+from shakedown.env import END, ShakedownParallelEnv
+from shakedown.export import read_jsonl
 
 pytestmark = pytest.mark.core
 
@@ -78,7 +78,7 @@ def test_external_run_endpoints_and_record(arena, ended):
 def test_stream_of_an_ended_branch(ended):
     branch = ended["branch"]
     seen = list(branch.stream())
-    assert [e.seq for e in seen] == [e.seq for e in branch.events()]
+    assert [e.seq for e in seen] == [e.seq for e in branch.record().events]
     assert branch.final["status"] == ended["result"]["status"]
 
 
@@ -149,7 +149,7 @@ def test_cors_origin_is_configurable(arena):
 
 
 def test_step_env_contract(arena, cleanup):
-    env = ArenaParallelEnv(arena, arena.tasks()[0].id, agents=["probe"], max_steps=5)
+    env = ShakedownParallelEnv(arena, arena.tasks()[0].id, agents=["probe"], max_steps=5)
     obs, infos = env.reset(seed=11)
     cleanup.append(env.branch.run_id)
     assert env.agents == ["probe"] and infos["probe"]["seed"] == 11
@@ -188,7 +188,7 @@ def test_external_suite_claim_and_export(arena, cleanup, tmp_path):
 def _live_model(arena):
     """A real model to drive an agent with: a provider shaked's gateway can reach, else Claude Code
     signed in on this machine. Skips, saying why, with neither."""
-    from arena import claude_code
+    from shakedown import claude_code
 
     models = {"openai": "gpt-4.1-mini", "anthropic": "claude-haiku-4-5",
               "openrouter": "anthropic/claude-haiku-4.5"}
@@ -202,7 +202,7 @@ def _live_model(arena):
 
 def test_driver_round_trip(arena, monkeypatch):
     """A driver starts a run, a real model works the ticket as one agent, and the run is scored."""
-    from arena import claude_code, driver
+    from shakedown import claude_code, driver
 
     via, model = _live_model(arena)
     for k in ("ARENA_BRANCH", "ARENA_RUN", "ARENA_TASK", "ARENA_FORK_OF"):
@@ -231,7 +231,7 @@ def test_driver_round_trip(arena, monkeypatch):
 
 
 def test_driver_that_raises_ends_the_run_failed_and_scored(arena, monkeypatch):
-    from arena import driver
+    from shakedown import driver
 
     for k in ("ARENA_BRANCH", "ARENA_RUN", "ARENA_TASK", "ARENA_FORK_OF"):
         monkeypatch.delenv(k, raising=False)

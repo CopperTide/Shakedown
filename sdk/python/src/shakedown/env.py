@@ -4,7 +4,7 @@ It follows PettingZoo's parallel API (``reset``/``step``/``close``, dicts keyed 
 depending on PettingZoo. Shakedown supplies the world, the record and the score; **your policy** (an LLM
 or anything else) picks the actions. Shakedown supplies no agent.
 
-    env = ArenaParallelEnv(arena, task="72", agents=["support"])
+    env = ShakedownParallelEnv(arena, task="72", agents=["support"])
     obs, infos = env.reset(seed=7)
     while env.agents:
         actions = {a: my_policy(obs[a]) for a in env.agents}   # {"name": tool, "arguments": {...}}
@@ -14,7 +14,7 @@ or anything else) picks the actions. Shakedown supplies no agent.
 - An action is a tool call ``{"name": ..., "arguments": {...}}`` made through the agent's MCP endpoint
   (so it is recorded like any agent's), ``None`` to do nothing this step, or :data:`END` when the
   agent is done. Actions of one step run one after another, in the order of ``possible_agents``.
-- An observation is a dict: ``tool_result`` (the last call's :class:`~arena.mcp.ToolResult`, as
+- An observation is a dict: ``tool_result`` (the last call's :class:`~shakedown.mcp.ToolResult`, as
   ``{"text", "is_error", "value"}``), ``messages`` (notes and messages sent to the agent since its
   last step), ``world_events`` (what the world's parts reported since then), and on reset ``prompt``,
   ``ticket``, ``instructions`` and ``tools`` (the tools the agent may call, as dicts).
@@ -32,21 +32,21 @@ from __future__ import annotations
 import copy
 from typing import Any, Callable, Optional, Sequence, Union
 
-from .client import AgentEndpoint, Arena, Branch
+from .client import AgentEndpoint, Shakedown, Branch
 from .models import Agent, CheckResult, Event, Task
 
 #: The action that says an agent is done.
 END = "__end__"
 
-Shaping = Callable[["ArenaParallelEnv", str, Any, dict], float]
+Shaping = Callable[["ShakedownParallelEnv", str, Any, dict], float]
 
 
-class ArenaParallelEnv:
+class ShakedownParallelEnv:
     metadata = {"name": "arena_parallel_v0", "is_parallelizable": False}
 
     def __init__(
         self,
-        arena: Arena,
+        arena: Shakedown,
         task: Union[str, Task],
         agents: Sequence[Union[str, Agent]],
         scenario: Any = None,
@@ -186,7 +186,7 @@ class ArenaParallelEnv:
 
     def _new_events(self) -> list[Event]:
         assert self.branch is not None
-        events = [e for e in self.branch.events() if e.seq > self._last_seq]
+        events = [e for e in self.branch.record().events if e.seq > self._last_seq]
         if events:
             self._last_seq = events[-1].seq
         return events
@@ -241,4 +241,7 @@ def _prompt(task: Task, role: str) -> str:
     return "\n\n".join(parts)
 
 
-__all__ = ["ArenaParallelEnv", "END"]
+#: The old name (the SDK was ``arena`` until 2026-11-19).
+ArenaParallelEnv = ShakedownParallelEnv
+
+__all__ = ["ShakedownParallelEnv", "END"]

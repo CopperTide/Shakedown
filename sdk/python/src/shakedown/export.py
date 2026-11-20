@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING, Any, Iterable, Optional
 from .models import BranchRecord
 
 if TYPE_CHECKING:
-    from .client import Arena
+    from .client import Shakedown
 
 FORMAT = "arena-dataset/1"
 
@@ -80,11 +80,11 @@ def event_rows(rec: BranchRecord) -> Iterable[dict[str, Any]]:
 
 
 def schema_text() -> str:
-    return resources.files("arena").joinpath("SCHEMA.md").read_text(encoding="utf-8")
+    return resources.files("shakedown").joinpath("SCHEMA.md").read_text(encoding="utf-8")
 
 
 def export_branches(
-    arena: "Arena",
+    arena: "Shakedown",
     branch_ids: Iterable[str],
     path: str,
     suite: Optional[dict[str, Any]] = None,

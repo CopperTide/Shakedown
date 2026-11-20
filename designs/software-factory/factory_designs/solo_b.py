@@ -17,7 +17,7 @@ from agents import Agent, ModelSettings, Runner
 from agents.exceptions import MaxTurnsExceeded
 from openai.types.shared import Reasoning
 
-from arena.adapters import openai_agents
+from shakedown.adapters import openai_agents
 
 from .prompts import load_prompt
 from .settings import Settings, load_settings

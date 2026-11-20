@@ -1,7 +1,7 @@
 """The OpenAI Agents SDK: an agent's tools as ``FunctionTool``\\ s and its gateway as a
 chat-completions model.
 
-    from arena.adapters import openai_agents as sd
+    from shakedown.adapters import openai_agents as sd
     from agents import Agent, Runner
 
     with sd.run() as run:

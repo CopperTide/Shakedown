@@ -4,14 +4,14 @@ import json
 
 import pytest
 
-from arena import Agent, Change, Disruption, Scenario, Team
-from arena.errors import BadRequest, Conflict, DiskFull, NotFound, from_status, ApiError
-from arena.export import branch_row, event_rows
-from arena.models import BranchRecord, CheckResult, Event, as_scenario, as_team
-from arena.sse import parse
-from arena.mcp import Tool, ToolResult
-from arena.env import _messages_for, _parse_action, END
-from arena.client import Branch, Suite, _poll, wait_review
+from shakedown import Agent, Change, Disruption, Scenario, Team
+from shakedown.errors import BadRequest, Conflict, DiskFull, NotFound, from_status, ApiError
+from shakedown.export import branch_row, event_rows
+from shakedown.models import BranchRecord, CheckResult, Event, as_scenario, as_team
+from shakedown.sse import parse
+from shakedown.mcp import Tool, ToolResult
+from shakedown.env import _messages_for, _parse_action, END
+from shakedown.client import Branch, Suite, _poll, wait_review
 
 
 def test_sse_parse_events_comments_and_multiline():
@@ -166,7 +166,7 @@ def _branch(status):
 
 def test_branch_and_suite_wait_read_until_ended(monkeypatch):
     slept = []
-    monkeypatch.setattr("arena.client.time.sleep", slept.append)
+    monkeypatch.setattr("shakedown.client.time.sleep", slept.append)
     arena = _Answers(_branch("running"), _branch("running"), _branch("passed"))
     assert Branch(arena, "b1", "r1").wait(poll=0.25).status == "passed"
     assert (arena.paths, slept) == (["/api/branches/b1"] * 3, [0.25, 0.25])
@@ -179,23 +179,23 @@ def test_branch_and_suite_wait_read_until_ended(monkeypatch):
         Suite(_Answers({"id": "s1", "status": "running"}), {"id": "s1"}).wait(timeout=-1)
 
 def test_agent_endpoint_reads_proxy_and_env():
-    from arena import Arena
-    from arena.client import AgentEndpoint
+    from shakedown import Shakedown
+    from shakedown.client import AgentEndpoint
 
     proxy = "http://arena:t@127.0.0.1:5"
     d = {"agent": "a", "mcp_url": "http://x/mcp/b1/a", "gateway_url": "http://x/gateway/b1/a/v1",
          "proxy_url": proxy, "env": {"HTTPS_PROXY": proxy, "TOY_URL": "https://toy.test"}}
-    a = AgentEndpoint.from_answer(Branch(Arena("http://127.0.0.1:1"), "b1", "r1"), d)
+    a = AgentEndpoint.from_answer(Branch(Shakedown("http://127.0.0.1:1"), "b1", "r1"), d)
     assert a.proxy_url == proxy
     assert a.env == {"HTTPS_PROXY": proxy, "TOY_URL": "https://toy.test"}
 
 
 def test_agent_endpoint_without_proxy():
-    from arena import Arena
-    from arena.client import AgentEndpoint
+    from shakedown import Shakedown
+    from shakedown.client import AgentEndpoint
 
     d = {"agent": "a", "mcp_url": "http://x/mcp/b1/a", "gateway_url": "http://x/gateway/b1/a/v1"}
-    a = AgentEndpoint.from_answer(Branch(Arena("http://127.0.0.1:1"), "b1", "r1"), d)
+    a = AgentEndpoint.from_answer(Branch(Shakedown("http://127.0.0.1:1"), "b1", "r1"), d)
     assert (a.proxy_url, a.env) == (None, {})
 
 
@@ -213,8 +213,8 @@ def _fake_shaked(monkeypatch, calls: list, ended: bool = False):
     With ``ended`` the branch has already ended: ending agents and finishing answer 409."""
     import httpx
 
-    import arena.driver as driver
-    from arena import Arena
+    import shakedown.driver as driver
+    from shakedown import Shakedown
 
     def handle(req: httpx.Request) -> httpx.Response:
         body = json.loads(req.content) if req.content else None
@@ -241,11 +241,11 @@ def _fake_shaked(monkeypatch, calls: list, ended: bool = False):
         return httpx.Response(404, json={"error": f"no such route {p}"})
 
     def fake(url):
-        a = Arena(url)
+        a = Shakedown(url)
         a._http = httpx.Client(base_url=a.url, transport=httpx.MockTransport(handle))
         return a
 
-    monkeypatch.setattr(driver, "Arena", fake)
+    monkeypatch.setattr(driver, "Shakedown", fake)
     for k, v in {"ARENA_URL": "http://127.0.0.1:1", "ARENA_RUN": "r1", "ARENA_BRANCH": "b1",
                  "ARENA_TASK": "t1"}.items():
         monkeypatch.setenv(k, v)
@@ -347,7 +347,7 @@ def _program(folder, name):
 
 
 def test_find_shaked_prefers_shaked_and_still_finds_a_build_named_arenad(tmp_path, monkeypatch):
-    from arena.local import find_shaked
+    from shakedown.local import find_shaked
 
     monkeypatch.delenv("ARENA_BIN_DIR", raising=False)
     monkeypatch.setenv("PATH", str(tmp_path / "nowhere"))
@@ -355,3 +355,67 @@ def test_find_shaked_prefers_shaked_and_still_finds_a_build_named_arenad(tmp_pat
     assert find_shaked(None, str(tmp_path)) == old
     new = _program(tmp_path, "shaked")
     assert find_shaked(None, str(tmp_path)) == new
+
+
+class _Forkable:
+    """A branch whose team is ``support`` and ``billing``, recording the fork it is asked for."""
+
+    def __init__(self):
+        self.asked = None
+
+    def record(self):
+        return type("Rec", (), {"team": Team([Agent.claude_code("support"), Agent.claude_code("billing")])})()
+
+    def fork(self, at_seq, changes=None, restore="exact", team=None):
+        self.asked = (at_seq, changes, restore, team)
+        return "fork"
+
+
+def test_rewind_fork_changes_every_agent_or_the_named_ones():
+    from shakedown.client import Rewind
+
+    b = _Forkable()
+    assert Rewind(b, 40).fork(model="sonnet") == "fork"
+    change = Change(model="sonnet")
+    assert b.asked == (40, {"support": change, "billing": change}, "exact", None)
+    Rewind(b, 7).fork(prompt="Be brief.", agents="billing", restore="approximate")
+    assert b.asked == (7, {"billing": Change(prompt="Be brief.")}, "approximate", None)
+    Rewind(b, 7).fork(team=[Agent.external("x")])
+    assert b.asked[1] is None and b.asked[3] == [Agent.external("x")]
+    with pytest.raises(ValueError, match="no agent nobody"):
+        Rewind(b, 7).fork(model="haiku", agents=["nobody"])
+
+
+def test_rewind_takes_a_seq_or_an_event():
+    from shakedown.client import Branch, Shakedown
+
+    branch = Branch(Shakedown("http://127.0.0.1:1"), "b1", "r1")
+    assert branch.rewind(event=40).seq == 40
+    assert branch.rewind(Event.from_dict({"seq": 12, "kind": "tool_call", "payload": {}})).seq == 12
+
+
+def test_the_old_import_name_arena_is_shakedown_and_warns_once():
+    import subprocess
+    import sys
+
+    code = """
+import warnings
+warnings.simplefilter("always")
+with warnings.catch_warnings(record=True) as w:
+    import arena, arena
+    from arena import Arena, ArenaError, Agent
+    from arena.local import LocalArena, find_arenad
+    from arena.env import ArenaParallelEnv
+    from arena.adapters import _schema
+    import arena.client
+import shakedown, shakedown.local, shakedown.env, shakedown.adapters._schema
+assert Arena is shakedown.Shakedown and ArenaError is shakedown.ShakedownError and Agent is shakedown.Agent
+assert LocalArena is shakedown.local.LocalShakedown and find_arenad is shakedown.local.find_shaked
+assert ArenaParallelEnv is shakedown.env.ShakedownParallelEnv and _schema is shakedown.adapters._schema
+assert arena.client is shakedown.client and arena.errors is shakedown.errors
+assert shakedown.client.__spec__.name == "shakedown.client"
+print(len([x for x in w if issubclass(x.category, DeprecationWarning) and "shakedown" in str(x.message)]))
+"""
+    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+    assert out.returncode == 0, out.stderr
+    assert out.stdout.strip() == "1"

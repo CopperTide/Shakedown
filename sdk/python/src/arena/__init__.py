@@ -1,53 +1,52 @@
-"""Shakedown (code name ``arena``) from Python: build environments, run teams, observe, control and export.
-
-    from arena import Arena, Agent
-
-    arena = Arena("http://127.0.0.1:4510")          # or: with Arena.local(benchmark="retail") as arena:
-    branch = arena.run("72", team=[Agent.claude_code("support", model="haiku")])
-    for event in branch.stream():
-        print(event.summary())
-    print(branch.check())
-
-See docs/sdk.md in the Shakedown repository (CopperTide/Shakedown).
+"""``arena``, the SDK's name until 2026-11-19: now :mod:`shakedown`. ``import arena`` and
+``from arena.<module> import ...`` give shakedown's own modules and objects, and the old class names
+(``Arena``, ``LocalArena``, ``ArenaError``, ``ArenaParallelEnv``) are the new classes. Importing it
+warns once. New code: ``from shakedown import Shakedown`` (docs/sdk.md, "Old names").
 """
 
-from .client import DEFAULT_URL, AgentEndpoint, Arena, Branch, Suite
-from .errors import (
-    ApiError,
-    ArenaError,
-    BadRequest,
-    Conflict,
-    ConnectionFailed,
-    DiskFull,
-    NotFound,
-    NotSupported,
-)
-from . import driver
-from .mcp import Tool, ToolResult
-from .models import (
-    ENDED,
-    Agent,
-    Benchmark,
-    BranchRecord,
-    Change,
-    CheckResult,
-    Disruption,
-    Event,
-    ForkInfo,
-    NamedCheck,
-    RunSummary,
-    Scenario,
-    Task,
-    Team,
+import importlib
+import importlib.abc
+import importlib.util
+import sys
+import warnings
+
+from shakedown import *  # noqa: F401,F403
+from shakedown import __all__ as _new_all
+from shakedown import __version__  # noqa: F401
+from shakedown.client import Arena
+from shakedown.errors import ArenaError
+
+warnings.warn(
+    "the `arena` package is now `shakedown`: use `from shakedown import Shakedown` "
+    "(`arena` and `Arena` are aliases kept for old code)",
+    DeprecationWarning,
+    stacklevel=2,
 )
 
-__version__ = "0.1.0"
 
-__all__ = [
-    "Arena", "Branch", "AgentEndpoint", "Suite", "DEFAULT_URL",
-    "Agent", "Team", "Change", "Scenario", "Disruption", "Task", "Benchmark", "Event",
-    "BranchRecord", "CheckResult", "NamedCheck", "RunSummary", "ForkInfo", "ENDED",
-    "Tool", "ToolResult",
-    "ArenaError", "ApiError", "BadRequest", "NotFound", "Conflict", "DiskFull",
-    "ConnectionFailed", "NotSupported", "driver",
-]
+class _OldName(importlib.abc.MetaPathFinder, importlib.abc.Loader):
+    """Finds ``arena.<x>`` and loads it as the module ``shakedown.<x>`` itself (not a copy), so
+    classes and errors are the same objects under both names."""
+
+    def find_spec(self, name, path=None, target=None):
+        if name.startswith(__name__ + "."):
+            return importlib.util.spec_from_loader(name, self)
+        return None
+
+    def create_module(self, spec):
+        return None
+
+    def exec_module(self, module):
+        # The import system hands back what ends up in sys.modules under the name.
+        sys.modules[module.__name__] = importlib.import_module("shakedown" + module.__name__[len(__name__):])
+
+
+sys.meta_path.insert(0, _OldName())
+
+# As before, `import arena` also gives the submodules loaded with it (`arena.client`, `arena.errors`, ...).
+for _name in [n for n in sys.modules if n.startswith("shakedown.")]:
+    sys.modules.setdefault(__name__ + _name[len("shakedown"):], sys.modules[_name])
+    if _name.count(".") == 1:
+        globals().setdefault(_name.split(".", 1)[1], sys.modules[_name])
+
+__all__ = [*_new_all, "Arena", "ArenaError"]

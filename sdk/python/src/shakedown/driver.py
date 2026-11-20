@@ -1,6 +1,6 @@
 """A driver: the few lines that put your own agent code in a Shakedown run.
 
-    from arena import driver
+    from shakedown import driver
 
     with driver.run() as run:
         planner = run.agent("planner", provider="openai", model="gpt-4.1-mini")
@@ -22,7 +22,7 @@ import sys
 from contextlib import contextmanager
 from typing import Iterator, Optional
 
-from .client import DEFAULT_URL, AgentEndpoint, Arena, Branch
+from .client import DEFAULT_URL, AgentEndpoint, Shakedown, Branch
 from .errors import Conflict
 from .models import Event, Task
 
@@ -30,7 +30,7 @@ from .models import Event, Task
 class DriverRun:
     """The run a driver drives: its branch, its task and the agents it registered."""
 
-    def __init__(self, arena: Arena, branch: Branch, task: Task, fork_of: Optional[str] = None):
+    def __init__(self, arena: Shakedown, branch: Branch, task: Task, fork_of: Optional[str] = None):
         self.arena = arena
         self.branch = branch
         self.task = task
@@ -81,7 +81,7 @@ class DriverRun:
             return []
         if self._start_seq is None:
             self._start_seq = self.branch.record().start_seq or 0
-        events = self.branch.events()
+        events = self.branch.record().events
         return [e for e in events if e.agent == agent_id and e.seq < self._start_seq]
 
     def _end_agents(self, ok: bool, error: Optional[str] = None) -> None:
@@ -94,7 +94,7 @@ class DriverRun:
 def run(task: Optional[str] = None, url: Optional[str] = None) -> Iterator[DriverRun]:
     """Joins the run Shakedown started this driver for (``ARENA_BRANCH``), or starts one of
     ``task`` (default ``ARENA_TASK``, else the benchmark's first task). Finishes it at the end."""
-    arena = Arena(url or os.environ.get("ARENA_URL") or DEFAULT_URL)
+    arena = Shakedown(url or os.environ.get("ARENA_URL") or DEFAULT_URL)
     branch_id = os.environ.get("ARENA_BRANCH")
     task_id = task or os.environ.get("ARENA_TASK")
     if branch_id:

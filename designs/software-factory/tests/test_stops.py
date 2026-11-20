@@ -2,7 +2,7 @@ import httpx
 import openai
 import pytest
 
-from arena.adapters import langgraph
+from shakedown.adapters import langgraph
 from fake_model import FakeModel, FakeRun, say, status
 from factory_designs.stops import run_design, stopped_reason
 
@@ -74,6 +74,6 @@ def test_other_errors_go_up():
 
 
 def test_shaked_saying_the_run_ended_is_a_stop():
-    from arena.errors import Conflict, NotFound
+    from shakedown.errors import Conflict, NotFound
     assert stopped_reason(Conflict(409, "the branch already ended", "GET", "/api/branches/b1/clock")) == "the run ended"
     assert stopped_reason(NotFound(404, "no such branch")) == "the run ended"

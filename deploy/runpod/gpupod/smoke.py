@@ -124,9 +124,9 @@ def smoke(ops: Ops, base: str, key: str, model: str, through_shaked: Optional[st
 
 
 def _arena(url: str) -> Any:
-    from arena import Arena
+    from shakedown import Shakedown
 
-    return Arena(url)
+    return Shakedown(url)
 
 
 def _through_shaked(s: _Smoke, url: str, factory: Callable[[str], Any], provider: str) -> None:
@@ -140,7 +140,7 @@ def _through_shaked(s: _Smoke, url: str, factory: Callable[[str], Any], provider
                     headers={"authorization": f"Bearer {GATEWAY_KEY}"},
                     json={"model": s.model, "messages": ASK, "tools": [GET_TIME], "max_tokens": 1024})
         found = any(e.kind == "reasoning" and (e.payload or {}).get("source") == "gateway"
-                    and (e.payload or {}).get("model_call_seq") is not None for e in branch.events())
+                    and (e.payload or {}).get("model_call_seq") is not None for e in branch.record().events)
         s.check("reasoning recorded through shaked", found,
                 "no reasoning event from the gateway with its model_call_seq")
     finally:

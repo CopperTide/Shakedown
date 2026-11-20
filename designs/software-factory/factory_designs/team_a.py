@@ -21,7 +21,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import create_react_agent
 
-from arena.adapters import langgraph
+from shakedown.adapters import langgraph
 
 from .prompts import fill_in, load_prompt
 from .settings import Settings, load_settings

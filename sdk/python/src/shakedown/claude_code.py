@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from .client import AgentEndpoint
-from .errors import ArenaError
+from .errors import ShakedownError
 from .models import Task
 
 #: Environment variables the CLI never gets (database URLs, other vendors' keys).
@@ -26,7 +26,7 @@ SCRUB = ("PGPASSWORD", "PGUSER", "PGHOST", "PGDATABASE", "PGPORT", "ARENA_PG_URL
          "OPENROUTER_API_KEY", "OPENAI_API_KEY", "ARENA_LOCAL_MODELS")
 
 
-class ClaudeCodeMissing(ArenaError):
+class ClaudeCodeMissing(ShakedownError):
     """``claude`` is not on PATH."""
 
 

@@ -1,4 +1,4 @@
-"""The client: :class:`Arena` (a connection to one shaked), :class:`Branch`, :class:`AgentEndpoint` and
+"""The client: :class:`Shakedown` (a connection to one shaked), :class:`Branch`, :class:`AgentEndpoint` and
 :class:`Suite`."""
 
 from __future__ import annotations
@@ -32,14 +32,14 @@ DEFAULT_URL = "http://127.0.0.1:4510"
 TeamLike = Union[Team, Sequence[Agent], dict, None]
 
 
-class Arena:
+class Shakedown:
     """A connection to a running shaked.
 
-    >>> arena = Arena("http://127.0.0.1:4510")
+    >>> arena = Shakedown("http://127.0.0.1:4510")
     >>> arena.benchmark().name
     'retail'
 
-    Use :meth:`Arena.local` to start a shaked of your own for the length of a ``with`` block.
+    Use :meth:`Shakedown.local` to start a shaked of your own for the length of a ``with`` block.
     """
 
     def __init__(self, url: str = DEFAULT_URL, timeout: float = 900.0, retries: int = 3):
@@ -85,24 +85,24 @@ class Arena:
     def close(self) -> None:
         self._http.close()
 
-    def __enter__(self) -> "Arena":
+    def __enter__(self) -> "Shakedown":
         return self
 
     def __exit__(self, *exc: Any) -> None:
         self.close()
 
     def __repr__(self) -> str:
-        return f"Arena({self.url!r})"
+        return f"Shakedown({self.url!r})"
 
     # -------------------------------------------------------------- starting a core
 
     @classmethod
-    def local(cls, **kw: Any) -> "Arena":
+    def local(cls, **kw: Any) -> "Shakedown":
         """Starts shaked as a subprocess and connects to it; it stops when the ``with`` block (or
-        :meth:`close`) ends. See :func:`arena.local.start` for the arguments."""
-        from .local import LocalArena
+        :meth:`close`) ends. See :func:`shakedown.local.start` for the arguments."""
+        from .local import LocalShakedown
 
-        return LocalArena(**kw)
+        return LocalShakedown(**kw)
 
     # -------------------------------------------------------------- what the core offers
 
@@ -308,7 +308,7 @@ class Arena:
         """True when this shaked has pause, resume and stop (``POST /api/branches/{id}/pause``)."""
         if self._pause_supported is None:
             try:
-                self.post("/api/branches/arena-sdk-probe/pause")
+                self.post("/api/branches/shakedown-sdk-probe/pause")
                 self._pause_supported = True
             except NotFound as e:
                 self._pause_supported = "no such route" not in e.message
@@ -368,7 +368,7 @@ class Branch:
 
     def __init__(
         self,
-        arena: Arena,
+        arena: Shakedown,
         branch_id: str,
         run_id: str,
         task_id: Optional[str] = None,
@@ -406,8 +406,12 @@ class Branch:
     def status(self) -> str:
         return self.record().status
 
-    def events(self) -> list[Event]:
-        return self.record().events
+    def events(self, reconnect: int = 5) -> Iterator[Event]:
+        """Every event of the branch, live: those recorded so far, then each new one as it happens,
+        until the branch ends (``self.final`` then holds ``{status, error}``); an ended branch gives
+        its recorded events and stops. The same as :meth:`stream`. The events recorded so far,
+        without waiting: ``record().events``."""
+        return self.stream(reconnect)
 
     def metrics(self) -> dict[str, Any]:
         """Measured and estimated time, overhead per kind, tokens and cost per agent."""
@@ -526,6 +530,11 @@ class Branch:
             f"/api/branches/{self.id}/restore-plan", at_seq=at_seq, restore=restore
         )
 
+    def rewind(self, event: Union[int, Event]) -> "Rewind":
+        """The branch back at just before step ``event`` (its seq, or the :class:`Event`). Nothing
+        runs until :meth:`Rewind.fork`: ``branch.rewind(event=40).fork(model="sonnet")``."""
+        return Rewind(self, event.seq if isinstance(event, Event) else int(event))
+
     def fork(
         self,
         at_seq: int,
@@ -591,7 +600,7 @@ class Branch:
 
     def pause(self) -> dict[str, Any]:
         """Holds new tool calls and gateway model calls and stops the world clock (newer cores
-        only: raises :class:`NotSupported` otherwise; see :meth:`Arena.supports_pause`)."""
+        only: raises :class:`NotSupported` otherwise; see :meth:`Shakedown.supports_pause`)."""
         return self._flow("pause")
 
     def resume(self) -> dict[str, Any]:
@@ -610,13 +619,57 @@ class Branch:
 
     def export(self, path: str) -> str:
         """Writes the branch as a dataset folder (``events.jsonl``, ``branches.jsonl``,
-        ``SCHEMA.md``); see :mod:`arena.export`."""
+        ``SCHEMA.md``); see :mod:`shakedown.export`."""
         from .export import export_branches
 
         return export_branches(self.arena, [self.id], path)
 
     def delete_run(self) -> None:
         self.arena.delete_run(self.run_id)
+
+
+class Rewind:
+    """A branch back at just before one of its steps (:meth:`Branch.rewind`). :meth:`fork` runs it
+    forward from there with one thing changed."""
+
+    def __init__(self, branch: Branch, seq: int):
+        self.branch = branch
+        self.seq = seq
+
+    def __repr__(self) -> str:
+        return f"Rewind({self.branch.id!r}, event={self.seq})"
+
+    def plan(self, restore: str = "exact") -> dict[str, Any]:
+        """How each part would be restored (see :meth:`Branch.restore_plan`)."""
+        return self.branch.restore_plan(self.seq, restore)
+
+    def fork(
+        self,
+        model: Optional[str] = None,
+        prompt: Optional[str] = None,
+        team: TeamLike = None,
+        agents: Union[str, Sequence[str], None] = None,
+        restore: str = "exact",
+    ) -> Branch:
+        """A new branch from here (:meth:`Branch.fork`). ``model`` and ``prompt`` change every agent
+        of the branch's team, or only the ``agents`` named (an id or a list of ids); ``team`` is
+        another team (external runs). With nothing given it runs forward unchanged."""
+        changes = None
+        if model is not None or prompt is not None:
+            change = Change(prompt=prompt, model=model)
+            changes = {a: change for a in self._agents(agents)}
+        return self.branch.fork(self.seq, changes=changes, restore=restore, team=team)
+
+    def _agents(self, named: Union[str, Sequence[str], None]) -> list[str]:
+        """The agents a change is for: ``named`` (checked against the team), else the whole team."""
+        team = [a.id for a in self.branch.record().team.agents]
+        if named is None:
+            return team
+        wanted = [named] if isinstance(named, str) else list(named)
+        unknown = [a for a in wanted if a not in team]
+        if unknown:
+            raise ValueError(f"the branch's team has no agent {', '.join(unknown)} (it has {', '.join(team)})")
+        return wanted
 
 
 def _task_of(rec: dict[str, Any]) -> Optional[str]:
@@ -732,7 +785,7 @@ class AgentEndpoint:
 class Suite:
     """A test suite. ``report`` is the last report read; :meth:`refresh` reads it again."""
 
-    def __init__(self, arena: Arena, report: dict[str, Any]):
+    def __init__(self, arena: Shakedown, report: dict[str, Any]):
         self.arena = arena
         self.id: str = report["id"]
         self.report = report
@@ -761,7 +814,7 @@ class Suite:
 
     def claim(self) -> Optional[Branch]:
         """External suites: claims the next run and starts it as an external run; None when every
-        run is claimed. Register agents and drive it like :meth:`Arena.external_run`'s branch."""
+        run is claimed. Register agents and drive it like :meth:`Shakedown.external_run`'s branch."""
         ans = self.arena.post(f"/api/suites/{self.id}/claim")
         if ans.get("done"):
             return None
@@ -783,10 +836,13 @@ class Suite:
         ]
 
     def export(self, path: str) -> str:
-        """Every run of the suite as one dataset folder (see :mod:`arena.export`)."""
+        """Every run of the suite as one dataset folder (see :mod:`shakedown.export`)."""
         from .export import export_branches
 
         return export_branches(self.arena, [b.id for b in self.branches()], path, suite=self.report)
 
 
-__all__ = ["Arena", "Branch", "AgentEndpoint", "Suite", "ENDED", "DEFAULT_URL"]
+#: The old name (the SDK was ``arena`` until 2026-11-19).
+Arena = Shakedown
+
+__all__ = ["Shakedown", "Branch", "Rewind", "AgentEndpoint", "Suite", "ENDED", "DEFAULT_URL"]

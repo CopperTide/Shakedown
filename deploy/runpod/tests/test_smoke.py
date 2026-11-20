@@ -40,8 +40,8 @@ class _Branch:
         self.registered = (agent, kw)
         return type("Ep", (), {"gateway_url": "https://shaked.test/gateway/b1/smoke/v1"})()
 
-    def events(self):
-        return self._events
+    def record(self):
+        return type("Rec", (), {"events": self._events})()
 
     def stop(self):
         self.stopped = True
