@@ -3,7 +3,7 @@ from pathlib import Path
 
 from arena_part.twin import HttpTwin
 
-from . import act, docs, routes, seed
+from . import act, apps, docs, routes, seed
 from .methods import METHODS
 
 SCHEMA_SQL = (Path(__file__).parent / "schema.sql").read_text()
@@ -33,6 +33,9 @@ class SlackTwin(HttpTwin):
 
     def docs(self, ctx):
         return docs.build(ctx)
+
+    def world_tools(self):
+        return {apps.TOOL["name"]: (apps.TOOL, apps.run)}
 
     def route_env(self, config, host):
         return {**route_env(config, host["host"]), **(host.get("env") or {})}

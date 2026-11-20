@@ -25,7 +25,7 @@ the agent, else the config's `default_user`. The Events API takes the service's 
 | `token`, `default_user`, `email_domain` | the one REST token; who `users/me` is without an agent; users' addresses `<name>@<email_domain>` |
 | `users` | `[{name, display_name, email?}]` |
 | `schedules` | `[{name, rotation: [user], shift_hours (default 168), start}]`: on call is `rotation[(now − start) // shift % n]`, `start` relative to world now (`-1h`) |
-| `services` | `[{name, schedule, integration_key}]` (32 characters); each gets an escalation policy paging its schedule |
+| `services` | `[{name, schedule, integration_key, auto_resolve?}]` (32 characters); each gets an escalation policy paging its schedule; `auto_resolve: false` makes a resolve event only clear the incident's alerts (the `alerts_cleared` notice), so a person resolves it (default true: the event resolves it, as Events v2 does) |
 
 ## What it serves
 
@@ -43,7 +43,7 @@ Found", "code": 2100}}`. Answers follow PagerDuty's descriptions (`tests/schemas
 body with `routing_key` also works), and `pagerduty_act {person, action, args}`: `ack {incident}`,
 `resolve {incident}`, `note {incident, text}`. At the next `advance` the twin reports `notice` events,
 `data = {system: "pagerduty", kind, data}`: `incident_triggered {incident, service, assignee, summary}`, and
-`alerts_cleared` (same fields) when a resolve event resolves an open incident (not when a person resolves it).
+`alerts_cleared` (same fields) when a resolve event clears an open incident's alerts (not when a person resolves it).
 
 ## Docs
 
@@ -51,7 +51,7 @@ body with `routing_key` also works), and `pagerduty_act {person, action, args}`:
 
 ## Verified
 
-`uv run --with pytest pytest -q` (26 tests): Events v2 dedup and resolve (and its `alerts_cleared` notice), the `From` rule, acknowledge, resolve and
+`uv run --with pytest pytest -q` (27 tests): Events v2 dedup and resolve (and its `alerts_cleared` notice; with `auto_resolve: false` the incident stays open for a person), the `From` rule, acknowledge, resolve and
 notes, filters and paging, on-call rotation in world time, the world tool and acts, read-only agents, every covered
 answer against PagerDuty's descriptions (fetched and pinned), and the `pagerduty` client 7.2 (`RestApiV2Client`),
 unchanged, listing, acknowledging (`rput` on the incident's `self`) and writing notes against the twin through a

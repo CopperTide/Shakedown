@@ -171,3 +171,22 @@ def test_alerts_clearing_an_open_incident_is_a_notice(pd):
     enqueue(pd, "trigger", "k2")
     pd.tool("pagerduty_act", {"person": "dev", "action": "resolve", "args": {"incident": "P2"}})
     assert [n["kind"] for n in pd.notices()] == ["incident_triggered"]
+
+
+def test_without_auto_resolve_a_resolve_event_only_clears_the_alerts():
+    from conftest import config, started
+    cfg = config()
+    cfg["services"][0]["auto_resolve"] = False
+    pd = started(cfg)
+    try:
+        enqueue(pd, "trigger", "k1")
+        pd.notices()
+        enqueue(pd, "resolve", "k1")
+        assert pd.docs()["incident/P1"]["status"] == "triggered"
+        assert [n["kind"] for n in pd.notices()] == ["alerts_cleared"]
+        assert pd.tool("pagerduty_event", {"action": "resolve", "dedup_key": "k1", "service": "checkout"})["result"] == \
+            {"incident": "P1", "status": "triggered"}
+        pd.tool("pagerduty_act", {"person": "dev", "action": "resolve", "args": {"incident": "P1"}})
+        assert pd.docs()["incident/P1"]["status"] == "resolved"
+    finally:
+        pd.part.stop("i")

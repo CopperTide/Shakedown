@@ -35,8 +35,17 @@ def apply(ctx, service, action: str, dedup_key: str | None, payload: dict):
         return None, dedup_key
     if action == "resolve":
         incidents.cleared(ctx, row, service)
+        if not _auto_resolves(ctx.config, service):
+            return records.incident(ctx.store.conn, ids.incident(row["number"])), dedup_key
     target = "acknowledged" if action == "acknowledge" else "resolved"
     return incidents.change(ctx, row, target, f"service:{service['id']}"), dedup_key
+
+
+def _auto_resolves(config: dict, service) -> bool:
+    """Whether a resolve event resolves the service's incident (Events v2's behaviour, the default) or only clears
+    its alerts, leaving a person to resolve it (`auto_resolve: false` in the service's config)."""
+    spec = next((s for s in config.get("services", []) if s["name"] == service["name"]), {})
+    return bool(spec.get("auto_resolve", True))
 
 
 def enqueue(req, ctx) -> Response:

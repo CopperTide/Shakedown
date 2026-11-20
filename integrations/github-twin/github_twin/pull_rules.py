@@ -53,7 +53,23 @@ def open_pull(v, repo, by: str, head: str, base: str | None, title: str, body: s
     notices.mentions(v.ctx, full_name(repo), pr["number"], by, body)
     _hook(v, repo, pr, "opened", by)
     runs.on_pull_request(v, repo, pr, by)
+    _assign_reviewers(v, repo, pr, by)
     return pr
+
+
+def _assign_reviewers(v, repo, pr, by: str) -> None:
+    """The config's `review_assignment {reviewers, count}`: each new pull request asks the next `count` of the
+    reviewers in turn (the n-th pull request starts at the n-th reviewer), its author skipped, as a GitHub team's
+    round-robin code review assignment does."""
+    spec = v.config.get("review_assignment") or {}
+    pool = list(spec.get("reviewers") or [])
+    if not pool:
+        return
+    n = v.db.execute("SELECT COUNT(*) FROM pulls").fetchone()[0]
+    turn = [pool[(n - 1 + k) % len(pool)] for k in range(len(pool))]
+    chosen = [login for login in turn if login != pr["user"]][:int(spec.get("count", 1))]
+    if chosen:
+        request_reviewers(v, repo, pr, by, chosen)
 
 
 def _own(pr, by: str, event: str | None) -> None:

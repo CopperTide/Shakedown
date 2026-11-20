@@ -54,7 +54,7 @@ def build(ctx) -> dict:
     db, repos, out = ctx.store.conn, Repos(ctx.files), {}
     for repo in db.execute("SELECT * FROM repos ORDER BY id").fetchall():
         out[f"repo/{full_name(repo)}"] = {"default_branch": repo["default_branch"], "private": bool(repo["private"]),
-                                          "description": repo["description"]}
+                                          "description": repo["description"], "seed_sha": repo["seed_sha"]}
         for part in (_branches(repos, db, repo), _pulls(db, repo), _issues(db, repo), _checks(db, repo), _runs(db, repo)):
             out.update(part)
     out.update(_hooks(db))
