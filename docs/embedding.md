@@ -22,7 +22,7 @@ shaked::serve::run(store.with_layer(std::sync::Arc::new(my_layer)), opts).await
 | `authorize(caller, action, target)` | before every route's handler, after the engine's own checks (token scope, run-token reach) | allow |
 | `admit(caller, costly)` | before a run (however it starts: `POST /api/runs`, a suite, an experiment, a suite's claim), a fork, a model call or a stored save | go |
 | `meter(caller, usage)` | after each run created and each recorded model call (idempotent on its key) | nothing |
-| `fallback_provider(caller, want)` | when an agent's provider has no key of the caller's own nor in the environment | none |
+| `fallback_provider(caller, want)` | when an agent's provider has no key of the caller's own nor in the environment; a lent provider's `cap` (`CallCap`) clamps each call's `max_tokens` and, on OpenRouter, sets `provider.max_price` | none |
 | `audit(tx, caller, event)` | inside the transaction of each token or model-key change (never with a secret) | nothing |
 | `routes()` | merged under `/api`, behind `authenticate` | none |
 | `me(caller)` | `GET /api/me`: `mode`, `features` and an optional `account` menu for the UI | `local`, none, none |

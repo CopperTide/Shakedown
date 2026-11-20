@@ -173,6 +173,7 @@ mod tests {
             max_tokens: 1024,
             rate: None,
             machine_credentials: true,
+            cap: None,
         }
     }
 

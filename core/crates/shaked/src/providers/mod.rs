@@ -113,6 +113,52 @@ pub struct Provider {
     /// Bedrock without a key of its own may sign with the machine's AWS credentials (env, the aws
     /// CLI, an instance role); false where the layer lends no environment keys.
     pub machine_credentials: bool,
+    /// Limits every call through this provider must keep (a layer's lent provider sets them).
+    pub cap: Option<CallCap>,
+}
+
+/// Limits a call is held to before it is sent: its `max_tokens` (set when the call names none),
+/// and on OpenRouter the most it may cost per million tokens (`provider.max_price`), so the
+/// provider itself refuses a dearer route.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CallCap {
+    pub max_tokens: u64,
+    /// (prompt, completion) in USD per million tokens.
+    pub max_price_per_mtok: Option<(f64, f64)>,
+}
+
+impl CallCap {
+    /// `body` held to the cap (see [`CallCap`]) for a call to a provider of `kind`.
+    pub fn apply(&self, kind: ProviderKind, mut body: serde_json::Value) -> serde_json::Value {
+        let Some(obj) = body.as_object_mut() else {
+            return body;
+        };
+        let mut named = false;
+        for field in ["max_tokens", "max_completion_tokens"] {
+            if let Some(n) = obj.get(field).and_then(serde_json::Value::as_u64) {
+                obj.insert(field.into(), n.min(self.max_tokens).into());
+                named = true;
+            } else if obj.contains_key(field) {
+                obj.insert(field.into(), self.max_tokens.into());
+                named = true;
+            }
+        }
+        if !named {
+            obj.insert("max_tokens".into(), self.max_tokens.into());
+        }
+        if let (ProviderKind::OpenRouter, Some((prompt, completion))) =
+            (kind, self.max_price_per_mtok)
+        {
+            let routing = obj
+                .entry("provider")
+                .or_insert_with(|| serde_json::json!({}));
+            if !routing.is_object() {
+                *routing = serde_json::json!({});
+            }
+            routing["max_price"] = serde_json::json!({"prompt": prompt, "completion": completion});
+        }
+        body
+    }
 }
 
 impl Provider {
@@ -124,6 +170,7 @@ impl Provider {
             max_tokens: DEFAULT_ANTHROPIC_MAX_TOKENS,
             rate: None,
             machine_credentials: true,
+            cap: None,
         }
     }
 

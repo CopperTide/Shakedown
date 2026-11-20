@@ -64,6 +64,10 @@ pub enum Costly<'a> {
         branch: &'a str,
         provider: &'a str,
         model: &'a str,
+        /// The call's own `max_tokens` (or `max_completion_tokens`), if it names one.
+        max_tokens: Option<u64>,
+        /// The request body's length, for estimating its prompt.
+        request_bytes: u64,
     },
     StoreSave {
         bytes: u64,

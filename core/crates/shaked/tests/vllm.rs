@@ -284,3 +284,42 @@ fn an_agent_without_a_key_gets_the_layer_fallback() {
         assert!(spy.calls().contains(&asked), "{:?}", spy.calls());
     })
 }
+
+/// OpenRouter at `base`, lent with a cap of 64 tokens and $1 / $2 per million tokens.
+fn capped_openrouter(base: &str) -> shaked::providers::Provider {
+    use shaked::providers::{CallCap, Endpoint, Provider, ProviderKind, Secret};
+    Provider {
+        id: "openrouter".into(),
+        kind: ProviderKind::OpenRouter,
+        endpoint: Endpoint::new(base, Some(Secret::new("sk-or-trial"))),
+        max_tokens: 1024,
+        rate: None,
+        machine_credentials: false,
+        cap: Some(CallCap {
+            max_tokens: 64,
+            max_price_per_mtok: Some((1.0, 2.0)),
+        }),
+    }
+}
+
+/// I2: a lent provider with a cap holds each call to it: `max_tokens` clamped, and on OpenRouter
+/// the most the call may cost per million tokens, so the provider refuses a dearer route.
+#[test]
+fn a_capped_fallback_holds_the_call_to_its_cap() {
+    run(async {
+        let llm = fake_llm(vec![(200, gpt_oss("t", None))]).await;
+        let spy = shaked::harness::SpyLayer::new().lending(shaked::layer::Fallback {
+            provider: capped_openrouter(&llm.base),
+            source: "trial",
+        });
+        let keyless = ProviderConfig::with_upstream(support::app::NOWHERE);
+        let (fx, _branch, gw) = external_spied("capped", keyless, &spy, "openrouter").await;
+        let (status, answer) = chat(&fx, &gw, ask(user("go"))).await;
+        assert_eq!(status, 200, "{answer}");
+        let seen = llm.seen.lock().unwrap();
+        let sent = &seen[0].body;
+        assert_eq!(sent["max_tokens"], 64, "{sent}");
+        let price = json!({"prompt": 1.0, "completion": 2.0});
+        assert_eq!(sent["provider"]["max_price"], price, "{sent}");
+    })
+}
