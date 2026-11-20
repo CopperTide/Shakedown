@@ -243,3 +243,61 @@ fn gateway_headers_reach_only_a_layer_that_serves_others() {
         }
     })
 }
+
+/// The operator's environment: keys for OpenAI and Anthropic, and a local server.
+fn operator_env() -> shaked::providers::ProviderConfig {
+    use shaked::providers::{Endpoint, LocalEndpoint, ProviderConfig, Secret};
+    let mut env = ProviderConfig::default();
+    env.openai.key = Some(Secret::new("sk-operator-env-key"));
+    env.anthropic.key = Some(Secret::new("sk-ant-operator-env-key"));
+    env.locals.push(LocalEndpoint {
+        name: "lab".into(),
+        endpoint: Endpoint::new("http://10.0.0.9:8000/v1", Some(Secret::new("lab-key"))),
+        rate: None,
+    });
+    env
+}
+
+/// Bedrock with no key of the caller's says so, and never signs with the machine's credentials.
+async fn bedrock_needs_an_own_key(fx: &AppFx) {
+    let providers = &fx.state.config.providers;
+    let bedrock = providers.resolve(Some("bedrock:us-east-1")).unwrap();
+    let why = bedrock.unavailable().map(|u| u.why()).unwrap_or_default();
+    assert!(why.contains("key of your own"), "{why}");
+    let call = json!({"model": "m", "max_tokens": 1, "messages": []});
+    let e = bedrock.send(&fx.state.http, &call).await.unwrap_err();
+    assert!(e.contains("key of your own"), "{e}");
+}
+
+/// A layer without environment keys (hosted) never lends a caller the operator's model keys or
+/// local servers, nor Bedrock the machine's AWS credentials (env, the aws CLI, an instance role);
+/// locally the environment's keys serve as before.
+#[test]
+fn a_layer_without_environment_keys_lends_none_of_the_operators() {
+    use shaked::providers::keys::provider_for;
+    run(async {
+        let hosted = Policy {
+            serves_others: true,
+            environment_keys: false,
+            ..Policy::LOCAL
+        };
+        for (policy, lent) in [(Policy::LOCAL, true), (hosted, false)] {
+            let spy = SpyLayer::new().with_policy(policy);
+            let fx = AppFx::idle("layer", "envkeys")
+                .layer(Arc::new(spy))
+                .providers(operator_env())
+                .start()
+                .await;
+            let caller = support::local();
+            for asked in ["openai", "anthropic"] {
+                let (p, _) = provider_for(&fx.state, caller, Some(asked), "m").await;
+                assert_eq!(p.unwrap().endpoint.key.is_some(), lent, "{asked} {policy:?}");
+            }
+            let (lab, _) = provider_for(&fx.state, caller, Some("local:lab"), "m").await;
+            assert_eq!(lab.is_ok(), lent, "{policy:?}");
+            if !lent {
+                bedrock_needs_an_own_key(&fx).await;
+            }
+        }
+    })
+}

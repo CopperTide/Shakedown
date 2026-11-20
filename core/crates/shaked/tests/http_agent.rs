@@ -422,6 +422,7 @@ fn a_hosted_check_never_reaches_a_private_agent() {
             serves_others: true,
             private_model_urls: false,
             runs_packages_here: false,
+            environment_keys: false,
         };
         let spy = shaked::harness::SpyLayer::new().with_policy(hosted);
         let fx = AppFx::idle("http_agent", "hostedcheck")

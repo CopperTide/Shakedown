@@ -187,8 +187,12 @@ fn shared_client(policy: &crate::layer::Policy) -> reqwest::Client {
 }
 
 impl AppState {
-    pub fn new(store: Arc<Store>, hub: Arc<Hub>, config: Config) -> AppState {
-        let http = shared_client(store.layer().policy());
+    pub fn new(store: Arc<Store>, hub: Arc<Hub>, mut config: Config) -> AppState {
+        let policy = store.layer().policy();
+        let http = shared_client(policy);
+        if !policy.environment_keys {
+            config.providers = ProviderConfig::without_environment();
+        }
         let named = config.start_benchmark.clone();
         let benchmark = named.clone().unwrap_or_else(|| only_benchmark(&hub));
         let remembered = || crate::worlds::remembered(&hub, config.worlds_dir.as_deref());

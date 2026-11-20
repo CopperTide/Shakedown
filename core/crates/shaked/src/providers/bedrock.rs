@@ -39,7 +39,8 @@ pub(super) async fn send(
 ) -> Result<Upstream, String> {
     let auth = match &p.endpoint.key {
         Some(own) => credentials::from_json(own.expose())?,
-        None => credentials::resolve().await?,
+        None if p.machine_credentials => credentials::resolve().await?,
+        None => return Err(credentials::NO_OWN_KEY.into()),
     };
     send_with(p, http, chat, &auth).await
 }
@@ -171,6 +172,7 @@ mod tests {
             endpoint: Endpoint::new(base, None),
             max_tokens: 1024,
             rate: None,
+            machine_credentials: true,
         }
     }
 

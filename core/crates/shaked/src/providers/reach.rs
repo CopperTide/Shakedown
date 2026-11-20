@@ -242,6 +242,7 @@ mod tests {
         serves_others: true,
         private_model_urls: false,
         runs_packages_here: false,
+        environment_keys: false,
     };
 
     fn ok(url: &str, p: &Policy) -> bool {

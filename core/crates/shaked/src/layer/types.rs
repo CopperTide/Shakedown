@@ -19,6 +19,10 @@ pub struct Policy {
     pub private_model_urls: bool,
     /// Packages and code connections run on this machine (else only in sandboxes).
     pub runs_packages_here: bool,
+    /// The operator's own model keys (`OPENAI_API_KEY` and the rest, local servers) and the
+    /// machine's AWS credentials (env, the aws CLI, an instance role) may serve callers. Off for a
+    /// layer that serves others: each caller brings keys of their own, else the layer's fallback.
+    pub environment_keys: bool,
 }
 
 /// An answer that stops a request: its status and message.

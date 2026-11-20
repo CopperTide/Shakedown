@@ -59,6 +59,8 @@ pub enum Unavailable {
     MissingKey(&'static str),
     /// No AWS credentials in the environment and no AWS CLI to find them.
     NoAwsCredentials,
+    /// Bedrock with no key of your own where the machine's AWS credentials serve no caller.
+    NoOwnBedrockKey,
 }
 
 impl Unavailable {
@@ -67,6 +69,7 @@ impl Unavailable {
         match self {
             Unavailable::MissingKey(env) => format!("{env} is not set"),
             Unavailable::NoAwsCredentials => bedrock::credentials::NO_CREDENTIALS.into(),
+            Unavailable::NoOwnBedrockKey => bedrock::credentials::NO_OWN_KEY.into(),
         }
     }
 
@@ -77,6 +80,7 @@ impl Unavailable {
             Unavailable::NoAwsCredentials => {
                 format!("Bedrock needs {}", bedrock::credentials::NO_CREDENTIALS)
             }
+            Unavailable::NoOwnBedrockKey => bedrock::credentials::NO_OWN_KEY.into(),
         }
     }
 }
@@ -103,6 +107,9 @@ pub struct Provider {
     pub max_tokens: u64,
     /// A local server's declared token rate (`SHAKEDOWN_LOCAL_PRICE_<NAME>`).
     pub rate: Option<Rate>,
+    /// Bedrock without a key of its own may sign with the machine's AWS credentials (env, the aws
+    /// CLI, an instance role); false where the layer lends no environment keys.
+    pub machine_credentials: bool,
 }
 
 impl Provider {
@@ -113,6 +120,7 @@ impl Provider {
             endpoint: endpoint.clone(),
             max_tokens: DEFAULT_ANTHROPIC_MAX_TOKENS,
             rate: None,
+            machine_credentials: true,
         }
     }
 
@@ -146,9 +154,13 @@ impl Provider {
             ProviderKind::OpenAi => missing("OPENAI_API_KEY"),
             ProviderKind::Anthropic => missing("ANTHROPIC_API_KEY"),
             ProviderKind::Local => None,
-            ProviderKind::Bedrock => (self.endpoint.key.is_none()
-                && !bedrock::credentials::some_source())
-            .then_some(Unavailable::NoAwsCredentials),
+            ProviderKind::Bedrock if self.endpoint.key.is_some() => None,
+            ProviderKind::Bedrock if !self.machine_credentials => {
+                Some(Unavailable::NoOwnBedrockKey)
+            }
+            ProviderKind::Bedrock => {
+                (!bedrock::credentials::some_source()).then_some(Unavailable::NoAwsCredentials)
+            }
         }
     }
 
@@ -225,7 +237,10 @@ impl ProviderConfig {
         }
         let own = (self.bedrock_keys.iter()).find_map(|(r, k)| (r == region).then(|| k.clone()));
         let endpoint = Endpoint::new(&bedrock::base_url(region), own);
-        Ok(Some(Provider::new(id, ProviderKind::Bedrock, &endpoint)))
+        Ok(Some(Provider {
+            machine_credentials: self.machine_credentials,
+            ..Provider::new(id, ProviderKind::Bedrock, &endpoint)
+        }))
     }
 
     fn anthropic(&self) -> Provider {

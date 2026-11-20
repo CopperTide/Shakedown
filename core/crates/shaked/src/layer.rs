@@ -66,6 +66,7 @@ impl Policy {
         serves_others: false,
         private_model_urls: true,
         runs_packages_here: true,
+        environment_keys: true,
     };
 }
 

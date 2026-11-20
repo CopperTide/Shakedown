@@ -117,6 +117,8 @@ pub struct ProviderConfig {
     /// Bedrock credentials of your own, by region: JSON
     /// `{access_key_id, secret_access_key, session_token?}` (else the environment's are used).
     pub bedrock_keys: Vec<(String, Secret)>,
+    /// Bedrock without a key of its own may sign with the machine's AWS credentials.
+    pub machine_credentials: bool,
 }
 
 impl Default for ProviderConfig {
@@ -130,6 +132,7 @@ impl Default for ProviderConfig {
             anthropic_max_tokens: DEFAULT_ANTHROPIC_MAX_TOKENS,
             default: OPENROUTER.to_string(),
             bedrock_keys: vec![],
+            machine_credentials: true,
         }
     }
 }
@@ -218,6 +221,15 @@ impl ProviderConfig {
             Err(p) => problems.push(p),
         }
         (config, problems)
+    }
+
+    /// Nothing of the operator's: no keys, no local servers, and Bedrock never on the machine's
+    /// AWS credentials (a layer without environment keys; each caller's own keys go over it).
+    pub fn without_environment() -> ProviderConfig {
+        ProviderConfig {
+            machine_credentials: false,
+            ..ProviderConfig::default()
+        }
     }
 
     /// Nothing from the environment: only the OpenAI-compatible `base`, as `local:custom`, for
