@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from arena_part import PartError
+from shakedown_part import PartError
 from isaac_part.backends import BACKENDS
 from isaac_part.part import IsaacSim
 

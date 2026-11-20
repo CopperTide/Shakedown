@@ -1,7 +1,7 @@
 """The roster's tools: the shift for agents, assigning an operator to a station and calling one in, and the
 scenario a task's setup sets."""
-from arena_part.jsonstate import Done, Scenarios, Tool
-from arena_part.params import Param, Refusal
+from shakedown_part.jsonstate import Done, Scenarios, Tool
+from shakedown_part.params import Param, Refusal
 
 from . import disrupt, roster
 

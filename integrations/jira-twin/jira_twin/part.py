@@ -1,7 +1,7 @@
 """The Jira twin part: an instance seeded from its config, the router, docs, acts and route env."""
 from pathlib import Path
 
-from arena_part.twin import HttpTwin
+from shakedown_part.twin import HttpTwin
 
 from . import act, docs, routes, seed, users
 

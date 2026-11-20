@@ -3,8 +3,8 @@ world declares (a string starting with `/` is a pointer into the event's data) a
 and every input each part got, in order. `Board` is a neutral twin on the kit that people ask and answer on."""
 from dataclasses import dataclass, field
 
-from arena_part.serve import dispatch
-from arena_part.twin import Done, HttpTwin, Router
+from shakedown_part.serve import dispatch
+from shakedown_part.twin import Done, HttpTwin, Router
 from people_part.part import People
 
 from support import EPOCH, MIN

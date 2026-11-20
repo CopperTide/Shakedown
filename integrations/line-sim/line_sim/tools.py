@@ -1,8 +1,8 @@
 """The simulation study's tools: the model's decisions, limits and KPIs; run a simulation of a config;
 the history of every simulation; and submit one simulated config as the recommendation, which is
 verified by re-simulating it on replications the study never used."""
-from arena_part.jsonstate import Denied, Done, Tool, event
-from arena_part.params import Param, Refusal
+from shakedown_part.jsonstate import Denied, Done, Tool, event
+from shakedown_part.params import Param, Refusal
 
 from . import kpis, plant
 from .backend import backend_for

@@ -3,8 +3,8 @@ the Factory method its api.py route calls, directly."""
 from dataclasses import dataclass
 from typing import Callable
 
-from arena_part import errors
-from arena_part.params import Param, Refusal, input_schema, normalize, refused
+from shakedown_part import errors
+from shakedown_part.params import Param, Refusal, input_schema, normalize, refused
 
 from . import views
 

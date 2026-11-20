@@ -1,5 +1,5 @@
 """The twin stamps what it makes in world time: the epoch shaked gives at start plus the branch clock."""
-from arena_part.serve import dispatch
+from shakedown_part.serve import dispatch
 
 from conftest import Clock, Twin, api, config
 from github_twin.part import GithubTwin

@@ -3,8 +3,8 @@ import json
 
 import pytest
 
-from arena_part import PartError
-from arena_part.benchmark import SingleTaskBenchmark, check, load
+from shakedown_part import PartError
+from shakedown_part.benchmark import SingleTaskBenchmark, check, load
 
 
 class Demo(SingleTaskBenchmark):

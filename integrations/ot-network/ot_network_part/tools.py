@@ -1,7 +1,7 @@
 """The OT network's tools: its status, the gateway's sessions and the playbook for agents; isolating and restoring
 a zone, revoking a session and reporting an incident; and the scenario a task's setup sets."""
-from arena_part.jsonstate import Done, Scenarios, Tool, event
-from arena_part.params import Param, Refusal
+from shakedown_part.jsonstate import Done, Scenarios, Tool, event
+from shakedown_part.params import Param, Refusal
 
 from . import disrupt, network
 

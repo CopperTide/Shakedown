@@ -1,5 +1,5 @@
-"""The arena-part/1 integration: one World per instance, saved as one JSON file."""
-from arena_part import DocsPart, errors, saves, sources
+"""The shakedown-part/1 integration: one World per instance, saved as one JSON file."""
+from shakedown_part import DocsPart, errors, saves, sources
 
 from . import state
 from .config import parse_config, source_files, source_hashes

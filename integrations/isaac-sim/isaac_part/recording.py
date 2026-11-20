@@ -4,7 +4,7 @@ A frame is rendered every `physics_hz / record_fps` physics steps, so the MP4 ru
 render costs. Rendering is the backend's (only `isaac` can); this module is plain Python."""
 from pathlib import Path
 
-from arena_part import errors
+from shakedown_part import errors
 
 CAMERA_MODES = ("auto", "free")
 STILL_SETTLE_FRAMES = 32  # frames a still waits after a cut, for the renderer's history to catch up

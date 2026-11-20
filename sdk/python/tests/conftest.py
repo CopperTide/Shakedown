@@ -3,7 +3,7 @@
 - ``SHAKEDOWN_SDK_URL``: a shaked that is already running (any benchmark); or
 - a shaked the tests start (``Shakedown.local``) with the retail example benchmark, from
   ``SHAKEDOWN_SDK_BIN_DIR`` (default ``core/target/release``, then ``core/target/debug``; it needs
-  ``shaked``, ``arena-retail`` and ``arena-postgres``) on the Postgres at ``SHAKEDOWN_SDK_PG_URL``
+  ``shaked``, ``shakedown-retail`` and ``shakedown-postgres``) on the Postgres at ``SHAKEDOWN_SDK_PG_URL``
   (default ``deploy/compose.yml``'s, ``postgres://arena:arena@127.0.0.1:5544/postgres``).
 
 The shaked the tests start cleans up unreferenced saves when it starts, like any shaked, so point
@@ -32,7 +32,7 @@ from shakedown.settings import setting
 REPO = Path(__file__).resolve().parents[3]
 #: First on the PATH of the shaked the tests start: a stand-in `claude` that calls no model.
 FAKE_BIN = Path(__file__).resolve().parent / "fake_bin"
-NEEDED = ("shaked", "arena-retail", "arena-postgres")
+NEEDED = ("shaked", "shakedown-retail", "shakedown-postgres")
 
 
 def _bin_dir() -> str | None:

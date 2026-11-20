@@ -3,8 +3,8 @@ over the lab's records, and gives a `decided` event that a benchmark's link hand
 Changes of other actions are not this desk's: it leaves them alone."""
 from datetime import date
 
-from arena_part.people import Desk
-from arena_part.params import Refusal
+from shakedown_part.people import Desk
+from shakedown_part.params import Refusal
 
 from . import lab
 

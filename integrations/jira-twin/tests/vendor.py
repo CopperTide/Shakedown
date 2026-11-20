@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from arena_part.twin.vendor_schema import Pinned, Unavailable, load
+from shakedown_part.twin.vendor_schema import Pinned, Unavailable, load
 
 CACHE = Path(__file__).parent / ".vendor-cache"
 WAYBACK = "https://web.archive.org/web/{stamp}id_/https://developer.atlassian.com/cloud/jira/{path}"

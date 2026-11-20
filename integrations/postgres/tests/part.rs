@@ -296,7 +296,7 @@ fn build_all() {
             .unwrap()
             .success());
         assert!(Command::new("cargo")
-            .args(["build", "-p", "parts", "--bin", "arena-part-check"])
+            .args(["build", "-p", "parts", "--bin", "shakedown-part-check"])
             .current_dir(a.join("core"))
             .status()
             .unwrap()
@@ -304,11 +304,11 @@ fn build_all() {
     });
 }
 
-/// Runs `arena-part-check` against the postgres package in the background and returns its output.
+/// Runs `shakedown-part-check` against the postgres package in the background and returns its output.
 async fn run_part_check(cfgfile: PathBuf, saves: PathBuf, ns: String) -> std::process::Output {
     let a = arena();
     tokio::task::spawn_blocking(move || {
-        Command::new(a.join("core/target/debug/arena-part-check"))
+        Command::new(a.join("core/target/debug/shakedown-part-check"))
             .arg(a.join("integrations/postgres/check"))
             .arg("--config")
             .arg(&cfgfile)

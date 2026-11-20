@@ -1,9 +1,9 @@
-"""The arena-part/1 integration: simulated people on the world clock. Its config names the people, each role's
+"""The shakedown-part/1 integration: simulated people on the world clock. Its config names the people, each role's
 rules (`shakedown-people/1`) and the systems the world has. People never call a system: the world's links hand
 every notice to `people_notice` and every act event (`<system>_act {person, action, args}`) to that system."""
-from arena_part import errors
-from arena_part.jsonstate import ClockedJsonStatePart, Done, Tool
-from arena_part.params import Param
+from shakedown_part import errors
+from shakedown_part.jsonstate import ClockedJsonStatePart, Done, Tool
+from shakedown_part.params import Param
 
 from . import docs, engine
 from .rules import FORMAT

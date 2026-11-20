@@ -1,7 +1,7 @@
-"""The arena-part/1 integration: a config (the benchmark's lab data) and a state (the scenario and the QA
+"""The shakedown-part/1 integration: a config (the benchmark's lab data) and a state (the scenario and the QA
 head's reviews) per instance, saved as one JSON file."""
-from arena_part import disruptions
-from arena_part.jsonstate import JsonStatePart
+from shakedown_part import disruptions
+from shakedown_part.jsonstate import JsonStatePart
 
 from . import disrupt, lab
 from .tools import TOOLS

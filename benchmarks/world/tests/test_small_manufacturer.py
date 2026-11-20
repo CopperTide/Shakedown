@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from arena_part.expect import evaluate
+from shakedown_part.expect import evaluate
 from worldbench.generate import generate
 from worldbench.template import load_template
 

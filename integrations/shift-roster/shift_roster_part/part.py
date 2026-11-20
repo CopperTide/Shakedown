@@ -1,7 +1,7 @@
-"""The arena-part/1 integration: a config (stations and operators) and a state (who is on shift where, call-outs,
+"""The shakedown-part/1 integration: a config (stations and operators) and a state (who is on shift where, call-outs,
 call-ins and the schedule) per instance, saved as one JSON file."""
-from arena_part import disruptions
-from arena_part.jsonstate import JsonStatePart
+from shakedown_part import disruptions
+from shakedown_part.jsonstate import JsonStatePart
 
 from . import disrupt, roster
 from .tools import TOOLS

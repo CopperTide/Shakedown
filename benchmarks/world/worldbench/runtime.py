@@ -3,9 +3,9 @@
 import json
 from pathlib import Path
 
-from arena_part import errors
-from arena_part.benchmark import Benchmark
-from arena_part.expect import evaluate
+from shakedown_part import errors
+from shakedown_part.benchmark import Benchmark
+from shakedown_part.expect import evaluate
 
 from .expand import WORLD_DIR
 

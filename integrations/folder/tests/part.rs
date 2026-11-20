@@ -282,7 +282,7 @@ fn build_all() {
         run(a.clone(), &["build", "-p", "arena-folder"]);
         run(
             a.join("core"),
-            &["build", "-p", "parts", "--bin", "arena-part-check"],
+            &["build", "-p", "parts", "--bin", "shakedown-part-check"],
         );
     });
 }
@@ -292,7 +292,7 @@ fn conformance_check_passes() {
     build_all();
     let a = arena();
     let saves = Saves::new("check");
-    let out = Command::new(a.join("core/target/debug/arena-part-check"))
+    let out = Command::new(a.join("core/target/debug/shakedown-part-check"))
         .arg(a.join("integrations/folder/check"))
         .env("SHAKEDOWN_BIN_DIR", a.join("core/target/debug"))
         .env("SHAKEDOWN_SAVES", &saves.0)

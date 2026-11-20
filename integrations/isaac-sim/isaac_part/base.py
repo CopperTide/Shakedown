@@ -1,6 +1,6 @@
 """What the plant and the mirror share: the kit's DocsPart over the factory's documents, whose saves keep them
 in `views.DOCS_FILE` and whose physics floats need only be close."""
-from arena_part import DocsPart as KitDocsPart
+from shakedown_part import DocsPart as KitDocsPart
 
 from . import views
 

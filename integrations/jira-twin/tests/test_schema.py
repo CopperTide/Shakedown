@@ -3,7 +3,7 @@ Jira Software's agile API), and every route a covered, documented operation."""
 import pytest
 from jsonschema import Draft7Validator
 
-from arena_part.twin.vendor_schema import component_schema, documented_ops, response_schema
+from shakedown_part.twin.vendor_schema import component_schema, documented_ops, response_schema
 from conftest import config, started
 from exercise import exercise
 from jira_twin.part import JiraTwin

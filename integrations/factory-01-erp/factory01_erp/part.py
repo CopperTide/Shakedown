@@ -1,7 +1,7 @@
-"""The arena-part/1 integration: Factory-01's ERP, a config and one JSON state per instance. A call over a
+"""The shakedown-part/1 integration: Factory-01's ERP, a config and one JSON state per instance. A call over a
 hard limit is refused with a structured denial, recorded, and reported to the world as a `denial` event."""
-from arena_part import disruptions
-from arena_part.jsonstate import JsonStatePart, denials_doc
+from shakedown_part import disruptions
+from shakedown_part.jsonstate import JsonStatePart, denials_doc
 
 from . import disrupt, erp
 from .tools import TOOLS

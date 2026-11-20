@@ -2,7 +2,7 @@
 
 
 class PartError(Exception):
-    """A JSON-RPC error with an arena-part/1 code."""
+    """A JSON-RPC error with an shakedown-part/1 code."""
 
     def __init__(self, code: int, message: str, data=None):
         super().__init__(message)

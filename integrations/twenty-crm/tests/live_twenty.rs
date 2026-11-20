@@ -302,19 +302,19 @@ fn cargo(dir: PathBuf, args: &[&str]) {
     assert!(status.unwrap().success(), "cargo {args:?}");
 }
 
-/// `arena-part-check` on a program of its own, against the test's server.
+/// `shakedown-part-check` on a program of its own, against the test's server.
 fn conformance(e: &Env) {
     let a = arena();
-    let program = Path::new(env!("CARGO_BIN_EXE_arena-twenty-crm"));
+    let program = Path::new(env!("CARGO_BIN_EXE_shakedown-twenty-crm"));
     let bin = program.parent().unwrap();
     cargo(
         a.join("core"),
-        &["build", "-p", "parts", "--bin", "arena-part-check"],
+        &["build", "-p", "parts", "--bin", "shakedown-part-check"],
     );
     let config = e.saves.join("check.json");
     std::fs::write(&config, e.config().to_string()).unwrap();
     let t = Instant::now();
-    let out = Command::new(bin.join("arena-part-check"))
+    let out = Command::new(bin.join("shakedown-part-check"))
         .arg(a.join("integrations/twenty-crm/check"))
         .arg("--config")
         .arg(&config)

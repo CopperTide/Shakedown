@@ -1,7 +1,7 @@
 """The Slack twin part: a workspace seeded from its config, the Web API router, docs, acts and route env."""
 from pathlib import Path
 
-from arena_part.twin import HttpTwin
+from shakedown_part.twin import HttpTwin
 
 from . import act, apps, docs, routes, seed
 from .methods import METHODS

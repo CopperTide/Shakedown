@@ -1,4 +1,4 @@
-//! Wire types of arena-part/1. See docs/protocol.md.
+//! Wire types of shakedown-part/1 (called arena-part/1 until 2026-11-19). See docs/protocol.md.
 use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
@@ -11,6 +11,26 @@ pub use scenario::*;
 pub use view::*;
 
 pub const PROTOCOL: u32 = 1;
+/// The protocol's name, as the kits announce it in `describe`'s `protocol`.
+pub const PROTOCOL_NAME: &str = "shakedown-part/1";
+/// Its name until 2026-11-19, still accepted.
+pub const OLD_PROTOCOL_NAME: &str = "arena-part/1";
+
+/// The protocol version a manifest's or a `describe`'s `protocol` says: the number, or either name
+/// of version 1 (None: neither).
+pub fn protocol_version(v: &Value) -> Option<u32> {
+    match v {
+        Value::Number(n) => n.as_u64().and_then(|n| u32::try_from(n).ok()),
+        Value::String(s) if s == PROTOCOL_NAME || s == OLD_PROTOCOL_NAME => Some(PROTOCOL),
+        _ => None,
+    }
+}
+
+/// `protocol`: a number, or a name of the protocol ([`protocol_version`]).
+fn de_protocol<'de, D: serde::Deserializer<'de>>(d: D) -> Result<u32, D::Error> {
+    let v = Value::deserialize(d)?;
+    protocol_version(&v).ok_or_else(|| serde::de::Error::custom(format!("unknown protocol {v}")))
+}
 
 fn all(s: &str, ok: impl Fn(u8) -> bool, max: usize) -> bool {
     !s.is_empty() && s.len() <= max && s.bytes().all(ok)
@@ -85,6 +105,7 @@ pub struct ToolSchema {
 pub struct Describe {
     pub name: String,
     pub version: String,
+    #[serde(deserialize_with = "de_protocol")]
     pub protocol: u32,
     pub restore: Restore,
     pub uses_clock: bool,
@@ -451,6 +472,7 @@ pub struct BenchTeam {
 pub struct BenchDescribe {
     pub name: String,
     pub version: String,
+    #[serde(deserialize_with = "de_protocol")]
     pub protocol: u32,
     pub world: Vec<WorldPart>,
     pub tasks: Vec<TaskInfo>,
@@ -598,6 +620,28 @@ impl NamedCheck {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Score {
     pub checks: Vec<NamedCheck>,
+}
+
+#[cfg(test)]
+mod protocol_names {
+    use super::*;
+
+    #[test]
+    fn both_names_and_the_number_say_version_1() {
+        for v in [
+            json_n(1),
+            Value::from(PROTOCOL_NAME),
+            Value::from(OLD_PROTOCOL_NAME),
+        ] {
+            assert_eq!(protocol_version(&v), Some(PROTOCOL), "{v}");
+        }
+        assert_eq!(protocol_version(&Value::from("other-part/1")), None);
+        assert_eq!(protocol_version(&json_n(2)), Some(2));
+    }
+
+    fn json_n(n: u64) -> Value {
+        Value::from(n)
+    }
 }
 
 #[cfg(test)]

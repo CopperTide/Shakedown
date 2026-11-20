@@ -39,7 +39,7 @@ fn write_pkg(root: &Path, name: &str, command: &str) {
     let d = root.join(name);
     std::fs::create_dir_all(&d).unwrap();
     std::fs::write(
-        d.join("arena-package.toml"),
+        d.join("shakedown-package.toml"),
         format!(
             "kind = \"integration\"\nname = \"{name}\"\nversion = \"0.1.0\"\nprotocol = 1\nrun = {{ command = {command} }}\n"
         ),
@@ -88,7 +88,7 @@ async fn exercise(hub: &Hub, name: &str) {
 fn manifest_rejects_bad_name() {
     let root = temp("badname");
     write_pkg(&root, "bad", r#"["x"]"#);
-    let f = root.join("bad/arena-package.toml");
+    let f = root.join("bad/shakedown-package.toml");
     let t = std::fs::read_to_string(&f)
         .unwrap()
         .replace("name = \"bad\"", "name = \"Bad_Name\"");
@@ -136,6 +136,26 @@ async fn run_override_replaces_the_manifest_command() {
     std::env::remove_var("SHAKEDOWN_RUN_RELAY_COUNTER");
     assert_eq!(d.protocol, 1);
     drop(hub);
+    std::fs::remove_dir_all(&root).unwrap();
+    std::fs::remove_dir_all(&saves).unwrap();
+}
+
+/// A package written before 2026-11-19, under every old name: `arena-package.toml`,
+/// `protocol = "arena-part/1"` and `${ARENA_BIN_DIR}` in its command. It is found and runs.
+#[tokio::test]
+async fn a_package_under_the_old_names_still_runs() {
+    build_counter();
+    let (root, saves) = (temp("oldnames"), temp("oldnames-saves"));
+    let d = root.join("counter");
+    std::fs::create_dir_all(&d).unwrap();
+    std::fs::write(
+        d.join("arena-package.toml"),
+        "kind = \"integration\"\nname = \"counter\"\nversion = \"0.1.0\"\nprotocol = \"arena-part/1\"\n\
+         run = { command = [\"${ARENA_BIN_DIR}/examples/counter\"] }\n",
+    )
+    .unwrap();
+    let hub = hub_for(std::slice::from_ref(&root), &saves);
+    exercise(&hub, "counter").await;
     std::fs::remove_dir_all(&root).unwrap();
     std::fs::remove_dir_all(&saves).unwrap();
 }

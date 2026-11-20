@@ -3,7 +3,7 @@ their attempts, jobs, logs (a redirect to the signed `/_logs/...`), re-run and c
 annotations and artifacts runs here never have."""
 import os
 
-from arena_part.twin import Response
+from shakedown_part.twin import Response
 
 from ..actions import jobs, logs, runs
 from ..errors import GithubError, not_found

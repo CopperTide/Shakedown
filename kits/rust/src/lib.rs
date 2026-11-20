@@ -1,4 +1,4 @@
-//! Kit for writing arena integrations and benchmarks (protocol arena-part/1).
+//! Kit for writing arena integrations and benchmarks (protocol shakedown-part/1).
 //!
 //! Implement [`Part`] (or [`Benchmark`]) and call [`serve`] (or [`serve_benchmark`]).
 mod error;

@@ -1,4 +1,4 @@
-//! An agent deployed anywhere, behind a URL (`kind: "http"`), spoken to with `arena-agent/1`:
+//! An agent deployed anywhere, behind a URL (`kind: "http"`), spoken to with `shakedown-agent/1`:
 //!
 //! - **Run.** shaked POSTs `{protocol, type: "run", run_id, branch_id, agent, task, mcp_url,
 //!   token, deadline}` to the URL, with the agent's headers. The agent works through the MCP
@@ -23,7 +23,10 @@ use crate::{
     store::Store,
 };
 
-pub const PROTOCOL: &str = "arena-agent/1";
+pub const PROTOCOL: &str = "shakedown-agent/1";
+/// Its name until 2026-11-19: an agent that refuses [`PROTOCOL`] (a 4xx answer) is asked again
+/// under it.
+pub const OLD_PROTOCOL: &str = "arena-agent/1";
 /// The longest a hello may take.
 pub const HELLO_TIMEOUT: Duration = Duration::from_secs(10);
 /// How an agent's own cost is labelled.
@@ -155,6 +158,22 @@ fn answered(host: &str, status: u16, body: &str) -> AgentResult {
     )
 }
 
+/// POSTs `body` to the agent; when it refuses it (a 4xx answer), POSTs it again with the old
+/// protocol name, for agents written before 2026-11-19 that check the name. The last answer.
+async fn post_speaking(
+    http: &reqwest::Client,
+    spec: &AgentSpec,
+    body: &Value,
+) -> Result<(u16, String), String> {
+    let first = post(http, spec, body).await?;
+    if !(400..500).contains(&first.0) {
+        return Ok(first);
+    }
+    let mut old = body.clone();
+    old["protocol"] = json!(OLD_PROTOCOL);
+    post(http, spec, &old).await
+}
+
 /// POSTs `body` to the agent; the status and body of its answer.
 async fn post(
     http: &reqwest::Client,
@@ -184,7 +203,7 @@ async fn post(
 pub async fn hello(http: &reqwest::Client, spec: &AgentSpec) -> Result<Option<String>, String> {
     let host = host_of(spec.url.as_deref().unwrap_or_default());
     let body = json!({"protocol": PROTOCOL, "type": "hello"});
-    let (status, text) = tokio::time::timeout(HELLO_TIMEOUT, post(http, spec, &body))
+    let (status, text) = tokio::time::timeout(HELLO_TIMEOUT, post_speaking(http, spec, &body))
         .await
         .map_err(|_| {
             format!(
@@ -251,7 +270,7 @@ impl HttpDriver {
         let waited = run
             .branch
             .flow
-            .timeout(self.timeout, post(&self.http, &run.spec, &body))
+            .timeout(self.timeout, post_speaking(&self.http, &run.spec, &body))
             .await;
         let mut r = match waited {
             None => {

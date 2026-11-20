@@ -1,4 +1,4 @@
-"""Toy arena-part/1 packages for shaked tests.
+"""Toy shakedown-part/1 packages for shaked tests.
 
   toy.py part [--crash-on-call N [--crash-mark FILE]] [--save-fails-after N] [--bad-diff] [--log FILE]
               [--prefix P] [--exact save|replay|none] [--approximate] [--uses-clock [--event-every]]

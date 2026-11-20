@@ -3,7 +3,7 @@ import argparse
 import os
 import sys
 
-from arena_part import serve
+from shakedown_part import serve
 
 from .backends import BACKENDS
 

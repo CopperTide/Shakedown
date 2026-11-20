@@ -1,10 +1,10 @@
 """A JSON-state part: refusals change nothing, saves restore exactly, inspect and diff read the docs."""
 import pytest
 
-from arena_part import PartError
-from arena_part.jsonstate import (DENIALS, Denied, Done, JsonStatePart, Scenarios, Tool, denial, denials_doc,
+from shakedown_part import PartError
+from shakedown_part.jsonstate import (DENIALS, Denied, Done, JsonStatePart, Scenarios, Tool, denial, denials_doc,
                                   event)
-from arena_part.params import Param, Refusal
+from shakedown_part.params import Param, Refusal
 
 
 def _add(config, state, args):

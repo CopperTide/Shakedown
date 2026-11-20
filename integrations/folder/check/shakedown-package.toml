@@ -1,10 +1,10 @@
 # The conformance target of the folder integration.
-# Run: arena-part-check integrations/folder/check
+# Run: shakedown-part-check integrations/folder/check
 kind = "integration"
 name = "folder-check"
 version = "0.1.0"
 protocol = 1
-run = { command = ["${ARENA_BIN_DIR}/arena-folder"] }
+run = { command = ["${SHAKEDOWN_BIN_DIR}/shakedown-folder"] }
 needs = { gpu_vram_gb = 0, services = [] }
 
 [[example]]

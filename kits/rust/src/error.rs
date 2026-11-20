@@ -1,7 +1,7 @@
 //! Errors a part reports to shaked as JSON-RPC errors.
 use std::fmt;
 
-/// A JSON-RPC error with the arena-part/1 codes.
+/// A JSON-RPC error with the shakedown-part/1 codes.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PartError {
     pub code: i64,

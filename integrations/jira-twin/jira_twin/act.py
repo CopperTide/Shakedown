@@ -2,7 +2,7 @@
 Each action follows the same rules as the REST API: `create_issue {project, summary, type?, description?,
 assignee?, priority?, labels?}`, `transition {key, to}` (a status, or a transition's name),
 `comment {key, body}`, `assign {key, to}` (null unassigns)."""
-from arena_part.twin import Done
+from shakedown_part.twin import Done
 
 from . import records, rules, users
 from .errors import JiraError

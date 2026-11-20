@@ -166,7 +166,7 @@ async fn add(c: &mut Client, instance: &str, n: i64) {
 async fn describe_reports_protocol_1() {
     let mut c = client();
     let r = c.call("describe", json!({})).await;
-    assert_eq!(r["result"]["protocol"], 1);
+    assert_eq!(r["result"]["protocol"], "shakedown-part/1");
     assert!(r["result"]["tools"][0].get("inputSchema").is_some());
 }
 

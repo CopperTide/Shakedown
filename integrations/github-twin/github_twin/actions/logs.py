@@ -7,7 +7,7 @@ import io
 import zipfile
 from datetime import datetime, timezone
 
-from arena_part.twin import Response
+from shakedown_part.twin import Response
 
 from . import jobs
 

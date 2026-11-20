@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from arena_part import PartError
+from shakedown_part import PartError
 from conftest import lims_config
 from pharma_lims_part.part import PharmaLims
 
@@ -107,11 +107,11 @@ def test_a_save_restores_the_scenario_and_the_reviews(tmp_path):
 
 
 def test_conformance(tmp_path):
-    """`arena-part-check` (describe, start, the examples, save and restore, diff, replay, drop_save)."""
+    """`shakedown-part-check` (describe, start, the examples, save and restore, diff, replay, drop_save)."""
     bin_dir = Path(os.environ.get("SHAKEDOWN_BIN_DIR", ARENA / "core" / "target" / "debug"))
-    check = bin_dir / "arena-part-check"
+    check = bin_dir / "shakedown-part-check"
     if not check.exists() or shutil.which("uv") is None:
-        pytest.skip(f"no {check} (cargo build -p parts --bin arena-part-check) or no uv")
+        pytest.skip(f"no {check} (cargo build -p parts --bin shakedown-part-check) or no uv")
     config = tmp_path / "config.json"
     config.write_text(json.dumps(lims_config()))
     env = {**os.environ, "SHAKEDOWN_BIN_DIR": str(bin_dir)}

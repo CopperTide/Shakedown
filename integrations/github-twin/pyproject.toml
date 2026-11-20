@@ -1,10 +1,10 @@
 [project]
 name = "github-twin"
 version = "0.1.0"
-description = "arena-part/1 integration: a GitHub-compatible twin (GHES mode) over real git repositories"
+description = "shakedown-part/1 integration: a GitHub-compatible twin (GHES mode) over real git repositories"
 requires-python = ">=3.10"
 dependencies = [
-    "arena-part",
+    "shakedown-part",
     "graphql-core>=3.3,<3.4",
     "pyyaml>=6.0,<7",
 ]
@@ -19,7 +19,7 @@ dev = [
 package = false
 
 [tool.uv.sources]
-arena-part = { path = "../../kits/python", editable = true }
+shakedown-part = { path = "../../kits/python", editable = true }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

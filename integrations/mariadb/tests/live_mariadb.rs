@@ -592,7 +592,7 @@ fn build_all() {
         ok(a.clone(), &["build", "-p", "arena-mariadb"]);
         ok(
             a.join("core"),
-            &["build", "-p", "parts", "--bin", "arena-part-check"],
+            &["build", "-p", "parts", "--bin", "shakedown-part-check"],
         );
     });
 }
@@ -607,7 +607,7 @@ async fn live_mariadb_conformance() {
     let cfgfile = e.saves.join("check.json");
     std::fs::write(&cfgfile, e.config(json!({})).to_string()).unwrap();
     let saves = e.saves.join("saves");
-    let out = Command::new(a.join("core/target/debug/arena-part-check"))
+    let out = Command::new(a.join("core/target/debug/shakedown-part-check"))
         .arg(a.join("integrations/mariadb/check"))
         .arg("--config")
         .arg(&cfgfile)

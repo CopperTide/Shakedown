@@ -5,7 +5,7 @@ import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 
-from arena_part import errors
+from shakedown_part import errors
 
 from . import views
 from .base import DocsPart

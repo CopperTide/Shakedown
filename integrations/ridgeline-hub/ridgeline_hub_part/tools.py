@@ -2,8 +2,8 @@
 from dataclasses import dataclass
 from typing import Callable
 
-from arena_part import disruptions, errors
-from arena_part.params import Param, Refusal, input_schema, normalize, refused
+from shakedown_part import disruptions, errors
+from shakedown_part.params import Param, Refusal, input_schema, normalize, refused
 
 from . import inbound
 

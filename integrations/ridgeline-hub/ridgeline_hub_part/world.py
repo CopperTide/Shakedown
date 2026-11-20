@@ -1,7 +1,7 @@
 """One instance's world: the hub's Market on the arena clock, with an adapter for its `factory`."""
 from datetime import datetime, timedelta
 
-from arena_part import FixedStep
+from shakedown_part import FixedStep
 
 from . import inbound
 from .config import Config, load_market

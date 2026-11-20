@@ -14,9 +14,9 @@ import sys
 from enum import Enum
 from pathlib import Path
 
-from arena_part import Part, PartError, cant_restore, serve, unknown
-from arena_part.errors import invalid
-from arena_part.settings import setting
+from shakedown_part import Part, PartError, cant_restore, serve, unknown
+from shakedown_part.errors import invalid
+from shakedown_part.settings import setting
 
 KEY = "counter/value"
 

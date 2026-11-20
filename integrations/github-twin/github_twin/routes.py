@@ -1,5 +1,5 @@
 """The twin's router: git smart HTTP beside the REST API, and GitHub's 404 for API paths it lacks."""
-from arena_part.twin import Response, Router
+from shakedown_part.twin import Response, Router
 
 from . import auth, events, git_http, rest, users
 from .actions import logs

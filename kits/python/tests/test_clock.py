@@ -1,9 +1,9 @@
 """The clock helpers: a fixed-step clock and a JSON-state part on the arena clock."""
 import pytest
 
-from arena_part import FixedStep
-from arena_part.jsonstate import ClockedJsonStatePart, Done, Tool, event
-from arena_part.params import Param
+from shakedown_part import FixedStep
+from shakedown_part.jsonstate import ClockedJsonStatePart, Done, Tool, event
+from shakedown_part.params import Param
 
 
 def test_a_fixed_step_clock_starts_at_the_last_whole_step():

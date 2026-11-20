@@ -4,7 +4,7 @@ import time
 
 import pytest
 
-from arena_part import PartError
+from shakedown_part import PartError
 from people_part import schedule
 from support import DAY, EPOCH, HOUR, MIN, Engine, acts, config
 

@@ -1,4 +1,4 @@
-//! The conformance check behind `arena-part-check` (docs/protocol.md, "Determinism contract").
+//! The conformance check behind `shakedown-part-check` (docs/protocol.md, "Determinism contract").
 use crate::client::{CallError, Client};
 use crate::hub::Hub;
 use crate::request::{GetUsage, Request, Stop};

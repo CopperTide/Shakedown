@@ -5,7 +5,7 @@ from pathlib import Path
 
 import yaml
 
-from arena_part.serve import dispatch
+from shakedown_part.serve import dispatch
 from people_part.part import People
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"

@@ -3,7 +3,7 @@ import subprocess
 import threading
 from pathlib import Path
 
-from arena_part.twin import Response
+from shakedown_part.twin import Response
 
 from .gitcmd import clean_env
 

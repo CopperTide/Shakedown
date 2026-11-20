@@ -98,7 +98,7 @@ fn fake_pkg(mode: &str, examples: bool) -> PathBuf {
         ""
     };
     std::fs::write(
-        d.join("arena-package.toml"),
+        d.join("shakedown-package.toml"),
         format!(
             "kind = \"integration\"\nname = \"counter\"\nversion = \"0\"\nprotocol = 1\n\
              run = {{ command = [\"python3\", \"fake.py\", \"{mode}\"] }}\n{ex}"
@@ -112,7 +112,7 @@ fn fake_pkg(mode: &str, examples: bool) -> PathBuf {
 fn flavour_pkg(flavour: &str) -> PathBuf {
     let d = temp(&format!("pkg-{flavour}"));
     std::fs::write(
-        d.join("arena-package.toml"),
+        d.join("shakedown-package.toml"),
         format!(
             "kind = \"integration\"\nname = \"counter\"\nversion = \"0.1.0\"\nprotocol = 1\n\
              run = {{ command = [\"${{SHAKEDOWN_BIN_DIR}}/examples/counter\", \"--flavour\", \"{flavour}\"] }}\n\n\

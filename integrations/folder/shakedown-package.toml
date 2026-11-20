@@ -2,6 +2,6 @@ kind = "integration"
 name = "folder"
 version = "0.1.0"
 protocol = 1
-run = { command = ["${ARENA_BIN_DIR}/arena-folder"] }
+run = { command = ["${SHAKEDOWN_BIN_DIR}/shakedown-folder"] }
 needs = { gpu_vram_gb = 0, services = [] }
 config_schema = { type = "object", properties = { root = { type = "string", description = "A folder whose files the instance starts with" } } }

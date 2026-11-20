@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from arena_part import PartError
+from shakedown_part import PartError
 from isaac_part.backends import BACKENDS
 from isaac_part.config import DEFAULT_ISAAC
 from isaac_part.mirror import Mirror
@@ -144,7 +144,7 @@ def test_approximate_restore_continues(saves_root):
 
 
 def over_stdio(requests, saves_root):
-    """The part's replies to `requests`, from a fresh process speaking arena-part/1 over stdio."""
+    """The part's replies to `requests`, from a fresh process speaking shakedown-part/1 over stdio."""
     lines = "".join(json.dumps({"jsonrpc": "2.0", "id": i, "method": m, "params": p}) + "\n"
                     for i, (m, p) in enumerate(requests, 1))
     r = subprocess.run([sys.executable, "-m", "isaac_part", "--backend", "standin"], input=lines, cwd=PACKAGE,
@@ -381,8 +381,8 @@ def test_mirror_mode_has_no_tools_and_relays_events(stub_plant, saves_root):
 def checker():
     dirs = [Path(os.environ["SHAKEDOWN_BIN_DIR"])] if os.environ.get("SHAKEDOWN_BIN_DIR") else []
     for d in dirs + [ARENA / "core" / "target" / profile for profile in ("debug", "release")]:
-        if (d / "arena-part-check").is_file():
-            return d / "arena-part-check"
+        if (d / "shakedown-part-check").is_file():
+            return d / "shakedown-part-check"
     return None
 
 
@@ -391,16 +391,16 @@ SHIFT_PLANT = ARENA / "benchmarks" / "factory" / "data" / "shift.json"
 
 @pytest.mark.parametrize("config", [None, "shift"])
 def test_conformance(tmp_path, config):
-    """arena-part-check on a copy of the manifest that runs the stand-in backend: as it is, and with the factory
+    """shakedown-part-check on a copy of the manifest that runs the stand-in backend: as it is, and with the factory
     benchmark's robot cell and load model (its shift task's config)."""
     binary = checker()
     if binary is None or shutil.which("uv") is None:
-        pytest.skip("arena-part-check is not built (cargo build -p parts --bin arena-part-check) or uv missing")
-    manifest = (PACKAGE / "arena-package.toml").read_text()
+        pytest.skip("shakedown-part-check is not built (cargo build -p parts --bin shakedown-part-check) or uv missing")
+    manifest = (PACKAGE / "shakedown-package.toml").read_text()
     run = f'run = {{ command = ["uv", "run", "--directory", "{PACKAGE}", "python", "-m", "isaac_part", ' \
           f'"--backend", "standin"] }}'
     (tmp_path / "pkg").mkdir()
-    (tmp_path / "pkg" / "arena-package.toml").write_text(re.sub(r"^run = .*$", run, manifest, flags=re.M))
+    (tmp_path / "pkg" / "shakedown-package.toml").write_text(re.sub(r"^run = .*$", run, manifest, flags=re.M))
     saves = tmp_path / "check-saves"
     saves.mkdir()
     env = {**os.environ, "SHAKEDOWN_SAVES": str(saves)}

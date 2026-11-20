@@ -306,10 +306,10 @@ fn conformance(e: &Env) {
     ok(a.clone(), &["build", "-p", "arena-erpnext"]);
     ok(
         a.join("core"),
-        &["build", "-p", "parts", "--bin", "arena-part-check"],
+        &["build", "-p", "parts", "--bin", "shakedown-part-check"],
     );
     let t = Instant::now();
-    let out = Command::new(a.join("core/target/debug/arena-part-check"))
+    let out = Command::new(a.join("core/target/debug/shakedown-part-check"))
         .arg(a.join("integrations/erpnext/check"))
         .arg("--config")
         .arg(e.check_config())

@@ -3,7 +3,7 @@
 `PagerDutyError` rolled back and answered in PagerDuty's words."""
 import hmac
 
-from arena_part.twin import Response
+from shakedown_part.twin import Response
 
 from . import records
 from .errors import ACCESS_DENIED, NO_FROM, UNAUTHORIZED, PagerDutyError, invalid

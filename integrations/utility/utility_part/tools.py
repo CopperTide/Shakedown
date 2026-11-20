@@ -1,7 +1,7 @@
 """The utility's tools: the site meter and the demand-response events for agents, the reading the plant sends
 (a benchmark's link calls it) and the scenario a task's setup sets."""
-from arena_part.jsonstate import Done, Scenarios, Tool
-from arena_part.params import Param, Refusal
+from shakedown_part.jsonstate import Done, Scenarios, Tool
+from shakedown_part.params import Param, Refusal
 
 from . import disrupt, meter
 

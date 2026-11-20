@@ -2,9 +2,9 @@
 samples, each batch's release tests, and the documents. Everything here only reads."""
 from datetime import date
 
-from arena_part import errors
-from arena_part.jsonstate import Scenarios
-from arena_part.params import Refusal
+from shakedown_part import errors
+from shakedown_part.jsonstate import Scenarios
+from shakedown_part.params import Refusal
 
 BASE = "base"
 

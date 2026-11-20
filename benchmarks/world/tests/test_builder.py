@@ -38,7 +38,7 @@ def test_a_preview_with_problems_still_names_the_world(builder_without_docker):
 
 def test_generate_writes_a_package_shaked_can_load(builder, tmp_path):
     out = call(builder, "generate", {"id": "shop", "choices": {}, "dir": str(tmp_path / "acme")})
-    toml = tomllib.loads((tmp_path / "acme" / "arena-package.toml").read_text())
+    toml = tomllib.loads((tmp_path / "acme" / "shakedown-package.toml").read_text())
     assert toml["kind"] == "benchmark" and toml["opt_in"] is True and toml["world"]["template"] == "shop"
     assert toml["version"] == out["version"] and out["version"].startswith("1.0.0+")
 
@@ -46,7 +46,7 @@ def test_generate_writes_a_package_shaked_can_load(builder, tmp_path):
 def test_the_package_names_the_world_and_runs_the_world_benchmark(builder, tmp_path):
     out = call(builder, "generate", {"id": "shop", "choices": {"company": {"name": "Ærø \"Q\" Co"}},
                                      "dir": str(tmp_path / "w")})
-    toml = tomllib.loads((tmp_path / "w" / "arena-package.toml").read_text())
+    toml = tomllib.loads((tmp_path / "w" / "shakedown-package.toml").read_text())
     assert out == {"name": "aero-q-co", "title": "Ærø \"Q\" Co", "version": toml["version"]}
     assert (toml["name"], toml["protocol"], toml["world"]["title"]) == ("aero-q-co", 1, "Ærø \"Q\" Co")
     assert toml["world"]["template_name"] == "Shop" and toml["needs"] == {"gpu_vram_gb": 0, "services": []}
@@ -148,7 +148,7 @@ def test_a_preview_with_problems_still_lists_the_people_it_drew(builder):
 def test_a_company_name_beyond_ascii_is_kept_in_the_package_manifest(builder, tmp_path):
     name = "Café 🚀 \"Tools\"\x7f"
     call(builder, "generate", {"id": "shop", "choices": {"company": {"name": name}}, "dir": str(tmp_path / "w")})
-    toml = tomllib.loads((tmp_path / "w" / "arena-package.toml").read_text(encoding="utf-8"))
+    toml = tomllib.loads((tmp_path / "w" / "shakedown-package.toml").read_text(encoding="utf-8"))
     assert toml["world"]["title"] == name
 
 

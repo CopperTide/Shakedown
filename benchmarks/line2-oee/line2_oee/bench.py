@@ -3,7 +3,7 @@ simulation budget and the plant's limits), three suggested optimiser designs, sc
 on the re-simulated recommendation, drawn as a twin."""
 from pathlib import Path
 
-from arena_part import benchmark
+from shakedown_part import benchmark
 
 from . import checks, setups, twin
 

@@ -1,5 +1,5 @@
 """The twin's router: the REST operations, and Jira's 404 for any other path."""
-from arena_part.twin import Response, Router
+from shakedown_part.twin import Response, Router
 
 from . import rest
 from .rest.api import not_found

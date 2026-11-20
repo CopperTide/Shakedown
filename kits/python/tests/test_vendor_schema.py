@@ -6,7 +6,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 
-from arena_part.twin.vendor_schema import (Pinned, Unavailable, component_schema, documented_ops, fetch,
+from shakedown_part.twin.vendor_schema import (Pinned, Unavailable, component_schema, documented_ops, fetch,
                                            response_schema)
 
 SPEC = {"openapi": "3.0.1", "paths": {

@@ -7,6 +7,9 @@ from . import errors
 from .errors import PartError
 from .world_time import WorldTime
 
+#: The protocol's name, as `describe` announces it; shaked also takes `1` and the old name `arena-part/1`.
+PROTOCOL_NAME = "shakedown-part/1"
+
 _ID = re.compile(r"[a-z0-9_]{1,63}")
 _ID_MSG = "instance and save ids must match [a-z0-9_]{1,63}"
 
@@ -157,13 +160,21 @@ def _unit(method, *names):
     return run
 
 
+def announced(describe):
+    """A `describe` answer announcing the protocol by its name: its `protocol` (when it gives one)
+    becomes `"shakedown-part/1"`."""
+    if isinstance(describe, dict) and "protocol" in describe:
+        return {**describe, "protocol": PROTOCOL_NAME}
+    return describe
+
+
 def _plain(method, *names):
     """A method that takes `names` from the params and answers with the part's result."""
     return lambda part, params: getattr(part, method)(*_need(params, *names))
 
 
 _METHODS = {
-    "describe": lambda part, params: part.describe(),
+    "describe": lambda part, params: announced(part.describe()),
     "start": _start,
     "call_tool": _call_tool,
     "advance": _advance,

@@ -1,7 +1,6 @@
 kind = "benchmark"
-name = "pharma"
+name = "retail"
 version = "0.1.0"
 protocol = 1
-run = { command = ["${ARENA_BIN_DIR}/arena-pharma"] }
+run = { command = ["${SHAKEDOWN_BIN_DIR}/shakedown-retail"] }
 needs = { gpu_vram_gb = 0, services = [] }
-opt_in = true

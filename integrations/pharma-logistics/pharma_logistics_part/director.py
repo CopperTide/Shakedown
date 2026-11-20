@@ -1,7 +1,7 @@
 """The simulated supply chain director: decides every proposed change whose action the config does not
 leave to another desk (`defer`), by fixed rules over this part's records and scenario, and gives a `decided`
 event that a benchmark's link hands to the approvals system."""
-from arena_part.people import Desk
+from shakedown_part.people import Desk
 
 from . import network
 

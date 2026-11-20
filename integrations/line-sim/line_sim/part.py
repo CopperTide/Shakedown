@@ -1,9 +1,9 @@
-"""The arena-part/1 integration: a simulation study of a plant. Each instance is the plant's config
+"""The shakedown-part/1 integration: a simulation study of a plant. Each instance is the plant's config
 (with its study settings) and one JSON state: every simulation run, the recommendation, and the
 denials. A config over a hard limit, or a simulation past the budget, is refused with a structured
 denial, recorded, and reported to the world as a `denial` event."""
-from arena_part import errors
-from arena_part.jsonstate import JsonStatePart, denials_doc
+from shakedown_part import errors
+from shakedown_part.jsonstate import JsonStatePart, denials_doc
 
 from .backend import backend_for
 from .tools import TOOLS

@@ -3,7 +3,7 @@ app for Slack, posts the message it has for `kind` into its channel, `{/pointer}
 has no message for posts nothing."""
 import re
 
-from arena_part.twin import Done
+from shakedown_part.twin import Done
 
 from . import chat, ids, records
 from .errors import SlackError

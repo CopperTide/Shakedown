@@ -88,10 +88,10 @@ impl Erpnext {
         };
         let made =
             made.map_err(|e| PartError::internal(format!("making the ERPNext base: {e:#}")))?;
-        eprintln!("arena-erpnext: made the base site in {:?}", t.elapsed());
+        eprintln!("shakedown-erpnext: made the base site in {:?}", t.elapsed());
         // The install's binlog is not needed once the base is a dump.
         if let Err(e) = self.settle_on(&stack.server).await {
-            eprintln!("arena-erpnext: tidying up after the base failed: {e}");
+            eprintln!("shakedown-erpnext: tidying up after the base failed: {e}");
         }
         Ok(made)
     }

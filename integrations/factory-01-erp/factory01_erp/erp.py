@@ -3,7 +3,7 @@ reservations, the schedule, purchase orders, flags) per instance, and what each 
 now."""
 from datetime import date, timedelta
 
-from arena_part.params import Refusal
+from shakedown_part.params import Refusal
 
 BASE = "base"
 

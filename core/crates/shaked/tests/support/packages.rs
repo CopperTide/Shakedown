@@ -234,7 +234,7 @@ pub fn package_root(tag: &str, packages: &[Package]) -> ToyRoot {
     for p in packages {
         let d = root.join(&p.name);
         std::fs::create_dir_all(&d).unwrap();
-        std::fs::write(d.join("arena-package.toml"), manifest(p)).unwrap();
+        std::fs::write(d.join("shakedown-package.toml"), manifest(p)).unwrap();
     }
     ToyRoot(root)
 }

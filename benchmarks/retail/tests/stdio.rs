@@ -3,7 +3,7 @@ use std::process::{Command, Stdio};
 
 /// Starts the benchmark, sends one `describe` request and returns its parsed response.
 fn describe_response() -> serde_json::Value {
-    let mut child = Command::new(env!("CARGO_BIN_EXE_arena-retail"))
+    let mut child = Command::new(env!("CARGO_BIN_EXE_shakedown-retail"))
         .current_dir(env!("CARGO_MANIFEST_DIR"))
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())

@@ -1,7 +1,7 @@
 """A simulated person's desk: decides the changes that are its own by fixed rules, records a review, and
 gives the `decided` event a benchmark's link hands to the approvals system."""
-from arena_part.jsonstate import Done
-from arena_part.people import Desk
+from shakedown_part.jsonstate import Done
+from shakedown_part.people import Desk
 
 
 def _rules(config, state, action, payload):

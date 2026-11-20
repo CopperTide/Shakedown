@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from arena_part import PartError
+from shakedown_part import PartError
 from ridgeline_hub_part.part import RidgelineHub
 
 PACKAGE = Path(__file__).resolve().parents[1]
@@ -300,15 +300,15 @@ def test_describe_declares_clock_restore_and_seed():
 def checker():
     dirs = [Path(os.environ["SHAKEDOWN_BIN_DIR"])] if os.environ.get("SHAKEDOWN_BIN_DIR") else []
     for d in dirs + [ARENA / "core" / "target" / profile for profile in ("debug", "release")]:
-        if (d / "arena-part-check").is_file():
-            return d / "arena-part-check"
+        if (d / "shakedown-part-check").is_file():
+            return d / "shakedown-part-check"
     return None
 
 
 def test_conformance(tmp_path):
     binary = checker()
     if binary is None or shutil.which("uv") is None:
-        pytest.skip("arena-part-check is not built (cargo build -p parts --bin arena-part-check) or uv missing")
+        pytest.skip("shakedown-part-check is not built (cargo build -p parts --bin shakedown-part-check) or uv missing")
     saves = tmp_path / "check-saves"
     saves.mkdir()
     env = {**os.environ, "SHAKEDOWN_SAVES": str(saves)}

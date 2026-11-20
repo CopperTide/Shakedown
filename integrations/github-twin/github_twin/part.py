@@ -1,7 +1,7 @@
 """The GitHub twin part: repositories seeded from the config, the router, docs and the save rules."""
 from pathlib import Path
 
-from arena_part.twin import HttpTwin
+from shakedown_part.twin import HttpTwin
 
 from . import act, docs, routes, users
 from .actions import runs

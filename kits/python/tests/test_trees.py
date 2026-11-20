@@ -1,7 +1,7 @@
 import os
 import stat
 
-from arena_part.twin.trees import link_copy
+from shakedown_part.twin.trees import link_copy
 
 
 def make(root, rel, text, mode=0o644):

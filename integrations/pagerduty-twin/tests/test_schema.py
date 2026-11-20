@@ -3,7 +3,7 @@ and every route a covered, documented operation."""
 import pytest
 from jsonschema import Draft7Validator
 
-from arena_part.twin.vendor_schema import documented_ops, response_schema
+from shakedown_part.twin.vendor_schema import documented_ops, response_schema
 from conftest import enqueue, rest
 from pagerduty_twin.covered import COVERED, router_ops
 from pagerduty_twin.part import PagerDutyTwin

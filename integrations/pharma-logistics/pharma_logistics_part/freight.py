@@ -1,7 +1,7 @@
 """What changes the logistics state: quotes asked of the carriers, shipments booked on them and notices sent
 to customers. Each function refuses (raises Refusal) before it changes anything."""
-from arena_part.jsonstate import Done
-from arena_part.params import Refusal
+from shakedown_part.jsonstate import Done
+from shakedown_part.params import Refusal
 
 from . import network
 

@@ -1,7 +1,7 @@
 import pytest
 
 from http_client import http
-from arena_part.twin import Done, Response, Router
+from shakedown_part.twin import Done, Response, Router
 from notes_twin import NotesTwin
 
 FORWARDED = {"X-Forwarded-Proto": "https", "X-Forwarded-Host": "notes.acme.test"}
@@ -151,7 +151,7 @@ def test_a_chunked_request_body_is_read_whole(notes):
 
 
 def test_a_path_param_takes_the_rest_of_the_path_even_when_empty():
-    from arena_part.twin import Request, Router
+    from shakedown_part.twin import Request, Router
 
     r = Router()
     r.add("GET", "/files/{path:path}", lambda req, ctx: Response(200, req.params))

@@ -1,7 +1,7 @@
 import pytest
 
-from arena_part.benchmark import check
-from arena_part.expect import evaluate
+from shakedown_part.benchmark import check
+from shakedown_part.expect import evaluate
 
 DOCS = {"tracker": {"issue/A-1": {"status": "Done"}, "issue/A-2": {"status": "To Do"}},
         "code": {"branch/main": {"sha": "abc"}}, "prod": {"version/api": {"sha": "abc"}, "slo/prod": {"error_rate": 0.004}}}

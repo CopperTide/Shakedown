@@ -2,7 +2,7 @@ kind = "integration"
 name = "sculptured"
 version = "0.1.0"
 protocol = 1
-run = { command = ["${ARENA_BIN_DIR}/arena-sculptured"] }
+run = { command = ["${SHAKEDOWN_BIN_DIR}/shakedown-sculptured"] }
 needs = { gpu_vram_gb = 0, services = [] }
 config_schema = { type = "object", properties = { binary = { type = "string", description = "the sculptured program (default: sculptured on PATH)" }, team = { type = "string", description = "the team whose changes the tools propose, list and decide (default arena; letters a-z, digits and -)" } } }
 

@@ -1,7 +1,7 @@
 """The logistics tools: the qualified-lanes register, quotes, bookings and notices for agents, the scenario a
 task's setup sets, and the supply chain director's review that a benchmark's link calls."""
-from arena_part.jsonstate import Done, Tool
-from arena_part.params import Param
+from shakedown_part.jsonstate import Done, Tool
+from shakedown_part.params import Param
 
 from . import director, disrupt, freight, network
 

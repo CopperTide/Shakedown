@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from arena_part.twin.vendor_schema import Pinned, Unavailable, load
+from shakedown_part.twin.vendor_schema import Pinned, Unavailable, load
 
 CACHE = Path(__file__).parent / ".vendor-cache"
 COMMIT = "c928d7cf3c7c8b50030316149e04318b6b9300e1"

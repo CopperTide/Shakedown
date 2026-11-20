@@ -57,7 +57,7 @@ impl Hub {
         self.registry.read().unwrap()
     }
 
-    /// Installs the package in `dir` (its `arena-package.toml`) while shaked runs; refuses a
+    /// Installs the package in `dir` (its `shakedown-package.toml`) while shaked runs; refuses a
     /// name that is installed already.
     pub fn install(&self, dir: &Path) -> Result<Manifest> {
         let m = Manifest::load(dir)?;
@@ -242,7 +242,7 @@ mod tests {
         let toml = format!(
             "kind = \"benchmark\"\nname = \"{name}\"\nversion = \"0.1.0\"\nprotocol = 1\nrun = {{ command = [\"x\"] }}\n"
         );
-        std::fs::write(dir.join("arena-package.toml"), toml).unwrap();
+        std::fs::write(dir.join("shakedown-package.toml"), toml).unwrap();
         dir
     }
 

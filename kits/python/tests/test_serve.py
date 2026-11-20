@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from arena_part import Part, PartError, FixedStep, fingerprint, kept, serve
+from shakedown_part import Part, PartError, FixedStep, fingerprint, kept, serve
 import counter
 from conftest import Client
 
@@ -32,7 +32,7 @@ def add(c, instance, n):
 
 def test_describe_reports_protocol_1():
     r = client().call("describe")
-    assert r["result"]["protocol"] == 1
+    assert r["result"]["protocol"] == "shakedown-part/1"
     assert "inputSchema" in r["result"]["tools"][0]
     assert r["result"]["fingerprint"] == {"example": "counter"}
 
@@ -299,7 +299,7 @@ def test_a_benchmark_answers_its_own_calls_and_refuses_the_rest():
     import io
     import json as _json
 
-    from arena_part import Benchmark, serve_benchmark
+    from shakedown_part import Benchmark, serve_benchmark
 
     class B(Benchmark):
         def describe(self):

@@ -6,7 +6,7 @@ import socket
 import pytest
 import yaml
 
-from arena_part.serve import dispatch
+from shakedown_part.serve import dispatch
 from people_part.part import People
 from support import EPOCH, FIXTURES, HOUR, MIN
 from world import World

@@ -3,7 +3,7 @@ Each action follows the same rules as the REST API."""
 import os
 import tempfile
 
-from arena_part.twin import Done
+from shakedown_part.twin import Done
 
 from . import events, issue_rules, pull_rules, records, users
 from .actions import jobs

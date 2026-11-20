@@ -1,6 +1,6 @@
 """A new instance from its config: users, channels and their earlier messages (times relative to
 world now, such as `-2h`). Seeding reports no notices."""
-from arena_part.twin import TwinCtx
+from shakedown_part.twin import TwinCtx
 
 from . import chat, ids, records
 

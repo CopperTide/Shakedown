@@ -2,7 +2,7 @@
 `pagerduty_act` and `pagerduty_event` world tools, and route env."""
 from pathlib import Path
 
-from arena_part.twin import HttpTwin
+from shakedown_part.twin import HttpTwin
 
 from . import act, docs, events_v2, routes, seed
 

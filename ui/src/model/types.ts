@@ -4,7 +4,7 @@ import type { SystemInfo, ToolInfo } from './report';
 import type { RecordedScenario, ScenarioOptions } from './scenario';
 import type { WorldViewPayload } from './twin';
 
-/** `http`: an agent someone deployed, reached at its URL (`arena-agent/1`); shaked doesn't run it, it calls it. */
+/** `http`: an agent someone deployed, reached at its URL (`shakedown-agent/1`); shaked doesn't run it, it calls it. */
 export type AgentKind = 'claude_code' | 'codex' | 'open' | 'external' | 'http';
 
 /** A header value as shaked answers it: never the secret itself, a reference to it (valid until shaked restarts). */

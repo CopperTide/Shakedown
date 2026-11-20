@@ -4,8 +4,8 @@ split (docs/protocol.md, "Clock contract"). Each demand-response window is measu
 way: the time and energy inside it, and the time over the target."""
 from datetime import datetime, timedelta
 
-from arena_part import errors
-from arena_part.params import config_datetime
+from shakedown_part import errors
+from shakedown_part.params import config_datetime
 
 MINUTE_MS = 60_000
 WMS_PER_KWH = 3_600_000_000  # watt-milliseconds in a kilowatt-hour

@@ -1,5 +1,5 @@
 """Pull requests: open, list, read (JSON, or the diff and patch media types), edit, merge, files, commits."""
-from arena_part.twin import Response
+from shakedown_part.twin import Response
 
 from .. import issue_rules, pull_rules, records
 from ..diffs import changed_files, full_diff

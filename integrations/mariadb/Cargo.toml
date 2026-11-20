@@ -8,8 +8,13 @@ name = "arena_mariadb"
 path = "src/lib.rs"
 
 [[bin]]
-name = "arena-mariadb"
+name = "shakedown-mariadb"
 path = "src/main.rs"
+
+# The program's name until 2026-11-19, built too for scripts that still run it.
+[[bin]]
+name = "arena-mariadb"
+path = "src/old_name.rs"
 
 [dependencies]
 arena-part = { path = "../../kits/rust", features = ["mariadb"] }

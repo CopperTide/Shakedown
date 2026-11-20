@@ -1,8 +1,8 @@
-"""The arena-part/1 integration: a config (the site, the tariff, the load at the start) and a state (the meter,
+"""The shakedown-part/1 integration: a config (the site, the tariff, the load at the start) and a state (the meter,
 the demand-response events and the schedule) per instance, saved as one JSON file. On the arena clock: the meter
 integrates the load as the clock runs, and a window's start and end are world events."""
-from arena_part import disruptions
-from arena_part.jsonstate import ClockedJsonStatePart
+from shakedown_part import disruptions
+from shakedown_part.jsonstate import ClockedJsonStatePart
 
 from . import disrupt, meter
 from .tools import BASE, TOOLS

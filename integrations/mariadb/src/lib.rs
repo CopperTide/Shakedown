@@ -30,7 +30,7 @@ use servers::Servers;
 
 pub struct Mariadb {
     dirs: SaveDirs,
-    /// `arena-mariadb --sql-tools`: list and serve `sql_query` and `sql_execute`.
+    /// `shakedown-mariadb --sql-tools`: list and serve `sql_query` and `sql_execute`.
     sql_tools: bool,
     servers: Servers,
     live: Registry<Instance>,

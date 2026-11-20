@@ -1,7 +1,7 @@
 """The twin's router: `/api/<method>` (GET or POST) to the method table. Each call runs in a savepoint
 rolled back when it refuses; a refused write changes nothing and is marked a read, and a read-only
 agent's write gets `missing_scope`."""
-from arena_part.twin import Response, Router
+from shakedown_part.twin import Response, Router
 
 from .call import Call
 from .errors import SlackError

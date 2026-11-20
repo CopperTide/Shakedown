@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 
 from . import errors
-from .serve import _need, serve
+from .serve import _need, announced, serve
 
 
 class Benchmark:
@@ -101,7 +101,7 @@ def _seed(bench, params):
 
 
 _METHODS = {
-    "describe": lambda b, p: b.describe(),
+    "describe": lambda b, p: announced(b.describe()),
     "seed": _seed,
     "call_tool": lambda b, p: b.call_tool(*_need(p, "name", "args", "connections")),
     "gold_actions": lambda b, p: b.gold_actions(*_need(p, "task")),

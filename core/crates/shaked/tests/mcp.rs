@@ -138,7 +138,7 @@ fn initialize_and_notification() {
         .await;
         assert_eq!(s, 200);
         assert_eq!(v["result"]["protocolVersion"], "2025-06-18");
-        assert_eq!(v["result"]["serverInfo"]["name"], "arena-retail");
+        assert_eq!(v["result"]["serverInfo"]["name"], "shakedown-retail");
         assert_eq!(v["result"]["capabilities"], json!({"tools":{}}));
         let (s, _) = rpc(
             &fx,

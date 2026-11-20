@@ -22,7 +22,7 @@ fn setup_fake_docker() -> (PathBuf, PathBuf, PathBuf, PathBuf) {
     std::os::unix::fs::PermissionsExt::set_mode(&mut perm, 0o755);
     std::fs::set_permissions(&fake, perm).unwrap();
     std::fs::write(
-        pkg.join("arena-package.toml"),
+        pkg.join("shakedown-package.toml"),
         "kind = \"integration\"\nname = \"boxed\"\nversion = \"0.1.0\"\nprotocol = 1\nrun = { image = \"img:1\" }\n",
     )
     .unwrap();

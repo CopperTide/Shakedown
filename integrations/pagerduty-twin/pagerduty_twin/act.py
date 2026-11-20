@@ -1,6 +1,6 @@
 """`pagerduty_act {person, action, args}`: what the world's people do on the pager, called by links:
 `ack {incident}`, `resolve {incident}`, `note {incident, text}`."""
-from arena_part.twin import Done
+from shakedown_part.twin import Done
 
 from . import incidents, records
 from .errors import PagerDutyError

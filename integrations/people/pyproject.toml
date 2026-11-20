@@ -1,9 +1,9 @@
 [project]
 name = "people"
 version = "0.1.0"
-description = "arena-part/1 integration: simulated people who act on the world clock by rules written as data"
+description = "shakedown-part/1 integration: simulated people who act on the world clock by rules written as data"
 requires-python = ">=3.10"
-dependencies = ["arena-part", "jsonschema>=4.18"]
+dependencies = ["shakedown-part", "jsonschema>=4.18"]
 
 [dependency-groups]
 dev = ["pyyaml>=6"]
@@ -12,7 +12,7 @@ dev = ["pyyaml>=6"]
 package = false
 
 [tool.uv.sources]
-arena-part = { path = "../../kits/python", editable = true }
+shakedown-part = { path = "../../kits/python", editable = true }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

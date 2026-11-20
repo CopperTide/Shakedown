@@ -1,6 +1,6 @@
 """`POST /api/graphql`: the token checked, the caller made a user, the request run, and the answer
 given GitHub's headers and `X-Arena-Effect`."""
-from arena_part.twin import Response
+from shakedown_part.twin import Response
 
 from .. import auth, users
 from ..headers import api_headers

@@ -2,7 +2,7 @@
 import base64
 import binascii
 
-from arena_part.twin import Response
+from shakedown_part.twin import Response
 
 from .. import events
 from ..gitcmd import GitError

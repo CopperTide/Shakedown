@@ -1,7 +1,7 @@
-"""The arena-part/1 integration: a config (the benchmark's network data) and a state (scenario, quotes,
+"""The shakedown-part/1 integration: a config (the benchmark's network data) and a state (scenario, quotes,
 shipments, notices, the director's reviews) per instance, saved as one JSON file."""
-from arena_part import disruptions
-from arena_part.jsonstate import JsonStatePart
+from shakedown_part import disruptions
+from shakedown_part.jsonstate import JsonStatePart
 
 from . import disrupt, network
 from .tools import TOOLS

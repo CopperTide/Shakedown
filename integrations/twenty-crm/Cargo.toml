@@ -8,8 +8,13 @@ name = "arena_twenty_crm"
 path = "src/lib.rs"
 
 [[bin]]
-name = "arena-twenty-crm"
+name = "shakedown-twenty-crm"
 path = "src/main.rs"
+
+# The program's name until 2026-11-19, built too for scripts that still run it.
+[[bin]]
+name = "arena-twenty-crm"
+path = "src/old_name.rs"
 
 [dependencies]
 arena-part = { path = "../../kits/rust", features = ["postgres", "compose", "http"] }

@@ -1,11 +1,11 @@
 # The conformance target of the erpnext integration (the same program).
-# Run: arena-part-check integrations/erpnext/check
+# Run: shakedown-part-check integrations/erpnext/check
 # The first start sets up the ERPNext stack and its base site (a few minutes, once).
 kind = "integration"
 name = "erpnext-check"
 version = "0.1.0"
 protocol = 1
-run = { command = ["${ARENA_BIN_DIR}/arena-erpnext"] }
+run = { command = ["${SHAKEDOWN_BIN_DIR}/shakedown-erpnext"] }
 needs = { gpu_vram_gb = 0, services = [] }
 
 # The first write example is run twice, so it must be repeatable: a ToDo gets a new name each time.

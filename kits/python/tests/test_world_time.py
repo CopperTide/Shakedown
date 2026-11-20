@@ -1,5 +1,5 @@
-from arena_part import Part
-from arena_part.world_time import WorldTime, rfc3339, unix_nanos
+from shakedown_part import Part
+from shakedown_part.world_time import WorldTime, rfc3339, unix_nanos
 from conftest import Client
 
 

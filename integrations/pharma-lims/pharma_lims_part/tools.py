@@ -1,7 +1,7 @@
 """The LIMS's tools: reads of the lab's records for agents, the scenario a task's setup sets, and the QA
 head's review that a benchmark's link calls."""
-from arena_part.jsonstate import Done, Tool
-from arena_part.params import Param
+from shakedown_part.jsonstate import Done, Tool
+from shakedown_part.params import Param
 
 from . import disrupt, lab, qa
 

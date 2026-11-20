@@ -12,7 +12,7 @@ import pytest
 import yaml
 from sf_support import load_yaml
 
-from arena_part.expect import evaluate
+from shakedown_part.expect import evaluate
 from worldbench import needs
 from worldbench.builder import Builder
 from worldbench.generate import generate
@@ -370,7 +370,7 @@ def test_generate_writes_the_same_bytes_for_the_same_choices(builder, tmp_path):
     a = builder.generate("software-factory", NORTHWIND, str(tmp_path / "a"))
     b = builder.generate("software-factory", NORTHWIND, str(tmp_path / "b"))
     assert a == b
-    for name in ("world.json", "arena-package.toml"):
+    for name in ("world.json", "shakedown-package.toml"):
         assert (tmp_path / "a" / name).read_bytes() == (tmp_path / "b" / name).read_bytes()
     assert (tmp_path / "a" / "files" / "platform" / "compose.yaml").is_file()
     assert (tmp_path / "a" / "files" / "repos" / "orders" / "orders" / "store.py").is_file()

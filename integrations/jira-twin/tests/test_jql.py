@@ -1,6 +1,6 @@
 import pytest
 
-from arena_part.world_time import WorldTime
+from shakedown_part.world_time import WorldTime
 from conftest import DAY_MS, START_MS, api, call, search, search_error
 from jira_twin import jql
 

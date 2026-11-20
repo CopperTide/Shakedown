@@ -1,7 +1,7 @@
-"""The disruption a task's setup may schedule on the OT network (arena_part.disruptions): a remote-access session
+"""The disruption a task's setup may schedule on the OT network (shakedown_part.disruptions): a remote-access session
 that appears on the IT/OT gateway, into a zone, from a user the access list doesn't have."""
-from arena_part.disruptions import Kind
-from arena_part.params import Refusal
+from shakedown_part.disruptions import Kind
+from shakedown_part.params import Refusal
 
 from . import network
 

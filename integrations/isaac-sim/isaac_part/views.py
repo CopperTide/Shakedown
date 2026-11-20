@@ -3,7 +3,7 @@ and the documents file of a save. Shared by the plant and the mirror (GET /state
 import json
 from pathlib import Path
 
-from arena_part import errors
+from shakedown_part import errors
 
 DOCS_FILE = "docs.json"
 # key kind -> the /state collection it comes from; each item has an `id`

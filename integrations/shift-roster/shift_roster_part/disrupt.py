@@ -1,7 +1,7 @@
-"""The disruption a task's setup may schedule on the roster (arena_part.disruptions): operators call out, so they
+"""The disruption a task's setup may schedule on the roster (shakedown_part.disruptions): operators call out, so they
 are off shift, and the stations they staffed are not staffed any more."""
-from arena_part.disruptions import Kind
-from arena_part.params import Refusal
+from shakedown_part.disruptions import Kind
+from shakedown_part.params import Refusal
 
 from . import roster
 

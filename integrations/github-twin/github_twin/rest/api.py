@@ -1,6 +1,6 @@
 """How every REST operation is served: the token checked, the caller made a user, the answer given
 GitHub's headers, and an `ApiError` rolled back to where the operation started."""
-from arena_part.twin import Response
+from shakedown_part.twin import Response
 
 from .. import auth, users
 from ..errors import GithubError, invalid, not_found, read_only

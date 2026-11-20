@@ -49,7 +49,7 @@ def _reply(builder, method: str, params: dict) -> dict:
     import io
     import json
 
-    from arena_part import serve
+    from shakedown_part import serve
     from worldbench.builder import dispatch
     out = io.StringIO()
     line = json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params})

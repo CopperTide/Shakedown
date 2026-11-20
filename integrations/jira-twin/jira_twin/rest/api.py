@@ -1,7 +1,7 @@
 """How every REST operation is served: the API version checked, a read-only agent's write refused,
 the token checked, the caller made a user, and a `JiraError` rolled back to where the operation
 started and answered in Jira's words."""
-from arena_part.twin import Response
+from shakedown_part.twin import Response
 
 from .. import auth, users
 from ..errors import JiraError, bad

@@ -1,6 +1,6 @@
 """`slack_act {person, action, args}`: what the world's people say in chat, called by links:
 `post {channel, text, thread_ts?}` (a channel's id, name or `#name`) and `react {channel, ts, name}`."""
-from arena_part.twin import Done
+from shakedown_part.twin import Done
 
 from . import chat, ids, records
 from .errors import SlackError

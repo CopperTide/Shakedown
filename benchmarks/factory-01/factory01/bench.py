@@ -2,7 +2,7 @@
 two suggested agent setups, scored by named checks, drawn as a twin."""
 from pathlib import Path
 
-from arena_part import benchmark
+from shakedown_part import benchmark
 
 from . import checks, setups, twin
 

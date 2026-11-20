@@ -3,7 +3,7 @@
 import argparse
 from pathlib import Path
 
-from arena_part import serve_benchmark
+from shakedown_part import serve_benchmark
 
 from .runtime import WorldBenchmark
 

@@ -6,14 +6,14 @@ import argparse
 import os
 from pathlib import Path
 
-from arena_part import errors, serve
-from arena_part.errors import PartError
-from arena_part.serve import _need
+from shakedown_part import errors, serve
+from shakedown_part.errors import PartError
+from shakedown_part.serve import _need
 
 from . import install
 from .preview import assess, preview
 from .template import Template, form, list_templates
-from arena_part.settings import setting
+from shakedown_part.settings import setting
 
 PACKAGE_TEMPLATES = Path(__file__).resolve().parents[1] / "templates"
 

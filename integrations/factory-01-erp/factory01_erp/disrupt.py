@@ -1,7 +1,7 @@
-"""The disruption a task's setup may schedule (arena_part.disruptions): a supplier pushes an open purchase
+"""The disruption a task's setup may schedule (shakedown_part.disruptions): a supplier pushes an open purchase
 order's arrival back."""
-from arena_part.disruptions import Kind
-from arena_part.params import Refusal
+from shakedown_part.disruptions import Kind
+from shakedown_part.params import Refusal
 
 from . import erp
 

@@ -1,4 +1,4 @@
-"""A deployed agent Shakedown can test (`kind: "http"`, protocol `arena-agent/1`, docs/agents.md).
+"""A deployed agent Shakedown can test (`kind: "http"`, protocol `shakedown-agent/1`, docs/agents.md).
 
     uv run python examples/agent_server.py [port]      # then connect http://127.0.0.1:8765 in Shakedown
 

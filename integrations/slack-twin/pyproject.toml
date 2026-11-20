@@ -1,9 +1,9 @@
 [project]
 name = "slack-twin"
 version = "0.1.0"
-description = "arena-part/1 integration: a Slack-compatible twin (the Web API chat methods agents use)"
+description = "shakedown-part/1 integration: a Slack-compatible twin (the Web API chat methods agents use)"
 requires-python = ">=3.10"
-dependencies = ["arena-part"]
+dependencies = ["shakedown-part"]
 
 [dependency-groups]
 dev = ["jsonschema>=4.18", "slack_sdk>=3.30"]
@@ -12,7 +12,7 @@ dev = ["jsonschema>=4.18", "slack_sdk>=3.30"]
 package = false
 
 [tool.uv.sources]
-arena-part = { path = "../../kits/python", editable = true }
+shakedown-part = { path = "../../kits/python", editable = true }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

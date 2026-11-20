@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from arena_part.twin.vendor_schema import response_schema  # noqa: E402
+from shakedown_part.twin.vendor_schema import response_schema  # noqa: E402
 from slack_twin.methods import METHODS  # noqa: E402
 
 

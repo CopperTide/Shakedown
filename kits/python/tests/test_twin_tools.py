@@ -2,7 +2,7 @@
 transaction, a refusal rolling back the store and the notices it queued."""
 import pytest
 
-from arena_part.twin import Done
+from shakedown_part.twin import Done
 from notes_twin import NotesTwin
 
 CONFIG = {"hosts": [{"host": "notes.acme.test"}], "default_user": "owner"}

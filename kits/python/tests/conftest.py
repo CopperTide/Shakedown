@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from arena_part import serve
+from shakedown_part import serve
 
 
 @pytest.fixture(autouse=True)

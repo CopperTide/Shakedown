@@ -11,7 +11,7 @@ objective is the run's score (`goal_reached`'s measure).
 import json
 from pathlib import Path
 
-from arena_part.benchmark import check
+from shakedown_part.benchmark import check
 
 from .setups import TARGET
 

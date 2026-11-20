@@ -1,6 +1,6 @@
-"""Example HTTP twin: notes anyone can post, each by the agent that sent it (see arena_part.twin)."""
-from arena_part import serve
-from arena_part.twin import Done, HttpTwin, Response, Router
+"""Example HTTP twin: notes anyone can post, each by the agent that sent it (see shakedown_part.twin)."""
+from shakedown_part import serve
+from shakedown_part.twin import Done, HttpTwin, Response, Router
 
 router = Router()
 

@@ -11,7 +11,7 @@ doesn't depend on how the advances were split.
   set by a benchmark's links (`show_status`). Only the showcase's visuals read it: it is in no document and no tool's
   answer, so agents learn nothing from the plant they wouldn't from those systems.
 """
-from arena_part.params import Refusal
+from shakedown_part.params import Refusal
 
 RUNNING, SAFE = "running", "safe-stopped"
 

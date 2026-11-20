@@ -2,7 +2,7 @@
 from pathlib import Path
 from types import SimpleNamespace
 
-from arena_part import errors, sources
+from shakedown_part import errors, sources
 
 from .config import Config, parse_config
 

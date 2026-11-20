@@ -55,7 +55,7 @@ impl Mariadb {
     pub(crate) async fn drop_save_files(&self, save: &str) -> Result<(), PartError> {
         self.dirs.remove(save).map_err(PartError::internal_from)?;
         if let Err(e) = self.settle().await {
-            eprintln!("arena-mariadb: dropped save {save}, but tidying up failed: {e}");
+            eprintln!("shakedown-mariadb: dropped save {save}, but tidying up failed: {e}");
         }
         Ok(())
     }
@@ -69,7 +69,7 @@ impl Mariadb {
             out.bytes += idle.bytes;
             if let Err(e) = self.reroot_on(&s, keep).await {
                 let name = &s.config().container;
-                eprintln!("arena-mariadb: not re-rooting the saves on {name}: {e}");
+                eprintln!("shakedown-mariadb: not re-rooting the saves on {name}: {e}");
             }
         }
         out.bytes += self.settle().await?;
@@ -105,7 +105,7 @@ impl Mariadb {
             // One server that misbehaves must not stop the others being purged.
             if let Err(e) = self.purge(&s, &saves).await {
                 let name = &s.config().container;
-                eprintln!("arena-mariadb: not purging {name}: {e}");
+                eprintln!("shakedown-mariadb: not purging {name}: {e}");
             }
         }
         Ok(freed)

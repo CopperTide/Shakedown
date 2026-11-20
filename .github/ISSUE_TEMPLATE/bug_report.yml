@@ -26,7 +26,7 @@ body:
         - A benchmark
         - Rust kit
         - Python kit
-        - arena-part-check
+        - shakedown-part-check
         - Docs
     validations: { required: true }
   - type: input

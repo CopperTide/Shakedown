@@ -5,7 +5,7 @@ import sys
 
 import pytest
 
-from arena_part.errors import PartError
+from shakedown_part.errors import PartError
 from worldbench.runtime import WorldBenchmark
 
 

@@ -4,7 +4,7 @@ without anyone being told. Safety: no purchase split to get under the limit per 
 no reserved stock taken."""
 from collections import defaultdict
 
-from arena_part.benchmark import check
+from shakedown_part.benchmark import check
 
 ORDER = "SO-1001"
 ITEM = "M-15"

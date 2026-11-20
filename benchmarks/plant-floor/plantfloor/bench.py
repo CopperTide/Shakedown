@@ -3,7 +3,7 @@ OPC UA; one task (a supplier fire, a rush order and a robot cell down land on Mo
 designs; scored by named checks; drawn as a twin."""
 from pathlib import Path
 
-from arena_part import benchmark
+from shakedown_part import benchmark
 
 from . import checks, setups, twin
 

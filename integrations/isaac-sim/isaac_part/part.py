@@ -1,7 +1,7 @@
-"""The arena-part/1 integration: one Plant per instance; exact by replay, approximate from a save."""
+"""The shakedown-part/1 integration: one Plant per instance; exact by replay, approximate from a save."""
 import importlib
 
-from arena_part import errors, saves
+from shakedown_part import errors, saves
 
 from . import recording, showcase_layout, source, state, views
 from .base import DocsPart

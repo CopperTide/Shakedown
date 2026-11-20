@@ -1,1 +1,1 @@
-"""Plant 2 over OPC UA, an arena-part/1 integration."""
+"""Plant 2 over OPC UA, an shakedown-part/1 integration."""

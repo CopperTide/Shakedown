@@ -5,7 +5,7 @@ import atexit
 import importlib
 import time
 
-from arena_part import sources
+from shakedown_part import sources
 
 from . import isaac_backend, recording
 from .log import log

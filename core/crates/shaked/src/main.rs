@@ -13,7 +13,7 @@
 //! `SHAKEDOWN_BENCHMARK` (default: the benchmark remembered in `SHAKEDOWN_WORLDS`, else the only installed
 //! benchmark; a remembered one that can't describe itself is logged and passed over), and where the
 //! parts are:
-//! - `SHAKEDOWN_PACKAGES`: `:`-separated folders whose subfolders hold `arena-package.toml`
+//! - `SHAKEDOWN_PACKAGES`: `:`-separated folders whose subfolders hold `shakedown-package.toml`
 //!   (default `<arena>/integrations:<arena>/benchmarks`);
 //! - `SHAKEDOWN_BIN_DIR`: substituted for `${SHAKEDOWN_BIN_DIR}` in package commands
 //!   (default `<arena>/core/target/release`; build with `cargo build --release` in `<arena>`);

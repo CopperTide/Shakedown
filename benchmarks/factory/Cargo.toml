@@ -8,8 +8,13 @@ name = "arena_factory"
 path = "src/lib.rs"
 
 [[bin]]
-name = "arena-factory"
+name = "shakedown-factory"
 path = "src/main.rs"
+
+# The program's name until 2026-11-19, built too for scripts that still run it.
+[[bin]]
+name = "arena-factory"
+path = "src/old_name.rs"
 
 [dependencies]
 arena-part = { path = "../../kits/rust", features = ["http"] }

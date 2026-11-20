@@ -1,5 +1,5 @@
-"""line-sim: a discrete-event simulation study of a plant (arena-part/1)."""
-from arena_part import serve
+"""line-sim: a discrete-event simulation study of a plant (shakedown-part/1)."""
+from shakedown_part import serve
 
 from .part import LineSim
 

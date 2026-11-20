@@ -4,7 +4,7 @@ import warnings
 
 import pytest
 
-from arena_part.settings import both, old_name, setting
+from shakedown_part.settings import both, old_name, setting
 
 
 def test_the_new_name_wins_and_the_old_one_is_read_without_it():
@@ -29,3 +29,25 @@ def test_an_old_name_is_warned_about_once():
 
 def test_programs_get_both_names():
     assert both("SHAKEDOWN_SAVES", "/s") == {"SHAKEDOWN_SAVES": "/s", "ARENA_SAVES": "/s"}
+
+
+def test_the_old_import_name_arena_part_is_shakedown_part_and_warns_once():
+    import subprocess
+    import sys
+
+    code = """
+import warnings
+warnings.simplefilter("always")
+with warnings.catch_warnings(record=True) as w:
+    import arena_part, arena_part
+    from arena_part import Part, serve
+    from arena_part.settings import setting
+    from arena_part.twin import HttpTwin
+import shakedown_part, shakedown_part.settings, shakedown_part.twin
+assert Part is shakedown_part.Part and serve is shakedown_part.serve
+assert setting is shakedown_part.settings.setting and HttpTwin is shakedown_part.twin.HttpTwin
+print(len([x for x in w if "shakedown_part" in str(x.message)]))
+"""
+    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+    assert out.returncode == 0, out.stderr
+    assert out.stdout.strip() == "1"

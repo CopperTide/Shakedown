@@ -51,7 +51,7 @@ class LocalShakedown(Shakedown):
 
     Args:
         benchmark: the benchmark package new runs use (``SHAKEDOWN_BENCHMARK``), e.g. ``"retail"``.
-        packages: folders whose subfolders hold ``arena-package.toml`` (``SHAKEDOWN_PACKAGES``); default:
+        packages: folders whose subfolders hold ``shakedown-package.toml`` (``SHAKEDOWN_PACKAGES``); default:
             shaked's own (``integrations`` and ``benchmarks`` of its checkout).
         pg_url: the Postgres server for shaked's records (``SHAKEDOWN_PG_URL``); default shaked's
             (``postgres://arena:arena@127.0.0.1:5544/postgres``, ``deploy/compose.yml``).

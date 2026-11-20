@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-from arena_part import errors, params
+from shakedown_part import errors, params
 
 from . import equipment
 

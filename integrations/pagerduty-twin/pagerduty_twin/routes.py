@@ -1,6 +1,6 @@
 """The twin's router: the REST API and the Events API (`/v2/enqueue`) on one server (each host the
 config gives reaches it), and PagerDuty's 404 for any other path."""
-from arena_part.twin import Response, Router
+from shakedown_part.twin import Response, Router
 
 from . import events_v2, rest
 from .api import serve

@@ -61,7 +61,10 @@ impl Erpnext {
         self.open_site(ready, &source, &site).await?;
         let out = f(&ready.rest, &site.name).await;
         if let Err(e) = close_site(&ready.stack, &site).await {
-            eprintln!("arena-erpnext: removing scratch site {}: {e}", site.name);
+            eprintln!(
+                "shakedown-erpnext: removing scratch site {}: {e}",
+                site.name
+            );
         }
         out
     }

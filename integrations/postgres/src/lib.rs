@@ -23,7 +23,7 @@ const DEFAULT_URL: &str = "postgres://arena:arena@127.0.0.1:5544/postgres";
 pub struct Postgres {
     pg: Templates,
     ns: String,
-    /// `arena-postgres --sql-tools`: list and serve `sql_query` and `sql_execute`.
+    /// `shakedown-postgres --sql-tools`: list and serve `sql_query` and `sql_execute`.
     sql_tools: bool,
     /// Instance databases started by this process.
     live: Mutex<HashSet<String>>,

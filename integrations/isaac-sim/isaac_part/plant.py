@@ -1,7 +1,7 @@
 """One instance's plant: the factory's Factory on the arena clock, stepped at a fixed physics rate."""
 from datetime import datetime, timedelta, timezone
 
-from arena_part import errors
+from shakedown_part import errors
 
 from . import recording, views
 from .equipment import Equipment

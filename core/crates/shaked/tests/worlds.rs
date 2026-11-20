@@ -377,7 +377,7 @@ impl Start {
         };
         let toys = package_root(tag, &[toybench, acme, broken, part]);
         for opt_in in ["acme", "broken"] {
-            let manifest = toys.0.join(opt_in).join("arena-package.toml");
+            let manifest = toys.0.join(opt_in).join("shakedown-package.toml");
             let text = std::fs::read_to_string(&manifest).unwrap();
             std::fs::write(&manifest, format!("{text}opt_in = true\n")).unwrap();
         }

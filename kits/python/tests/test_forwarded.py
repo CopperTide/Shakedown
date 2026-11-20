@@ -1,4 +1,4 @@
-from arena_part.forwarded import public_base
+from shakedown_part.forwarded import public_base
 
 
 def test_public_base_reads_forwarded_headers():
@@ -12,7 +12,7 @@ def test_public_base_falls_back_without_both_headers():
 
 
 def test_agent_of_reads_the_agent_header():
-    from arena_part.forwarded import AGENT_HEADER, agent_of
+    from shakedown_part.forwarded import AGENT_HEADER, agent_of
 
     assert AGENT_HEADER == "x-arena-agent"
     assert agent_of({"X-Arena-Agent": "coder"}) == "coder"
@@ -21,7 +21,7 @@ def test_agent_of_reads_the_agent_header():
 
 
 def test_readonly_of_reads_the_readonly_header():
-    from arena_part.forwarded import READONLY_HEADER, readonly_of
+    from shakedown_part.forwarded import READONLY_HEADER, readonly_of
 
     assert READONLY_HEADER == "x-arena-readonly"
     assert readonly_of({"X-Arena-Readonly": "1"}) is True

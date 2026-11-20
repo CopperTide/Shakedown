@@ -106,7 +106,7 @@ fn initialize_result(ctx: &BranchCtx) -> Value {
     json!({
         "protocolVersion": "2025-06-18",
         "capabilities": {"tools": {}},
-        "serverInfo": {"name": format!("arena-{}", ctx.world.bench()), "version": "0.1.0"},
+        "serverInfo": {"name": format!("shakedown-{}", ctx.world.bench()), "version": "0.1.0"},
     })
 }
 

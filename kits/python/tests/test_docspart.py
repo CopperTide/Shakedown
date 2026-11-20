@@ -3,8 +3,8 @@ import json
 
 import pytest
 
-from arena_part import PartError, saves
-from arena_part.docspart import DocsPart
+from shakedown_part import PartError, saves
+from shakedown_part.docspart import DocsPart
 
 
 class Notes(DocsPart):

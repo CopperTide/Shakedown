@@ -6,7 +6,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from arena_part import errors
+from shakedown_part import errors
 
 PROC = Path("/proc/driver/nvidia")
 NO_GPU = {"gpu": None, "driver": None}

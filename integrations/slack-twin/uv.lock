@@ -7,11 +7,6 @@ resolution-markers = [
 ]
 
 [[package]]
-name = "arena-part"
-version = "0.1.0"
-source = { editable = "../../kits/python" }
-
-[[package]]
 name = "attrs"
 version = "26.1.0"
 source = { registry = "https://pypi.org/simple" }
@@ -327,6 +322,11 @@ wheels = [
 ]
 
 [[package]]
+name = "shakedown-part"
+version = "0.1.0"
+source = { editable = "../../kits/python" }
+
+[[package]]
 name = "slack-sdk"
 version = "3.47.0"
 source = { registry = "https://pypi.org/simple" }
@@ -340,7 +340,7 @@ name = "slack-twin"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
-    { name = "arena-part" },
+    { name = "shakedown-part" },
 ]
 
 [package.dev-dependencies]
@@ -350,7 +350,7 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "arena-part", editable = "../../kits/python" }]
+requires-dist = [{ name = "shakedown-part", editable = "../../kits/python" }]
 
 [package.metadata.requires-dev]
 dev = [

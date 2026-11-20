@@ -2,9 +2,9 @@
 qualification for 2-8 C, capacity left this week, customers and dates. Everything here only reads."""
 from datetime import date, timedelta
 
-from arena_part import errors
-from arena_part.jsonstate import Scenarios
-from arena_part.params import Refusal
+from shakedown_part import errors
+from shakedown_part.jsonstate import Scenarios
+from shakedown_part.params import Refusal
 
 BASE = "base"
 

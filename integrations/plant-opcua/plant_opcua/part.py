@@ -1,11 +1,11 @@
-"""The arena-part/1 integration: Plant 2's floor as an OPC UA server, with an MCP-style bridge (browse, read,
+"""The shakedown-part/1 integration: Plant 2's floor as an OPC UA server, with an MCP-style bridge (browse, read,
 write tags). The state is one JSON document per instance (saved exactly); each instance serves it as OPC UA
 nodes on its own port, and the bridge tools reach it over opc.tcp like any OPC UA client would. With
 `endpoint` in the config, the bridge talks to that server instead (a real plant), and no simulation starts."""
 import copy
 
-from arena_part.jsonstate import DENIALS, Done, JsonStatePart, Tool, denial, denials_doc, event
-from arena_part.params import Param, Refusal
+from shakedown_part.jsonstate import DENIALS, Done, JsonStatePart, Tool, denial, denials_doc, event
+from shakedown_part.params import Param, Refusal
 
 from . import opcua, sim, tags
 

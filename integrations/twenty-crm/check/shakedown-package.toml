@@ -1,11 +1,11 @@
 # The conformance target of the twenty-crm integration (the same program).
-# Run: arena-part-check integrations/twenty-crm/check
+# Run: shakedown-part-check integrations/twenty-crm/check
 # The first start sets up the database server and the base workspace (about a minute, once).
 kind = "integration"
 name = "twenty-crm-check"
 version = "0.1.0"
 protocol = 1
-run = { command = ["${ARENA_BIN_DIR}/arena-twenty-crm"] }
+run = { command = ["${SHAKEDOWN_BIN_DIR}/shakedown-twenty-crm"] }
 needs = { gpu_vram_gb = 0, services = [] }
 
 # The first write example is run twice, so it must be repeatable: a task gets a new id each time.

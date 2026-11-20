@@ -36,7 +36,7 @@ impl Erpnext {
         self.dirs.remove(save).map_err(PartError::internal_from)?;
         self.docs.drop_save(save);
         if let Err(e) = self.settle_on(self.server()).await {
-            eprintln!("arena-erpnext: dropped save {save}, but tidying up failed: {e}");
+            eprintln!("shakedown-erpnext: dropped save {save}, but tidying up failed: {e}");
         }
         Ok(())
     }
@@ -51,7 +51,7 @@ impl Erpnext {
             out.dropped += idle.dropped;
             out.bytes += idle.bytes;
             if let Err(e) = self.reroot(keep).await {
-                eprintln!("arena-erpnext: not re-rooting the kept saves: {e}");
+                eprintln!("shakedown-erpnext: not re-rooting the kept saves: {e}");
             }
         }
         out.bytes += self.settle_on(self.server()).await?;

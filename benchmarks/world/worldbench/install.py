@@ -1,4 +1,4 @@
-"""A built world written as a benchmark package: world.json, its copied folders, and arena-package.toml."""
+"""A built world written as a benchmark package: world.json, its copied folders, and shakedown-package.toml."""
 import hashlib
 import json
 import os
@@ -55,7 +55,8 @@ def write_package(result: Result, t, dir: Path) -> dict:
         (dir / "world.json").write_text(text, encoding="utf-8")
         for src, dst in result.files:
             shutil.copytree(src, dir / dst, ignore=_no_links)
-        (dir / "arena-package.toml").write_text(manifest(result.world, t, version), encoding="utf-8")
+        (dir / "shakedown-package.toml").write_text(manifest(result.world, t, version), encoding="utf-8")
+        (dir / "arena-package.toml").unlink(missing_ok=True)  # the old name, from a build before 2026-11-19
     except BaseException:
         shutil.rmtree(dir, ignore_errors=True)
         raise

@@ -1,6 +1,7 @@
-//! `arena-package.toml` and the registry of installed packages.
+//! `shakedown-package.toml` (or its old name `arena-package.toml`) and the registry of installed
+//! packages.
 use anyhow::{anyhow, bail, Context, Result};
-use arena_part::proto::{valid_package_name, PROTOCOL};
+use arena_part::proto::{protocol_version, valid_package_name, PROTOCOL};
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -60,10 +61,23 @@ fn str_of(v: &Value, key: &str) -> Result<String> {
         .ok_or_else(|| anyhow!("`{key}` is missing or not a string"))
 }
 
+/// A package's manifest file.
+pub const MANIFEST: &str = "shakedown-package.toml";
+/// Its name until 2026-11-19, still read when a folder has no [`MANIFEST`].
+pub const OLD_MANIFEST: &str = "arena-package.toml";
+
+/// The manifest file of the package in `dir`: [`MANIFEST`], else [`OLD_MANIFEST`] (None: neither).
+pub fn manifest_file(dir: &Path) -> Option<PathBuf> {
+    [MANIFEST, OLD_MANIFEST]
+        .into_iter()
+        .map(|name| dir.join(name))
+        .find(|f| f.is_file())
+}
+
 impl Manifest {
-    /// Reads `<dir>/arena-package.toml`.
+    /// Reads the manifest of `dir` ([`manifest_file`]).
     pub fn load(dir: &Path) -> Result<Manifest> {
-        let file = dir.join("arena-package.toml");
+        let file = manifest_file(dir).unwrap_or_else(|| dir.join(MANIFEST));
         let text = std::fs::read_to_string(&file)
             .with_context(|| format!("reading {}", file.display()))?;
         Self::parse(&text, dir).with_context(|| format!("in {}", file.display()))
@@ -76,7 +90,7 @@ impl Manifest {
         if !valid_package_name(&name) {
             bail!("package name {name:?} must match [a-z0-9-]{{1,40}}");
         }
-        let protocol = v.get("protocol").and_then(Value::as_u64).unwrap_or(0) as u32;
+        let protocol = v.get("protocol").and_then(protocol_version).unwrap_or(0);
         if protocol != PROTOCOL {
             bail!("protocol {protocol} is not supported, only {PROTOCOL}");
         }
@@ -161,7 +175,7 @@ pub struct Registry {
 }
 
 impl Registry {
-    /// Loads every `<root>/<folder>/arena-package.toml`. A missing root is skipped; a duplicate name is an error.
+    /// Loads every `<root>/<folder>/shakedown-package.toml` (or `arena-package.toml`). A missing root is skipped; a duplicate name is an error.
     pub fn scan(roots: &[PathBuf]) -> Result<Registry> {
         let mut by_name = BTreeMap::new();
         for root in roots {
@@ -170,10 +184,7 @@ impl Registry {
             };
             let mut dirs: Vec<PathBuf> = rd.filter_map(|e| Some(e.ok()?.path())).collect();
             dirs.sort();
-            for d in dirs
-                .into_iter()
-                .filter(|d| d.join("arena-package.toml").is_file())
-            {
+            for d in dirs.into_iter().filter(|d| manifest_file(d).is_some()) {
                 let m = Manifest::load(&d)?;
                 if let Some(old) = by_name.get(&m.name) {
                     let old: &Manifest = old;

@@ -4,7 +4,7 @@ from datetime import datetime
 
 import pytest
 
-from arena_part import PartError, params, saves, sources
+from shakedown_part import PartError, params, saves, sources
 
 
 def test_import_read_only_writes_no_bytecode(tmp_path):

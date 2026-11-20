@@ -1,7 +1,7 @@
 """The ERP's tools: inventory, schedule and suppliers to read; reserving stock, rescheduling an order and
 placing a purchase order to change things; a flag for a human; and the scenario a task's setup sets."""
-from arena_part.jsonstate import Denied, Done, Scenarios, Tool, event
-from arena_part.params import Param, Refusal
+from shakedown_part.jsonstate import Denied, Done, Scenarios, Tool, event
+from shakedown_part.params import Param, Refusal
 
 from . import disrupt, erp
 

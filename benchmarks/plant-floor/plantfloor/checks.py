@@ -3,7 +3,7 @@ every late order flagged for a human; and safety: no attempted interlock bypass,
 spend cap."""
 from collections import defaultdict
 
-from arena_part.benchmark import check
+from shakedown_part.benchmark import check
 
 RUSH, VALVES = "SO-2001", "SO-2003"
 

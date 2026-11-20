@@ -3,7 +3,7 @@
 key gets one made from its service, summary and world time."""
 import hashlib
 
-from arena_part.twin import Done, Response
+from shakedown_part.twin import Done, Response
 
 from . import incidents, ids, records
 from .errors import EventError, PagerDutyError

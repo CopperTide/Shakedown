@@ -76,7 +76,7 @@ def generate(p):
         raise RpcError(-32602, "%s exists already" % p["dir"])
     shown = preview(p)
     os.makedirs(p["dir"])
-    with open(os.path.join(p["dir"], "arena-package.toml"), "w") as f:
+    with open(os.path.join(p["dir"], "shakedown-package.toml"), "w") as f:
         f.write(manifest(shown["name"], shown["title"]))
     return {"name": shown["name"], "title": shown["title"], "version": "1.0.0+0"}
 

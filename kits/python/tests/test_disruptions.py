@@ -2,9 +2,9 @@
 agent's call that crosses its count, even when that call is refused, and a save restores the count."""
 import pytest
 
-from arena_part import disruptions
-from arena_part.jsonstate import Done, JsonStatePart, Tool
-from arena_part.params import Param, Refusal
+from shakedown_part import disruptions
+from shakedown_part.jsonstate import Done, JsonStatePart, Tool
+from shakedown_part.params import Param, Refusal
 
 
 def _set_cap(config, state, do):
