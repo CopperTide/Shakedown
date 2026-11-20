@@ -3,7 +3,7 @@
 Puts the Ridgeline factory's outside companies in the world (suppliers, carriers, the insurer, customers), as the
 factory hub's `Market` running on the Shakedown clock. Restore: exact from a save (one `state.json`); approximate: no.
 `uses_clock`: true. Verified offline only: its pytest suite (`uv run --with pytest pytest -q`) imports the real
-`market.py` from the factory demo folder and runs the `arena-part-check` conformance check. No service or
+`market.py` from the factory demo folder and runs the `shakedown-part-check` conformance check. No service or
 container is involved. No shaked test or run has used it.
 
 **The factory example this package wraps is not public yet.** Its default `hub_path` points into a private
@@ -11,7 +11,7 @@ container is involved. No shaked test or run has used it.
 `tests/` is skipped (pytest says why). Outside contributors can read and change the code, but can't run it.
 
 The simulated outside companies of the Ridgeline factory demo (suppliers, carriers, the insurer and
-customers) as an `arena-part/1` integration, running on the Shakedown clock. It wraps the factory hub's
+customers) as an `shakedown-part/1` integration, running on the Shakedown clock. It wraps the factory hub's
 `ridgeline_hub.market.Market` and changes only where time comes from: `now()` returns Shakedown seconds, not
 `time.monotonic()`. Replies therefore arrive at the same Shakedown times in every run and replay.
 
@@ -52,7 +52,7 @@ imports anything.
 - Restore is exact from a save: one `state.json` in the save folder with all market state, the shipments,
   the queued events and the stepper position. The market has no randomness, so `seed` is accepted and
   unused; the replay contract holds for any seed (`describe` says so in its fingerprint).
-- `usage` is 0 (everything is under `ARENA_SAVES`). `gc` removes save folders not kept.
+- `usage` is 0 (everything is under `SHAKEDOWN_SAVES`). `gc` removes save folders not kept.
 
 ## Inbound deliveries and their delay
 
@@ -65,7 +65,7 @@ benchmark's shift task. A world without `inbound` sees the hub as before, except
 | `hub_scenario {name, disruptions?}` | write | sets the scenario (`base`) and schedules disruptions; a task's setup calls it, so agents don't get it |
 
 - Keys: `inbound/<id>`, `scenario/inbound`, `_disruption/<id>` (internal).
-- **Scheduled disruption** (`arena_part.disruptions`, docs/protocol.md "Scheduled disruptions"): `delivery_delay
+- **Scheduled disruption** (`shakedown_part.disruptions`, docs/protocol.md "Scheduled disruptions"): `delivery_delay
   {delivery, extra_hours}`: the truck arrives `extra_hours` later. It fires before the agent's call (of any hub tool,
   or of `when.tool`) that crosses its count, and stays when that call is refused; `hub_scenario` counts for nothing.
   The schedule is saved with the rest of the state.
@@ -78,6 +78,6 @@ benchmark's shift task. A world without `inbound` sees the hub as before, except
 uv run --with pytest pytest -q
 ```
 
-The conformance test runs `arena-part-check` and is skipped when the binary is not built
-(`cargo build -p parts --bin arena-part-check`; `ARENA_BIN_DIR` names where it is). Verified on Linux, 2026-11-07:
+The conformance test runs `shakedown-part-check` and is skipped when the binary is not built
+(`cargo build -p parts --bin shakedown-part-check`; `SHAKEDOWN_BIN_DIR` names where it is). Verified on Linux, 2026-11-07:
 all 23 pass (`tests/test_inbound.py` included), the conformance check included.

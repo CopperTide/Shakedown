@@ -1,6 +1,6 @@
 # live-service integration
 
-The `service` integration (`integrations/service/`, same crate, program `arena-live-service`) for a live platform on
+The `service` integration (`integrations/service/`, same crate, program `shakedown-live-service`) for a live platform on
 the world clock: one Docker Compose project whose containers read the world's time, take deploys from a pipeline and
 report what they watch as world events. Everything in `service`'s README holds here too (volumes, save strategies,
 `live_copy`, `images`, `probes`, `http`). Its `describe` differs: `name: live-service`, `uses_clock: true`, and one
@@ -13,8 +13,8 @@ since it fails on a one-shot that finished. A start from a save waits the same w
 
 Config additions:
 
-- `live: true`: the instance's clock folder (`$ARENA_SAVES/live-service/.clock/<instance>/`) is given to compose as
-  `ARENA_CLOCK_DIR` (services mount it read-only). `clock.json` `{epoch_ms, clock_ms, world_ms, speed, wall_ms}` is
+- `live: true`: the instance's clock folder (`$SHAKEDOWN_SAVES/live-service/.clock/<instance>/`) is given to compose as
+  `SHAKEDOWN_CLOCK_DIR` (services mount it read-only). `clock.json` `{epoch_ms, clock_ms, world_ms, speed, wall_ms}` is
   written before the project comes up and replaced (written beside, then renamed) on each `advance`, which answers
   `changed: true`. `epoch_ms` and `speed` are the `world_time` of `start`; a world that gives none starts at the wall
   clock at speed 1. `stop` removes the folder.

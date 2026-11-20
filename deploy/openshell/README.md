@@ -25,8 +25,8 @@ What was verified on 2026-11-08, with OpenShell v0.1.7 and Claude Code 2.1.319 o
    start `openshell-gateway --config config/gateway.toml` (with `OPENSHELL_LOCAL_TLS_DIR` set to that folder),
    then `openshell gateway add https://127.0.0.1:17670 --local --name arena`.
 4. Build the image (see `Dockerfile`) and tag it `openshell-arena-claude:latest`.
-5. Start shaked with `PATH=<this folder>:$PATH OPENSHELL_HOME=...` (optionally `ARENA_OPENSHELL_POLICY`,
-   `ARENA_OPENSHELL_IMAGE`).
+5. Start shaked with `PATH=<this folder>:$PATH OPENSHELL_HOME=...` (optionally `SHAKEDOWN_OPENSHELL_POLICY`,
+   `SHAKEDOWN_OPENSHELL_IMAGE`).
 
 ## How it works, and its limits
 

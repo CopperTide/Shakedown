@@ -4,7 +4,7 @@ Templates written as data, worlds generated from them, and the benchmark a built
 (`docs/superpowers/plans/2026-11-19-world-builder.md`).
 
 - `library/<id>/`: the templates shipped with the builder (`small-manufacturer`); its manifest passes
-  `--templates library` to the program, which also reads its own `templates/` and `ARENA_TEMPLATES`.
+  `--templates library` to the program, which also reads its own `templates/` and `SHAKEDOWN_TEMPLATES`.
 - `<root>/<id>/template.yaml`: a template, checked (with its tasks' checks, in place or included) by
   `worldbench/schema/template.schema.json` (JSON Schema draft 2020-12) and by the cross-checks in
   `worldbench/validate.py` (ids unique per list, the systems a list names exist, `rules` files exist, sizes and

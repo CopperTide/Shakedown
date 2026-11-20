@@ -11,7 +11,7 @@ Thanks for helping. Bug reports, new integrations and benchmarks, docs fixes and
 
 ## Set up
 
-You need [Rust](https://rustup.rs/) (stable), [Node.js](https://nodejs.org/) 24, Docker, Git and, for the Python kit and integrations, [uv](https://docs.astral.sh/uv/). Claude Code or Codex is only needed to run real CLI agents, and a model provider (a key such as `OPENROUTER_API_KEY`, or a local server in `ARENA_LOCAL_MODELS`) only for API agents; the tests call neither.
+You need [Rust](https://rustup.rs/) (stable), [Node.js](https://nodejs.org/) 24, Docker, Git and, for the Python kit and integrations, [uv](https://docs.astral.sh/uv/). Claude Code or Codex is only needed to run real CLI agents, and a model provider (a key such as `OPENROUTER_API_KEY`, or a local server in `SHAKEDOWN_LOCAL_MODELS`) only for API agents; the tests call neither.
 
 ```bash
 git clone https://github.com/CopperTide/Shakedown.git
@@ -26,8 +26,8 @@ cargo build --release                          # integrations and benchmarks, in
 
 | Path | What it holds |
 |---|---|
-| `core/` | shaked (`crates/shaked`) and the package host and checker (`crates/parts`, `arena-part-check`). No code for any particular system. |
-| `kits/rust`, `kits/python` | The kits integrations and benchmarks are written with: crate `arena-part`, package `arena_part`. |
+| `core/` | shaked (`crates/shaked`) and the package host and checker (`crates/parts`, `shakedown-part-check`). No code for any particular system. |
+| `kits/rust`, `kits/python` | The kits integrations and benchmarks are written with: crate `arena-part`, package `shakedown_part`. |
 | `integrations/<name>/` | One package per kind of system (Postgres, a folder, Docker Compose, MariaDB, ERPNext, ...). |
 | `benchmarks/<name>/` | Benchmarks: tasks, tools, seed data and gold actions. `benchmarks/retail` is the included example. |
 | `ui/` | The web UI (React, Vite). |
@@ -57,16 +57,16 @@ Tests that need Docker services, real servers, GPUs or real models are `#[ignore
 
 ## The protocol
 
-shaked talks to every integration and benchmark over `arena-part/1`: JSON-RPC 2.0, one message per line, on the program's stdin and stdout. [docs/protocol.md](docs/protocol.md) is the specification. A change to the protocol updates `docs/protocol.md`, the kits and `arena-part-check` together, in one pull request.
+shaked talks to every integration and benchmark over `shakedown-part/1`: JSON-RPC 2.0, one message per line, on the program's stdin and stdout. [docs/protocol.md](docs/protocol.md) is the specification. A change to the protocol updates `docs/protocol.md`, the kits and `shakedown-part-check` together, in one pull request.
 
 ## Write an integration
 
-An integration is a folder with an `arena-package.toml` and a program, in any language, that speaks the protocol. [integrations/README.md](integrations/README.md) walks through the counter example step by step. Check it with the conformance checker before you open a pull request:
+An integration is a folder with an `shakedown-package.toml` and a program, in any language, that speaks the protocol. [integrations/README.md](integrations/README.md) walks through the counter example step by step. Check it with the conformance checker before you open a pull request:
 
 ```bash
 cargo build                                                  # your integration (debug build)
-(cd core && cargo build -p parts --bin arena-part-check)     # the checker
-ARENA_BIN_DIR=core/target/debug core/target/debug/arena-part-check integrations/<name> [--config file.json]
+(cd core && cargo build -p parts --bin shakedown-part-check)     # the checker
+SHAKEDOWN_BIN_DIR=core/target/debug core/target/debug/shakedown-part-check integrations/<name> [--config file.json]
 ```
 
 Give the integration a README that says what it puts in the world, its config, how it saves and restores, and what was verified and on what. Never claim a restore mode the checker has not passed.

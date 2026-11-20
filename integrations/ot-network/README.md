@@ -6,7 +6,7 @@ playbook for an unknown session. It stands in for an industrial firewall and rem
 monitoring tool; `describe.system` is `{kind: "network", product: "Simulated OT network and IT/OT remote-access
 gateway", simulated: true}`. Restore: exact from a save (one `state.json`); approximate: no. `uses_clock`: false.
 
-A Python package on the kit's `arena_part.jsonstate` (a tool runs on a copy of the state, so a refusal changes
+A Python package on the kit's `shakedown_part.jsonstate` (a tool runs on a copy of the state, so a refusal changes
 nothing). It knows nothing of the machines in a zone: the factory benchmark gates `isolate_zone` on the plant's
 robot cell being safe-stopped, and `restore_zone` on an approved change (`benchmarks/factory/src/world.rs`).
 
@@ -53,4 +53,4 @@ into `target`, from a user the access list doesn't have for it (so it is not app
 
 `uv run --with pytest pytest -q`: the network on the benchmark's data, the session appearing after its count, the
 playbook's order recorded, a restore with the session live, revoking without isolating, save and restore, and
-`arena-part-check`. Verified on Linux, 2026-11-07: all 7 pass, the conformance check included.
+`shakedown-part-check`. Verified on Linux, 2026-11-07: all 7 pass, the conformance check included.

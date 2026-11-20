@@ -11,7 +11,7 @@
   <a href="LICENSE"><img alt="License: Apache 2.0" src="https://img.shields.io/badge/license-Apache%202.0-2f6f73"></a>
   <img alt="Rust stable" src="https://img.shields.io/badge/rust-stable-2f6f73?logo=rust">
   <img alt="Python 3.10 or newer" src="https://img.shields.io/badge/python-3.10%2B-2f6f73?logo=python&logoColor=white">
-  <a href="docs/protocol.md"><img alt="Protocol: arena-part/1" src="https://img.shields.io/badge/protocol-arena--part%2F1-2f6f73"></a>
+  <a href="docs/protocol.md"><img alt="Protocol: shakedown-part/1" src="https://img.shields.io/badge/protocol-shakedown--part%2F1-2f6f73"></a>
 </p>
 
 <p align="center">
@@ -34,7 +34,8 @@ environment, not in the agent's prompt, and are enforced deterministically; scor
 never by a model. shaked, the Shakedown service, records every step of every run, so any run can be opened and read
 step by step.
 
-The service is `shaked` and the Python SDK `shakedown`; their old names still work ([Old names](#old-names)).
+The service is `shaked`, the Python SDK `shakedown` and the settings `SHAKEDOWN_*`; the old `arena` names still
+work ([Old names](#old-names)).
 
 ## Use Shakedown from code
 
@@ -88,8 +89,8 @@ untested live. See [docs/agents.md](docs/agents.md).
   model on your own machine through any OpenAI-compatible server (Ollama, vLLM, LM Studio, llama.cpp's server).
   A fork can move an agent to another provider or model.
 - **Integrations work like device drivers.** Each kind of system is a separate program, in any language, that
-  speaks `arena-part/1`: JSON-RPC over stdin and stdout. Rust and Python kits do the plumbing, and
-  `arena-part-check` checks a new integration against the protocol.
+  speaks `shakedown-part/1`: JSON-RPC over stdin and stdout. Rust and Python kits do the plumbing, and
+  `shakedown-part-check` checks a new integration against the protocol.
 - **Benchmarks are packages too.** A benchmark brings the tasks, tools, seed data and gold actions, and names
   the world it runs in. The core depends on no integration and no benchmark
   (`core/crates/parts/tests/isolation.rs` checks this).
@@ -160,11 +161,11 @@ flowchart LR
   API --> ENG
   MCP --> ENG
   ENG --> PG
-  ENG <-->|"arena-part/1<br/>JSON-RPC over stdio"| world
+  ENG <-->|"shakedown-part/1<br/>JSON-RPC over stdio"| world
 ```
 
 The world is made of **integrations**: isolated programs that each put one kind of system in the world and
-speak the `arena-part/1` protocol with shaked ([docs/protocol.md](docs/protocol.md)). Each one starts
+speak the `shakedown-part/1` protocol with shaked ([docs/protocol.md](docs/protocol.md)). Each one starts
 instances, runs tool calls, saves an instance's state, starts from a save, shows the state and compares two
 states. A **benchmark** names the world it runs in (its **parts**) and brings the tasks, the tools, the data and
 the gold actions. When a branch ends, shaked diffs its world with the task's gold world; it passes when no key
@@ -179,7 +180,7 @@ teams and handoffs, forking rules and cost labels.
 This uses the included retail example benchmark (`benchmarks/retail`, customer service from tau2-bench retail,
 on one `postgres` part), the default benchmark. You need Docker, Rust and Node; the `claude` and/or `codex`
 CLIs on your PATH for CLI agents; for API agents, a key (`OPENROUTER_API_KEY`, `OPENAI_API_KEY` or
-`ANTHROPIC_API_KEY`) or a local OpenAI-compatible server named in `ARENA_LOCAL_MODELS` (for example
+`ANTHROPIC_API_KEY`) or a local OpenAI-compatible server named in `SHAKEDOWN_LOCAL_MODELS` (for example
 `ollama=http://127.0.0.1:11434/v1`); `uv` only for the Python integrations.
 
 ```bash
@@ -190,18 +191,18 @@ cargo build --release                          # the Rust integrations and bench
 (cd ui && npm install && npm run dev)          # UI on http://127.0.0.1:4520 (proxies /api to 4510)
 ```
 
-shaked keeps its records in the database `arena` on that Postgres. It starts the integration and benchmark
-programs itself, from `ARENA_BIN_DIR` (default `core/target/release`), and refuses to start if the benchmark
+shaked keeps its records in the database `shakedown` on that Postgres (`arena` on a server made before 2026-11-19). It starts the integration and benchmark
+programs itself, from `SHAKEDOWN_BIN_DIR` (default `core/target/release`), and refuses to start if the benchmark
 can't be described (package missing or not built). It listens on 127.0.0.1 only. `GET /api/health` shows the
 benchmark, which CLIs were found, each model provider and whether API mode is available, and the disk use;
 `GET /api/providers` also asks the local servers and lists the models each provider offers.
 
 The UI is optional: everything works from code ([docs/sdk.md](docs/sdk.md)). A UI served from another origin
-can call shaked when that origin is in `ARENA_CORS_ORIGIN`. Or build the UI and let shaked serve it:
+can call shaked when that origin is in `SHAKEDOWN_CORS_ORIGIN`. Or build the UI and let shaked serve it:
 
 ```bash
 (cd ui && npm install && npm run build)
-(cd core && ARENA_UI_DIST=../ui/dist cargo run -p shaked)    # UI and API on :4510
+(cd core && SHAKEDOWN_UI_DIST=../ui/dist cargo run -p shaked)    # UI and API on :4510
 ```
 
 Then:
@@ -225,20 +226,20 @@ the prefix `live_` and needs Docker or a real server. Each folder's README has t
 
 | Name | What it puts in the world | Exact | Approx. | Clock | Verified |
 |---|---|---|---|---|---|
-| `postgres` | A Postgres database per instance | save | no | no | Tests against the `postgres:17-alpine` server of `deploy/compose.yml`, with the `arena-part-check` run (`integrations/postgres/tests/part.rs`); the retail example runs on it through shaked |
-| `folder` | A folder of files per instance | save | no | no | Tests on local disk with the `arena-part-check` run (`integrations/folder/tests/part.rs`); no service involved |
-| `service` | Any Docker Compose project per instance | save | no | no | `live_service_roundtrip` against a real Redis 6.2 project in Docker. No `arena-part-check` run |
+| `postgres` | A Postgres database per instance | save | no | no | Tests against the `postgres:17-alpine` server of `deploy/compose.yml`, with the `shakedown-part-check` run (`integrations/postgres/tests/part.rs`); the retail example runs on it through shaked |
+| `folder` | A folder of files per instance | save | no | no | Tests on local disk with the `shakedown-part-check` run (`integrations/folder/tests/part.rs`); no service involved |
+| `service` | Any Docker Compose project per instance | save | no | no | `live_service_roundtrip` against a real Redis 6.2 project in Docker. No `shakedown-part-check` run |
 | `live-service` | A Docker Compose platform on the world clock (clock file, deploys as a world tool, probes and watches) | save | no | yes | `live_platform_deploys_a_new_image` against the software factory's real platform: deploy, world-time telemetry, save and restore |
-| `mariadb` | A MariaDB database per instance (saves are binary-log positions) | save | no | no | Seven `live_mariadb_*` tests against MariaDB 11.8 in Docker, including `arena-part-check` |
-| `erpnext` | An ERPNext site per instance (saves are binary-log positions plus the site's files) | save | no | no | `live_erpnext_roundtrip` against ERPNext v16.53.0 in Docker, including `arena-part-check` |
-| `twenty-crm` | A Twenty CRM server per instance (saves are copies of its Postgres database) | save | no | no | `live_twenty_roundtrip` against Twenty v2.51.0 in Docker, including `arena-part-check` |
-| `sculptured` | A CopperTide server per instance, for approvals | save | no | no | `live_sculptured_roundtrip` against a real `sculptured` build; `arena-part-check` passed once by hand |
-| `ridgeline-hub` | A factory's simulated suppliers, carriers, insurer and customers | save | no | yes | Python tests against the real hub `market.py`, with `arena-part-check`. No services, no shaked run |
-| `isaac-sim` | A factory plant, on Isaac Sim physics or a stand-in | replay | yes | yes | **Stand-in only.** Python tests with `arena-part-check`. The `isaac` backend has never run on Isaac Sim |
+| `mariadb` | A MariaDB database per instance (saves are binary-log positions) | save | no | no | Seven `live_mariadb_*` tests against MariaDB 11.8 in Docker, including `shakedown-part-check` |
+| `erpnext` | An ERPNext site per instance (saves are binary-log positions plus the site's files) | save | no | no | `live_erpnext_roundtrip` against ERPNext v16.53.0 in Docker, including `shakedown-part-check` |
+| `twenty-crm` | A Twenty CRM server per instance (saves are copies of its Postgres database) | save | no | no | `live_twenty_roundtrip` against Twenty v2.51.0 in Docker, including `shakedown-part-check` |
+| `sculptured` | A CopperTide server per instance, for approvals | save | no | no | `live_sculptured_roundtrip` against a real `sculptured` build; `shakedown-part-check` passed once by hand |
+| `ridgeline-hub` | A factory's simulated suppliers, carriers, insurer and customers | save | no | yes | Python tests against the real hub `market.py`, with `shakedown-part-check`. No services, no shaked run |
+| `isaac-sim` | A factory plant, on Isaac Sim physics or a stand-in | replay | yes | yes | **Stand-in only.** Python tests with `shakedown-part-check`. The `isaac` backend has never run on Isaac Sim |
 | `isaac-sim-mirror` | A read-only view of a running plant | none | no | yes | One Python test against a stub HTTP server. A world containing it can't be rerun |
-| `utility` | A simulated electric utility: the site meter fed from the plant's load, tariff, demand-response events | save | no | yes | Python tests with `arena-part-check`. No shaked run |
-| `ot-network` | A simulated plant OT network: zones, conduits, the IT/OT gateway's sessions, the incident playbook | save | no | no | Python tests with `arena-part-check`. No shaked run |
-| `shift-roster` | A simulated shift roster: stations, operators, certifications, call-outs and call-ins | save | no | no | Python tests with `arena-part-check`. No shaked run |
+| `utility` | A simulated electric utility: the site meter fed from the plant's load, tariff, demand-response events | save | no | yes | Python tests with `shakedown-part-check`. No shaked run |
+| `ot-network` | A simulated plant OT network: zones, conduits, the IT/OT gateway's sessions, the incident playbook | save | no | no | Python tests with `shakedown-part-check`. No shaked run |
+| `shift-roster` | A simulated shift roster: stations, operators, certifications, call-outs and call-ins | save | no | no | Python tests with `shakedown-part-check`. No shaked run |
 | `line-sim` | A plant's discrete-event simulation model for an optimisation study: simulate configs, a budget, hard limits, a verified recommendation | save | no | no | Python tests (model determinism and common random numbers, limits, budget, verification, saves); real Claude Code runs through shaked with `benchmarks/line2-oee` |
 | `counter` (Rust), `counter-py` (Python) | Kit examples: one integer per instance | save (flavours: replay, approximate) | no (flavour) | yes | Kit and core tests (`kits/*/tests`, `core/crates/parts/tests`, shaked tests) |
 
@@ -249,11 +250,11 @@ factory example. Without those, their tests are skipped.
 
 ## Extend Shakedown
 
-- **Write an integration:** a folder with an `arena-package.toml` and a program that speaks the protocol. Start
-  from the counter in [integrations/README.md](integrations/README.md), then check it with `arena-part-check`.
+- **Write an integration:** a folder with an `shakedown-package.toml` and a program that speaks the protocol. Start
+  from the counter in [integrations/README.md](integrations/README.md), then check it with `shakedown-part-check`.
 - **Write a benchmark:** a package with `kind = "benchmark"` that answers `describe`, `seed`, `call_tool` and
   `gold_actions`. `benchmarks/retail` is the example; see [docs/packages.md](docs/packages.md#write-a-benchmark).
-- **Install a package:** put its folder under one of the `ARENA_PACKAGES` roots. `command` runs are for
+- **Install a package:** put its folder under one of the `SHAKEDOWN_PACKAGES` roots. `command` runs are for
   programs you trust; `image` runs are boxed in a container ([docs/packages.md](docs/packages.md)).
 
 ## Documentation
@@ -261,10 +262,10 @@ factory example. Without those, their tests are skipped.
 | Document | What it covers |
 |---|---|
 | [docs/sdk.md](docs/sdk.md) | Using Shakedown from code: the Python SDK, external agents, the step-loop env, export, reproducibility, Rust, citing |
-| [docs/agents.md](docs/agents.md) | Bringing your own deployed agent: the `arena-agent/1` protocol, Bedrock agents, secrets, what is verified |
+| [docs/agents.md](docs/agents.md) | Bringing your own deployed agent: the `shakedown-agent/1` protocol, Bedrock agents, secrets, what is verified |
 | [docs/concepts.md](docs/concepts.md) | Glossary, restore modes, teams and runners, external designs, overhead and estimates, CLI isolation, forking, cost labels |
-| [docs/protocol.md](docs/protocol.md) | `arena-part/1`: transport, manifest, every call, errors, clock and determinism contracts |
-| [integrations/README.md](integrations/README.md) | The integrations, a step-by-step counter integration, `arena-part-check` |
+| [docs/protocol.md](docs/protocol.md) | `shakedown-part/1`: transport, manifest, every call, errors, clock and determinism contracts |
+| [integrations/README.md](integrations/README.md) | The integrations, a step-by-step counter integration, `shakedown-part-check` |
 | [docs/packages.md](docs/packages.md) | Writing and installing integrations and benchmarks |
 | [docs/reference.md](docs/reference.md) | HTTP API, configuration, disk use and cleanup, tests |
 | [docs/measurements.md](docs/measurements.md) | Measurements made with the retail example benchmark |
@@ -308,17 +309,22 @@ other integration is checked on its own, and API mode has not been measured.
 
 ## Old names
 
-These were renamed on 2026-11-19. The old names still work, so code and scripts written before keep running:
+These were renamed on 2026-11-19. The old names still work, so code, packages and scripts written before keep running:
 
 | Old name | New name | What still works under the old name |
 |---|---|---|
 | `arenad`, the service (`core/crates/arenad`) | `shaked` (`core/crates/shaked`) | `cargo run -p arenad`, `cargo build -p arenad` and the program `core/target/<profile>/arenad`: the package `core/crates/arenad-alias` builds the same program under the old name |
 | the Python SDK `arena` (distribution `arena-sdk`, class `Arena`) | `shakedown` (distribution `shakedown`, class `Shakedown`) | `import arena` and `from arena.<module> import ...` give the same objects and warn once; `Arena`, `LocalArena`, `ArenaError`, `ArenaParallelEnv`; `sdk/python/compat/arena-sdk` installs `shakedown` under the old distribution name; `Shakedown.local(arenad=...)`, and a build named `arenad` is found |
+| settings `ARENA_<NAME>` (environment variables, `VITE_ARENA_*` for the UI build) | `SHAKEDOWN_<NAME>`, `VITE_SHAKEDOWN_*` | every old name is read when the new one is not set, with one warning per name; every program shaked or a part starts (part programs, drivers, docker compose projects) gets both names |
+| the protocols `arena-part/1` and `arena-agent/1` | `shakedown-part/1` and `shakedown-agent/1` | a part's `protocol` may be `1`, `"shakedown-part/1"` or `"arena-part/1"` (the kits now announce the new name); an HTTP agent that refuses `shakedown-agent/1` (a 4xx answer) is asked again under `arena-agent/1` |
+| `arena-package.toml`, `${ARENA_BIN_DIR}`, `${ARENA_DIR}` | `shakedown-package.toml`, `${SHAKEDOWN_BIN_DIR}`, `${SHAKEDOWN_DIR}` | a folder with only `arena-package.toml` is read (the new file wins when both are there), and both placeholders expand |
+| the programs `arena-<package>` (`arena-retail`, `arena-postgres`, ..., `arena-part-check`) | `shakedown-<package>`, `shakedown-part-check` | the old programs are built too; the Cargo package names (`cargo build -p arena-retail`) and the Rust kit crate `arena-part` are not renamed |
+| the Python kit `arena_part` (distribution `arena-part`) | `shakedown_part` (distribution `shakedown-part`) | `import arena_part` and its modules give the same objects and warn once; `kits/python/compat/arena-part` installs `shakedown-part` under the old name |
+| browser storage `arena.*` | `shakedown.*` | the UI moves each old key once, on load |
+| Postgres user and password `arena`, and the database `arena` of shaked's records | `shakedown` (new deployments: `deploy/compose.yml`) | with no URL set, shaked connects as `shakedown`, else as `arena`; it keeps using a database `arena` while there is no `shakedown`; the postgres integration reads `?arena_ns=` on the URL as `?shakedown_ns=`. To rename by hand (shaked stopped): `docker exec deploy-pg-1 psql -U arena -d postgres -c "CREATE ROLE shakedown LOGIN SUPERUSER PASSWORD 'shakedown'" && docker exec deploy-pg-1 psql -U shakedown -d postgres -c "ALTER DATABASE arena RENAME TO shakedown"` |
 | `deploy/runpod`: `arenad_provider` in `pod.toml`, `gpupod --arenad`, `--through-arenad` | `shaked_provider`, `--shaked`, `--through-shaked` | the old key and flags are read |
 
-Still under their old names, to be renamed with a migration: the protocols `arena-part/1` and `arena-agent/1`,
-`arena-package.toml`, the package programs `arena-<package>`, the Python kit `arena_part`, the environment
-variables `ARENA_*`, the browser storage keys and the Postgres user and database `arena`.
+Still under their old names, as wire or stored formats: the request headers `X-Arena-*`, the proxy's user `arena`, the MCP server name `arena` an agent's tools are called by (`mcp__arena__*`), the dataset format `arena-dataset/1`, the Cargo package names `arena-*`, and the names of docker resources the integrations made (`arena_erpnext`, `arena-erpnext-db`, `arena_<instance>`).
 
 ## Contributing
 

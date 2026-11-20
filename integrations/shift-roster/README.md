@@ -41,5 +41,5 @@ stations they staffed are not staffed. `roster_scenario` counts for none.
 ## Tests
 
 `uv run --with pytest pytest -q`: the stations at the start, a call-out covered by a floater and a call-in, a station
-taken over, save and restore, and `arena-part-check`. Verified on Linux, 2026-11-07: all 5 pass, the conformance check
+taken over, save and restore, and `shakedown-part-check`. Verified on Linux, 2026-11-07: all 5 pass, the conformance check
 included.

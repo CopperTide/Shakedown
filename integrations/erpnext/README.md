@@ -3,7 +3,7 @@
 Puts an ERPNext site in the world: one site per instance on one ERPNext install (`frappe/erpnext:v16.53.0` in Docker),
 with its own MariaDB server. Restore: exact from a save (a binary-log position plus the site's files); approximate:
 no. `uses_clock`: false. Verified live: `live_erpnext_roundtrip` ran against that real install in Docker (insert,
-save, change, restore, diff, a restarted program, and the `arena-part-check` conformance run). First start takes
+save, change, restore, diff, a restarted program, and the `shakedown-part-check` conformance run). First start takes
 about 90 s, to build the base site.
 
 ERP is a wrapper on a database, so ERPNext saves are the mariadb integration's binlog saves plus the
@@ -23,19 +23,19 @@ helper this integration uses: `arena_part::helpers::mariadb`).
   --skip-character-set-client-handshake`) after the binlog flags. It is connected to the project's
   network with alias `db` (`docker network connect --alias db`). A server of its own means the
   mariadb integration's binlog purges never remove binlog an ERPNext save needs, and the reverse.
-- **Settings:** the install's settings come from env (`ARENA_ERPNEXT_DB_CONTAINER`, `_DB_PORT`,
+- **Settings:** the install's settings come from env (`SHAKEDOWN_ERPNEXT_DB_CONTAINER`, `_DB_PORT`,
   `_DB_VOLUME`, `_DB_PASSWORD`, `_PROJECT`, `_PORT`, `_IMAGE`, `_COMPOSE`) else the defaults above, and
   the config of the first start may override them with `db_container`, `db_port`, `db_volume`,
   `db_root_password`, `project`, `http_port` (shaked runs programs with a cleared environment). One
   install per program: a later start whose config names another is -32602. Per instance:
   `diff_doctypes` (default `Item, Supplier, Customer, Purchase Order, Sales Order, Work Order,
   Journal Entry`) and `dump_after_bytes` (default 64 MiB, as mariadb).
-- **Sites folder:** the bench's `sites` is `$ARENA_SAVES/erpnext/.sites` (a dot folder: shaked's
+- **Sites folder:** the bench's `sites` is `$SHAKEDOWN_SAVES/erpnext/.sites` (a dot folder: shaked's
   sweep skips it), bind-mounted into the containers, so a site's files are copied with the folder
   helper. The integration writes `common_site_config.json` (db `db:3306`, the two Redis) and
   `apps.txt`. The image runs as uid 1000, so the folder must belong to uid 1000 (checked: else
   `start` fails saying so).
-- **Base** (made once, on the first start, and kept in `$ARENA_SAVES/erpnext/.base/`): the helper
+- **Base** (made once, on the first start, and kept in `$SHAKEDOWN_SAVES/erpnext/.base/`): the helper
   makes a database `erpnext_base` and its least-privilege account, `bench new-site
   arena-base.localhost --no-setup-db --install-app erpnext` installs into them, `generate_keys` makes an
   Administrator API key, and the setup wizard runs (company `Arena Co`, abbreviation `AC`, USD,
@@ -63,7 +63,7 @@ helper this integration uses: `arena_part::helpers::mariadb`).
   instance is live, so `gc` leaves it alone; starting an id that runs or is starting is -32602.
 - **State changes only through tool calls:** there is no scheduler service, and every site has
   `pause_scheduler`. Jobs that tool calls enqueue run on the worker.
-- **Save** `$ARENA_SAVES/erpnext/<save>/`: first the site's background jobs are drained (Frappe's `RQ
+- **Save** `$SHAKEDOWN_SAVES/erpnext/<save>/`: first the site's background jobs are drained (Frappe's `RQ
   Job` list for the site, queued or started, polled every 250 ms; after 60 s the save fails with
   -32001 "background jobs still running for <site>"). Then `files/public` and `files/private` (copies of
   `sites/<site>/public/files` and `private/files`, hard-linked to the previous save's copy when
@@ -96,13 +96,13 @@ helper this integration uses: `arena_part::helpers::mariadb`).
   mariadb's code (the kit's `Dumps::reroot_standing`) and has not been run live on this integration.
 - **usage** is this server's binlog plus the `eb_*` and `ev_*` databases. The mariadb integration does
   not count this server, so nothing is counted twice. The sites folder, saves, dumps and the base are
-  under `ARENA_SAVES`, which shaked counts; the server's own data volume and the Redis volumes are not
+  under `SHAKEDOWN_SAVES`, which shaked counts; the server's own data volume and the Redis volumes are not
   counted.
 - **connect** gives `{url, site, api_key, api_secret, admin_password}`: send `Host: <site>` (or log in to
   the web pages as Administrator).
 - **fingerprint** `{image, frappe, erpnext}`: the image tag and the app versions `bench version` prints
   (run once per program in a throwaway container).
-- **Conformance:** `check/arena-package.toml` (`erpnext-check`, the same program; its examples insert a
+- **Conformance:** `check/shakedown-package.toml` (`erpnext-check`, the same program; its examples insert a
   ToDo and an Item and read them). `cargo test -p arena-erpnext -- --ignored live_ --nocapture` runs
   the round trip and the check against a project (`arena_erpnext_t<pid>`, on a free port) and a
   server of its own, and removes them (`docker compose down -v`, the server's container and volume,

@@ -49,7 +49,7 @@ are in [reference.md](reference.md).
 - **Safety check**: a named check a benchmark marks `safety: true`: an unsafe action, not a missed goal. Suites
   count its failures apart from the score.
 - **Clock**: parts with `uses_clock` get the Shakedown clock, which runs with real time (times
-  `ARENA_CLOCK_SPEED`) while agents work and stands still while the world is saved or restored and while the
+  `SHAKEDOWN_CLOCK_SPEED`) while agents work and stands still while the world is saved or restored and while the
   record is written, so time-based world logic sees about the time it would see in production.
 
 ## Restore modes
@@ -153,7 +153,7 @@ record is one ordered sequence.
 
 The lead's `finish` ends the run: shaked refuses every later call, gives agents still working up to 45 seconds to
 end their turn, stops every agent, records each agent's end (tokens, cost, and the time it spent working), then
-freezes and scores the world. Guard rails (see `ARENA_DISPATCH_*` in [reference.md](reference.md#configuration)):
+freezes and scores the world. Guard rails (see `SHAKEDOWN_DISPATCH_*` in [reference.md](reference.md#configuration)):
 a time limit for the run (60 minutes by default, time paused left out), and an idle rule: when every agent has
 waited with no mail for 20 seconds and the lead hasn't finished, the lead is woken with the state of the team
 (each agent's last words); after 3 such wakes the run ends `failed`, scored, with the reason. The time limit also
@@ -186,7 +186,7 @@ An agent's `kind` picks its mode:
   - `anthropic`: Claude through Anthropic's Messages API, translated by the gateway; needs `ANTHROPIC_API_KEY`
     and a model.
   - `local:<name>`: any OpenAI-compatible server (Ollama, vLLM, LM Studio, llama.cpp's server), configured in
-    `ARENA_LOCAL_MODELS`, for example `ollama=http://127.0.0.1:11434/v1`; needs a model.
+    `SHAKEDOWN_LOCAL_MODELS`, for example `ollama=http://127.0.0.1:11434/v1`; needs a model.
 
   Every call is recorded in one format (OpenAI chat completions), whatever the provider, so replay, forks and
   compare treat all providers alike. The details, and what each provider costs, are in
@@ -201,8 +201,8 @@ Isolation of the CLI agents (`core/crates/shaked/src/agents/`; checked live by t
   web search off; read-only sandbox. Codex's built-in shell cannot be turned off. A probe from inside the
   sandbox could not open a socket, not even to the loopback Postgres port (`Operation not permitted`). Codex
   still listed its sub-agent tools (`collaboration.*`) in the live checks; they run under the same restrictions.
-- Both CLIs run in a fresh temporary working directory, with `PG*`, `ARENA_PG_URL`, `DATABASE_URL`,
-  `OPENROUTER_API_KEY`, `ARENA_LOCAL_MODELS` and every `ARENA_LOCAL_KEY_*` removed from their environment. Each
+- Both CLIs run in a fresh temporary working directory, with `PG*`, `SHAKEDOWN_PG_URL`, `DATABASE_URL`,
+  `OPENROUTER_API_KEY`, `SHAKEDOWN_LOCAL_MODELS` and every `SHAKEDOWN_LOCAL_KEY_*` removed from their environment. Each
   keeps only its own vendor's key, which it may sign in with: Claude Code keeps `ANTHROPIC_API_KEY` and loses
   `OPENAI_API_KEY`; Codex keeps `OPENAI_API_KEY` and loses `ANTHROPIC_API_KEY`. The `provider` of API mode does
   not apply to them.
@@ -263,7 +263,7 @@ A design that lives in its own code (or in CopperTide) drives a run itself, and 
 
 A fork of an external run starts at the step asked for, restores the world as it was just before it, and leaves
 the new branch live. When a Code connection drove the run, Shakedown starts its driver again for the new
-branch, with `ARENA_FORK_OF` set to the branch it came from (the answer says `driver: "relaunched"`); the
+branch, with `SHAKEDOWN_FORK_OF` set to the branch it came from (the answer says `driver: "relaunched"`); the
 driver's agents restart from the fork point, and `run.history(agent_id)` gives what each did before it. Its answer gives each agent's recorded history before the fork point and its endpoints on the
 new branch, so the design resumes its agents its own way. A branch whose design never calls `finish` stays running
 until shaked restarts (it is then `interrupted`).
@@ -281,7 +281,7 @@ is counted as overhead (`pause`), so the estimate in production leaves it out. `
 ## Spend limits
 
 A run may have a model-spend limit, `max_cost_usd` (on `POST /api/runs`, `/api/suites` and `/api/experiments`, for
-each of their runs; else `ARENA_MAX_COST_USD`, else none). It is recorded in `RunStart` and enforced while agents
+each of their runs; else `SHAKEDOWN_MAX_COST_USD`, else none). It is recorded in `RunStart` and enforced while agents
 work, not after:
 - Each model call is priced as shaked sees it, at the list prices of `docs/prices.toml` (with their cache and
   long-context rates): a Claude Code agent's calls from its stream-json `usage` (dispatch sessions), an API-mode
@@ -302,14 +302,14 @@ work, not after:
 ## World time windows
 
 A run an external system drives may have a world time window, `world_minutes` (on `POST /api/runs`, more than 0 and
-at most 1440; recorded in `RunStart`, and given to a Code connection's driver as `ARENA_WORLD_MINUTES`). When its
+at most 1440; recorded in `RunStart`, and given to a Code connection's driver as `SHAKEDOWN_WORLD_MINUTES`). When its
 branch clock reaches the window's end, shaked records the world event `window/time_up` and scores the run as
 `finish` would, whatever its driver is doing, so runs of different designs are scored at the same world time. A
 paused clock stands still, so a pause extends the window; a fork keeps its run's window (it counts from the run's
 clock 0). A driver that finishes earlier is held: `finish` answers `{status: "running", held_until_clock_ms}`, the
 run's agents are ended (their endpoints answer no one), and the run is scored when the window ends, `failed` with
 the finish's `error` when it carried one. A driver that exits holding a finish does not fail its run, and a driver of
-a windowed run is cut off only after the longer of `ARENA_CODE_RUN_SECS` and the window's wall time plus the driver
+a windowed run is cut off only after the longer of `SHAKEDOWN_CODE_RUN_SECS` and the window's wall time plus the driver
 grace.
 
 ## What the world says about itself
@@ -339,11 +339,11 @@ before scripted drivers were removed; not yet checked again with real agents.
 A built world is a benchmark made from a template in the UI (**Build a world**, `/worlds/new`): pick a template,
 name the company, set its size, choose its systems, edit its simulated people, choose its events, review, build.
 The world builder (`benchmarks/world`, a package of `kind = "builder"`) generates it from the template, the choices
-and a seed, the same way every time, and shaked writes it to `ARENA_WORLDS` as a benchmark package, installs it,
+and a seed, the same way every time, and shaked writes it to `SHAKEDOWN_WORLDS` as a benchmark package, installs it,
 makes its base saves in the background and then makes it the current benchmark (new runs use it). Runs, suites
 and experiments keep the benchmark they were created with, so choosing another world never changes a run that is
 going. Run once and New experiment have a world picker; the choice is remembered across a restart (unless
-`ARENA_BENCHMARK` names another). A built world is never changed or deleted: a change is a new world under another
+`SHAKEDOWN_BENCHMARK` names another). A built world is never changed or deleted: a change is a new world under another
 name. See `docs/reference.md` (`/api/worlds`)
 and `docs/packages.md` ("Templates and built worlds").
 
@@ -404,7 +404,7 @@ start_seq`), as compare does:
 
 ## AI review
 
-Optional, and off with `ARENA_REVIEW=off` or in the web UI's Advanced menu. A real model (Claude Code Sonnet by
+Optional, and off with `SHAKEDOWN_REVIEW=off` or in the web UI's Advanced menu. A real model (Claude Code Sonnet by
 default) reads a compact digest of a run's record and says where it went wrong (each claim citing steps), what to
 change (a prompt, the team, a tool, the model or the process; for a prompt change the sentences to add) and what
 went well; for two runs or two suites, the few differences that matter and which did better. shaked checks every

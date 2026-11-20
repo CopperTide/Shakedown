@@ -6,7 +6,7 @@ false. **The CopperTide program is not published yet**, so outside contributors 
 or its live test; the rest of the repository does not need it. It needs a CopperTide with the
 route for outside proposers (`POST /api/teams/{id}/changes`, CopperTide `platform` from 2026-11-07).
 Verified live on 2026-11-07: `live_sculptured_roundtrip` (propose, save, decide, restore, re-raise, diff)
-and `arena-part-check` (passed) ran against a local build of `sculptured` on the maintainer's machine,
+and `shakedown-part-check` (passed) ran against a local build of `sculptured` on the maintainer's machine,
 by hand (no routine test runs them). The test is skipped, and says so, when no
 CopperTide program is found. A save restores only with the same CopperTide build.
 
@@ -58,7 +58,7 @@ API.
     refusing a proposal, an unknown change, a change already decided, a change that can no longer be
     decided, 8 changes already waiting. An unknown tool is -32602. A server that can't be reached fails the
     call.
-- **Save** `$ARENA_SAVES/sculptured/<save>/` (tool calls on the instance wait meanwhile): `data/`,
+- **Save** `$SHAKEDOWN_SAVES/sculptured/<save>/` (tool calls on the instance wait meanwhile): `data/`,
   `changes.json` and `meta.json` (`{build, aliases}`: the `sculptured --version` that wrote the store,
   and the re-raised changes). `data/` holds an SQLite online backup of each store in the data folder (`controld.sqlite`
   and the runner's `host-local/hostd.sqlite`, through rusqlite with bundled SQLite) and the kit's folder copy
@@ -84,11 +84,11 @@ API.
   while it is still the recorded program (`/proc/<pid>/exe`) with a whole argument that is the data
   folder or under it (the kit's `arena_part::helpers::process_group`, Linux only). Then the instance's
   folder and scratch folder are removed. Stopping an instance that does not run is a no-op. `usage` is 0:
-  everything is under `ARENA_SAVES` except the scratch folders, which `stop` removes.
+  everything is under `SHAKEDOWN_SAVES` except the scratch folders, which `stop` removes.
 - **gc:** stops (as `stop`) every instance under `.live/` that this program did not start (left running
   by a program that ended without stopping it), then drops the saves `keep` does not keep.
 - Not `uses_clock`. Fingerprint `{"integration": "sculptured"}`.
 - Tests: `cargo test -p arena-sculptured` (unit tests, `gc` on a simulated leaked instance, and the restore
   refusals), `cargo test -p arena-sculptured -- --ignored live_` (runs real servers; skipped with a note when
-  the program is missing, or set `ARENA_SCULPTURED_BINARY`).
-  Conformance: `ARENA_BIN_DIR=core/target/debug core/target/debug/arena-part-check integrations/sculptured`.
+  the program is missing, or set `SHAKEDOWN_SCULPTURED_BINARY`).
+  Conformance: `SHAKEDOWN_BIN_DIR=core/target/debug core/target/debug/shakedown-part-check integrations/sculptured`.

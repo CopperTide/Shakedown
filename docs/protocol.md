@@ -1,4 +1,4 @@
-# `arena-part/1`
+# `shakedown-part/1`
 
 The protocol between shaked and an integration (or benchmark) program, in any language. Kits: Rust
 (`kits/rust`, crate `arena-part`) and Python (`kits/python`). Wire types for Rust: `arena_part::proto`.
@@ -11,17 +11,17 @@ answered in any order; match them by `id`. Each response is one whole line.
 
 ## Manifest
 
-`arena-package.toml` in each integration or benchmark folder:
+`shakedown-package.toml` in each integration or benchmark folder:
 
 ```toml
 kind = "integration"         # or "benchmark"
 name = "postgres"            # [a-z0-9-]{1,40}, unique among installed packages
 version = "0.1.0"
 protocol = 1
-run = { command = ["${ARENA_BIN_DIR}/arena-postgres"] }    # or: run = { image = "..." }
+run = { command = ["${SHAKEDOWN_BIN_DIR}/shakedown-postgres"] }    # or: run = { image = "..." }
 needs = { gpu_vram_gb = 0, services = [] }    # e.g. services = ["host.docker.internal:5544"], network = "host"
 config_schema = { ... }      # JSON Schema of the part's config in a world
-opt_in = true                # optional, for a benchmark: shaked uses it only when ARENA_BENCHMARK names it
+opt_in = true                # optional, for a benchmark: shaked uses it only when SHAKEDOWN_BENCHMARK names it
 
 [[example]]                  # tool calls the conformance check runs
 tool = "get"
@@ -29,16 +29,16 @@ args = {}
 ```
 
 `command` runs as a local program, for integrations installed from a folder you trust, and may contain
-`${ARENA_BIN_DIR}`. `image` runs boxed in a container: no network at all unless `needs.network = "host"`,
+`${SHAKEDOWN_BIN_DIR}`. `image` runs boxed in a container: no network at all unless `needs.network = "host"`,
 which gives it the host's network (every service the host can reach, not only those in `needs.services`;
 shaked does not enforce `services`); no environment from shaked; disk only under its own save folder,
 mounted at `/saves`.
 
-`ARENA_RUN_<PACKAGE>` in shaked's environment (the name upper-cased, `-` as `_`; `ARENA_RUN_ISAAC_SIM` for
+`SHAKEDOWN_RUN_<PACKAGE>` in shaked's environment (the name upper-cased, `-` as `_`; `SHAKEDOWN_RUN_ISAAC_SIM` for
 `isaac-sim`) replaces `run`. shaked runs it with `/bin/sh -c`, as a `command` (in the package folder, with the same
-environment, and `${ARENA_BIN_DIR}` substituted). Use it for a part on another machine, such as
+environment, and `${SHAKEDOWN_BIN_DIR}` substituted). Use it for a part on another machine, such as
 `ssh <host> -- <command>`, whose stdin and stdout carry the protocol. Such a part keeps its saves under its own
-`ARENA_SAVES` there, by the convention below, and shaked doesn't count their bytes.
+`SHAKEDOWN_SAVES` there, by the convention below, and shaked doesn't count their bytes.
 
 ## Ids and keys
 
@@ -81,10 +81,10 @@ real product. Each tool's `effect` already says whether it reads or writes.
 
 - `ToolSchema` is the MCP shape (`name`, `description`, `inputSchema`) plus `effect: "read"|"write"`. Tool
   names must be unique across a world; a world that has a clash is refused.
-- `dir` is a folder shaked creates for that save under `ARENA_SAVES/<part>/<save>/`. A part that keeps
+- `dir` is a folder shaked creates for that save under `SHAKEDOWN_SAVES/<part>/<save>/`. A part that keeps
   saves natively (Postgres `snap_` databases) ignores it and reports `bytes` itself.
-- **Save folders by convention:** a part finds any save's folder at `$ARENA_SAVES/<package name>/<save>/`.
-  shaked passes env `ARENA_SAVES` to the program, and `save.dir` is that same path. So a part that has
+- **Save folders by convention:** a part finds any save's folder at `$SHAKEDOWN_SAVES/<package name>/<save>/`.
+  shaked passes env `SHAKEDOWN_SAVES` to the program, and `save.dir` is that same path. So a part that has
   been restarted can still start from, inspect or diff an older save that is not in its memory; it answers
   `-32002` only when the folder is missing.
 - `advance` moves the part's clock to `clock_ms`. Parts with `uses_clock: false` never get it. Events the
@@ -96,13 +96,13 @@ real product. Each tool's `effect` already says whether it reads or writes.
   `events`: shaked saves the part with that step, as for any write, so a fork after it keeps the change.
 - `save` reports `exact: false` when the save may not capture everything (an approximate save).
 - `inspect` with an empty `keys` list returns every key the part has for that target.
-- `usage` counts only what the part keeps outside `ARENA_SAVES` (databases, files elsewhere). shaked
-  measures the save folders under `ARENA_SAVES` itself, so a part whose saves all live there reports 0.
+- `usage` counts only what the part keeps outside `SHAKEDOWN_SAVES` (databases, files elsewhere). shaked
+  measures the save folders under `SHAKEDOWN_SAVES` itself, so a part whose saves all live there reports 0.
 - `drop_save` of a save the part doesn't have answers `-32002` or succeeds; it is never another error.
   shaked calls it without checking first and treats `-32002` as "already gone", which counts as success.
 - `gc` drops the saves not in `keep` (and instances that are not running). A `keep` entry is a save id,
   or an id prefix followed by `*`: `base_*` keeps every save whose id starts with `base_`. After a
-  `gc`, shaked removes the folders under `ARENA_SAVES/<part>/` whose names `keep` does not keep.
+  `gc`, shaked removes the folders under `SHAKEDOWN_SAVES/<part>/` whose names `keep` does not keep.
 
 ## Benchmark calls
 
@@ -229,7 +229,7 @@ builder shows them, and a run or suite names the ones it chose.
 
 The disruptions a scenario adds are scheduled inside simulated parts, and the agents are not told; they find out when
 they query or act. A part that offers them takes them in its scenario tool's `disruptions` (and its scenario's data
-may list more). The Python kit implements this convention (`arena_part.disruptions`, used by `jsonstate`).
+may list more). The Python kit implements this convention (`shakedown_part.disruptions`, used by `jsonstate`).
 
 - A disruption is `{id, when: {after_calls, tool?}, do: {kind, ...}, text}`. `after_calls` counts the agents' tool calls
   the part answered since setup (only calls of `tool`, when given); the world's own calls (a setup's, a link's) count
@@ -309,7 +309,7 @@ against that no run made (an offline baseline search). Experiments show each mea
 scored run's value, and the best run (or, without `better`, the mean). `benchmarks/line2-oee` scores a
 study by the verified objective of its recommendation this way.
 
-A Python benchmark may write its checks as data instead of code: `arena_part.expect.evaluate(checks, docs)` turns
+A Python benchmark may write its checks as data instead of code: `shakedown_part.expect.evaluate(checks, docs)` turns
 a list of checks in the expected end state format (end state only) into the `checks` answer. Each is
 `{name, says?, safety?, measure?, check}`, where `check` is one of
 
@@ -358,7 +358,7 @@ tools, so a benchmark that wants them counted follows this convention:
 
 A world builder (a package of `kind = "builder"`, `benchmarks/world`) speaks the same transport and answers four
 calls over its templates (its own `templates/`, the folders its command names with `--templates`, and the
-`:`-separated `ARENA_TEMPLATES` roots, read again on every call). `choices` is what the builder's UI sends, every field optional: `{seed, company: {name}, size, systems,
+`:`-separated `SHAKEDOWN_TEMPLATES` roots, read again on every call). `choices` is what the builder's UI sends, every field optional: `{seed, company: {name}, size, systems,
 options: {system: {name: value}}, people: {counts: {role: n}, edits: {id: {name}}, added: [{name, role}], removed:
 [id]}, events: {id: {on, params}}}`. A problem is `{path, message}`.
 
@@ -381,8 +381,8 @@ options: {system: {name: value}}, people: {counts: {role: n}, edits: {id: {name}
 - The same template version, choices and seed give a byte-identical `world.json`. The package's `version` is the
   template's plus `+` and the first 8 hex digits of world.json's sha256; its name is the company's slug; it has
   `opt_in = true` and a `[world]` table `{title, template, template_name}`; its program is
-  `python -m worldbench --world world.json --version <version>` in `${ARENA_DIR}/benchmarks/world`, a benchmark
-  scored by the task's checks (`arena_part.expect`, see [Scoring by named checks](#scoring-by-named-checks)).
+  `python -m worldbench --world world.json --version <version>` in `${SHAKEDOWN_DIR}/benchmarks/world`, a benchmark
+  scored by the task's checks (`shakedown_part.expect`, see [Scoring by named checks](#scoring-by-named-checks)).
 
 ## Serving HTTP
 
@@ -434,7 +434,7 @@ The epoch is recorded in `RunStart.world_epoch_ms` (a run recorded before world 
 Base and gold worlds get no `world_time`.
 
 The kits turn this into stamps: Rust `arena_part::helpers::world_time::WorldTime` and Python
-`arena_part.world_time.WorldTime` (`at(clock_ms)`, `observe(clock_ms, now)`, `now_ms(now)`), with the formats
+`shakedown_part.world_time.WorldTime` (`at(clock_ms)`, `observe(clock_ms, now)`, `now_ms(now)`), with the formats
 `unix_nanos(ms)` (Loki push, OTLP `timeUnixNano`) and `rfc3339(ms)` (`2026-03-10T06:02:30.000Z`); Prometheus samples
 take the unix ms as it is. Between clocks, `now_ms` runs on at `speed` for at most 1 s of wall time past the last
 clock seen (a paused branch sends none), and never goes back. The Python kit keeps each instance's `WorldTime` from
@@ -469,7 +469,7 @@ Given the same `seed`, the same `fingerprint`, and the same ordered inputs (`cal
 `start` with the original seed at clock 0, then for each recorded input `advance` to its `clock_ms` and
 repeat the call. A result that differs from the recorded one stops the replay with "replay diverged". A
 replay is refused when the `fingerprint` differs from the one recorded at the run's start. The conformance
-check (`arena-part-check`) tests this.
+check (`shakedown-part-check`) tests this.
 
 So anything that changes how the part behaves must be in its `fingerprint` (its code, data files, the
 version of a program it drives) or checked at `start`: a `config` that points at other code or data than

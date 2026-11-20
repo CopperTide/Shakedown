@@ -79,7 +79,7 @@ earlier trial run). Five runs per setup is a small sample: the pass rates' 95% r
 ## Run it
 
 ```
-ARENA_BENCHMARK=line2-oee cargo run -p shaked      # from core/; the parts run with uv
+SHAKEDOWN_BENCHMARK=line2-oee cargo run -p shaked      # from core/; the parts run with uv
 (cd integrations/line-sim && uv run --with pytest pytest -q)
 (cd benchmarks/line2-oee && uv run --with pytest pytest -q)
 (cd benchmarks/line2-oee && uv run python scripts/reference.py 10)   # remakes data/reference.json

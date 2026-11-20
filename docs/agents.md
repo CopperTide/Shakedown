@@ -45,7 +45,7 @@ CrewAI adapter's `step_callback(agent)` records each step's thought; Shakedown a
 model responses it passes on (reasoning and thinking content, and what the model says alongside its tool
 calls). The CrewAI adapter turns CrewAI's own telemetry off; the OpenAI Agents adapter turns the SDK's trace
 export off when there is no `OPENAI_API_KEY` to send it with. The same team in each framework is in
-`sdk/python/examples/drivers/`. Run one by hand (`ARENA_URL=… python langgraph_driver.py`) and it starts a
+`sdk/python/examples/drivers/`. Run one by hand (`SHAKEDOWN_URL=… python langgraph_driver.py`) and it starts a
 run of its own; see [the SDK](sdk.md#drivers) for what `run` does at the end and when the driver raises.
 
 ### Code connections: Shakedown starts the driver
@@ -59,11 +59,11 @@ curl -s localhost:4510/api/connections -H 'content-type: application/json' -d '{
   "name": "Our LangGraph team",
   "command": ["uv", "run", "--extra", "langgraph", "python", "examples/drivers/langgraph_driver.py"],
   "workdir": "/path/to/sdk/python",
-  "env": {"ARENA_PROVIDER": "openai", "ARENA_MODEL": "gpt-4.1-mini"}
+  "env": {"SHAKEDOWN_PROVIDER": "openai", "SHAKEDOWN_MODEL": "gpt-4.1-mini"}
 }'
 ```
 
-The driver gets the run's ids (`ARENA_URL`, `ARENA_RUN`, `ARENA_BRANCH`, `ARENA_TASK`, `ARENA_CONNECTION`), the
+The driver gets the run's ids (`SHAKEDOWN_URL`, `SHAKEDOWN_RUN`, `SHAKEDOWN_BRANCH`, `SHAKEDOWN_TASK`, `SHAKEDOWN_CONNECTION`), the
 connection's `env`, and only `PATH`, `HOME`, `USER`, `LANG`, `LC_ALL`, `TMPDIR`, `UV_CACHE_DIR`,
 `XDG_CACHE_HOME` and `RUST_LOG` of shaked's own environment: model keys stay in shaked, behind the gateway.
 If the driver exits before it finishes the run, the run is scored and ends `failed` with the exit code and the
@@ -73,15 +73,15 @@ task with it (spend limit $0.50) and says whether its agents worked. Shakedown s
 listens on 127.0.0.1 alone, and the routes that start one refuse requests a web page could make (anything not
 JSON, or from another origin). Any program on this computer can still reach it, so run Shakedown with Code
 connections only on a computer whose other accounts you trust. A driver that drives its run longer than
-`ARENA_CODE_RUN_SECS` (default 900) has its run ended `failed`, scored; a run with a world time window
+`SHAKEDOWN_CODE_RUN_SECS` (default 900) has its run ended `failed`, scored; a run with a world time window
 (`world_minutes`) allows at least the window's wall time plus the driver grace, and is scored when the window ends
 ([concepts](concepts.md#world-time-windows)).
 
 ### The world's time
 
-Every driver Shakedown launches gets `ARENA_WORLD_EPOCH_MS` (the unix ms of the world clock's 0: the task's
-`clock_start` read as UTC, else the run's start; a fork keeps its run's) and `ARENA_CLOCK_SPEED` (world ms per wall
-ms), and `ARENA_WORLD_MINUTES` when the run has a world time window. `GET /api/branches/{id}/clock` (SDK: `Branch.clock()`) answers `{clock_ms, speed, paused, world_epoch_ms,
+Every driver Shakedown launches gets `SHAKEDOWN_WORLD_EPOCH_MS` (the unix ms of the world clock's 0: the task's
+`clock_start` read as UTC, else the run's start; a fork keeps its run's) and `SHAKEDOWN_CLOCK_SPEED` (world ms per wall
+ms), and `SHAKEDOWN_WORLD_MINUTES` when the run has a world time window. `GET /api/branches/{id}/clock` (SDK: `Branch.clock()`) answers `{clock_ms, speed, paused, world_epoch_ms,
 world_ms}` for a live branch (409 once it ended). Simulated traffic and twins stamp what they emit with
 `world_epoch_ms + clock_ms` (the kits' `WorldTime`), so dashboards follow the world clock and its pauses.
 
@@ -91,14 +91,14 @@ In a world whose parts serve HTTP (a code host, an issue tracker: see `docs/prot
 agents' own clients (`git`, `gh`, `curl`, SDKs) reach those services through Shakedown's recording proxy, and each
 request is recorded as an `http` step of the part that serves its host: inspectable and forkable like a tool call.
 
-- A driver Shakedown launches gets `HTTP_PROXY`, `HTTPS_PROXY` (and their lower-case forms), `ARENA_PROXY`,
+- A driver Shakedown launches gets `HTTP_PROXY`, `HTTPS_PROXY` (and their lower-case forms), `SHAKEDOWN_PROXY`,
   `NO_PROXY=127.0.0.1,localhost,::1`, `NODE_USE_ENV_PROXY=1`, and the variables the parts' routes name (a
   base URL such as `GITHUB_API_URL`). Set them in the environment of the clients your agents run.
 - An agent's register answer (`POST /api/branches/{id}/agents`) has its own `proxy_url` and `env`; the SDK gives them
   as `AgentEndpoint.proxy_url` and `AgentEndpoint.env`. Requests with an agent's proxy are recorded as that agent's;
   requests with the driver's are recorded as the agent whose model call through the gateway came last
   (`args.attributed: "latest model call"`), else as no agent's.
-- The proxy listens on 127.0.0.1 only (`ARENA_PROXY_PORT`, default a free port). Its URL carries a ticket of the
+- The proxy listens on 127.0.0.1 only (`SHAKEDOWN_PROXY_PORT`, default a free port). Its URL carries a ticket of the
   run; a request without one is answered 407. A request to a host no part serves is refused (403) and recorded. A
   read-only agent's writes are refused. Requests wait while the run is paused and are answered 409 once it ended.
 - HTTPS to a served host goes through the proxy too (`CONNECT host:443`): the proxy terminates TLS with a CA of the
@@ -108,13 +108,13 @@ request is recorded as an `http` step of the part that serves its host: inspecta
   own CA. `CONNECT` to another host, or to a served host on another port, is refused (403) and recorded.
 - A world that serves no HTTP gives none of these variables: drivers reach their providers as before.
 
-## HTTP agents (`arena-agent/1`)
+## HTTP agents (`shakedown-agent/1`)
 
 **Run.** When the agent's turn starts, shaked sends one `POST` to its URL, with its headers:
 
 ```json
 {
-  "protocol": "arena-agent/1",
+  "protocol": "shakedown-agent/1",
   "type": "run",
   "run_id": "0abe2f29…",
   "branch_id": "20ba9b19…",
@@ -149,7 +149,7 @@ gateway in front of the agent with a shorter timeout (AWS API Gateway cuts at 29
 
 Time the branch spends paused doesn't count. Once shaked stops waiting, the token no longer opens the endpoint.
 
-**Hello.** **Test connection** (`POST /api/agents/check`) sends `{"protocol": "arena-agent/1", "type": "hello"}`
+**Hello.** **Test connection** (`POST /api/agents/check`) sends `{"protocol": "shakedown-agent/1", "type": "hello"}`
 with the same headers and waits up to 10 s; any 2xx is a handshake, and `{"name": "…"}` names the agent.
 
 **Secrets.** Header values never reach a log, an API answer or a saved run. shaked keeps each value in memory the
@@ -159,7 +159,7 @@ agent again". Errors name the URL's host, never its path or query, but the URL i
 put credentials in headers, not in the URL.
 
 **Where the agent runs.** shaked listens on 127.0.0.1 only. An agent on another machine reaches `mcp_url` through
-a tunnel you run; set `ARENA_AGENT_BASE` to the tunnel's base URL and `mcp_url` uses it.
+a tunnel you run; set `SHAKEDOWN_AGENT_BASE` to the tunnel's base URL and `mcp_url` uses it.
 
 **Example.** `sdk/python/examples/agent_server.py` is a complete HTTP agent in about 70 lines: it takes the run
 and works the task with a real model, through the Claude API (`anthropic` package) when `ANTHROPIC_API_KEY` is

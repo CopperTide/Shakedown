@@ -13,7 +13,7 @@ every message, `edited`), and the twin answers only what it documents.
 
 The extract keeps every documented method's name (`methods`), the success (`200`) and error
 (`default`) answers of the methods the twin serves (`slack_twin/methods.py`), keyed `method status`,
-and the definitions they use, as JSON Schema draft 7 (the kit's `arena_part.twin.vendor_schema`; a
+and the definitions they use, as JSON Schema draft 7 (the kit's `shakedown_part.twin.vendor_schema`; a
 list-valued `items` on a non-array becomes `anyOf`, see the script). Rebuild it after changing the
 methods:
 

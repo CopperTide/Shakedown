@@ -1,15 +1,15 @@
 # Packages: integrations and benchmarks
 
-Everything system-specific in Shakedown is a package: a folder with an `arena-package.toml` and a program that
-speaks [`arena-part/1`](protocol.md). shaked finds packages under the `ARENA_PACKAGES` roots (default
+Everything system-specific in Shakedown is a package: a folder with an `shakedown-package.toml` and a program that
+speaks [`shakedown-part/1`](protocol.md). shaked finds packages under the `SHAKEDOWN_PACKAGES` roots (default
 `integrations/` and `benchmarks/`) and starts their programs itself. The core never depends on a package, and a
 package never depends on the core: it uses only the kits.
 
 ## Write an integration
 
-A folder with an `arena-package.toml` (`kind = "integration"`, `name`, `version`, `protocol`, `run`, `needs`,
+A folder with an `shakedown-package.toml` (`kind = "integration"`, `name`, `version`, `protocol`, `run`, `needs`,
 `config_schema`, and `[[example]]` tool calls) and a program that speaks the protocol. The Rust kit
-(`kits/rust`, crate `arena-part`) and the Python kit (`kits/python`, package `arena_part`) read and write the
+(`kits/rust`, crate `arena-part`) and the Python kit (`kits/python`, package `shakedown_part`) read and write the
 lines and check the ids; you fill in `describe`, `start`, `call_tool`, `advance`, `save`, `inspect`, `diff`,
 `drop_save`, `stop` and `usage` (`gc` and `connect` are optional). `integrations/README.md` walks through the
 counter example (`kits/rust/examples/counter.rs`, `kits/python/examples/counter.py`). Then check it, from the
@@ -17,22 +17,22 @@ repository root:
 
 ```bash
 cargo build                                                  # your integration (debug build)
-(cd core && cargo build -p parts --bin arena-part-check)     # the checker
-ARENA_BIN_DIR=core/target/debug core/target/debug/arena-part-check integrations/<name> [--config file.json]
+(cd core && cargo build -p parts --bin shakedown-part-check)     # the checker
+SHAKEDOWN_BIN_DIR=core/target/debug core/target/debug/shakedown-part-check integrations/<name> [--config file.json]
 ```
 
-`arena-part-check` runs the program and checks describe, start, the examples, save and restore, diff, replay
+`shakedown-part-check` runs the program and checks describe, start, the examples, save and restore, diff, replay
 and `drop_save`. It prints a JSON report and exits 0 if all passed, 1 if not, 2 if it could not run.
 
-Install a package by putting its folder under one of the `ARENA_PACKAGES` roots. A `command` run is for
-programs you trust; it runs in the package folder with only `PATH`, `HOME`, `ARENA_PG_URL`, `UV_CACHE_DIR`,
-`XDG_CACHE_HOME`, `RUST_LOG` and `ARENA_SAVES` in its environment. An `image` run is boxed in a container: no
+Install a package by putting its folder under one of the `SHAKEDOWN_PACKAGES` roots. A `command` run is for
+programs you trust; it runs in the package folder with only `PATH`, `HOME`, `SHAKEDOWN_PG_URL`, `UV_CACHE_DIR`,
+`XDG_CACHE_HOME`, `RUST_LOG` and `SHAKEDOWN_SAVES` in its environment. An `image` run is boxed in a container: no
 network unless the manifest asks for host networking (`needs.network = "host"`), no environment from shaked,
 and only its own saves folder, mounted at `/saves`.
 
 ## Write a benchmark
 
-A benchmark is a package with `kind = "benchmark"` in its `arena-package.toml` and a program that speaks the same
+A benchmark is a package with `kind = "benchmark"` in its `shakedown-package.toml` and a program that speaks the same
 transport (`docs/protocol.md`, "Benchmark calls"). It answers:
 
 - `describe`: its name and version, the world (`[{part, integration, config}]`), the tasks (`[{id, reason,
@@ -55,7 +55,7 @@ with exact saves may be connected. In Rust, implement `arena_part::Benchmark` an
 and `src/tasks.rs` reads the tasks and gold actions from `data/retail/tasks.json` (the tasks offered are the
 ids in `data/retail/demo_tasks.json`); `src/team.rs` holds the team it suggests and the `Store policy` heading
 over its policy. Its tests are in `benchmarks/retail/tests`. shaked runs one benchmark at a time, chosen with
-`ARENA_BENCHMARK`.
+`SHAKEDOWN_BENCHMARK`.
 
 `benchmarks/factory` is a benchmark over eight integrations (`erpnext`, `twenty-crm`, `ridgeline-hub`, the stand-in
 plant, `sculptured`, and three simulations: `utility`, `ot-network`, `shift-roster`) with two tasks, a press bearing
@@ -76,18 +76,18 @@ safety checks (`safety: true`). See `benchmarks/pharma/README.md`.
 
 `benchmarks/world` is the world builder: a Python package that reads templates (YAML checked by
 `worldbench/schema/template.schema.json`) and generates a world from a template, the user's choices and a seed
-(`docs/protocol.md`, "Builder calls"). A built world is itself a benchmark package: `arena-package.toml`
+(`docs/protocol.md`, "Builder calls"). A built world is itself a benchmark package: `shakedown-package.toml`
 (`opt_in = true`, a `[world]` table naming its title and template), `world.json` and the folders the template
 copies under `files/`. Its program is the same Python package run as `python -m worldbench --world world.json`,
-which serves the world and scores each task by its checks (`arena_part.expect`).
+which serves the world and scores each task by its checks (`shakedown_part.expect`).
 
 - `kind = "builder"`: the package shaked asks for templates, previews and builds.
 - Templates: the ones shipped with the builder are in `benchmarks/world/library/` (its manifest passes
   `--templates library`; `small-manufacturer`, see its README), beside its own `templates/` (none yet).
-- `ARENA_TEMPLATES`: `:`-separated folders of more templates (each `<id>/template.yaml`).
-- `ARENA_WORLDS`: where built worlds are written (default `<arena>/core/worlds`, git-ignored), scanned at start like
-  `ARENA_PACKAGES`. A built world's command names `${ARENA_DIR}`, the arena folder.
+- `SHAKEDOWN_TEMPLATES`: `:`-separated folders of more templates (each `<id>/template.yaml`).
+- `SHAKEDOWN_WORLDS`: where built worlds are written (default `<arena>/core/worlds`, git-ignored), scanned at start like
+  `SHAKEDOWN_PACKAGES`. A built world's command names `${SHAKEDOWN_DIR}`, the arena folder.
 
 shaked asks the first builder installed (by name) for templates and previews, writes a built world into
-`ARENA_WORLDS`, installs it while it runs and prepares its base in the background (`docs/reference.md`,
+`SHAKEDOWN_WORLDS`, installs it while it runs and prepares its base in the background (`docs/reference.md`,
 `/api/templates` and `/api/worlds`).

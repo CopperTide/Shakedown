@@ -16,16 +16,16 @@ All JSON on `http://127.0.0.1:4510`, except the event stream. Errors are `{error
 | `GET /api/templates` | the world builder's templates, `[{id, name, summary, version, systems: [label]}]` ([protocol](protocol.md#builder-calls)); 404 `no world builder is installed` when no package of `kind = "builder"` is (with several, the first by name answers) |
 | `GET /api/templates/{id}` | the template's form (its choices and defaults); 404 for an unknown template |
 | `POST /api/templates/{id}/preview` | body: the choices; what the world would be: name, title, parts, hosts, people, events, tasks, what is dropped, the images and memory it needs, and its `problems` |
-| `POST /api/worlds` | `{template, choices}`: builds a world. 202 `{name, state: "preparing"}`: it is written to `ARENA_WORLDS/<name>` (generated into a hidden temporary folder first), installed, and its base saves are made in the background, after which it is the current benchmark unless another was chosen since the build was asked for (that choice stands); 422 `{problems}` when the choices have problems (nothing is written); 409 `{error, suggested}` when a world or package has that name (`suggested` is the first free `<name>-N`) |
+| `POST /api/worlds` | `{template, choices}`: builds a world. 202 `{name, state: "preparing"}`: it is written to `SHAKEDOWN_WORLDS/<name>` (generated into a hidden temporary folder first), installed, and its base saves are made in the background, after which it is the current benchmark unless another was chosen since the build was asked for (that choice stands); 422 `{problems}` when the choices have problems (nothing is written); 409 `{error, suggested}` when a world or package has that name (`suggested` is the first free `<name>-N`) |
 | `GET /api/worlds` | the benchmarks a user can choose between (those not opt-in, every built world and the current one): `[{name, title, template: {id, name} \| null, built, current, state}]`, `state` being `preparing`, `ready` or `failed` for a world prepared since shaked started, else `ready` when its base saves exist and `not_prepared` when they don't |
 | `GET /api/worlds/{name}` | that row plus `elapsed_ms` (how long its preparation took, or has taken) and `error`; 404 for an unknown benchmark |
-| `POST /api/worlds/{name}/use` | makes it the benchmark of new runs (runs, suites and experiments made before keep theirs), remembered across a restart in `ARENA_WORLDS/.current`; answers its row; 404 for an unknown benchmark |
+| `POST /api/worlds/{name}/use` | makes it the benchmark of new runs (runs, suites and experiments made before keep theirs), remembered across a restart in `SHAKEDOWN_WORLDS/.current`; answers its row; 404 for an unknown benchmark |
 | `POST /api/worlds/{name}/prepare` | makes its base saves again (after a failure) and then makes it current (unless another was chosen since): 202; 409 while it is being prepared |
 | `GET /api/team/default[?kind=&model=&provider=]` | the default team; the query runs every agent with that kind, model or provider instead of Claude Code with `sonnet` |
 | `GET /api/teams[?kind=&model=&provider=]` | every team the benchmark suggests, the default first: `[{id, name, agents, runner}]`, `runner` being the runner the team's prompts are written for (`chain` when the benchmark names none or one shaked doesn't know); the query as for `/api/team/default` |
 | `GET /api/runs` | the runs with their branches |
-| `POST /api/agents/check` | `{kind: "http", url, headers?}` or `{kind: "bedrock", model_id, region}`, with an optional `name`: reaches the agent once (an `arena-agent/1` hello, or one Converse call of one token) and answers 200 `{ok: true, agent, name?, ms}`, `agent` being the team member as a team stores it (header values as `{secret: ref}`), or `{ok: false, error, ms}`; 400 for any other kind or a bad URL ([agents.md](agents.md)) |
-| `POST /api/runs` | `{task_id, team, runner?, scenario?, seed?, benchmark?}`: start a run; returns `{run_id, branch_id}`. `benchmark` is the benchmark it runs on (the page's world; absent, the current one, read once when the run is asked for), its task and scenario checked against it; 409 when no benchmark of that name is installed. `max_cost_usd` (optional, a positive number) is the run's model-spend limit ([concepts](concepts.md#spend-limits)); absent, `ARENA_MAX_COST_USD` applies; 400 for zero or less. `world_minutes` (optional, more than 0 and at most 1440; else 400 "world_minutes must be from 0 to 1440 minutes of world time") is an external or Code run's world time window ([concepts](concepts.md#world-time-windows)), recorded in `RunStart.world_minutes`; shaked's own runners ignore it. `seed` (0 to 2^53 - 1) is the seed the run's world starts its parts with, recorded in `RunStart.seed`; random when absent (every run starts from the same seeded base world either way; the seed reaches parts that draw from it, such as simulators). `scenario` is `{disruptions: [{id, params?: {name: value}}]}`, options of `GET /api/benchmark`'s `scenario_options` (params left out take their defaults): shaked expands each with its template, adds it to the task's setup and records the expanded scenario in `RunStart` (`scenario`); 400 for an unknown option or param, a value out of range or not among the choices, or an option chosen twice. `runner` is `chain` (default: one agent after another), `concurrent` (all at once), `dispatch` (a lead delegates to the team; see concepts, "Who drives the agents") or `external` (see below; the team may be empty and the answer adds `agents`, each agent's endpoints). `connection` (a Code connection's id) makes shaked launch that connection's driver for the run (the runner is then `external`; the answer adds `connection` and `driver`: `launched`, or `failed` when it couldn't start, the run then ending `failed` saying why); 404 for an unknown connection, 415/403 as for `POST /api/connections`. Each agent is `{id, name, kind, model, prompt, provider?, read_only?, lead?, tools?}`, or an `http` agent `{…, url, headers?}`, or a Bedrock agent `{…, kind: "bedrock", model_id, region}` ([agents.md](agents.md)) (`read_only`, default false, gives the agent only read tools; `tools`, a list of world tool names, gives it only those (the runner's talk tools always come), and a call of another world tool is refused; `lead` marks the agent that leads a dispatch run, else the first does); 400 when a dispatch team marks two leads or has a Codex or `http` agent (neither can keep a session across turns), or when an API-mode agent's provider is unknown or unavailable, or has no default model and the agent names none |
+| `POST /api/agents/check` | `{kind: "http", url, headers?}` or `{kind: "bedrock", model_id, region}`, with an optional `name`: reaches the agent once (an `shakedown-agent/1` hello, or one Converse call of one token) and answers 200 `{ok: true, agent, name?, ms}`, `agent` being the team member as a team stores it (header values as `{secret: ref}`), or `{ok: false, error, ms}`; 400 for any other kind or a bad URL ([agents.md](agents.md)) |
+| `POST /api/runs` | `{task_id, team, runner?, scenario?, seed?, benchmark?}`: start a run; returns `{run_id, branch_id}`. `benchmark` is the benchmark it runs on (the page's world; absent, the current one, read once when the run is asked for), its task and scenario checked against it; 409 when no benchmark of that name is installed. `max_cost_usd` (optional, a positive number) is the run's model-spend limit ([concepts](concepts.md#spend-limits)); absent, `SHAKEDOWN_MAX_COST_USD` applies; 400 for zero or less. `world_minutes` (optional, more than 0 and at most 1440; else 400 "world_minutes must be from 0 to 1440 minutes of world time") is an external or Code run's world time window ([concepts](concepts.md#world-time-windows)), recorded in `RunStart.world_minutes`; shaked's own runners ignore it. `seed` (0 to 2^53 - 1) is the seed the run's world starts its parts with, recorded in `RunStart.seed`; random when absent (every run starts from the same seeded base world either way; the seed reaches parts that draw from it, such as simulators). `scenario` is `{disruptions: [{id, params?: {name: value}}]}`, options of `GET /api/benchmark`'s `scenario_options` (params left out take their defaults): shaked expands each with its template, adds it to the task's setup and records the expanded scenario in `RunStart` (`scenario`); 400 for an unknown option or param, a value out of range or not among the choices, or an option chosen twice. `runner` is `chain` (default: one agent after another), `concurrent` (all at once), `dispatch` (a lead delegates to the team; see concepts, "Who drives the agents") or `external` (see below; the team may be empty and the answer adds `agents`, each agent's endpoints). `connection` (a Code connection's id) makes shaked launch that connection's driver for the run (the runner is then `external`; the answer adds `connection` and `driver`: `launched`, or `failed` when it couldn't start, the run then ending `failed` saying why); 404 for an unknown connection, 415/403 as for `POST /api/connections`. Each agent is `{id, name, kind, model, prompt, provider?, read_only?, lead?, tools?}`, or an `http` agent `{…, url, headers?}`, or a Bedrock agent `{…, kind: "bedrock", model_id, region}` ([agents.md](agents.md)) (`read_only`, default false, gives the agent only read tools; `tools`, a list of world tool names, gives it only those (the runner's talk tools always come), and a call of another world tool is refused; `lead` marks the agent that leads a dispatch run, else the first does); 400 when a dispatch team marks two leads or has a Codex or `http` agent (neither can keep a session across turns), or when an API-mode agent's provider is unknown or unavailable, or has no default model and the agent names none |
 | `POST /api/runs/{id}/name` | `{name}` sets an optional display name (1–300 bytes after trimming); 404 for a missing run. `GET /api/runs` includes `name` when set; task ids and event records are unchanged |
 | `DELETE /api/runs/{id}` | delete a run and what it saved (409 while a branch runs) |
 | `GET /api/branches/{id}` | a branch with its events, `budget` (`{max_cost_usd, estimate_usd}`: its spend limit, and its running estimate while it runs) and `metrics`: `{measured_s, overhead_ms: {save?, restore?, record?, gateway?, gate?, link?, mcp?, wait?, score?, pause?}, overhead_s, overhead_recorded, estimated_s, tokens, cost, agents: [{agent, kind, model, provider, tokens, prompt_tokens, completion_tokens, cost, model_calls, peak_prompt_tokens, compactions, overhead_s}]}`, each `cost` `{usd, label, source, as_of}` (see concepts, "Overhead and estimates"); `peak_prompt_tokens` is the largest `usage.prompt_tokens` of the agent's model calls, `overhead_s` the overhead recorded on its own events |
@@ -46,7 +46,7 @@ All JSON on `http://127.0.0.1:4510`, except the event stream. Errors are `{error
 | `GET /api/branches/{id}/rows?seq=N&keys=<kind>/<id>,...[&part=]` | the state of those keys just after step N (at most 50 keys) |
 | `POST /api/branches/{id}/fork` | `{at_seq, changes: {<agent id>: {prompt?, model?, kind?, provider?, read_only?}}, restore: "exact"\|"approximate", team?}` (default exact); `team` (a run an external system drives only, and not with `changes`; else 400) gives the new branch another team, such as a single agent in place of a team: its agents' `history` holds the events of any agent of the same id, and the fork note says the team changed; returns `{branch_id, start_seq, moved_from, reason}`, and for an external run `agents`: each agent's `{agent, mcp_url, gateway_url, spec, history}` on the new branch, which stays live for the external system (`history` is the agent's recorded events before `start_seq`). The changes are checked on the team the fork would run, as `POST /api/runs` checks a team |
 | `GET /api/branches/{id}/views` | `[{seq, event_seq, view}]`: the world's views recorded on the branch, in order (a fork's include those before its fork point, which its record starts with). `seq` is the step the view follows (the `world_view` event's `seq_of`), `event_seq` the view's own event, `view` the benchmark's `TwinView` ([protocol](protocol.md#the-worlds-view)); empty for a benchmark that draws none; 404 for an unknown branch |
-| `GET /api/branches/{id}/recording` | `{video, of, sidecar}`: the branch's plant recording, if `ARENA_RECORDINGS` holds one (an MP4 whose name has the branch id in it; a fork without one shows its parent's, `of` says whose), with its JSON sidecar; `video` is null when there is none. A recording part writes its frames on Shakedown time, so the video's second t is the branch's Shakedown second t |
+| `GET /api/branches/{id}/recording` | `{video, of, sidecar}`: the branch's plant recording, if `SHAKEDOWN_RECORDINGS` holds one (an MP4 whose name has the branch id in it; a fork without one shows its parent's, `of` says whose), with its JSON sidecar; `video` is null when there is none. A recording part writes its frames on Shakedown time, so the video's second t is the branch's Shakedown second t |
 | `GET /api/branches/{id}/recording.mp4` | that MP4, with byte ranges (so a player can seek); 404 when there is none |
 | `GET /api/branches/{id}/restore-plan?at_seq=N&restore=exact\|approximate` | `{parts: [{part, how, estimate_seconds?}]}`, or 409 with the refusal |
 | `GET /api/compare?a=<branch>&b=<branch>` | `{a, b, first_divergent_seq, differing_rows, not_compared}` |
@@ -74,66 +74,67 @@ API-mode gateway (`/gateway/{branch}/{agent}/v1/chat/completions`) are for shake
 
 ## Configuration
 
-Environment variables, read once at startup by shaked:
+Environment variables, read once at startup by shaked (each also under its old name `ARENA_*`, see
+[Old names](../README.md#old-names)):
 
-- `ARENA_PG_URL`: the Postgres server for shaked's records, passed on to integration programs (default
-  `postgres://arena:arena@127.0.0.1:5544/postgres`).
-- `ARENA_PORT`: HTTP port (default 4510).
-- `ARENA_BENCHMARK`: the benchmark new runs use, by package name (default: the only installed benchmark,
+- `SHAKEDOWN_PG_URL`: the Postgres server for shaked's records, passed on to integration programs (default
+  `postgres://shakedown:shakedown@127.0.0.1:5544/postgres`, else the same server's old user `arena`).
+- `SHAKEDOWN_PORT`: HTTP port (default 4510).
+- `SHAKEDOWN_BENCHMARK`: the benchmark new runs use, by package name (default: the only installed benchmark,
   not counting those whose manifest says `opt_in = true`; required when several are installed).
   A benchmark chosen with `POST /api/worlds/{name}/use` (or a world made current when it was built) is
-  remembered in `ARENA_WORLDS/.current`; at the next start `ARENA_BENCHMARK`, when set, wins over it, and it wins
+  remembered in `SHAKEDOWN_WORLDS/.current`; at the next start `SHAKEDOWN_BENCHMARK`, when set, wins over it, and it wins
   over the only installed benchmark. A remembered benchmark that can't describe itself at start is logged and
   passed over.
-- `ARENA_WORLDS`: where built worlds are written; scanned at start like `ARENA_PACKAGES` (default `core/worlds`,
+- `SHAKEDOWN_WORLDS`: where built worlds are written; scanned at start like `SHAKEDOWN_PACKAGES` (default `core/worlds`,
   ignored by git).
-- `ARENA_TEMPLATES`: `:`-separated folders of more world templates, passed on to the world builder.
-- `ARENA_PACKAGES`: `:`-separated folders whose subfolders hold an `arena-package.toml` (default
+- `SHAKEDOWN_TEMPLATES`: `:`-separated folders of more world templates, passed on to the world builder.
+- `SHAKEDOWN_PACKAGES`: `:`-separated folders whose subfolders hold an `shakedown-package.toml` (default
   `integrations:benchmarks` in the repository root).
-- `ARENA_BIN_DIR`: what `${ARENA_BIN_DIR}` in a manifest stands for (default `core/target/release`).
-- `${ARENA_DIR}` in a manifest's command stands for the arena folder (the one above `core`).
-- `ARENA_SAVES`: where saves are kept (default `core/saves`, ignored by git). Integrations that run in Docker or
+- `SHAKEDOWN_BIN_DIR`: what `${SHAKEDOWN_BIN_DIR}` in a manifest stands for (default `core/target/release`).
+- `${SHAKEDOWN_DIR}` in a manifest's command stands for the arena folder (the one above `core`).
+- `SHAKEDOWN_SAVES`: where saves are kept (default `core/saves`, ignored by git). Integrations that run in Docker or
   on their own servers also keep data elsewhere.
-- `ARENA_MAX_DB_BYTES`: disk limit, see [Disk](#disk) (default 5 GiB, `5368709120`).
-- `ARENA_MAX_COST_USD`: the model-spend limit of a run that names no `max_cost_usd` (a positive number of dollars;
+- `SHAKEDOWN_MAX_DB_BYTES`: disk limit, see [Disk](#disk) (default 5 GiB, `5368709120`).
+- `SHAKEDOWN_MAX_COST_USD`: the model-spend limit of a run that names no `max_cost_usd` (a positive number of dollars;
   default none). See [concepts](concepts.md#spend-limits).
-- `ARENA_DISPATCH_MAX_MINUTES`, `ARENA_DISPATCH_IDLE_SECS`, `ARENA_DISPATCH_IDLE_WAKES`: a dispatch run's guard
+- `SHAKEDOWN_DISPATCH_MAX_MINUTES`, `SHAKEDOWN_DISPATCH_IDLE_SECS`, `SHAKEDOWN_DISPATCH_IDLE_WAKES`: a dispatch run's guard
   rails (defaults 60 minutes, 20 seconds, 3): the longest a run may go on (time paused left out), how long the
   whole team may wait with nothing to do before the lead is woken, and how many such wakes before the run ends
   as failed. Read each time a dispatch branch starts. A value that isn't a whole number counts as unset.
-- `ARENA_CLOCK_SPEED`: speed of the world clock (default 1, real time; 0 stops it; anything that isn't a number
+- `SHAKEDOWN_CLOCK_SPEED`: speed of the world clock (default 1, real time; 0 stops it; anything that isn't a number
   of at least 0 counts as 1). Unlike the others, it is read each time a run or fork starts a branch, not once at
   startup.
 - `OPENROUTER_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`: the keys of the OpenRouter, OpenAI and Anthropic
   providers of API mode. Each key turns its provider on. Pick the provider and model per agent on the Team page
   (or per fork in "Change and rerun").
-- `ARENA_LOCAL_MODELS`: OpenAI-compatible servers to use as providers, `name=url[,name=url…]`, each the provider
+- `SHAKEDOWN_LOCAL_MODELS`: OpenAI-compatible servers to use as providers, `name=url[,name=url…]`, each the provider
   `local:<name>`. The name matches `^[a-z0-9_-]+$` and the URL is `http` or `https`. A bad entry, or a name
   given twice after its first, is skipped with a warning on stderr that never shows the URL.
-- `ARENA_LOCAL_KEY_<NAME>`: an optional key for `local:<name>`, sent as a bearer token (`<NAME>` is the name
+- `SHAKEDOWN_LOCAL_KEY_<NAME>`: an optional key for `local:<name>`, sent as a bearer token (`<NAME>` is the name
   upper-cased, with `-` as `_`).
-- `ARENA_LOCAL_PRICE_<NAME>`: an optional token rate for `local:<name>`, `<in>,<out>` in USD per million prompt and
+- `SHAKEDOWN_LOCAL_PRICE_<NAME>`: an optional token rate for `local:<name>`, `<in>,<out>` in USD per million prompt and
   completion tokens (cached prompt tokens at the input rate), so its calls are priced (cost source "rate set for this
   local server") and count toward a run's `max_cost_usd`. Without it a local server's calls cost 0. A value that
   isn't two numbers at least 0 is reported at startup (never the value) and the server stays unrated.
-- `ARENA_ANTHROPIC_MAX_TOKENS`: the `max_tokens` of a Claude call whose request names none (default 16000). A
+- `SHAKEDOWN_ANTHROPIC_MAX_TOKENS`: the `max_tokens` of a Claude call whose request names none (default 16000). A
   value that isn't a positive whole number is reported at startup and the default is used.
-- `ARENA_REVIEW`: `on` or `off` (default on when the reviewer can run). Off: no review is started and nothing is
+- `SHAKEDOWN_REVIEW`: `on` or `off` (default on when the reviewer can run). Off: no review is started and nothing is
   sent to a model; stored reviews can still be read.
-- `ARENA_REVIEW_MODEL`: the reviewer, `claude_code:<model>` (default `claude_code:sonnet`, Claude Code headless,
+- `SHAKEDOWN_REVIEW_MODEL`: the reviewer, `claude_code:<model>` (default `claude_code:sonnet`, Claude Code headless,
   signed in as the CLI agents are) or `<provider>:<model>` for one of the providers below (`openrouter:<model>`,
   `anthropic:<model>`, `openai:<model>`, `local:<name>:<model>`). A reviewer that can't run (no `claude` on the
   PATH, a provider without its key) turns AI review off, with why in `/api/review/settings`.
-- `ARENA_RECORDINGS`: a folder of plant recordings fetched from a recording part (Isaac Sim writes
+- `SHAKEDOWN_RECORDINGS`: a folder of plant recordings fetched from a recording part (Isaac Sim writes
   `<record>-b_<branch>_plant.mp4` and its `.json` sidecar), which the world view shows as "Plant (Isaac Sim)" beside
   the twin, held at the Shakedown second of the step on screen. Optional.
-- `ARENA_UI_DIST`: a built UI folder for shaked to serve at `/`. Optional: shaked is fully usable without a UI
+- `SHAKEDOWN_UI_DIST`: a built UI folder for shaked to serve at `/`. Optional: shaked is fully usable without a UI
   (from code, see [sdk.md](sdk.md)), and the UI can be served from anywhere else.
-- `ARENA_CORS_ORIGIN`: web origins, comma-separated (`http://127.0.0.1:5173,https://ui.example`), whose pages
+- `SHAKEDOWN_CORS_ORIGIN`: web origins, comma-separated (`http://127.0.0.1:5173,https://ui.example`), whose pages
   may call `/api` from a browser, for a UI served from elsewhere. Exact matches only; `*` and anything that isn't
   `http(s)://host[:port]` is skipped with a warning (a wildcard would let any web page drive this machine's Shakedown).
   Unset: same origin only. The `/api` routes still answer only a loopback `Host`.
-- `ARENA_AGENT_BASE`: the base URL an `http` agent is told to reach its MCP endpoint at (`mcp_url`), for an agent
+- `SHAKEDOWN_AGENT_BASE`: the base URL an `http` agent is told to reach its MCP endpoint at (`mcp_url`), for an agent
   on another machine reaching shaked through a tunnel. Unset: shaked's own address ([agents.md](agents.md)).
 
 A blank key counts as unset. A key a header can't carry is reported at startup (by its variable's name) and
@@ -142,7 +143,7 @@ vendor's key (see [concepts.md](concepts.md#teams-and-agents)).
 
 Default paths are relative to the repository root, fixed when shaked is built, so they hold wherever shaked is started
 from. The retail example reads its data from `data/retail` (relative to its package folder, `../../data/retail`);
-`ARENA_RETAIL_DATA` overrides that when you run its program directly, but shaked does not pass it on.
+`SHAKEDOWN_RETAIL_DATA` overrides that when you run its program directly, but shaked does not pass it on.
 
 ## Model providers
 
@@ -155,14 +156,14 @@ gateway, and the gateway talks to the provider:
 | `openrouter` | `https://openrouter.ai/api/v1/chat/completions` | `OPENROUTER_API_KEY`, bearer | not asked (type an OpenRouter model id) | `deepseek/deepseek-chat-v3.1` |
 | `openai` | `https://api.openai.com/v1/chat/completions` | `OPENAI_API_KEY`, bearer | `GET /v1/models`, without embedding, audio, image, moderation and other non-chat models | none: name one |
 | `anthropic` | `https://api.anthropic.com/v1/messages` (the Messages API, translated) | `ANTHROPIC_API_KEY`, `x-api-key` | `GET /v1/models` | none: name one |
-| `local:<name>` | `<url>/chat/completions` of the `ARENA_LOCAL_MODELS` entry | `ARENA_LOCAL_KEY_<NAME>`, bearer, if set | `GET <url>/models` | none: name one |
+| `local:<name>` | `<url>/chat/completions` of the `SHAKEDOWN_LOCAL_MODELS` entry | `SHAKEDOWN_LOCAL_KEY_<NAME>`, bearer, if set | `GET <url>/models` | none: name one |
 | `bedrock:<region>` | `https://bedrock-runtime.<region>.amazonaws.com/model/<model>/converse` (the Converse API, translated; untested live) | the user's AWS credentials, SigV4 or a Bedrock API key ([agents.md](agents.md#bedrock-agents)) | not listed | none: name one |
 
 A local provider is any server that speaks the OpenAI chat-completions API, such as Ollama, vLLM, LM Studio or
 llama.cpp's server. For example:
 
 ```bash
-cd core && ARENA_LOCAL_MODELS="ollama=http://127.0.0.1:11434/v1,vllm=http://127.0.0.1:8000/v1" cargo run -p shaked
+cd core && SHAKEDOWN_LOCAL_MODELS="ollama=http://127.0.0.1:11434/v1,vllm=http://127.0.0.1:8000/v1" cargo run -p shaked
 ```
 
 Then pick `local:ollama` or `local:vllm` as an agent's provider and name a model the server serves (for Ollama, a
@@ -183,7 +184,7 @@ What the gateway does per provider:
 - **OpenAI and local servers:** the request goes out as the agent sent it.
 - **Anthropic:** the request is translated to the Messages API (`anthropic-version: 2026-10-21`): system
   messages become `system`, tools get `input_schema`, tool calls and tool results become `tool_use` and
-  `tool_result` blocks, and `max_tokens` is the request's own or `ARENA_ANTHROPIC_MAX_TOKENS`. Nothing else is
+  `tool_result` blocks, and `max_tokens` is the request's own or `SHAKEDOWN_ANTHROPIC_MAX_TOKENS`. Nothing else is
   carried over, so sampling fields such as `temperature` are dropped, and a forced tool choice becomes `auto`. The
   answer is translated back: `stop_reason` `end_turn` is `stop`, `tool_use` is `tool_calls`, `max_tokens` is
   `length` and `refusal` is `content_filter`; usage becomes prompt, completion and total tokens.
@@ -241,14 +242,14 @@ the final worlds). The unit tests build digests, prompts and checks on those two
 
 ## Disk
 
-What uses space: every save of every part, and the databases or files a part keeps outside `ARENA_SAVES`. How
+What uses space: every save of every part, and the databases or files a part keeps outside `SHAKEDOWN_SAVES`. How
 big a save is depends on the integration (see its README): a `postgres` save is a full copy of the database
 (about 21 MB for the retail example), a `mariadb` save is a binary-log position. Runs and forks add up until you
 delete the run. The Rust build directory `core/target` also grows; `cd core && cargo clean` frees it.
 
-- The top bar shows `Saves <used> / <limit> GB`: each integration's `usage` plus the size of `ARENA_SAVES`.
+- The top bar shows `Saves <used> / <limit> GB`: each integration's `usage` plus the size of `SHAKEDOWN_SAVES`.
   When it reaches the limit, new runs and forks are refused (HTTP 507) until you delete old runs. The limit is
-  `ARENA_MAX_DB_BYTES`.
+  `SHAKEDOWN_MAX_DB_BYTES`.
 - Delete a run from the Runs page (Delete run, then confirm), or
   `curl -X DELETE http://127.0.0.1:4510/api/runs/<run_id>`. This drops its saves, stops its live instances and
   removes its recorded events. The shared base and gold saves stay. A run with a running branch can't be
@@ -275,9 +276,9 @@ cargo test -- --ignored live_                  # live integration tests: they st
 (cd sdk/python && uv run pytest -q)            # SDK: unit tests, and integration tests against a real shaked
 ```
 
-The SDK's integration tests start a shaked on the retail example (`ARENA_SDK_BIN_DIR`, default
-`core/target/release`, then `core/target/debug`; Postgres at `ARENA_SDK_PG_URL`, default the compose one) or use
-the running one at `ARENA_SDK_URL`, and are skipped without either. They drive the API directly and call no model.
+The SDK's integration tests start a shaked on the retail example (`SHAKEDOWN_SDK_BIN_DIR`, default
+`core/target/release`, then `core/target/debug`; Postgres at `SHAKEDOWN_SDK_PG_URL`, default the compose one) or use
+the running one at `SHAKEDOWN_SDK_URL`, and are skipped without either. They drive the API directly and call no model.
 The shaked they start runs the startup cleanup, so give them a Postgres no other test run uses at the time.
 
 The tests of `integrations/ridgeline-hub` and `integrations/isaac-sim` read the Ridgeline factory example from
@@ -287,9 +288,9 @@ program that `integrations/sculptured` runs is not published yet either; its liv
 
 Tests never call a real model unless they are `live_`, and no test uses a fake model server or a scripted
 agent: everything an agent does in a test is done by a real model. shaked's `live_` tests
-(`core/crates/shaked/tests/support/live.rs`) run on Claude Code (`claude`, signed in) with `ARENA_LIVE_MODEL`
+(`core/crates/shaked/tests/support/live.rs`) run on Claude Code (`claude`, signed in) with `SHAKEDOWN_LIVE_MODEL`
 (default `haiku`), or on shaked's own agent loop when a provider key is set (`ANTHROPIC_API_KEY`,
-`OPENAI_API_KEY`, `OPENROUTER_API_KEY`, or `ARENA_LOCAL_MODELS` with `ARENA_LIVE_MODEL`); `ARENA_LIVE_AGENT=claude`
+`OPENAI_API_KEY`, `OPENROUTER_API_KEY`, or `SHAKEDOWN_LOCAL_MODELS` with `SHAKEDOWN_LIVE_MODEL`); `SHAKEDOWN_LIVE_AGENT=claude`
 or `=api` picks one. A test that needs shaked's own loop (its model calls recorded, a fork resuming
 mid-conversation, a provider's request and cost) skips without a key, and every live test prints `skipped: …` and
 passes when no model is available. Models vary from run to run, so these tests check what Shakedown records and

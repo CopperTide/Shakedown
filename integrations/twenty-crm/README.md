@@ -5,16 +5,16 @@ in Docker), each with its own Redis, on one database of one Postgres server. Res
 DATABASE .. TEMPLATE`, the kit's Postgres helper); approximate: no. `uses_clock`: false.
 
 **Verified:** `live_twenty_roundtrip` ran against that real image in Docker, on Linux: find, write, inspect, save, change,
-restore, a restarted program, `gc`, and the `arena-part-check` conformance run (all steps passed, replay skipped: it
+restore, a restarted program, `gc`, and the `shakedown-part-check` conformance run (all steps passed, replay skipped: it
 restores from saves). The test took about 100 s, of which the first start, making the base, about 60 s. A restore took about 9 s; a save
 about 0.1 s and 20 MB of database, on the database server's Docker volume. A server holds about 1 GB of memory. **Not run:** Twenty's web UI against a restored instance, and more than two instances at once.
 
 - **Database server:** compose project `arena_twenty` from `compose.yml`: `postgres:17-alpine` (never pulled), volume
   `arena-twenty-db`, container `arena-twenty-db`, on `127.0.0.1:5546`, network `arena-twenty`. It comes up on the first
-  start or the first call that needs it, and stays up. Env `ARENA_TWENTY_PROJECT`, `ARENA_TWENTY_DB_PORT` and
-  `ARENA_TWENTY_IMAGE` change it, or the first start's config (`project`, `db_port`), since shaked runs programs with a cleared
+  start or the first call that needs it, and stays up. Env `SHAKEDOWN_TWENTY_PROJECT`, `SHAKEDOWN_TWENTY_DB_PORT` and
+  `SHAKEDOWN_TWENTY_IMAGE` change it, or the first start's config (`project`, `db_port`), since shaked runs programs with a cleared
   environment. A later start whose config names another server is -32602.
-- **Base** (made once, kept as the database `tb_base`, with its sign-in in `$ARENA_SAVES/twenty-crm/.base/api.json`): a server
+- **Base** (made once, kept as the database `tb_base`, with its sign-in in `$SHAKEDOWN_SAVES/twenty-crm/.base/api.json`): a server
   on an empty database runs the image's migrations, the app's sign-up makes the workspace and an Admin API key, the server
   is removed, and the demo records a new workspace comes with are emptied. A base without its sign-in file is made again.
 - **Instance** `<id>` (at most 60 characters) is the database `ti_<id>` copied from the base or a save, and compose project
@@ -43,6 +43,6 @@ about 0.1 s and 20 MB of database, on the database server's Docker volume. A ser
   it the workspace keeps the base's name, "Arena". The factory benchmark names it Ridgeline Components.
 - **usage** is the size of the `ti_*` and `ts_*` databases; 0 before this program has needed the server. **gc {keep}** drops the
   saves `keep` doesn't name (an entry ending in `*` is a prefix) and the databases of instances not running; never the base.
-- **Conformance:** `check/arena-package.toml` (`twenty-crm-check`, the same program). `cargo test -p arena-twenty-crm --
+- **Conformance:** `check/shakedown-package.toml` (`twenty-crm-check`, the same program). `cargo test -p arena-twenty-crm --
   --ignored live_ --nocapture` runs the round trip and the check against a server of its own and removes it when it ends.
   It needs the three images above present; none is pulled.

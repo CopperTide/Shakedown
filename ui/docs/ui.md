@@ -53,7 +53,7 @@ secondary metadata lines, few borders, plenty of whitespace.
   per line, masked unless focused), or a Bedrock model and region; **Test connection**
   (`POST /api/agents/check`: the agent's name and round trip, or the reason with ⚠), then **Use this
   agent** goes back with a one-agent team selected. Any edit means testing again. This browser keeps
-  the agent shaked answered (`arena.connected.v1`; header values only as shaked's secret references,
+  the agent shaked answered (`shakedown.connected.v1`; header values only as shaked's secret references,
   never the values), listed as "<name> (connected)" in both pickers.
 - **Build a world** (`/worlds/new`, `features/build/`): from ⋯ ("Build a world…"), ⌘K, or the last option of the
   world picker. A stepper (Template, Company, Systems, People, Events, Review; done steps ✓ and clickable; on
@@ -72,10 +72,10 @@ secondary metadata lines, few borders, plenty of whitespace.
   and the **Team editor** (`/team`) are one click away under ⋯ and ⌘K.
 
 **Which core.** The UI talks to the Shakedown core (shaked) it is served from. A build can name another
-with `VITE_ARENA_URL=<url>`, and the address can switch with `?core=<url>` (this browser remembers it;
+with `VITE_SHAKEDOWN_URL=<url>`, and the address can switch with `?core=<url>` (this browser remembers it;
 `?core=` with nothing goes back to the serving core); every `/api` request and the event stream go
 there (`src/api/core.ts`), and the ⋯ menu says which core is in use. A UI served from another
-origin needs the core started with `ARENA_CORS_ORIGIN=<the UI's origin>`.
+origin needs the core started with `SHAKEDOWN_CORS_ORIGIN=<the UI's origin>`.
 
 Pause and Stop are shaked's (`POST /api/branches/{id}/pause`, `/resume`, `/stop`): while paused, the
 branch's tool calls and gateway model calls wait and the world clock stops; `pause` and `resume` are
@@ -119,7 +119,7 @@ Tailwind names and never raw colours.
   are spaced 16 px apart. Table rows are 32 px tall.
 - **Radii.** `sm` 3 px for chips, `md` 4 px for controls, `lg` 6 px for panels and dialogs.
 - **Theme.** System, light or dark, chosen with the top bar button or the palette and kept in
-  `localStorage` (`arena.theme`).
+  `localStorage` (`shakedown.theme`; keys stored as `arena.*` before 2026-11-19 move to `shakedown.*` once, on load).
 
 ## Components (`src/components/ui`)
 
@@ -234,7 +234,7 @@ Logic lives in pure modules with tests, and components only render. For example:
   scripted usage) and escalations for both branches (what each row means is its tooltip); the
   divergence strip on one step axis is under Details. World
   views are not steps: the timeline, run figures, process view and divergence skip them.
-- **Fixtures.** A build with `VITE_ARENA_FIXTURES=1` answers `/api` from the pharma fixtures
+- **Fixtures.** A build with `VITE_SHAKEDOWN_FIXTURES=1` answers `/api` from the pharma fixtures
   (`dev/fixtureApi.ts`), for screenshots without shaked.
 - **Trends.** Actions per minute for each system kind, tokens, cost and tool latency as sparklines,
   and context per model call as a chart. A cost the record does not give per call draws no line.

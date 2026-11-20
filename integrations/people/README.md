@@ -8,7 +8,7 @@ repeats and a fork reproduces. `describe.system` is `{kind: "people", product: "
 written as data", simulated: true}`. Restore: exact from a save (one `state.json`, which holds every act a person
 still means to do); approximate: no. `uses_clock`: true.
 
-A Python package on the kit's `arena_part.jsonstate` (`ClockedJsonStatePart`). Time is the clock shaked gives
+A Python package on the kit's `shakedown_part.jsonstate` (`ClockedJsonStatePart`). Time is the clock shaked gives
 (world ms), so a paused branch pauses people and the world's speed scales them; times of day are the world's
 (`world_time.epoch_ms` + clock, UTC; clock 0 is midnight 1970 without a world time). Running the clock fires each
 act that came due, earliest first, so how the advances were split changes nothing.

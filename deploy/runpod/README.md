@@ -17,8 +17,8 @@ uv run --project deploy/runpod gpupod status | stop | delete [--force] | reconci
   the planned hours would pass the budget. It warns when the account balance is above what is left of the
   budget: with auto-reload off, that balance is the one stop that works if this machine dies with a pod up.
 - **Start** re-uses the stopped pod of the open session (its volume keeps the weights) or creates one with a
-  new `VLLM_API_KEY`. It writes `~/.config/shakedown/runpod.env` (mode 0600: `ARENA_LOCAL_MODELS`,
-  `ARENA_LOCAL_KEY_RUNPOD`, `ARENA_LOCAL_PRICE_RUNPOD`) for shaked, starts the watchdog detached (pid and log in
+  new `VLLM_API_KEY`. It writes `~/.config/shakedown/runpod.env` (mode 0600: `SHAKEDOWN_LOCAL_MODELS`,
+  `SHAKEDOWN_LOCAL_KEY_RUNPOD`, `SHAKEDOWN_LOCAL_PRICE_RUNPOD`) for shaked, starts the watchdog detached (pid and log in
   `~/.local/state/shakedown/`), and waits up to 20 min for vLLM's `/health`; a pod that never gets healthy is
   stopped.
 - **The watchdog** probes every minute and stops the pod after `idle_minutes` idle, after `max_session_hours`,

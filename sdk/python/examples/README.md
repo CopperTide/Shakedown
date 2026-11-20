@@ -1,8 +1,8 @@
 # Examples
 
-Run from `sdk/python` with `uv run python examples/<name>.py`. Each connects to the shaked at `ARENA_URL`, or
-starts one (`Shakedown.local`) from `ARENA_BIN_DIR` (default `core/target/release`) on the Postgres at `ARENA_PG_URL`
-with the benchmark `ARENA_BENCHMARK` (default `retail`); see `common.py`. Use `ARENA_URL` when one example
+Run from `sdk/python` with `uv run python examples/<name>.py`. Each connects to the shaked at `SHAKEDOWN_URL`, or
+starts one (`Shakedown.local`) from `SHAKEDOWN_BIN_DIR` (default `core/target/release`) on the Postgres at `SHAKEDOWN_PG_URL`
+with the benchmark `SHAKEDOWN_BENCHMARK` (default `retail`); see `common.py`. Use `SHAKEDOWN_URL` when one example
 should see another's runs (a started shaked stops when its script ends).
 
 Agents are always real models: Claude Code (`claude` signed in) by default, or an API provider whose key is set

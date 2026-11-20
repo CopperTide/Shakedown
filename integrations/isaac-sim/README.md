@@ -3,7 +3,7 @@
 Puts the Ridgeline factory plant in the world, with Isaac Sim as the physics (the `isaac` backend) or a stand-in
 double (the `standin` backend). Restore: exact by replay from the seed and inputs; approximate from a save
 (a pickle of the factory and simulation state). `uses_clock`: true. Verified on the stand-in by its pytest suite
-and the `arena-part-check` conformance check. The `isaac` backend has run once on Isaac Sim 6.2.0, on a rented
+and the `shakedown-part-check` conformance check. The `isaac` backend has run once on Isaac Sim 6.2.0, on a rented
 RTX 3090, through the factory benchmark's gold path, and recorded it to MP4 (see "Verified on Isaac Sim"). Its
 package `isaac-sim-mirror` (see `integrations/isaac-sim-mirror/README.md`)
 only follows a live plant.
@@ -12,7 +12,7 @@ only follows a live plant.
 `CopperTide-Examples` checkout next to the `Shakedown` checkout; without one the package can't start and every test in
 `tests/` is skipped (pytest says why). Outside contributors can read and change the code, but can't run it.
 
-The Ridgeline factory as an `arena-part/1` integration, on the Shakedown clock. In the factory demo
+The Ridgeline factory as an `shakedown-part/1` integration, on the Shakedown clock. In the factory demo
 (`CopperTide-Examples/factory`, branch `isaac-plant`), Isaac Sim 6.2 **is** the plant. This integration wraps
 that demo's `isaac/factory.py` class `Factory` without editing it. Factory is plain Python and reaches the
 simulation only through a `PlantIO`.
@@ -28,14 +28,14 @@ changes the fingerprint.
 
 | Backend | PlantIO | Used by |
 |---|---|---|
-| `isaac` | `sim_io.IsaacIO` in a headless `SimulationApp`, set up as `run.py` does it: scene build, `IsaacIO`, `setup_physics`, play, `start()`. PhysX steps run with `SimulationManager.step`, and `Factory.physics_step` runs in the post-step callback. | `arena-package.toml` (`needs.gpu_vram_gb = 16`) |
+| `isaac` | `sim_io.IsaacIO` in a headless `SimulationApp`, set up as `run.py` does it: scene build, `IsaacIO`, `setup_physics`, play, `start()`. PhysX steps run with `SimulationManager.step`, and `Factory.physics_step` runs in the post-step callback. | `shakedown-package.toml` (`needs.gpu_vram_gb = 16`) |
 | `standin` | `fake_sim.FakeIO`. Each step is `io.step(dt)` and then `Factory.physics_step(dt)`, the order `test_scenario.py` and the app use. | the tests (a test manifest written to `tmp_path`) and package `isaac-sim-standin` (`integrations/isaac-sim-standin`) |
 
 - If `isaacsim` can't be imported, `describe` still answers and `start` fails with -32603: "Isaac Sim is not
   importable here: run this integration with Isaac Sim's Python on the DGX Spark (see README)".
 - Isaac Sim has one stage per process, so the `isaac` backend holds one live plant per process. A second `start`
   is refused with -32603 until the first instance stops. So two branches running at once on one isaac-sim
-  program fail clearly at the second start. `arena-part-check` needs three live instances, so it can't pass on
+  program fail clearly at the second start. `shakedown-part-check` needs three live instances, so it can't pass on
   `isaac` as written.
 - Stopping an `isaac` instance points the physics callback at a no-op and stops the timeline. A new plant starts
   the same way, then builds a new stage, so a later plant never steps an old one. shaked's usual base, then
@@ -63,7 +63,7 @@ changes the fingerprint.
 
 | key | default |
 |---|---|
-| `record` | none. An MP4 path, relative to `$ARENA_SAVES/isaac-sim/`. Each instance writes `<stem>-<instance>.mp4` (shaked runs a base, then a branch) |
+| `record` | none. An MP4 path, relative to `$SHAKEDOWN_SAVES/isaac-sim/`. Each instance writes `<stem>-<instance>.mp4` (shaked runs a base, then a branch) |
 | `camera` | `auto`: the factory's camera director, which cuts to events. Or `free`, or a rig in the factory's `layout.CAMERAS` |
 | `record_fps` | 30: frames per second of Shakedown time. The MP4 plays at this rate, so it runs in Shakedown time |
 | `record_height` | 720: the MP4's height; the width follows at 16:9 |
@@ -262,7 +262,7 @@ plant as before (no extra keys, events or load).
 - `plant_state` lists `cells` and `power`; `plant/power` is `{meter, kw, reported_kw}`.
 - An approximate save keeps the cells, the last load reported and the seed, and a save made with other `cells` or
   `power` can't be restored (-32001).
-- Verified on `standin` only (`tests/test_equipment.py`, and `arena-part-check` with the factory benchmark's
+- Verified on `standin` only (`tests/test_equipment.py`, and `shakedown-part-check` with the factory benchmark's
   `data/shift.json` plant config). Not run on Isaac Sim, and nothing in the Isaac Sim scene shows the cells yet.
 
 ## Keys, inspect and diff
@@ -308,7 +308,7 @@ plant as before (no extra keys, events or load).
 
 ## Mirror mode: package `isaac-sim-mirror`
 
-`integrations/isaac-sim-mirror/arena-package.toml` runs this module with `--mode mirror`. It follows a running
+`integrations/isaac-sim-mirror/shakedown-package.toml` runs this module with `--mode mirror`. It follows a running
 factory (config `plant_url`, default `http://127.0.0.1:8090`) and only ever GETs.
 
 - No tools.
@@ -319,23 +319,23 @@ factory (config `plant_url`, default `http://127.0.0.1:8090`) and only ever GETs
   for display (`exact: false`).
 - Restore is `{exact: "none", approximate: false}`. A live plant can't be rewound, so a start `from` a save is
   -32001, and shaked's restore table refuses to fork a world that contains the mirror.
-- It has no `[[example]]`, so `arena-part-check` can't run on it. Its test uses a stub HTTP server on a free port.
+- It has no `[[example]]`, so `shakedown-part-check` can't run on it. Its test uses a stub HTTP server on a free port.
 
-## Running on another machine: `ARENA_RUN_ISAAC_SIM`
+## Running on another machine: `SHAKEDOWN_RUN_ISAAC_SIM`
 
-shaked replaces a package's run command with the command line in `ARENA_RUN_<PACKAGE>` (here
-`ARENA_RUN_ISAAC_SIM`), run by `/bin/sh -c` (`docs/protocol.md`). Pointed at `ssh <host> -- <command>`, the part
+shaked replaces a package's run command with the command line in `SHAKEDOWN_RUN_<PACKAGE>` (here
+`SHAKEDOWN_RUN_ISAAC_SIM`), run by `/bin/sh -c` (`docs/protocol.md`). Pointed at `ssh <host> -- <command>`, the part
 runs on a GPU machine with the protocol on the ssh session's stdio:
 
 ```bash
-export ARENA_RUN_ISAAC_SIM="exec ssh -p <port> -i <key> -o BatchMode=yes isaac@<host> -- 'cd /isaac-sim/work/arena/integrations/isaac-sim && \
-  ARENA_SAVES=/isaac-sim/work/saves PYTHONPATH=/isaac-sim/work/arena/kits/python exec /isaac-sim/python.sh -m isaac_part --backend isaac'"
+export SHAKEDOWN_RUN_ISAAC_SIM="exec ssh -p <port> -i <key> -o BatchMode=yes isaac@<host> -- 'cd /isaac-sim/work/arena/integrations/isaac-sim && \
+  SHAKEDOWN_SAVES=/isaac-sim/work/saves PYTHONPATH=/isaac-sim/work/arena/kits/python exec /isaac-sim/python.sh -m isaac_part --backend isaac'"
 ```
 
 - The remote machine needs this folder, `kits/python` and the factory's `isaac/` and `data/` in the same layout
   (`arena/` next to `CopperTide-Examples/`), since the default paths and the fingerprint are relative to it.
-- Saves and recordings stay on the remote machine, under its `ARENA_SAVES`: `save` writes to
-  `$ARENA_SAVES/isaac-sim/<save>` (the protocol's convention) rather than shaked's `dir`, which is a local path.
+- Saves and recordings stay on the remote machine, under its `SHAKEDOWN_SAVES`: `save` writes to
+  `$SHAKEDOWN_SAVES/isaac-sim/<save>` (the protocol's convention) rather than shaked's `dir`, which is a local path.
   shaked's own count of save bytes doesn't see them.
 - The `nvcr.io/nvidia/isaac-sim:6.2.0` image has no sshd and runs as uid 1234 without root, so `remote/sshd.py`
   is a small SSH server (asyncssh, key login only, one command per session) to start inside the container.
@@ -349,8 +349,8 @@ export ARENA_RUN_ISAAC_SIM="exec ssh -p <port> -i <key> -o BatchMode=yes isaac@<
   - a 40 GB container disk and no volume.
 - Everything else ran on a Linux workstation: shaked (`live_factory_gold_path_report`), the factory benchmark with
   `--backend isaac`, ERPNext (`frappe/erpnext:v16.53.0`), `ridgeline-hub` and CopperTide.
-- shaked started the part over `ssh` (`ARENA_RUN_ISAAC_SIM`, `remote/sshd.py` on the pod), with
-  `ARENA_CLOCK_SPEED=0.1` and `{"record": "factory-gold.mp4", "camera": "auto", "record_fps": 10}`.
+- shaked started the part over `ssh` (`SHAKEDOWN_RUN_ISAAC_SIM`, `remote/sshd.py` on the pod), with
+  `SHAKEDOWN_CLOCK_SPEED=0.1` and `{"record": "factory-gold.mp4", "camera": "auto", "record_fps": 10}`.
 - The team was the scripted, no-model team, on the gold path. Shakedown no longer has that team: the factory's live
   test (now `live_factory_team_runs_the_incident_and_arena_scores_it`) runs the benchmark's team on a real model,
   and has not run on Isaac Sim.
@@ -395,7 +395,7 @@ longer than the last.
 - The early frames' labels show PR-C1 at 888.8 mm/s. This looks like the presses spinning up from rest.
 
 **Not run on Isaac Sim:**
-- `arena-part-check`, which needs three live instances, one more than the backend allows;
+- `shakedown-part-check`, which needs three live instances, one more than the backend allows;
 - a replay, a fork or a rerun;
 - the wrong path;
 - real models.
@@ -408,8 +408,8 @@ uv run --with pytest --with asyncssh pytest -q
 
 Without `asyncssh`, the tests of `remote/sshd.py` are skipped.
 
-All tests run on `standin`. The conformance test runs `arena-part-check` on a copy of the manifest that uses
+All tests run on `standin`. The conformance test runs `shakedown-part-check` on a copy of the manifest that uses
 `--backend standin`, as it is and with the factory benchmark's cells and load model; it is skipped when the binary
-is not built (`cargo build -p parts --bin arena-part-check`; `ARENA_BIN_DIR` names where it is). Verified on Linux,
+is not built (`cargo build -p parts --bin shakedown-part-check`; `SHAKEDOWN_BIN_DIR` names where it is). Verified on Linux,
 2026-11-07: 61 passed, 1 skipped (`asyncssh` not installed), the conformance runs included. A restore in a fresh process is tested by running the part over stdio. The suite takes
 about 3 s.

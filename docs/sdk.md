@@ -1,6 +1,6 @@
 # Use Shakedown from code
 
-Shakedown's core is **shaked** (the service), the **`arena-part/1` protocol** and its **kits**. It is headless and
+Shakedown's core is **shaked** (the service), the **`shakedown-part/1` protocol** and its **kits**. It is headless and
 fully usable without a UI: everything the web UI does goes through shaked's public HTTP API
 ([reference.md](reference.md#http-api)), and so can your code. Three ways in:
 
@@ -32,12 +32,12 @@ from shakedown import Shakedown
 sd = Shakedown("http://127.0.0.1:4510")                # a running shaked
 
 with Shakedown.local(                                     # or start one for the length of the block
-    benchmark="retail",                               # ARENA_BENCHMARK
+    benchmark="retail",                               # SHAKEDOWN_BENCHMARK
     bin_dir="core/target/release",                    # where shaked and the package programs are
-    packages=["integrations", "benchmarks"],          # ARENA_PACKAGES (default: shaked's own)
-    pg_url="postgres://arena:arena@127.0.0.1:5544/postgres",
+    packages=["integrations", "benchmarks"],          # SHAKEDOWN_PACKAGES (default: shaked's own)
+    pg_url="postgres://shakedown:shakedown@127.0.0.1:5544/postgres",
     saves="runs/saves",                               # keep saves to fork later (default: a temp folder)
-    env={"ARENA_LOCAL_MODELS": "ollama=http://127.0.0.1:11434/v1"},
+    env={"SHAKEDOWN_LOCAL_MODELS": "ollama=http://127.0.0.1:11434/v1"},
 ) as sd:
     print(sd.health()["benchmark"])
 ```
@@ -132,7 +132,7 @@ ends (its world time window or its spend limit ended it), the driver says
 `shakedown: the run had already ended (…)` on stderr and the block ends normally.
 `run.agent(id, read_only=True)` registers an agent whose writes are refused, `run.agents` lists the agents
 registered so far, and `run.clock()` is the run's clock and world time (`Branch.clock()`). When Shakedown starts a driver it sets
-`ARENA_URL`, `ARENA_RUN`, `ARENA_BRANCH`, `ARENA_TASK` and, on a fork, `ARENA_FORK_OF`; on a fork
+`SHAKEDOWN_URL`, `SHAKEDOWN_RUN`, `SHAKEDOWN_BRANCH`, `SHAKEDOWN_TASK` and, on a fork, `SHAKEDOWN_FORK_OF`; on a fork
 `run.history(agent_id)` gives what that agent did before the fork point. The adapters in `shakedown.adapters`
 turn an agent's tools and gateway into your framework's own objects (see [agents](agents.md)).
 
@@ -245,9 +245,9 @@ a step is reproducible given the world. `examples/step_env.py` uses a Claude mod
 
 ## Add your own world part
 
-A part is an integration: a program in any language that speaks `arena-part/1` over stdin and stdout. Start from
+A part is an integration: a program in any language that speaks `shakedown-part/1` over stdin and stdout. Start from
 the counter in [integrations/README.md](../integrations/README.md) with the Rust kit (`kits/rust`) or the Python
-kit (`kits/python`, `kits/python/examples/counter.py`), check it with `arena-part-check`, and name it in a
+kit (`kits/python`, `kits/python/examples/counter.py`), check it with `shakedown-part-check`, and name it in a
 benchmark's world ([packages.md](packages.md)). Then pass the folders to `Shakedown.local(packages=[...])`.
 
 ## Rust
@@ -276,8 +276,8 @@ A typed Rust client crate is not written yet. Write integrations and benchmarks 
 
 The core (shaked, the protocol, the kits, the integrations and benchmarks) depends on no UI. The web UI (`ui/`)
 is one client of the HTTP API, as CopperTide's Shakedown control and this SDK are. shaked can serve a built UI
-(`ARENA_UI_DIST`) as a convenience; it is not required. A UI served from another origin can call the API when
-shaked lists that origin in `ARENA_CORS_ORIGIN` ([reference.md](reference.md#configuration)); the API still
+(`SHAKEDOWN_UI_DIST`) as a convenience; it is not required. A UI served from another origin can call the API when
+shaked lists that origin in `SHAKEDOWN_CORS_ORIGIN` ([reference.md](reference.md#configuration)); the API still
 answers only a loopback `Host`.
 
 ## Cite Shakedown

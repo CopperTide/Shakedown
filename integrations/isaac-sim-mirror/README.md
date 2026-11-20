@@ -16,4 +16,4 @@ It is the `isaac-sim` program run with `--mode mirror`, so its code and full not
 - `advance` returns `GET /events?since=<last seq>` as world events.
 - `inspect` shows pieces of `GET /state`. `save` stores the current state for display only (`exact: false`);
   nothing can start from it.
-- No `[[example]]` in the manifest, so `arena-part-check` can't run on it.
+- No `[[example]]` in the manifest, so `shakedown-part-check` can't run on it.
