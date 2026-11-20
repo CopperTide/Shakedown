@@ -3,6 +3,7 @@
 //! the server's own key goes upstream, what the agent sends reaches the server as sent, a rated
 //! server's calls are priced, and a proxy timeout is recorded and passed on.
 mod support;
+use support::records;
 
 use serde_json::{json, Value};
 use shaked::model::*;
@@ -66,7 +67,7 @@ fn user(text: &str) -> Value {
 
 /// `a`'s events of `kinds`, in order.
 async fn of(fx: &AppFx, branch: &str, kinds: &[EventKind]) -> Vec<Event> {
-    let evs = fx.state.store.events(branch).await.unwrap();
+    let evs = records(&fx.state.store).events(branch).await.unwrap();
     let mine = |e: &Event| e.agent.as_deref() == Some("a") && kinds.contains(&e.kind);
     evs.into_iter().filter(mine).collect()
 }

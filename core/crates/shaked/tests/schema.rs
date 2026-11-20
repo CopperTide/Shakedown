@@ -10,6 +10,7 @@ use shaked::{
 use support::{legacy, pg, run};
 
 mod support;
+use support::records;
 
 fn team() -> Team {
     Team {
@@ -47,12 +48,12 @@ fn an_old_public_database_moves_to_shakedown_and_keeps_its_runs() {
         clean.add(&name);
         let (run_id, branch) = legacy::old_public_db(&name).await;
         let store = Store::open_named(&pg::admin(), &name).await.unwrap();
-        let runs = store.runs().await.unwrap();
+        let runs = records(&store).runs().await.unwrap();
         assert_eq!(
             runs.iter().map(|r| r.id.as_str()).collect::<Vec<_>>(),
             [run_id.as_str()]
         );
-        let events = store.events(&branch).await.unwrap();
+        let events = records(&store).events(&branch).await.unwrap();
         assert_eq!(events.len(), 2);
         assert_eq!(events[1].payload, json!({"text": "kept"}));
         drop(store);
@@ -88,13 +89,13 @@ fn a_fresh_database_has_the_local_owner() {
 fn running_branches_are_interrupted_at_start() {
     run(async {
         let (_name, store, _clean) = pg::fresh_store("interruptjob").await;
-        let run_id = store.create_run("task", &team()).await.unwrap();
-        let b = store
+        let run_id = records(&store).create_run("task", &team()).await.unwrap();
+        let b = records(&store)
             .create_branch(&run_id, None, &team(), &json!([]), None)
             .await
             .unwrap();
         shaked::jobs::interrupt_at_start(&store).await.unwrap();
-        let got = store.branch(&b).await.unwrap();
+        let got = records(&store).branch(&b).await.unwrap();
         assert_eq!(got.status, BranchStatus::Interrupted);
         assert!(got.ended_at.is_some());
     })

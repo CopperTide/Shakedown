@@ -106,16 +106,25 @@ pub async fn legacy_run(
     snap: &str,
     final_db: &str,
 ) -> (String, String) {
-    let run_id = store.create_run("27", team).await.unwrap();
-    let branch = store
+    let run_id = crate::support::records(store)
+        .create_run("27", team)
+        .await
+        .unwrap();
+    let branch = crate::support::records(store)
         .create_branch(&run_id, None, team, &json!([]), None)
         .await
         .unwrap();
     for (who, kind, payload) in run_events(team, snap) {
-        store.append(&branch, who, kind, payload).await.unwrap();
+        crate::support::records(store)
+            .append(&branch, who, kind, payload)
+            .await
+            .unwrap();
     }
     let passed = BranchStatus::Passed;
-    store.set_status(&branch, passed, None).await.unwrap();
+    crate::support::records(store)
+        .set_status(&branch, passed, None)
+        .await
+        .unwrap();
     dbs.copy(&format!("branch_{branch}"), final_db).await;
     (run_id, branch)
 }

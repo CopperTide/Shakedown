@@ -2,6 +2,7 @@
 //! the restore asked for), the fork plan, the checks that an exact restore can be exact, the
 //! fingerprint check for replays, and starting the new branch's world that way.
 
+use crate::store::Scoped;
 use std::collections::{BTreeMap, BTreeSet};
 
 use parts::proto::{BenchDescribe, ExactKind, FromSave, Mode};
@@ -76,12 +77,17 @@ impl Rerun {
     /// Refuses a rerun that can't be what it claims: in an exact one, a part whose world changed
     /// since the run or that was restored approximately on the way; in any, a replayed part
     /// whose integration's fingerprint changed.
-    async fn check(&self, state: &AppState, branch: &Branch, mode: Mode) -> Result<(), ForkError> {
+    async fn check(
+        &self,
+        records: Scoped<'_>,
+        branch: &Branch,
+        mode: Mode,
+    ) -> Result<(), ForkError> {
         let replayed = replayed_names(&self.parts);
         if mode == Mode::Exact {
             world_changed(&self.run.world, &self.bench.world, &self.hows())
                 .map_err(ForkError::Refused)?;
-            let forks = ancestry(&state.store, branch).await?;
+            let forks = ancestry(records, branch).await?;
             approximate_on_the_way(&forks, &replayed, self.plan.start_seq)
                 .map_err(ForkError::Refused)?;
         }
@@ -126,6 +132,7 @@ fn replay_unsaved(parts: &mut [PartRestore], restore: &Saves) {
 /// Plans a rerun of `branch` (its `events`) for `req`.
 pub async fn prepare(
     state: &AppState,
+    records: Scoped<'_>,
     branch: &Branch,
     events: &[Event],
     req: &ForkRequest,
@@ -148,7 +155,7 @@ pub async fn prepare(
         plan,
         parts,
     };
-    rerun.check(state, branch, req.restore).await?;
+    rerun.check(records, branch, req.restore).await?;
     Ok(rerun)
 }
 

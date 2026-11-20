@@ -8,6 +8,7 @@
 //! `src/agents/open.rs`.
 
 mod support;
+use support::records;
 
 use std::time::{Duration, Instant};
 
@@ -229,7 +230,7 @@ fn runs_are_refused_on_providers_that_cannot_take_them() {
         assert_eq!(st, 400);
         let error = v["error"].as_str().unwrap();
         assert!(error.contains("unknown provider \"local:nope\""), "{v}");
-        assert!(fx.state.store.runs().await.unwrap().is_empty());
+        assert!(records(&fx.state.store).runs().await.unwrap().is_empty());
     })
 }
 
@@ -241,12 +242,12 @@ fn fork_body(at: i64, changes: Value) -> Value {
 /// A finished branch of `t`, written to the store by hand (no agent ran it): its id.
 async fn finished_by_hand(fx: &AppFx, t: &Team) -> String {
     let store = &fx.state.store;
-    let run_id = store.create_run("27", t).await.unwrap();
-    let b = store
+    let run_id = records(store).create_run("27", t).await.unwrap();
+    let b = records(store)
         .create_branch(&run_id, None, t, &json!([]), None)
         .await
         .unwrap();
-    store
+    records(store)
         .set_status(&b, BranchStatus::Passed, None)
         .await
         .unwrap();
@@ -284,7 +285,7 @@ fn a_fork_is_refused_on_a_provider_that_cannot_take_it() {
             let seen = (st, v["error"].as_str());
             assert_eq!(seen, (400, Some(why.as_str())), "{change}");
         }
-        let runs = fx.state.store.runs().await.unwrap();
+        let runs = records(&fx.state.store).runs().await.unwrap();
         assert_eq!(runs[0].branches.len(), 1, "no branch was made");
     })
 }

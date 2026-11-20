@@ -134,13 +134,14 @@ pub fn local_only(config: &Config, what: &str) -> Result<(), String> {
     }
 }
 
-/// The `/api` routes that change this machine's worlds (build, use, prepare): refused in hosted
-/// mode whoever asks.
+/// The `/api` routes that change this machine's worlds (build, use, prepare) or its saves (gc):
+/// refused in hosted mode whoever asks.
 pub fn local_only_route(method: &str, path: &str) -> bool {
     let parts: Vec<&str> = path.trim_end_matches('/').split('/').collect();
     method == "POST"
         && match parts.as_slice() {
-            ["", "api", "worlds"] => true,
+            // Building a world, and dropping the saves no org's event names (this machine's disk).
+            ["", "api", "worlds"] | ["", "api", "gc"] => true,
             ["", "api", "worlds", _, action] => matches!(*action, "use" | "prepare"),
             _ => false,
         }
@@ -192,6 +193,7 @@ mod tests {
         assert!(local_only_route("POST", "/api/worlds"));
         assert!(local_only_route("POST", "/api/worlds/plant/use"));
         assert!(local_only_route("POST", "/api/worlds/plant/prepare"));
+        assert!(local_only_route("POST", "/api/gc"));
         assert!(!local_only_route("GET", "/api/worlds"));
         assert!(!local_only_route("GET", "/api/worlds/plant"));
         assert!(!local_only_route("POST", "/api/runs"));

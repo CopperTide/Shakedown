@@ -3,6 +3,7 @@
 //! second wall; levels finer than "may see" live here.
 
 pub mod can;
+pub mod extract;
 pub mod principal;
 pub mod scope;
 pub mod system;
@@ -10,6 +11,7 @@ pub mod system;
 pub use can::{
     can, level, required, Action, Grant, Grantee, OrgFlags, Resource, ResourceKind, Target,
 };
+pub use extract::Caller;
 pub use principal::{Level, OrgRole, Principal, RunTokenKind, SeatRole, TokenScope};
 #[cfg(any(test, feature = "testkit"))]
 pub use scope::test_scope;

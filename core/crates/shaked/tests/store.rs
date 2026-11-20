@@ -3,6 +3,7 @@ use shaked::{model::*, pg::Admin, store::Store};
 use support::{pg, run};
 
 mod support;
+use support::records;
 
 fn team() -> Team {
     Team {
@@ -29,8 +30,8 @@ async fn done(_admin: Admin, _name: String, store: Store) {
 
 /// A run of "task" with one root branch; returns the run id and the branch id.
 async fn root_branch(store: &Store) -> (String, String) {
-    let run_id = store.create_run("task", &team()).await.unwrap();
-    let b = store
+    let run_id = records(store).create_run("task", &team()).await.unwrap();
+    let b = records(store)
         .create_branch(&run_id, None, &team(), &json!([]), None)
         .await
         .unwrap();
@@ -43,7 +44,8 @@ async fn append_concurrently(store: &std::sync::Arc<Store>, b: &str, n: usize) -
     for i in 0..n {
         let (s, b) = (store.clone(), b.to_string());
         hs.push(tokio::spawn(async move {
-            s.append(&b, None, EventKind::ToolCall, json!({ "i": i }))
+            records(&s)
+                .append(&b, None, EventKind::ToolCall, json!({ "i": i }))
                 .await
                 .unwrap()
                 .seq
@@ -59,18 +61,18 @@ async fn append_concurrently(store: &std::sync::Arc<Store>, b: &str, n: usize) -
 
 /// A running branch becomes passed, with an end time, and the run lists it.
 async fn assert_passes_and_is_listed(store: &Store, b: &str) {
-    let br = store.branch(b).await.unwrap();
+    let br = records(store).branch(b).await.unwrap();
     assert_eq!(br.status, BranchStatus::Running);
     assert!(br.ended_at.is_none());
-    store
+    records(store)
         .set_status(b, BranchStatus::Passed, None)
         .await
         .unwrap();
-    let br = store.branch(b).await.unwrap();
+    let br = records(store).branch(b).await.unwrap();
     assert_eq!(br.status, BranchStatus::Passed);
     assert!(br.ended_at.is_some());
     assert_eq!(br.team, team());
-    let runs = store.runs().await.unwrap();
+    let runs = records(store).runs().await.unwrap();
     assert_eq!(runs.len(), 1);
     assert_eq!(runs[0].branches.len(), 1);
 }
@@ -81,11 +83,11 @@ fn append_assigns_increasing_seq() {
         let (admin, name, store, _g) = fresh("append").await;
         let (_, b) = root_branch(&store).await;
         let mut rx = store.subscribe();
-        let e1 = store
+        let e1 = records(&store)
             .append(&b, None, EventKind::RunStart, json!({}))
             .await
             .unwrap();
-        let e2 = store
+        let e2 = records(&store)
             .append(&b, Some("a"), EventKind::Handoff, json!({"note": "x"}))
             .await
             .unwrap();
@@ -97,7 +99,7 @@ fn append_assigns_increasing_seq() {
         let store = std::sync::Arc::new(store);
         let seqs = append_concurrently(&store, &b, 20).await;
         assert_eq!(seqs, (3..=22).collect::<Vec<_>>());
-        let evs = store.events(&b).await.unwrap();
+        let evs = records(&store).events(&b).await.unwrap();
         assert_eq!(evs.len(), 22);
         assert_eq!(evs[1].agent.as_deref(), Some("a"));
         assert_eq!(evs[1].kind, EventKind::Handoff);
@@ -110,18 +112,18 @@ fn append_assigns_increasing_seq() {
 
 /// `child` holds copies of `parent`'s events 1..=3 and its next event is 4; `parent` is untouched.
 async fn assert_child_continues_after_prefix(store: &Store, parent: &str, child: &str) {
-    let copied = store.events(child).await.unwrap();
+    let copied = records(store).events(child).await.unwrap();
     assert_eq!(
         copied.iter().map(|e| e.seq).collect::<Vec<_>>(),
         vec![1, 2, 3]
     );
-    let e = store
+    let e = records(store)
         .append(child, None, EventKind::ToolCall, json!({}))
         .await
         .unwrap();
     assert_eq!(e.seq, 4);
-    assert_eq!(store.events(parent).await.unwrap().len(), 5);
-    let b = store.branch(child).await.unwrap();
+    assert_eq!(records(store).events(parent).await.unwrap().len(), 5);
+    let b = records(store).branch(child).await.unwrap();
     assert_eq!(b.parent_id.as_deref(), Some(parent));
     assert_eq!(b.start_seq, Some(4));
     assert_eq!(b.fork_note.as_deref(), Some("note"));
@@ -133,12 +135,12 @@ fn copy_prefix_keeps_seqs_and_new_events_continue_after() {
         let (admin, name, store, _g) = fresh("copy").await;
         let (run_id, parent) = root_branch(&store).await;
         for i in 0..5 {
-            store
+            records(&store)
                 .append(&parent, None, EventKind::ToolCall, json!({ "i": i }))
                 .await
                 .unwrap();
         }
-        let child = store
+        let child = records(&store)
             .create_branch(
                 &run_id,
                 Some((&parent, 4)),
@@ -148,7 +150,10 @@ fn copy_prefix_keeps_seqs_and_new_events_continue_after() {
             )
             .await
             .unwrap();
-        store.copy_prefix(&parent, &child, 4).await.unwrap();
+        records(&store)
+            .copy_prefix(&parent, &child, 4)
+            .await
+            .unwrap();
         assert_child_continues_after_prefix(&store, &parent, &child).await;
         done(admin, name, store).await;
     })
@@ -158,27 +163,27 @@ fn copy_prefix_keeps_seqs_and_new_events_continue_after() {
 fn open_marks_running_branches_interrupted() {
     run(async {
         let (admin, name, store, _g) = fresh("interrupt").await;
-        let run_id = store.create_run("task", &team()).await.unwrap();
-        let running = store
+        let run_id = records(&store).create_run("task", &team()).await.unwrap();
+        let running = records(&store)
             .create_branch(&run_id, None, &team(), &json!([]), None)
             .await
             .unwrap();
-        let passed = store
+        let passed = records(&store)
             .create_branch(&run_id, None, &team(), &json!([]), None)
             .await
             .unwrap();
-        store
+        records(&store)
             .set_status(&passed, BranchStatus::Passed, None)
             .await
             .unwrap();
         drop(store);
 
         let store = Store::open_named(&admin, &name).await.unwrap();
-        let r = store.branch(&running).await.unwrap();
+        let r = records(&store).branch(&running).await.unwrap();
         assert_eq!(r.status, BranchStatus::Interrupted);
         assert!(r.ended_at.is_some());
         assert_eq!(
-            store.branch(&passed).await.unwrap().status,
+            records(&store).branch(&passed).await.unwrap().status,
             BranchStatus::Passed
         );
         done(admin, name, store).await;
@@ -198,7 +203,7 @@ async fn execute(admin: &Admin, name: &str, sql: &str) {
 
 /// A pair's `read_only`, as the store reads its branch back.
 async fn read_only_of(store: &Store, b: &str) -> Vec<bool> {
-    let team = store.branch(b).await.unwrap().team;
+    let team = records(store).branch(b).await.unwrap().team;
     team.agents.iter().map(|a| a.read_only).collect()
 }
 
@@ -211,8 +216,8 @@ fn a_team_stored_before_read_only_keeps_the_old_rule() {
             id: "b".into(),
             ..pair.agents[0].clone()
         });
-        let run_id = store.create_run("task", &pair).await.unwrap();
-        let b = store
+        let run_id = records(&store).create_run("task", &pair).await.unwrap();
+        let b = records(&store)
             .create_branch(&run_id, None, &pair, &json!([]), None)
             .await
             .unwrap();
@@ -235,12 +240,12 @@ fn one_run_reads_as_the_list_has_it() {
         let (admin, name, store, _clean) = fresh("one_run").await;
         let (run_id, _) = root_branch(&store).await;
         let (other, _) = root_branch(&store).await;
-        let listed = store.runs().await.unwrap();
+        let listed = records(&store).runs().await.unwrap();
         for id in [&run_id, &other] {
-            let one = store.run(id).await.unwrap();
+            let one = records(&store).run(id).await.unwrap();
             assert_eq!(one.as_ref(), listed.iter().find(|r| &r.id == id));
         }
-        assert_eq!(store.run("nope").await.unwrap(), None);
+        assert_eq!(records(&store).run("nope").await.unwrap(), None);
         done(admin, name, store).await;
     })
 }

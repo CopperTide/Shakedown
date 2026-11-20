@@ -2,6 +2,7 @@
 //! as UTC, else the run's start), forks keep their run's epoch, and the clock route tells a driver
 //! the world's time. The run is one an external system drives; no model answers anything here.
 mod support;
+use support::records;
 
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -120,7 +121,10 @@ fn a_clock_parts_stamps_leave_out_the_time_the_branch_was_paused() {
 fn a_fork_keeps_its_runs_epoch() {
     run(async {
         let fx = TimeFx::new("fork", &[]).await;
-        let evs = fx.fx.state.store.events(&fx.branch).await.unwrap();
+        let evs = records(&fx.fx.state.store)
+            .events(&fx.branch)
+            .await
+            .unwrap();
         let epoch = evs[0].payload["world_epoch_ms"].as_i64().unwrap();
         let start = evs
             .iter()

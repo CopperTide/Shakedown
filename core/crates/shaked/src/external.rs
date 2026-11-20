@@ -134,7 +134,9 @@ pub async fn register(store: &Store, ctx: &BranchCtx, join: &Join) -> anyhow::Re
         None => {
             let spec = join.spec();
             if ctx.roster.join(spec.clone()) {
-                store.set_team(&ctx.branch_id, &team_with(ctx)).await?;
+                ctx.records(store)
+                    .set_team(&ctx.branch_id, &team_with(ctx))
+                    .await?;
             }
             spec
         }

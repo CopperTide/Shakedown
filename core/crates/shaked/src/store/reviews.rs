@@ -7,7 +7,7 @@ use serde::Serialize;
 use serde_json::Value;
 use tokio_postgres::Row;
 
-use super::Store;
+use super::Scoped;
 
 const COLS: &str =
     "key, kind, status, model, review, issues, error, cost_usd, cost_source, tokens, \
@@ -66,10 +66,10 @@ fn review_from(r: &Row) -> StoredReview {
     }
 }
 
-impl Store {
+impl Scoped<'_> {
     pub async fn review(&self, key: &str) -> Result<Option<StoredReview>> {
-        let sql = format!("SELECT {COLS} FROM reviews WHERE key = $1");
-        let row = self.db().await?.query_opt(&sql, &[&key]).await?;
+        let sql = format!("SELECT {COLS} FROM reviews WHERE key = $1 AND org_id = $2");
+        let row = self.query_opt(&sql, &[&key, &self.org()]).await?;
         Ok(row.as_ref().map(review_from))
     }
 
@@ -82,18 +82,17 @@ impl Store {
         model: &str,
     ) -> Result<Option<StoredReview>> {
         let sql = format!(
-            "INSERT INTO reviews (key, kind, status, model) VALUES ($1, $2, 'running', $3)
+            "INSERT INTO reviews (key, kind, status, model, org_id, created_by)
+             VALUES ($1, $2, 'running', $3, $4, $5)
              ON CONFLICT (key) DO UPDATE SET kind = $2, status = 'running', model = $3,
                  review = NULL, issues = '[]', error = NULL, cost_usd = NULL, cost_source = NULL,
                  tokens = NULL, seconds = NULL, digest_bytes = NULL, created_at = now(),
                  finished_at = NULL
-             WHERE reviews.status <> 'running'
+             WHERE reviews.status <> 'running' AND reviews.org_id = $4
              RETURNING {COLS}"
         );
         let row = self
-            .db()
-            .await?
-            .query_opt(&sql, &[&key, &kind, &model])
+            .query_opt(&sql, &[&key, &kind, &model, &self.org(), &self.user()])
             .await?;
         Ok(row.as_ref().map(review_from))
     }
@@ -101,33 +100,31 @@ impl Store {
     pub async fn finish_review(&self, key: &str, done: ReviewDone<'_>) -> Result<()> {
         let issues = serde_json::to_value(done.issues)?;
         let bytes = done.digest_bytes as i64;
-        self.db()
-            .await?
-            .execute(
-                "UPDATE reviews SET status = 'done', review = $2, issues = $3, cost_usd = $4,
+        self.execute(
+            "UPDATE reviews SET status = 'done', review = $2, issues = $3, cost_usd = $4,
                      cost_source = $5, tokens = $6, seconds = $7, digest_bytes = $8,
                      finished_at = now()
-                 WHERE key = $1",
-                &[
-                    &key,
-                    done.review,
-                    &issues,
-                    &done.cost_usd,
-                    &done.cost_source,
-                    &done.tokens,
-                    &done.seconds,
-                    &bytes,
-                ],
-            )
-            .await?;
+                 WHERE key = $1 AND org_id = $9",
+            &[
+                &key,
+                done.review,
+                &issues,
+                &done.cost_usd,
+                &done.cost_source,
+                &done.tokens,
+                &done.seconds,
+                &bytes,
+                &self.org(),
+            ],
+        )
+        .await?;
         Ok(())
     }
 
     pub async fn fail_review(&self, key: &str, error: &str) -> Result<()> {
-        self.db().await?
-            .execute(
-                "UPDATE reviews SET status = 'error', error = $2, finished_at = now() WHERE key = $1",
-                &[&key, &error],
+        self.execute(
+                "UPDATE reviews SET status = 'error', error = $2, finished_at = now() WHERE key = $1 AND org_id = $3",
+                &[&key, &error, &self.org()],
             )
             .await?;
         Ok(())

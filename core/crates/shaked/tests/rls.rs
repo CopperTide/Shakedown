@@ -342,3 +342,93 @@ fn an_uncommitted_tx_never_returns_its_connection() {
         );
     })
 }
+
+/// A run of org A with a branch and one event, made through the store as A's owner: the run
+/// and the branch.
+async fn org_a_branch(store: &Store, a: &shaked::auth::Scope) -> (String, String) {
+    let team = shaked::model::Team {
+        id: "t".into(),
+        name: "T".into(),
+        agents: vec![],
+    };
+    let at = store.at(a);
+    let run = at.create_run("t", &team).await.unwrap();
+    let none = serde_json::json!([]);
+    let br = at
+        .create_branch(&run, None, &team, &none, None)
+        .await
+        .unwrap();
+    let kind = shaked::model::EventKind::Message;
+    at.append(&br, None, kind, serde_json::json!({}))
+        .await
+        .unwrap();
+    (run, br)
+}
+
+#[test]
+fn org_b_cannot_read_or_append_to_org_a_branches_through_the_store() {
+    run(async {
+        let (_name, store, orgs, _clean) = store_with_orgs("scopedcross").await;
+        let (a, b) = (owner_of(&orgs, "a"), owner_of(&orgs, "b"));
+        let (run, br) = org_a_branch(&store, &a).await;
+        let (in_a, in_b) = (store.at(&a), store.at(&b));
+        let kind = shaked::model::EventKind::Message;
+        assert!(in_b.find_branch(&br).await.unwrap().is_none());
+        assert!(in_b.events(&br).await.unwrap().is_empty());
+        assert!(in_b
+            .append(&br, None, kind, serde_json::json!({}))
+            .await
+            .is_err());
+        assert!(in_b.runs().await.unwrap().is_empty());
+        assert!(!in_b.run_exists(&run).await.unwrap());
+        assert_eq!(
+            in_a.events(&br).await.unwrap().len(),
+            1,
+            "B's append changed nothing"
+        );
+    })
+}
+
+#[test]
+fn a_branch_of_an_invisible_run_is_not_found() {
+    run(async {
+        let (name, store, orgs, _clean) = store_with_orgs("scopedinvisible").await;
+        team_run(&name, &orgs).await;
+        let a = orgs.org("a").id;
+        let sql = format!(
+            "INSERT INTO shakedown.branches (id, org_id, run_id, team) VALUES ('teambranch', '{a}', 'teamrun', '{{\"id\": \"t\", \"name\": \"T\", \"agents\": []}}')"
+        );
+        pg::execute(&name, &sql).await;
+        let member = test_scope(orgs.principal("a_member"));
+        assert!(store
+            .at(&member)
+            .find_branch("teambranch")
+            .await
+            .unwrap()
+            .is_none());
+        let seated = test_scope(orgs.principal("a_seated"));
+        assert!(store
+            .at(&seated)
+            .find_branch("teambranch")
+            .await
+            .unwrap()
+            .is_some());
+    })
+}
+
+#[test]
+fn inserts_without_org_fail_after_shakedown_3() {
+    run(async {
+        let (name, _store, _clean) = pg::fresh_store("noorgdefault").await;
+        let sql = "INSERT INTO shakedown.runs (id, task_id, team) VALUES ('r', 't', '{}')";
+        let (c, conn) = tokio_postgres::connect(&pg::admin().db_url(&name), tokio_postgres::NoTls)
+            .await
+            .unwrap();
+        tokio::spawn(conn);
+        let err = c
+            .batch_execute(sql)
+            .await
+            .expect_err("org_id has no default any more");
+        assert!(format!("{err:?}").contains("org_id"), "{err:?}");
+    })
+}

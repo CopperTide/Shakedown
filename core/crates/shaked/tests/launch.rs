@@ -3,6 +3,7 @@
 //! suite's claim records it and answers the error, and an external suite's runs take no spend
 //! limit. Without a model: the runs never get to an agent.
 mod support;
+use support::records;
 
 use std::time::Duration;
 
@@ -39,12 +40,12 @@ async fn stored_suite(
         max_cost_usd,
         connection: None,
     };
-    fx.state.store.create_suite(new).await.unwrap()
+    records(&fx.state.store).create_suite(new).await.unwrap()
 }
 
 /// Each slot's error, in order.
 async fn slot_errors(fx: &AppFx, suite: &str) -> Vec<Option<String>> {
-    let slots = fx.state.store.slots(suite).await.unwrap();
+    let slots = records(&fx.state.store).slots(suite).await.unwrap();
     slots.into_iter().map(|s| s.error).collect()
 }
 
@@ -55,10 +56,18 @@ fn a_builtin_suite_goes_on_past_a_run_that_cannot_start() {
     run(async {
         let fx = setup("builtin").await;
         let s = stored_suite(&fx, Runner::Chain, ("nope", 2), None).await;
-        suite::spawn_builtin(&fx.state, s.clone());
+        suite::spawn_builtin(
+            &fx.state,
+            std::sync::Arc::new(shaked::auth::local_owner()),
+            s.clone(),
+        );
         let mut ended = None;
         for _ in 0..100 {
-            let now = fx.state.store.suite(&s.id).await.unwrap().unwrap();
+            let now = records(&fx.state.store)
+                .suite(&s.id)
+                .await
+                .unwrap()
+                .unwrap();
             if now.ended_at.is_some() {
                 ended = Some(now);
                 break;
@@ -102,7 +111,7 @@ fn an_external_suites_runs_take_no_spend_limit() {
             .await;
         assert_eq!(status, 200, "{v}");
         let branch = v["branch_id"].as_str().unwrap();
-        let evs = fx.state.store.events(branch).await.unwrap();
+        let evs = records(&fx.state.store).events(branch).await.unwrap();
         assert_eq!(evs[0].kind, EventKind::RunStart);
         assert_ne!(
             evs[0].payload["max_cost_usd"],

@@ -5,6 +5,7 @@
 //! the shapes the API answers, suites made on their own shown as one-setup experiments, stopping,
 //! and an experiment left running when shaked stopped.
 mod support;
+use support::records;
 
 use std::time::Duration;
 
@@ -166,7 +167,7 @@ async fn made_in_order(fx: &AppFx, v: &Value) -> Vec<(String, i64)> {
     for s in v["setups"].as_array().unwrap() {
         for row in s["runs"].as_array().unwrap() {
             let branch = row["branch_id"].as_str().expect("every run started");
-            let b = fx.state.store.branch(branch).await.unwrap();
+            let b = records(&fx.state.store).branch(branch).await.unwrap();
             let who = (
                 s["name"].as_str().unwrap().to_string(),
                 row["repeat"].as_i64().unwrap(),
@@ -240,7 +241,7 @@ async fn stored_suite(store: &Store) -> String {
         max_cost_usd: None,
         connection: None,
     };
-    store.create_suite(suite).await.unwrap().id
+    records(store).create_suite(suite).await.unwrap().id
 }
 
 /// A suite stored on its own and then an experiment of two setups stored without being driven:
@@ -269,7 +270,7 @@ async fn stored(store: &Store) -> (String, String) {
         seed: 7,
         world_minutes: None,
     };
-    let (e, suites) = store.create_experiment(new).await.unwrap();
+    let (e, suites) = records(store).create_experiment(new).await.unwrap();
     assert_eq!(suites.len(), 2);
     (legacy, e.id)
 }
@@ -449,9 +450,9 @@ fn an_experiment_left_running_is_stopped_when_shaked_starts_again() {
         let (_, exp) = stored(&store).await;
         drop(store);
         let store = Store::open_named(&pg::admin(), &name).await.unwrap();
-        let e = store.experiment(&exp).await.unwrap().unwrap();
+        let e = records(&store).experiment(&exp).await.unwrap().unwrap();
         assert!(e.error.unwrap().contains("shaked stopped") && e.ended_at.is_some());
-        for s in store.experiment_suites(&exp).await.unwrap() {
+        for s in records(&store).experiment_suites(&exp).await.unwrap() {
             assert!(s.ended_at.is_some() && s.error.is_some(), "{s:?}");
         }
     });
@@ -471,7 +472,7 @@ async fn run_starts(fx: &AppFx, done: &Value, i: usize) -> Vec<RunStartPayload> 
     let mut out = vec![];
     for row in done["setups"][i]["runs"].as_array().unwrap() {
         let branch = row["branch_id"].as_str().unwrap();
-        let evs = fx.state.store.events(branch).await.unwrap();
+        let evs = records(&fx.state.store).events(branch).await.unwrap();
         out.push(RunStartPayload::of(&evs).expect("a RunStart"));
     }
     out

@@ -1,6 +1,7 @@
 //! Test suites over HTTP: create one (`POST /api/suites`), list them, read one's report, claim
 //! an external suite's next run, and compare two suites.
 
+use crate::auth::{Caller, Scope};
 use std::{collections::HashMap, sync::Arc};
 
 use axum::{
@@ -134,6 +135,7 @@ fn validate_suite(state: &AppState, req: &NewSuiteReq) -> Result<(), ApiError> {
 /// its report.
 async fn create(
     State(state): State<Arc<AppState>>,
+    Caller(caller): Caller,
     JsonBody(mut req): JsonBody<NewSuiteReq>,
 ) -> ApiResult<SuiteReport> {
     settle_providers(&mut req.team);
@@ -157,25 +159,30 @@ async fn create(
         max_cost_usd: super::max_cost(req.max_cost_usd)?,
         connection: None,
     };
-    let stored = state.store.create_suite(new).await?;
+    let stored = state.store.at(&caller).create_suite(new).await?;
     if stored.runner != Runner::External {
-        suite::spawn_builtin(&state, stored.clone());
+        suite::spawn_builtin(&state, caller.clone(), stored.clone());
     }
-    Ok(Json(suite::load(&state.store, stored).await?))
+    Ok(Json(suite::load(state.store.at(&caller), stored).await?))
 }
 
 /// `GET /api/suites`: every suite, newest first, with its status and how many runs ended.
-async fn list(State(state): State<Arc<AppState>>) -> ApiResult<Vec<Listed>> {
+async fn list(
+    State(state): State<Arc<AppState>>,
+    Caller(caller): Caller,
+) -> ApiResult<Vec<Listed>> {
     let mut out = vec![];
-    for s in state.store.suites().await? {
-        out.push(suite::listed(&state.store, s).await?);
+    let records = state.store.at(&caller);
+    for s in records.suites().await? {
+        out.push(suite::listed(records, s).await?);
     }
     Ok(Json(out))
 }
 
-async fn find(state: &AppState, id: &str) -> Result<Suite, ApiError> {
+async fn find(state: &AppState, caller: &Scope, id: &str) -> Result<Suite, ApiError> {
     state
         .store
+        .at(caller)
         .suite(id)
         .await?
         .ok_or_else(|| ApiError::not_found(format!("there is no suite \"{id}\"")))
@@ -184,17 +191,22 @@ async fn find(state: &AppState, id: &str) -> Result<Suite, ApiError> {
 /// `GET /api/suites/{id}`: the suite's report.
 async fn get_one(
     State(state): State<Arc<AppState>>,
+    Caller(caller): Caller,
     Path(id): Path<String>,
 ) -> ApiResult<SuiteReport> {
-    let s = find(&state, &id).await?;
-    Ok(Json(suite::load(&state.store, s).await?))
+    let s = find(&state, &caller, &id).await?;
+    Ok(Json(suite::load(state.store.at(&caller), s).await?))
 }
 
 /// `POST /api/suites/{id}/claim`: an external suite's next run, started: `{done: false, task_id,
 /// repeat, run_id, branch_id, agents}`, which the system drives through the external-run API;
 /// `{done: true}` when every run is claimed.
-async fn claim(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> ApiResult<Value> {
-    let s = find(&state, &id).await?;
+async fn claim(
+    State(state): State<Arc<AppState>>,
+    Caller(caller): Caller,
+    Path(id): Path<String>,
+) -> ApiResult<Value> {
+    let s = find(&state, &caller, &id).await?;
     if s.runner != Runner::External || s.connection.is_some() {
         return Err(ApiError::conflict("shaked runs this suite's runs itself"));
     }
@@ -202,7 +214,7 @@ async fn claim(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> Ap
     permit.check_disk(&state).await?;
     detached(async move {
         let _permit = permit;
-        let Some(claimed) = suite::claim_external(&state, &s).await? else {
+        let Some(claimed) = suite::claim_external(&state, &caller, &s).await? else {
             return Ok(Json(json!({"done": true})));
         };
         let mut v = serde_json::to_value(claimed)?;
@@ -215,10 +227,12 @@ async fn claim(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> Ap
 /// `GET /api/suites/compare?a=&b=`: suite `b` against suite `a`.
 async fn compare(
     State(state): State<Arc<AppState>>,
+    Caller(caller): Caller,
     Query(q): Query<HashMap<String, String>>,
 ) -> ApiResult<Comparison> {
     let (a, b) = super::pair(&q)?;
-    let a = suite::load(&state.store, find(&state, &a).await?).await?;
-    let b = suite::load(&state.store, find(&state, &b).await?).await?;
+    let records = state.store.at(&caller);
+    let a = suite::load(records, find(&state, &caller, &a).await?).await?;
+    let b = suite::load(records, find(&state, &caller, &b).await?).await?;
     Ok(Json(suite::compare(&a, &b)))
 }

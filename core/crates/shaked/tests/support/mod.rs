@@ -189,3 +189,14 @@ impl AppSetup {
         }
     }
 }
+
+/// The local owner's scope: what every local request runs as.
+pub fn local() -> &'static shaked::auth::Scope {
+    static LOCAL: LazyLock<shaked::auth::Scope> = LazyLock::new(shaked::auth::local_owner);
+    &LOCAL
+}
+
+/// `store`'s records as the local owner.
+pub fn records(store: &shaked::store::Store) -> shaked::store::Scoped<'_> {
+    store.at(local())
+}

@@ -2,6 +2,7 @@
 //! run, and recording on the slot how that went (the run that filled it, or why it couldn't
 //! start).
 
+use crate::auth::Scope;
 use std::future::Future;
 
 use anyhow::{anyhow, Result};
@@ -35,13 +36,18 @@ pub enum SlotOutcome {
 /// (the error).
 pub async fn permit(
     state: &AppState,
+    scope: &Scope,
     suite: &Suite,
     slot: &Slot,
 ) -> Result<OwnedRwLockReadGuard<()>> {
     let held = state.cleanup.clone().read_owned().await;
     if state.saves_over_limit().await? {
         let why = crate::api::SAVES_FULL;
-        state.store.slot_failed(&suite.id, slot.ord, why).await?;
+        state
+            .store
+            .at(scope)
+            .slot_failed(&suite.id, slot.ord, why)
+            .await?;
         return Err(anyhow!(why));
     }
     Ok(held)
@@ -51,21 +57,27 @@ pub async fn permit(
 /// it couldn't start. An error recording it is the error.
 pub async fn run_slot(
     state: &AppState,
+    scope: &Scope,
     suite: &Suite,
     slot: &Slot,
     start: impl Future<Output = Result<Launched, RunError>>,
 ) -> Result<SlotOutcome> {
     match start.await {
         Ok(l) => {
-            let store = &state.store;
-            store
+            state
+                .store
+                .at(scope)
                 .fill_slot(&suite.id, slot.ord, &l.run_id, &l.branch_id)
                 .await?;
             Ok(SlotOutcome::Filled(l))
         }
         Err(e) => {
             let why = format!("{e:#}");
-            state.store.slot_failed(&suite.id, slot.ord, &why).await?;
+            state
+                .store
+                .at(scope)
+                .slot_failed(&suite.id, slot.ord, &why)
+                .await?;
             Ok(SlotOutcome::Failed(e))
         }
     }

@@ -4,6 +4,7 @@
 //! that misbehaves on purpose could show (arguments cut off, output cut off, a refusal) is tested
 //! on the loop's own functions in `src/agents/open.rs`.
 mod support;
+use support::records;
 
 use std::sync::Arc;
 
@@ -44,8 +45,8 @@ async fn setup(tag: &str, agents: Vec<AgentSpec>, providers: ProviderConfig) -> 
         name: "T".into(),
         agents,
     };
-    let run_id = store.create_run("task", &team).await.unwrap();
-    let branch = store
+    let run_id = records(&store).create_run("task", &team).await.unwrap();
+    let branch = records(&store)
         .create_branch(&run_id, None, &team, &json!([]), None)
         .await
         .unwrap();
@@ -85,7 +86,10 @@ fn agent_run(fx: &Fx, idx: usize, input: &str, resume: Option<Vec<Value>>) -> Ag
 }
 
 async fn events(fx: &Fx) -> Vec<Event> {
-    fx.state.store.events(&fx.ctx.branch_id).await.unwrap()
+    records(&fx.state.store)
+        .events(&fx.ctx.branch_id)
+        .await
+        .unwrap()
 }
 
 fn gateway_url(fx: &Fx, branch: &str, agent: &str) -> String {

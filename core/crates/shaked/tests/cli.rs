@@ -1,4 +1,5 @@
 mod support;
+use support::records;
 
 use std::{path::Path, sync::Arc};
 
@@ -315,8 +316,8 @@ async fn bind_local() -> (tokio::net::TcpListener, String) {
 
 /// A new branch of "task" for `team`, with a retail world started for it.
 async fn live_branch(store: &Store, hub: &packages::TestHub, team: &Team) -> (String, Arc<World>) {
-    let run_id = store.create_run("task", team).await.unwrap();
-    let branch = store
+    let run_id = records(store).create_run("task", team).await.unwrap();
+    let branch = records(store)
         .create_branch(&run_id, None, team, &json!([]), None)
         .await
         .unwrap();
@@ -400,7 +401,7 @@ async fn live_with(
             resume: None,
         })
         .await;
-    let evs = store.events(&branch).await.unwrap();
+    let evs = records(&store).events(&branch).await.unwrap();
     print_outcome(&r, &evs);
     drop(store);
     world.stop().await;

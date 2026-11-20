@@ -73,7 +73,7 @@ pub(crate) async fn run(
     ctx: &Arc<BranchCtx>,
     brief: &Brief,
 ) -> Result<Option<Ending>> {
-    let events = state.store.events(&ctx.branch_id).await?;
+    let events = ctx.records(&state.store).events(&ctx.branch_id).await?;
     let mut crew = Crew::new(state, ctx, brief);
     let first = crew.begin(&events).await?;
     let end = crew.drive(first.into()).await?;

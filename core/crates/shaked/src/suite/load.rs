@@ -9,11 +9,11 @@ use super::{
     report::{self, SlotRun},
     RunOutcome, Suite, SuiteReport,
 };
-use crate::{model::BranchStatus, prices, store::Store};
+use crate::{model::BranchStatus, prices, store::Scoped};
 
 /// The outcome of the run on `branch` and when it ended; None when the branch is gone.
 async fn ran(
-    store: &Store,
+    store: Scoped<'_>,
     branch: &str,
     now: DateTime<Utc>,
 ) -> Result<Option<(RunOutcome, Option<DateTime<Utc>>)>> {
@@ -28,7 +28,7 @@ async fn ran(
 }
 
 /// The suite's report, from its slots and their runs' records.
-pub async fn load(store: &Store, suite: Suite) -> Result<SuiteReport> {
+pub async fn load(store: Scoped<'_>, suite: Suite) -> Result<SuiteReport> {
     let now = Utc::now();
     let mut runs = vec![];
     for slot in store.slots(&suite.id).await? {
@@ -58,7 +58,7 @@ pub struct Listed {
 }
 
 /// The suite's line in the list (branch statuses only, no events read).
-pub async fn listed(store: &Store, suite: Suite) -> Result<Listed> {
+pub async fn listed(store: Scoped<'_>, suite: Suite) -> Result<Listed> {
     let slots = store.slots(&suite.id).await?;
     let mut statuses = vec![];
     for s in &slots {

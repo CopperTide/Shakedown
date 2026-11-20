@@ -6,6 +6,7 @@
 //! endpoint on a live branch. `live_`: runs on a real model (see `support/live.rs`), while the
 //! clock, the setup and the links do what they do on their own.
 mod support;
+use support::records;
 
 use std::sync::Arc;
 
@@ -57,10 +58,11 @@ impl AppFx {
     /// id and context. Nothing runs on it: the test calls its tools through Arena's MCP endpoint.
     async fn live_branch(&self) -> (String, Arc<BranchCtx>) {
         let team = idle_team();
-        let run_id = self.state.store.create_run("t1", &team).await.unwrap();
-        let branch = self
-            .state
-            .store
+        let run_id = records(&self.state.store)
+            .create_run("t1", &team)
+            .await
+            .unwrap();
+        let branch = records(&self.state.store)
             .create_branch(&run_id, None, &team, &json!([]), None)
             .await
             .unwrap();
@@ -285,7 +287,7 @@ fn an_event_in_a_tool_result_calls_the_link() {
         let fx = setup("rung", rung_world("rung", &[link])).await;
         let (branch, ctx) = fx.live_branch().await;
         assert_eq!(fx.mcp(&branch, "a_poke").await["isError"], false);
-        let evs = fx.state.store.events(&branch).await.unwrap();
+        let evs = records(&fx.state.store).events(&branch).await.unwrap();
         let poke = evs.iter().find(|e| e.payload["name"] == "a_poke").unwrap();
         let rung = evs
             .iter()
@@ -396,7 +398,7 @@ fn a_gate_holds_a_tool_back_until_the_document_allows_it() {
             peek["structuredContent"]["n"], 1,
             "the refused call changed nothing"
         );
-        let evs = fx.state.store.events(&branch).await.unwrap();
+        let evs = records(&fx.state.store).events(&branch).await.unwrap();
         let first = &live::calls_named(&evs, "a_poke")[0].payload;
         assert!(first["part"].is_null(), "{first}");
         assert!(first["error"].as_str().unwrap().contains("/n"), "{first}");
@@ -444,7 +446,11 @@ async fn a_scored_benchmark_checks_the_end_state(live: Live) {
     let poked = live::calls_named(&evs, "poke")
         .iter()
         .any(|e| e.payload["error"].is_null());
-    let status = fx.state.store.branch(&branch).await.unwrap().status;
+    let status = records(&fx.state.store)
+        .branch(&branch)
+        .await
+        .unwrap()
+        .status;
     let (want, failed) = match poked {
         true => (BranchStatus::Passed, vec![]),
         false => (BranchStatus::Failed, vec!["poked".to_string()]),
@@ -546,10 +552,8 @@ fn a_failed_setup_ends_the_run() {
             format!("{e:#}").contains("setup call a_poke failed"),
             "{e:#}"
         );
-        let runs = fx.state.store.runs().await.unwrap();
-        let evs = fx
-            .state
-            .store
+        let runs = records(&fx.state.store).runs().await.unwrap();
+        let evs = records(&fx.state.store)
             .events(&runs[0].branches[0].id)
             .await
             .unwrap();

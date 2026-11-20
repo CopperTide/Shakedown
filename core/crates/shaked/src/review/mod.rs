@@ -16,6 +16,7 @@ pub mod reviewer;
 pub mod settings;
 pub mod suites;
 
+use crate::auth::Scope;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -94,10 +95,21 @@ pub fn check(answer: &serde_json::Value, job: &Job) -> Result<(serde_json::Value
 }
 
 /// Asks the reviewer and stores its checked answer under `key`, or why it failed.
-pub async fn run(state: Arc<AppState>, key: String, model: ReviewerModel, job: Result<Job>) {
-    let outcome = answer(&state, &key, &model, job).await;
+pub async fn run(
+    state: Arc<AppState>,
+    scope: Arc<Scope>,
+    key: String,
+    model: ReviewerModel,
+    job: Result<Job>,
+) {
+    let outcome = answer(&state, &scope, &key, &model, job).await;
     if let Err(e) = outcome {
-        if let Err(e2) = state.store.fail_review(&key, &format!("{e:#}")).await {
+        if let Err(e2) = state
+            .store
+            .at(&scope)
+            .fail_review(&key, &format!("{e:#}"))
+            .await
+        {
             eprintln!("review {key}: {e:#}; storing that failed too: {e2:#}");
         }
     }
@@ -105,6 +117,7 @@ pub async fn run(state: Arc<AppState>, key: String, model: ReviewerModel, job: R
 
 async fn answer(
     state: &AppState,
+    scope: &Scope,
     key: &str,
     model: &ReviewerModel,
     job: Result<Job>,
@@ -122,5 +135,5 @@ async fn answer(
         seconds: a.seconds,
         digest_bytes: job.prompt.user.len(),
     };
-    state.store.finish_review(key, done).await
+    state.store.at(scope).finish_review(key, done).await
 }

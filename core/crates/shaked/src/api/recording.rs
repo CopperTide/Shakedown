@@ -5,6 +5,7 @@
 //! parent's. `GET /api/branches/{id}/recording` says what there is; `.../recording.mp4` serves the
 //! video, with byte ranges so a player can seek.
 
+use crate::auth::{Caller, Scope};
 use std::{path::PathBuf, sync::Arc};
 
 use axum::{
@@ -47,11 +48,15 @@ fn mp4_of(dir: &std::path::Path, branch: &str) -> Option<PathBuf> {
 }
 
 /// The recording of `id`, or of its nearest ancestor that has one, with the branch it is of.
-async fn find(state: &AppState, id: &str) -> Result<Option<(String, PathBuf)>, ApiError> {
+async fn find(
+    state: &AppState,
+    caller: &Scope,
+    id: &str,
+) -> Result<Option<(String, PathBuf)>, ApiError> {
     let Some(dir) = folder() else { return Ok(None) };
     let mut at = Some(id.to_string());
     while let Some(branch) = at {
-        let b = super::branch_or_404(state, &branch).await?;
+        let b = super::branch_or_404(state, caller, &branch).await?;
         if let Some(path) = mp4_of(&dir, &branch) {
             return Ok(Some((branch, path)));
         }
@@ -61,8 +66,12 @@ async fn find(state: &AppState, id: &str) -> Result<Option<(String, PathBuf)>, A
 }
 
 /// `{video: url | null, of: branch, sidecar: {...} | null}`.
-async fn recording(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> ApiResult<Value> {
-    let Some((of, path)) = find(&state, &id).await? else {
+async fn recording(
+    State(state): State<Arc<AppState>>,
+    Caller(caller): Caller,
+    Path(id): Path<String>,
+) -> ApiResult<Value> {
+    let Some((of, path)) = find(&state, &caller, &id).await? else {
         return Ok(Json(json!({"video": null, "of": null, "sidecar": null})));
     };
     let sidecar = std::fs::read_to_string(path.with_extension("json"))
@@ -91,10 +100,11 @@ fn range(headers: &HeaderMap, len: u64) -> Option<(u64, u64)> {
 
 async fn video(
     State(state): State<Arc<AppState>>,
+    Caller(caller): Caller,
     Path(id): Path<String>,
     headers: HeaderMap,
 ) -> Result<Response, ApiError> {
-    let Some((_, path)) = find(&state, &id).await? else {
+    let Some((_, path)) = find(&state, &caller, &id).await? else {
         return Err(ApiError::not_found(format!(
             "branch \"{id}\" has no recording"
         )));

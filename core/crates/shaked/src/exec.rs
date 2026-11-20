@@ -59,6 +59,8 @@ pub struct BranchCtx {
     pub overhead: Ledger,
     /// A finish held until the run's world time window ends (see [`crate::window`]).
     pub window: std::sync::Mutex<Option<crate::window::Held>>,
+    /// Who the branch runs for: its records are written under this scope.
+    pub scope: Arc<crate::auth::Scope>,
 }
 
 impl BranchCtx {
@@ -79,7 +81,19 @@ impl BranchCtx {
             lifecycle: Lifecycle::default(),
             overhead: Ledger::default(),
             window: std::sync::Mutex::default(),
+            scope: Arc::new(crate::auth::local_owner()),
         }
+    }
+
+    /// The same branch run for `scope` (a new branch runs for the local owner until told).
+    pub fn with_scope(mut self, scope: Arc<crate::auth::Scope>) -> BranchCtx {
+        self.scope = scope;
+        self
+    }
+
+    /// The store's records as this branch's scope.
+    pub fn records<'a>(&'a self, store: &'a Store) -> crate::store::Scoped<'a> {
+        store.at(&self.scope)
     }
 
     /// The same branch under `rules`.
@@ -150,7 +164,10 @@ impl BranchCtx {
     ) -> anyhow::Result<Event> {
         let since = std::time::Instant::now();
         let (id, built_up) = (&self.branch_id, self.overhead.take());
-        let ev = store.append_with(id, agent, kind, payload, built_up).await;
+        let ev = self
+            .records(store)
+            .append_with(id, agent, kind, payload, built_up)
+            .await;
         self.overhead.add_since(Cat::Record, since);
         ev
     }

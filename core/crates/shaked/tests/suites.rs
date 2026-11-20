@@ -6,6 +6,7 @@
 //! its agent, as a design in its own code would (see `support/live.rs`). Whatever the agents did,
 //! the report must add up their runs.
 mod support;
+use support::records;
 
 use std::time::Duration;
 
@@ -106,7 +107,7 @@ async fn runs_checks(fx: &AppFx, r: &Value) -> Vec<(String, Vec<parts::proto::Na
     let mut out = vec![];
     for row in r["runs"].as_array().unwrap() {
         let branch = row["branch_id"].as_str().unwrap();
-        let evs = fx.state.store.events(branch).await.unwrap();
+        let evs = records(&fx.state.store).events(branch).await.unwrap();
         let check = live::check_of(&evs).expect("a scored run");
         out.push((
             row["task_id"].as_str().unwrap().to_string(),
@@ -366,32 +367,40 @@ async fn fresh_db() -> (String, Cleanup) {
     (name, clean)
 }
 
+/// A built-in suite and an external one, stored: their ids.
+async fn builtin_and_external(store: &Store) -> (String, String) {
+    let team: Team = serde_json::from_value(team_data()).unwrap();
+    let (tasks, scenario) = (vec!["t1".to_string()], Default::default());
+    let new = |runner| NewSuite {
+        name: "s",
+        team: &team,
+        tasks: &tasks,
+        repeats: 1,
+        runner,
+        benchmark: "b",
+        scenario: &scenario,
+        variants: &[],
+        max_cost_usd: None,
+        connection: None,
+    };
+    let r = records(store);
+    let builtin = r.create_suite(new(Runner::Chain)).await.unwrap();
+    let external = r.create_suite(new(Runner::External)).await.unwrap();
+    (builtin.id, external.id)
+}
+
 #[test]
 fn a_builtin_suite_left_running_is_stopped_when_shaked_starts_again() {
     run(async {
         let (name, _clean) = fresh_db().await;
         let store = Store::open_named(&pg::admin(), &name).await.unwrap();
-        let team: Team = serde_json::from_value(team_data()).unwrap();
-        let (tasks, scenario) = (vec!["t1".to_string()], Default::default());
-        let new = |runner| NewSuite {
-            name: "s",
-            team: &team,
-            tasks: &tasks,
-            repeats: 1,
-            runner,
-            benchmark: "b",
-            scenario: &scenario,
-            variants: &[],
-            max_cost_usd: None,
-            connection: None,
-        };
-        let builtin = store.create_suite(new(Runner::Chain)).await.unwrap();
-        let external = store.create_suite(new(Runner::External)).await.unwrap();
+        let (builtin, external) = builtin_and_external(&store).await;
         drop(store);
         let store = Store::open_named(&pg::admin(), &name).await.unwrap();
-        let again = store.suite(&builtin.id).await.unwrap().unwrap();
+        let r = records(&store);
+        let again = r.suite(&builtin).await.unwrap().unwrap();
         assert!(again.error.unwrap().contains("shaked stopped") && again.ended_at.is_some());
-        let ext = store.suite(&external.id).await.unwrap().unwrap();
+        let ext = r.suite(&external).await.unwrap().unwrap();
         assert_eq!(
             (ext.error, ext.ended_at),
             (None, None),
@@ -423,8 +432,8 @@ fn a_suite_keeps_its_scenario() {
             max_cost_usd: None,
             connection: None,
         };
-        let id = store.create_suite(new).await.unwrap().id;
-        let again = store.suite(&id).await.unwrap().unwrap();
+        let id = records(&store).create_suite(new).await.unwrap().id;
+        let again = records(&store).suite(&id).await.unwrap().unwrap();
         assert_eq!(again.scenario, scenario);
         assert_eq!(again.scenario.disruptions[0].params["after"], 2);
     });
@@ -460,11 +469,11 @@ fn a_suite_varies_its_runs_over_its_scenarios() {
             max_cost_usd: None,
             connection: None,
         };
-        let suite = store.create_suite(new).await.unwrap();
-        let slots = store.slots(&suite.id).await.unwrap();
+        let suite = records(&store).create_suite(new).await.unwrap();
+        let slots = records(&store).slots(&suite.id).await.unwrap();
         let cells: Vec<(i32, i32)> = slots.iter().map(|s| (s.variant, s.repeat)).collect();
         assert_eq!(cells, [(0, 1), (0, 2), (1, 1), (1, 2)]);
-        let again = store.suite(&suite.id).await.unwrap().unwrap();
+        let again = records(&store).suite(&suite.id).await.unwrap().unwrap();
         assert_eq!(again.variants, variants);
         let after = |i: usize| again.scenario_of(&slots[i]).disruptions[0].params["after"].clone();
         assert_eq!((after(0), after(3)), (json!(1), json!(3)));

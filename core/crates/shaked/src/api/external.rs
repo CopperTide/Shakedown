@@ -1,6 +1,7 @@
 //! The routes an external system drives a run with: start it (`POST /api/runs` with `runner:
 //! "external"`), register agents and get their endpoints, report an agent done, and finish it.
 
+use crate::auth::{Caller, Scope};
 use std::sync::Arc;
 
 use axum::{
@@ -39,6 +40,7 @@ pub(super) fn router() -> Router<Arc<AppState>> {
 /// the disk, the order external runs have always been refused in.
 pub(super) async fn create_run(
     state: Arc<AppState>,
+    caller: Arc<Scope>,
     permit: StartPermit,
     benchmark: String,
     (task_id, team): (String, Team),
@@ -53,6 +55,7 @@ pub(super) async fn create_run(
     detached(async move {
         let _permit = permit;
         let spec = LaunchSpec {
+            scope: caller,
             task_id: &task_id,
             team,
             scenario: &scenario,
@@ -69,10 +72,11 @@ pub(super) async fn create_run(
 
 /// The live branch `id` an external system drives: 404 when it isn't live, 409 when shaked runs
 /// its agents.
-fn external_branch(state: &AppState, id: &str) -> Result<Arc<BranchCtx>, ApiError> {
+fn external_branch(state: &AppState, caller: &Scope, id: &str) -> Result<Arc<BranchCtx>, ApiError> {
     let ctx = state
         .live
         .get(id)
+        .filter(|c| c.scope.org() == caller.org())
         .ok_or_else(|| ApiError::not_found(format!("no live branch \"{id}\"")))?;
     if ctx.rules.runner != Runner::External {
         return Err(ApiError::conflict(
@@ -83,8 +87,13 @@ fn external_branch(state: &AppState, id: &str) -> Result<Arc<BranchCtx>, ApiErro
 }
 
 /// The live external branch `id` (see `external_branch`) when it has `agent`: 404 when it hasn't.
-fn external_agent(state: &AppState, id: &str, agent: &str) -> Result<Arc<BranchCtx>, ApiError> {
-    let ctx = external_branch(state, id)?;
+fn external_agent(
+    state: &AppState,
+    caller: &Scope,
+    id: &str,
+    agent: &str,
+) -> Result<Arc<BranchCtx>, ApiError> {
+    let ctx = external_branch(state, caller, id)?;
     match ctx.roster.has_agent(agent) {
         true => Ok(ctx),
         false => Err(ApiError::not_found(format!(
@@ -116,11 +125,12 @@ struct Finished {
 /// answers its endpoints and the tools it gets.
 async fn register(
     State(state): State<Arc<AppState>>,
+    Caller(caller): Caller,
     Path(id): Path<String>,
     JsonBody(join): JsonBody<Join>,
 ) -> ApiResult<Value> {
     team::validate_id(&join.id)?;
-    let ctx = external_branch(&state, &id)?;
+    let ctx = external_branch(&state, &caller, &id)?;
     if ctx.roster.agent(&join.id).is_none() {
         team::validate_agents(providers_of(&state), &[join.spec()])?;
     }
@@ -136,10 +146,11 @@ async fn register(
 /// and cost the system reports for it.
 async fn end_agent(
     State(state): State<Arc<AppState>>,
+    Caller(caller): Caller,
     Path((id, agent)): Path<(String, String)>,
     OptionalJson(done): OptionalJson<AgentDone>,
 ) -> ApiResult<Recorded> {
-    let ctx = external_agent(&state, &id, &agent)?;
+    let ctx = external_agent(&state, &caller, &id, &agent)?;
     let ev = ctx
         .record(&state.store, Some(&agent), &done.payload())
         .await?;
@@ -150,10 +161,11 @@ async fn end_agent(
 /// agent's client reported, as a `ModelCall` event.
 async fn report_usage(
     State(state): State<Arc<AppState>>,
+    Caller(caller): Caller,
     Path((id, agent)): Path<(String, String)>,
     JsonBody(report): JsonBody<UsageReport>,
 ) -> ApiResult<Recorded> {
-    let ctx = external_agent(&state, &id, &agent)?;
+    let ctx = external_agent(&state, &caller, &id, &agent)?;
     let ev = ctx.append(
         &state.store,
         Some(&agent),
@@ -167,6 +179,7 @@ async fn report_usage(
 /// would do, one `Reasoning` event per non-blank item, in order. Answers their `seqs`.
 async fn report_reasoning(
     State(state): State<Arc<AppState>>,
+    Caller(caller): Caller,
     Path((id, agent)): Path<(String, String)>,
     JsonBody(report): JsonBody<ReasoningReport>,
 ) -> ApiResult<RecordedAll> {
@@ -176,7 +189,7 @@ async fn report_reasoning(
             reasoning::MAX_ITEMS
         )));
     }
-    let ctx = external_agent(&state, &id, &agent)?;
+    let ctx = external_agent(&state, &caller, &id, &agent)?;
     let mut seqs = Vec::new();
     for item in &report.items {
         let Some(p) = reasoning::payload(item, reasoning::SOURCE_AGENT) else {
@@ -202,10 +215,11 @@ struct FinishReq {
 /// held_until_clock_ms}` and the run is scored when the window ends.
 async fn finish(
     State(state): State<Arc<AppState>>,
+    Caller(caller): Caller,
     Path(id): Path<String>,
     OptionalJson(req): OptionalJson<FinishReq>,
 ) -> ApiResult<Value> {
-    let ctx = external_branch(&state, &id)?;
+    let ctx = external_branch(&state, &caller, &id)?;
     let error = req.error.filter(|e| !e.trim().is_empty());
     if let Some(until) = crate::window::hold(&ctx, error.clone()) {
         return Ok(Json(

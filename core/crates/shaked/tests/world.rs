@@ -1,6 +1,7 @@
 //! `/api/world`, `/api/usage`, `/api/gc` and `/api/team/default` over toy integrations and a toy
 //! benchmark. `live_`: a run on a real model (see `support/live.rs`).
 mod support;
+use support::records;
 
 use std::{sync::Arc, time::Duration};
 
@@ -63,25 +64,27 @@ impl AppFx {
             name: "T".into(),
             agents: vec![],
         };
-        let run_id = store.create_run("t1", &team).await.unwrap();
-        let b = store
+        let run_id = records(store).create_run("t1", &team).await.unwrap();
+        let b = records(store)
             .create_branch(&run_id, None, &team, &json!([]), None)
             .await
             .unwrap();
         let world = json!([{"part": "box", "integration": integration, "config": {}}]);
         let start = json!({"benchmark": "toybench", "world": world, "seed": 0, "saves": {}});
-        store
+        records(store)
             .append(&b, None, EventKind::RunStart, start)
             .await
             .unwrap();
         let call = json!({"name": "poke", "error": null, "writes": ["box/n"], "part": "box",
                           "saves": {"box": save}});
-        store
+        records(store)
             .append(&b, None, EventKind::ToolCall, call)
             .await
             .unwrap();
-        let passed = store.set_status(&b, BranchStatus::Passed, None);
-        passed.await.unwrap();
+        let passed = records(store)
+            .set_status(&b, BranchStatus::Passed, None)
+            .await;
+        passed.unwrap();
     }
 }
 

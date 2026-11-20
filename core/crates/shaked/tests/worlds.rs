@@ -4,6 +4,7 @@
 //! they were created with. The builder here is `tests/fixtures/builder.py` (one template `toy`);
 //! the live test at the end uses the real one (`benchmarks/world`) and its small manufacturer.
 mod support;
+use support::records;
 
 use std::{
     path::{Path, PathBuf},
@@ -469,7 +470,7 @@ impl Fx {
 
     /// The benchmark the branch's `RunStart` names.
     async fn benchmark_of(&self, branch: &str) -> Value {
-        let events = self.app.state.store.events(branch).await.unwrap();
+        let events = records(&self.app.state.store).events(branch).await.unwrap();
         events[0].payload["benchmark"].clone()
     }
 }
@@ -556,7 +557,7 @@ async fn external_run(
     };
     fx.post(&format!("/api/branches/{branch}/finish"), json!({}))
         .await;
-    let events = fx.state.store.events(branch).await.unwrap();
+    let events = records(&fx.state.store).events(branch).await.unwrap();
     (
         status,
         json!({"branch_id": branch, "start": events[0].payload}),
@@ -601,7 +602,11 @@ fn an_experiment_runs_on_the_benchmark_it_asks_for_in_a_scenario_of_that_benchma
         let id = v["id"].as_str().unwrap();
         fx.post(&format!("/api/experiments/{id}/stop"), json!({}))
             .await;
-        let stored = fx.state.store.experiment(id).await.unwrap().unwrap();
+        let stored = records(&fx.state.store)
+            .experiment(id)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(stored.benchmark, "acme");
         let (status, v) = fx.post("/api/experiments", body("nope")).await;
         assert_eq!(
@@ -622,7 +627,9 @@ fn a_suite_runs_on_the_benchmark_it_asks_for_in_scenarios_of_that_benchmark() {
         };
         let (status, v) = fx.post("/api/suites", body("acme")).await;
         assert_eq!(status, 200, "{v}");
-        let stored = fx.state.store.suite(v["id"].as_str().unwrap()).await;
+        let stored = records(&fx.state.store)
+            .suite(v["id"].as_str().unwrap())
+            .await;
         assert_eq!(stored.unwrap().unwrap().benchmark, "acme");
         let (status, v) = fx.post("/api/suites", body("nope")).await;
         assert_eq!(
@@ -639,9 +646,7 @@ fn a_run_is_reviewed_with_the_ticket_of_its_own_benchmark() {
         let fx = asked_for("wreview").await;
         let (status, v) = external_run(&fx, "t2", Some("acme"), json!(null)).await;
         assert_eq!(status, 200, "{v}");
-        let events = fx
-            .state
-            .store
+        let events = records(&fx.state.store)
             .events(v["branch_id"].as_str().unwrap())
             .await;
         let ticket = shaked::review::ticket(&fx.state, &events.unwrap()).await;

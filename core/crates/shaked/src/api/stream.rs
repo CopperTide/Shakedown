@@ -1,6 +1,7 @@
 //! A branch's events and final status as a server-sent event stream
 //! (`GET /api/branches/{id}/stream`).
 
+use crate::auth::{Caller, Scope};
 use std::{sync::Arc, time::Duration};
 
 use axum::{
@@ -31,6 +32,7 @@ type SseTx = mpsc::Sender<Result<SseEvent, std::convert::Infallible>>;
 /// Feeds one branch's events and final status to an SSE client.
 struct Pump {
     state: Arc<AppState>,
+    caller: Arc<Scope>,
     id: String,
     /// The last event seq sent.
     last: i64,
@@ -66,7 +68,7 @@ fn unless_gone(ok: bool, then: Next) -> Next {
 impl Pump {
     /// Sends the stored events after `last`; false when the client is gone or the store failed.
     async fn catch_up(&mut self) -> bool {
-        let Ok(events) = self.state.store.events(&self.id).await else {
+        let Ok(events) = self.state.store.at(&self.caller).events(&self.id).await else {
             return false;
         };
         let from = self.last;
@@ -110,7 +112,13 @@ impl Pump {
 
     /// Sends the final `status` once the branch is no longer running; false to stop.
     async fn status_check(&mut self) -> bool {
-        let Ok(Some(b)) = self.state.store.find_branch(&self.id).await else {
+        let Ok(Some(b)) = self
+            .state
+            .store
+            .at(&self.caller)
+            .find_branch(&self.id)
+            .await
+        else {
             return false;
         };
         if b.status == BranchStatus::Running {
@@ -149,15 +157,17 @@ impl Pump {
 
 pub(super) async fn stream(
     State(state): State<Arc<AppState>>,
+    Caller(caller): Caller,
     Path(id): Path<String>,
 ) -> Result<Response, ApiError> {
-    branch_or_404(&state, &id).await?;
+    branch_or_404(&state, &caller, &id).await?;
     // Subscribe before reading the stored events so nothing falls between the two.
     let rx = state.store.subscribe();
     let (tx, out) = mpsc::channel(64);
     tokio::spawn(
         Pump {
             state,
+            caller,
             id,
             last: 0,
             tx,

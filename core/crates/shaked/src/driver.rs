@@ -10,6 +10,7 @@
 //! local program can, though: a Code connection runs as shaked's user, so this assumes a machine
 //! whose accounts trust each other (`docs/agents.md`).
 
+use crate::auth::Scope;
 use std::{
     collections::{BTreeMap, VecDeque},
     os::unix::process::ExitStatusExt,
@@ -149,7 +150,13 @@ async fn time_env(
     branch: &str,
     ctx: Option<&crate::exec::BranchCtx>,
 ) -> BTreeMap<String, String> {
-    let events = state.store.events(branch).await.unwrap_or_default();
+    let scope = scope_of(state, branch);
+    let events = state
+        .store
+        .at(&scope)
+        .events(branch)
+        .await
+        .unwrap_or_default();
     let epoch = crate::recorded::world_epoch_ms(&events);
     let speed = ctx.map_or_else(crate::clock::speed_from_env, |c| c.clock.speed());
     let pairs = [
@@ -319,12 +326,27 @@ async fn record_exit(state: &AppState, branch: &str, words: &str, l: &Launched) 
     let kind = EventKind::WorldEvent;
     let recorded = match state.live.get(branch) {
         Some(ctx) => ctx.append_now(&state.store, None, kind, ev).await,
-        None => state.store.append(branch, None, kind, ev).await,
+        None => {
+            state
+                .store
+                .at(&scope_of(state, branch))
+                .append(branch, None, kind, ev)
+                .await
+        }
     };
     if let Err(e) = recorded {
         eprintln!("branch {branch}: recording the driver's exit: {e:#}");
     }
     stderr
+}
+
+/// Who `branch` runs for: its live context's scope. A driver runs only in local mode
+/// ([`launch`] refuses in hosted mode), so a branch no longer live is the local owner's.
+fn scope_of(state: &AppState, branch: &str) -> Arc<Scope> {
+    match state.live.get(branch) {
+        Some(ctx) => ctx.scope.clone(),
+        None => Arc::new(crate::auth::local_owner()),
+    }
 }
 
 /// The rules of a run a Code connection drives.
@@ -340,15 +362,17 @@ pub fn rules_for(conn_id: &str, max_cost_usd: Option<f64>, world_minutes: Option
 /// experiment, as they stop a built-in suite.
 async fn start_run(
     state: &Arc<AppState>,
+    scope: &Arc<Scope>,
     suite: &Suite,
     slot: &Slot,
     conn_id: &str,
 ) -> Result<Option<crate::launch::Launched>> {
-    let _permit = slots::permit(state, suite, slot).await?;
+    let _permit = slots::permit(state, scope, suite, slot).await?;
     let rules = rules_for(conn_id, suite.max_cost_usd, suite.world_minutes);
     let scenario = suite.slot_scenario(slot);
-    let start = crate::launch::launch(state, suite::slot_spec(suite, slot, &scenario, rules));
-    match slots::run_slot(state, suite, slot, start).await? {
+    let spec = suite::slot_spec(scope, suite, slot, &scenario, rules);
+    let start = crate::launch::launch(state, spec);
+    match slots::run_slot(state, scope, suite, slot, start).await? {
         SlotOutcome::Filled(l) => Ok(Some(l)),
         SlotOutcome::Failed(_) => Ok(None),
     }
@@ -359,6 +383,7 @@ async fn start_run(
 /// when the connection is gone or the run couldn't start.
 pub async fn start_slot(
     state: &Arc<AppState>,
+    scope: &Arc<Scope>,
     suite: &Suite,
     slot: &Slot,
 ) -> Result<Option<String>> {
@@ -366,12 +391,13 @@ pub async fn start_slot(
         .connection
         .as_deref()
         .context("the suite has no connection")?;
-    let Some(conn) = state.store.connection(id).await? else {
+    let records = state.store.at(scope);
+    let Some(conn) = records.connection(id).await? else {
         let why = format!("the Code connection {id} was deleted");
-        state.store.slot_failed(&suite.id, slot.ord, &why).await?;
+        records.slot_failed(&suite.id, slot.ord, &why).await?;
         return Ok(None);
     };
-    let Some(started) = start_run(state, suite, slot, id).await? else {
+    let Some(started) = start_run(state, scope, suite, slot, id).await? else {
         return Ok(None);
     };
     let ids = RunIds {

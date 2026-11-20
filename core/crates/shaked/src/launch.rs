@@ -19,6 +19,8 @@ use crate::{
 /// What a new run is: its task, team, scenario and rules (`rules.runner` says who drives it),
 /// and for a run a Code connection drives, the connection whose driver shaked launches for it.
 pub struct LaunchSpec<'a> {
+    /// Who the run is for.
+    pub scope: Arc<crate::auth::Scope>,
     pub task_id: &'a str,
     pub team: Team,
     pub scenario: &'a Scenario,
@@ -43,10 +45,11 @@ pub struct Launched {
 /// `failed`, saying why).
 pub async fn launch_driver(
     state: &Arc<AppState>,
+    scope: &crate::auth::Scope,
     conn_id: &str,
     ids: RunIds<'_>,
 ) -> Option<driver::Launched> {
-    let found = state.store.connection(conn_id).await;
+    let found = state.store.at(scope).connection(conn_id).await;
     let found = found.map_err(|e| format!("reading the Code connection: {e:#}"));
     let gone = || format!("the Code connection {conn_id} was deleted");
     match found.and_then(|c| c.ok_or_else(gone)) {
@@ -70,19 +73,29 @@ async fn go(state: &Arc<AppState>, ctx: Arc<BranchCtx>) -> anyhow::Result<Vec<En
     Ok(vec![])
 }
 
+/// The run's driver started, when it has one.
+async fn launch_driver_of(
+    state: &Arc<AppState>,
+    driver: Option<&Connection>,
+    ids: RunIds<'_>,
+) -> Option<driver::Launched> {
+    driver::launch_or_fail(state, driver?, ids).await
+}
+
 /// Starts the run `spec` describes. shaked's own runners run its team on a spawned task, one
 /// agent after another (or as the runner says); a run an external system drives goes live, its
 /// team's agents (there may be none yet) started, and then its driver is launched, if it has one.
 pub async fn launch(state: &Arc<AppState>, spec: LaunchSpec<'_>) -> Result<Launched, RunError> {
-    let LaunchSpec {
+    let (task_id, driver) = (spec.task_id, spec.driver);
+    let begun = runner::begin_run(
+        state,
+        &spec.scope,
+        spec.benchmark,
         task_id,
-        team,
-        scenario,
-        rules,
-        driver,
-        benchmark,
-    } = spec;
-    let begun = runner::begin_run(state, benchmark, task_id, team, rules, scenario);
+        spec.team,
+        spec.rules,
+        spec.scenario,
+    );
     let (run_id, ctx) = begun.await?;
     let branch_id = ctx.branch_id.clone();
     let agents = go(state, Arc::new(ctx)).await?;
@@ -92,10 +105,7 @@ pub async fn launch(state: &Arc<AppState>, spec: LaunchSpec<'_>) -> Result<Launc
         task_id,
         fork_of: None,
     };
-    let driver = match driver {
-        Some(conn) => driver::launch_or_fail(state, conn, ids).await,
-        None => None,
-    };
+    let driver = launch_driver_of(state, driver, ids).await;
     Ok(Launched {
         run_id,
         branch_id,

@@ -1,4 +1,5 @@
 mod support;
+use support::records;
 
 use std::{path::PathBuf, sync::Arc};
 
@@ -47,8 +48,8 @@ async fn new_branch(store: &Store) -> (Team, String) {
         name: "T".into(),
         agents: vec![agent("triage"), auditor, lister, agent("resolver")],
     };
-    let run_id = store.create_run("task", &team).await.unwrap();
-    let branch = store
+    let run_id = records(store).create_run("task", &team).await.unwrap();
+    let branch = records(store)
         .create_branch(&run_id, None, &team, &json!([]), None)
         .await
         .unwrap();
@@ -220,7 +221,7 @@ fn a_read_only_agents_write_is_refused_and_recorded() {
             r["content"][0]["text"],
             "Write tools are not available to this agent: its team made it read-only"
         );
-        let evs = fx.store.events(&fx.branch).await.unwrap();
+        let evs = records(&fx.store).events(&fx.branch).await.unwrap();
         assert_eq!(evs.len(), 1);
         assert_eq!(evs[0].kind, EventKind::ToolCall);
         assert_eq!(evs[0].agent.as_deref(), Some("auditor"));
@@ -275,7 +276,7 @@ fn run_records_saves_per_part() {
 
 /// The `n`-th recorded event, as a tool call.
 async fn payload(fx: &Fx, n: usize) -> ToolCallPayload {
-    let evs = fx.store.events(&fx.branch).await.unwrap();
+    let evs = records(&fx.store).events(&fx.branch).await.unwrap();
     serde_json::from_value(evs[n].payload.clone()).unwrap()
 }
 
@@ -299,7 +300,7 @@ fn bad_calls_are_tool_errors_not_500() {
             .await;
             assert_eq!(s, 200, "case {i}");
             assert_eq!(v["result"]["isError"], true, "case {i}: {v}");
-            let evs = fx.store.events(&fx.branch).await.unwrap();
+            let evs = records(&fx.store).events(&fx.branch).await.unwrap();
             assert_eq!(evs.len(), i + 1, "case {i}");
         }
         teardown(fx).await;
@@ -320,7 +321,7 @@ fn handoff_records_once_and_is_not_for_last_agent() {
         assert_eq!(r["isError"], true);
         let r = call(&fx, "resolver", "handoff", json!({"note":"n"})).await;
         assert_eq!(r["isError"], true);
-        let evs = fx.store.events(&fx.branch).await.unwrap();
+        let evs = records(&fx.store).events(&fx.branch).await.unwrap();
         let kinds: Vec<_> = evs.iter().map(|e| e.kind).collect();
         assert_eq!(
             kinds,
@@ -385,7 +386,7 @@ fn parallel_writes_snapshot_in_order() {
         );
         assert_eq!(a["isError"], false, "{a}");
         assert_eq!(b["isError"], false, "{b}");
-        let evs = fx.store.events(&fx.branch).await.unwrap();
+        let evs = records(&fx.store).events(&fx.branch).await.unwrap();
         assert_eq!(evs.len(), 2);
         assert!(evs[0].seq < evs[1].seq);
         assert_saves_follow_events(&fx, &evs, [u1, u2]).await;

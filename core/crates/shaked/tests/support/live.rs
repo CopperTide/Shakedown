@@ -213,7 +213,10 @@ pub const BRANCH_TIMEOUT: Duration = Duration::from_secs(20 * 60);
 pub async fn ended(state: &AppState, branch: &str) -> Branch {
     let polls = BRANCH_TIMEOUT.as_millis() / 500;
     for _ in 0..polls {
-        let b = state.store.branch(branch).await.unwrap();
+        let b = crate::support::records(&state.store)
+            .branch(branch)
+            .await
+            .unwrap();
         if b.status != BranchStatus::Running {
             return b;
         }
@@ -228,7 +231,10 @@ pub async fn ended_ok(state: &AppState, branch: &str) -> (Branch, Vec<Event>) {
     let b = ended(state, branch).await;
     assert_ne!(b.status, BranchStatus::InfraError, "{:?}", b.error);
     assert_ne!(b.status, BranchStatus::Interrupted, "{:?}", b.error);
-    let evs = state.store.events(branch).await.unwrap();
+    let evs = crate::support::records(&state.store)
+        .events(branch)
+        .await
+        .unwrap();
     (b, evs)
 }
 

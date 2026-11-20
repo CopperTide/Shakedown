@@ -465,12 +465,14 @@ fn preflight_answer() -> axum::response::Response {
 pub fn router(state: Arc<AppState>) -> Router {
     let origins = Arc::new(state.config.cors_origins.clone());
     let hosts = Arc::new(state.config.hosts());
-    let mut api = crate::api::router();
-    if state.config.mode == crate::mode::Mode::Hosted {
-        api = api.layer(axum::middleware::from_fn(
+    let api = match state.config.mode {
+        crate::mode::Mode::Hosted => crate::api::router().layer(axum::middleware::from_fn(
             |req, _next: axum::middleware::Next| hosted_gate(req),
-        ));
-    }
+        )),
+        crate::mode::Mode::Local => crate::api::router().layer(axum::middleware::from_fn(
+            crate::auth::extract::local_owner_layer,
+        )),
+    };
     let api = api
         .layer(axum::middleware::from_fn_with_state(hosts, allowed_host))
         .layer(axum::middleware::from_fn_with_state(origins, cors));

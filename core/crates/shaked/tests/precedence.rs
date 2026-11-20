@@ -2,6 +2,7 @@
 //! body of each, on an app whose saves are over their limit (so a 507 competes with every other
 //! refusal). Without a model: nothing here starts an agent.
 mod support;
+use support::records;
 
 use serde_json::{json, Value};
 use shaked::model::*;
@@ -179,7 +180,7 @@ fn a_new_run_is_refused_in_this_order() {
         assert_cases(&fx, run_cases()).await;
         assert_cases(&fx, external_run_cases()).await;
         assert_cases(&fx, code_run_cases()).await;
-        assert!(fx.state.store.runs().await.unwrap().is_empty());
+        assert!(records(&fx.state.store).runs().await.unwrap().is_empty());
     })
 }
 
@@ -190,12 +191,14 @@ async fn finished_branch(fx: &AppFx) -> String {
         name: "T".into(),
         agents: vec![AgentSpec::new("a", AgentKind::ClaudeCode)],
     };
-    let run_id = fx.state.store.create_run("27", &t).await.unwrap();
+    let run_id = records(&fx.state.store).create_run("27", &t).await.unwrap();
     let store = &fx.state.store;
     let none = json!([]);
-    let b = store.create_branch(&run_id, None, &t, &none, None);
-    let b = b.await.unwrap();
-    store
+    let b = records(store)
+        .create_branch(&run_id, None, &t, &none, None)
+        .await;
+    let b = b.unwrap();
+    records(store)
         .set_status(&b, BranchStatus::Passed, None)
         .await
         .unwrap();
@@ -333,7 +336,7 @@ fn a_suite_or_experiment_is_refused_in_this_order() {
     run(async {
         let fx = setup("suites").await;
         assert_cases(&fx, suite_cases()).await;
-        assert!(fx.state.store.suites().await.unwrap().is_empty());
+        assert!(records(&fx.state.store).suites().await.unwrap().is_empty());
     })
 }
 

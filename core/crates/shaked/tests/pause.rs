@@ -3,6 +3,7 @@
 //! the gateway's provider is a closed port, so a model call that goes through fails to connect.
 //! No model answers anything here: these tests check the holding, not an agent.
 mod support;
+use support::records;
 
 use std::time::Duration;
 
@@ -61,7 +62,7 @@ impl AppFx {
     }
 
     async fn kinds(&self, branch: &str) -> Vec<EventKind> {
-        let evs = self.state.store.events(branch).await.unwrap();
+        let evs = records(&self.state.store).events(branch).await.unwrap();
         evs.iter().map(|e| e.kind).collect()
     }
 
@@ -92,7 +93,7 @@ const HELD: Duration = Duration::from_millis(400);
 /// `Pause` and `Resume` are recorded around the held call, with the pause's length, which is
 /// no part of the run's estimate in production.
 async fn pause_is_recorded(fx: &AppFx, branch: &str) {
-    let evs = fx.state.store.events(branch).await.unwrap();
+    let evs = records(&fx.state.store).events(branch).await.unwrap();
     let at = |k| evs.iter().position(|e| e.kind == k).unwrap();
     use EventKind::*;
     assert!(at(Pause) < at(Resume) && at(Resume) < at(ToolCall));
@@ -160,7 +161,7 @@ fn stopping_refuses_the_held_calls_and_ends_the_run_unscored() {
         assert!(out.to_string().contains("the run was stopped"), "{out}");
         assert_eq!(model.await.unwrap(), 409);
 
-        let b = fx.state.store.branch(&branch).await.unwrap();
+        let b = records(&fx.state.store).branch(&branch).await.unwrap();
         assert_eq!((b.status, b.error), (BranchStatus::Stopped, None));
         assert!(
             !fx.kinds(&branch).await.contains(&EventKind::Check),

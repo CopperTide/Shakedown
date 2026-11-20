@@ -1,4 +1,5 @@
 mod support;
+use support::records;
 
 use std::time::Duration;
 
@@ -149,7 +150,7 @@ async fn assert_stream_ended(fx: &AppFx, branch: &str) -> (usize, usize) {
     let last = fr.last().unwrap();
     assert_eq!(last.0, "status");
     let status: Value = serde_json::from_str(&last.1).unwrap();
-    let b = fx.state.store.branch(branch).await.unwrap();
+    let b = records(&fx.state.store).branch(branch).await.unwrap();
     assert_eq!(status["status"], json!(b.status), "{status}");
     let evs: Vec<Value> = fr
         .iter()
@@ -187,7 +188,7 @@ fn health_tasks_and_run_validation() {
         let fx = setup("health").await;
         assert_health_and_tasks(&fx).await;
         assert_run_validation_errors(&fx).await;
-        assert!(fx.state.store.runs().await.unwrap().is_empty());
+        assert!(records(&fx.state.store).runs().await.unwrap().is_empty());
     })
 }
 
@@ -238,7 +239,7 @@ async fn compare_edge_cases(fx: &AppFx, a: &str) {
 
 /// The final save of part `retail` of a finished branch.
 async fn final_save(fx: &AppFx, branch: &str) -> String {
-    let evs = fx.state.store.events(branch).await.unwrap();
+    let evs = records(&fx.state.store).events(branch).await.unwrap();
     let check = live::check_of(&evs).expect("a check");
     check.final_saves.unwrap()["retail"].clone()
 }
@@ -283,7 +284,7 @@ async fn compare_diffs_the_final_saves_of_two_runs(live: Live) {
     let (st, v) = fx.get(&format!("/api/compare?a={a}&b={b}")).await;
     assert_eq!(st, 200, "{v}");
     for (side, id) in [("a", &a), ("b", &b)] {
-        let br = fx.state.store.branch(id).await.unwrap();
+        let br = records(&fx.state.store).branch(id).await.unwrap();
         assert_eq!(v[side]["status"], json!(br.status), "{v}");
         assert!(v[side]["tokens"].as_i64().unwrap() > 0, "{v}");
         assert!(v[side]["seconds"].as_f64().unwrap() >= 0.0, "{v}");
@@ -343,7 +344,7 @@ async fn assert_rows_read_the_save(fx: &AppFx, b: &str, e: &Event) {
 async fn rows_read_each_steps_save(live: Live) {
     let fx = live_setup("rows").await;
     let b = fx.run_to_end("27", &solo(&live)).await;
-    let evs = fx.state.store.events(&b).await.unwrap();
+    let evs = records(&fx.state.store).events(&b).await.unwrap();
     let order = format!("orders/{ORDER}");
     let keys = "orders/%23W7181492,users/nobody";
     let (st, v) = fx.get(&rows_path(&b, 1, keys, "")).await;
@@ -402,7 +403,7 @@ async fn fork_over_http_maps_errors_and_starts_a_branch(live: Live) {
     let bench = fx.state.hub.bench_describe("retail").await.unwrap();
     let team = live.bench_team(bench.team.unwrap());
     let b = fx.run_to_end("27", &team).await;
-    let evs = fx.state.store.events(&b).await.unwrap();
+    let evs = records(&fx.state.store).events(&b).await.unwrap();
     let at = live::first_of(&evs, EventKind::AgentStart, "resolver").unwrap();
     let url = format!("/api/branches/{b}/fork");
     assert_fork_errors(&fx, &url, at).await;
@@ -412,10 +413,10 @@ async fn fork_over_http_maps_errors_and_starts_a_branch(live: Live) {
     assert_eq!(v["start_seq"], at, "{v}");
     let done = fx.wait(&child).await;
     assert_eq!(done["parent_id"], b.as_str());
-    let parent = fx.state.store.branch(&b).await.unwrap();
-    let c = fx.state.store.branch(&child).await.unwrap();
+    let parent = records(&fx.state.store).branch(&b).await.unwrap();
+    let c = records(&fx.state.store).branch(&child).await.unwrap();
     assert_eq!(c.run_id, parent.run_id);
-    let cevs = fx.state.store.events(&child).await.unwrap();
+    let cevs = records(&fx.state.store).events(&child).await.unwrap();
     live::assert_recorded(&c, &cevs, &live);
     teardown(fx, &[&b, &child]).await;
 }
@@ -446,7 +447,7 @@ fn open_mode_is_rejected_without_a_key() {
             .await;
         assert_eq!(st, 404);
         assert!(
-            fx.state.store.runs().await.unwrap().is_empty(),
+            records(&fx.state.store).runs().await.unwrap().is_empty(),
             "no run was created"
         );
         drop(fx.state);
@@ -459,10 +460,8 @@ fn stream_ends_when_shutdown_fires() {
         // A branch that stays running: a run row and a running branch, no agent.
         let fx = setup("shutdown").await;
         let t = team();
-        let run_id = fx.state.store.create_run("27", &t).await.unwrap();
-        let b = fx
-            .state
-            .store
+        let run_id = records(&fx.state.store).create_run("27", &t).await.unwrap();
+        let b = records(&fx.state.store)
             .create_branch(&run_id, None, &t, &json!([]), None)
             .await
             .unwrap();
@@ -488,15 +487,12 @@ fn compare_of_branch_without_final_state_is_409() {
     run(async {
         let fx = setup("nodb").await;
         let t = team();
-        let run_id = fx.state.store.create_run("27", &t).await.unwrap();
-        let ghost = fx
-            .state
-            .store
+        let run_id = records(&fx.state.store).create_run("27", &t).await.unwrap();
+        let ghost = records(&fx.state.store)
             .create_branch(&run_id, None, &t, &json!([]), None)
             .await
             .unwrap();
-        fx.state
-            .store
+        records(&fx.state.store)
             .set_status(
                 &ghost,
                 BranchStatus::InfraError,
@@ -578,8 +574,8 @@ impl Toy {
     /// `events`. Its id.
     async fn branch(&self, parts: &[&str], base: Value, events: Vec<(EventKind, Value)>) -> String {
         let store = &self.fx.state.store;
-        let run_id = store.create_run("t1", &team()).await.unwrap();
-        let b = store
+        let run_id = records(store).create_run("t1", &team()).await.unwrap();
+        let b = records(store)
             .create_branch(&run_id, None, &team(), &json!([]), None)
             .await
             .unwrap();
@@ -588,14 +584,17 @@ impl Toy {
             .map(|p| json!({"part": p, "integration": self.part, "config": {}}))
             .collect();
         let start = json!({"benchmark": "toybench", "world": world, "seed": 0, "saves": base});
-        store
+        records(store)
             .append(&b, None, EventKind::RunStart, start)
             .await
             .unwrap();
         for (kind, payload) in events {
-            store.append(&b, None, kind, payload).await.unwrap();
+            records(store)
+                .append(&b, None, kind, payload)
+                .await
+                .unwrap();
         }
-        store
+        records(store)
             .set_status(&b, BranchStatus::Passed, None)
             .await
             .unwrap();
@@ -681,7 +680,7 @@ fn delete_treats_an_unknown_save_as_gone() {
         t.save("s_d1", 1).await;
         let events = vec![poked("s_d1"), poked("s_dgone")];
         let b = t.branch(&["box"], json!({"box": "s_d1"}), events).await;
-        let run_id = t.fx.state.store.branch(&b).await.unwrap().run_id;
+        let run_id = records(&t.fx.state.store).branch(&b).await.unwrap().run_id;
         let url = format!("{}/api/runs/{run_id}", t.fx.base);
         let (st, v) = app::send(t.fx.http.delete(url)).await;
         assert_eq!((st, &v["dropped"]), (200, &json!(1)), "{v}");
@@ -704,14 +703,12 @@ fn delete_treats_an_unknown_save_as_gone() {
 fn run_names_are_optional_validated_metadata() {
     run(async {
         let fx = setup("names").await;
-        let id = fx
-            .state
-            .store
+        let id = records(&fx.state.store)
             .create_run("original-task", &team())
             .await
             .unwrap();
         let url = format!("{}/api/runs/{id}/name", fx.base);
-        let before = fx.state.store.runs().await.unwrap();
+        let before = records(&fx.state.store).runs().await.unwrap();
         assert_eq!(before[0].name, None);
         let response = fx
             .http
@@ -721,7 +718,7 @@ fn run_names_are_optional_validated_metadata() {
             .await
             .unwrap();
         assert_eq!(response.status(), 200);
-        let after = fx.state.store.runs().await.unwrap();
+        let after = records(&fx.state.store).runs().await.unwrap();
         assert_eq!(after[0].name.as_deref(), Some("Demo: retail"));
         assert_eq!(after[0].task_id, "original-task");
         invalid_run_names(&fx, &url).await;

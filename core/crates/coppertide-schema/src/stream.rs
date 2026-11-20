@@ -80,6 +80,11 @@ const FILES: &[(Stream, &str, &str)] = &[
         "0002_orgs.sql",
         include_str!("../migrations/shakedown/0002_orgs.sql"),
     ),
+    (
+        Stream::Shakedown,
+        "0003_validate.sql",
+        include_str!("../migrations/shakedown/0003_validate.sql"),
+    ),
 ];
 
 /// Earlier checksums each (stream, version) also accepts. Empty: no file has changed since it shipped.

@@ -20,6 +20,34 @@ const IDENTITY: Plan<'static> = Plan {
     applied_by: "test",
 };
 
+/// The local org a local shaked seeds between the identity and shakedown streams.
+const LOCAL_ORG: &str = "INSERT INTO identity.orgs (id, slug, name, kind)
+    VALUES ('00000000-0000-0000-0000-00000000000b', 'local', 'Local', 'local')";
+
+/// A row in each of today's shaked tables, in `public`.
+const TODAYS_ROWS: &str = "
+    INSERT INTO runs (id, task_id, team) VALUES ('r1', 't', '{}');
+    INSERT INTO branches (id, run_id, team) VALUES ('b1', 'r1', '{}');
+    INSERT INTO events (branch_id, seq, kind, payload) VALUES ('b1', 1, 'message', '{}');
+    INSERT INTO suites (id, name, team, tasks, repeats, runner, benchmark)
+      VALUES ('s1', 's', '{}', '[]', 1, 'chain', 'b');
+    INSERT INTO suite_runs (suite_id, ord, task_id, repeat) VALUES ('s1', 0, 't', 0);
+    INSERT INTO experiments (id, name, task_id, benchmark, runs) VALUES ('e1', 'e', 't', 'b', 1);
+    INSERT INTO reviews (key, kind, status, model) VALUES ('run:r1', 'run', 'done', 'm');
+    INSERT INTO connections (id, name, command) VALUES ('c1', 'c', '[]');";
+
+/// Today's shaked tables with a row each, migrated as shaked does: identity, the local org its
+/// old rows go to, then shakedown.
+async fn todays_shaked_migrated(c: &mut tokio_postgres::Client) {
+    c.batch_execute(include_str!("fixtures/shaked-bb8e7e8.sql"))
+        .await
+        .unwrap();
+    c.batch_execute(TODAYS_ROWS).await.unwrap();
+    migrate(c, &IDENTITY).await.unwrap();
+    c.batch_execute(LOCAL_ORG).await.unwrap();
+    migrate(c, &LOCAL).await.unwrap();
+}
+
 fn latest(s: Stream) -> u32 {
     migrations()
         .iter()
@@ -176,16 +204,7 @@ async fn shakedown_1_is_idempotent_over_tables_made_by_todays_shaked() {
     let old = Scratch::bootstrapped("todaysshaked").await;
     let fresh = Scratch::bootstrapped("shakedfresh").await;
     let mut a = old.connect().await;
-    let today = include_str!("fixtures/shaked-bb8e7e8.sql");
-    a.batch_execute(today).await.unwrap();
-    a.batch_execute(
-        "INSERT INTO runs (id, task_id, team) VALUES ('r1', 't', '{}');
-         INSERT INTO branches (id, run_id, team) VALUES ('b1', 'r1', '{}');
-         INSERT INTO events (branch_id, seq, kind, payload) VALUES ('b1', 1, 'note', '{}');",
-    )
-    .await
-    .unwrap();
-    migrate(&mut a, &LOCAL).await.unwrap();
+    todays_shaked_migrated(&mut a).await;
     assert_eq!(
         count(&a, "SELECT * FROM shakedown.events WHERE branch_id = 'b1'").await,
         1
@@ -237,27 +256,26 @@ async fn a_missing_setting_matches_no_row() {
 async fn shakedown_2_on_todays_data_gives_every_row_the_local_org() {
     let old = Scratch::bootstrapped("orgdefault").await;
     let mut c = old.connect().await;
-    c.batch_execute(include_str!("fixtures/shaked-bb8e7e8.sql")).await.unwrap();
-    c.batch_execute(
-        "INSERT INTO runs (id, task_id, team) VALUES ('r1', 't', '{}');
-         INSERT INTO branches (id, run_id, team) VALUES ('b1', 'r1', '{}');
-         INSERT INTO events (branch_id, seq, kind, payload) VALUES ('b1', 1, 'message', '{}');
-         INSERT INTO suites (id, name, team, tasks, repeats, runner, benchmark) VALUES ('s1', 's', '{}', '[]', 1, 'chain', 'b');
-         INSERT INTO suite_runs (suite_id, ord, task_id, repeat) VALUES ('s1', 0, 't', 0);
-         INSERT INTO experiments (id, name, task_id, benchmark, runs) VALUES ('e1', 'e', 't', 'b', 1);
-         INSERT INTO reviews (key, kind, status, model) VALUES ('run:r1', 'run', 'done', 'm');
-         INSERT INTO connections (id, name, command) VALUES ('c1', 'c', '[]');",
-    )
-    .await
-    .unwrap();
-    migrate(&mut c, &IDENTITY).await.unwrap();
+    todays_shaked_migrated(&mut c).await;
     let local = "00000000-0000-0000-0000-00000000000b";
-    let org = format!("INSERT INTO identity.orgs (id, slug, name, kind) VALUES ('{local}', 'local', 'Local', 'local')");
-    c.batch_execute(&org).await.unwrap();
-    migrate(&mut c, &LOCAL).await.unwrap();
-    for t in ["runs", "branches", "events", "suites", "suite_runs", "experiments", "reviews", "connections"] {
+    for t in [
+        "runs",
+        "branches",
+        "events",
+        "suites",
+        "suite_runs",
+        "experiments",
+        "reviews",
+        "connections",
+    ] {
         let sql = format!("SELECT org_id::text FROM shakedown.{t}");
-        let orgs: Vec<String> = c.query(&sql, &[]).await.unwrap().iter().map(|r| r.get(0)).collect();
+        let orgs: Vec<String> = c
+            .query(&sql, &[])
+            .await
+            .unwrap()
+            .iter()
+            .map(|r| r.get(0))
+            .collect();
         assert_eq!(orgs, [local], "{t}");
     }
 }

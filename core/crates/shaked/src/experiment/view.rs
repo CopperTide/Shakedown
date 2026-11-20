@@ -12,7 +12,7 @@ use super::Experiment;
 use crate::{
     model::Runner,
     scenario::Scenario,
-    store::Store,
+    store::Scoped,
     suite::{self, Suite, SuiteReport},
 };
 
@@ -121,7 +121,7 @@ pub struct Detail {
 }
 
 /// Every experiment and every suite made on its own, newest first.
-pub async fn list(store: &Store) -> Result<Vec<Listed>> {
+pub async fn list(store: Scoped<'_>) -> Result<Vec<Listed>> {
     let mut of_experiment: HashMap<String, Vec<Suite>> = HashMap::new();
     let mut out = vec![];
     for s in store.suites().await? {
@@ -144,7 +144,7 @@ pub async fn list(store: &Store) -> Result<Vec<Listed>> {
     Ok(out)
 }
 
-async fn legacy_line(store: &Store, s: Suite) -> Result<Listed> {
+async fn legacy_line(store: Scoped<'_>, s: Suite) -> Result<Listed> {
     let line = suite::listed(store, s).await?;
     let head = Head::of_legacy(&line.suite, line.status);
     Ok(Listed {
@@ -154,7 +154,7 @@ async fn legacy_line(store: &Store, s: Suite) -> Result<Listed> {
 }
 
 /// The experiment's detail, with its suites' reports.
-pub async fn detail(store: &Store, e: &Experiment) -> Result<Detail> {
+pub async fn detail(store: Scoped<'_>, e: &Experiment) -> Result<Detail> {
     let mut setups = vec![];
     for s in store.experiment_suites(&e.id).await? {
         setups.push(suite::load(store, s).await?);
@@ -170,7 +170,7 @@ pub async fn detail(store: &Store, e: &Experiment) -> Result<Detail> {
 }
 
 /// A suite made on its own as a one-setup experiment's detail.
-pub async fn legacy_detail(store: &Store, s: Suite) -> Result<Detail> {
+pub async fn legacy_detail(store: Scoped<'_>, s: Suite) -> Result<Detail> {
     let report = suite::load(store, s).await?;
     let s = &report.suite;
     Ok(Detail {

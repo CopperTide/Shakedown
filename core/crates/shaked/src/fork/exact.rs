@@ -9,7 +9,7 @@ use parts::proto::WorldPart;
 use crate::{
     model::{Branch, RestoredHow, RestoredPart},
     restore::{How, Refused},
-    store::Store,
+    store::Scoped,
 };
 
 fn refused(part: &str, reason: String) -> Refused {
@@ -76,7 +76,7 @@ pub struct EarlierFork {
 
 /// The forks a branch's events go through, nearest first: the branch itself when it is a fork,
 /// then each forked ancestor up to the run's first branch.
-pub async fn ancestry(store: &Store, branch: &Branch) -> anyhow::Result<Vec<EarlierFork>> {
+pub async fn ancestry(store: Scoped<'_>, branch: &Branch) -> anyhow::Result<Vec<EarlierFork>> {
     let mut out = vec![];
     let mut b = branch.clone();
     loop {

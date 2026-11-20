@@ -1,6 +1,7 @@
 //! Starting a run: its first branch, its world from the base save, its `RunStart` and the
 //! task's setup.
 
+use crate::{auth::Scope, store::Scoped};
 use std::{sync::Arc, time::Instant};
 
 use anyhow::{anyhow, Result};
@@ -52,6 +53,8 @@ pub async fn start_run(
 #[derive(Debug, Clone, Copy)]
 pub struct RunOptions<'a> {
     runner: Runner,
+    /// Who the run is for; None: the local owner.
+    scope: Option<&'a Arc<Scope>>,
     scenario: Option<&'a Scenario>,
     max_cost_usd: Option<f64>,
     benchmark: Option<&'a str>,
@@ -61,9 +64,18 @@ impl<'a> RunOptions<'a> {
     pub fn new(runner: Runner) -> RunOptions<'a> {
         RunOptions {
             runner,
+            scope: None,
             scenario: None,
             max_cost_usd: None,
             benchmark: None,
+        }
+    }
+
+    /// The run for `scope` (else for the local owner).
+    pub fn scope(self, scope: &'a Arc<Scope>) -> RunOptions<'a> {
+        RunOptions {
+            scope: Some(scope),
+            ..self
         }
     }
 
@@ -99,7 +111,12 @@ impl<'a> RunOptions<'a> {
         team: Team,
     ) -> Result<(RunId, BranchId), RunError> {
         let none = Scenario::default();
+        let scope = match self.scope {
+            Some(s) => s.clone(),
+            None => Arc::new(crate::auth::local_owner()),
+        };
         let spec = crate::launch::LaunchSpec {
+            scope,
             task_id,
             team,
             scenario: self.scenario.unwrap_or(&none),
@@ -117,6 +134,7 @@ impl<'a> RunOptions<'a> {
 /// branch, ready to be driven.
 pub async fn begin_run(
     state: &AppState,
+    scope: &Arc<Scope>,
     benchmark: Option<&str>,
     task_id: &str,
     team: Team,
@@ -131,9 +149,9 @@ pub async fn begin_run(
         return Err(RunError::UnknownTask(task_id.to_string()));
     }
     let planned = world::plan(&state.hub, &bench).await?;
-    let run_id = state.store.create_run(task_id, &team).await?;
-    let branch_id = state
-        .store
+    let records = state.store.at(scope);
+    let run_id = records.create_run(task_id, &team).await?;
+    let branch_id = records
         .create_branch(&run_id, None, &team, &json!([]), None)
         .await?;
     let start = RunStartOf {
@@ -143,10 +161,10 @@ pub async fn begin_run(
         rules: rules.clone(),
         scenario,
     };
-    let started = start_world(state, &bench, planned, start).await;
-    let (world, start_seq, record_ms) = setup_or_infra_error(state, &branch_id, started).await?;
+    let started = start_world(state, records, &bench, planned, start).await;
+    let (world, start_seq, record_ms) = setup_or_infra_error(records, &branch_id, started).await?;
     let ctx = BranchCtx::new(branch_id, Arc::new(world), team, task_id.to_string());
-    let ctx = ctx.with_rules(rules);
+    let ctx = ctx.with_rules(rules).with_scope(scope.clone());
     ctx.overhead.add(Cat::Record, record_ms);
     set_up_task(state, &bench, &ctx, scenario, start_seq).await?;
     Ok((run_id, ctx))
@@ -179,7 +197,7 @@ async fn set_up_task(
         Err(e) => e,
     };
     ctx.world.stop().await;
-    setup_failed(state, &ctx.branch_id, e.clone()).await;
+    setup_failed(ctx.records(&state.store), &ctx.branch_id, e.clone()).await;
     Err(anyhow!(e))
 }
 
@@ -201,18 +219,20 @@ struct RunStartOf<'a> {
 }
 
 /// A new branch's setup result; a failed setup ends the branch `infra_error` with its message.
-pub async fn setup_or_infra_error<T>(state: &AppState, branch_id: &str, r: Result<T>) -> Result<T> {
+pub async fn setup_or_infra_error<T>(
+    records: Scoped<'_>,
+    branch_id: &str,
+    r: Result<T>,
+) -> Result<T> {
     if let Err(e) = &r {
-        setup_failed(state, branch_id, format!("{e:#}")).await;
+        setup_failed(records, branch_id, format!("{e:#}")).await;
     }
     r
 }
 
 /// Ends a branch whose setup failed `infra_error` with `error`; a store failure is logged.
-pub async fn setup_failed(state: &AppState, branch_id: &str, error: String) {
-    let set = state
-        .store
-        .set_status(branch_id, BranchStatus::InfraError, Some(error));
+pub async fn setup_failed(records: Scoped<'_>, branch_id: &str, error: String) {
+    let set = records.set_status(branch_id, BranchStatus::InfraError, Some(error));
     if let Err(e) = set.await {
         eprintln!("branch {branch_id}: could not record its failed setup: {e:#}");
     }
@@ -227,6 +247,7 @@ pub async fn setup_failed(state: &AppState, branch_id: &str, error: String) {
 /// and how long recording it took (overhead for the branch's next event).
 async fn start_world(
     state: &AppState,
+    records: Scoped<'_>,
     bench: &BenchDescribe,
     planned: Plan,
     of: RunStartOf<'_>,
@@ -244,7 +265,7 @@ async fn start_world(
     let mut start = run_start(bench, &world, seed, &of);
     start.world_epoch_ms = Some(world_time.epoch_ms);
     let since = Instant::now();
-    match state.store.record(branch_id, None, &start, restored).await {
+    match records.record(branch_id, None, &start, restored).await {
         Ok(e) => Ok((world, e.seq, overhead::ms_since(since))),
         Err(e) => {
             world.stop().await;

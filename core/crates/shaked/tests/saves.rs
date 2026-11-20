@@ -4,6 +4,7 @@
 //! through its MCP endpoint and gateway; the gateway's provider is a closed port, so no model
 //! answers anything here.
 mod support;
+use support::records;
 
 use axum::{http::StatusCode, routing::post, Router};
 use serde_json::{json, Value};
@@ -73,7 +74,10 @@ impl SavesFx {
     }
 
     async fn events(&self) -> Vec<Event> {
-        self.fx.state.store.events(&self.branch).await.unwrap()
+        records(&self.fx.state.store)
+            .events(&self.branch)
+            .await
+            .unwrap()
     }
 
     async fn of_kind(&self, kind: EventKind) -> Vec<Event> {
@@ -243,7 +247,11 @@ fn a_setup_that_writes_a_points_part_is_saved_where_the_agents_start() {
             .find(|e| e.kind == EventKind::AgentStart)
             .unwrap();
         assert!(points[0].seq < start.seq);
-        let team = fx.fx.state.store.branch(&fx.branch).await.unwrap().team;
+        let team = records(&fx.fx.state.store)
+            .branch(&fx.branch)
+            .await
+            .unwrap()
+            .team;
         let plan = shaked::fork::plan_fork(&evs, &team, start.seq, &Default::default()).unwrap();
         assert_eq!((plan.start_seq, plan.moved_from), (start.seq, None));
         assert_eq!(

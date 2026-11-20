@@ -2,6 +2,7 @@
 //! model: what is refused before a run, an agent whose provider can't be reached, and two
 //! branches' worlds on one program. `live_`: teams on a real model (see `support/live.rs`).
 mod support;
+use support::records;
 
 use std::{path::PathBuf, sync::Arc};
 
@@ -69,7 +70,7 @@ fn an_unreachable_provider_ends_the_branch_infra_error() {
         assert_eq!(b.status, BranchStatus::InfraError);
         let error = b.error.unwrap();
         assert!(error.starts_with("model call failed (502)"), "{error}");
-        let evs = fx.state.store.events(&branch).await.unwrap();
+        let evs = records(&fx.state.store).events(&branch).await.unwrap();
         assert_eq!(
             kinds(&evs),
             vec![
@@ -114,7 +115,7 @@ fn tool_name_clash_refused() {
             "{e:#}"
         );
         assert!(
-            fx.state.store.runs().await.unwrap().is_empty(),
+            records(&fx.state.store).runs().await.unwrap().is_empty(),
             "no run was recorded"
         );
     })
@@ -123,10 +124,11 @@ fn tool_name_clash_refused() {
 /// A fresh branch of `task` with its world started, made live as `spawn_branch` does before it
 /// runs.
 async fn live_branch(fx: &AppFx, team: Team, bench: &str, task: &str) -> (String, Arc<BranchCtx>) {
-    let run_id = fx.state.store.create_run(task, &team).await.unwrap();
-    let branch = fx
-        .state
-        .store
+    let run_id = records(&fx.state.store)
+        .create_run(task, &team)
+        .await
+        .unwrap();
+    let branch = records(&fx.state.store)
         .create_branch(&run_id, None, &team, &json!([]), None)
         .await
         .unwrap();
@@ -167,7 +169,7 @@ async fn assert_own_line(fx: &AppFx, branch: &str, line: &str) {
     let user = json!({"user_id": USER});
     let read = mcp(fx, branch, "resolver", "get_user_details", user).await;
     assert_eq!(read["address"]["address1"], line, "{read}");
-    let evs = fx.state.store.events(branch).await.unwrap();
+    let evs = records(&fx.state.store).events(branch).await.unwrap();
     let w = live::calls_named(&evs, "modify_user_address")[0];
     let save = w.payload["saves"]["retail"].as_str().unwrap().to_string();
     assert_eq!(line_in(fx, &save).await, line);
@@ -207,10 +209,10 @@ fn fail_if_live_ends_a_live_branch_failed() {
             live.fail_if_live(&fx.state, &b, "the driver broke".into())
                 .await
         );
-        let ended = fx.state.store.branch(&b).await.unwrap();
+        let ended = records(&fx.state.store).branch(&b).await.unwrap();
         let got = (ended.status, ended.error.as_deref());
         assert_eq!(got, (BranchStatus::Failed, Some("the driver broke")));
-        let evs = fx.state.store.events(&b).await.unwrap();
+        let evs = records(&fx.state.store).events(&b).await.unwrap();
         assert!(evs.iter().any(|e| e.kind == EventKind::Check), "scored");
         assert!(!live.contains(&b));
     })
@@ -383,8 +385,8 @@ async fn a_legacy_branch_still_needs_its_handoff(live: Live) {
     let (branch, ctx) = live_branch(&fx, quiet_team(&live), "retail", "27").await;
     assert_eq!(ctx.rules, Rules::legacy());
     runner::run_branch(fx.state.clone(), ctx, StartPoint::default()).await;
-    let b = fx.state.store.branch(&branch).await.unwrap();
-    let evs = fx.state.store.events(&branch).await.unwrap();
+    let b = records(&fx.state.store).branch(&branch).await.unwrap();
+    let evs = records(&fx.state.store).events(&branch).await.unwrap();
     let handed = evs.iter().any(|e| e.kind == EventKind::Handoff);
     let triage_ok = evs.iter().any(|e| {
         e.kind == EventKind::AgentEnd
@@ -587,7 +589,7 @@ async fn part_crash_ends_branch_infra_error(live: Live) {
         .await
         .unwrap();
     let b = live::ended(&fx.state, &branch).await;
-    let evs = fx.state.store.events(&branch).await.unwrap();
+    let evs = records(&fx.state.store).events(&branch).await.unwrap();
     let pokes = live::calls_named(&evs, "poke");
     if pokes.is_empty() {
         eprintln!("note: the model did not poke this time; the crash was not exercised");
@@ -624,7 +626,7 @@ async fn malformed_diff_is_infra_error_not_passed(live: Live) {
         err.contains("diff failed") && err.contains("bad result"),
         "{err}"
     );
-    let evs = fx.state.store.events(&branch).await.unwrap();
+    let evs = records(&fx.state.store).events(&branch).await.unwrap();
     assert!(!kinds(&evs).contains(&EventKind::Check));
     if let Some(first) = evs.iter().find(|e| e.kind == EventKind::ModelCall) {
         let input = first.payload["request"]["messages"][1]["content"]
@@ -663,6 +665,6 @@ async fn a_cut_off_answer_fails_the_branch_not_infra_error(live: Live) {
     let b = live::ended(&fx.state, &branch).await;
     assert_eq!(b.status, BranchStatus::Failed);
     assert_eq!(b.error.as_deref(), Some("model output was cut off"));
-    let evs = fx.state.store.events(&branch).await.unwrap();
+    let evs = records(&fx.state.store).events(&branch).await.unwrap();
     assert!(!kinds(&evs).contains(&EventKind::Check));
 }

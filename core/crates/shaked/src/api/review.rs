@@ -3,6 +3,7 @@
 //! `GET` reads it (404 before any). Off (`GET /api/review/settings`): `POST` is refused (409) and
 //! nothing is sent to a model.
 
+use crate::auth::{Caller, Scope};
 use std::{collections::HashMap, sync::Arc};
 
 use anyhow::anyhow;
@@ -65,8 +66,8 @@ fn reviewer(state: &AppState) -> Result<ReviewerModel, ApiError> {
     }
 }
 
-async fn stored(state: &AppState, key: &str) -> ApiResult<StoredReview> {
-    match state.store.review(key).await? {
+async fn stored(state: &AppState, caller: &Scope, key: &str) -> ApiResult<StoredReview> {
+    match state.store.at(caller).review(key).await? {
         Some(r) => Ok(Json(r)),
         None => Err(ApiError::not_found("there is no review yet")),
     }
@@ -80,6 +81,7 @@ fn again(q: &HashMap<String, String>) -> bool {
 /// one started: its row, with `make` building the job on a task of its own.
 async fn start<F>(
     state: Arc<AppState>,
+    caller: Arc<Scope>,
     key: String,
     shape: Shape,
     again: bool,
@@ -89,22 +91,22 @@ where
     F: std::future::Future<Output = anyhow::Result<Job>> + Send + 'static,
 {
     let model = reviewer(&state)?;
-    if let Some(r) = state.store.review(&key).await? {
+    let records = state.store.at(&caller);
+    if let Some(r) = records.review(&key).await? {
         let keep = r.status == "running" || (r.status == "done" && !again);
         if keep {
             return Ok(Json(r));
         }
     }
-    let Some(row) = state
-        .store
+    let Some(row) = records
         .start_review(&key, shape.kind(), &model.label())
         .await?
     else {
-        return stored(&state, &key).await;
+        return stored(&state, &caller, &key).await;
     };
     tokio::spawn(async move {
         let job = make.await;
-        review::run(state, key, model, job).await;
+        review::run(state, caller, key, model, job).await;
     });
     Ok(Json(row))
 }
@@ -113,29 +115,32 @@ where
 
 async fn get_branch(
     State(state): State<Arc<AppState>>,
+    Caller(caller): Caller,
     Path(id): Path<String>,
 ) -> ApiResult<StoredReview> {
-    stored(&state, &review::branch_key(&id)).await
+    stored(&state, &caller, &review::branch_key(&id)).await
 }
 
 async fn post_branch(
     State(state): State<Arc<AppState>>,
+    Caller(caller): Caller,
     Path(id): Path<String>,
     Query(q): Q,
 ) -> ApiResult<StoredReview> {
     reviewer(&state)?;
-    finished_branch(&state, &id).await?;
+    finished_branch(&state, &caller, &id).await?;
     let key = review::branch_key(&id);
-    let s = state.clone();
-    start(state, key, Shape::Run, again(&q), async move {
-        branch_job(&s, &id).await
+    let (s, c) = (state.clone(), caller.clone());
+    start(state, caller, key, Shape::Run, again(&q), async move {
+        branch_job(&s, &c, &id).await
     })
     .await
 }
 
-async fn branch_job(state: &AppState, id: &str) -> anyhow::Result<Job> {
-    let branch = state.store.branch(id).await?;
-    let events = state.store.events(id).await?;
+async fn branch_job(state: &AppState, caller: &Scope, id: &str) -> anyhow::Result<Job> {
+    let records = state.store.at(caller);
+    let branch = records.branch(id).await?;
+    let events = records.events(id).await?;
     let ticket = ticket(state, &events).await;
     let rec = RunRecord {
         branch: &branch,
@@ -157,25 +162,34 @@ async fn branch_job(state: &AppState, id: &str) -> anyhow::Result<Job> {
 
 // ------------------------------------------------------------ two branches
 
-async fn get_compare(State(state): State<Arc<AppState>>, Query(q): Q) -> ApiResult<StoredReview> {
+async fn get_compare(
+    State(state): State<Arc<AppState>>,
+    Caller(caller): Caller,
+    Query(q): Q,
+) -> ApiResult<StoredReview> {
     let (a, b) = pair(&q)?;
-    stored(&state, &review::compare_key(&a, &b)).await
+    stored(&state, &caller, &review::compare_key(&a, &b)).await
 }
 
-async fn post_compare(State(state): State<Arc<AppState>>, Query(q): Q) -> ApiResult<StoredReview> {
+async fn post_compare(
+    State(state): State<Arc<AppState>>,
+    Caller(caller): Caller,
+    Query(q): Q,
+) -> ApiResult<StoredReview> {
     reviewer(&state)?;
     let (a, b) = pair(&q)?;
     for id in [&a, &b] {
-        finished_branch(&state, id).await?;
+        finished_branch(&state, &caller, id).await?;
     }
     let key = review::compare_key(&a, &b);
-    let s = state.clone();
+    let (s, c) = (state.clone(), caller.clone());
     start(
         state,
+        caller,
         key,
         Shape::Compare(Cites::Steps),
         again(&q),
-        async move { compare_job(&s, &a, &b).await },
+        async move { compare_job(&s, &c, &a, &b).await },
     )
     .await
 }
@@ -210,9 +224,9 @@ fn record<'a>(s: &'a Side, ticket: Option<&'a str>) -> RunRecord<'a> {
     }
 }
 
-async fn compare_job(state: &AppState, a: &str, b: &str) -> anyhow::Result<Job> {
+async fn compare_job(state: &AppState, caller: &Scope, a: &str, b: &str) -> anyhow::Result<Job> {
     let (ia, ib) = (a.to_string(), b.to_string());
-    let [sa, sb] = sides(state, [&ia, &ib]).await.map_err(job_err)?;
+    let [sa, sb] = sides(state, caller, [&ia, &ib]).await.map_err(job_err)?;
     let c = compared(state, &sa, &sb).await?;
     let facts = CompareFacts {
         first_divergent_seq: c.first_divergent_seq,
@@ -241,38 +255,56 @@ async fn compare_job(state: &AppState, a: &str, b: &str) -> anyhow::Result<Job> 
 
 // ------------------------------------------------------------ two suites
 
-async fn get_suites(State(state): State<Arc<AppState>>, Query(q): Q) -> ApiResult<StoredReview> {
+async fn get_suites(
+    State(state): State<Arc<AppState>>,
+    Caller(caller): Caller,
+    Query(q): Q,
+) -> ApiResult<StoredReview> {
     let (a, b) = pair(&q)?;
-    stored(&state, &review::suites_key(&a, &b)).await
+    stored(&state, &caller, &review::suites_key(&a, &b)).await
 }
 
-async fn find_suite(state: &AppState, id: &str) -> Result<suite::Suite, ApiError> {
+async fn find_suite(state: &AppState, caller: &Scope, id: &str) -> Result<suite::Suite, ApiError> {
     state
         .store
+        .at(caller)
         .suite(id)
         .await?
         .ok_or_else(|| ApiError::not_found(format!("there is no suite \"{id}\"")))
 }
 
-async fn post_suites(State(state): State<Arc<AppState>>, Query(q): Q) -> ApiResult<StoredReview> {
+async fn post_suites(
+    State(state): State<Arc<AppState>>,
+    Caller(caller): Caller,
+    Query(q): Q,
+) -> ApiResult<StoredReview> {
     reviewer(&state)?;
     let (a, b) = pair(&q)?;
-    let (sa, sb) = (find_suite(&state, &a).await?, find_suite(&state, &b).await?);
+    let (sa, sb) = (
+        find_suite(&state, &caller, &a).await?,
+        find_suite(&state, &caller, &b).await?,
+    );
     let key = review::suites_key(&a, &b);
-    let s = state.clone();
+    let (s, c) = (state.clone(), caller.clone());
     start(
         state,
+        caller,
         key,
         Shape::Compare(Cites::Runs),
         again(&q),
-        async move { suites_job(&s, sa, sb).await },
+        async move { suites_job(&s, &c, sa, sb).await },
     )
     .await
 }
 
-async fn suites_job(state: &AppState, a: suite::Suite, b: suite::Suite) -> anyhow::Result<Job> {
-    let ra = suite::load(&state.store, a).await?;
-    let rb = suite::load(&state.store, b).await?;
+async fn suites_job(
+    state: &AppState,
+    caller: &Scope,
+    a: suite::Suite,
+    b: suite::Suite,
+) -> anyhow::Result<Job> {
+    let ra = suite::load(state.store.at(caller), a).await?;
+    let rb = suite::load(state.store.at(caller), b).await?;
     let c = suite::compare(&ra, &rb);
     let d = suite_digest(&ra, &rb, &c);
     let agents = ra.suite.team.agents.iter().chain(&rb.suite.team.agents);

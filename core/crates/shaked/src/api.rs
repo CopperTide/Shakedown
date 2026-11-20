@@ -16,6 +16,7 @@ use serde_json::{json, Value};
 
 use crate::{
     app::AppState,
+    auth::{Caller, Scope},
     fork::{self, ForkError},
     gc, metrics,
     model::*,
@@ -163,9 +164,10 @@ fn no_branch(id: &str) -> ApiError {
 }
 
 /// The branch `id`; 404 when there is none.
-async fn branch_or_404(state: &AppState, id: &str) -> Result<Branch, ApiError> {
+async fn branch_or_404(state: &AppState, caller: &Scope, id: &str) -> Result<Branch, ApiError> {
     state
         .store
+        .at(caller)
         .find_branch(id)
         .await?
         .ok_or_else(|| no_branch(id))
@@ -285,26 +287,28 @@ async fn check_disk(state: &AppState) -> Result<(), ApiError> {
 pub const SAVES_FULL: &str = "Shakedown's saves use more than the limit; delete old runs";
 
 /// True when any branch of the run is running (stored as running, or live in this process).
-async fn run_is_running(state: &AppState, id: &str) -> Result<bool, ApiError> {
-    if state.store.run_has_running(id).await? {
+async fn run_is_running(state: &AppState, caller: &Scope, id: &str) -> Result<bool, ApiError> {
+    let records = state.store.at(caller);
+    if records.run_has_running(id).await? {
         return Ok(true);
     }
-    let branches = state.store.run_branches(id).await?;
+    let branches = records.run_branches(id).await?;
     Ok(branches.iter().any(|b| state.live.contains(b)))
 }
 
 async fn delete_run(
     State(state): State<Arc<AppState>>,
+    Caller(caller): Caller,
     Path(id): Path<String>,
 ) -> ApiResult<Value> {
-    if !state.store.run_exists(&id).await? {
+    if !state.store.at(&caller).run_exists(&id).await? {
         return Err(ApiError::not_found(format!("there is no run \"{id}\"")));
     }
-    if run_is_running(&state, &id).await? {
+    if run_is_running(&state, &caller, &id).await? {
         return Err(ApiError::conflict("the run still has a running branch"));
     }
     detached(async move {
-        let dropped = gc::delete_run(&state.store, &state.hub, &id).await?;
+        let dropped = gc::delete_run(state.store.at(&caller), &state.hub, &id).await?;
         Ok(Json(json!({"dropped": dropped})))
     })
     .await
@@ -344,8 +348,11 @@ async fn suggested_teams(
     Ok(Json(prompts::suggested_teams(&state.bench().await?, &q)))
 }
 
-async fn list_runs(State(state): State<Arc<AppState>>) -> ApiResult<Vec<RunSummary>> {
-    Ok(Json(state.store.runs().await?))
+async fn list_runs(
+    State(state): State<Arc<AppState>>,
+    Caller(caller): Caller,
+) -> ApiResult<Vec<RunSummary>> {
+    Ok(Json(state.store.at(&caller).runs().await?))
 }
 
 // ---------------------------------------------------------------- runs
@@ -412,6 +419,7 @@ pub(crate) fn max_cost(asked: Option<f64>) -> Result<Option<f64>, ApiError> {
 /// `POST /api/runs` with `connection` (see `connections::create_run`).
 async fn create_code_run(
     state: Arc<AppState>,
+    caller: Arc<Scope>,
     permit: StartPermit,
     headers: &axum::http::HeaderMap,
     req: NewRun,
@@ -430,13 +438,14 @@ async fn create_code_run(
         benchmark: bench,
     };
     let id = req.connection.unwrap_or_default();
-    connections::create_run(state, permit, headers, (&id, req.runner), run).await
+    connections::create_run(state, caller, permit, headers, (&id, req.runner), run).await
 }
 
 /// `POST /api/runs` with `runner: external` (see `external::create_run`, which checks its spend
 /// limit and world time window).
 async fn create_external_run(
     state: Arc<AppState>,
+    caller: Arc<Scope>,
     permit: StartPermit,
     req: NewRun,
     bench: String,
@@ -446,11 +455,12 @@ async fn create_external_run(
         (req.task_id, req.team),
         (req.max_cost_usd, req.world_minutes),
     );
-    external::create_run(state, permit, bench, run, scenario, limits).await
+    external::create_run(state, caller, permit, bench, run, scenario, limits).await
 }
 
 async fn create_run(
     State(state): State<Arc<AppState>>,
+    Caller(caller): Caller,
     permit: StartPermit,
     headers: axum::http::HeaderMap,
     JsonBody(mut req): JsonBody<NewRun>,
@@ -463,10 +473,10 @@ async fn create_run(
     }
     scenario.seed = req.seed;
     if req.connection.is_some() {
-        return create_code_run(state, permit, &headers, req, bench, scenario).await;
+        return create_code_run(state, caller, permit, &headers, req, bench, scenario).await;
     }
     if req.runner == Runner::External {
-        return create_external_run(state, permit, req, bench, scenario).await;
+        return create_external_run(state, caller, permit, req, bench, scenario).await;
     }
     team::validate_builtin(providers_of(&state), &req.team, req.runner)?;
     let max = max_cost(req.max_cost_usd)?;
@@ -474,7 +484,9 @@ async fn create_run(
     let (run_id, branch_id) = detached(async move {
         let _permit = permit;
         let (task, team) = (&req.task_id, req.team);
-        let run = runner::RunOptions::new(req.runner).scenario(&scenario);
+        let run = runner::RunOptions::new(req.runner)
+            .scenario(&scenario)
+            .scope(&caller);
         let run = run.benchmark(&bench);
         Ok(run.max_cost(max).start(&state, task, team).await?)
     })
@@ -484,10 +496,11 @@ async fn create_run(
 
 async fn get_branch(
     State(state): State<Arc<AppState>>,
+    Caller(caller): Caller,
     Path(id): Path<String>,
 ) -> ApiResult<Value> {
-    let branch = branch_or_404(&state, &id).await?;
-    let events = state.store.events(&id).await?;
+    let branch = branch_or_404(&state, &caller, &id).await?;
+    let events = state.store.at(&caller).events(&id).await?;
     let now = chrono::Utc::now();
     let m = metrics::metrics(&branch, &events, prices::table(), now);
     let mut v = serde_json::to_value(branch)?;
@@ -525,8 +538,8 @@ struct ForkReq {
 
 /// The branch to fork: 404 for an unknown branch and 409 for a running one; these come before
 /// the 507 check.
-async fn forkable(state: &AppState, id: &str) -> Result<Branch, ApiError> {
-    match state.store.find_branch(id).await? {
+async fn forkable(state: &AppState, caller: &Scope, id: &str) -> Result<Branch, ApiError> {
+    match state.store.at(caller).find_branch(id).await? {
         None => Err(no_branch(id)),
         Some(b) if b.status == BranchStatus::Running => {
             Err(ApiError::conflict("the branch is still running"))
@@ -539,10 +552,11 @@ async fn forkable(state: &AppState, id: &str) -> Result<Branch, ApiError> {
 /// page could make (`connections::guard_launch`).
 async fn guard_code_fork(
     state: &AppState,
+    caller: &Scope,
     headers: &axum::http::HeaderMap,
     id: &str,
 ) -> Result<(), ApiError> {
-    let events = state.store.events(id).await?;
+    let events = state.store.at(caller).events(id).await?;
     match crate::recorded::rules(&events).connection {
         Some(_) => connections::guard_launch(state, headers),
         None => Ok(()),
@@ -551,13 +565,14 @@ async fn guard_code_fork(
 
 async fn fork_branch(
     State(state): State<Arc<AppState>>,
+    Caller(caller): Caller,
     Path(id): Path<String>,
     permit: StartPermit,
     headers: axum::http::HeaderMap,
     JsonBody(mut req): JsonBody<ForkReq>,
 ) -> ApiResult<fork::ForkResponse> {
-    let parent = forkable(&state, &id).await?;
-    guard_code_fork(&state, &headers, &id).await?;
+    let parent = forkable(&state, &caller, &id).await?;
+    guard_code_fork(&state, &caller, &headers, &id).await?;
     fork::settle_changes(&parent.team, &mut req.changes, &state.config.providers);
     check_fork_team(&state, &parent.team, &req.changes)?;
     if let Some(team) = &mut req.team {
@@ -573,7 +588,7 @@ async fn fork_branch(
     };
     let resp = detached(async move {
         let _permit = permit;
-        Ok(fork::fork_with(&state, &id, req).await?)
+        Ok(fork::fork_with(&state, &caller, &id, req).await?)
     })
     .await?;
     Ok(Json(resp))
@@ -592,6 +607,7 @@ fn parse_restore(q: &HashMap<String, String>) -> Result<Mode, ApiError> {
 /// restored, or the refusal (409).
 async fn get_restore_plan(
     State(state): State<Arc<AppState>>,
+    Caller(caller): Caller,
     Path(id): Path<String>,
     Query(q): Query<HashMap<String, String>>,
 ) -> ApiResult<Value> {
@@ -601,7 +617,9 @@ async fn get_restore_plan(
         .ok_or_else(|| ApiError::bad("at_seq must be an integer"))?;
     let mode = parse_restore(&q)?;
     let parts =
-        detached(async move { Ok(fork::restore_preview(&state, &id, at_seq, mode).await?) })
-            .await?;
+        detached(
+            async move { Ok(fork::restore_preview(&state, &caller, &id, at_seq, mode).await?) },
+        )
+        .await?;
     Ok(Json(json!({"parts": parts})))
 }

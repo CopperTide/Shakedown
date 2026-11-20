@@ -6,6 +6,7 @@
 //! made by the world). `live_`: agents on a real model write (see `support/live.rs`); the views
 //! expected follow from what was recorded.
 mod support;
+use support::records;
 
 use serde_json::{json, Value};
 use shaked::model::*;
@@ -83,11 +84,11 @@ impl AppFx {
             .post(&format!("/api/branches/{branch}/finish"), json!({}))
             .await;
         assert_eq!(status, 200, "{v}");
-        let b = self.state.store.branch(&branch).await.unwrap();
+        let b = records(&self.state.store).branch(&branch).await.unwrap();
         assert_ne!(b.status, BranchStatus::InfraError, "{:?}", b.error);
         (
             branch.clone(),
-            self.state.store.events(&branch).await.unwrap(),
+            records(&self.state.store).events(&branch).await.unwrap(),
         )
     }
 
@@ -214,9 +215,7 @@ async fn seeded_run_start(fx: &AppFx, seed: u64) -> Value {
     let body = json!({"task_id": "t1", "team": team, "runner": "external", "seed": seed});
     let (status, v) = fx.post("/api/runs", body).await;
     assert_eq!(status, 200, "{v}");
-    let evs = fx
-        .state
-        .store
+    let evs = records(&fx.state.store)
         .events(v["branch_id"].as_str().unwrap())
         .await;
     evs.unwrap()[0].payload.clone()

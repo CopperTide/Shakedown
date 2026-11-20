@@ -156,8 +156,9 @@ impl Ending {
 async fn record_ending(state: &AppState, ctx: &BranchCtx, Ending { status, error }: Ending) {
     ctx.overhead.take();
     let branch_id = &ctx.branch_id;
+    let records = ctx.records(&state.store);
     for attempt in 1..=2 {
-        let set = state.store.set_status(branch_id, status, error.clone());
+        let set = records.set_status(branch_id, status, error.clone());
         match set.await {
             Ok(()) => return,
             Err(e) => {

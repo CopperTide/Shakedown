@@ -2,6 +2,7 @@
 //! one, and start a run with one (`POST /api/runs` with `connection`). Every route that can start
 //! a driver refuses requests a web page could make (`guard_launch`).
 
+use crate::auth::{Caller, Scope};
 use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
 use axum::{
@@ -119,8 +120,8 @@ fn validate(req: &NewConnectionReq) -> Result<(), ApiError> {
 }
 
 /// `GET /api/connections`: every connection, newest first, secret env values redacted.
-async fn list(State(state): State<Arc<AppState>>) -> ApiResult<Value> {
-    let all = state.store.connections().await?;
+async fn list(State(state): State<Arc<AppState>>, Caller(caller): Caller) -> ApiResult<Value> {
+    let all = state.store.at(&caller).connections().await?;
     let shown: Vec<Connection> = all.iter().map(Connection::redacted).collect();
     Ok(Json(serde_json::to_value(shown)?))
 }
@@ -128,6 +129,7 @@ async fn list(State(state): State<Arc<AppState>>) -> ApiResult<Value> {
 /// `POST /api/connections`: saves a Code connection; answers it, secrets redacted.
 async fn create(
     State(state): State<Arc<AppState>>,
+    Caller(caller): Caller,
     headers: HeaderMap,
     body: Bytes,
 ) -> ApiResult<Value> {
@@ -140,21 +142,29 @@ async fn create(
         workdir: req.workdir.as_deref(),
         env: &req.env,
     };
-    let made = state.store.create_connection(new).await?;
+    let made = state.store.at(&caller).create_connection(new).await?;
     Ok(Json(serde_json::to_value(made.redacted())?))
 }
 
 /// `DELETE /api/connections/{id}`: 404 when there is none. Runs that used it keep its id.
-async fn delete(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> ApiResult<Value> {
-    match state.store.delete_connection(&id).await? {
+async fn delete(
+    State(state): State<Arc<AppState>>,
+    Caller(caller): Caller,
+    Path(id): Path<String>,
+) -> ApiResult<Value> {
+    match state.store.at(&caller).delete_connection(&id).await? {
         true => Ok(Json(json!({"deleted": id}))),
         false => Err(ApiError::not_found(format!("no connection \"{id}\""))),
     }
 }
 
 /// The connection `id`, or 404.
-pub(super) async fn connection_or_404(state: &AppState, id: &str) -> Result<Connection, ApiError> {
-    let found = state.store.connection(id).await?;
+pub(super) async fn connection_or_404(
+    state: &AppState,
+    caller: &Scope,
+    id: &str,
+) -> Result<Connection, ApiError> {
+    let found = state.store.at(caller).connection(id).await?;
     found.ok_or_else(|| ApiError::not_found(format!("no connection \"{id}\"")))
 }
 
@@ -174,6 +184,7 @@ pub(super) struct CodeRun {
 /// runner other than `external` (or `chain`, the default), 404 for an unknown connection.
 pub(super) async fn create_run(
     state: Arc<AppState>,
+    caller: Arc<Scope>,
     permit: StartPermit,
     headers: &HeaderMap,
     (id, runner): (&str, Runner),
@@ -185,14 +196,17 @@ pub(super) async fn create_run(
             "a run with a Code connection is driven by its driver",
         ));
     }
-    let conn = connection_or_404(&state, id).await?;
-    Ok(Json(start_code_run(state, permit, conn, run).await?.0))
+    let conn = connection_or_404(&state, &caller, id).await?;
+    Ok(Json(
+        start_code_run(state, caller, permit, conn, run).await?.0,
+    ))
 }
 
 /// A run a connection's driver drives, just started: the run's ids, its agents' endpoints (none
 /// yet), and whether the driver started (`launched`) or not (`failed`, the run ended saying why).
 pub(super) async fn start_code_run(
     state: Arc<AppState>,
+    caller: Arc<Scope>,
     permit: StartPermit,
     conn: Connection,
     run: CodeRun,
@@ -202,6 +216,7 @@ pub(super) async fn start_code_run(
     detached(async move {
         let _permit = permit;
         let spec = LaunchSpec {
+            scope: caller,
             task_id: &run.task_id,
             team: run.team,
             scenario: &run.scenario,
@@ -249,39 +264,43 @@ async fn test_run(state: &AppState, conn: &Connection) -> Result<CodeRun, ApiErr
 /// registered an agent that called a tool, finished the run and exited cleanly.
 async fn test(
     State(state): State<Arc<AppState>>,
+    Caller(caller): Caller,
     Path(id): Path<String>,
     headers: HeaderMap,
 ) -> ApiResult<Value> {
     guard_launch(&state, &headers)?;
-    let conn = connection_or_404(&state, &id).await?;
+    let conn = connection_or_404(&state, &caller, &id).await?;
     let permit = StartPermit::take(&state)?;
     let run = test_run(&state, &conn).await?;
     let name = format!("Connection test · {}", conn.name);
-    let (started, launched) = start_code_run(state.clone(), permit, conn, run).await?;
+    let (started, launched) =
+        start_code_run(state.clone(), caller.clone(), permit, conn, run).await?;
     let text = |k: &str| started[k].as_str().unwrap_or_default().to_string();
     let (run_id, branch) = (text("run_id"), text("branch_id"));
-    state.store.name_run(&run_id, &name).await?;
-    detached(async move { Ok(test_outcome(&state, &branch, launched).await?) }).await
+    state.store.at(&caller).name_run(&run_id, &name).await?;
+    detached(async move { Ok(test_outcome(&state, &caller, &branch, launched).await?) }).await
 }
 
 /// The branch once it ended, or once [`TEST_WAIT`] passed (then it is stopped, and the second
 /// value says so).
 async fn ended_or_stopped(
     state: &AppState,
+    caller: &Scope,
     branch: &str,
 ) -> anyhow::Result<(Branch, Option<String>)> {
     let deadline = tokio::time::Instant::now() + TEST_WAIT;
-    let mut b = state.store.branch(branch).await?;
+    let records = state.store.at(caller);
+    let mut b = records.branch(branch).await?;
     while b.status == BranchStatus::Running && tokio::time::Instant::now() < deadline {
         tokio::time::sleep(Duration::from_millis(500)).await;
-        b = state.store.branch(branch).await?;
+        b = records.branch(branch).await?;
     }
     if b.status != BranchStatus::Running {
         return Ok((b, None));
     }
     state.live.stop(state, branch).await;
     let late = "the run was still going after 5 minutes, so it was stopped".to_string();
-    Ok((state.store.branch(branch).await?, Some(late)))
+    Ok((records.branch(branch).await?, Some(late)))
 }
 
 /// Waits a little for the driver's exit, which is recorded just after its run ends.
@@ -310,12 +329,13 @@ fn work_of(events: &[Event]) -> (Vec<String>, usize) {
 /// What a connection test's run came to (see `test`).
 async fn test_outcome(
     state: &Arc<AppState>,
+    caller: &Scope,
     branch: &str,
     launched: Option<Launched>,
 ) -> anyhow::Result<Json<Value>> {
-    let (b, late) = ended_or_stopped(state, branch).await?;
+    let (b, late) = ended_or_stopped(state, caller, branch).await?;
     let exit = exit_of(launched.as_ref()).await;
-    let (agents, tool_calls) = work_of(&state.store.events(branch).await?);
+    let (agents, tool_calls) = work_of(&state.store.at(caller).events(branch).await?);
     let scored = matches!(b.status, BranchStatus::Passed | BranchStatus::Failed);
     let by_driver = |e: &str| e.starts_with("the driver") || e.starts_with("driver raised");
     let driver_failed = b.error.as_deref().is_some_and(by_driver);

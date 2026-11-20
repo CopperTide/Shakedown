@@ -3,6 +3,7 @@
 //! part `box` whose one route sends `toy.test` to a small axum upstream the test runs; the run is
 //! one an external system drives (no model answers anything here).
 mod support;
+use support::records;
 
 use std::{collections::HashMap, time::Duration};
 
@@ -170,7 +171,10 @@ impl ProxyFx {
     }
 
     async fn events(&self) -> Vec<Event> {
-        self.fx.state.store.events(&self.branch).await.unwrap()
+        records(&self.fx.state.store)
+            .events(&self.branch)
+            .await
+            .unwrap()
     }
 
     async fn last_tool_call(&self) -> Event {
@@ -478,7 +482,8 @@ fn a_read_only_request_the_part_says_wrote_is_a_violation_that_fails_the_branch(
         );
         assert_eq!(e.payload["writes"], json!(["http/toy.test"]));
         assert_eq!(fx.on("finish").await.0, 200);
-        let b = fx.fx.state.store.branch(&fx.branch).await.unwrap();
+        let b = records(&fx.fx.state.store).branch(&fx.branch).await;
+        let b = b.unwrap();
         assert_eq!(
             (b.status, b.error.as_deref()),
             (BranchStatus::Failed, Some(why))

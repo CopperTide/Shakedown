@@ -7,6 +7,7 @@
 //! or a timeout ends the run, that header values stay out of the record), not an agent.
 
 mod support;
+use support::records;
 
 use std::{
     ops::Deref,
@@ -169,7 +170,7 @@ impl Fx {
         assert_eq!(st, 200, "{v}");
         let id = v["branch_id"].as_str().unwrap();
         let b = live::ended(&self.state, id).await;
-        let evs = self.state.store.events(id).await.unwrap();
+        let evs = records(&self.state.store).events(id).await.unwrap();
         let shown =
             app::send(reqwest::Client::new().get(format!("{}/api/branches/{id}", self.base)))
                 .await

@@ -1,6 +1,7 @@
 //! Experiments over HTTP: create one (`POST /api/experiments`), list them, read one, stop one.
 //! Suites made on their own show up as one-setup experiments (`legacy`).
 
+use crate::auth::{Caller, Scope};
 use std::sync::Arc;
 
 use axum::{
@@ -136,6 +137,7 @@ fn validate(state: &AppState, req: &mut NewExperimentReq) -> Result<Vec<String>,
 /// drivers (`guard_launch`).
 async fn check_connections(
     state: &AppState,
+    caller: &Scope,
     headers: &axum::http::HeaderMap,
     names: &[String],
     setups: &[SetupReq],
@@ -145,7 +147,7 @@ async fn check_connections(
     }
     for (name, s) in names.iter().zip(setups) {
         if let Some(id) = &s.connection {
-            super::connections::connection_or_404(state, id)
+            super::connections::connection_or_404(state, caller, id)
                 .await
                 .map_err(|ApiError(code, msg)| ApiError(code, format!("{name}: {msg}")))?;
         }
@@ -168,11 +170,12 @@ fn new_setups<'a>(names: &'a [String], setups: &'a [SetupReq]) -> Vec<NewSetup<'
 /// Answers its detail.
 async fn create(
     State(state): State<Arc<AppState>>,
+    Caller(caller): Caller,
     headers: axum::http::HeaderMap,
     JsonBody(mut req): JsonBody<NewExperimentReq>,
 ) -> ApiResult<Detail> {
     let names = validate(&state, &mut req)?;
-    check_connections(&state, &headers, &names, &req.setups).await?;
+    check_connections(&state, &caller, &headers, &names, &req.setups).await?;
     let max_cost_usd = super::max_cost(req.max_cost_usd)?;
     let (seed, world_minutes) = (
         base_seed(req.seed)?,
@@ -194,14 +197,19 @@ async fn create(
         seed,
         world_minutes,
     };
-    let (stored, suites) = state.store.create_experiment(new).await?;
-    experiment::spawn(&state, stored.id.clone(), suites);
-    Ok(Json(experiment::detail(&state.store, &stored).await?))
+    let (stored, suites) = state.store.at(&caller).create_experiment(new).await?;
+    experiment::spawn(&state, caller.clone(), stored.id.clone(), suites);
+    Ok(Json(
+        experiment::detail(state.store.at(&caller), &stored).await?,
+    ))
 }
 
 /// `GET /api/experiments`: every experiment and suite made on its own, newest first.
-async fn list(State(state): State<Arc<AppState>>) -> ApiResult<Vec<Listed>> {
-    Ok(Json(experiment::list(&state.store).await?))
+async fn list(
+    State(state): State<Arc<AppState>>,
+    Caller(caller): Caller,
+) -> ApiResult<Vec<Listed>> {
+    Ok(Json(experiment::list(state.store.at(&caller)).await?))
 }
 
 /// What an id names: an experiment, or a suite made on its own (a legacy one-setup experiment).
@@ -210,11 +218,12 @@ enum Found {
     Legacy(Box<crate::suite::Suite>),
 }
 
-async fn find(state: &AppState, id: &str) -> Result<Found, ApiError> {
-    if let Some(e) = state.store.experiment(id).await? {
+async fn find(state: &AppState, caller: &Scope, id: &str) -> Result<Found, ApiError> {
+    let records = state.store.at(caller);
+    if let Some(e) = records.experiment(id).await? {
         return Ok(Found::Experiment(e));
     }
-    match state.store.suite(id).await? {
+    match records.suite(id).await? {
         Some(s) if s.experiment_id.is_none() => Ok(Found::Legacy(Box::new(s))),
         _ => Err(ApiError::not_found(format!(
             "there is no experiment \"{id}\""
@@ -222,32 +231,41 @@ async fn find(state: &AppState, id: &str) -> Result<Found, ApiError> {
     }
 }
 
-async fn detail_of(state: &AppState, found: Found) -> ApiResult<Detail> {
+async fn detail_of(state: &AppState, caller: &Scope, found: Found) -> ApiResult<Detail> {
+    let records = state.store.at(caller);
     let d = match found {
-        Found::Experiment(e) => experiment::detail(&state.store, &e).await?,
-        Found::Legacy(s) => experiment::legacy_detail(&state.store, *s).await?,
+        Found::Experiment(e) => experiment::detail(records, &e).await?,
+        Found::Legacy(s) => experiment::legacy_detail(records, *s).await?,
     };
     Ok(Json(d))
 }
 
 /// `GET /api/experiments/{id}`: the experiment with its setups' suite reports.
-async fn get_one(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> ApiResult<Detail> {
-    let found = find(&state, &id).await?;
-    detail_of(&state, found).await
+async fn get_one(
+    State(state): State<Arc<AppState>>,
+    Caller(caller): Caller,
+    Path(id): Path<String>,
+) -> ApiResult<Detail> {
+    let found = find(&state, &caller, &id).await?;
+    detail_of(&state, &caller, found).await
 }
 
 /// `POST /api/experiments/{id}/stop`: no further run starts and the running one is stopped.
 /// Answers the experiment's detail; 409 for a suite made on its own.
-async fn stop(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> ApiResult<Detail> {
-    let Found::Experiment(_) = find(&state, &id).await? else {
+async fn stop(
+    State(state): State<Arc<AppState>>,
+    Caller(caller): Caller,
+    Path(id): Path<String>,
+) -> ApiResult<Detail> {
+    let Found::Experiment(_) = find(&state, &caller, &id).await? else {
         return Err(ApiError::conflict(
             "a suite made on its own is not an experiment shaked can stop",
         ));
     };
     detached(async move {
-        experiment::stop(&state, &id).await?;
-        let found = find(&state, &id).await?;
-        detail_of(&state, found).await
+        experiment::stop(&state, &caller, &id).await?;
+        let found = find(&state, &caller, &id).await?;
+        detail_of(&state, &caller, found).await
     })
     .await
 }

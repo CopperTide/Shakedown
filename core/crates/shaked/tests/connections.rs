@@ -3,6 +3,7 @@
 //! starts, watches and ends a driver. The live test runs a real one.
 
 mod support;
+use support::records;
 
 use std::{future::Future, path::PathBuf, time::Duration};
 
@@ -55,10 +56,10 @@ impl AppFx {
         let store = &self.state.store;
         let deadline = std::time::Instant::now() + Duration::from_secs(secs);
         loop {
-            let suites = store.experiment_suites(&id).await.unwrap();
-            let slots = store.slots(&suites[0].id).await.unwrap();
+            let suites = records(store).experiment_suites(&id).await.unwrap();
+            let slots = records(store).slots(&suites[0].id).await.unwrap();
             let branches: Vec<String> = slots.iter().filter_map(|s| s.branch_id.clone()).collect();
-            let ended = store.experiment_ended(&id).await.unwrap();
+            let ended = records(store).experiment_ended(&id).await.unwrap();
             if ended && branches.len() == slots.len() || std::time::Instant::now() > deadline {
                 return branches;
             }
@@ -68,7 +69,7 @@ impl AppFx {
 
     async fn ended(&self, branch: &str) -> Branch {
         for _ in 0..300 {
-            let b = self.state.store.branch(branch).await.unwrap();
+            let b = records(&self.state.store).branch(branch).await.unwrap();
             if b.status != BranchStatus::Running {
                 return b;
             }
@@ -154,7 +155,7 @@ fn a_driver_that_exits_without_finishing_fails_the_run_scored() {
             error.contains("code 3") && error.contains("the team's code broke"),
             "{error}"
         );
-        let evs = fx.state.store.events(&branch).await.unwrap();
+        let evs = records(&fx.state.store).events(&branch).await.unwrap();
         assert!(evs.iter().any(|e| e.kind == EventKind::Check));
         let exit = evs
             .iter()
@@ -218,7 +219,7 @@ fn an_experiment_setup_launches_its_driver_for_each_run() {
             let ended = fx.ended(b).await;
             assert_eq!(ended.status, BranchStatus::Failed);
             assert!(ended.error.unwrap_or_default().contains("code 3"));
-            let evs = fx.state.store.events(b).await.unwrap();
+            let evs = records(&fx.state.store).events(b).await.unwrap();
             assert_eq!(evs[0].payload["connection"], json!(id));
         }
         // A setup's connection must exist, and a web page can't start one.
@@ -238,7 +239,7 @@ fn an_experiment_setup_launches_its_driver_for_each_run() {
 /// The `driver` exit event of `branch`, waiting for it (it is recorded just after the run ends).
 async fn driver_exit(fx: &AppFx, branch: &str) -> Event {
     for _ in 0..100 {
-        let evs = fx.state.store.events(branch).await.unwrap();
+        let evs = records(&fx.state.store).events(branch).await.unwrap();
         let exit = evs.into_iter().rev().find(|e| {
             e.kind == EventKind::WorldEvent
                 && e.payload["part"] == "driver"
@@ -288,7 +289,7 @@ fn a_fork_of_a_code_run_whose_connection_is_gone_fails() {
         let parent = fx.start(&id).await;
         fx.ended(&parent).await;
         assert_eq!(fx.delete(&format!("/api/connections/{id}")).await.0, 200);
-        let evs = fx.state.store.events(&parent).await.unwrap();
+        let evs = records(&fx.state.store).events(&parent).await.unwrap();
         let at = evs.iter().find(|e| e.kind == EventKind::AgentStart);
         let body = json!({"at_seq": at.unwrap().seq});
         let (status, forked) = fx.post(&format!("/api/branches/{parent}/fork"), body).await;
@@ -318,7 +319,7 @@ fn a_fork_of_a_code_run_relaunches_the_driver() {
             .as_str()
             .unwrap()
             .contains("fork of: \n"));
-        let evs = fx.state.store.events(&parent).await.unwrap();
+        let evs = records(&fx.state.store).events(&parent).await.unwrap();
         let at = evs
             .iter()
             .find(|e| e.kind == EventKind::AgentStart)
@@ -334,7 +335,7 @@ fn a_fork_of_a_code_run_relaunches_the_driver() {
             .unwrap()
             .to_string();
         assert!(said.contains(&format!("fork of: {parent}")), "{said}");
-        let child_evs = fx.state.store.events(child).await.unwrap();
+        let child_evs = records(&fx.state.store).events(child).await.unwrap();
         let scored = |e: &Event| e.kind == EventKind::Check && e.branch_id == child;
         assert!(child_evs.iter().any(scored));
     })
@@ -364,7 +365,7 @@ fn testing_a_connection_says_what_its_agents_did() {
             t["stderr_tail"].as_str().unwrap().contains("fork of:"),
             "{t}"
         );
-        let runs = fx.state.store.runs().await.unwrap();
+        let runs = records(&fx.state.store).runs().await.unwrap();
         assert!(runs
             .iter()
             .any(|r| r.name.as_deref() == Some("Connection test · fork_aware.py")));
@@ -381,7 +382,7 @@ fn a_driver_that_never_finishes_is_cut_off_and_its_run_scored() {
         assert_eq!(b.status, BranchStatus::Failed);
         let error = b.error.unwrap_or_default();
         assert!(error.contains("still running after"), "{error}");
-        let evs = fx.state.store.events(&branch).await.unwrap();
+        let evs = records(&fx.state.store).events(&branch).await.unwrap();
         assert!(evs.iter().any(|e| e.kind == EventKind::Check));
         driver_exit(&fx, &branch).await;
     })
@@ -396,6 +397,7 @@ fn a_code_setups_runs_cannot_be_claimed() {
         let (status, made) = fx.post("/api/experiments", exp).await;
         assert_eq!(status, 200, "{made}");
         let suites = (fx.state.store)
+            .at(crate::support::local())
             .experiment_suites(made["id"].as_str().unwrap())
             .await
             .unwrap();
@@ -498,7 +500,7 @@ fn live_an_experiment_setup_runs_a_code_connection() {
         assert_eq!(branches.len(), 2, "both runs started");
         for b in &branches {
             let ended = fx.ended(b).await;
-            let evs = fx.state.store.events(b).await.unwrap();
+            let evs = records(&fx.state.store).events(b).await.unwrap();
             assert_eq!(evs[0].payload["connection"], json!(id), "{b}");
             let worked = evs.iter().any(|e| e.kind == EventKind::ToolCall);
             assert!(worked, "{b}: {:?}", ended.error);
@@ -523,7 +525,7 @@ fn live_a_fork_of_a_code_run_relaunches_the_driver() {
         let fx = live_setup().await;
         let parent = fx.start(&fx.example_connection().await).await;
         fx.ended(&parent).await;
-        let evs = fx.state.store.events(&parent).await.unwrap();
+        let evs = records(&fx.state.store).events(&parent).await.unwrap();
         let calls: Vec<i64> = (evs.iter().filter(|e| e.kind == EventKind::ToolCall))
             .map(|e| e.seq)
             .collect();
@@ -534,7 +536,7 @@ fn live_a_fork_of_a_code_run_relaunches_the_driver() {
         let (child, start) = fx.fork_relaunched(&parent, at).await;
         fx.ended(&child).await;
         driver_exit(&fx, &child).await;
-        let mine = fx.state.store.events(&child).await.unwrap();
+        let mine = records(&fx.state.store).events(&child).await.unwrap();
         let has = |k: EventKind, from: i64| mine.iter().any(|e| e.kind == k && e.seq >= from);
         assert!(
             has(EventKind::ToolCall, start),
@@ -571,7 +573,7 @@ fn a_driver_that_exits_holding_a_finish_leaves_its_run_to_the_window() {
         let b = fx.ended(&branch).await;
         let error = b.error.unwrap_or_default();
         assert!(!error.contains("driver"), "{error}");
-        let evs = fx.state.store.events(&branch).await.unwrap();
+        let evs = records(&fx.state.store).events(&branch).await.unwrap();
         assert!(has_time_up(&evs), "the window ended the run");
         assert!(evs.iter().any(|e| e.kind == EventKind::Check));
         driver_exit(&fx, &branch).await;
@@ -587,7 +589,7 @@ fn a_windowed_run_is_not_cut_off_before_its_window_ends() {
         let b = fx.ended(&branch).await;
         let error = b.error.unwrap_or_default();
         assert!(!error.contains("still running after"), "{error}");
-        let evs = fx.state.store.events(&branch).await.unwrap();
+        let evs = records(&fx.state.store).events(&branch).await.unwrap();
         assert!(has_time_up(&evs), "the window ended the run");
     })
 }

@@ -4,6 +4,7 @@
 //! refused. `live_`: the agent is Claude Code (signed in; see `support/live.rs`), run by this
 //! test the way a design in its own code runs it.
 mod support;
+use support::records;
 
 use serde_json::{json, Value};
 use shaked::model::*;
@@ -29,7 +30,7 @@ impl AppFx {
     }
 
     async fn events(&self, branch: &str) -> Vec<Event> {
-        self.state.store.events(branch).await.unwrap()
+        records(&self.state.store).events(branch).await.unwrap()
     }
 
     /// The branch's metrics, from `GET /api/branches/{id}`.
@@ -235,7 +236,7 @@ async fn assert_reviewer_reads_only(fx: &AppFx, branch: &str) {
 async fn assert_finished(fx: &AppFx, live: &Live, branch: &str) {
     let (status, v) = fx.finish(branch).await;
     assert_eq!(status, 200, "{v}");
-    let b = fx.state.store.branch(branch).await.unwrap();
+    let b = records(&fx.state.store).branch(branch).await.unwrap();
     let scored = matches!(b.status, BranchStatus::Passed | BranchStatus::Failed);
     assert!(scored, "{:?}", b.status);
     assert_eq!(v["status"], json!(b.status));
@@ -382,7 +383,7 @@ async fn assert_team_swap(fx: &AppFx, branch: &str, at: i64) {
     assert_eq!((agents.len(), &agents[0]["agent"]), (1, &json!("solo2")));
     assert_eq!(agents[0]["history"], json!([]));
     let swapped = f["branch_id"].as_str().unwrap();
-    let stored = fx.state.store.branch(swapped).await.unwrap();
+    let stored = records(&fx.state.store).branch(swapped).await.unwrap();
     assert_eq!(stored.team.id, "single");
     assert!(stored.fork_note.unwrap().contains("Single agent"));
     assert_eq!(fx.finish(swapped).await.0, 200);

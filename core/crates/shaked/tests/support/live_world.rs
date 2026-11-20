@@ -137,9 +137,15 @@ pub async fn walk_in(
         .start(state, task, team);
     let (_run, id) = started.await.unwrap();
     for _ in 0..polls {
-        let b = state.store.branch(&id).await.unwrap();
+        let b = crate::support::records(&state.store)
+            .branch(&id)
+            .await
+            .unwrap();
         if b.status != BranchStatus::Running {
-            let evs = state.store.events(&id).await.unwrap();
+            let evs = crate::support::records(&state.store)
+                .events(&id)
+                .await
+                .unwrap();
             let check = evs.iter().find(|e| e.kind == EventKind::Check);
             let payload = check
                 .unwrap_or_else(|| panic!("no check: {b:?}"))

@@ -1,6 +1,7 @@
 //! Starting a fork: the new branch, its world restored, and its agents (or its driver) running
 //! again.
 
+use crate::{auth::Scope, store::Scoped};
 use std::{collections::HashMap, sync::Arc};
 
 use serde::Serialize;
@@ -38,7 +39,8 @@ pub struct ForkResponse {
     pub driver: Option<&'static str>,
 }
 
-/// Forks `branch_id` at `at_seq` with `changes`, restoring exactly, and starts the new branch.
+/// Forks `branch_id` at `at_seq` with `changes`, restoring exactly, and starts the new branch,
+/// for the local owner.
 pub async fn fork(
     state: &Arc<AppState>,
     branch_id: &str,
@@ -52,28 +54,32 @@ pub async fn fork(
         restore,
         team: None,
     };
-    fork_with(state, branch_id, req).await
+    let local = Arc::new(crate::auth::local_owner());
+    fork_with(state, &local, branch_id, req).await
 }
 
 /// Forks `branch_id` as `req` asks and starts the new branch running. A refusal comes before
 /// anything is recorded; a replay that fails ends the new branch `infra_error`.
 pub async fn fork_with(
     state: &Arc<AppState>,
+    scope: &Arc<Scope>,
     branch_id: &str,
     mut req: ForkRequest,
 ) -> Result<ForkResponse, ForkError> {
-    let parent = finished_branch(state, branch_id).await?;
+    let records = state.store.at(scope);
+    let parent = finished_branch(records, branch_id).await?;
     settle_changes(&parent.team, &mut req.changes, &state.config.providers);
-    let events = state.store.events(branch_id).await?;
-    let mut rerun = prepare(state, &parent, &events, &req).await?;
-    let task_id = task_of(state, &events, &parent).await?;
+    let events = records.events(branch_id).await?;
+    let mut rerun = prepare(state, records, &parent, &events, &req).await?;
+    let task_id = task_of(records, &events, &parent).await?;
     let team = new_team(&parent.team, &events, &req)?;
-    let new_id = create_child(state, &parent, &rerun, &team, &req).await?;
+    let new_id = create_child(records, &parent, &rerun, &team, &req).await?;
     let (world, restore_ms) =
-        start_child_world(state, &events, &parent.id, &new_id, &mut rerun).await?;
+        start_child_world(state, records, &events, &parent.id, &new_id, &mut rerun).await?;
     let ctx = BranchCtx::new(new_id, Arc::new(world), team, task_id.clone())
         .with_rules(recorded::rules(&events))
-        .with_clock(BranchClock::from_env(rerun.clock_ms));
+        .with_clock(BranchClock::from_env(rerun.clock_ms))
+        .with_scope(scope.clone());
     ctx.overhead.add(Cat::Restore, restore_ms);
     if ctx.rules.runner == Runner::External {
         let conn = ctx.rules.connection.clone();
@@ -81,7 +87,7 @@ pub async fn fork_with(
         crate::window::watch(state, &res.branch_id);
         if let Some(conn) = conn {
             let ids = (parent.run_id.as_str(), parent.id.as_str(), task_id.as_str());
-            res.driver = Some(relaunch(state, &conn, ids, &res.branch_id).await);
+            res.driver = Some(relaunch(state, scope, &conn, ids, &res.branch_id).await);
         }
         return Ok(res);
     }
@@ -92,6 +98,7 @@ pub async fn fork_with(
 /// of `(run, parent, task)`: `relaunched`, or `failed` (the branch ended `failed`, saying why).
 async fn relaunch(
     state: &Arc<AppState>,
+    scope: &Scope,
     conn_id: &str,
     (run_id, parent, task_id): (&str, &str, &str),
     branch_id: &str,
@@ -102,7 +109,7 @@ async fn relaunch(
         task_id,
         fork_of: Some(parent),
     };
-    match crate::launch::launch_driver(state, conn_id, ids).await {
+    match crate::launch::launch_driver(state, scope, conn_id, ids).await {
         Some(_) => "relaunched",
         None => "failed",
     }
@@ -157,23 +164,24 @@ async fn live_child(
 /// rerun panel shows before forking).
 pub async fn restore_preview(
     state: &AppState,
+    scope: &Scope,
     branch_id: &str,
     at_seq: i64,
     restore: parts::proto::Mode,
 ) -> Result<Vec<PartPlan>, ForkError> {
-    let branch = state
-        .store
+    let records = state.store.at(scope);
+    let branch = records
         .find_branch(branch_id)
         .await?
         .ok_or_else(|| ForkError::UnknownBranch(branch_id.to_string()))?;
-    let events = state.store.events(branch_id).await?;
+    let events = records.events(branch_id).await?;
     let req = ForkRequest {
         at_seq,
         changes: HashMap::new(),
         restore,
         team: None,
     };
-    let rerun = prepare(state, &branch, &events, &req).await?;
+    let rerun = prepare(state, records, &branch, &events, &req).await?;
     Ok(part_plans(&rerun, &events))
 }
 
@@ -209,8 +217,8 @@ fn spawn_child(state: &Arc<AppState>, ctx: BranchCtx, plan: ForkPlan) -> ForkRes
 }
 
 /// The branch to fork: it must exist and have finished.
-async fn finished_branch(state: &AppState, branch_id: &str) -> Result<Branch, ForkError> {
-    match state.store.find_branch(branch_id).await? {
+async fn finished_branch(records: Scoped<'_>, branch_id: &str) -> Result<Branch, ForkError> {
+    match records.find_branch(branch_id).await? {
         None => Err(ForkError::UnknownBranch(branch_id.to_string())),
         Some(b) if b.status == BranchStatus::Running => Err(ForkError::BranchRunning),
         Some(b) => Ok(b),
@@ -220,7 +228,7 @@ async fn finished_branch(state: &AppState, branch_id: &str) -> Result<Branch, Fo
 /// Records the new branch: the parent's run, the fork point, the effective team, the changes,
 /// and how its world is restored.
 async fn create_child(
-    state: &AppState,
+    store: Scoped<'_>,
     parent: &Branch,
     rerun: &Rerun,
     team: &Team,
@@ -231,7 +239,6 @@ async fn create_child(
     let from = Some((parent.id.as_str(), plan.start_seq));
     let swapped = (req.team.as_ref()).map(|t| format!("the team changed to {}", t.name));
     let note = plan.reason.clone().or(swapped);
-    let store = &state.store;
     let id = store
         .create_branch(&parent.run_id, from, team, &changes_json, note)
         .await?;
@@ -242,11 +249,11 @@ async fn create_child(
 }
 
 /// The task of the run: from `RunStart`, else from the run row.
-async fn task_of(state: &AppState, events: &[Event], parent: &Branch) -> anyhow::Result<String> {
+async fn task_of(records: Scoped<'_>, events: &[Event], parent: &Branch) -> anyhow::Result<String> {
     if let Some(t) = RunStartPayload::of(events).and_then(|s| s.task_id) {
         return Ok(t);
     }
-    let run = state.store.run(&parent.run_id).await?;
+    let run = records.run(&parent.run_id).await?;
     run.map(|r| r.task_id)
         .ok_or_else(|| anyhow::anyhow!("no run {} for branch {}", parent.run_id, parent.id))
 }
@@ -256,6 +263,7 @@ async fn task_of(state: &AppState, events: &[Event], parent: &Branch) -> anyhow:
 /// A failure ends the new branch `infra_error` with its message.
 async fn start_child_world(
     state: &AppState,
+    records: Scoped<'_>,
     events: &[Event],
     parent: &str,
     new_id: &str,
@@ -263,7 +271,7 @@ async fn start_child_world(
 ) -> Result<(crate::world::World, f64), ForkError> {
     let started = async {
         let start = rerun.plan.start_seq;
-        state.store.copy_prefix(parent, new_id, start).await?;
+        records.copy_prefix(parent, new_id, start).await?;
         let since = std::time::Instant::now();
         let world = rerun::start_world(state, events, new_id, rerun).await?;
         Ok((world, overhead::ms_since(since)))
@@ -274,7 +282,7 @@ async fn start_child_world(
             ForkError::Internal(e) => format!("{e:#}"),
             e => e.to_string(),
         };
-        runner::setup_failed(state, new_id, error).await;
+        runner::setup_failed(records, new_id, error).await;
     }
     started
 }

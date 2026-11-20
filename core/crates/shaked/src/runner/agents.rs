@@ -180,7 +180,7 @@ async fn notes_for(
     ctx: &BranchCtx,
     agent: &str,
 ) -> Result<Vec<(String, String)>> {
-    let events = state.store.events(&ctx.branch_id).await?;
+    let events = ctx.records(&state.store).events(&ctx.branch_id).await?;
     let name_of = |id: &str| {
         let spec = ctx.roster.team.agents.iter().find(|a| a.id == id);
         spec.map_or_else(|| id.to_string(), |a| a.name.clone())

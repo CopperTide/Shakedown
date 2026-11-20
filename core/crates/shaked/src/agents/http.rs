@@ -228,7 +228,11 @@ pub async fn hello(http: &reqwest::Client, spec: &AgentSpec) -> Result<Option<St
 impl HttpDriver {
     async fn run_body(&self, run: &AgentRun, token: &str) -> anyhow::Result<Value> {
         let branch = &run.branch;
-        let run_id = self.store.branch(&branch.branch_id).await?.run_id;
+        let run_id = branch
+            .records(&self.store)
+            .branch(&branch.branch_id)
+            .await?
+            .run_id;
         let mcp = crate::external::endpoints(
             &self.agent_base,
             &branch.branch_id,

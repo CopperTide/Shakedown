@@ -24,6 +24,7 @@ use shaked::{
 use support::{pg, run};
 
 mod support;
+use support::records;
 
 #[test]
 fn reviews_are_stored_once_kept_and_replaced_only_when_asked() {
@@ -33,8 +34,8 @@ fn reviews_are_stored_once_kept_and_replaced_only_when_asked() {
         let name = pg::fresh_db("review", &clean).await;
         let store = Store::open_named(&admin, &name).await.unwrap();
         let key = review::branch_key("b1");
-        assert!(store.review(&key).await.unwrap().is_none());
-        let row = store
+        assert!(records(&store).review(&key).await.unwrap().is_none());
+        let row = records(&store)
             .start_review(&key, "run", "claude_code:haiku")
             .await
             .unwrap()
@@ -44,7 +45,7 @@ fn reviews_are_stored_once_kept_and_replaced_only_when_asked() {
             ("running", "claude_code:haiku")
         );
         // One review of a key at a time.
-        assert!(store
+        assert!(records(&store)
             .start_review(&key, "run", "claude_code:haiku")
             .await
             .unwrap()
@@ -67,8 +68,8 @@ async fn finish_and_read(store: &Store, key: &str) {
         seconds: 12.5,
         digest_bytes: 9000,
     };
-    store.finish_review(key, done).await.unwrap();
-    let got = store.review(key).await.unwrap().unwrap();
+    records(store).finish_review(key, done).await.unwrap();
+    let got = records(store).review(key).await.unwrap().unwrap();
     assert_eq!(got.status, "done");
     assert_eq!(got.review, Some(answer));
     assert_eq!(got.issues, json!(issues));
@@ -81,7 +82,7 @@ async fn finish_and_read(store: &Store, key: &str) {
 
 async fn replace_and_fail(store: &Store, key: &str) {
     // Asked again: replaced, the old answer gone.
-    let again = store
+    let again = records(store)
         .start_review(key, "run", "claude_code:sonnet")
         .await
         .unwrap()
@@ -90,25 +91,25 @@ async fn replace_and_fail(store: &Store, key: &str) {
         (again.status.as_str(), again.review.clone()),
         ("running", None)
     );
-    store
+    records(store)
         .fail_review(key, "the reviewer did not answer")
         .await
         .unwrap();
-    let failed = store.review(key).await.unwrap().unwrap();
+    let failed = records(store).review(key).await.unwrap().unwrap();
     assert_eq!(failed.error.as_deref(), Some("the reviewer did not answer"));
 }
 
 async fn restart_marks_running_failed(store: Store, admin: &shaked::pg::Admin, name: &str) {
     // A review running when shaked stops is marked failed when it starts again.
     let other = review::compare_key("a", "b");
-    store
+    records(&store)
         .start_review(&other, "compare", "m")
         .await
         .unwrap()
         .unwrap();
     drop(store);
     let reopened = Store::open_named(admin, name).await.unwrap();
-    let r = reopened.review(&other).await.unwrap().unwrap();
+    let r = records(&reopened).review(&other).await.unwrap().unwrap();
     assert_eq!(r.status, "error");
     assert!(r.error.unwrap().contains("shaked stopped"));
     drop(reopened);

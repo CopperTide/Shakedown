@@ -5,6 +5,7 @@
 //! `support/live.rs`); where a fork starts for each kind of agent is planned on recorded events
 //! in `src/fork.rs`'s own tests.
 mod support;
+use support::records;
 
 use std::{collections::HashMap, sync::Arc};
 
@@ -145,7 +146,12 @@ async fn assert_bad_forks_make_nothing(fx: &AppFx, pid: &str, at: i64) {
         matches!(e, ForkError::UnknownAgent(ref a) if a == "ghost"),
         "{e:?}"
     );
-    assert_eq!(fx.state.store.runs().await.unwrap()[0].branches.len(), 1);
+    assert_eq!(
+        records(&fx.state.store).runs().await.unwrap()[0]
+            .branches
+            .len(),
+        1
+    );
 }
 
 async fn a_fork_restores_the_world_at_its_fork_point(live: Live) {
@@ -254,20 +260,21 @@ async fn an_open_agent_resumes_a_fork_mid_conversation(live: Live) {
 /// A branch of task 27 that has started and not ended.
 async fn running_branch(fx: &AppFx) -> String {
     let t = team();
-    let run_id = fx.state.store.create_run("27", &t).await.unwrap();
-    let branch = fx
-        .state
-        .store
+    let run_id = records(&fx.state.store).create_run("27", &t).await.unwrap();
+    let branch = records(&fx.state.store)
         .create_branch(&run_id, None, &t, &json!([]), None)
         .await
         .unwrap();
-    fx.state
-        .store
+    records(&fx.state.store)
         .append(&branch, None, EventKind::RunStart, json!({"task_id": "27"}))
         .await
         .unwrap();
     assert_eq!(
-        fx.state.store.branch(&branch).await.unwrap().status,
+        records(&fx.state.store)
+            .branch(&branch)
+            .await
+            .unwrap()
+            .status,
         BranchStatus::Running
     );
     branch
@@ -290,7 +297,7 @@ fn fork_while_running_is_409() {
             .unwrap_err();
         assert!(matches!(e, ForkError::BranchRunning), "{e:?}");
         // No branch was created.
-        let runs = fx.state.store.runs().await.unwrap();
+        let runs = records(&fx.state.store).runs().await.unwrap();
         assert_eq!(runs[0].branches.len(), 1);
         drop(fx.state);
     })
@@ -308,9 +315,7 @@ fn fork_of_unknown_branch_is_unknown_branch() {
             "{e:?}"
         );
         assert!(e.to_string().contains("nosuchbranch"));
-        assert!(fx
-            .state
-            .store
+        assert!(records(&fx.state.store)
             .find_branch("nosuchbranch")
             .await
             .unwrap()
@@ -373,7 +378,7 @@ impl LegacyFx {
         let (state, base) = app::app_for(store, hub, Some("retail"), |_| {}).await;
         let (run_a, a) = legacy_run(&state.store, &dbs, solo, &snap, &snap).await;
         let (_, b) = legacy_run(&state.store, &dbs, solo, &snap, &base_copy).await;
-        let evs = state.store.events(&a).await.unwrap();
+        let evs = records(&state.store).events(&a).await.unwrap();
         let write = evs
             .iter()
             .find(|e| e.kind == EventKind::ToolCall)
@@ -443,7 +448,7 @@ impl LegacyFx {
         let instance = shaked::world::instance_id(&child, "retail");
         self.dbs.track(&format!("pi_{instance}"));
         let ended = live::ended(&self.state, &child).await;
-        let cevs = self.state.store.events(&child).await.unwrap();
+        let cevs = records(&self.state.store).events(&child).await.unwrap();
         match first_read_before_writes(&cevs, at) {
             Some(read) => assert_eq!(
                 read["status"], "exchange requested",

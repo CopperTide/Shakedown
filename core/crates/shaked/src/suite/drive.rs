@@ -3,6 +3,7 @@
 //! system claims each next slot and shaked starts an external run for it, which the system then
 //! drives through the external-run API.
 
+use crate::auth::Scope;
 use std::{sync::Arc, time::Duration};
 
 use anyhow::Result;
@@ -31,15 +32,20 @@ pub(crate) fn shutting_down(state: &AppState) -> bool {
 
 /// Runs a built-in suite's runs one after another on a task of its own, then records that it
 /// ended (with why, if it stopped early). On shutdown it stops; the next start records why.
-pub fn spawn_builtin(state: &Arc<AppState>, suite: Suite) {
+pub fn spawn_builtin(state: &Arc<AppState>, scope: Arc<Scope>, suite: Suite) {
     let state = state.clone();
     tokio::spawn(async move {
-        let stopped = drive_builtin(&state, &suite).await.err();
+        let stopped = drive_builtin(&state, &scope, &suite).await.err();
         if shutting_down(&state) {
             return;
         }
         let why = stopped.map(|e| format!("{e:#}"));
-        if let Err(e) = state.store.end_suite(&suite.id, why.as_deref()).await {
+        if let Err(e) = state
+            .store
+            .at(&scope)
+            .end_suite(&suite.id, why.as_deref())
+            .await
+        {
             eprintln!("suite {}: could not record its end: {e:#}", suite.id);
         }
     });
@@ -47,16 +53,16 @@ pub fn spawn_builtin(state: &Arc<AppState>, suite: Suite) {
 
 /// Claims and runs each slot in turn until all are done or shaked shuts down; an error stops
 /// the suite.
-async fn drive_builtin(state: &Arc<AppState>, suite: &Suite) -> Result<()> {
+async fn drive_builtin(state: &Arc<AppState>, scope: &Arc<Scope>, suite: &Suite) -> Result<()> {
     loop {
         if shutting_down(state) {
             return Ok(());
         }
-        let Some(slot) = state.store.claim_slot(&suite.id).await? else {
+        let Some(slot) = state.store.at(scope).claim_slot(&suite.id).await? else {
             return Ok(());
         };
-        if let Some(branch) = start_builtin(state, suite, &slot).await? {
-            wait_ended(state, &branch).await?;
+        if let Some(branch) = start_builtin(state, scope, suite, &slot).await? {
+            wait_ended(state, scope, &branch).await?;
         }
     }
 }
@@ -65,14 +71,15 @@ async fn drive_builtin(state: &Arc<AppState>, suite: &Suite) -> Result<()> {
 /// (recorded on the slot). Saves over the limit stop the suite.
 pub(crate) async fn start_builtin(
     state: &Arc<AppState>,
+    scope: &Arc<Scope>,
     suite: &Suite,
     slot: &Slot,
 ) -> Result<Option<String>> {
-    let _permit = slots::permit(state, suite, slot).await?;
+    let _permit = slots::permit(state, scope, suite, slot).await?;
     let rules = Rules::new(suite.runner).with_max_cost(suite.max_cost_usd);
     let scenario = suite.slot_scenario(slot);
-    let start = launch(state, slot_spec(suite, slot, &scenario, rules));
-    match slots::run_slot(state, suite, slot, start).await? {
+    let start = launch(state, slot_spec(scope, suite, slot, &scenario, rules));
+    match slots::run_slot(state, scope, suite, slot, start).await? {
         SlotOutcome::Filled(l) => Ok(Some(l.branch_id)),
         SlotOutcome::Failed(_) => Ok(None),
     }
@@ -81,12 +88,14 @@ pub(crate) async fn start_builtin(
 /// The run of `suite`'s `slot` in `scenario` (`Suite::slot_scenario`) under `rules` (with the
 /// suite's world time window): its task, the suite's team.
 pub(crate) fn slot_spec<'a>(
+    scope: &Arc<Scope>,
     suite: &'a Suite,
     slot: &'a Slot,
     scenario: &'a Scenario,
     rules: Rules,
 ) -> LaunchSpec<'a> {
     LaunchSpec {
+        scope: scope.clone(),
         task_id: &slot.task_id,
         team: suite.team.clone(),
         scenario,
@@ -97,9 +106,9 @@ pub(crate) fn slot_spec<'a>(
 }
 
 /// Waits until the branch is no longer running (or shaked shuts down).
-pub(crate) async fn wait_ended(state: &AppState, branch: &str) -> Result<()> {
+pub(crate) async fn wait_ended(state: &AppState, scope: &Scope, branch: &str) -> Result<()> {
     while !shutting_down(state) {
-        match state.store.find_branch(branch).await? {
+        match state.store.at(scope).find_branch(branch).await? {
             Some(b) if b.status == BranchStatus::Running => tokio::time::sleep(POLL).await,
             _ => return Ok(()),
         }
@@ -122,14 +131,15 @@ pub struct ExternalClaim {
 /// run that could not start is recorded on its slot, and the error returned.
 pub async fn claim_external(
     state: &Arc<AppState>,
+    scope: &Arc<Scope>,
     suite: &Suite,
 ) -> Result<Option<ExternalClaim>, RunError> {
-    let Some(slot) = state.store.claim_slot(&suite.id).await? else {
+    let Some(slot) = state.store.at(scope).claim_slot(&suite.id).await? else {
         return Ok(None);
     };
     let (rules, scenario) = (Rules::new(Runner::External), suite.slot_scenario(&slot));
-    let start = launch(state, slot_spec(suite, &slot, &scenario, rules));
-    match slots::run_slot(state, suite, &slot, start).await? {
+    let start = launch(state, slot_spec(scope, suite, &slot, &scenario, rules));
+    match slots::run_slot(state, scope, suite, &slot, start).await? {
         SlotOutcome::Filled(l) => Ok(Some(ExternalClaim {
             task_id: slot.task_id,
             variant: slot.variant,

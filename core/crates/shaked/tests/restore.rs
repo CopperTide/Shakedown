@@ -5,6 +5,7 @@
 //! real models (see `support/live.rs`) that mostly only read, so what is restored doesn't depend
 //! on what they chose to do. Every test here is `live_`.
 mod support;
+use support::records;
 
 use std::{ops::Deref, sync::Arc, time::Duration};
 
@@ -204,7 +205,7 @@ async fn exact_refused_names_part(live: Live) {
         let msg = v["error"].as_str().unwrap();
         assert!(msg.contains("box") && msg.contains("approximate"), "{msg}");
     }
-    let runs = fx.state.store.runs().await.unwrap();
+    let runs = records(&fx.state.store).runs().await.unwrap();
     assert_eq!(runs[0].branches.len(), 1);
 }
 
@@ -252,10 +253,10 @@ async fn approximate_marks_branch(live: Live) {
 /// A world of replay-only parts can't be checked: the branch fails saying so, and its part is
 /// listed as unchecked (and as not compared).
 async fn assert_nothing_checked(fx: &Fx, parent: &str, child: &str) {
-    let b = fx.state.store.branch(child).await.unwrap();
+    let b = records(&fx.state.store).branch(child).await.unwrap();
     assert_eq!(b.status, BranchStatus::Failed);
     assert_eq!(b.error.as_deref(), Some(shaked::runner::NOTHING_CHECKED));
-    let evs = fx.state.store.events(child).await.unwrap();
+    let evs = records(&fx.state.store).events(child).await.unwrap();
     let check = live::check_of(&evs).unwrap();
     assert_eq!(check.unchecked, ["c"]);
     assert!(!check.passed);
@@ -323,7 +324,7 @@ async fn exact_replay_starts_like_the_original(live: Live) {
 
 /// The fork of `parent`: its only child.
 async fn only_child(fx: &Fx, parent: &str) -> Branch {
-    let runs = fx.state.store.runs().await.unwrap();
+    let runs = records(&fx.state.store).runs().await.unwrap();
     let children: Vec<Branch> = runs[0]
         .branches
         .iter()
@@ -785,7 +786,8 @@ async fn exact_refused_after_an_approximate_restore(live: Live) {
     let (b, bevs) = fx
         .fork_to_end(&a, start_of(&evs, "first"), Some("approximate"))
         .await;
-    let b_start = fx.state.store.branch(&b).await.unwrap().start_seq.unwrap();
+    let b_start = records(&fx.state.store).branch(&b).await.unwrap();
+    let b_start = b_start.start_seq.unwrap();
     let at = bevs
         .iter()
         .filter(|e| e.kind == EventKind::AgentStart && e.agent.as_deref() == Some("second"))
@@ -872,9 +874,7 @@ async fn fork_reports_no_world_event_twice(live: Live) {
         return;
     }
     let (child, cevs) = fx.fork_to_end(&parent, at, None).await;
-    let start = fx
-        .state
-        .store
+    let start = records(&fx.state.store)
         .branch(&child)
         .await
         .unwrap()

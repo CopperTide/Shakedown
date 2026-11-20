@@ -5,6 +5,7 @@
 //! - an `http` agent that reports a cost over the limit ends its run `budget_exceeded`, scored
 //!   (a failure), with the limit in `RunStart` and in `GET /api/branches/{id}`.
 mod support;
+use support::records;
 
 use std::{
     os::unix::fs::PermissionsExt,
@@ -51,8 +52,8 @@ async fn claude_branch(hub: &TestHub, store: &Arc<Store>) -> (Team, Arc<BranchCt
         name: "T".into(),
         agents: vec![member("lead", AgentKind::ClaudeCode, "haiku")],
     };
-    let run_id = store.create_run("task", &team).await.unwrap();
-    let branch = store
+    let run_id = records(store).create_run("task", &team).await.unwrap();
+    let branch = records(store)
         .create_branch(&run_id, None, &team, &json!([]), None)
         .await
         .unwrap();
@@ -102,7 +103,7 @@ fn a_claude_turn_over_the_limit_is_stopped_at_once_and_its_estimate_is_its_cost(
         let cost = end.cost_usd.unwrap();
         assert!((cost - 2.5).abs() < 0.01, "{cost}");
         assert_eq!(end.cost_source.as_deref(), Some("list_price_estimate"));
-        let calls = store.events(&ctx.branch_id).await.unwrap();
+        let calls = records(&store).events(&ctx.branch_id).await.unwrap();
         assert!(calls.iter().any(|e| e.kind == EventKind::ModelCall));
         ctx.world.stop().await;
     });
@@ -162,7 +163,7 @@ fn a_run_whose_reported_cost_passes_its_limit_ends_budget_exceeded_and_scored() 
         let b = live::ended(&state, id).await;
         assert_eq!(b.status, BranchStatus::BudgetExceeded, "{:?}", b.error);
         assert!(b.error.unwrap().contains("USD 0.25"));
-        let evs = state.store.events(id).await.unwrap();
+        let evs = records(&state.store).events(id).await.unwrap();
         assert!(
             evs.iter().any(|e| e.kind == EventKind::Check),
             "scored as it stood"

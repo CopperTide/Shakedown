@@ -1,6 +1,7 @@
 //! Disk hygiene: the bytes the arena keeps, deleting a run's saves, and the startup cleanup of
 //! saves no event names.
 
+use crate::{auth::SystemScope, store::Scoped};
 use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::Result;
@@ -72,7 +73,7 @@ impl Doomed {
 
 /// Deletes the run from the store, then drops every save its events name (except the shared
 /// base and gold saves) and stops its instances. The number of saves dropped.
-pub async fn delete_run(store: &Store, hub: &Hub, run_id: &str) -> Result<usize> {
+pub async fn delete_run(store: Scoped<'_>, hub: &Hub, run_id: &str) -> Result<usize> {
     let mut doomed = Doomed::default();
     for b in store.run_branches(run_id).await? {
         let events = store.events(&b).await?;
@@ -108,7 +109,10 @@ async fn drop_doomed(hub: &Hub, doomed: &Doomed, run_id: &str) -> usize {
 /// Every save the store's events name, plus the base and gold saves of every benchmark.
 async fn keep_list(store: &Store) -> Result<Vec<String>> {
     let mut by_branch: BTreeMap<String, Vec<Event>> = BTreeMap::new();
-    for e in store.events_naming_saves().await? {
+    for e in store
+        .events_naming_saves(&SystemScope::startup_gc())
+        .await?
+    {
         by_branch.entry(e.branch_id.clone()).or_default().push(e);
     }
     let mut keep: BTreeSet<String> = by_branch

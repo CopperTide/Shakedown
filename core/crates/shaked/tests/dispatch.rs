@@ -3,6 +3,7 @@
 //! suggests, and a lead that can't reach its model. `live_`: a team on a real model (see
 //! `support/live.rs`), then a fork of its run.
 mod support;
+use support::records;
 
 use std::collections::HashMap;
 
@@ -64,7 +65,7 @@ fn the_api_refuses_what_a_dispatch_run_cant_take_and_lists_the_teams() {
         two.agents.iter_mut().for_each(|a| a.lead = true);
         let (status, body) = post(two).await;
         assert_eq!(status, 400, "{body}");
-        assert!(fx.state.store.runs().await.unwrap().is_empty());
+        assert!(records(&fx.state.store).runs().await.unwrap().is_empty());
         let (status, teams) = send(http.get(format!("{}/api/teams?model=haiku", fx.base))).await;
         assert_eq!(status, 200);
         let first = &teams[0];
@@ -93,7 +94,7 @@ fn a_lead_that_cant_reach_its_model_ends_the_run_infra_error() {
             error.starts_with("the lead failed: model call failed (502)"),
             "{error}"
         );
-        let evs = fx.state.store.events(&branch).await.unwrap();
+        let evs = records(&fx.state.store).events(&branch).await.unwrap();
         assert_eq!(evs[0].payload["runner"], "dispatch");
         assert_lifecycle_events(&evs);
         assert_lead_woken_with_its_brief(&evs);
@@ -302,7 +303,10 @@ async fn fork_restarts_everyone(fx: &AppFx, branch: &str, evs: &[Event]) {
     assert_eq!(forked.start_seq, at, "a dispatch run forks where asked");
     let b = live::ended(&fx.state, &forked.branch_id).await;
     assert_ne!(b.status, BranchStatus::InfraError, "{:?}", b.error);
-    let evs = fx.state.store.events(&forked.branch_id).await.unwrap();
+    let evs = records(&fx.state.store)
+        .events(&forked.branch_id)
+        .await
+        .unwrap();
     let new: Vec<&Event> = evs.iter().filter(|e| e.seq >= at).collect();
     let lead_wake = new
         .iter()

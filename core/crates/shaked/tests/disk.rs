@@ -1,6 +1,7 @@
 //! What a run's saves cost and how they go: deleting a run, the saves limit, the cleanup at
 //! start. `live_`: runs on a real model make the saves (see `support/live.rs`).
 mod support;
+use support::records;
 
 use std::sync::Arc;
 
@@ -49,7 +50,7 @@ async fn live_run(fx: &AppFx, live: &Live) -> (String, String) {
 /// Every save a branch's events name, except the shared base and gold saves.
 async fn run_saves(fx: &AppFx, branch: &str) -> Vec<String> {
     let mut out = vec![];
-    for e in fx.state.store.events(branch).await.unwrap() {
+    for e in records(&fx.state.store).events(branch).await.unwrap() {
         for key in ["saves", "final_saves"] {
             if let Some(m) = e.payload[key].as_object() {
                 out.extend(m.values().filter_map(Value::as_str).map(str::to_string));
@@ -99,7 +100,7 @@ async fn assert_saves(fx: &AppFx, saves: &[String], exist: bool) {
 /// both branches' events name.
 async fn run_with_fork(fx: &AppFx, live: &Live) -> (String, Vec<String>) {
     let (run_id, b) = live_run(fx, live).await;
-    let evs = fx.state.store.events(&b).await.unwrap();
+    let evs = records(&fx.state.store).events(&b).await.unwrap();
     let at = live::first_of(&evs, EventKind::AgentStart, "resolver").unwrap();
     let child = shaked::fork::fork(&fx.state, &b, at, Default::default())
         .await
@@ -141,17 +142,15 @@ async fn delete_run_drops_all_part_saves(live: Live) {
     if !saves.is_empty() {
         assert!(after < before, "disk usage falls: {before} -> {after}");
     }
-    assert!(fx.state.store.runs().await.unwrap().is_empty());
+    assert!(records(&fx.state.store).runs().await.unwrap().is_empty());
     assert_eq!(fx.delete(&format!("/api/runs/{run_id}")).await.0, 404);
 }
 
 /// A run of task 27 with one root branch that has not ended.
 async fn new_branch(fx: &AppFx) -> (String, String) {
     let t = team();
-    let run_id = fx.state.store.create_run("27", &t).await.unwrap();
-    let b = fx
-        .state
-        .store
+    let run_id = records(&fx.state.store).create_run("27", &t).await.unwrap();
+    let b = records(&fx.state.store)
         .create_branch(&run_id, None, &t, &json!([]), None)
         .await
         .unwrap();
@@ -174,8 +173,7 @@ async fn assert_fork_errors_before_limit(fx: &AppFx) {
             .0,
         409
     );
-    fx.state
-        .store
+    records(&fx.state.store)
         .set_status(&b, BranchStatus::Passed, None)
         .await
         .unwrap();
@@ -204,7 +202,11 @@ fn delete_running_run_is_409() {
         let (st, v) = fx.delete(&format!("/api/runs/{run_id}")).await;
         assert_eq!(st, 409, "{v}");
         assert!(
-            fx.state.store.find_branch(&b).await.unwrap().is_some(),
+            records(&fx.state.store)
+                .find_branch(&b)
+                .await
+                .unwrap()
+                .is_some(),
             "nothing was deleted"
         );
     })
@@ -228,7 +230,9 @@ fn limit_refuses_new_runs() {
         assert_over_limit(st, &v);
         assert_fork_errors_before_limit(&fx).await;
         assert_eq!(
-            fx.state.store.runs().await.unwrap()[0].branches.len(),
+            records(&fx.state.store).runs().await.unwrap()[0]
+                .branches
+                .len(),
             1,
             "no branch was created"
         );
@@ -289,21 +293,22 @@ fn delete_run_without_events_needs_no_benchmark() {
         let hub = Arc::new(parts::Hub::new(registry, packages::bin_dir(), saves));
         let (store, _clean) = app::meta_store("disk", "noevents").await;
         let (state, base) = app::idle_app(store, hub, None, |_| {}).await;
-        let run_id = state.store.create_run("27", &team()).await.unwrap();
-        let b = state
-            .store
+        let run_id = records(&state.store)
+            .create_run("27", &team())
+            .await
+            .unwrap();
+        let b = records(&state.store)
             .create_branch(&run_id, None, &team(), &json!([]), None)
             .await
             .unwrap();
         let failed = Some("setup failed".to_string());
-        state
-            .store
+        records(&state.store)
             .set_status(&b, BranchStatus::InfraError, failed)
             .await
             .unwrap();
         let req = reqwest::Client::new().delete(format!("{base}/api/runs/{run_id}"));
         let (st, v) = app::send(req).await;
         assert_eq!((st, v["dropped"].as_u64()), (200, Some(0)), "{v}");
-        assert!(state.store.runs().await.unwrap().is_empty());
+        assert!(records(&state.store).runs().await.unwrap().is_empty());
     })
 }

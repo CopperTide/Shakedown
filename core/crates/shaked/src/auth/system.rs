@@ -23,6 +23,13 @@ impl SystemScope {
         self.job
     }
 
+    /// Finding the saves no event of any org names (at start, and when asked on this machine).
+    pub(crate) fn startup_gc() -> SystemScope {
+        SystemScope {
+            job: SystemJob::StartupGc,
+        }
+    }
+
     /// Marking what was running when shaked stopped as interrupted.
     pub(crate) fn interrupt_at_start() -> SystemScope {
         SystemScope {
