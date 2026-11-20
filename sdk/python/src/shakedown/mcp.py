@@ -94,11 +94,12 @@ class McpClient:
     def _rpc(self, method: str, params: Optional[dict[str, Any]] = None) -> Any:
         body = {"jsonrpc": "2.0", "id": next(self._ids), "method": method, "params": params or {}}
         try:
-            r = self._http.post(
-                self.url,
-                json=body,
-                headers=self._headers(),
-            )
+            req = self._http.build_request("POST", self.url, json=body, headers=self._headers())
+            if not self._token and req.url.netloc != self._http.base_url.netloc:
+                # The shared client's default header is the API token (sd_…): only its own shaked
+                # may see it, never an MCP endpoint on another host.
+                req.headers.pop("authorization", None)
+            r = self._http.send(req)
         except httpx.TransportError as e:
             raise ConnectionFailed(f"MCP endpoint {self.url}: {e}") from e
         try:

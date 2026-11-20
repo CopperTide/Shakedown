@@ -23,6 +23,7 @@ from .errors import (
     ConnectionFailed,
     DiskFull,
     NotFound,
+    Unauthorized,
     NotSupported,
 )
 from . import driver
@@ -51,6 +52,6 @@ __all__ = [
     "Agent", "Team", "Change", "Scenario", "Disruption", "Task", "Benchmark", "Event",
     "BranchRecord", "CheckResult", "NamedCheck", "RunSummary", "ForkInfo", "ENDED",
     "Tool", "ToolResult",
-    "ShakedownError", "ApiError", "BadRequest", "NotFound", "Conflict", "DiskFull",
+    "ShakedownError", "ApiError", "BadRequest", "Unauthorized", "NotFound", "Conflict", "DiskFull",
     "ConnectionFailed", "NotSupported", "driver",
 ]

@@ -32,6 +32,10 @@ class BadRequest(ApiError):
     """400: the request was refused as given (unknown task, bad team, bad scenario, ...)."""
 
 
+class Unauthorized(ApiError):
+    """401: shaked refused the token (none sent, unknown, revoked or expired)."""
+
+
 class NotFound(ApiError):
     """404: no such run, branch, agent or route."""
 
@@ -49,5 +53,5 @@ class NotSupported(ShakedownError):
 
 
 def from_status(status: int, message: str, method: str = "", path: str = "") -> ApiError:
-    cls = {400: BadRequest, 404: NotFound, 409: Conflict, 507: DiskFull}.get(status, ApiError)
+    cls = {400: BadRequest, 401: Unauthorized, 404: NotFound, 409: Conflict, 507: DiskFull}.get(status, ApiError)
     return cls(status, message, method, path)
