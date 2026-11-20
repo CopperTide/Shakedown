@@ -138,7 +138,8 @@ it from the `headers` of its `--mcp-config` file (written 0600 in its working fo
 `SHAKEDOWN_AGENT_TOKEN` (`bearer_token_env_var`); an external system gets each agent's `token` in the register
 answer and the run's start, and a Code connection's driver gets `SHAKEDOWN_AGENT_TOKEN_<AGENT>` for each agent of
 its team. A token dies with its agent and branch, and a pause does not count against its lifetime. An external
-run's start also answers `run_token` (`sdr_…`), which registers agents, reports and finishes in hosted mode.
+run's start also answers `run_token` (`sdr_…`), which registers agents, reports and finishes on that run's branch
+only.
 
 **Done is the HTTP answer.** The agent answers the `POST` when it has finished: any 2xx means done, optionally
 with `{"ok": true, "usage": {"input_tokens": n, "output_tokens": n}, "cost_usd": x}`, which the run records as

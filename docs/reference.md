@@ -10,7 +10,16 @@ All JSON on `http://127.0.0.1:4510`, except the event stream. Errors are `{error
 | Route | What it does |
 |---|---|
 | `GET /api/health` | `{open_available, providers, claude, codex, benchmark, disk: {bytes, limit_bytes}}`. `providers` is each model provider as the configuration alone tells it, in the shape of `/api/providers` without `models`; a local server is not asked, so it is `available: false, checked: false` with why `not checked (GET /api/providers asks the server)`. `open_available` is true when some provider can take calls, judged from the configuration (a configured local server counts, up or not) |
-| `GET /api/providers` | `[{id, kind, label, available, checked, why?, models?}]`, one per model provider; see [Model providers](#model-providers) |
+| `GET /api/providers` | `[{id, kind, label, available, checked, why?, models?}]`, one per model provider, your own keys applied; see [Model providers](#model-providers) |
+| `GET /api/me` | `{mode, user: {name}, features}`: `mode` is `local` and `user.name` `You` for an open-source shaked; a deployment's layer may add `account` (the UI's account menu) |
+| `GET /api/tokens` | the live API tokens, `[{id, name, prefix, scopes, created_at, last_used_at, expires_at}]`: never a token or its hash |
+| `POST /api/tokens` | `{name, scopes: ["read"\|"run"\|"admin"], expires_days?}`: `{id, token, prefix}`, the token (`sd_…`) shown this once. `read` views; `run` also starts, forks, stops and records; `admin` does everything, model keys and tokens included |
+| `DELETE /api/tokens/{id}` | revokes a token; calls with it then get 401 |
+| `GET /api/models/keys` | your model keys and servers, `[{id, name, kind, base_url, model, key_last4, checked_ok, checked_at, check_detail, created_at}]`: never the key |
+| `POST /api/models/keys` | `{name, kind, secret, base_url?, model?}`: adds one (`kind` `anthropic`, `openai`, `openrouter`, `bedrock` or `custom`). A `custom` server needs `base_url` and is picked by agents as `custom:<name>`; Bedrock's `secret` is JSON `{access_key_id, secret_access_key, session_token?}` and `base_url` its region. 409 when the name is taken |
+| `POST /api/models/keys/{id}/secret` | `{secret}`: replaces a key's secret |
+| `POST /api/models/keys/{id}/test` | a one-token call with the key; the key with `checked_ok` and `check_detail` (the provider's reason, never the key) |
+| `DELETE /api/models/keys/{id}` | deletes a key |
 | `GET /api/tasks` | the benchmark's tasks, `[{id, reason, ticket, instructions, clock_start?}]` (`instructions` is the benchmark's, the same for every task; `clock_start`, the world's date and time at clock 0 when its world keeps its own calendar: agents are told the world's date, see [protocol](protocol.md#a-tasks-clock)) |
 | `GET /api/benchmark` | `{name, version, tasks: [{id, reason}], scenario_options, view}`: `scenario_options` is the benchmark's `describe.scenario_options` (null when it offers none), the disruptions a run's scenario may add ([protocol](protocol.md#a-runs-scenario)); `view` is true when the benchmark draws the world's view |
 | `GET /api/templates` | the world builder's templates, `[{id, name, summary, version, systems: [label]}]` ([protocol](protocol.md#builder-calls)); 404 `no world builder is installed` when no package of `kind = "builder"` is (with several, the first by name answers) |
@@ -79,7 +88,24 @@ Environment variables, read once at startup by shaked (each also under its old n
 
 - `SHAKEDOWN_PG_URL`: the Postgres server for shaked's records, passed on to integration programs (default
   `postgres://shakedown:shakedown@127.0.0.1:5544/postgres`, else the same server's old user `arena`).
-- `SHAKEDOWN_PORT`: HTTP port (default 4510).
+- `SHAKEDOWN_BIND`: where shaked listens (default `127.0.0.1:4510`). An open-source shaked serves only the person
+  at this machine and refuses a bind beyond loopback. The old `SHAKEDOWN_PORT=<port>` still binds
+  `127.0.0.1:<port>`.
+- `SHAKEDOWN_PUBLIC_URL`: the base of every URL shaked hands out (MCP, gateway, register answers, drivers;
+  default `http://<bind>`). `SHAKEDOWN_AGENT_BASE`, its old name for HTTP agents, is still read.
+- `SHAKEDOWN_ALLOWED_HOSTS`: more `Host` names `/api` answers, comma-separated (default: loopback only).
+- `SHAKEDOWN_DB`: the database of shaked's records on that server (default `shakedown`, else an existing
+  `arena`).
+- `SHAKEDOWN_VAULT_KEY` (64 hex characters) or `SHAKEDOWN_VAULT_KEY_FILE`: the key your model keys are sealed
+  with (AES-256-GCM, each bound to its row). Without either, `core/vault.key` is made (mode 0600, ignored by
+  git) the first time a key is saved. A lost vault key makes the saved keys unreadable: add them again.
+- `SHAKEDOWN_OBJECT_STORE`: object stores for saves, transcripts and exports, `name=url,name=url` or one URL
+  (named `default`): `r2://<bucket>?account=<id>[&prefix=p]`, `s3://<bucket>?region=<r>[&endpoint=<url>][&allow_http=true][&prefix=p]`,
+  `file:///dir` or `memory://`. Rows keep the store's name and the key, never a URL; any listed store serves
+  reads, and `SHAKEDOWN_OBJECT_STORE_WRITE` names the one that takes writes (default: the first). Keys come only
+  from `SHAKEDOWN_OBJECT_STORE_<NAME>_ACCESS_KEY_ID` and `_SECRET_ACCESS_KEY` (else `AWS_ACCESS_KEY_ID` and
+  `AWS_SECRET_ACCESS_KEY`); a URL holding credentials is refused. Nothing is stored there yet: saves stay on
+  the parts' disks.
 - `SHAKEDOWN_BENCHMARK`: the benchmark new runs use, by package name (default: the only installed benchmark,
   not counting those whose manifest says `opt_in = true`; required when several are installed).
   A benchmark chosen with `POST /api/worlds/{name}/use` (or a world made current when it was built) is
@@ -145,6 +171,16 @@ Default paths are relative to the repository root, fixed when shaked is built, s
 from. The retail example reads its data from `data/retail` (relative to its package folder, `../../data/retail`);
 `SHAKEDOWN_RETAIL_DATA` overrides that when you run its program directly, but shaked does not pass it on.
 
+## Commands
+
+- `shaked token create --name <name> [--scope read|run|admin ...] [--expires-days N]`: prints a new API token
+  (default scope `read`) and nothing else.
+- `shaked store copy --from <store> --to <store> [--prefix <p>/] [--repoint]`: copies every object (under
+  `--prefix`) from one store of `SHAKEDOWN_OBJECT_STORE` to another, each checked by sha256 once it lands; an
+  object already there with the right checksum is skipped, so it reruns safely. `--repoint` points the saves
+  whose objects all verified at the destination; a save whose object no longer matches its recorded checksum
+  stays where it is. Exits 1 when any object failed.
+
 ## Model providers
 
 An API-mode agent (`kind: "open"`) names its provider in `provider`; without one it uses `openrouter`, so teams
@@ -158,6 +194,12 @@ gateway, and the gateway talks to the provider:
 | `anthropic` | `https://api.anthropic.com/v1/messages` (the Messages API, translated) | `ANTHROPIC_API_KEY`, `x-api-key` | `GET /v1/models` | none: name one |
 | `local:<name>` | `<url>/chat/completions` of the `SHAKEDOWN_LOCAL_MODELS` entry | `SHAKEDOWN_LOCAL_KEY_<NAME>`, bearer, if set | `GET <url>/models` | none: name one |
 | `bedrock:<region>` | `https://bedrock-runtime.<region>.amazonaws.com/model/<model>/converse` (the Converse API, translated; untested live) | the user's AWS credentials, SigV4 or a Bedrock API key ([agents.md](agents.md#bedrock-agents)) | not listed | none: name one |
+
+Your own keys (Settings → Models, or `/api/models/keys`) come first: an `openai`, `anthropic` or `openrouter`
+key replaces the environment's key for that provider (on its server, unless the key names a `base_url`), a
+`bedrock` key is used for its region, and a `custom` server is the provider `custom:<name>` (taking over a
+`local:<name>` of the same name). The newest key of a provider wins. Without one, the environment's key is
+used.
 
 A local provider is any server that speaks the OpenAI chat-completions API, such as Ollama, vLLM, LM Studio or
 llama.cpp's server. For example:

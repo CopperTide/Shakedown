@@ -23,6 +23,8 @@ const Run = lazy(() => import('@/features/run/RunPage'));
 const Runs = lazy(() => import('@/features/runs/RunsPage'));
 const Team = lazy(() => import('@/features/team/TeamPage'));
 const World = lazy(() => import('@/features/world/WorldPage'));
+const SettingsModels = lazy(() => import('@/features/settings/ModelsPage'));
+const SettingsTokens = lazy(() => import('@/features/settings/TokensPage'));
 
 function NotFound() {
   return (
@@ -59,6 +61,9 @@ function AppRoutes() {
         <Route path="/suites/:id" element={<Moved to={(p) => `/experiments/${p.id}`} />} />
         <Route path="/control/:runId/:branchId" element={<ProcessPage />} />
         <Route path="/world/:runId/:branchId" element={<World />} />
+        <Route path="/settings" element={<Navigate to="/settings/models" replace />} />
+        <Route path="/settings/models" element={<SettingsModels />} />
+        <Route path="/settings/tokens" element={<SettingsTokens />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </Suspense>

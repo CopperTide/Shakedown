@@ -28,6 +28,8 @@ function pages(): Item[] {
     { id: 'go-experiments', group: 'Go to', label: 'Experiments', keywords: ['home', 'suites', 'tests'], action: { go: '/' } },
     { id: 'go-runs', group: 'Go to', label: 'Runs', keywords: ['history', 'list'], action: { go: '/runs' } },
     { id: 'go-team', group: 'Go to', label: 'Team editor', keywords: ['agents', 'edit'], action: { go: '/team' } },
+    { id: 'go-models', group: 'Go to', label: 'Settings: Models', keywords: ['keys', 'providers', 'vllm', 'server'], action: { go: '/settings/models' } },
+    { id: 'go-tokens', group: 'Go to', label: 'Settings: API tokens', keywords: ['sdk', 'token', 'scripts'], action: { go: '/settings/tokens' } },
   ];
 }
 

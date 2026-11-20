@@ -16,7 +16,7 @@ const experiments = [experiment('e1', 'Rules or not'), experiment('e2', 'Haiku v
 describe('command palette', () => {
   it('lists pages, actions, every experiment and every branch at the root', () => {
     const items = itemsFor({ kind: 'root' }, runs, experiments);
-    expect(items.filter((i) => i.group === 'Go to').map((i) => i.label)).toEqual(['Experiments', 'Runs', 'Team editor']);
+    expect(items.filter((i) => i.group === 'Go to').map((i) => i.label)).toEqual(['Experiments', 'Runs', 'Team editor', 'Settings: Models', 'Settings: API tokens']);
     expect(items.find((i) => i.id === 'new-experiment')!.action).toEqual({ go: '/experiments/new' });
     expect(items.find((i) => i.id === 'new-run')!.action).toEqual({ go: '/run' });
     expect(items.filter((i) => i.group === 'Runs').map((i) => [i.label, i.action])).toEqual([

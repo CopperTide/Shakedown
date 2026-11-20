@@ -6,6 +6,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { Kbd } from '@/components/ui/kbd';
 import ReviewToggle from '@/features/review/ReviewToggle';
 import { cn } from '@/lib/cn';
+import { AccountMenu, useMe } from './AccountMenu';
 import type { Mode } from './palette';
 import { setThemePref, useTheme } from './theme';
 import { nextPref } from './themeModel';
@@ -33,6 +34,9 @@ function MoreMenu({ onPalette }: { onPalette: (start?: Mode) => void }) {
         <DropdownMenuItem onSelect={() => onPalette({ kind: 'world' })}>World view of a run…</DropdownMenuItem>
         <DropdownMenuItem onSelect={() => nav('/team')}>Team editor</DropdownMenuItem>
         <ReviewToggle />
+        <DropdownMenuLabel>Settings</DropdownMenuLabel>
+        <DropdownMenuItem onSelect={() => nav('/settings/models')}>Models</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => nav('/settings/tokens')}>API tokens</DropdownMenuItem>
         <DropdownMenuLabel>App</DropdownMenuLabel>
         <DropdownMenuItem onSelect={() => onPalette()}><span className="flex-1">Command palette</span><Kbd>⌘K</Kbd></DropdownMenuItem>
         <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setThemePref(nextPref(pref)); }}>
@@ -49,6 +53,7 @@ function MoreMenu({ onPalette }: { onPalette: (start?: Mode) => void }) {
 /** The wordmark, Experiments and Runs, and "⋯" for everything else. */
 export default function TopBar({ onPalette }: { onPalette: (start?: Mode) => void }) {
   const { pathname } = useLocation();
+  const me = useMe();
   return (
     <div className="sticky top-0 z-40 flex h-12 shrink-0 items-center gap-2 border-b border-line bg-bg/85 px-4 backdrop-blur sm:gap-6 sm:px-6">
       <Link to="/" className="flex items-center gap-2 text-sm font-semibold tracking-tight">
@@ -71,6 +76,7 @@ export default function TopBar({ onPalette }: { onPalette: (start?: Mode) => voi
         })}
       </nav>
       <span className="flex-1" />
+      <AccountMenu me={me} />
       <MoreMenu onPalette={onPalette} />
     </div>
   );
