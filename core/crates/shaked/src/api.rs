@@ -16,7 +16,7 @@ use serde_json::{json, Value};
 
 use crate::{
     app::AppState,
-    auth::{Caller, Scope},
+    auth::{Action, Caller, Decision, ResourceKind, Target, Who},
     fork::{self, ForkError},
     gc, metrics,
     model::*,
@@ -108,37 +108,29 @@ impl ApiError {
     fn conflict(msg: impl Into<String>) -> ApiError {
         ApiError(StatusCode::CONFLICT, msg.into())
     }
-    fn forbidden(msg: impl Into<String>) -> ApiError {
-        ApiError(StatusCode::FORBIDDEN, msg.into())
-    }
 }
 
 impl From<anyhow::Error> for ApiError {
-    /// A write row-level security refused (SQLSTATE 42501: the caller's role or team may not) is
-    /// 403; anything else is 500.
+    /// A write the database refused for this caller (SQLSTATE 42501, insufficient privilege: a
+    /// hosting layer's policies) is 403; anything else is 500.
     fn from(e: anyhow::Error) -> ApiError {
         let refused = (e.chain())
             .filter_map(|c| c.downcast_ref::<tokio_postgres::Error>())
             .any(|p| p.code() == Some(&tokio_postgres::error::SqlState::INSUFFICIENT_PRIVILEGE));
         match refused {
-            true => ApiError(
-                StatusCode::FORBIDDEN,
-                "your role in this org may not do that".into(),
-            ),
+            true => ApiError(StatusCode::FORBIDDEN, "you may not do that".into()),
             false => ApiError(StatusCode::INTERNAL_SERVER_ERROR, format!("{e:#}")),
         }
     }
 }
 
-/// 403 unless the caller may do `action` in its org (`auth::can`, org level).
-pub(crate) fn allowed(caller: &Scope, action: crate::auth::Action) -> Result<(), ApiError> {
-    let target = crate::auth::Target::Org(caller.org());
-    match crate::auth::can(caller.principal(), &action, &target, &Default::default()) {
-        true => Ok(()),
-        false => Err(ApiError(
-            StatusCode::FORBIDDEN,
-            "your role in this org may not do that".into(),
-        )),
+/// The engine's own check of `caller` doing `action` on `target` (`auth::engine_check`): 404 when
+/// not found, 403 when refused.
+pub(crate) fn allowed(caller: &Caller, action: Action, target: Target<'_>) -> Result<(), ApiError> {
+    match crate::auth::engine_check(caller, &action, &target) {
+        Decision::Allow => Ok(()),
+        Decision::NotFound => Err(ApiError::not_found("not found".to_string())),
+        Decision::Forbidden(why) => Err(ApiError(StatusCode::FORBIDDEN, why)),
     }
 }
 
@@ -200,7 +192,7 @@ fn no_branch(id: &str) -> ApiError {
 }
 
 /// The branch `id`; 404 when there is none.
-async fn branch_or_404(state: &AppState, caller: &Scope, id: &str) -> Result<Branch, ApiError> {
+async fn branch_or_404(state: &AppState, caller: &Caller, id: &str) -> Result<Branch, ApiError> {
     state
         .store
         .at(caller)
@@ -323,7 +315,7 @@ async fn check_disk(state: &AppState) -> Result<(), ApiError> {
 pub const SAVES_FULL: &str = "Shakedown's saves use more than the limit; delete old runs";
 
 /// True when any branch of the run is running (stored as running, or live in this process).
-async fn run_is_running(state: &AppState, caller: &Scope, id: &str) -> Result<bool, ApiError> {
+async fn run_is_running(state: &AppState, caller: &Caller, id: &str) -> Result<bool, ApiError> {
     let records = state.store.at(caller);
     if records.run_has_running(id).await? {
         return Ok(true);
@@ -334,7 +326,7 @@ async fn run_is_running(state: &AppState, caller: &Scope, id: &str) -> Result<bo
 
 async fn delete_run(
     State(state): State<Arc<AppState>>,
-    Caller(caller): Caller,
+    Who(caller): Who,
     Path(id): Path<String>,
 ) -> ApiResult<Value> {
     if !state.store.at(&caller).run_exists(&id).await? {
@@ -386,7 +378,7 @@ async fn suggested_teams(
 
 async fn list_runs(
     State(state): State<Arc<AppState>>,
-    Caller(caller): Caller,
+    Who(caller): Who,
 ) -> ApiResult<Vec<RunSummary>> {
     Ok(Json(state.store.at(&caller).runs().await?))
 }
@@ -455,7 +447,7 @@ pub(crate) fn max_cost(asked: Option<f64>) -> Result<Option<f64>, ApiError> {
 /// `POST /api/runs` with `connection` (see `connections::create_run`).
 async fn create_code_run(
     state: Arc<AppState>,
-    caller: Arc<Scope>,
+    caller: Arc<Caller>,
     permit: StartPermit,
     headers: &axum::http::HeaderMap,
     req: NewRun,
@@ -481,7 +473,7 @@ async fn create_code_run(
 /// limit and world time window).
 async fn create_external_run(
     state: Arc<AppState>,
-    caller: Arc<Scope>,
+    caller: Arc<Caller>,
     permit: StartPermit,
     req: NewRun,
     bench: String,
@@ -497,13 +489,10 @@ async fn create_external_run(
 /// A new run's benchmark and scenario (its seed checked), once the caller may start runs.
 async fn new_run_world(
     state: &AppState,
-    caller: &Scope,
+    caller: &Caller,
     req: &mut NewRun,
 ) -> Result<(String, crate::scenario::Scenario), ApiError> {
-    allowed(
-        caller,
-        crate::auth::Action::CreateOrgWide(crate::auth::ResourceKind::Run),
-    )?;
+    allowed(caller, Action::Start, Target::Kind(ResourceKind::Run))?;
     settle_providers(&mut req.team);
     let bench = benchmark_asked(state, req.benchmark.as_deref())?;
     let mut scenario = twin::scenario_of(state, &bench, req.scenario.as_ref()).await?;
@@ -517,21 +506,18 @@ async fn new_run_world(
 /// `POST /api/runs`.
 async fn create_run(
     State(state): State<Arc<AppState>>,
-    Caller(caller): Caller,
+    Who(caller): Who,
     permit: StartPermit,
     headers: axum::http::HeaderMap,
     JsonBody(req): JsonBody<NewRun>,
 ) -> ApiResult<Value> {
-    allowed(
-        &caller,
-        crate::auth::Action::CreateOrgWide(crate::auth::ResourceKind::Run),
-    )?;
+    allowed(&caller, Action::Start, Target::Kind(ResourceKind::Run))?;
     start_run(state, caller, permit, headers, req).await
 }
 
 async fn start_run(
     state: Arc<AppState>,
-    caller: Arc<Scope>,
+    caller: Arc<Caller>,
     permit: StartPermit,
     headers: axum::http::HeaderMap,
     mut req: NewRun,
@@ -561,7 +547,7 @@ async fn start_run(
 
 async fn get_branch(
     State(state): State<Arc<AppState>>,
-    Caller(caller): Caller,
+    Who(caller): Who,
     Path(id): Path<String>,
 ) -> ApiResult<Value> {
     let branch = branch_or_404(&state, &caller, &id).await?;
@@ -603,7 +589,7 @@ struct ForkReq {
 
 /// The branch to fork: 404 for an unknown branch and 409 for a running one; these come before
 /// the 507 check.
-async fn forkable(state: &AppState, caller: &Scope, id: &str) -> Result<Branch, ApiError> {
+async fn forkable(state: &AppState, caller: &Caller, id: &str) -> Result<Branch, ApiError> {
     match state.store.at(caller).find_branch(id).await? {
         None => Err(no_branch(id)),
         Some(b) if b.status == BranchStatus::Running => {
@@ -617,7 +603,7 @@ async fn forkable(state: &AppState, caller: &Scope, id: &str) -> Result<Branch, 
 /// page could make (`connections::guard_launch`).
 async fn guard_code_fork(
     state: &AppState,
-    caller: &Scope,
+    caller: &Caller,
     headers: &axum::http::HeaderMap,
     id: &str,
 ) -> Result<(), ApiError> {
@@ -630,7 +616,7 @@ async fn guard_code_fork(
 
 async fn fork_branch(
     State(state): State<Arc<AppState>>,
-    Caller(caller): Caller,
+    Who(caller): Who,
     Path(id): Path<String>,
     permit: StartPermit,
     headers: axum::http::HeaderMap,
@@ -672,7 +658,7 @@ fn parse_restore(q: &HashMap<String, String>) -> Result<Mode, ApiError> {
 /// restored, or the refusal (409).
 async fn get_restore_plan(
     State(state): State<Arc<AppState>>,
-    Caller(caller): Caller,
+    Who(caller): Who,
     Path(id): Path<String>,
     Query(q): Query<HashMap<String, String>>,
 ) -> ApiResult<Value> {

@@ -3,11 +3,11 @@
 
 use std::{collections::BTreeSet, path::Path};
 
-use shakedown_schema::{base, load, retiring_identity, Error, Files, Migration, Stream};
+use shakedown_schema::{base, load, Error, Files, Migration, Stream};
 
 /// Every embedded set, one stream each.
-fn sets() -> [&'static [Migration]; 2] {
-    [base(), retiring_identity()]
+fn sets() -> [&'static [Migration]; 1] {
+    [base()]
 }
 
 /// Every embedded migration.

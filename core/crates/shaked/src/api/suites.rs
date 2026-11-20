@@ -1,7 +1,7 @@
 //! Test suites over HTTP: create one (`POST /api/suites`), list them, read one's report, claim
 //! an external suite's next run, and compare two suites.
 
-use crate::auth::{Caller, Scope};
+use crate::auth::{Caller, Who};
 use std::{collections::HashMap, sync::Arc};
 
 use axum::{
@@ -135,7 +135,7 @@ fn validate_suite(state: &AppState, req: &NewSuiteReq) -> Result<(), ApiError> {
 /// its report.
 async fn create(
     State(state): State<Arc<AppState>>,
-    Caller(caller): Caller,
+    Who(caller): Who,
     JsonBody(mut req): JsonBody<NewSuiteReq>,
 ) -> ApiResult<SuiteReport> {
     settle_providers(&mut req.team);
@@ -167,10 +167,7 @@ async fn create(
 }
 
 /// `GET /api/suites`: every suite, newest first, with its status and how many runs ended.
-async fn list(
-    State(state): State<Arc<AppState>>,
-    Caller(caller): Caller,
-) -> ApiResult<Vec<Listed>> {
+async fn list(State(state): State<Arc<AppState>>, Who(caller): Who) -> ApiResult<Vec<Listed>> {
     let mut out = vec![];
     let records = state.store.at(&caller);
     for s in records.suites().await? {
@@ -179,7 +176,7 @@ async fn list(
     Ok(Json(out))
 }
 
-async fn find(state: &AppState, caller: &Scope, id: &str) -> Result<Suite, ApiError> {
+async fn find(state: &AppState, caller: &Caller, id: &str) -> Result<Suite, ApiError> {
     state
         .store
         .at(caller)
@@ -191,7 +188,7 @@ async fn find(state: &AppState, caller: &Scope, id: &str) -> Result<Suite, ApiEr
 /// `GET /api/suites/{id}`: the suite's report.
 async fn get_one(
     State(state): State<Arc<AppState>>,
-    Caller(caller): Caller,
+    Who(caller): Who,
     Path(id): Path<String>,
 ) -> ApiResult<SuiteReport> {
     let s = find(&state, &caller, &id).await?;
@@ -203,7 +200,7 @@ async fn get_one(
 /// `{done: true}` when every run is claimed.
 async fn claim(
     State(state): State<Arc<AppState>>,
-    Caller(caller): Caller,
+    Who(caller): Who,
     Path(id): Path<String>,
 ) -> ApiResult<Value> {
     let s = find(&state, &caller, &id).await?;
@@ -227,7 +224,7 @@ async fn claim(
 /// `GET /api/suites/compare?a=&b=`: suite `b` against suite `a`.
 async fn compare(
     State(state): State<Arc<AppState>>,
-    Caller(caller): Caller,
+    Who(caller): Who,
     Query(q): Query<HashMap<String, String>>,
 ) -> ApiResult<Comparison> {
     let (a, b) = super::pair(&q)?;

@@ -10,7 +10,7 @@
 //! local program can, though: a Code connection runs as shaked's user, so this assumes a machine
 //! whose accounts trust each other (`docs/agents.md`).
 
-use crate::auth::Scope;
+use crate::auth::Caller;
 use std::{
     collections::{BTreeMap, VecDeque},
     os::unix::process::ExitStatusExt,
@@ -369,10 +369,10 @@ async fn record_exit(state: &AppState, branch: &str, words: &str, l: &Launched) 
 
 /// Who `branch` runs for: its live context's scope. A driver runs only in local mode
 /// ([`launch`] refuses in hosted mode), so a branch no longer live is the local owner's.
-fn scope_of(state: &AppState, branch: &str) -> Arc<Scope> {
+fn scope_of(state: &AppState, branch: &str) -> Arc<Caller> {
     match state.live.get(branch) {
-        Some(ctx) => ctx.scope.clone(),
-        None => Arc::new(crate::auth::local_owner()),
+        Some(ctx) => ctx.caller.clone(),
+        None => Arc::new(crate::auth::Caller::person()),
     }
 }
 
@@ -389,7 +389,7 @@ pub fn rules_for(conn_id: &str, max_cost_usd: Option<f64>, world_minutes: Option
 /// experiment, as they stop a built-in suite.
 async fn start_run(
     state: &Arc<AppState>,
-    scope: &Arc<Scope>,
+    scope: &Arc<Caller>,
     suite: &Suite,
     slot: &Slot,
     conn_id: &str,
@@ -410,7 +410,7 @@ async fn start_run(
 /// when the connection is gone or the run couldn't start.
 pub async fn start_slot(
     state: &Arc<AppState>,
-    scope: &Arc<Scope>,
+    scope: &Arc<Caller>,
     suite: &Suite,
     slot: &Slot,
 ) -> Result<Option<String>> {

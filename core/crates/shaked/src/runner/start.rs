@@ -1,7 +1,7 @@
 //! Starting a run: its first branch, its world from the base save, its `RunStart` and the
 //! task's setup.
 
-use crate::{auth::Scope, store::Scoped};
+use crate::{auth::Caller, store::Scoped};
 use std::{sync::Arc, time::Instant};
 
 use anyhow::{anyhow, Result};
@@ -54,7 +54,7 @@ pub async fn start_run(
 pub struct RunOptions<'a> {
     runner: Runner,
     /// Who the run is for; None: the local owner.
-    scope: Option<&'a Arc<Scope>>,
+    scope: Option<&'a Arc<Caller>>,
     scenario: Option<&'a Scenario>,
     max_cost_usd: Option<f64>,
     benchmark: Option<&'a str>,
@@ -72,7 +72,7 @@ impl<'a> RunOptions<'a> {
     }
 
     /// The run for `scope` (else for the local owner).
-    pub fn scope(self, scope: &'a Arc<Scope>) -> RunOptions<'a> {
+    pub fn scope(self, scope: &'a Arc<Caller>) -> RunOptions<'a> {
         RunOptions {
             scope: Some(scope),
             ..self
@@ -113,7 +113,7 @@ impl<'a> RunOptions<'a> {
         let none = Scenario::default();
         let scope = match self.scope {
             Some(s) => s.clone(),
-            None => Arc::new(crate::auth::local_owner()),
+            None => Arc::new(crate::auth::Caller::person()),
         };
         let spec = crate::launch::LaunchSpec {
             scope,
@@ -134,7 +134,7 @@ impl<'a> RunOptions<'a> {
 /// branch, ready to be driven.
 pub async fn begin_run(
     state: &AppState,
-    scope: &Arc<Scope>,
+    scope: &Arc<Caller>,
     benchmark: Option<&str>,
     task_id: &str,
     team: Team,
@@ -164,7 +164,7 @@ pub async fn begin_run(
     let started = start_world(state, records, &bench, planned, start).await;
     let (world, start_seq, record_ms) = setup_or_infra_error(records, &branch_id, started).await?;
     let ctx = BranchCtx::new(branch_id, Arc::new(world), team, task_id.to_string());
-    let ctx = ctx.with_rules(rules).with_scope(scope.clone());
+    let ctx = ctx.with_rules(rules).with_caller(scope.clone());
     ctx.overhead.add(Cat::Record, record_ms);
     set_up_task(state, &bench, &ctx, scenario, start_seq).await?;
     Ok((run_id, ctx))

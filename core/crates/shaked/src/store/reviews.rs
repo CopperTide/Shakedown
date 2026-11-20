@@ -68,8 +68,8 @@ fn review_from(r: &Row) -> StoredReview {
 
 impl Scoped<'_> {
     pub async fn review(&self, key: &str) -> Result<Option<StoredReview>> {
-        let sql = format!("SELECT {COLS} FROM reviews WHERE key = $1 AND org_id = $2");
-        let row = self.query_opt(&sql, &[&key, &self.org()]).await?;
+        let sql = format!("SELECT {COLS} FROM reviews WHERE key = $1");
+        let row = self.query_opt(&sql, &[&key]).await?;
         Ok(row.as_ref().map(review_from))
     }
 
@@ -82,18 +82,16 @@ impl Scoped<'_> {
         model: &str,
     ) -> Result<Option<StoredReview>> {
         let sql = format!(
-            "INSERT INTO reviews (key, kind, status, model, org_id, created_by)
-             VALUES ($1, $2, 'running', $3, $4, $5)
+            "INSERT INTO reviews (key, kind, status, model)
+             VALUES ($1, $2, 'running', $3)
              ON CONFLICT (key) DO UPDATE SET kind = $2, status = 'running', model = $3,
                  review = NULL, issues = '[]', error = NULL, cost_usd = NULL, cost_source = NULL,
                  tokens = NULL, seconds = NULL, digest_bytes = NULL, created_at = now(),
                  finished_at = NULL
-             WHERE reviews.status <> 'running' AND reviews.org_id = $4
+             WHERE reviews.status <> 'running'
              RETURNING {COLS}"
         );
-        let row = self
-            .query_opt(&sql, &[&key, &kind, &model, &self.org(), &self.user()])
-            .await?;
+        let row = self.query_opt(&sql, &[&key, &kind, &model]).await?;
         Ok(row.as_ref().map(review_from))
     }
 
@@ -104,7 +102,7 @@ impl Scoped<'_> {
             "UPDATE reviews SET status = 'done', review = $2, issues = $3, cost_usd = $4,
                      cost_source = $5, tokens = $6, seconds = $7, digest_bytes = $8,
                      finished_at = now()
-                 WHERE key = $1 AND org_id = $9",
+                 WHERE key = $1",
             &[
                 &key,
                 done.review,
@@ -114,7 +112,6 @@ impl Scoped<'_> {
                 &done.tokens,
                 &done.seconds,
                 &bytes,
-                &self.org(),
             ],
         )
         .await?;
@@ -123,10 +120,10 @@ impl Scoped<'_> {
 
     pub async fn fail_review(&self, key: &str, error: &str) -> Result<()> {
         self.execute(
-                "UPDATE reviews SET status = 'error', error = $2, finished_at = now() WHERE key = $1 AND org_id = $3",
-                &[&key, &error, &self.org()],
-            )
-            .await?;
+            "UPDATE reviews SET status = 'error', error = $2, finished_at = now() WHERE key = $1",
+            &[&key, &error],
+        )
+        .await?;
         Ok(())
     }
 }

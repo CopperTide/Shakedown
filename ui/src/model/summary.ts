@@ -68,6 +68,6 @@ export function restoringLine(parts: string[]): string {
 
 /** The world's name: the twin's own title up to its first " · " or ": " (its organisation), else the benchmark's name. */
 export function worldName(benchmark: string, twinTitle?: string | null): string {
-  const org = twinTitle?.split(/ · |: /)[0]?.trim();
-  return org || capital(benchmark.replace(/[-_]+/g, ' '));
+  const company = twinTitle?.split(/ · |: /)[0]?.trim();
+  return company || capital(benchmark.replace(/[-_]+/g, ' '));
 }

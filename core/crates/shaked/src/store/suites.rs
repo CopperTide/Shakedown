@@ -17,16 +17,16 @@ pub(super) const SUITE_COLS: &str =
      experiment_id, setup_ord, max_cost_usd, connection, base_seed, world_minutes";
 /// Inserts a suite (`$1`..`$7`, `$11` the scenario, `$12` the variants, `$14` its experiment,
 /// `$15` its place there, `$16` its runs' spend limit, `$17` its Code connection, `$18` its base
-/// seed, `$19` its world time window, `$20` its org and `$21` who made it) and its slots (`$8`..`$10`
+/// seed, `$19` its world time window) and its slots (`$8`..`$10`
 /// and `$13`, in arrays).
 const INSERT_SUITE: &str =
     "WITH s AS (INSERT INTO suites (id, name, team, tasks, repeats, runner, benchmark, scenario, variants,
                                    experiment_id, setup_ord, max_cost_usd, connection, base_seed,
-                                   world_minutes, org_id, created_by)
-                       VALUES ($1, $2, $3, $4, $5, $6, $7, $11, $12, $14, $15, $16, $17, $18, $19, $20, $21)
+                                   world_minutes)
+                       VALUES ($1, $2, $3, $4, $5, $6, $7, $11, $12, $14, $15, $16, $17, $18, $19)
                     RETURNING id)
-           INSERT INTO suite_runs (suite_id, ord, task_id, repeat, variant, org_id)
-           SELECT s.id, u.o, u.t, u.r, u.v, $20
+           INSERT INTO suite_runs (suite_id, ord, task_id, repeat, variant)
+           SELECT s.id, u.o, u.t, u.r, u.v
            FROM s, unnest($8::int[], $9::text[], $10::int[], $13::int[]) AS u(o, t, r, v)";
 const SLOT_COLS: &str = "ord, task_id, variant, repeat, claimed, run_id, branch_id, error";
 
@@ -138,7 +138,7 @@ impl Scoped<'_> {
         let id = new_id();
         let slots = slots_of(new.tasks, variant_count(new.variants), new.repeats);
         let cols = SlotColumns::of(&slots);
-        let params: [&(dyn tokio_postgres::types::ToSql + Sync); 21] = [
+        let params: [&(dyn tokio_postgres::types::ToSql + Sync); 19] = [
             &id,
             &new.name,
             &serde_json::to_value(new.team)?,
@@ -158,8 +158,6 @@ impl Scoped<'_> {
             &new.connection,
             &of.map(|o| o.base_seed as i64), // at most 2^53 - 1
             &of.and_then(|o| o.world_minutes),
-            &self.org(),
-            &self.user(),
         ];
         self.execute(INSERT_SUITE, &params).await?;
         self.just_stored(&id).await
@@ -173,26 +171,24 @@ impl Scoped<'_> {
 
     /// Every suite, newest first.
     pub async fn suites(&self) -> Result<Vec<Suite>> {
-        let sql = format!(
-            "SELECT {SUITE_COLS} FROM suites WHERE org_id = $1 ORDER BY created_at DESC, id"
-        );
-        let rows = self.query(&sql, &[&self.org()]).await?;
+        let sql = format!("SELECT {SUITE_COLS} FROM suites ORDER BY created_at DESC, id");
+        let rows = self.query(&sql, &[]).await?;
         rows.iter().map(suite_from).collect()
     }
 
     pub async fn suite(&self, id: &str) -> Result<Option<Suite>> {
-        let sql = format!("SELECT {SUITE_COLS} FROM suites WHERE id = $1 AND org_id = $2");
-        let row = self.query_opt(&sql, &[&id, &self.org()]).await?;
+        let sql = format!("SELECT {SUITE_COLS} FROM suites WHERE id = $1");
+        let row = self.query_opt(&sql, &[&id]).await?;
         row.as_ref().map(suite_from).transpose()
     }
 
     /// The suite's slots, in run order.
     pub async fn slots(&self, suite: &str) -> Result<Vec<Slot>> {
         let sql = format!(
-            "SELECT {SLOT_COLS} FROM suite_runs WHERE suite_id = $1 AND org_id = $2
+            "SELECT {SLOT_COLS} FROM suite_runs WHERE suite_id = $1
                 AND EXISTS (SELECT 1 FROM suites WHERE id = $1) ORDER BY ord"
         );
-        let rows = self.query(&sql, &[&suite, &self.org()]).await?;
+        let rows = self.query(&sql, &[&suite]).await?;
         Ok(rows.iter().map(slot_from).collect())
     }
 
@@ -200,36 +196,33 @@ impl Scoped<'_> {
     pub async fn claim_slot(&self, suite: &str) -> Result<Option<Slot>> {
         let sql = format!(
             "UPDATE suite_runs SET claimed = true
-             WHERE suite_id = $1 AND org_id = $2 AND NOT claimed AND ord = (
-                 SELECT min(ord) FROM suite_runs WHERE suite_id = $1 AND org_id = $2 AND NOT claimed)
+             WHERE suite_id = $1 AND NOT claimed AND ord = (
+                 SELECT min(ord) FROM suite_runs WHERE suite_id = $1 AND NOT claimed)
              RETURNING {SLOT_COLS}"
         );
-        let row = self.query_opt(&sql, &[&suite, &self.org()]).await?;
+        let row = self.query_opt(&sql, &[&suite]).await?;
         Ok(row.as_ref().map(slot_from))
     }
 
     /// Names the run (and its first branch) that fills a slot.
     pub async fn fill_slot(&self, suite: &str, ord: i32, run: &str, branch: &str) -> Result<()> {
         let sql =
-            "UPDATE suite_runs SET run_id = $3, branch_id = $4 WHERE suite_id = $1 AND ord = $2 AND org_id = $5";
-        self.execute(sql, &[&suite, &ord, &run, &branch, &self.org()])
-            .await?;
+            "UPDATE suite_runs SET run_id = $3, branch_id = $4 WHERE suite_id = $1 AND ord = $2";
+        self.execute(sql, &[&suite, &ord, &run, &branch]).await?;
         Ok(())
     }
 
     /// Records why a slot's run could not start.
     pub async fn slot_failed(&self, suite: &str, ord: i32, error: &str) -> Result<()> {
-        let sql =
-            "UPDATE suite_runs SET error = $3 WHERE suite_id = $1 AND ord = $2 AND org_id = $4";
-        self.execute(sql, &[&suite, &ord, &error, &self.org()])
-            .await?;
+        let sql = "UPDATE suite_runs SET error = $3 WHERE suite_id = $1 AND ord = $2";
+        self.execute(sql, &[&suite, &ord, &error]).await?;
         Ok(())
     }
 
     /// Records that shaked stopped driving a built-in suite, with why when it stopped early.
     pub async fn end_suite(&self, suite: &str, error: Option<&str>) -> Result<()> {
-        let sql = "UPDATE suites SET ended_at = now(), error = $2 WHERE id = $1 AND org_id = $3";
-        self.execute(sql, &[&suite, &error, &self.org()]).await?;
+        let sql = "UPDATE suites SET ended_at = now(), error = $2 WHERE id = $1";
+        self.execute(sql, &[&suite, &error]).await?;
         Ok(())
     }
 }

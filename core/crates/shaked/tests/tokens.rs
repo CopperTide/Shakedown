@@ -3,10 +3,35 @@
 
 use std::process::Command;
 
-use shaked::auth::tokens::resolve_api_token;
-use support::{pg, run};
+use serde_json::json;
+use shaked::auth::tokens::{hash, resolve_api_token};
+use support::{pg, run, AppFx};
 
 mod support;
+
+#[test]
+fn a_token_is_shown_once_and_stored_hashed() {
+    run(async {
+        let fx = AppFx::idle("tokens", "once").start().await;
+        let body = json!({"name": "laptop", "scopes": ["read"]});
+        let (status, made) = fx.post("/api/tokens", body).await;
+        assert_eq!(status, 200, "{made}");
+        let token = made["token"].as_str().unwrap().to_string();
+        assert!(token.starts_with("sd_") && token.len() == 67, "{token}");
+        assert_eq!(made["prefix"], json!(&token[..8]));
+        let (status, list) = fx.get("/api/tokens").await;
+        assert_eq!(status, 200, "{list}");
+        let text = list.to_string();
+        assert!(
+            !text.contains(&token[3..]) && !text.contains(&hash(&token)),
+            "{text}"
+        );
+        assert_eq!(list[0]["prefix"], json!(&token[..8]));
+        let id = made["id"].as_str().unwrap();
+        let stored = format!("SELECT token_hash FROM shakedown.api_tokens WHERE id = '{id}'");
+        assert_eq!(pg::query_text(&fx.db, &stored).await, Some(hash(&token)));
+    })
+}
 
 #[test]
 fn cli_token_create_prints_a_working_token() {

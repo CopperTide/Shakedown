@@ -1,12 +1,9 @@
 //! shaked's records in the shakedown schema through shakedown-schema: old databases move in place,
-//! a fresh one has the built-in local owner, and a login that cannot set up the roles is refused.
+//! a fresh one has only Shakedown's schemas, a plain login opens its own database, and a database
+//! from the retired factory build is refused with the way to convert it.
 
 use serde_json::json;
-use shaked::{
-    model::*,
-    pg::Admin,
-    store::{Store, LOCAL_ORG_ID, LOCAL_USER_ID},
-};
+use shaked::{model::*, pg::Admin, store::Store};
 use support::{legacy, pg, run};
 
 mod support;
@@ -72,16 +69,16 @@ fn an_old_public_database_moves_to_shakedown_and_keeps_its_runs() {
 }
 
 #[test]
-fn a_fresh_database_has_the_local_owner() {
+fn a_fresh_database_has_only_shakedown_s_schemas() {
     run(async {
-        let (name, store, _clean) = pg::fresh_store("localowner").await;
+        let (name, store, _clean) = pg::fresh_store("onlyshakedown").await;
         drop(store);
-        let sql = format!(
-            "SELECT m.role || ' ' || o.kind || ' ' || o.plan FROM identity.memberships m
-               JOIN identity.orgs o ON o.id = m.org_id
-              WHERE m.org_id = '{LOCAL_ORG_ID}' AND m.user_id = '{LOCAL_USER_ID}'"
-        );
-        assert_eq!(rows(&name, &sql).await, ["owner local local"]);
+        let schemas = "SELECT string_agg(nspname, ',' ORDER BY nspname) FROM pg_namespace
+                        WHERE nspname NOT LIKE 'pg\\_%' AND nspname <> 'information_schema'";
+        assert_eq!(rows(&name, schemas).await, ["public,schema_meta,shakedown"]);
+        let history = "SELECT string_agg(stream || ' ' || version, ',' ORDER BY stream, version)
+                         FROM schema_meta.migrations";
+        assert_eq!(rows(&name, history).await, ["shakedown 1,shakedown 2"]);
     })
 }
 
@@ -102,21 +99,103 @@ fn running_branches_are_interrupted_at_start() {
 }
 
 #[test]
-fn a_non_superuser_without_roles_is_refused_naming_bootstrap_sql() {
+fn a_plain_login_that_owns_its_database_opens_it() {
     run(async {
-        let login = pg::TempLogin::new("nosuper").await;
-        let err = Store::open_named(&Admin::lazy(&login.url), &login.db)
+        let login = pg::TempLogin::new("plainlogin").await;
+        let store = Store::open_named(&Admin::lazy(&login.url), &login.db)
+            .await
+            .expect("a login that owns its database needs nothing else");
+        let run_id = records(&store).create_run("task", &team()).await.unwrap();
+        let runs = records(&store).runs().await.unwrap();
+        assert_eq!(runs.len(), 1);
+        assert_eq!(runs[0].id, run_id);
+    })
+}
+
+/// The retired factory build's files, in the order it applied them.
+const RETIRED: &[(&str, u32, &str, &str)] = &[
+    (
+        "identity",
+        1,
+        "baseline",
+        include_str!("fixtures/retired/identity/0001_baseline.sql"),
+    ),
+    (
+        "identity",
+        2,
+        "orgs",
+        include_str!("fixtures/retired/identity/0002_orgs.sql"),
+    ),
+    (
+        "shakedown",
+        1,
+        "baseline",
+        include_str!("../../shakedown-schema/migrations/shakedown/0001_baseline.sql"),
+    ),
+    (
+        "shakedown",
+        2,
+        "orgs",
+        include_str!("fixtures/retired/shakedown/0002_orgs.sql"),
+    ),
+    (
+        "shakedown",
+        3,
+        "validate",
+        include_str!("fixtures/retired/shakedown/0003_validate.sql"),
+    ),
+];
+
+/// The local org the retired build seeded between its identity and shakedown streams.
+const RETIRED_SEED: &str = "INSERT INTO identity.orgs (id, slug, name, kind)
+    VALUES ('00000000-0000-0000-0000-00000000000b', 'local', 'Local', 'local')";
+
+/// Database `db` as the retired factory build left it: its files applied and recorded with
+/// their sha256, as its migrator did.
+async fn retired_build(db: &str) {
+    let mut sql = String::from(include_str!("fixtures/retired/bootstrap.sql"));
+    sql.push_str(
+        "\nCREATE SCHEMA IF NOT EXISTS schema_meta;
+         CREATE TABLE schema_meta.migrations (stream text NOT NULL, version integer NOT NULL,
+           name text NOT NULL, checksum bytea NOT NULL, applied_at timestamptz NOT NULL DEFAULT now(),
+           applied_by text NOT NULL, execution_ms integer NOT NULL DEFAULT 0, PRIMARY KEY (stream, version));\n",
+    );
+    for (stream, version, name, text) in RETIRED {
+        if (*stream, *version) == ("shakedown", 2) {
+            sql.push_str(RETIRED_SEED);
+            sql.push_str(";\n");
+        }
+        let sum = ring::digest::digest(&ring::digest::SHA256, text.as_bytes());
+        let hex: String = sum.as_ref().iter().map(|b| format!("{b:02x}")).collect();
+        sql.push_str(&format!(
+            "BEGIN;\n{text}\n;\nRESET search_path;\nINSERT INTO schema_meta.migrations (stream, version, name, checksum, applied_by)
+             VALUES ('{stream}', {version}, '{name}', decode('{hex}', 'hex'), 'shaked factory');\nCOMMIT;\n"
+        ));
+    }
+    pg::execute(db, &sql).await;
+}
+
+#[test]
+fn a_database_from_the_retired_factory_build_is_refused_naming_the_fix() {
+    run(async {
+        let clean = pg::Cleanup::new();
+        let name = pg::db_name("retired");
+        clean.add(&name);
+        pg::admin()
+            .create_db_from(&name, "template1")
+            .await
+            .unwrap();
+        retired_build(&name).await;
+        let count = "SELECT count(*) FROM schema_meta.migrations";
+        assert_eq!(rows(&name, count).await, ["5"]);
+        let err = Store::open_named(&pg::admin(), &name)
             .await
             .err()
-            .expect("a login outside shaked_app is refused");
+            .expect("a database the retired build migrated is refused");
         let msg = format!("{err:#}");
-        assert!(
-            msg.contains("core/crates/shakedown-schema/bootstrap.sql"),
-            "{msg}"
-        );
-        assert!(
-            !msg.contains(&login.password),
-            "the message never shows the password: {msg}"
-        );
+        assert!(msg.contains("unreleased factory build"), "{msg}");
+        assert!(msg.contains("step O1"), "{msg}");
+        assert!(!msg.contains("postgres://"), "no connection string: {msg}");
+        assert_eq!(rows(&name, count).await, ["5"], "nothing was written");
     })
 }

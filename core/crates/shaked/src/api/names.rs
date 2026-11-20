@@ -1,5 +1,5 @@
 //! Display names are optional metadata: task ids and event records stay unchanged.
-use crate::auth::Caller;
+use crate::auth::Who;
 use std::sync::Arc;
 
 use axum::{
@@ -19,7 +19,7 @@ pub(super) struct Name {
 
 pub(super) async fn set(
     State(state): State<Arc<AppState>>,
-    Caller(caller): Caller,
+    Who(caller): Who,
     Path(id): Path<String>,
     JsonBody(req): JsonBody<Name>,
 ) -> ApiResult<Value> {

@@ -13,13 +13,9 @@
 mod migrator;
 #[cfg(feature = "tokio-postgres")]
 mod pg;
+mod retired;
 mod stream;
 
 pub use migrator::{check, migrate, wait_ready, Applied, Conn, Error, Plan, Report};
-pub use stream::{
-    base, load, parse, retiring_identity, Files, Migration, Stream, BASE_FILES, SHAKEDOWN,
-};
-
-/// Section 0 of the schema: the four NOLOGIN roles and the schemas. Run once per cluster and
-/// database as a superuser before migrating (a local shaked on a superuser login runs it itself).
-pub const BOOTSTRAP_SQL: &str = include_str!("../bootstrap.sql");
+pub use retired::{retired_in, RETIRED};
+pub use stream::{base, load, parse, Files, Migration, Stream, BASE_FILES, SHAKEDOWN};

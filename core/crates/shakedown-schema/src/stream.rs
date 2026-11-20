@@ -97,28 +97,8 @@ pub const BASE_FILES: Files = Files {
             include_str!("../migrations/shakedown/0001_baseline.sql"),
         ),
         (
-            "0002_orgs.sql",
-            include_str!("../migrations/shakedown/0002_orgs.sql"),
-        ),
-        (
-            "0003_validate.sql",
-            include_str!("../migrations/shakedown/0003_validate.sql"),
-        ),
-    ],
-    also_accept: &[],
-};
-
-/// The identity stream, which moves to the cloud's crate; kept until the base drops its orgs.
-const IDENTITY_FILES: Files = Files {
-    stream: Stream("identity"),
-    files: &[
-        (
-            "0001_baseline.sql",
-            include_str!("../migrations/identity/0001_baseline.sql"),
-        ),
-        (
-            "0002_orgs.sql",
-            include_str!("../migrations/identity/0002_orgs.sql"),
+            "0002_keys_worlds_saves_tokens.sql",
+            include_str!("../migrations/shakedown/0002_keys_worlds_saves_tokens.sql"),
         ),
     ],
     also_accept: &[],
@@ -158,12 +138,6 @@ pub fn base() -> &'static [Migration] {
     &BASE
 }
 
-/// The identity stream, parsed; it leaves this crate with the base's orgs.
-pub fn retiring_identity() -> &'static [Migration] {
-    static IDENTITY: LazyLock<Vec<Migration>> = LazyLock::new(|| embedded(&IDENTITY_FILES));
-    &IDENTITY
-}
-
 /// Reads a file's version and name (`NNNN_name.sql`) and its header lines.
 pub fn parse(
     stream: Stream,
@@ -193,7 +167,7 @@ pub fn parse(
     })
 }
 
-/// `0002_orgs.sql` as (2, "orgs").
+/// `0002_keys.sql` as (2, "keys").
 fn version_and_name(file: &'static str) -> Option<(u32, &'static str)> {
     let (num, name) = file.strip_suffix(".sql")?.split_once('_')?;
     let version: u32 = num.parse().ok().filter(|v| *v > 0 && num.len() == 4)?;

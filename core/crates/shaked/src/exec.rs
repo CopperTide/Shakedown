@@ -60,8 +60,8 @@ pub struct BranchCtx {
     pub overhead: Ledger,
     /// A finish held until the run's world time window ends (see [`crate::window`]).
     pub window: std::sync::Mutex<Option<crate::window::Held>>,
-    /// Who the branch runs for: its records are written under this scope.
-    pub scope: Arc<crate::auth::Scope>,
+    /// Who the branch runs for: its records are written for this caller.
+    pub caller: Arc<crate::auth::Caller>,
 }
 
 impl BranchCtx {
@@ -82,13 +82,13 @@ impl BranchCtx {
             lifecycle: Lifecycle::default(),
             overhead: Ledger::default(),
             window: std::sync::Mutex::default(),
-            scope: Arc::new(crate::auth::local_owner()),
+            caller: Arc::new(crate::auth::Caller::person()),
         }
     }
 
     /// The same branch run for `scope` (a new branch runs for the local owner until told).
-    pub fn with_scope(mut self, scope: Arc<crate::auth::Scope>) -> BranchCtx {
-        self.scope = scope;
+    pub fn with_caller(mut self, caller: Arc<crate::auth::Caller>) -> BranchCtx {
+        self.caller = caller;
         self
     }
 
@@ -105,7 +105,7 @@ impl BranchCtx {
 
     /// The store's records as this branch's scope.
     pub fn records<'a>(&'a self, store: &'a Store) -> crate::store::Scoped<'a> {
-        store.at(&self.scope)
+        store.at(&self.caller)
     }
 
     /// The same branch under `rules`.

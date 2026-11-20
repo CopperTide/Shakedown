@@ -1,0 +1,4 @@
+# <path from the repo root>:<the trimmed line> of each line that may name an org (see no_orgs.rs).
+core/crates/shaked/src/metrics.rs:assert_eq!(m.cost.source.as_deref(), Some("https://example.org/prices"));
+core/crates/shaked/src/metrics.rs:source = "https://example.org/prices"
+core/crates/shaked/src/prices.rs:source = "https://example.org"

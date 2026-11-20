@@ -20,7 +20,7 @@ use crate::{
 /// and for a run a Code connection drives, the connection whose driver shaked launches for it.
 pub struct LaunchSpec<'a> {
     /// Who the run is for.
-    pub scope: Arc<crate::auth::Scope>,
+    pub scope: Arc<crate::auth::Caller>,
     pub task_id: &'a str,
     pub team: Team,
     pub scenario: &'a Scenario,
@@ -47,7 +47,7 @@ pub struct Launched {
 /// `failed`, saying why).
 pub async fn launch_driver(
     state: &Arc<AppState>,
-    scope: &crate::auth::Scope,
+    scope: &crate::auth::Caller,
     conn_id: &str,
     ids: RunIds<'_>,
 ) -> Option<driver::Launched> {

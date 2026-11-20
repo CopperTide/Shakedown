@@ -24,10 +24,9 @@ impl Scoped<'_> {
         expires: DateTime<Utc>,
     ) -> Result<String> {
         let token = new_secret(prefix(kind));
-        let sql = "INSERT INTO run_tokens (org_id, run_id, branch_id, kind, agent, sandbox_id, token_hash, expires_at)
-                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8)";
-        let params: [&(dyn tokio_postgres::types::ToSql + Sync); 8] = [
-            &self.org(),
+        let sql = "INSERT INTO run_tokens (run_id, branch_id, kind, agent, sandbox_id, token_hash, expires_at)
+                   VALUES ($1, $2, $3, $4, $5, $6, $7)";
+        let params: [&(dyn tokio_postgres::types::ToSql + Sync); 7] = [
             &run,
             &branch,
             &kind.as_str(),
@@ -42,16 +41,15 @@ impl Scoped<'_> {
 
     /// Moves `branch`'s live tokens' expiry `by` later (the branch was paused that long).
     pub async fn extend_run_tokens(&self, branch: &str, by: std::time::Duration) -> Result<u64> {
-        let sql = "UPDATE run_tokens SET expires_at = expires_at + make_interval(secs => $3)
-                   WHERE branch_id = $1 AND org_id = $2 AND revoked_at IS NULL";
-        self.execute(sql, &[&branch, &self.org(), &by.as_secs_f64()])
-            .await
+        let sql = "UPDATE run_tokens SET expires_at = expires_at + make_interval(secs => $2)
+                   WHERE branch_id = $1 AND revoked_at IS NULL";
+        self.execute(sql, &[&branch, &by.as_secs_f64()]).await
     }
 
     /// Revokes `branch`'s live tokens (only `agent`'s, when given): how many.
     pub async fn revoke_run_tokens(&self, branch: &str, agent: Option<&str>) -> Result<u64> {
         let sql = "UPDATE run_tokens SET revoked_at = now()
-                   WHERE branch_id = $1 AND org_id = $2 AND revoked_at IS NULL AND ($3::text IS NULL OR agent = $3)";
-        self.execute(sql, &[&branch, &self.org(), &agent]).await
+                   WHERE branch_id = $1 AND revoked_at IS NULL AND ($2::text IS NULL OR agent = $2)";
+        self.execute(sql, &[&branch, &agent]).await
     }
 }

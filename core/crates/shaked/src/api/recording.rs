@@ -5,7 +5,7 @@
 //! parent's. `GET /api/branches/{id}/recording` says what there is; `.../recording.mp4` serves the
 //! video, with byte ranges so a player can seek.
 
-use crate::auth::{Caller, Scope};
+use crate::auth::{Caller, Who};
 use std::{path::PathBuf, sync::Arc};
 
 use axum::{
@@ -50,7 +50,7 @@ fn mp4_of(dir: &std::path::Path, branch: &str) -> Option<PathBuf> {
 /// The recording of `id`, or of its nearest ancestor that has one, with the branch it is of.
 async fn find(
     state: &AppState,
-    caller: &Scope,
+    caller: &Caller,
     id: &str,
 ) -> Result<Option<(String, PathBuf)>, ApiError> {
     let Some(dir) = folder() else { return Ok(None) };
@@ -68,7 +68,7 @@ async fn find(
 /// `{video: url | null, of: branch, sidecar: {...} | null}`.
 async fn recording(
     State(state): State<Arc<AppState>>,
-    Caller(caller): Caller,
+    Who(caller): Who,
     Path(id): Path<String>,
 ) -> ApiResult<Value> {
     let Some((of, path)) = find(&state, &caller, &id).await? else {
@@ -100,7 +100,7 @@ fn range(headers: &HeaderMap, len: u64) -> Option<(u64, u64)> {
 
 async fn video(
     State(state): State<Arc<AppState>>,
-    Caller(caller): Caller,
+    Who(caller): Who,
     Path(id): Path<String>,
     headers: HeaderMap,
 ) -> Result<Response, ApiError> {

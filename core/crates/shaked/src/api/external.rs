@@ -1,7 +1,7 @@
 //! The routes an external system drives a run with: start it (`POST /api/runs` with `runner:
 //! "external"`), register agents and get their endpoints, report an agent done, and finish it.
 
-use crate::auth::{Caller, Scope};
+use crate::auth::{Caller, Who};
 use std::sync::Arc;
 
 use axum::{
@@ -40,7 +40,7 @@ pub(super) fn router() -> Router<Arc<AppState>> {
 /// the disk, the order external runs have always been refused in.
 pub(super) async fn create_run(
     state: Arc<AppState>,
-    caller: Arc<Scope>,
+    caller: Arc<Caller>,
     permit: StartPermit,
     benchmark: String,
     (task_id, team): (String, Team),
@@ -73,11 +73,14 @@ pub(super) async fn create_run(
 
 /// The live branch `id` an external system drives: 404 when it isn't live, 409 when shaked runs
 /// its agents.
-fn external_branch(state: &AppState, caller: &Scope, id: &str) -> Result<Arc<BranchCtx>, ApiError> {
+fn external_branch(
+    state: &AppState,
+    _caller: &Caller,
+    id: &str,
+) -> Result<Arc<BranchCtx>, ApiError> {
     let ctx = state
         .live
         .get(id)
-        .filter(|c| c.scope.org() == caller.org())
         .ok_or_else(|| ApiError::not_found(format!("no live branch \"{id}\"")))?;
     if ctx.rules.runner != Runner::External {
         return Err(ApiError::conflict(
@@ -90,7 +93,7 @@ fn external_branch(state: &AppState, caller: &Scope, id: &str) -> Result<Arc<Bra
 /// The live external branch `id` (see `external_branch`) when it has `agent`: 404 when it hasn't.
 fn external_agent(
     state: &AppState,
-    caller: &Scope,
+    caller: &Caller,
     id: &str,
     agent: &str,
 ) -> Result<Arc<BranchCtx>, ApiError> {
@@ -126,7 +129,7 @@ struct Finished {
 /// answers its endpoints and the tools it gets.
 async fn register(
     State(state): State<Arc<AppState>>,
-    Caller(caller): Caller,
+    Who(caller): Who,
     Path(id): Path<String>,
     JsonBody(join): JsonBody<Join>,
 ) -> ApiResult<Value> {
@@ -148,7 +151,7 @@ async fn register(
 /// and cost the system reports for it.
 async fn end_agent(
     State(state): State<Arc<AppState>>,
-    Caller(caller): Caller,
+    Who(caller): Who,
     Path((id, agent)): Path<(String, String)>,
     OptionalJson(done): OptionalJson<AgentDone>,
 ) -> ApiResult<Recorded> {
@@ -163,7 +166,7 @@ async fn end_agent(
 /// agent's client reported, as a `ModelCall` event.
 async fn report_usage(
     State(state): State<Arc<AppState>>,
-    Caller(caller): Caller,
+    Who(caller): Who,
     Path((id, agent)): Path<(String, String)>,
     JsonBody(report): JsonBody<UsageReport>,
 ) -> ApiResult<Recorded> {
@@ -181,7 +184,7 @@ async fn report_usage(
 /// would do, one `Reasoning` event per non-blank item, in order. Answers their `seqs`.
 async fn report_reasoning(
     State(state): State<Arc<AppState>>,
-    Caller(caller): Caller,
+    Who(caller): Who,
     Path((id, agent)): Path<(String, String)>,
     JsonBody(report): JsonBody<ReasoningReport>,
 ) -> ApiResult<RecordedAll> {
@@ -217,7 +220,7 @@ struct FinishReq {
 /// held_until_clock_ms}` and the run is scored when the window ends.
 async fn finish(
     State(state): State<Arc<AppState>>,
-    Caller(caller): Caller,
+    Who(caller): Who,
     Path(id): Path<String>,
     OptionalJson(req): OptionalJson<FinishReq>,
 ) -> ApiResult<Value> {

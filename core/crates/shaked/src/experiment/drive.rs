@@ -2,7 +2,7 @@
 //! run it looks whether the experiment was stopped or shaked is shutting down; a suite ends when
 //! its last run did, the experiment when every run did.
 
-use crate::auth::Scope;
+use crate::auth::Caller;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -16,7 +16,7 @@ use crate::{
 /// Drives the experiment `id` over its `suites` (in setup order) on a task of its own, then
 /// records that it ended (with why, if it stopped early). On shutdown it stops; the next start
 /// records why.
-pub fn spawn(state: &Arc<AppState>, scope: Arc<Scope>, id: String, suites: Vec<Suite>) {
+pub fn spawn(state: &Arc<AppState>, scope: Arc<Caller>, id: String, suites: Vec<Suite>) {
     let state = state.clone();
     tokio::spawn(async move {
         let stopped = drive(&state, &scope, &id, &suites).await.err();
@@ -39,7 +39,7 @@ pub fn spawn(state: &Arc<AppState>, scope: Arc<Scope>, id: String, suites: Vec<S
 /// an error stops the experiment.
 async fn drive(
     state: &Arc<AppState>,
-    scope: &Arc<Scope>,
+    scope: &Arc<Caller>,
     id: &str,
     suites: &[Suite],
 ) -> Result<()> {
@@ -62,7 +62,7 @@ async fn drive(
 /// as the experiment was stopped is stopped too.
 async fn next_run(
     state: &Arc<AppState>,
-    scope: &Arc<Scope>,
+    scope: &Arc<Caller>,
     id: &str,
     suite: &Suite,
 ) -> Result<()> {
@@ -84,7 +84,7 @@ async fn next_run(
 
 /// Stops the experiment: no further run starts, its suites end, and the run that is running now
 /// is stopped. Stopping one that ended changes nothing.
-pub async fn stop(state: &AppState, scope: &Scope, id: &str) -> Result<()> {
+pub async fn stop(state: &AppState, scope: &Caller, id: &str) -> Result<()> {
     let records = state.store.at(scope);
     records.end_experiment(id, Some(STOPPED)).await?;
     for s in records.experiment_suites(id).await? {

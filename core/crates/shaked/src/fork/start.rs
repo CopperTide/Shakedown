@@ -1,7 +1,7 @@
 //! Starting a fork: the new branch, its world restored, and its agents (or its driver) running
 //! again.
 
-use crate::{auth::Scope, store::Scoped};
+use crate::{auth::Caller, store::Scoped};
 use std::{collections::HashMap, sync::Arc};
 
 use serde::Serialize;
@@ -54,7 +54,7 @@ pub async fn fork(
         restore,
         team: None,
     };
-    let local = Arc::new(crate::auth::local_owner());
+    let local = Arc::new(crate::auth::Caller::person());
     fork_with(state, &local, branch_id, req).await
 }
 
@@ -62,7 +62,7 @@ pub async fn fork(
 /// anything is recorded; a replay that fails ends the new branch `infra_error`.
 pub async fn fork_with(
     state: &Arc<AppState>,
-    scope: &Arc<Scope>,
+    scope: &Arc<Caller>,
     branch_id: &str,
     mut req: ForkRequest,
 ) -> Result<ForkResponse, ForkError> {
@@ -79,7 +79,7 @@ pub async fn fork_with(
     let ctx = BranchCtx::new(new_id, Arc::new(world), team, task_id.clone())
         .with_rules(recorded::rules(&events))
         .with_clock(BranchClock::from_env(rerun.clock_ms))
-        .with_scope(scope.clone());
+        .with_caller(scope.clone());
     ctx.overhead.add(Cat::Restore, restore_ms);
     if ctx.rules.runner == Runner::External {
         let conn = ctx.rules.connection.clone();
@@ -98,7 +98,7 @@ pub async fn fork_with(
 /// of `(run, parent, task)`: `relaunched`, or `failed` (the branch ended `failed`, saying why).
 async fn relaunch(
     state: &Arc<AppState>,
-    scope: &Scope,
+    scope: &Caller,
     conn_id: &str,
     (run_id, parent, task_id): (&str, &str, &str),
     branch_id: &str,
@@ -165,7 +165,7 @@ async fn live_child(
 /// rerun panel shows before forking).
 pub async fn restore_preview(
     state: &AppState,
-    scope: &Scope,
+    scope: &Caller,
     branch_id: &str,
     at_seq: i64,
     restore: parts::proto::Mode,

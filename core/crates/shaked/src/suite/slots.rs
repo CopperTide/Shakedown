@@ -2,7 +2,7 @@
 //! run, and recording on the slot how that went (the run that filled it, or why it couldn't
 //! start).
 
-use crate::auth::Scope;
+use crate::auth::Caller;
 use std::future::Future;
 
 use anyhow::{anyhow, Result};
@@ -36,7 +36,7 @@ pub enum SlotOutcome {
 /// (the error).
 pub async fn permit(
     state: &AppState,
-    scope: &Scope,
+    scope: &Caller,
     suite: &Suite,
     slot: &Slot,
 ) -> Result<OwnedRwLockReadGuard<()>> {
@@ -57,7 +57,7 @@ pub async fn permit(
 /// it couldn't start. An error recording it is the error.
 pub async fn run_slot(
     state: &AppState,
-    scope: &Scope,
+    scope: &Caller,
     suite: &Suite,
     slot: &Slot,
     start: impl Future<Output = Result<Launched, RunError>>,

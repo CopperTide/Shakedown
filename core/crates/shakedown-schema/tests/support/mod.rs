@@ -72,17 +72,6 @@ impl Scratch {
         }
     }
 
-    /// `new`, with the bootstrap roles and schemas (the test login is a superuser).
-    pub async fn bootstrapped(tag: &str) -> Scratch {
-        let db = Scratch::new(tag).await;
-        db.connect()
-            .await
-            .batch_execute(shakedown_schema::BOOTSTRAP_SQL)
-            .await
-            .unwrap();
-        db
-    }
-
     pub async fn connect(&self) -> Client {
         connect(&self.name).await
     }
@@ -155,22 +144,6 @@ pub async fn count(c: &Client, sql: &str) -> i64 {
         .await
         .unwrap()
         .get(0)
-}
-
-/// Applies CopperTide-Cloud's migrations 0001–0015 (copied from its main) into `public`.
-pub async fn apply_cloud_0015(c: &Client) {
-    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/cloud-0015");
-    let mut files: Vec<_> = std::fs::read_dir(&dir)
-        .unwrap()
-        .map(|e| e.unwrap().path())
-        .collect();
-    files.sort();
-    assert_eq!(files.len(), 15);
-    for f in &files {
-        c.batch_execute(&std::fs::read_to_string(f).unwrap())
-            .await
-            .unwrap();
-    }
 }
 
 /// True when the table `rel` (schema-qualified) exists.

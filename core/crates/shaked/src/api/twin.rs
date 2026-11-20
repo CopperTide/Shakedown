@@ -2,7 +2,7 @@
 //! (`GET /api/benchmark`), a scenario asked for checked and expanded, and a branch's recorded
 //! views (`GET /api/branches/{id}/views`).
 
-use crate::auth::Caller;
+use crate::auth::Who;
 use std::sync::Arc;
 
 use axum::{
@@ -73,7 +73,7 @@ pub fn views(events: &[Event]) -> Vec<Value> {
 /// included (a fork's record starts with its parent's events before that point).
 async fn branch_views(
     State(state): State<Arc<AppState>>,
-    Caller(caller): Caller,
+    Who(caller): Who,
     Path(id): Path<String>,
 ) -> ApiResult<Vec<Value>> {
     super::branch_or_404(&state, &caller, &id).await?;

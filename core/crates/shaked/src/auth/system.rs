@@ -1,45 +1,15 @@
-//! System scopes: the background jobs that may read and write every org's rows (on the system
-//! pool, as `shaked_system`, which bypasses row-level security). Each job builds its own scope
-//! here and nowhere else.
+//! The background jobs that run without a caller: their transactions are the layer's to set up
+//! (a hosting layer runs them where every owner's rows are visible).
 
-/// The jobs that span orgs.
+/// A job that runs without a caller.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SystemJob {
-    InterruptAtStart,
-    StartupGc,
-    ResolveToken,
-    StoreCopy,
-}
-
-/// Permission to run one system job's transactions.
-#[derive(Debug, Clone, Copy)]
-pub struct SystemScope {
-    job: SystemJob,
-}
-
-impl SystemScope {
-    pub fn job(&self) -> SystemJob {
-        self.job
-    }
-
-    /// Finding the saves no event of any org names (at start, and when asked on this machine).
-    pub(crate) fn startup_gc() -> SystemScope {
-        SystemScope {
-            job: SystemJob::StartupGc,
-        }
-    }
-
-    /// Finding the token a bearer secret's hash names (one fixed query).
-    pub(crate) fn resolve_token() -> SystemScope {
-        SystemScope {
-            job: SystemJob::ResolveToken,
-        }
-    }
-
     /// Marking what was running when shaked stopped as interrupted.
-    pub(crate) fn interrupt_at_start() -> SystemScope {
-        SystemScope {
-            job: SystemJob::InterruptAtStart,
-        }
-    }
+    InterruptAtStart,
+    /// Finding the saves no event names (at start, and when asked on this machine).
+    StartupGc,
+    /// Finding the token a bearer secret's hash names (one fixed query).
+    ResolveToken,
+    /// Copying stored objects between stores.
+    StoreCopy,
 }

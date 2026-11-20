@@ -8,18 +8,18 @@ use axum::{
     Json,
 };
 
-use super::Scope;
+use super::Caller;
 
-/// Who is calling: the scope the auth layer built for this request.
+/// Who is calling: the caller the auth layer put on this request.
 #[derive(Debug, Clone)]
-pub struct Caller(pub Arc<Scope>);
+pub struct Who(pub Arc<Caller>);
 
-impl<S: Send + Sync> FromRequestParts<S> for Caller {
+impl<S: Send + Sync> FromRequestParts<S> for Who {
     type Rejection = (StatusCode, Json<serde_json::Value>);
 
-    async fn from_request_parts(parts: &mut Parts, _: &S) -> Result<Caller, Self::Rejection> {
-        match parts.extensions.get::<Arc<Scope>>() {
-            Some(s) => Ok(Caller(s.clone())),
+    async fn from_request_parts(parts: &mut Parts, _: &S) -> Result<Who, Self::Rejection> {
+        match parts.extensions.get::<Arc<Caller>>() {
+            Some(c) => Ok(Who(c.clone())),
             // A route outside the auth layer: fail closed.
             None => Err((
                 StatusCode::UNAUTHORIZED,

@@ -6,7 +6,7 @@ use std::os::unix::fs::PermissionsExt;
 use serde_json::{json, Value};
 use shaked::{
     agents::{claude, codex, Mcp},
-    auth::{run_tokens::resolve_run_token, Principal, RunTokenKind},
+    auth::{run_tokens::resolve_run_token, CallerKind, RunTokenKind},
     model::{AgentKind, AgentSpec},
 };
 use support::{pg, records, run, AppFx};
@@ -199,14 +199,9 @@ async fn one_branch(store: &shaked::store::Store) -> (String, String) {
     (run_id, b1)
 }
 
-/// A `fake` sandbox for branch `b1` of `run_id`: its id.
-async fn sandbox(db: &str, run_id: &str, b1: &str) -> Option<uuid::Uuid> {
-    let org = shaked::store::LOCAL_ORG_ID;
-    let sql = format!(
-        "INSERT INTO shakedown.sandboxes (id, org_id, run_id, branch_id, backend, image_digest)
-         VALUES ('00000000-0000-0000-0000-0000000000f5', '{org}', '{run_id}', '{b1}', 'fake', 'sha256:x')"
-    );
-    pg::execute(db, &sql).await;
+/// A sandbox's id for branch `b1` of `run_id` (the base keeps only the id; a hosting layer's
+/// schema adds the sandboxes themselves).
+async fn sandbox(_db: &str, _run_id: &str, _b1: &str) -> Option<uuid::Uuid> {
     Some(uuid::Uuid::from_u128(0xf5))
 }
 
@@ -226,8 +221,8 @@ fn run_tokens_resolve_to_their_branch_until_revoked() {
         let t = t.unwrap();
         assert!(t.starts_with("sdr_"));
         let got = resolve_run_token(&store, &t).await.unwrap();
-        let Some(Principal::RunToken { branch, kind, .. }) = got else {
-            panic!("{got:?}")
+        let Some(CallerKind::RunToken { branch, kind, .. }) = got.map(|c| c.kind) else {
+            panic!("a run token resolves")
         };
         assert_eq!((branch, kind), (b1.clone(), RunTokenKind::Run));
         assert_eq!(r.revoke_run_tokens(&b1, None).await.unwrap(), 1);
@@ -255,11 +250,11 @@ fn a_worker_token_needs_its_sandbox() {
             .await
             .unwrap();
         assert!(w.starts_with("sdw_"));
-        let worker = resolve_run_token(&store, &w).await.unwrap();
+        let worker = resolve_run_token(&store, &w).await.unwrap().map(|c| c.kind);
         assert!(
             matches!(
                 worker,
-                Some(Principal::RunToken {
+                Some(CallerKind::RunToken {
                     sandbox: Some(_),
                     ..
                 })

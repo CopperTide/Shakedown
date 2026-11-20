@@ -1,7 +1,7 @@
 //! Pausing, resuming and stopping a live branch (`POST /api/branches/{id}/pause`, `/resume`,
 //! `/stop`), whatever drives its agents, and asking for a save point (`/save`).
 
-use crate::auth::{Caller, Scope};
+use crate::auth::{Caller, Who};
 use std::sync::Arc;
 
 use axum::{
@@ -29,8 +29,8 @@ pub(super) fn router() -> Router<Arc<AppState>> {
 }
 
 /// The live branch `id`: 409 when it has ended (or never ran here), 404 when there is none.
-async fn live(state: &AppState, caller: &Scope, id: &str) -> Result<Arc<BranchCtx>, ApiError> {
-    if let Some(ctx) = state.live.get(id).filter(|c| c.scope.org() == caller.org()) {
+async fn live(state: &AppState, caller: &Caller, id: &str) -> Result<Arc<BranchCtx>, ApiError> {
+    if let Some(ctx) = state.live.get(id) {
         return Ok(ctx);
     }
     match state.store.at(caller).find_branch(id).await? {
@@ -49,7 +49,7 @@ fn paused(ctx: &BranchCtx, changed: bool) -> ApiResult<Value> {
 /// `POST /api/branches/{id}/pause`: new tool calls and model calls wait, the world clock stops.
 async fn pause(
     State(state): State<Arc<AppState>>,
-    Caller(caller): Caller,
+    Who(caller): Who,
     Path(id): Path<String>,
 ) -> ApiResult<Value> {
     let ctx = live(&state, &caller, &id).await?;
@@ -59,7 +59,7 @@ async fn pause(
 /// `POST /api/branches/{id}/resume`: the calls that wait go on, the world clock runs again.
 async fn resume(
     State(state): State<Arc<AppState>>,
-    Caller(caller): Caller,
+    Who(caller): Who,
     Path(id): Path<String>,
 ) -> ApiResult<Value> {
     let ctx = live(&state, &caller, &id).await?;
@@ -76,7 +76,7 @@ async fn resume(
 /// the branch on its task; the stream says when it has.
 async fn stop(
     State(state): State<Arc<AppState>>,
-    Caller(caller): Caller,
+    Who(caller): Who,
     Path(id): Path<String>,
 ) -> ApiResult<Value> {
     let ctx = live(&state, &caller, &id).await?;
@@ -88,7 +88,7 @@ async fn stop(
 /// point: `{"seq", "saves"}` (`seq` null and `saves` empty when nothing was unsaved).
 async fn save(
     State(state): State<Arc<AppState>>,
-    Caller(caller): Caller,
+    Who(caller): Who,
     Path(id): Path<String>,
 ) -> ApiResult<Value> {
     let ctx = live(&state, &caller, &id).await?;
@@ -109,7 +109,7 @@ async fn save(
 /// world's time (`world_ms = world_epoch_ms + clock_ms`).
 async fn clock(
     State(state): State<Arc<AppState>>,
-    Caller(caller): Caller,
+    Who(caller): Who,
     Path(id): Path<String>,
 ) -> ApiResult<Value> {
     let ctx = live(&state, &caller, &id).await?;

@@ -1,6 +1,6 @@
 //! The docs of some keys of a part as they were just after a step (`GET /api/branches/{id}/rows`).
 
-use crate::auth::Caller;
+use crate::auth::Who;
 use std::{collections::HashMap, sync::Arc};
 
 use axum::{
@@ -104,7 +104,7 @@ async fn read_rows(state: &AppState, events: &[Event], q: &RowsQuery) -> Result<
 
 pub(super) async fn rows(
     State(state): State<Arc<AppState>>,
-    Caller(caller): Caller,
+    Who(caller): Who,
     Path(id): Path<String>,
     Query(q): Query<HashMap<String, String>>,
 ) -> ApiResult<Value> {

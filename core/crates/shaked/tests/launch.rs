@@ -58,7 +58,7 @@ fn a_builtin_suite_goes_on_past_a_run_that_cannot_start() {
         let s = stored_suite(&fx, Runner::Chain, ("nope", 2), None).await;
         suite::spawn_builtin(
             &fx.state,
-            std::sync::Arc::new(shaked::auth::local_owner()),
+            std::sync::Arc::new(shaked::auth::Caller::person()),
             s.clone(),
         );
         let mut ended = None;

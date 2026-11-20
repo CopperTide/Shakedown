@@ -3,7 +3,7 @@
 use anyhow::{bail, Context, Result};
 
 use crate::{
-    auth::{local_owner, TokenScope},
+    auth::{Caller, TokenScope},
     pg::Admin,
     store::Store,
 };
@@ -17,7 +17,7 @@ pub async fn run(args: &[String]) -> Option<Result<()>> {
 }
 
 /// `token create --name <n> [--scope read|run|admin ...] [--expires-days N]`: prints a token of
-/// the local owner, and nothing else.
+/// the person at this machine, and nothing else.
 async fn token(args: &[String]) -> Result<()> {
     let words: Vec<&str> = args.iter().map(String::as_str).collect();
     let Some(("create", rest)) = words.split_first().map(|(f, r)| (*f, r)) else {
@@ -25,13 +25,13 @@ async fn token(args: &[String]) -> Result<()> {
     };
     let asked = TokenArgs::parse(rest)?;
     let store = Store::open(&Admin::lazy(&crate::pg::configured_url().await)).await?;
-    let scope = local_owner();
+    let scope = Caller::person();
     let expires = asked
         .expires_days
         .map(|d| chrono::Utc::now() + chrono::Duration::days(d));
     let minted = store
         .at(&scope)
-        .create_api_token(&asked.name, &asked.scopes, None, expires)
+        .create_api_token(&asked.name, &asked.scopes, expires)
         .await?;
     println!("{}", minted.token);
     Ok(())

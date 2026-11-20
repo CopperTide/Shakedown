@@ -145,7 +145,7 @@ pub async fn fresh_store(tag: &str) -> (String, shaked::store::Store, Cleanup) {
     (name, store, clean)
 }
 
-/// A non-superuser login (in no shaked role) owning a database of its own; both are dropped on
+/// A non-superuser login owning a database of its own; both are dropped on
 /// drop. The password is a test value made here.
 pub struct TempLogin {
     pub role: String,
@@ -245,49 +245,4 @@ pub async fn batch_last_text(db: &str, sql: &str) -> Option<String> {
         tokio_postgres::SimpleQueryMessage::Row(r) => r.get(0).map(str::to_string),
         _ => None,
     })
-}
-
-/// Bootstraps database `db` and migrates only stream identity (as the Cloud gateway would).
-pub async fn identity_only(db: &str) {
-    let (mut c, task) = db_client(db).await;
-    c.batch_execute(shakedown_schema::BOOTSTRAP_SQL)
-        .await
-        .unwrap();
-    let plan = shakedown_schema::Plan {
-        apply: &[shakedown_schema::Stream("identity")],
-        require: &[],
-        applied_by: "test",
-    };
-    shakedown_schema::migrate(&mut c, &plan, shakedown_schema::retiring_identity())
-        .await
-        .unwrap();
-    drop(c);
-    let _ = task.await;
-}
-
-impl TempLogin {
-    /// A login in `roles` that may connect to `db` (which it does not own); dropped on drop.
-    pub async fn member(tag: &str, db: &str, roles: &[&str]) -> TempLogin {
-        let id = &uuid::Uuid::new_v4().simple().to_string()[..8];
-        let role = format!("shakedown_test_login_{tag}_{id}");
-        let password = format!("test-{id}");
-        let c = admin_client().await;
-        let sql = format!(
-            "CREATE ROLE \"{role}\" LOGIN PASSWORD '{password}' IN ROLE {}; GRANT CONNECT ON DATABASE \"{db}\" TO \"{role}\"",
-            roles.join(", ")
-        );
-        c.batch_execute(&sql).await.unwrap();
-        let url = with_user(&pg_url(), &role, &password);
-        TempLogin {
-            role,
-            password,
-            db: String::new(),
-            url,
-        }
-    }
-
-    /// The login's URL for database `db`.
-    pub fn db_url(&self, db: &str) -> String {
-        Admin::lazy(&self.url).db_url(db)
-    }
 }

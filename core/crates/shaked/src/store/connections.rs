@@ -79,38 +79,32 @@ impl Scoped<'_> {
         let command = serde_json::to_value(new.command)?;
         let env = serde_json::to_value(new.env)?;
         let sql = format!(
-            "INSERT INTO connections (id, name, command, workdir, env, org_id, created_by)
-             VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING {COLS}"
+            "INSERT INTO connections (id, name, command, workdir, env)
+             VALUES ($1, $2, $3, $4, $5) RETURNING {COLS}"
         );
-        let (org, user) = (self.org(), self.user());
-        let params: [&(dyn tokio_postgres::types::ToSql + Sync); 7] =
-            [&id, &new.name, &command, &new.workdir, &env, &org, &user];
+        let params: [&(dyn tokio_postgres::types::ToSql + Sync); 5] =
+            [&id, &new.name, &command, &new.workdir, &env];
         let row = self.query_one(&sql, &params).await?;
         connection_from(&row)
     }
 
     /// Every connection, newest first.
     pub async fn connections(&self) -> Result<Vec<Connection>> {
-        let sql = format!(
-            "SELECT {COLS} FROM connections WHERE org_id = $1 ORDER BY created_at DESC, id"
-        );
-        let rows = self.query(&sql, &[&self.org()]).await?;
+        let sql = format!("SELECT {COLS} FROM connections ORDER BY created_at DESC, id");
+        let rows = self.query(&sql, &[]).await?;
         rows.iter().map(connection_from).collect()
     }
 
     pub async fn connection(&self, id: &str) -> Result<Option<Connection>> {
-        let sql = format!("SELECT {COLS} FROM connections WHERE id = $1 AND org_id = $2");
-        let row = self.query_opt(&sql, &[&id, &self.org()]).await?;
+        let sql = format!("SELECT {COLS} FROM connections WHERE id = $1");
+        let row = self.query_opt(&sql, &[&id]).await?;
         row.as_ref().map(connection_from).transpose()
     }
 
     /// Deletes the connection: false when there was none. Runs that used it keep its id.
     pub async fn delete_connection(&self, id: &str) -> Result<bool> {
         let n = self
-            .execute(
-                "DELETE FROM connections WHERE id = $1 AND org_id = $2",
-                &[&id, &self.org()],
-            )
+            .execute("DELETE FROM connections WHERE id = $1", &[&id])
             .await?;
         Ok(n > 0)
     }

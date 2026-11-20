@@ -81,18 +81,10 @@ impl Scoped<'_> {
         new: NewExperiment<'_>,
     ) -> Result<(Experiment, Vec<Suite>)> {
         let id = new_id();
-        let sql = "INSERT INTO experiments (id, name, task_id, benchmark, runs, org_id, created_by)
-                   VALUES ($1, $2, $3, $4, $5, $6, $7)";
-        let (org, user) = (self.org(), self.user());
-        let params: [&(dyn tokio_postgres::types::ToSql + Sync); 7] = [
-            &id,
-            &new.name,
-            &new.task,
-            &new.benchmark,
-            &new.runs,
-            &org,
-            &user,
-        ];
+        let sql = "INSERT INTO experiments (id, name, task_id, benchmark, runs)
+                   VALUES ($1, $2, $3, $4, $5)";
+        let params: [&(dyn tokio_postgres::types::ToSql + Sync); 5] =
+            [&id, &new.name, &new.task, &new.benchmark, &new.runs];
         self.execute(sql, &params).await?;
         let tasks = [new.task.to_string()];
         let mut suites = vec![];
@@ -112,32 +104,29 @@ impl Scoped<'_> {
 
     /// Every experiment, newest first.
     pub async fn experiments(&self) -> Result<Vec<Experiment>> {
-        let sql = format!(
-            "SELECT {COLS} FROM experiments WHERE org_id = $1 ORDER BY created_at DESC, id"
-        );
-        let rows = self.query(&sql, &[&self.org()]).await?;
+        let sql = format!("SELECT {COLS} FROM experiments ORDER BY created_at DESC, id");
+        let rows = self.query(&sql, &[]).await?;
         Ok(rows.iter().map(experiment_from).collect())
     }
 
     pub async fn experiment(&self, id: &str) -> Result<Option<Experiment>> {
-        let sql = format!("SELECT {COLS} FROM experiments WHERE id = $1 AND org_id = $2");
-        let row = self.query_opt(&sql, &[&id, &self.org()]).await?;
+        let sql = format!("SELECT {COLS} FROM experiments WHERE id = $1");
+        let row = self.query_opt(&sql, &[&id]).await?;
         Ok(row.as_ref().map(experiment_from))
     }
 
     /// The experiment's suites, in setup order.
     pub async fn experiment_suites(&self, id: &str) -> Result<Vec<Suite>> {
         let sql =
-            format!("SELECT {SUITE_COLS} FROM suites WHERE experiment_id = $1 AND org_id = $2 ORDER BY setup_ord");
-        let rows = self.query(&sql, &[&id, &self.org()]).await?;
+            format!("SELECT {SUITE_COLS} FROM suites WHERE experiment_id = $1 ORDER BY setup_ord");
+        let rows = self.query(&sql, &[&id]).await?;
         rows.iter().map(suite_from).collect()
     }
 
     /// True once the experiment ended (finished or stopped); a missing one counts as ended.
     pub async fn experiment_ended(&self, id: &str) -> Result<bool> {
-        let sql =
-            "SELECT ended_at IS NOT NULL AS ended FROM experiments WHERE id = $1 AND org_id = $2";
-        let row = self.query_opt(sql, &[&id, &self.org()]).await?;
+        let sql = "SELECT ended_at IS NOT NULL AS ended FROM experiments WHERE id = $1";
+        let row = self.query_opt(sql, &[&id]).await?;
         Ok(row.is_none_or(|r| r.get("ended")))
     }
 
@@ -145,10 +134,10 @@ impl Scoped<'_> {
     /// that have not ended with the same why. Nothing changes for one that ended already.
     pub async fn end_experiment(&self, id: &str, error: Option<&str>) -> Result<()> {
         let sql = "WITH e AS (UPDATE experiments SET ended_at = now(), error = $2
-                              WHERE id = $1 AND org_id = $3 AND ended_at IS NULL RETURNING id)
+                              WHERE id = $1 AND ended_at IS NULL RETURNING id)
                    UPDATE suites SET ended_at = now(), error = $2
-                   FROM e WHERE suites.experiment_id = e.id AND suites.org_id = $3 AND suites.ended_at IS NULL";
-        self.execute(sql, &[&id, &error, &self.org()]).await?;
+                   FROM e WHERE suites.experiment_id = e.id AND suites.ended_at IS NULL";
+        self.execute(sql, &[&id, &error]).await?;
         Ok(())
     }
 }

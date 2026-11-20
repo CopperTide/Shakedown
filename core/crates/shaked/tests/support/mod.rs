@@ -7,7 +7,6 @@ pub mod fake_llm;
 pub mod legacy;
 pub mod live;
 pub mod live_world;
-pub mod orgs;
 pub mod packages;
 pub mod pg;
 
@@ -68,8 +67,6 @@ pub struct AppFx {
     pub hub: TestHub,
     /// The metadata database's name.
     pub db: String,
-    /// The org fixtures, seeded into a hosted app's database.
-    orgs: Option<orgs::Orgs>,
     root: Option<ToyRoot>,
     _clean: Cleanup,
     _cas: CaCleanup,
@@ -82,7 +79,6 @@ pub struct AppSetup {
     kind: String,
     tag: String,
     configured: bool,
-    hosted: bool,
     hub: Option<TestHub>,
     root: Option<ToyRoot>,
     bench: Option<String>,
@@ -97,7 +93,6 @@ impl AppFx {
             kind: kind.into(),
             tag: tag.into(),
             configured: false,
-            hosted: false,
             hub: None,
             root: None,
             bench: None,
@@ -123,11 +118,6 @@ impl AppFx {
 
     pub async fn delete(&self, path: &str) -> (u16, Value) {
         app::send(self.http.delete(format!("{}{path}", self.base))).await
-    }
-
-    /// The org fixtures of a hosted app.
-    pub fn orgs(&self) -> &orgs::Orgs {
-        self.orgs.as_ref().expect("a hosted app (AppSetup::hosted)")
     }
 }
 
@@ -184,10 +174,6 @@ impl AppSetup {
     pub async fn start(self) -> AppFx {
         let hub = self.hub.unwrap_or_else(|| TestHub::new(&[]));
         let (db, store, clean) = app::meta_store_named(&self.kind, &self.tag).await;
-        let orgs = match self.hosted {
-            true => Some(orgs::seed(&db).await),
-            false => None,
-        };
         let (h, bench) = (hub.hub.clone(), self.bench.as_deref());
         let (state, base) = match self.configured {
             true => app::app_for(store, h, bench, self.tweak).await,
@@ -200,20 +186,19 @@ impl AppSetup {
             http: reqwest::Client::new(),
             hub,
             db,
-            orgs,
             root: self.root,
             _clean: clean,
         }
     }
 }
 
-/// The local owner's scope: what every local request runs as.
-pub fn local() -> &'static shaked::auth::Scope {
-    static LOCAL: LazyLock<shaked::auth::Scope> = LazyLock::new(shaked::auth::local_owner);
+/// The person at this machine: what every local request runs as.
+pub fn local() -> &'static shaked::auth::Caller {
+    static LOCAL: LazyLock<shaked::auth::Caller> = LazyLock::new(shaked::auth::Caller::person);
     &LOCAL
 }
 
-/// `store`'s records as the local owner.
+/// `store`'s records as the person at this machine.
 pub fn records(store: &shaked::store::Store) -> shaked::store::Scoped<'_> {
     store.at(local())
 }

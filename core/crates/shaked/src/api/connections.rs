@@ -2,7 +2,7 @@
 //! one, and start a run with one (`POST /api/runs` with `connection`). Every route that can start
 //! a driver refuses requests a web page could make (`guard_launch`).
 
-use crate::auth::{Caller, Scope};
+use crate::auth::{Caller, Who};
 use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
 use axum::{
@@ -120,7 +120,7 @@ fn validate(req: &NewConnectionReq) -> Result<(), ApiError> {
 }
 
 /// `GET /api/connections`: every connection, newest first, secret env values redacted.
-async fn list(State(state): State<Arc<AppState>>, Caller(caller): Caller) -> ApiResult<Value> {
+async fn list(State(state): State<Arc<AppState>>, Who(caller): Who) -> ApiResult<Value> {
     let all = state.store.at(&caller).connections().await?;
     let shown: Vec<Connection> = all.iter().map(Connection::redacted).collect();
     Ok(Json(serde_json::to_value(shown)?))
@@ -129,7 +129,7 @@ async fn list(State(state): State<Arc<AppState>>, Caller(caller): Caller) -> Api
 /// `POST /api/connections`: saves a Code connection; answers it, secrets redacted.
 async fn create(
     State(state): State<Arc<AppState>>,
-    Caller(caller): Caller,
+    Who(caller): Who,
     headers: HeaderMap,
     body: Bytes,
 ) -> ApiResult<Value> {
@@ -149,7 +149,7 @@ async fn create(
 /// `DELETE /api/connections/{id}`: 404 when there is none. Runs that used it keep its id.
 async fn delete(
     State(state): State<Arc<AppState>>,
-    Caller(caller): Caller,
+    Who(caller): Who,
     Path(id): Path<String>,
 ) -> ApiResult<Value> {
     match state.store.at(&caller).delete_connection(&id).await? {
@@ -161,7 +161,7 @@ async fn delete(
 /// The connection `id`, or 404.
 pub(super) async fn connection_or_404(
     state: &AppState,
-    caller: &Scope,
+    caller: &Caller,
     id: &str,
 ) -> Result<Connection, ApiError> {
     let found = state.store.at(caller).connection(id).await?;
@@ -184,7 +184,7 @@ pub(super) struct CodeRun {
 /// runner other than `external` (or `chain`, the default), 404 for an unknown connection.
 pub(super) async fn create_run(
     state: Arc<AppState>,
-    caller: Arc<Scope>,
+    caller: Arc<Caller>,
     permit: StartPermit,
     headers: &HeaderMap,
     (id, runner): (&str, Runner),
@@ -206,7 +206,7 @@ pub(super) async fn create_run(
 /// yet), and whether the driver started (`launched`) or not (`failed`, the run ended saying why).
 pub(super) async fn start_code_run(
     state: Arc<AppState>,
-    caller: Arc<Scope>,
+    caller: Arc<Caller>,
     permit: StartPermit,
     conn: Connection,
     run: CodeRun,
@@ -264,7 +264,7 @@ async fn test_run(state: &AppState, conn: &Connection) -> Result<CodeRun, ApiErr
 /// registered an agent that called a tool, finished the run and exited cleanly.
 async fn test(
     State(state): State<Arc<AppState>>,
-    Caller(caller): Caller,
+    Who(caller): Who,
     Path(id): Path<String>,
     headers: HeaderMap,
 ) -> ApiResult<Value> {
@@ -285,7 +285,7 @@ async fn test(
 /// value says so).
 async fn ended_or_stopped(
     state: &AppState,
-    caller: &Scope,
+    caller: &Caller,
     branch: &str,
 ) -> anyhow::Result<(Branch, Option<String>)> {
     let deadline = tokio::time::Instant::now() + TEST_WAIT;
@@ -329,7 +329,7 @@ fn work_of(events: &[Event]) -> (Vec<String>, usize) {
 /// What a connection test's run came to (see `test`).
 async fn test_outcome(
     state: &Arc<AppState>,
-    caller: &Scope,
+    caller: &Caller,
     branch: &str,
     launched: Option<Launched>,
 ) -> anyhow::Result<Json<Value>> {

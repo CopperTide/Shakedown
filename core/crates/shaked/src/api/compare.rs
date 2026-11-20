@@ -1,7 +1,7 @@
 //! Two finished branches compared: their summaries, where they diverged, and the rows their final
 //! worlds differ in (`GET /api/compare?a=&b=`).
 
-use crate::auth::{Caller, Scope};
+use crate::auth::{Caller, Who};
 use std::{collections::HashMap, sync::Arc};
 
 use axum::{
@@ -24,7 +24,7 @@ const NO_FINAL_STATE: &str = "this branch has no final state yet";
 /// The branch, which must exist (404) and have finished (409).
 pub(super) async fn finished_branch(
     state: &AppState,
-    caller: &Scope,
+    caller: &Caller,
     id: &str,
 ) -> Result<Branch, ApiError> {
     let b = branch_or_404(state, caller, id).await?;
@@ -43,7 +43,7 @@ pub(super) struct Side {
     pub end: FinalState,
 }
 
-async fn side(state: &AppState, caller: &Scope, branch: Branch) -> Result<Side, ApiError> {
+async fn side(state: &AppState, caller: &Caller, branch: Branch) -> Result<Side, ApiError> {
     let events = state.store.at(caller).events(&branch.id).await?;
     let saves = final_saves(&branch.id, &events).ok_or(ApiError::conflict(NO_FINAL_STATE))?;
     let world = world_of(&state.hub, &events).await?;
@@ -57,7 +57,7 @@ async fn side(state: &AppState, caller: &Scope, branch: Branch) -> Result<Side, 
 /// Both sides: existence first (404), then finished (409), then a final state (409).
 pub(super) async fn sides(
     state: &AppState,
-    caller: &Scope,
+    caller: &Caller,
     ids: [&String; 2],
 ) -> Result<[Side; 2], ApiError> {
     for id in ids {
@@ -72,7 +72,7 @@ pub(super) async fn sides(
 
 pub(super) async fn compare_branches(
     State(state): State<Arc<AppState>>,
-    Caller(caller): Caller,
+    Who(caller): Who,
     Query(q): Query<HashMap<String, String>>,
 ) -> ApiResult<Value> {
     let (a, b) = pair(&q)?;

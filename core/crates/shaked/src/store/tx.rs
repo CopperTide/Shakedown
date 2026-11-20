@@ -1,18 +1,12 @@
-//! A store transaction under a scope: `BEGIN`, the role, and the `app.*` settings every
-//! row-level security policy reads. A transaction dropped without `commit` closes its connection,
-//! so it never goes back to the pool mid-transaction.
+//! A store transaction: `BEGIN` on a pooled connection. A transaction dropped without `commit`
+//! closes its connection, so it never goes back to the pool mid-transaction.
 
 use anyhow::{Context, Result};
 use deadpool_postgres::Object;
 use tokio_postgres::{types::ToSql, Row};
 
 use super::Store;
-use crate::auth::{Scope, SystemScope};
-
-/// The four settings, transaction-local, so they reset at commit.
-const SET_SCOPE: &str =
-    "SELECT set_config('app.org_id', $1, true), set_config('app.user_id', $2, true),
-        set_config('app.team_ids', $3, true), set_config('app.org_role', $4, true)";
+use crate::auth::{Caller, SystemJob};
 
 /// An open transaction.
 pub struct Tx {
@@ -70,36 +64,27 @@ impl Drop for Tx {
 }
 
 impl Store {
-    /// A transaction as `s`: under `shaked_app` (set as the role when this login is not in it
-    /// already) with `s`'s org, user, teams and role.
-    pub async fn tx(&self, s: &Scope) -> Result<Tx> {
-        let tx = Tx {
-            conn: Some(self.app.get().await?),
-            committed: false,
-        };
-        tx.batch(if self.set_role {
-            "BEGIN; SET LOCAL ROLE shaked_app"
-        } else {
-            "BEGIN"
-        })
-        .await?;
-        let [org, user, teams, role] = s.settings();
-        tx.execute(SET_SCOPE, &[&org, &user, &teams, &role]).await?;
-        Ok(tx)
+    /// A transaction for `_c`'s request.
+    pub async fn tx(&self, _c: &Caller) -> Result<Tx> {
+        self.begin(&self.pool).await
     }
 
-    /// A transaction of a system job, on the system pool as `shaked_system` (every org's rows).
-    pub async fn system_tx(&self, _s: &SystemScope) -> Result<Tx> {
+    /// A transaction of a system job: on the system pool when there is one.
+    pub async fn system_tx(&self, _job: SystemJob) -> Result<Tx> {
+        self.begin(self.system.as_ref().unwrap_or(&self.pool)).await
+    }
+
+    async fn begin(&self, pool: &deadpool_postgres::Pool) -> Result<Tx> {
         let tx = Tx {
-            conn: Some(self.system.get().await?),
+            conn: Some(pool.get().await?),
             committed: false,
         };
-        tx.batch("BEGIN; SET LOCAL ROLE shaked_system").await?;
+        tx.batch("BEGIN").await?;
         Ok(tx)
     }
 
     /// The request pool's size and idle connections.
     pub fn pool_status(&self) -> deadpool_postgres::Status {
-        self.app.status()
+        self.pool.status()
     }
 }

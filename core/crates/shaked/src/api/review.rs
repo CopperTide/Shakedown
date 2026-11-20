@@ -3,7 +3,7 @@
 //! `GET` reads it (404 before any). Off (`GET /api/review/settings`): `POST` is refused (409) and
 //! nothing is sent to a model.
 
-use crate::auth::{Caller, Scope};
+use crate::auth::{Caller, Who};
 use std::{collections::HashMap, sync::Arc};
 
 use anyhow::anyhow;
@@ -66,7 +66,7 @@ fn reviewer(state: &AppState) -> Result<ReviewerModel, ApiError> {
     }
 }
 
-async fn stored(state: &AppState, caller: &Scope, key: &str) -> ApiResult<StoredReview> {
+async fn stored(state: &AppState, caller: &Caller, key: &str) -> ApiResult<StoredReview> {
     match state.store.at(caller).review(key).await? {
         Some(r) => Ok(Json(r)),
         None => Err(ApiError::not_found("there is no review yet")),
@@ -81,7 +81,7 @@ fn again(q: &HashMap<String, String>) -> bool {
 /// one started: its row, with `make` building the job on a task of its own.
 async fn start<F>(
     state: Arc<AppState>,
-    caller: Arc<Scope>,
+    caller: Arc<Caller>,
     key: String,
     shape: Shape,
     again: bool,
@@ -115,7 +115,7 @@ where
 
 async fn get_branch(
     State(state): State<Arc<AppState>>,
-    Caller(caller): Caller,
+    Who(caller): Who,
     Path(id): Path<String>,
 ) -> ApiResult<StoredReview> {
     stored(&state, &caller, &review::branch_key(&id)).await
@@ -123,7 +123,7 @@ async fn get_branch(
 
 async fn post_branch(
     State(state): State<Arc<AppState>>,
-    Caller(caller): Caller,
+    Who(caller): Who,
     Path(id): Path<String>,
     Query(q): Q,
 ) -> ApiResult<StoredReview> {
@@ -137,7 +137,7 @@ async fn post_branch(
     .await
 }
 
-async fn branch_job(state: &AppState, caller: &Scope, id: &str) -> anyhow::Result<Job> {
+async fn branch_job(state: &AppState, caller: &Caller, id: &str) -> anyhow::Result<Job> {
     let records = state.store.at(caller);
     let branch = records.branch(id).await?;
     let events = records.events(id).await?;
@@ -164,7 +164,7 @@ async fn branch_job(state: &AppState, caller: &Scope, id: &str) -> anyhow::Resul
 
 async fn get_compare(
     State(state): State<Arc<AppState>>,
-    Caller(caller): Caller,
+    Who(caller): Who,
     Query(q): Q,
 ) -> ApiResult<StoredReview> {
     let (a, b) = pair(&q)?;
@@ -173,7 +173,7 @@ async fn get_compare(
 
 async fn post_compare(
     State(state): State<Arc<AppState>>,
-    Caller(caller): Caller,
+    Who(caller): Who,
     Query(q): Q,
 ) -> ApiResult<StoredReview> {
     reviewer(&state)?;
@@ -224,7 +224,7 @@ fn record<'a>(s: &'a Side, ticket: Option<&'a str>) -> RunRecord<'a> {
     }
 }
 
-async fn compare_job(state: &AppState, caller: &Scope, a: &str, b: &str) -> anyhow::Result<Job> {
+async fn compare_job(state: &AppState, caller: &Caller, a: &str, b: &str) -> anyhow::Result<Job> {
     let (ia, ib) = (a.to_string(), b.to_string());
     let [sa, sb] = sides(state, caller, [&ia, &ib]).await.map_err(job_err)?;
     let c = compared(state, &sa, &sb).await?;
@@ -257,14 +257,14 @@ async fn compare_job(state: &AppState, caller: &Scope, a: &str, b: &str) -> anyh
 
 async fn get_suites(
     State(state): State<Arc<AppState>>,
-    Caller(caller): Caller,
+    Who(caller): Who,
     Query(q): Q,
 ) -> ApiResult<StoredReview> {
     let (a, b) = pair(&q)?;
     stored(&state, &caller, &review::suites_key(&a, &b)).await
 }
 
-async fn find_suite(state: &AppState, caller: &Scope, id: &str) -> Result<suite::Suite, ApiError> {
+async fn find_suite(state: &AppState, caller: &Caller, id: &str) -> Result<suite::Suite, ApiError> {
     state
         .store
         .at(caller)
@@ -275,7 +275,7 @@ async fn find_suite(state: &AppState, caller: &Scope, id: &str) -> Result<suite:
 
 async fn post_suites(
     State(state): State<Arc<AppState>>,
-    Caller(caller): Caller,
+    Who(caller): Who,
     Query(q): Q,
 ) -> ApiResult<StoredReview> {
     reviewer(&state)?;
@@ -299,7 +299,7 @@ async fn post_suites(
 
 async fn suites_job(
     state: &AppState,
-    caller: &Scope,
+    caller: &Caller,
     a: suite::Suite,
     b: suite::Suite,
 ) -> anyhow::Result<Job> {

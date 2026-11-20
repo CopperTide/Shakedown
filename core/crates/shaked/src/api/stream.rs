@@ -1,7 +1,7 @@
 //! A branch's events and final status as a server-sent event stream
 //! (`GET /api/branches/{id}/stream`).
 
-use crate::auth::{Caller, Scope};
+use crate::auth::{Caller, Who};
 use std::{sync::Arc, time::Duration};
 
 use axum::{
@@ -32,7 +32,7 @@ type SseTx = mpsc::Sender<Result<SseEvent, std::convert::Infallible>>;
 /// Feeds one branch's events and final status to an SSE client.
 struct Pump {
     state: Arc<AppState>,
-    caller: Arc<Scope>,
+    caller: Arc<Caller>,
     id: String,
     /// The last event seq sent.
     last: i64,
@@ -157,7 +157,7 @@ impl Pump {
 
 pub(super) async fn stream(
     State(state): State<Arc<AppState>>,
-    Caller(caller): Caller,
+    Who(caller): Who,
     Path(id): Path<String>,
 ) -> Result<Response, ApiError> {
     branch_or_404(&state, &caller, &id).await?;

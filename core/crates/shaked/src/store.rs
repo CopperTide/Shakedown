@@ -7,7 +7,7 @@ use tokio::sync::{broadcast, Mutex as AsyncMutex};
 use tokio_postgres::{types::ToSql, Row};
 
 use crate::{
-    auth::{Scope, SystemScope},
+    auth::{Caller, SystemJob},
     model::*,
     overhead::Overhead,
     pg::Admin,
@@ -20,7 +20,6 @@ mod experiments;
 mod open;
 mod reviews;
 mod run_tokens;
-mod seed;
 mod suites;
 mod tx;
 pub use api_tokens::ApiTokenRow;
@@ -28,7 +27,6 @@ pub use connections::{is_secret, Connection, NewConnection, REDACTED};
 pub use experiments::{NewExperiment, NewSetup};
 pub use open::{prepare_db, template_key};
 pub use reviews::{ReviewDone, StoredReview};
-pub use seed::{LOCAL_ORG_ID, LOCAL_USER_ID};
 pub use suites::NewSuite;
 pub use tx::Tx;
 
@@ -74,25 +72,22 @@ const EVENT_COLS: &str = "branch_id, seq, at, agent, kind, payload";
 const BRANCH_COLS_B: &str =
     "b.id, b.run_id, b.parent_id, b.start_seq, b.team, b.changes, b.fork_note, \
      b.status, b.error, b.created_at, b.ended_at, b.restore_mode, b.restored";
-/// Branches joined to their runs: under row-level security a branch of a run the scope cannot
-/// see is not found.
-const BRANCHES_OF_RUNS: &str = "branches b JOIN runs r ON r.id = b.run_id AND r.org_id = b.org_id";
-/// True when the branch `$1` is one of a run the scope can see.
+/// Branches joined to their runs: a branch of a run the caller cannot see (under a layer's
+/// row-level security) is not found.
+const BRANCHES_OF_RUNS: &str = "branches b JOIN runs r ON r.id = b.run_id";
+/// True when the branch `$1` is one of a run the caller can see.
 const VISIBLE_BRANCH: &str =
-    "SELECT 1 FROM branches b JOIN runs r ON r.id = b.run_id AND r.org_id = b.org_id WHERE b.id = $1";
+    "SELECT 1 FROM branches b JOIN runs r ON r.id = b.run_id WHERE b.id = $1";
 
 fn new_id() -> String {
     uuid::Uuid::new_v4().simple().to_string()
 }
 
 pub struct Store {
-    /// Request paths' connections (in Task 5 on: under row-level security).
-    app: Pool,
-    /// Background jobs that span orgs (`crate::jobs`).
-    system: Pool,
-    /// Each transaction sets its role (`shaked_app`, `shaked_system`): true for a local login,
-    /// which is a superuser or a member of both roles.
-    set_role: bool,
+    /// Request paths' connections.
+    pool: Pool,
+    /// Background jobs' connections, when they need their own (a hosting layer's); else `pool`.
+    system: Option<Pool>,
     tx: broadcast::Sender<Event>,
     // Per-branch locks make `max(seq)+1` appends atomic within this process.
     locks: Mutex<HashMap<String, std::sync::Arc<AsyncMutex<()>>>>,
@@ -118,7 +113,7 @@ impl Store {
     }
 
     /// Like `open`, with a custom database name (tests use a fresh one each): makes it when
-    /// missing, brings its schema up to date and seeds the local owner ([`prepare_db`]), and marks
+    /// missing, brings its schema up to date ([`prepare_db`]), and marks
     /// what was running when shaked last stopped as interrupted.
     pub async fn open_named(admin: &Admin, name: &str) -> Result<Store> {
         if !admin.exists(name).await? {
@@ -131,17 +126,16 @@ impl Store {
         }
         prepare_db(admin, name).await?;
         let url = admin.db_url(name);
-        let store = Store::with_pools(open::pool(&url)?, open::pool(&url)?, true);
+        let store = Store::with_pools(open::pool(&url)?, None);
         crate::jobs::interrupt_at_start(&store).await?;
         Ok(store)
     }
 
-    fn with_pools(app: Pool, system: Pool, set_role: bool) -> Store {
+    fn with_pools(pool: Pool, system: Option<Pool>) -> Store {
         let (tx, _) = broadcast::channel(1024);
         Store {
-            app,
+            pool,
             system,
-            set_role,
             tx,
             locks: Mutex::new(HashMap::new()),
         }
@@ -156,14 +150,14 @@ impl Store {
             .clone()
     }
 
-    /// Every event that can name a save (`run_start`, `tool_call`, `check`), of every branch in every org (a system job),
+    /// Every event that can name a save (`run_start`, `tool_call`, `check`), of every branch (a system job),
     /// by branch and seq.
-    pub async fn events_naming_saves(&self, s: &SystemScope) -> Result<Vec<Event>> {
+    pub async fn events_naming_saves(&self) -> Result<Vec<Event>> {
         let kinds =
             [EventKind::RunStart, EventKind::ToolCall, EventKind::Check].map(|k| k.as_str());
         let sql =
             format!("SELECT {EVENT_COLS} FROM events WHERE kind = ANY($1) ORDER BY branch_id, seq");
-        let tx = self.system_tx(s).await?;
+        let tx = self.system_tx(SystemJob::StartupGc).await?;
         let rows = tx.query(&sql, &[&kinds.as_slice()]).await?;
         tx.commit().await?;
         rows.iter().map(event_from).collect()
@@ -173,56 +167,48 @@ impl Store {
         self.tx.subscribe()
     }
 
-    /// The record methods, as `scope`: the only way to them.
-    pub fn at<'a>(&'a self, scope: &'a Scope) -> Scoped<'a> {
-        Scoped { store: self, scope }
+    /// The record methods, for `caller`: the only way to them.
+    pub fn at<'a>(&'a self, caller: &'a Caller) -> Scoped<'a> {
+        Scoped {
+            store: self,
+            caller,
+        }
     }
 }
 
-/// The store as one scope: every record method runs in a transaction under it, and every query
-/// names its org.
+/// The store for one caller: every record method runs in a transaction for it.
 #[derive(Clone, Copy)]
 pub struct Scoped<'a> {
     store: &'a Store,
-    scope: &'a Scope,
+    caller: &'a Caller,
 }
 
 type Params<'p> = &'p [&'p (dyn ToSql + Sync)];
 
 impl Scoped<'_> {
-    /// The org every row this scope writes belongs to.
-    fn org(&self) -> uuid::Uuid {
-        self.scope.org()
-    }
-
-    /// Who writes (`created_by`), when a person.
-    fn user(&self) -> Option<uuid::Uuid> {
-        self.scope.user()
-    }
-
     async fn query(&self, sql: &str, p: Params<'_>) -> Result<Vec<Row>> {
-        let tx = self.store.tx(self.scope).await?;
+        let tx = self.store.tx(self.caller).await?;
         let rows = tx.query(sql, p).await?;
         tx.commit().await?;
         Ok(rows)
     }
 
     async fn query_opt(&self, sql: &str, p: Params<'_>) -> Result<Option<Row>> {
-        let tx = self.store.tx(self.scope).await?;
+        let tx = self.store.tx(self.caller).await?;
         let row = tx.query_opt(sql, p).await?;
         tx.commit().await?;
         Ok(row)
     }
 
     async fn query_one(&self, sql: &str, p: Params<'_>) -> Result<Row> {
-        let tx = self.store.tx(self.scope).await?;
+        let tx = self.store.tx(self.caller).await?;
         let row = tx.query_one(sql, p).await?;
         tx.commit().await?;
         Ok(row)
     }
 
     async fn execute(&self, sql: &str, p: Params<'_>) -> Result<u64> {
-        let tx = self.store.tx(self.scope).await?;
+        let tx = self.store.tx(self.caller).await?;
         let n = tx.execute(sql, p).await?;
         tx.commit().await?;
         Ok(n)
@@ -231,14 +217,8 @@ impl Scoped<'_> {
     pub async fn create_run(&self, task_id: &str, team: &Team) -> Result<RunId> {
         let id = new_id();
         self.execute(
-            "INSERT INTO runs (id, task_id, team, org_id, created_by) VALUES ($1, $2, $3, $4, $5)",
-            &[
-                &id,
-                &task_id,
-                &serde_json::to_value(team)?,
-                &self.org(),
-                &self.user(),
-            ],
+            "INSERT INTO runs (id, task_id, team) VALUES ($1, $2, $3)",
+            &[&id, &task_id, &serde_json::to_value(team)?],
         )
         .await?;
         Ok(id)
@@ -247,10 +227,7 @@ impl Scoped<'_> {
     /// Sets a run's display name without changing its task or recorded events.
     pub async fn name_run(&self, id: &str, name: &str) -> Result<bool> {
         Ok(self
-            .execute(
-                "UPDATE runs SET name = $2 WHERE id = $1 AND org_id = $3",
-                &[&id, &name, &self.org()],
-            )
+            .execute("UPDATE runs SET name = $2 WHERE id = $1", &[&id, &name])
             .await?
             == 1)
     }
@@ -270,29 +247,27 @@ impl Scoped<'_> {
             None => (None, None),
         };
         self.execute(
-                "INSERT INTO branches (id, run_id, parent_id, start_seq, team, changes, fork_note, org_id, created_by)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
-                &[
-                    &id,
-                    &run_id,
-                    &parent_id,
-                    &start_seq,
-                    &serde_json::to_value(team)?,
-                    changes,
-                    &fork_note,
-                    &self.org(),
-                    &self.user(),
-                ],
-            )
-            .await?;
+            "INSERT INTO branches (id, run_id, parent_id, start_seq, team, changes, fork_note)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7)",
+            &[
+                &id,
+                &run_id,
+                &parent_id,
+                &start_seq,
+                &serde_json::to_value(team)?,
+                changes,
+                &fork_note,
+            ],
+        )
+        .await?;
         Ok(id)
     }
 
     /// Replaces a branch's team (an external system registered another agent).
     pub async fn set_team(&self, branch_id: &str, team: &Team) -> Result<()> {
         self.execute(
-            "UPDATE branches SET team = $2 WHERE id = $1 AND org_id = $3",
-            &[&branch_id, &serde_json::to_value(team)?, &self.org()],
+            "UPDATE branches SET team = $2 WHERE id = $1",
+            &[&branch_id, &serde_json::to_value(team)?],
         )
         .await?;
         Ok(())
@@ -306,12 +281,11 @@ impl Scoped<'_> {
         restored: &[RestoredPart],
     ) -> Result<()> {
         self.execute(
-            "UPDATE branches SET restore_mode = $2, restored = $3 WHERE id = $1 AND org_id = $4",
+            "UPDATE branches SET restore_mode = $2, restored = $3 WHERE id = $1",
             &[
                 &branch_id,
                 &serde_json::to_value(mode)?.as_str(),
                 &serde_json::to_value(restored)?,
-                &self.org(),
             ],
         )
         .await?;
@@ -370,11 +344,11 @@ impl Scoped<'_> {
         let _g = lock.lock().await;
         let row = self.query_one(
                 &format!(
-                    "INSERT INTO events (branch_id, seq, agent, kind, payload, org_id)
-                     SELECT $1, coalesce(max(seq), 0) + 1, $2, $3, $4, $5 FROM events WHERE branch_id = $1
+                    "INSERT INTO events (branch_id, seq, agent, kind, payload)
+                     SELECT $1, coalesce(max(seq), 0) + 1, $2, $3, $4 FROM events WHERE branch_id = $1
                      RETURNING {EVENT_COLS}"
                 ),
-                &[&branch_id, &agent, &kind.as_str(), &payload, &self.org()],
+                &[&branch_id, &agent, &kind.as_str(), &payload],
             )
             .await?;
         let ev = event_from(&row)?;
@@ -386,10 +360,10 @@ impl Scoped<'_> {
         let rows = self
             .query(
                 &format!(
-                    "SELECT {EVENT_COLS} FROM events WHERE branch_id = $1 AND org_id = $2
+                    "SELECT {EVENT_COLS} FROM events WHERE branch_id = $1
                         AND EXISTS ({VISIBLE_BRANCH}) ORDER BY seq"
                 ),
-                &[&branch_id, &self.org()],
+                &[&branch_id],
             )
             .await?;
         rows.iter().map(event_from).collect()
@@ -402,11 +376,11 @@ impl Scoped<'_> {
         error: Option<String>,
     ) -> Result<()> {
         self.execute(
-                "UPDATE branches SET status = $2, error = $3,
-                 ended_at = CASE WHEN $2 = 'running' THEN NULL ELSE now() END WHERE id = $1 AND org_id = $4",
-                &[&branch_id, &status.as_str(), &error, &self.org()],
-            )
-            .await?;
+            "UPDATE branches SET status = $2, error = $3,
+                 ended_at = CASE WHEN $2 = 'running' THEN NULL ELSE now() END WHERE id = $1",
+            &[&branch_id, &status.as_str(), &error],
+        )
+        .await?;
         Ok(())
     }
 
@@ -418,18 +392,20 @@ impl Scoped<'_> {
 
     /// Like `branch`, but a missing branch is `Ok(None)` rather than an error.
     pub async fn find_branch(&self, id: &str) -> Result<Option<Branch>> {
-        let row = self.query_opt(
-                &format!("SELECT {BRANCH_COLS_B} FROM {BRANCHES_OF_RUNS} WHERE b.id = $1 AND b.org_id = $2"),
-                &[&id, &self.org()],
+        let row = self
+            .query_opt(
+                &format!("SELECT {BRANCH_COLS_B} FROM {BRANCHES_OF_RUNS} WHERE b.id = $1"),
+                &[&id],
             )
             .await?;
         row.as_ref().map(branch_from).transpose()
     }
 
     pub async fn runs(&self) -> Result<Vec<RunSummary>> {
-        let runs = self.query(
-                "SELECT id, name, task_id, created_at FROM runs WHERE org_id = $1 ORDER BY created_at DESC, id",
-                &[&self.org()],
+        let runs = self
+            .query(
+                "SELECT id, name, task_id, created_at FROM runs ORDER BY created_at DESC, id",
+                &[],
             )
             .await?;
         let mut by_run = self.branches_by_run().await?;
@@ -450,13 +426,13 @@ impl Scoped<'_> {
 
     /// The run `id` with its branches, oldest first; None when there is no such run.
     pub async fn run(&self, id: &str) -> Result<Option<RunSummary>> {
-        let sql = "SELECT id, name, task_id, created_at FROM runs WHERE id = $1 AND org_id = $2";
-        let Some(r) = self.query_opt(sql, &[&id, &self.org()]).await? else {
+        let sql = "SELECT id, name, task_id, created_at FROM runs WHERE id = $1";
+        let Some(r) = self.query_opt(sql, &[&id]).await? else {
             return Ok(None);
         };
         let sql =
-            format!("SELECT {BRANCH_COLS} FROM branches WHERE run_id = $1 AND org_id = $2 ORDER BY created_at, id");
-        let rows = self.query(&sql, &[&id, &self.org()]).await?;
+            format!("SELECT {BRANCH_COLS} FROM branches WHERE run_id = $1 ORDER BY created_at, id");
+        let rows = self.query(&sql, &[&id]).await?;
         Ok(Some(RunSummary {
             branches: rows.iter().map(branch_from).collect::<Result<_>>()?,
             id: r.get("id"),
@@ -468,11 +444,12 @@ impl Scoped<'_> {
 
     /// Every branch, grouped by its run, oldest first.
     async fn branches_by_run(&self) -> Result<HashMap<String, Vec<Branch>>> {
-        let rows = self.query(
+        let rows = self
+            .query(
                 &format!(
-                    "SELECT {BRANCH_COLS_B} FROM {BRANCHES_OF_RUNS} WHERE b.org_id = $1 ORDER BY b.created_at, b.id"
+                    "SELECT {BRANCH_COLS_B} FROM {BRANCHES_OF_RUNS} ORDER BY b.created_at, b.id"
                 ),
-                &[&self.org()],
+                &[],
             )
             .await?;
         let mut by_run: HashMap<String, Vec<Branch>> = HashMap::new();
@@ -486,9 +463,9 @@ impl Scoped<'_> {
     /// The ids of the run's branches.
     pub async fn run_branches(&self, run_id: &str) -> Result<Vec<BranchId>> {
         let sql = format!(
-            "SELECT b.id FROM {BRANCHES_OF_RUNS} WHERE b.run_id = $1 AND b.org_id = $2 ORDER BY b.created_at, b.id"
+            "SELECT b.id FROM {BRANCHES_OF_RUNS} WHERE b.run_id = $1 ORDER BY b.created_at, b.id"
         );
-        let rows = self.query(&sql, &[&run_id, &self.org()]).await?;
+        let rows = self.query(&sql, &[&run_id]).await?;
         Ok(rows.iter().map(|r| r.get(0)).collect())
     }
 
@@ -497,10 +474,10 @@ impl Scoped<'_> {
         let ids = self.run_branches(run_id).await?;
         // One statement, so the branch/parent foreign keys are checked at its end.
         self.execute(
-            "WITH ev AS (DELETE FROM events WHERE branch_id = ANY($2) AND org_id = $3),
-                      br AS (DELETE FROM branches WHERE run_id = $1 AND org_id = $3)
-                 DELETE FROM runs WHERE id = $1 AND org_id = $3",
-            &[&run_id, &ids, &self.org()],
+            "WITH ev AS (DELETE FROM events WHERE branch_id = ANY($2)),
+                      br AS (DELETE FROM branches WHERE run_id = $1)
+                 DELETE FROM runs WHERE id = $1",
+            &[&run_id, &ids],
         )
         .await?;
         Ok(())
@@ -508,9 +485,10 @@ impl Scoped<'_> {
 
     /// True if some branch of the run has status `running`.
     pub async fn run_has_running(&self, run_id: &str) -> Result<bool> {
-        Ok(self.query_one(
-                "SELECT EXISTS (SELECT 1 FROM branches WHERE run_id = $1 AND org_id = $2 AND status = 'running')",
-                &[&run_id, &self.org()],
+        Ok(self
+            .query_one(
+                "SELECT EXISTS (SELECT 1 FROM branches WHERE run_id = $1 AND status = 'running')",
+                &[&run_id],
             )
             .await?
             .get(0))
@@ -519,8 +497,8 @@ impl Scoped<'_> {
     pub async fn run_exists(&self, run_id: &str) -> Result<bool> {
         Ok(self
             .query_one(
-                "SELECT EXISTS (SELECT 1 FROM runs WHERE id = $1 AND org_id = $2)",
-                &[&run_id, &self.org()],
+                "SELECT EXISTS (SELECT 1 FROM runs WHERE id = $1)",
+                &[&run_id],
             )
             .await?
             .get(0))
@@ -536,10 +514,10 @@ impl Scoped<'_> {
         let lock = self.store.lock_for(to_branch);
         let _g = lock.lock().await;
         self.execute(
-            "INSERT INTO events (branch_id, seq, at, agent, kind, payload, org_id)
-                 SELECT $2, seq, at, agent, kind, payload, $4 FROM events
-                 WHERE branch_id = $1 AND seq < $3 AND org_id = $4",
-            &[&from_branch, &to_branch, &before_seq, &self.org()],
+            "INSERT INTO events (branch_id, seq, at, agent, kind, payload)
+                 SELECT $2, seq, at, agent, kind, payload FROM events
+                 WHERE branch_id = $1 AND seq < $3",
+            &[&from_branch, &to_branch, &before_seq],
         )
         .await?;
         Ok(())

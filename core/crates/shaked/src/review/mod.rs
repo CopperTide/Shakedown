@@ -16,7 +16,7 @@ pub mod reviewer;
 pub mod settings;
 pub mod suites;
 
-use crate::auth::Scope;
+use crate::auth::Caller;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -97,7 +97,7 @@ pub fn check(answer: &serde_json::Value, job: &Job) -> Result<(serde_json::Value
 /// Asks the reviewer and stores its checked answer under `key`, or why it failed.
 pub async fn run(
     state: Arc<AppState>,
-    scope: Arc<Scope>,
+    scope: Arc<Caller>,
     key: String,
     model: ReviewerModel,
     job: Result<Job>,
@@ -117,7 +117,7 @@ pub async fn run(
 
 async fn answer(
     state: &AppState,
-    scope: &Scope,
+    scope: &Caller,
     key: &str,
     model: &ReviewerModel,
     job: Result<Job>,
