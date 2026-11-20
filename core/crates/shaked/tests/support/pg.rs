@@ -180,10 +180,13 @@ impl Drop for TempLogin {
         let (db, role) = (self.db.clone(), self.role.clone());
         on_own_runtime(|| async move {
             let c = admin_client().await;
-            for sql in [
-                format!("DROP DATABASE IF EXISTS \"{db}\" WITH (FORCE)"),
-                format!("DROP ROLE IF EXISTS \"{role}\""),
-            ] {
+            let mut sqls = vec![];
+            if !db.is_empty() {
+                sqls.push(format!("DROP DATABASE IF EXISTS \"{db}\" WITH (FORCE)"));
+            }
+            sqls.push(format!("DROP OWNED BY \"{role}\""));
+            sqls.push(format!("DROP ROLE IF EXISTS \"{role}\""));
+            for sql in sqls {
                 if let Err(e) = c.batch_execute(&sql).await {
                     eprintln!("test cleanup: {sql}: {e}");
                 }
@@ -242,4 +245,47 @@ pub async fn batch_last_text(db: &str, sql: &str) -> Option<String> {
         tokio_postgres::SimpleQueryMessage::Row(r) => r.get(0).map(str::to_string),
         _ => None,
     })
+}
+
+/// Bootstraps database `db` and migrates only stream identity (as the Cloud gateway would).
+pub async fn identity_only(db: &str) {
+    let (mut c, task) = db_client(db).await;
+    c.batch_execute(coppertide_schema::BOOTSTRAP_SQL)
+        .await
+        .unwrap();
+    let plan = coppertide_schema::Plan {
+        apply: &[coppertide_schema::Stream::Identity],
+        require: &[],
+        applied_by: "test",
+    };
+    coppertide_schema::migrate(&mut c, &plan).await.unwrap();
+    drop(c);
+    let _ = task.await;
+}
+
+impl TempLogin {
+    /// A login in `roles` that may connect to `db` (which it does not own); dropped on drop.
+    pub async fn member(tag: &str, db: &str, roles: &[&str]) -> TempLogin {
+        let id = &uuid::Uuid::new_v4().simple().to_string()[..8];
+        let role = format!("shakedown_test_login_{tag}_{id}");
+        let password = format!("test-{id}");
+        let c = admin_client().await;
+        let sql = format!(
+            "CREATE ROLE \"{role}\" LOGIN PASSWORD '{password}' IN ROLE {}; GRANT CONNECT ON DATABASE \"{db}\" TO \"{role}\"",
+            roles.join(", ")
+        );
+        c.batch_execute(&sql).await.unwrap();
+        let url = with_user(&pg_url(), &role, &password);
+        TempLogin {
+            role,
+            password,
+            db: String::new(),
+            url,
+        }
+    }
+
+    /// The login's URL for database `db`.
+    pub fn db_url(&self, db: &str) -> String {
+        Admin::lazy(&self.url).db_url(db)
+    }
 }

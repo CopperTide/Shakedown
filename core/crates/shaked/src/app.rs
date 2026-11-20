@@ -61,6 +61,10 @@ pub struct Config {
     /// The Host names `/api` answers (`SHAKEDOWN_ALLOWED_HOSTS` plus the public URL's host).
     /// Empty means this machine's loopback names only.
     pub allowed_hosts: Vec<String>,
+    /// The secret the Cloud gateway signs requests with (hosted; `SHAKEDOWN_GATEWAY_SECRET_FILE`).
+    pub gateway_secret: Option<crate::auth::signing::GatewaySecret>,
+    /// Where the UI posts `{org_id}` to switch orgs (hosted; `SHAKEDOWN_SWITCH_ORG_URL`).
+    pub switch_org_url: Option<String>,
 }
 
 pub const DEFAULT_DRIVER_GRACE: Duration = Duration::from_secs(30);
@@ -109,6 +113,8 @@ impl Config {
             mode: crate::mode::Mode::Local,
             public_url: String::new(),
             allowed_hosts: Vec::new(),
+            gateway_secret: None,
+            switch_org_url: None,
         }
     }
 
@@ -377,19 +383,6 @@ async fn allowed_host(
     next.run(req).await
 }
 
-/// Hosted mode until shaked can tell who is calling: routes that change this machine's worlds are
-/// refused (403), and every other `/api` request asks the caller to sign in (401). Fails closed.
-async fn hosted_gate(req: axum::extract::Request) -> axum::response::Response {
-    use axum::{http::StatusCode, response::IntoResponse, Json};
-    if crate::mode::local_only_route(req.method().as_str(), req.uri().path()) {
-        let body = Json(serde_json::json!({"error": crate::mode::HOSTED_REFUSAL}));
-        return (StatusCode::FORBIDDEN, body).into_response();
-    }
-    let body =
-        Json(serde_json::json!({"error": "sign in through the gateway or send an API token"}));
-    (StatusCode::UNAUTHORIZED, body).into_response()
-}
-
 /// The origins of `SHAKEDOWN_CORS_ORIGIN` (comma-separated, each `http(s)://host[:port]` without a
 /// path); anything else, `*` included, is skipped with a warning, since a wildcard would let any
 /// web page drive this machine's arena.
@@ -466,12 +459,12 @@ pub fn router(state: Arc<AppState>) -> Router {
     let origins = Arc::new(state.config.cors_origins.clone());
     let hosts = Arc::new(state.config.hosts());
     let api = match state.config.mode {
-        crate::mode::Mode::Hosted => crate::api::router().layer(axum::middleware::from_fn(
-            |req, _next: axum::middleware::Next| hosted_gate(req),
-        )),
-        crate::mode::Mode::Local => crate::api::router().layer(axum::middleware::from_fn(
-            crate::auth::extract::local_owner_layer,
-        )),
+        crate::mode::Mode::Hosted => crate::api::router().layer(
+            axum::middleware::from_fn_with_state(state.clone(), crate::auth::middleware::hosted),
+        ),
+        crate::mode::Mode::Local => {
+            crate::api::router().layer(axum::middleware::from_fn(crate::auth::middleware::local))
+        }
     };
     let api = api
         .layer(axum::middleware::from_fn_with_state(hosts, allowed_host))

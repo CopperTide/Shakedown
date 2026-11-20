@@ -16,10 +16,16 @@ use super::pg::{admin, Cleanup};
 /// A store in a fresh `shakedown_test_<kind>_<tag>_<id>` database, copied from the migrated
 /// template.
 pub async fn meta_store(kind: &str, tag: &str) -> (Arc<Store>, Cleanup) {
+    let (_, store, clean) = meta_store_named(kind, tag).await;
+    (store, clean)
+}
+
+/// `meta_store`, with the database's name.
+pub async fn meta_store_named(kind: &str, tag: &str) -> (String, Arc<Store>, Cleanup) {
     let clean = Cleanup::new();
     let meta = super::pg::fresh_db(&format!("{kind}_{tag}"), &clean).await;
     let store = Store::open_named(&admin(), &meta).await.unwrap();
-    (Arc::new(store), clean)
+    (meta, Arc::new(store), clean)
 }
 
 /// A listener on a free loopback port, and its base URL.

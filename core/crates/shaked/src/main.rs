@@ -40,7 +40,7 @@ use shaked::{
     app::{self, AppState, Config},
     mode::{Bind, Mode},
     pg::Admin,
-    store::Store,
+    store::{DbUrls, Store},
 };
 
 fn repo_dir() -> PathBuf {
@@ -95,8 +95,12 @@ fn hub(pg_url: &str, worlds: &std::path::Path) -> anyhow::Result<Hub> {
 
 /// The store and the hub.
 async fn app_state(url: &str, bind: &Bind, mode: Mode) -> anyhow::Result<Arc<AppState>> {
-    let admin = Admin::connect(url).await?;
-    let store = Arc::new(Store::open(&admin).await?);
+    let store = Arc::new(match mode {
+        Mode::Local => Store::open(&Admin::lazy(url)).await?,
+        Mode::Hosted => {
+            Store::open_hosted(&DbUrls::from_env(|k| parts::settings::var(k).ok())).await?
+        }
+    });
     let worlds = worlds_dir()?;
     let hub = Arc::new(hub(url, &worlds)?);
     let mut config = Config::new();
@@ -105,7 +109,25 @@ async fn app_state(url: &str, bind: &Bind, mode: Mode) -> anyhow::Result<Arc<App
     config.allowed_hosts = bind.allowed_hosts.clone();
     config.mode = mode;
     config.worlds_dir = Some(worlds);
+    if mode == Mode::Hosted {
+        config.gateway_secret = Some(gateway_secret()?);
+        config.switch_org_url = parts::settings::var("SHAKEDOWN_SWITCH_ORG_URL").ok();
+    }
     Ok(Arc::new(AppState::new(store, hub, config)))
+}
+
+/// The Cloud gateway's signing secret, from `SHAKEDOWN_GATEWAY_SECRET_FILE` (hosted mode needs it).
+fn gateway_secret() -> anyhow::Result<shaked::auth::signing::GatewaySecret> {
+    use anyhow::Context;
+    let path = parts::settings::var("SHAKEDOWN_GATEWAY_SECRET_FILE")
+        .context("hosted mode needs SHAKEDOWN_GATEWAY_SECRET_FILE")?;
+    let secret = std::fs::read(&path).with_context(|| format!("reading {path}"))?;
+    let secret = String::from_utf8_lossy(&secret).trim().as_bytes().to_vec();
+    anyhow::ensure!(
+        secret.len() >= 32,
+        "the gateway secret in {path} is shorter than 32 bytes"
+    );
+    Ok(shaked::auth::signing::GatewaySecret(secret))
 }
 
 /// Where shaked reaches itself: `addr`, or loopback on its port when it listens on every address.
@@ -193,6 +215,33 @@ async fn start_proxy(state: &std::sync::Arc<shaked::app::AppState>) -> anyhow::R
     Ok(())
 }
 
+/// The startup line: where shaked listens, as which URL, its benchmark, modes and UI.
+fn listening_line(
+    state: &AppState,
+    bind: &Bind,
+    bench: Option<&BenchDescribe>,
+    ui: Option<&std::path::Path>,
+) -> String {
+    let bench = bench.map_or("none (hosted)".to_string(), |b| {
+        format!("{} {}", b.name, b.version)
+    });
+    format!(
+        "shaked: listening on http://{} as {} (benchmark: {bench}; modes: {}; ui: {})",
+        bind.addr,
+        state.config.public_base(),
+        available_modes(state).join(", "),
+        ui.map_or("api only".to_string(), |d| d.display().to_string())
+    )
+}
+
+/// A local shaked's start: its benchmark, and before any run can save, dropping the saves no
+/// event names (left by crashes and aborted tests).
+async fn local_start(state: &AppState) -> anyhow::Result<BenchDescribe> {
+    let bench = state.startup_bench().await?;
+    shaked::gc::run_startup_gc(&state.store, &state.hub, &state.benchmark()).await?;
+    Ok(bench)
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let (mode, bind) = mode_and_bind()?;
@@ -200,12 +249,14 @@ async fn main() -> anyhow::Result<()> {
     let ui_dist = ui_dist_from_env();
 
     let state = app_state(&url, &bind, mode).await?;
-    let bench = state.startup_bench().await?;
-    if std::env::args().nth(1).as_deref() == Some("base") {
-        return build_base(&state, &bench).await;
+    let bench = match mode {
+        Mode::Local => Some(local_start(&state).await?),
+        // A hosted shaked starts no package program on the control box (they run in sandboxes).
+        Mode::Hosted => None,
+    };
+    if let (Some(bench), Some("base")) = (&bench, std::env::args().nth(1).as_deref()) {
+        return build_base(&state, bench).await;
     }
-    // Before any run can save: drop the saves no event names (left by crashes and aborted tests).
-    shaked::gc::run_startup_gc(&state.store, &state.hub, &state.benchmark()).await?;
     app::install_default_drivers(&state);
 
     let mut router = app::router(state.clone());
@@ -215,13 +266,8 @@ async fn main() -> anyhow::Result<()> {
     let listener = tokio::net::TcpListener::bind(bind.addr).await?;
     start_proxy(&state).await?;
     println!(
-        "shaked: listening on http://{} as {} (benchmark: {} {}; modes: {}; ui: {})",
-        bind.addr,
-        state.config.public_base(),
-        bench.name,
-        bench.version,
-        available_modes(&state).join(", "),
-        ui_dist.map_or("api only".to_string(), |d| d.display().to_string())
+        "{}",
+        listening_line(&state, &bind, bench.as_ref(), ui_dist.as_deref())
     );
     axum::serve(listener, router)
         .with_graceful_shutdown(shutdown_on_ctrl_c(state))

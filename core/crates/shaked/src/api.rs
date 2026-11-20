@@ -32,6 +32,7 @@ mod experiments;
 mod external;
 mod extract;
 mod flow;
+mod me;
 mod names;
 mod recording;
 mod review;
@@ -66,10 +67,18 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/api/world", get(world::world))
         .route("/api/usage", get(world::usage))
         .route("/api/gc", post(world::gc))
+        .merge(modules())
+        .route("/api/{*rest}", get(api_not_found).post(api_not_found))
+}
+
+/// The routes each `api` module serves.
+fn modules() -> Router<Arc<AppState>> {
+    Router::new()
         .merge(external::router())
         .merge(connect::router())
         .merge(connections::router())
         .merge(flow::router())
+        .merge(me::router())
         .merge(suites::router())
         .merge(experiments::router())
         .merge(review::router())
@@ -77,7 +86,6 @@ pub fn router() -> Router<Arc<AppState>> {
         .merge(twin::router())
         .merge(recording::router())
         .merge(worlds::router())
-        .route("/api/{*rest}", get(api_not_found).post(api_not_found))
 }
 
 // ---------------------------------------------------------------- errors
@@ -101,8 +109,31 @@ impl ApiError {
 }
 
 impl From<anyhow::Error> for ApiError {
+    /// A write row-level security refused (SQLSTATE 42501: the caller's role or team may not) is
+    /// 403; anything else is 500.
     fn from(e: anyhow::Error) -> ApiError {
-        ApiError(StatusCode::INTERNAL_SERVER_ERROR, format!("{e:#}"))
+        let refused = (e.chain())
+            .filter_map(|c| c.downcast_ref::<tokio_postgres::Error>())
+            .any(|p| p.code() == Some(&tokio_postgres::error::SqlState::INSUFFICIENT_PRIVILEGE));
+        match refused {
+            true => ApiError(
+                StatusCode::FORBIDDEN,
+                "your role in this org may not do that".into(),
+            ),
+            false => ApiError(StatusCode::INTERNAL_SERVER_ERROR, format!("{e:#}")),
+        }
+    }
+}
+
+/// 403 unless the caller may do `action` in its org (`auth::can`, org level).
+pub(crate) fn allowed(caller: &Scope, action: crate::auth::Action) -> Result<(), ApiError> {
+    let target = crate::auth::Target::Org(caller.org());
+    match crate::auth::can(caller.principal(), &action, &target, &Default::default()) {
+        true => Ok(()),
+        false => Err(ApiError(
+            StatusCode::FORBIDDEN,
+            "your role in this org may not do that".into(),
+        )),
     }
 }
 
@@ -458,6 +489,26 @@ async fn create_external_run(
     external::create_run(state, caller, permit, bench, run, scenario, limits).await
 }
 
+/// A new run's benchmark and scenario (its seed checked), once the caller may start runs.
+async fn new_run_world(
+    state: &AppState,
+    caller: &Scope,
+    req: &mut NewRun,
+) -> Result<(String, crate::scenario::Scenario), ApiError> {
+    allowed(
+        caller,
+        crate::auth::Action::CreateOrgWide(crate::auth::ResourceKind::Run),
+    )?;
+    settle_providers(&mut req.team);
+    let bench = benchmark_asked(state, req.benchmark.as_deref())?;
+    let mut scenario = twin::scenario_of(state, &bench, req.scenario.as_ref()).await?;
+    if req.seed.is_some_and(|s| s > runner::MAX_SEED) {
+        return Err(ApiError::bad("seed must be at most 2^53 - 1"));
+    }
+    scenario.seed = req.seed;
+    Ok((bench, scenario))
+}
+
 async fn create_run(
     State(state): State<Arc<AppState>>,
     Caller(caller): Caller,
@@ -465,13 +516,7 @@ async fn create_run(
     headers: axum::http::HeaderMap,
     JsonBody(mut req): JsonBody<NewRun>,
 ) -> ApiResult<Value> {
-    settle_providers(&mut req.team);
-    let bench = benchmark_asked(&state, req.benchmark.as_deref())?;
-    let mut scenario = twin::scenario_of(&state, &bench, req.scenario.as_ref()).await?;
-    if req.seed.is_some_and(|s| s > runner::MAX_SEED) {
-        return Err(ApiError::bad("seed must be at most 2^53 - 1"));
-    }
-    scenario.seed = req.seed;
+    let (bench, scenario) = new_run_world(&state, &caller, &mut req).await?;
     if req.connection.is_some() {
         return create_code_run(state, caller, permit, &headers, req, bench, scenario).await;
     }

@@ -4,8 +4,11 @@
 
 pub mod can;
 pub mod extract;
+pub mod identity;
+pub mod middleware;
 pub mod principal;
 pub mod scope;
+pub mod signing;
 pub mod system;
 
 pub use can::{

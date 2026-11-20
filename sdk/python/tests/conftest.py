@@ -79,7 +79,13 @@ def arena():
         pg_url=pg,
         saves=saves,
         cors_origin="http://127.0.0.1:5173",
-        env={"PATH": f"{FAKE_BIN}{os.pathsep}{os.environ.get('PATH', '')}"},
+        env={
+            "PATH": f"{FAKE_BIN}{os.pathsep}{os.environ.get('PATH', '')}",
+            # Never the shared default database: shaked refuses it under the guard. This one is the
+            # SDK tests' own, kept between runs.
+            "SHAKEDOWN_TEST_GUARD": "1",
+            "SHAKEDOWN_DB": setting("SHAKEDOWN_SDK_DB") or "shakedown_sdk_live",
+        },
     )
     yield a
     a.close()

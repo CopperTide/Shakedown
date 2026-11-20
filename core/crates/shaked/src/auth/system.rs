@@ -30,6 +30,13 @@ impl SystemScope {
         }
     }
 
+    /// Listing the orgs a user belongs to (`/api/me`).
+    pub(crate) fn list_orgs_of_user() -> SystemScope {
+        SystemScope {
+            job: SystemJob::ListOrgsOfUser,
+        }
+    }
+
     /// Marking what was running when shaked stopped as interrupted.
     pub(crate) fn interrupt_at_start() -> SystemScope {
         SystemScope {

@@ -23,7 +23,7 @@ mod suites;
 mod tx;
 pub use connections::{is_secret, Connection, NewConnection, REDACTED};
 pub use experiments::{NewExperiment, NewSetup};
-pub use open::{prepare_db, template_key};
+pub use open::{prepare_db, template_key, DbUrls};
 pub use reviews::{ReviewDone, StoredReview};
 pub use seed::{LOCAL_ORG_ID, LOCAL_USER_ID};
 pub use suites::NewSuite;
@@ -36,6 +36,24 @@ pub type BranchId = String;
 pub const DEFAULT_DB: &str = "shakedown";
 /// Its name until 2026-11-19, still used while the server has no [`DEFAULT_DB`].
 pub const OLD_DEFAULT_DB: &str = "arena";
+
+/// `SHAKEDOWN_DB` (`get` reads a setting), else None (the default database). Under
+/// `SHAKEDOWN_TEST_GUARD`, without `SHAKEDOWN_ALLOW_DEFAULT_DB`, a default database is refused,
+/// before anything connects.
+pub fn db_setting(get: impl Fn(&str) -> Option<String>) -> Result<Option<String>> {
+    let named = get("SHAKEDOWN_DB");
+    let guarded =
+        get("SHAKEDOWN_TEST_GUARD").is_some() && get("SHAKEDOWN_ALLOW_DEFAULT_DB").is_none();
+    let default = named
+        .as_deref()
+        .is_none_or(|n| n == DEFAULT_DB || n == OLD_DEFAULT_DB);
+    if guarded && default {
+        anyhow::bail!(
+            "SHAKEDOWN_TEST_GUARD is set: refusing the shared default database; set SHAKEDOWN_DB to a scratch database (or SHAKEDOWN_ALLOW_DEFAULT_DB=1)"
+        );
+    }
+    Ok(named)
+}
 
 /// The database to keep the records in: `name` when it exists, else `old` when that exists (an
 /// install from before the rename keeps its records), else `name` (to be made).
@@ -80,8 +98,16 @@ pub struct Store {
 impl Store {
     /// Opens (creating if needed) the metadata database [`DEFAULT_DB`], or the old `arena` one
     /// while there is no `shakedown` ([`pick_db`]).
+    ///
+    /// `SHAKEDOWN_DB` names another database. Under `SHAKEDOWN_TEST_GUARD` (set by tests that start
+    /// shaked) the shared default databases are refused unless `SHAKEDOWN_ALLOW_DEFAULT_DB` is set,
+    /// so a test never migrates someone's records ([`db_setting`]).
     pub async fn open(admin: &Admin) -> Result<Store> {
-        let db = pick_db(admin, DEFAULT_DB, OLD_DEFAULT_DB).await?;
+        let set = db_setting(|k| parts::settings::var(k).ok().filter(|v| !v.is_empty()))?;
+        let db = match set {
+            Some(name) => name,
+            None => pick_db(admin, DEFAULT_DB, OLD_DEFAULT_DB).await?,
+        };
         if db == OLD_DEFAULT_DB {
             eprintln!("shaked: records in the database arena (its name until 2026-11-19); see README.md, Old names");
         }
@@ -103,6 +129,21 @@ impl Store {
         prepare_db(admin, name).await?;
         let url = admin.db_url(name);
         let store = Store::with_pools(open::pool(&url)?, open::pool(&url)?, true);
+        crate::jobs::interrupt_at_start(&store).await?;
+        Ok(store)
+    }
+
+    /// Opens a hosted shaked's database (`DbUrls`, every one needed): migrates stream shakedown
+    /// once stream identity is at 2, never seeds the local owner, and runs requests and system
+    /// jobs on their own logins (members of `shaked_app` and `shaked_system`).
+    pub async fn open_hosted(urls: &DbUrls) -> Result<Store> {
+        let migrate =
+            (urls.migrate.as_deref()).context("hosted mode needs SHAKEDOWN_MIGRATE_PG_URL")?;
+        let system =
+            (urls.system.as_deref()).context("hosted mode needs SHAKEDOWN_SYSTEM_PG_URL")?;
+        anyhow::ensure!(!urls.app.is_empty(), "hosted mode needs SHAKEDOWN_PG_URL");
+        open::migrate_hosted(migrate).await?;
+        let store = Store::with_pools(open::pool(&urls.app)?, open::pool(system)?, false);
         crate::jobs::interrupt_at_start(&store).await?;
         Ok(store)
     }
@@ -552,4 +593,40 @@ fn branch_from(r: &Row) -> Result<Branch> {
             .transpose()?,
         restored: serde_json::from_value(restored)?,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::db_setting;
+
+    fn with<'a>(vars: &'a [(&'a str, &'a str)]) -> impl Fn(&str) -> Option<String> + 'a {
+        move |k| {
+            vars.iter()
+                .find(|(n, _)| *n == k)
+                .map(|(_, v)| v.to_string())
+        }
+    }
+
+    #[test]
+    fn the_test_guard_refuses_the_default_databases() {
+        assert_eq!(
+            db_setting(with(&[])).unwrap(),
+            None,
+            "a user's shaked uses the default"
+        );
+        assert_eq!(
+            db_setting(with(&[("SHAKEDOWN_DB", "mine")]))
+                .unwrap()
+                .as_deref(),
+            Some("mine")
+        );
+        let guard = ("SHAKEDOWN_TEST_GUARD", "1");
+        assert!(db_setting(with(&[guard])).is_err());
+        assert!(db_setting(with(&[guard, ("SHAKEDOWN_DB", "arena")])).is_err());
+        assert!(db_setting(with(&[guard, ("SHAKEDOWN_DB", "shakedown")])).is_err());
+        let scratch = db_setting(with(&[guard, ("SHAKEDOWN_DB", "shakedown_test_x")]));
+        assert_eq!(scratch.unwrap().as_deref(), Some("shakedown_test_x"));
+        let allowed = [guard, ("SHAKEDOWN_ALLOW_DEFAULT_DB", "1")];
+        assert_eq!(db_setting(with(&allowed)).unwrap(), None);
+    }
 }

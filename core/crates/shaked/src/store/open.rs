@@ -106,3 +106,60 @@ pub fn template_key() -> String {
     let d = ring::digest::digest(&ring::digest::SHA256, &all);
     d.as_ref()[..4].iter().map(|b| format!("{b:02x}")).collect()
 }
+
+/// A hosted shaked's three Postgres logins: requests (in `shaked_app`), system jobs (in
+/// `shaked_system`) and migrations (`coppertide_migrator`, or a superuser). Owner decision D15:
+/// the database is the Cloud gateway's, so stream identity is the gateway's to apply.
+#[derive(Clone)]
+pub struct DbUrls {
+    /// `SHAKEDOWN_PG_URL`.
+    pub app: String,
+    /// `SHAKEDOWN_SYSTEM_PG_URL`.
+    pub system: Option<String>,
+    /// `SHAKEDOWN_MIGRATE_PG_URL`.
+    pub migrate: Option<String>,
+}
+
+impl DbUrls {
+    /// The three settings; a hosted shaked needs every one.
+    pub fn from_env(get: impl Fn(&str) -> Option<String>) -> DbUrls {
+        DbUrls {
+            app: get("SHAKEDOWN_PG_URL").unwrap_or_default(),
+            system: get("SHAKEDOWN_SYSTEM_PG_URL"),
+            migrate: get("SHAKEDOWN_MIGRATE_PG_URL"),
+        }
+    }
+}
+
+/// What a hosted shaked needs of the database: stream identity at 2 (applied by the gateway).
+const HOSTED_PLAN: Plan<'static> = Plan {
+    apply: &[Stream::Shakedown],
+    require: &[(Stream::Identity, 2)],
+    applied_by: APPLIED_BY,
+};
+/// How often and how long a hosted start waits for the gateway's identity stream.
+const READY_EVERY: std::time::Duration = std::time::Duration::from_secs(5);
+const READY_GIVE_UP: std::time::Duration = std::time::Duration::from_secs(120);
+
+/// Applies stream shakedown over the migrate login, waiting for stream identity when the gateway
+/// is a deploy behind. Never seeds the local owner.
+pub(super) async fn migrate_hosted(url: &str) -> Result<()> {
+    let (mut c, conn) = tokio_postgres::connect(url, NoTls)
+        .await
+        .context("connecting to migrate")?;
+    let task = tokio::spawn(conn);
+    let mut done = migrate(&mut c, &HOSTED_PLAN).await;
+    if let Err(coppertide_schema::Error::Behind { .. }) = done {
+        let ready =
+            coppertide_schema::wait_ready(&mut c, &HOSTED_PLAN, READY_EVERY, READY_GIVE_UP).await;
+        done = match ready {
+            Ok(_) | Err(coppertide_schema::Error::Behind { .. }) => {
+                migrate(&mut c, &HOSTED_PLAN).await
+            }
+            Err(e) => Err(e),
+        };
+    }
+    drop(c);
+    let _ = task.await;
+    done.map(drop).context("migrating stream shakedown")
+}

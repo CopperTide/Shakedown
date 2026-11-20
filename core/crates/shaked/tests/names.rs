@@ -15,7 +15,7 @@ use std::{
 
 use support::{
     packages::{self, toy_world},
-    pg::pg_url,
+    pg::{self, pg_url},
     run,
 };
 
@@ -62,11 +62,14 @@ impl Drop for Service {
     }
 }
 
-/// `binary` started on the toy world in `packages`, with saves and worlds under the temp folder.
-fn start(binary: &Path, tag: &str, port: u16, packages_root: &Path) -> Service {
+/// `binary` started on the toy world in `packages`, with saves and worlds under the temp folder
+/// and its records in the scratch database `db` (never the shared default one).
+fn start(binary: &Path, tag: &str, port: u16, packages_root: &Path, db: &str) -> Service {
     let base = std::env::temp_dir().join(format!("shaked-names-{tag}-{}", std::process::id()));
     let (saves, worlds) = (base.join("saves"), base.join("worlds"));
     let child = Command::new(binary)
+        .env("SHAKEDOWN_TEST_GUARD", "1")
+        .env("SHAKEDOWN_DB", db)
         .env("SHAKEDOWN_PG_URL", pg_url())
         .env("SHAKEDOWN_PORT", port.to_string())
         .env("SHAKEDOWN_PROXY_PORT", "0")
@@ -112,10 +115,54 @@ fn shaked_and_its_old_name_arenad_both_start_and_answer() {
     let arenad = arenad_binary();
     let shaked = PathBuf::from(env!("CARGO_BIN_EXE_shaked"));
     let root = toy_world("names", &[], &[]);
+    let clean = pg::Cleanup::new();
     for (tag, binary) in [("shaked", &shaked), ("arenad", &arenad)] {
         let port = free_port();
-        let mut service = start(binary, tag, port, &root.0);
+        let db = pg::db_name(&format!("names_{tag}"));
+        clean.add(&db);
+        let mut service = start(binary, tag, port, &root.0, &db);
         let bench = run(health_benchmark(&mut service, port));
         assert_eq!(bench, "toybench", "{tag}");
+    }
+}
+
+/// A test-started shaked with no database of its own refuses the shared default one (`shakedown`,
+/// or `arena` on an older server) before it connects. The server URL points nowhere, so a guard
+/// that failed could not reach anyone's records either.
+#[test]
+fn a_test_started_shaked_refuses_the_shared_default_database() {
+    let shaked = PathBuf::from(env!("CARGO_BIN_EXE_shaked"));
+    let out = Command::new(shaked)
+        .env("SHAKEDOWN_TEST_GUARD", "1")
+        .env_remove("SHAKEDOWN_DB")
+        .env_remove("SHAKEDOWN_ALLOW_DEFAULT_DB")
+        .env(
+            "SHAKEDOWN_PG_URL",
+            "postgres://nobody:nothing@127.0.0.1:9/postgres",
+        )
+        .env("SHAKEDOWN_PORT", free_port().to_string())
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert!(!out.status.success());
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("SHAKEDOWN_DB"), "{err}");
+}
+
+/// Every test that starts a shaked binary sets the guard (and so names a database of its own).
+#[test]
+fn every_test_that_starts_shaked_sets_the_guard() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests");
+    for e in std::fs::read_dir(&dir).unwrap() {
+        let path = e.unwrap().path();
+        let text = std::fs::read_to_string(&path).unwrap_or_default();
+        if text.contains(concat!("CARGO_BIN", "_EXE_")) {
+            let guarded = text.contains("SHAKEDOWN_TEST_GUARD");
+            assert!(
+                guarded,
+                "{} starts shaked without the guard",
+                path.display()
+            );
+        }
     }
 }

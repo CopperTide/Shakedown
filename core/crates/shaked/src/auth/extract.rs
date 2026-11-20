@@ -28,12 +28,3 @@ impl<S: Send + Sync> FromRequestParts<S> for Caller {
         }
     }
 }
-
-/// The local mode's auth layer: every request that passed the Host guard is the local owner's.
-pub async fn local_owner_layer(
-    mut req: axum::extract::Request,
-    next: axum::middleware::Next,
-) -> axum::response::Response {
-    req.extensions_mut().insert(Arc::new(super::local_owner()));
-    next.run(req).await
-}
