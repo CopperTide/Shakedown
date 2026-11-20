@@ -29,10 +29,10 @@ def _seed_repo(ctx, spec: dict) -> None:
     sha = Repos(ctx.files).init_from(Path(spec["source"]), f"{owner}/{spec['name']}", spec.get("default_branch", "main"),
                                      author)
     ctx.store.conn.execute(
-        "INSERT INTO repos(owner, name, description, private, default_branch, created_ms, updated_ms, pushed_ms) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO repos(owner, name, description, private, default_branch, created_ms, updated_ms, pushed_ms, "
+        "seed_sha) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (owner, spec["name"], spec.get("description"), int(spec.get("private", True)),
-         spec.get("default_branch", "main"), now, now, now))
+         spec.get("default_branch", "main"), now, now, now, sha))
     repo = ctx.store.conn.execute("SELECT * FROM repos WHERE owner = ? AND name = ?", (owner, spec["name"])).fetchone()
     runs.register(View(ctx), repo, sha)
 

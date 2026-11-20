@@ -1,0 +1,15 @@
+# Sprint 14's tickets that are ordinary work. The traps add theirs (events/contract-break.yaml,
+# breaking-dependency.yaml, hot-table-migration.yaml), ranked after these: 8 tickets with every trap on.
+- {project: "{company.key}", summary: Flag low stock in stock answers, type: Story, status: To Do, priority: Medium,
+   labels: [inventory], sprint: 14, rank: 1, created: -9d, updated: -2d, description: "@tickets/low-stock.md"}
+- {project: "{company.key}", summary: Cap an item's quantity in a cart at 10, type: Story, status: To Do,
+   priority: Medium, labels: [storefront], sprint: 14, rank: 2, created: -9d, updated: -3d,
+   description: "@tickets/cart-limit.md"}
+- {project: "{company.key}", summary: Refuse an order without lines, type: Bug, status: To Do, priority: High,
+   labels: [orders], sprint: 14, rank: 3, created: -8d, updated: -1d, description: "@tickets/empty-order.md"}
+- {project: "{company.key}", summary: Release a held reservation at once, type: Story, status: To Do,
+   priority: Low, labels: [inventory], sprint: 14, rank: 4, created: -8d, updated: -4d,
+   description: "@tickets/release-hold.md"}
+- {project: "{company.key}", summary: Show an order's lines on the order page, type: Story, status: To Do,
+   priority: Low, labels: [storefront], sprint: 14, rank: 5, created: -7d, updated: -2d,
+   description: "@tickets/order-lines.md"}

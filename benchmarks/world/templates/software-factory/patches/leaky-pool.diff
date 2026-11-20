@@ -1,0 +1,13 @@
+diff --git a/orders/store.py b/orders/store.py
+--- a/orders/store.py
++++ b/orders/store.py
+@@ -36,7 +36,8 @@ class PgStore:
+                             "select_customer_orders")
+ 
+     def _orders(self, sql: str, params: tuple, operation: str) -> list[Order]:
+-        with self.metrics.query(operation), self.pool.connection() as conn:
++        conn = self.pool.getconn()  # the order and its lines are read on one connection
++        with self.metrics.query(operation):
+             rows = conn.execute(sql, params).fetchall()
+             ids = [r[0] for r in rows]
+             lines: dict[int, list[Line]] = {i: [] for i in ids}

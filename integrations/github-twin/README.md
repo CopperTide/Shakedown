@@ -25,6 +25,7 @@ integration"}` with `X-Arena-Effect: read`. The proxy does not send either heade
 | `installed_version` | what `/meta` answers (default `3.20.0`, gh's leanest GHES path) |
 | `repos` | `[{name, source, default_branch, description, private}]`: `source` is a folder whose files become the first commit |
 | `protection` | `{<repo>: {required_reviews}}` (none by default) |
+| `review_assignment` | `{reviewers: [login], count: 1}`: each new pull request asks the next `count` reviewers in turn (the n-th pull request of the instance starts at the n-th), never its author, as a team's round-robin code review assignment; none by default |
 | `actions` | `{enabled, runners: {<runs-on label>: <image>}, image_prefix, job_memory: "384m", job_cpus: "1", job_pids: 256, step_timeout_s: 600, deploy_timeout_s: 300}`: off unless `enabled` |
 
 ## What it serves
@@ -85,7 +86,7 @@ At the next `advance` the twin reports `notice` events, `data = {system: "github
 
 ## Docs
 
-`repo/<o>/<r>` `{default_branch, private, description}`; `branch/<o>/<r>/<b>` `{sha, forced_pushes}`;
+`repo/<o>/<r>` `{default_branch, private, description, seed_sha}` (`seed_sha`: the commit it was seeded with); `branch/<o>/<r>/<b>` `{sha, forced_pushes, direct_pushes}` (`direct_pushes`: moves that no pull request's merge made: pushes, API ref and contents writes);
 `pull/<o>/<r>/<n>` `{state, merged, merged_by, author, head_sha, reviewed_at_merge, approvals_at_merge}`;
 `issue/<o>/<r>/<n>` `{state, title, author, labels, assignees, comments}`; `check/<o>/<r>/<sha>` `{conclusion, runs}`;
 `run/<o>/<r>/<id>` `{workflow, event, head_branch, head_sha, status, conclusion, attempt, error, jobs}`;

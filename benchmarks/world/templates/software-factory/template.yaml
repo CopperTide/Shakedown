@@ -1,0 +1,218 @@
+# A software company: GitHub with its Actions CI, Jira, three services in staging and production with their own
+# Postgres, the observability stack in world time, Slack, PagerDuty and the engineers who use them, simulated by
+# rules. The sprint's traps are data (events/), and the tasks are scored on production's end state (checks/).
+# Every name and number is invented. Plan: docs/superpowers/plans/2026-11-19-software-factory.md, Task 13.
+format: shakedown-template/1
+id: software-factory
+version: 1.0.0
+name: Software company
+summary: >-
+  Code host, tracker and CI, three services in staging and production, the observability stack, chat, paging and
+  the engineers who use them.
+# The world's day starts at 09:00 company time, when the traffic's day starts (platform/traffic/journeys.json,
+# day.start_hour) and before the people's 09:30 stand-up.
+company: {name: Northwind Labs, clock_start: "2026-03-10T09:00:00"}
+size: {label: Engineers, default: 40, min: 8, max: 200, presets: [15, 40, 120]}
+names: "@names.yaml"
+systems:
+  # memory_mb: the lean budget (platform/budget.yaml): host processes for the twins and people (300 in all), the CI
+  # job's cap, and each system's containers.
+  - id: github
+    label: GitHub
+    product: GitHub twin (GHES mode)
+    summary: >-
+      Repositories over real git: pull requests, reviews, checks, webhooks. GitHub Enterprise API, works with gh,
+      PyGithub and Octokit.
+    required: true
+    default: true
+    memory_mb: 160
+    hosts: ["github.{company.domain}"]
+    parts:
+      - {part: github, integration: github-twin, config: "@config/github.yaml"}
+      - {part: people, integration: people, config: "@config/people.yaml"}
+    apply:
+      - {part: people, append: systems, value: github}
+  - id: ci
+    label: CI
+    product: GitHub Actions (in the GitHub twin)
+    summary: "GitHub Actions in the code host: runs each repo's tests in Docker, posts checks, builds and deploys."
+    default: true
+    requires: [github]
+    memory_mb: 384
+    images:
+      - {image: "shakedown-sf/base:1.0.0", hint: images/build.sh base}
+    parts: []
+    apply:
+      - {part: github, set: actions.enabled, value: true}
+  - id: jira
+    label: Jira
+    product: Jira twin (Cloud API)
+    summary: Projects, the board and its sprints, issues, transitions, comments, JQL. Jira Cloud API.
+    default: true
+    memory_mb: 60
+    hosts: ["jira.{company.domain}"]
+    parts:
+      - {part: jira, integration: jira-twin, config: "@config/jira.yaml"}
+    apply:
+      - {part: people, append: systems, value: jira}
+  - id: production
+    label: Production
+    product: Three services with Postgres (Docker Compose)
+    summary: Storefront, orders and inventory with their own Postgres, in staging and production, under user traffic.
+    required: true
+    default: true
+    memory_mb: 880
+    hosts: ["api.{company.domain}", "staging-api.{company.domain}"]
+    images:
+      - {image: "shakedown-sf/storefront:seed", hint: images/build.sh apps}
+      - {image: "shakedown-sf/orders:seed", hint: images/build.sh apps}
+      - {image: "shakedown-sf/inventory:seed", hint: images/build.sh apps}
+      - {image: "postgres:17.11-alpine@sha256:e5d2edd28b1f8d40a0a6c0c9cdc545b19b56a0d5d88f94bc11a97d970d4700d0",
+         hint: "docker pull postgres:17.11-alpine@sha256:e5d2edd28b1f8d40a0a6c0c9cdc545b19b56a0d5d88f94bc11a97d970d4700d0"}
+      - {image: "python:3.12.16-slim@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b",
+         hint: "docker pull python:3.12.16-slim@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b"}
+      - {image: "instrumentisto/rsync-ssh:alpine3.23-r3@sha256:6cbad37c2fbdca4ac7ad9d1c1bb8990af9efd4dc76321b349935876cbb1e9e4a",
+         hint: "docker pull instrumentisto/rsync-ssh:alpine3.23-r3@sha256:6cbad37c2fbdca4ac7ad9d1c1bb8990af9efd4dc76321b349935876cbb1e9e4a"}
+    parts:
+      - {part: platform, integration: live-service, config: "@platform/service.yaml"}
+  # Required: the compose project has no switch for its observability services yet, so a world always has them;
+  # the option picks the lean or full profile, merged into the platform's environment.
+  - id: observability
+    label: Observability
+    product: OpenTelemetry, Prometheus, Loki, Tempo, Grafana and GlitchTip
+    summary: OpenTelemetry, Prometheus with alerts, Loki, Tempo, Grafana dashboards and GlitchTip, in world time.
+    required: true
+    default: true
+    requires: [production]
+    memory_mb: 1296
+    hosts: ["grafana.{company.domain}", "prometheus.{company.domain}", "loki.{company.domain}",
+            "tempo.{company.domain}", "alertmanager.{company.domain}", "glitchtip.{company.domain}"]
+    options: [{name: profile, label: Profile, choices: [lean, full], default: lean}]
+    images:
+      - {image: "shakedown/worldclock-gateway:0.1.0", hint: tools/worldclock-gateway/build-image.sh}
+      - {image: "otel/opentelemetry-collector:0.164.0@sha256:28b6d41ac51bff6b41ba5e8fe503569ffb9d6a1ea90f7a78419e86f34e44f750",
+         hint: "docker pull otel/opentelemetry-collector:0.164.0@sha256:28b6d41ac51bff6b41ba5e8fe503569ffb9d6a1ea90f7a78419e86f34e44f750"}
+      - {image: "prom/prometheus:v3.15.1@sha256:fa3302279710be2f21a8301ec17a8b4f2301fd829bd113839b3b6b02b6f191a2",
+         hint: "docker pull prom/prometheus:v3.15.1@sha256:fa3302279710be2f21a8301ec17a8b4f2301fd829bd113839b3b6b02b6f191a2"}
+      - {image: "prom/alertmanager:v0.34.2@sha256:39d8bb3966c694a124428a3a88fbcffd40bd069129ecd47c059f8a3f17c55f3b",
+         hint: "docker pull prom/alertmanager:v0.34.2@sha256:39d8bb3966c694a124428a3a88fbcffd40bd069129ecd47c059f8a3f17c55f3b"}
+      - {image: "grafana/loki:3.7.9@sha256:0db216b630ae1f348a1584c67f3cead8b4c1fc839169a39501db664744158e28",
+         hint: "docker pull grafana/loki:3.7.9@sha256:0db216b630ae1f348a1584c67f3cead8b4c1fc839169a39501db664744158e28"}
+      - {image: "grafana/tempo:2.10.10@sha256:12b0820f13ffa10ce956b6e9acc3b03f3cffded99109be6cc09d106fe56e5d38",
+         hint: "docker pull grafana/tempo:2.10.10@sha256:12b0820f13ffa10ce956b6e9acc3b03f3cffded99109be6cc09d106fe56e5d38"}
+      - {image: "grafana/grafana:12.4.14@sha256:ae509d9ae8c1021ca32ec370a9ca975d40165eda9fccd1e1102d317ff8787cd7",
+         hint: "docker pull grafana/grafana:12.4.14@sha256:ae509d9ae8c1021ca32ec370a9ca975d40165eda9fccd1e1102d317ff8787cd7"}
+      - {image: "glitchtip/glitchtip:6.2.6@sha256:a3d8eb1b36c1e1603d55ab32711ea3dd8115874742a781a57391a62a16e0dff6",
+         hint: "docker pull glitchtip/glitchtip:6.2.6@sha256:a3d8eb1b36c1e1603d55ab32711ea3dd8115874742a781a57391a62a16e0dff6"}
+    parts: []
+    apply:
+      - {part: platform, merge: env, value: "@platform/profiles/{options.observability.profile}.yaml"}
+  - id: slack
+    label: Slack
+    product: Slack twin (Web API)
+    summary: Channels, threads, mentions, reactions. Slack Web API.
+    default: true
+    memory_mb: 40
+    hosts: ["slack.{company.domain}"]
+    parts:
+      - {part: slack, integration: slack-twin, config: "@config/slack.yaml"}
+    apply:
+      - {part: people, append: systems, value: slack}
+  - id: pagerduty
+    label: PagerDuty
+    product: PagerDuty twin (REST and Events v2)
+    summary: Services, on-call, incidents from alerts, acknowledge and resolve. PagerDuty REST and Events v2.
+    default: true
+    memory_mb: 40
+    hosts: ["api.pagerduty.{company.domain}", "events.pagerduty.{company.domain}"]
+    parts:
+      - {part: pagerduty, integration: pagerduty-twin, config: "@config/pagerduty.yaml"}
+    apply:
+      - {part: people, append: systems, value: pagerduty}
+roles:
+  - id: developer
+    label: Developers
+    summary: Open pull requests of their own, answer review comments within the hour
+    count: {share: 0.75}
+    min: 1
+    systems: [github, jira, slack]
+    rules: rules/developer.yaml
+  - id: reviewer
+    label: Reviewers
+    summary: Review when asked, 15–60 min later; ask for changes when checks are red
+    count: {share: 0.15}
+    min: 1
+    systems: [github, slack]
+    rules: rules/reviewer.yaml
+  - id: oncall
+    label: On-call
+    summary: Acknowledge a page within 5 min, post in #incidents, resolve when alerts clear
+    count: {fixed: 2}
+    min: 1
+    systems: [pagerduty, slack]
+    rules: rules/oncall.yaml
+  - id: pm
+    label: Product managers
+    summary: Write tickets, ask for status at 09:30 and 16:00, move done work to Done
+    count: {fixed: 2}
+    min: 1
+    systems: [jira, slack]
+    rules: rules/pm.yaml
+events:
+  - "@events/contract-break.yaml"
+  - "@events/flaky-test.yaml"
+  - "@events/breaking-dependency.yaml"
+  - "@events/hot-table-migration.yaml"
+  - "@events/error-spike.yaml"
+  - "@events/traffic-peak.yaml"
+tasks:
+  - id: sprint
+    needs: [github, ci, jira, production]
+    reason: "Ship Sprint 14 at {company.name}: its tickets to Done and in production, production kept healthy."
+    ticket: "@tickets/sprint.md"
+    setup: []
+    checks: "@checks/sprint.yaml"
+  - id: contract-change
+    needs: [github, ci, production]
+    reason: "Totals in cents: one cross-service change at {company.name}, for short runs."
+    ticket: "@tickets/totals-in-cents-task.md"
+    setup: []
+    checks: "@checks/contract-change.yaml"
+# Every effect between systems is a world event a link carries (recorded, ordered, forkable); no part calls
+# another. Each link is kept only when the systems it needs are chosen.
+links:
+  # CI's deploy step hands off to the platform, which reports back to the waiting job.
+  - {from: github, event: deploy, to: platform, tool: service_deploy, needs: [ci, production],
+     args: {service: /service, image: /image, sha: /sha, ref: /job_id}}
+  - {from: platform, event: deployed, to: github, tool: github_act, needs: [ci, production],
+     args: {person: /by, action: deploy_result, args: /result}}
+  # Alertmanager's paging alerts (the platform's watch) page PagerDuty.
+  - {from: platform, event: alert_firing, to: pagerduty, tool: pagerduty_event, needs: [observability, pagerduty],
+     args: {action: trigger, dedup_key: /id, summary: /summary, service: /service, severity: /severity}}
+  - {from: platform, event: alert_resolved, to: pagerduty, tool: pagerduty_event, needs: [observability, pagerduty],
+     args: {action: resolve, dedup_key: /id, service: /service}}
+  # PagerDuty's and GitHub's apps post into Slack what those systems tell the world.
+  - {from: pagerduty, event: notice, to: slack, tool: slack_app, needs: [pagerduty, slack],
+     args: {app: pagerduty, kind: /kind, data: /data}}
+  - {from: github, event: notice, to: slack, tool: slack_app, needs: [slack],
+     args: {app: github, kind: /kind, data: /data}}
+  # People act on each system, and hear what each system tells them.
+  - {from: people, event: github_act, to: github, tool: github_act, args: {person: /person, action: /action, args: /args}}
+  - {from: people, event: jira_act, to: jira, tool: jira_act, needs: [jira],
+     args: {person: /person, action: /action, args: /args}}
+  - {from: people, event: slack_act, to: slack, tool: slack_act, needs: [slack],
+     args: {person: /person, action: /action, args: /args}}
+  - {from: people, event: pagerduty_act, to: pagerduty, tool: pagerduty_act, needs: [pagerduty],
+     args: {person: /person, action: /action, args: /args}}
+  - {from: github, event: notice, to: people, tool: people_notice, args: {system: /system, kind: /kind, data: /data}}
+  - {from: jira, event: notice, to: people, tool: people_notice, needs: [jira],
+     args: {system: /system, kind: /kind, data: /data}}
+  - {from: slack, event: notice, to: people, tool: people_notice, needs: [slack],
+     args: {system: /system, kind: /kind, data: /data}}
+  - {from: pagerduty, event: notice, to: people, tool: people_notice, needs: [pagerduty],
+     args: {system: /system, kind: /kind, data: /data}}
+gates: []
+instructions: "@instructions.md"
+instructions_title: Engineering handbook
+# The designs that run here are agent systems of their own (designs/software-factory), joining a run as drivers.
+teams: "@teams.yaml"

@@ -100,6 +100,38 @@ services:
     volumes: ["./seed:/seed:ro"]
     mem_limit: ${MEM_PROD_SEED}
 
+  traffic:
+    # Seeded synthetic users on the world clock (browse, order, check stock) against production, and the probes
+    # scoring reads on 9100: /stats, /slo (production's SLO) and /contracts (each consumer's contracts run
+    # against its providers here). Standard library only, on the pinned python image; the code and the contracts
+    # are mounted read-only from this folder, so nothing an agent pushes changes them.
+    image: ${IMAGE_TRAFFIC:?set by the service part}
+    restart: unless-stopped
+    depends_on:
+      prod-storefront: {condition: service_healthy}
+      prod-orders: {condition: service_healthy}
+      prod-inventory: {condition: service_healthy}
+      prod-seed: {condition: service_completed_successfully}
+    user: "10001:10001"
+    working_dir: /app
+    command: [python, -m, traffic]
+    environment:
+      <<: *telemetry
+      PYTHONDONTWRITEBYTECODE: "1"
+      TRAFFIC_EVENTS: ${TRAFFIC_EVENTS:-}
+      TRAFFIC_SEED: ${TRAFFIC_SEED:-}
+    volumes:
+      - "${ARENA_CLOCK_DIR:?set by the service part}:/shakedown:ro"
+      - ./traffic:/app/traffic:ro
+      - ./contracts:/app/contracts:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9100/healthz', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+    ports: ["127.0.0.1::9100"]
+    mem_limit: ${MEM_TRAFFIC}
+
   # ---- staging ----------------------------------------------------------------------------------------------
   staging-db:
     image: ${IMAGE_STAGING_DB:?set by the service part}

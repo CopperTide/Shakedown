@@ -43,6 +43,7 @@ def load_template(folder: Path) -> Template:
     if not file.is_file():
         raise TemplateError("", f"no template.yaml in {folder}")
     data = limits.parse(limits.read_text(file, "template.yaml", ""), ".yaml", "template.yaml", "")
+    data = validate.with_event_files(data, folder)
     validate.check(data, folder)
     return Template(id=data["id"], version=data["version"], name=data["name"], summary=data["summary"],
                     dir=folder, data=data)
@@ -101,4 +102,5 @@ def _role_form(r: dict) -> dict:
 
 def _event_form(e: dict) -> dict:
     return {"id": e["id"], "label": e["label"], "description": e["description"], "kind": e["kind"],
-            "default": e.get("default", False), "needs": e.get("needs", []), "params": e.get("params", [])}
+            "default": e.get("default", False) or e.get("fixed", False), "fixed": e.get("fixed", False),
+            "needs": e.get("needs", []), "params": e.get("params", [])}

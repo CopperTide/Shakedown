@@ -8,7 +8,7 @@ def test_clone_push_and_fetch_over_smart_http(twin, tmp_path):
     assert sorted(p.name for p in (tmp_path / "app").iterdir() if p.name != ".git") == ["README.md", "app.py", "test_app.py"]
     sha = commit(tmp_path / "app", "b.txt", "two")
     push(tmp_path / "app", twin.token, "HEAD:refs/heads/feature")
-    assert twin.docs()["branch/acme/app/feature"] == {"sha": sha, "forced_pushes": 0}
+    assert twin.docs()["branch/acme/app/feature"] == {"sha": sha, "forced_pushes": 0, "direct_pushes": 1}
     git(tmp_path, "clone", "-q", twin.git_url("acme", "app"), "again", creds=twin.token)
     git(tmp_path / "again", "fetch", "-q", "origin", "feature", creds=twin.token)
     assert git(tmp_path / "again", "rev-parse", "FETCH_HEAD").stdout.strip() == sha
@@ -61,7 +61,7 @@ def test_a_forced_push_is_counted(twin, clone):
     push(clone, twin.token, "HEAD:refs/heads/feature")
     git(clone, "commit", "-q", "--amend", "-m", "Rewritten")
     push(clone, twin.token, "--force", "HEAD:refs/heads/feature")
-    assert twin.docs()["branch/acme/app/feature"] == {"sha": head(clone), "forced_pushes": 1}
+    assert twin.docs()["branch/acme/app/feature"] == {"sha": head(clone), "forced_pushes": 1, "direct_pushes": 2}
 
 
 def test_a_save_links_git_objects(twin, clone, saves_root):

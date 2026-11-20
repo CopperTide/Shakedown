@@ -24,6 +24,7 @@ its reads, and its writes answer `{"ok": false, "error": "missing_scope", "neede
 | `users` | `[{name, real_name}]` |
 | `channels` | `[{name, topic?, purpose?, private?, general?}]` |
 | `messages` | `[{channel, user, text, at}]`: earlier history, `at` relative to world now (`-2h`, `-1d`, `-30m`) |
+| `apps` | `[{name, user, channel, messages: {<kind>: <text>}}]`: apps that post what another system tells the world (`slack_app`); `{/pointer}` in a text is that value of the event's data |
 
 ## What it serves
 
@@ -38,7 +39,9 @@ Answers follow Slack's published description (`tests/schemas/SOURCE.md`), which 
 ## Tool and notices
 
 `slack_act {person, action, args}` (called by links): `post {channel, text, thread_ts?}`, `react {channel, ts,
-name}`. At the next `advance` the twin reports `notice` events, `data = {system: "slack", kind, data}`:
+name}`. `slack_app {app, kind, data}` (called by links, e.g. from GitHub's or PagerDuty's `notice` events): the
+app posts, as its `user` in its `channel`, the text it has for `kind` (nothing for a kind it has no text for;
+`{posted: false}`); an app the config lacks is refused. At the next `advance` the twin reports `notice` events, `data = {system: "slack", kind, data}`:
 `mentioned {channel, user, text, ts}` for each `<@U…>` or `@name` (of a known user) in a posted message, the
 author left out.
 
@@ -48,7 +51,7 @@ author left out.
 
 ## Verified
 
-`uv run --with pytest pytest -q` (36 tests): the methods with `slack_sdk` 3.47 `WebClient` unchanged (base URL
-set to the twin, the proxy's headers added), errors, threads, reactions, search, mentions, acts, read-only agents,
+`uv run --with pytest pytest -q` (39 tests): the methods with `slack_sdk` 3.47 `WebClient` unchanged (base URL
+set to the twin, the proxy's headers added), errors, threads, reactions, search, mentions, acts, apps' posts, read-only agents,
 save and restore, and every method's success and error answers against Slack's description. Not yet verified
 through arenad's proxy.

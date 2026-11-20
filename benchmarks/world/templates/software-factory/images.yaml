@@ -6,12 +6,17 @@ images:
   - id: python
     image: python:3.12.16-slim@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b
     hint: docker pull python:3.12.16-slim@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b
-    services: []  # the base image is built from it
+    services: [traffic]  # the traffic service runs on it as is; the base image is built from it
   - id: base
     image: shakedown-sf/base:1.0.0
     build: true
     hint: images/build.sh base
     services: []  # what the app images and CI jobs run on
+  - id: workbench
+    image: shakedown-workbench:1
+    build: true
+    hint: images/build.sh workbench
+    services: []  # where the designs' agents run commands (designs/software-factory), built on the base image
   - id: storefront
     image: shakedown-sf/storefront:seed
     build: true
@@ -67,4 +72,4 @@ images:
   - id: rsync
     image: instrumentisto/rsync-ssh:alpine3.23-r3@sha256:6cbad37c2fbdca4ac7ad9d1c1bb8990af9efd4dc76321b349935876cbb1e9e4a
     hint: docker pull instrumentisto/rsync-ssh:alpine3.23-r3@sha256:6cbad37c2fbdca4ac7ad9d1c1bb8990af9efd4dc76321b349935876cbb1e9e4a
-    services: []  # the service part's rsync_image (hard-linked saves)
+    services: []  # the live-service part's helper_image (copies volumes, hard-linked saves)

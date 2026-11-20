@@ -11,18 +11,19 @@ from .errors import TemplateError, key_path
 WORLD_DIR = "${WORLD_DIR}"
 _TOKEN = re.compile(r"\{\{|\}\}|\{([a-z_]+(?:\.[a-z0-9_-]+)*)\}")
 _PARSED = {".yaml", ".yml", ".json"}
-_TEXT = {".md", ".txt"}
+_TEXT = {".md", ".txt", ".diff", ".patch"}
 
 
 @dataclass
 class Context:
     """What placeholders read: the company (name, slug, key, domain), the size, each system's options, the
-    people and an event's params."""
+    people, an event's params and the world's seed."""
     company: dict
     size: int
     options: dict
     people: list
     params: dict
+    seed: int = 0
 
 
 @dataclass
@@ -43,8 +44,17 @@ def expand(value, ctx: Context, base: Path, files: list, path: str = "", budget:
     if isinstance(value, list):
         return [expand(v, ctx, base, files, key_path(path, i), budget) for i, v in enumerate(value)]
     if isinstance(value, str):
-        return _include(value[1:], ctx, base, files, path, budget) if is_include(value) else fill(value, ctx, path)
+        return _include(_include_path(value, ctx, path), ctx, base, files, path, budget) if is_include(value) \
+            else fill(value, ctx, path)
     return value
+
+
+def _include_path(value: str, ctx: Context, path: str) -> str:
+    """The file an include names, its placeholders filled (`@env/{options.obs.profile}.yaml`)."""
+    rel = fill(value[1:], ctx, path)
+    if not isinstance(rel, str):
+        raise TemplateError(path, f"{value} does not name a file")
+    return rel
 
 
 def is_include(s: str) -> bool:
@@ -84,6 +94,8 @@ _RESOLVERS = {
     ("options", 2): lambda ctx, system, name: ctx.options[system][name],
     ("people", 0): lambda ctx: ctx.people,
     ("people", 1): lambda ctx, role: [p for p in ctx.people if p.get("role") == role],
+    ("people", 2): lambda ctx, role, field: [p[field] for p in ctx.people if p.get("role") == role],
+    ("seed", 0): lambda ctx: ctx.seed,
     ("param", 1): lambda ctx, k: ctx.params[k],
     ("world_dir", 0): lambda ctx: WORLD_DIR,
 }

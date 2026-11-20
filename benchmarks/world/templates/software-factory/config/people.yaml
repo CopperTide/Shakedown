@@ -1,0 +1,10 @@
+# The people engine (integrations/people): the world's people and each role's rules (shakedown-people/1). Its seed
+# is the run's; `systems` is filled by each chosen system's apply in template.yaml, so acts on a system the world
+# lacks are skipped and counted.
+people: "{people}"
+rules:
+  developer: "@rules/developer.yaml"
+  reviewer: "@rules/reviewer.yaml"
+  oncall: "@rules/oncall.yaml"
+  pm: "@rules/pm.yaml"
+systems: []

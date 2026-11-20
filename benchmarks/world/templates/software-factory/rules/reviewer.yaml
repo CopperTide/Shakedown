@@ -1,0 +1,24 @@
+# Reviewers review 15-60 world minutes after they are asked (the code host assigns one to each new pull request
+# in turn): approve when checks are green, ask for changes when they are red, and say they are waiting while
+# checks still run. Checks that finish before the review update what the reviewer sees.
+format: shakedown-people/1
+role: reviewer
+lines:
+  approve: ["LGTM", "Looks good, ship it", "Approved, thanks"]
+  red: ["Checks are red, please fix them first.", "CI is failing on this one."]
+  waiting: ["Checks are still running, I'll look again when they finish."]
+rules:
+  - id: review-when-asked
+    notice: {system: github, kind: review_requested, to: me}
+    after: {minutes: [15, 60]}
+    refresh:
+      - notice: {system: github, kind: checks_completed}
+        match: {/repo: /repo, /number: /prs}
+        set: {/checks: /conclusion}
+    do:
+      - if: {/checks: [success, none]}
+        act: {system: github, action: review, args: {repo: /repo, number: /number, event: APPROVE, body: "{pick:approve}"}}
+      - if: {/checks: failure}
+        act: {system: github, action: review, args: {repo: /repo, number: /number, event: REQUEST_CHANGES, body: "{pick:red}"}}
+      - else: true
+        act: {system: github, action: comment, args: {repo: /repo, number: /number, body: "{pick:waiting}"}}

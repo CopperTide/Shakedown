@@ -5,7 +5,8 @@ import pytest
 from support import call, call_error, copy_with
 
 from worldbench import needs
-from worldbench.builder import Builder
+from worldbench.builder import PACKAGE_TEMPLATES, Builder
+from worldbench.template import list_templates
 
 
 def test_preview_answers_what_review_shows(builder):
@@ -107,6 +108,10 @@ def test_an_image_is_present_only_when_docker_says_so(monkeypatch, tmp_path):
     assert needs.image_present("toy:1") is True and needs.image_present("toy:2") is False
 
 
+# The templates the package ships in its own templates/ folder, always listed (software-factory).
+SHIPPED = [t.id for t in list_templates([PACKAGE_TEMPLATES])]
+
+
 def test_the_program_answers_templates_over_the_line_protocol(fixtures, tmp_path):
     import os
     import subprocess
@@ -115,7 +120,7 @@ def test_the_program_answers_templates_over_the_line_protocol(fixtures, tmp_path
     proc = subprocess.run([sys.executable, "-m", "worldbench.builder"], cwd=tmp_path, env=env, capture_output=True,
                           text=True, input='{"jsonrpc":"2.0","id":1,"method":"templates"}\n', timeout=30)
     ids = [t["id"] for t in json.loads(proc.stdout.splitlines()[0])["result"]]
-    assert ids == ["bad-include", "bad-placeholder", "shop"]
+    assert ids == sorted(["bad-include", "bad-placeholder", "shop", *SHIPPED])
 
 
 def test_the_program_adds_the_template_roots_its_command_names(fixtures, tmp_path):
@@ -127,7 +132,7 @@ def test_the_program_adds_the_template_roots_its_command_names(fixtures, tmp_pat
                           env=env, capture_output=True, text=True,
                           input='{"jsonrpc":"2.0","id":1,"method":"templates"}\n', timeout=30)
     ids = [t["id"] for t in json.loads(proc.stdout.splitlines()[0])["result"]]
-    assert ids == ["bad-include", "bad-placeholder", "shop"]
+    assert ids == sorted(["bad-include", "bad-placeholder", "shop", *SHIPPED])
 
 
 def test_a_preview_with_problems_still_lists_the_people_it_drew(builder):

@@ -7,9 +7,11 @@ from .repos import Repos, full_name
 
 def _branches(repos: Repos, db, repo) -> dict:
     fn = full_name(repo)
-    forced = {r["branch"]: r["forced_pushes"] for r in
-              db.execute("SELECT branch, forced_pushes FROM branch_stats WHERE repo_id = ?", (repo["id"],))}
-    return {f"branch/{fn}/{b}": {"sha": sha, "forced_pushes": forced.get(b, 0)} for b, sha in repos.branches(fn).items()}
+    stats = {r["branch"]: r for r in db.execute("SELECT branch, forced_pushes, direct_pushes FROM branch_stats "
+                                                "WHERE repo_id = ?", (repo["id"],))}
+    return {f"branch/{fn}/{b}": {"sha": sha, "forced_pushes": stats[b]["forced_pushes"] if b in stats else 0,
+                                 "direct_pushes": stats[b]["direct_pushes"] if b in stats else 0}
+            for b, sha in repos.branches(fn).items()}
 
 
 def _pulls(db, repo) -> dict:
@@ -54,7 +56,7 @@ def build(ctx) -> dict:
     db, repos, out = ctx.store.conn, Repos(ctx.files), {}
     for repo in db.execute("SELECT * FROM repos ORDER BY id").fetchall():
         out[f"repo/{full_name(repo)}"] = {"default_branch": repo["default_branch"], "private": bool(repo["private"]),
-                                          "description": repo["description"]}
+                                          "description": repo["description"], "seed_sha": repo["seed_sha"]}
         for part in (_branches(repos, db, repo), _pulls(db, repo), _issues(db, repo), _checks(db, repo), _runs(db, repo)):
             out.update(part)
     out.update(_hooks(db))

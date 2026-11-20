@@ -20,10 +20,10 @@ containers:
   staging-orders: 80
   staging-inventory: 80
   staging-db: 128             # shared_buffers 16MB
+  traffic: 64                 # standard-library Python, 16 worker threads, 6 world hours of request records
 outside_compose:
   ci-job: 384                 # the GitHub twin's `docker run --memory 384m`, concurrency 1
-reserved:
-  traffic: 64                 # Task 9's traffic service, one asyncio process (not in compose.yaml yet)
+reserved: {}
 containers_mib: 2560          # the sum of the three lists above
 one_shot:                     # psql seeds that exit once the services have migrated, before traffic starts
   prod-seed: 32

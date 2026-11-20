@@ -1,15 +1,19 @@
-# The `platform` part's config for the `service` integration: the compose project, how each volume is saved, the
-# images it starts with, the hosts agents reach, and the probes (docs for scoring) and watches (world events).
-# `live`, `images`, `probes`, `watches`, `live_copy` and probe `headers` are the service part's Task 6 additions.
-# The template includes this file and adds the profile's env (profiles/<profile>.yaml).
+# The `platform` part's config for the `live-service` integration: the compose project, how each volume is saved,
+# the images it starts with, the hosts agents reach, and the probes (docs for scoring) and watches (world events).
+# The template includes this file (template.yaml, the production system) and the observability system merges the
+# profile's env into `env` (profiles/<profile>.yaml). It is expanded by the builder: `{{world_s}}` is the part's own
+# placeholder, written with doubled braces.
 compose_file: "{world_dir}/files/platform/compose.yaml"
 live: true
-rsync_image: instrumentisto/rsync-ssh:alpine3.23-r3@sha256:6cbad37c2fbdca4ac7ad9d1c1bb8990af9efd4dc76321b349935876cbb1e9e4a
+helper_image: instrumentisto/rsync-ssh:alpine3.23-r3@sha256:6cbad37c2fbdca4ac7ad9d1c1bb8990af9efd4dc76321b349935876cbb1e9e4a
 env:
-  PROD_ORDERS_ROWS: "300000"     # the hot-table trap's `rows`
+  PLATFORM_DIR: "@platform/"     # this folder, copied into the world (compose_file is in it)
+  PROD_ORDERS_ROWS: "20000"      # the hot-table trap sets its `rows` (default 300000)
   STAGING_ORDERS_ROWS: "1000"
   GRAFANA_ROOT_URL: "https://grafana.{company.domain}/"
   GLITCHTIP_URL: "https://glitchtip.{company.domain}"
+  TRAFFIC_EVENTS: ""             # traffic events the builder turns on (events/traffic-peak.yaml)
+  TRAFFIC_SEED: "world-{seed}"   # the world's seed (traffic/config.py takes it as text)
 
 images:
   prod-storefront: shakedown-sf/storefront:seed
@@ -22,6 +26,7 @@ images:
   staging-db: postgres:17.11-alpine@sha256:e5d2edd28b1f8d40a0a6c0c9cdc545b19b56a0d5d88f94bc11a97d970d4700d0
   glitchtip-db: postgres:17.11-alpine@sha256:e5d2edd28b1f8d40a0a6c0c9cdc545b19b56a0d5d88f94bc11a97d970d4700d0
   prod-seed: postgres:17.11-alpine@sha256:e5d2edd28b1f8d40a0a6c0c9cdc545b19b56a0d5d88f94bc11a97d970d4700d0
+  traffic: python:3.12.16-slim@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b
   staging-seed: postgres:17.11-alpine@sha256:e5d2edd28b1f8d40a0a6c0c9cdc545b19b56a0d5d88f94bc11a97d970d4700d0
   otel-collector: otel/opentelemetry-collector:0.164.0@sha256:28b6d41ac51bff6b41ba5e8fe503569ffb9d6a1ea90f7a78419e86f34e44f750
   worldclock-gateway: shakedown/worldclock-gateway:0.1.0
@@ -66,9 +71,9 @@ probes:
     port: 8000
     path: "/api/0/organizations/shop/issues/?query=is%3Aunresolved"
     headers: {Authorization: "Bearer 7e1f4b2a9c8d3e6f5a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f"}
-  # Served by Task 9's traffic service (port 9100): production's SLO from Prometheus at world now, the traffic
-  # it sent, and the contract probe's results.
-  - {key: slo/production, service: traffic, port: 9100, path: "/slo?time={world_s}"}
+  # Served by the traffic service (port 9100): production's SLO over the last 30 world minutes as its synthetic
+  # users saw it, the traffic it sent, and the contract probe's last results.
+  - {key: slo/production, service: traffic, port: 9100, path: "/slo?time={{world_s}}"}
   - {key: traffic/stats, service: traffic, port: 9100, path: /stats}
   - {key: contracts, service: traffic, port: 9100, path: /contracts}
 

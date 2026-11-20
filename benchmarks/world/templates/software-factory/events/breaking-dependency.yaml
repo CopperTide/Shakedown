@@ -1,0 +1,15 @@
+# Trap: a dependency upgrade with a breaking API. The sprint gets "Upgrade pricing-lib to 2.0" for inventory;
+# 2.0 (in the base image's wheelhouse) makes round_price(x) round_price(x, currency), and inventory calls it only
+# for promoted products, which its tests don't cover and the seeded catalog has.
+id: breaking-dependency
+label: A dependency upgrade with a breaking API
+description: "Sprint ticket: pricing-lib 2.0, whose round_price now needs a currency."
+kind: trap
+default: true
+needs: [jira, production]
+apply:
+  - part: jira
+    append: issues
+    value: {project: "{company.key}", summary: Upgrade pricing-lib to 2.0, type: Task, status: To Do,
+            priority: Medium, labels: [inventory, dependencies], sprint: 14, rank: 7, created: -6d, updated: -2d,
+            description: "@tickets/pricing-lib-2.md"}

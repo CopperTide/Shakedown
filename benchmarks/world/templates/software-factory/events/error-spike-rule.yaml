@@ -1,0 +1,16 @@
+# The error-spike event's developer rule: at world minute {param.after_minutes} one developer opens a change that
+# reads an order on a connection it never gives back. Its tests pass (they run on an in-memory store), the code
+# host assigns a reviewer, the reviewer approves it when the checks are green and the developer merges it
+# (rules/developer.yaml); once deployed, production's orders run out of connections under traffic.
+id: open-the-leaky-change
+once: {minute: "{param.after_minutes}"}
+who: one
+act:
+  system: github
+  action: open_pr
+  args:
+    repo: "{company.slug}/orders"
+    branch: "{person:login}-one-connection"
+    title: Read an order and its lines on one connection
+    body: Saves a pool round trip per order lookup.
+    patch: "@patches/leaky-pool.diff"

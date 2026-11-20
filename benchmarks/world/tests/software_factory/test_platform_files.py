@@ -146,7 +146,7 @@ def test_volumes_are_saved_as_planned_and_probes_read_production(platform):
     assert {"alerts", "glitchtip/issues", "version/storefront", "version/orders", "version/inventory",
             "slo/production"} <= keys
     compose = load_yaml(platform / "compose.yaml")["services"]
-    assert {p["service"] for p in part["probes"]} - set(compose) == {"traffic"}  # Task 9 adds it
+    assert {p["service"] for p in part["probes"]} <= set(compose)
     assert {w["probe"] for w in part["watches"]} == {"alerts/paging"} <= keys
 
 
@@ -154,7 +154,7 @@ def test_the_part_starts_each_service_on_the_image_images_yaml_pins(platform, sf
     part, named = load_yaml(platform / "service.yaml"), images_env(sf_dir)
     assert set(part["images"]) == set(services(platform, "full"))
     assert {f"IMAGE_{s.upper().replace('-', '_')}": i for s, i in part["images"].items()} == named
-    assert part["rsync_image"] in {i["image"] for i in load_yaml(sf_dir / "images.yaml")["images"]}
+    assert part["helper_image"] in {i["image"] for i in load_yaml(sf_dir / "images.yaml")["images"]}
 
 
 def test_paging_alerts_carry_a_severity_pagerduty_accepts(platform):

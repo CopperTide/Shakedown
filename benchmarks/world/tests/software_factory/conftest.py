@@ -1,5 +1,5 @@
-"""Paths into the software-factory template for its file tests. These tests read only the template's files (and,
-where marked, Docker); they import nothing from worldbench."""
+"""Paths into the software-factory template for its tests. The file tests read only the template's files (and,
+where marked, Docker); test_template.py reads it through worldbench, as the builder does."""
 from pathlib import Path
 
 import pytest
