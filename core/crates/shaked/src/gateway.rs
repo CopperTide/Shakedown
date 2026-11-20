@@ -201,7 +201,7 @@ fn live_agent(
     let provider = ctx.roster.provider_of(agent).ok_or(unknown)?;
     let authorization = headers.get(AUTHORIZATION).and_then(|v| v.to_str().ok());
     if !ctx.roster.token_ok(agent, authorization) {
-        let why = "this endpoint wants the run's bearer token";
+        let why = crate::external::TOKEN_WANTED;
         return Err((StatusCode::UNAUTHORIZED, why));
     }
     Ok((ctx, provider))

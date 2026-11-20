@@ -437,3 +437,24 @@ fn benchmark_naming_an_unknown_part_is_a_tool_error() {
         teardown(fx).await;
     })
 }
+
+/// I11: an older SDK or HTTP agent that sends no token is told which field to send and from
+/// which SDK version the SDK sends it.
+#[test]
+fn a_tokenless_call_is_told_to_send_the_agents_token() {
+    run(async {
+        let fx = setup("tokenless").await;
+        let r = reqwest::Client::new()
+            .post(format!("{}/{}/triage", fx.url, fx.branch))
+            .json(&json!({"jsonrpc": "2.0", "id": 1, "method": "tools/list"}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(r.status(), 401);
+        let v: Value = r.json().await.unwrap();
+        let why = v["error"]["message"].as_str().unwrap_or_default();
+        assert!(why.contains("`token`"), "{v}");
+        assert!(why.contains("shakedown-sdk 0.2.0"), "{v}");
+        teardown(fx).await;
+    })
+}

@@ -16,6 +16,13 @@ use crate::{
     store::{BranchId, RunId, Store},
 };
 
+/// Why an MCP or gateway call without its agent's token is refused (401): the field each agent's
+/// endpoints carry the token in, and the SDK release that first sends it (older SDKs and HTTP
+/// agents that send no token stopped working when tokens became required).
+pub const TOKEN_WANTED: &str = "this endpoint wants the run's bearer token: send the agent's \
+    `token` (from its endpoints) as Authorization: Bearer <token>; the Python SDK sends it from \
+    shakedown-sdk 0.2.0";
+
 /// Where an agent reaches the world's tools (MCP, streamable HTTP) and its models (an
 /// OpenAI-compatible base URL: `{gateway_url}/chat/completions`).
 /// In a world whose parts serve HTTP, also the recording proxy its own clients go through and
