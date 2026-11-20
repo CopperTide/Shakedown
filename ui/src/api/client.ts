@@ -1,11 +1,11 @@
-// The one way the UI talks to arenad: typed requests, on paths built with `path` and `qs` (lib/url).
+// The one way the UI talks to shaked: typed requests, on paths built with `path` and `qs` (lib/url).
 import { api } from './core';
 
 export { path, qs } from '@/lib/url';
 
-/** A request arenad refused: its status and arenad's `error` (else the body, else the status text). */
+/** A request shaked refused: its status and shaked's `error` (else the body, else the status text). */
 export class ApiError extends Error {
-  /** The JSON arenad answered (e.g. `{problems}` or `{error, suggested}`), when it was JSON. */
+  /** The JSON shaked answered (e.g. `{problems}` or `{error, suggested}`), when it was JSON. */
   declare body?: unknown;
   constructor(public status: number, message: string, body?: unknown) {
     super(message);

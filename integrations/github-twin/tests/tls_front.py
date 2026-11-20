@@ -1,4 +1,4 @@
-"""A TLS front for the twin on 127.0.0.1, standing in for arenad's proxy in client tests: a test CA,
+"""A TLS front for the twin on 127.0.0.1, standing in for shaked's proxy in client tests: a test CA,
 and per agent one HTTPS listener that forwards each request to the twin with `X-Forwarded-Proto`,
 `X-Forwarded-Host` and that agent's `X-Arena-Agent` (a client-sent one is dropped), as the proxy does.
 It records the GraphQL requests it forwards."""

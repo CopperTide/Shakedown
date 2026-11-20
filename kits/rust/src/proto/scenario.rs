@@ -13,13 +13,13 @@ pub struct ScenarioOptions {
     /// The task ids a scenario may start from.
     pub base: Vec<String>,
     pub disruptions: Vec<DisruptionOption>,
-    /// Per part, the setup call arenad adds to a task that has none for that part, to carry the
+    /// Per part, the setup call shaked adds to a task that has none for that part, to carry the
     /// part's disruptions (the part's scenario tool, with its base arguments).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub setup: BTreeMap<String, SetupTemplate>,
 }
 
-/// The setup call arenad makes on `part` to carry disruptions when a task has none for it.
+/// The setup call shaked makes on `part` to carry disruptions when a task has none for it.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SetupTemplate {
     pub tool: String,

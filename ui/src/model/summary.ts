@@ -39,7 +39,7 @@ export function missingFor(team: Team, h: Health | null): string[] {
   return [...cli, ...providers.filter((p): p is string => !!p), ...external];
 }
 
-/** Why the team can't run this way, or null: arenad gives no HTTP agent a lead's work. */
+/** Why the team can't run this way, or null: shaked gives no HTTP agent a lead's work. */
 export function runnerProblem(team: Team, runner: Runner): string | null {
   return runner === 'dispatch' && team.agents.some((a) => a.kind === 'http')
     ? "An HTTP agent can't run with a lead dispatching: pick one after another or all at once."

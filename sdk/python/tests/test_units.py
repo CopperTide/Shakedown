@@ -1,4 +1,4 @@
-"""Unit tests: parsing, models, errors, export rows. No arenad needed."""
+"""Unit tests: parsing, models, errors, export rows. No shaked needed."""
 
 import json
 
@@ -208,8 +208,8 @@ def test_branch_clock_gets_the_route():
 
 # ---------------------------------------------------------------- drivers
 
-def _fake_arenad(monkeypatch, calls: list, ended: bool = False):
-    """An arenad that answers a driver's calls and keeps them in ``calls`` as (method, path, body).
+def _fake_shaked(monkeypatch, calls: list, ended: bool = False):
+    """A shaked that answers a driver's calls and keeps them in ``calls`` as (method, path, body).
     With ``ended`` the branch has already ended: ending agents and finishing answer 409."""
     import httpx
 
@@ -253,9 +253,9 @@ def _fake_arenad(monkeypatch, calls: list, ended: bool = False):
     return driver
 
 
-def test_driver_joins_the_branch_arenad_launched(monkeypatch):
+def test_driver_joins_the_branch_shaked_launched(monkeypatch):
     calls: list = []
-    driver = _fake_arenad(monkeypatch, calls)
+    driver = _fake_shaked(monkeypatch, calls)
     with driver.run() as run:
         assert run.branch.id == "b1" and run.task.id == "t1" and not run.is_fork
         assert run.ticket == "Fix it.\n\nBe brief."
@@ -271,7 +271,7 @@ def test_driver_joins_the_branch_arenad_launched(monkeypatch):
 
 def test_driver_failure_finishes_with_the_error(monkeypatch):
     calls: list = []
-    driver = _fake_arenad(monkeypatch, calls)
+    driver = _fake_shaked(monkeypatch, calls)
     with pytest.raises(ValueError, match="boom"):
         with driver.run() as run:
             run.agent("a")
@@ -284,7 +284,7 @@ def test_driver_failure_finishes_with_the_error(monkeypatch):
 
 def test_driver_leaves_agents_it_ended_alone(monkeypatch):
     calls: list = []
-    driver = _fake_arenad(monkeypatch, calls)
+    driver = _fake_shaked(monkeypatch, calls)
     with driver.run() as run:
         run.agent("a").end(ok=True)
     assert len([p for _, p, _ in calls if p.endswith("/end")]) == 1
@@ -292,7 +292,7 @@ def test_driver_leaves_agents_it_ended_alone(monkeypatch):
 
 def test_report_reasoning_posts_items(monkeypatch):
     calls: list = []
-    driver = _fake_arenad(monkeypatch, calls)
+    driver = _fake_shaked(monkeypatch, calls)
     with driver.run() as run:
         a = run.agent("a")
         assert a.report_reasoning("Check stock first.", kind="plan") == [0]
@@ -304,7 +304,7 @@ def test_report_reasoning_posts_items(monkeypatch):
 
 def test_agent_registers_read_only_when_asked(monkeypatch):
     calls: list = []
-    driver = _fake_arenad(monkeypatch, calls)
+    driver = _fake_shaked(monkeypatch, calls)
     with driver.run() as run:
         run.agent("planner", read_only=True)
         run.agent("coder")
@@ -315,7 +315,7 @@ def test_agent_registers_read_only_when_asked(monkeypatch):
 
 def test_driver_run_reads_the_clock(monkeypatch):
     calls: list = []
-    driver = _fake_arenad(monkeypatch, calls)
+    driver = _fake_shaked(monkeypatch, calls)
     with driver.run() as run:
         assert run.clock()["clock_ms"] == 1500
     assert ("GET", "/api/branches/b1/clock", None) in calls
@@ -323,7 +323,7 @@ def test_driver_run_reads_the_clock(monkeypatch):
 
 def test_finish_on_an_ended_branch_is_not_an_error(monkeypatch, capsys):
     calls: list = []
-    driver = _fake_arenad(monkeypatch, calls, ended=True)
+    driver = _fake_shaked(monkeypatch, calls, ended=True)
     with driver.run() as run:
         run.agent("a")
     err = capsys.readouterr().err
@@ -333,7 +333,25 @@ def test_finish_on_an_ended_branch_is_not_an_error(monkeypatch, capsys):
 
 def test_driver_run_lists_the_agents_it_registered(monkeypatch):
     calls: list = []
-    driver = _fake_arenad(monkeypatch, calls)
+    driver = _fake_shaked(monkeypatch, calls)
     with driver.run() as run:
         a, b = run.agent("a"), run.agent("b")
         assert run.agents == [a, b]
+
+
+def _program(folder, name):
+    p = folder / name
+    p.write_text("#!/bin/sh\n")
+    p.chmod(0o755)
+    return str(p)
+
+
+def test_find_shaked_prefers_shaked_and_still_finds_a_build_named_arenad(tmp_path, monkeypatch):
+    from arena.local import find_shaked
+
+    monkeypatch.delenv("ARENA_BIN_DIR", raising=False)
+    monkeypatch.setenv("PATH", str(tmp_path / "nowhere"))
+    old = _program(tmp_path, "arenad")
+    assert find_shaked(None, str(tmp_path)) == old
+    new = _program(tmp_path, "shaked")
+    assert find_shaked(None, str(tmp_path)) == new

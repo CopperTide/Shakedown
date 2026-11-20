@@ -126,7 +126,7 @@ def test_a_read_only_agent_reads_but_cannot_acknowledge(pd):
 
 
 class _Proxy(httpx2.BaseTransport):
-    """Stands in for arenad's proxy: the client talks to the public host, the twin gets X-Forwarded-*."""
+    """Stands in for shaked's proxy: the client talks to the public host, the twin gets X-Forwarded-*."""
 
     def __init__(self, upstream: str):
         self.upstream, self.inner = httpx2.URL(upstream), httpx2.HTTPTransport()

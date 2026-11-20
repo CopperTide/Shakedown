@@ -207,7 +207,7 @@ async fn some_docs(
 }
 
 /// False when Frappe has no such doctype: it answers a read of one with a server error, not 404,
-/// and a key of a doctype that doesn't exist names no document (arenad probes saves with one).
+/// and a key of a doctype that doesn't exist names no document (shaked probes saves with one).
 async fn doctype_exists(rest: &Rest, site: &str, doctype: &str) -> Result<bool, PartError> {
     let path = ["resource", "DocType", doctype];
     let reply = rest.get(site, &path, &[]).await?;

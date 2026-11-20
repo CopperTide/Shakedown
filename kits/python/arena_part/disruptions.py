@@ -156,7 +156,7 @@ def merged(out: dict, before: Fired) -> dict:
 
 def docs(state) -> dict:
     """`{_disruption/<id>: doc}`: each disruption with how many calls it has seen and whether it fired.
-    The keys are internal (docs/protocol.md, "Ids and keys"): arenad saves them but no step writes them."""
+    The keys are internal (docs/protocol.md, "Ids and keys"): shaked saves them but no step writes them."""
     return {key(d): d for d in state.get("disruptions", [])}
 
 

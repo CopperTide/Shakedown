@@ -78,7 +78,7 @@ export function RunReviewBody({ r, d, onStep }: { r: RunReview; d: BranchDetail;
   );
 }
 
-/** The small print, and the citations arenad dropped. */
+/** The small print, and the citations shaked dropped. */
 function Footer({ s }: { s: StoredReview }) {
   const dropped = s.issues.filter((i) => i.startsWith('dropped citation')).length;
   return (

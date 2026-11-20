@@ -1,4 +1,4 @@
-// Mirrors arenad's suite/ (report.rs, outcome.rs) and world/systems.rs (serde snake_case).
+// Mirrors shaked's suite/ (report.rs, outcome.rs) and world/systems.rs (serde snake_case).
 import type { RecordedScenario } from './scenario';
 import type { BranchStatus, NamedCheck, Runner, Team } from './types';
 
@@ -101,7 +101,7 @@ export interface TaskSpread extends Figures {
 
 export type ExperimentStatus = 'running' | 'finished' | 'stopped';
 
-/** One setup of an experiment as arenad stores it (a suite: `suite/`): its team, tasks and runs per task. */
+/** One setup of an experiment as shaked stores it (a suite: `suite/`): its team, tasks and runs per task. */
 export interface StoredSetup {
   id: string;
   name: string;
@@ -113,11 +113,11 @@ export interface StoredSetup {
   created_at: string;
   ended_at: string | null;
   error: string | null;
-  /** The disruptions every run starts with, as arenad expanded them. */
+  /** The disruptions every run starts with, as shaked expanded them. */
   scenario?: RecordedScenario;
 }
 
-/** A setup's report (arenad's suite report): its runs, check rates and figures. */
+/** A setup's report (shaked's suite report): its runs, check rates and figures. */
 export interface SetupReport extends StoredSetup {
   status: ExperimentStatus;
   finished_s: number | null;

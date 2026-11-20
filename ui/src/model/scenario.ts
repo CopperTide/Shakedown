@@ -66,7 +66,7 @@ export interface ScenarioChoice {
   disruptions: { id: string; params: Record<string, ParamValue> }[];
 }
 
-/** One chosen disruption as arenad expanded it: its option, params (defaults filled) and filled template. */
+/** One chosen disruption as shaked expanded it: its option, params (defaults filled) and filled template. */
 export interface RecordedDisruption {
   id: string;
   label: string;
@@ -75,7 +75,7 @@ export interface RecordedDisruption {
   disruption: Disruption;
 }
 
-/** `run_start.scenario`: the scenario as arenad expanded it. */
+/** `run_start.scenario`: the scenario as shaked expanded it. */
 export interface RecordedScenario {
   disruptions?: RecordedDisruption[];
 }

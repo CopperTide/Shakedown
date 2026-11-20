@@ -1,9 +1,9 @@
-"""The idle watchdog, started detached with the pod: every minute it probes vLLM and arenad and
+"""The idle watchdog, started detached with the pod: every minute it probes vLLM and shaked and
 stops the pod when it has been idle for ``idle_minutes``, ran ``max_session_hours``, would pass
 the budget within ten more minutes, or was unhealthy for ten minutes in a row.
 
 Busy means vLLM is running a request, has finished one since the last probe, or a run in
-arenad is running (an experiment between model calls, or one holding its world time window).
+shaked is running (an experiment between model calls, or one holding its world time window).
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from typing import Optional
 
 import httpx
 
-from .pod import Ops, arenad_running
+from .pod import Ops, shaked_running
 from .runpodctl import RunpodError, call
 from .spec import PodSpec
 
@@ -28,7 +28,7 @@ AHEAD_H = 10 / 60
 class Probe:
     running_requests: Optional[int]
     success_total: Optional[float]
-    arenad_running: Optional[bool]
+    shaked_running: Optional[bool]
     healthy: Optional[bool]
 
 
@@ -48,7 +48,7 @@ class Decision:
 def _busy(state: WatchState, p: Probe) -> bool:
     finished = (p.success_total is not None and state.last_success is not None
                 and p.success_total != state.last_success)
-    return bool(p.running_requests) or finished or bool(p.arenad_running)
+    return bool(p.running_requests) or finished or bool(p.shaked_running)
 
 
 def observe(state: WatchState, p: Probe, now: datetime) -> WatchState:
@@ -92,8 +92,8 @@ def parse_metrics(text: str) -> tuple[Optional[int], Optional[float]]:
     return (int(running) if running is not None else None, sums.get("vllm:request_success_total"))
 
 
-def probe(http: httpx.Client, base: str, arenad_url: str) -> Probe:
-    """vLLM's public ``/health`` and ``/metrics`` (no key needed) and arenad's runs."""
+def probe(http: httpx.Client, base: str, shaked_url: str) -> Probe:
+    """vLLM's public ``/health`` and ``/metrics`` (no key needed) and shaked's runs."""
     try:
         healthy = http.get(f"{base}/health", timeout=30).status_code == 200
     except httpx.HTTPError:
@@ -103,7 +103,7 @@ def probe(http: httpx.Client, base: str, arenad_url: str) -> Probe:
         running, success = parse_metrics(r.text) if r.status_code == 200 else (None, None)
     except httpx.HTTPError:
         running, success = None, None
-    return Probe(running, success, arenad_running(http, arenad_url), healthy)
+    return Probe(running, success, shaked_running(http, shaked_url), healthy)
 
 
 def _stop(ops: Ops, pod_id: str, by: str) -> bool:
@@ -126,7 +126,7 @@ def watch(ops: Ops, pod_id: str) -> Optional[str]:
         if not s or s["pod_id"] != pod_id or s["stopped"]:
             return None
         now = ops.now()
-        state = observe(state, probe(ops.http, ops.base(pod_id), ops.arenad_url), now)
+        state = observe(state, probe(ops.http, ops.base(pod_id), ops.shaked_url), now)
         d = decide(now, state, s["started_at"], s["usd_h"], ops.ledger.spent(), ops.spec)
         if d.stop and _stop(ops, pod_id, d.by or "idle"):
             return d.by

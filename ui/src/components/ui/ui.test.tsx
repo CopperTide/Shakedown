@@ -37,7 +37,7 @@ describe('base components', () => {
     expect(text(html(<EmptyState title="No runs yet" hint="Start one." />))).toBe('No runs yet Start one.');
     const err = html(<ErrorState error="boom" onRetry={() => {}} />);
     expect(err).toContain('role="alert"');
-    expect(text(err)).toContain('Check that arenad is running');
+    expect(text(err)).toContain('Check that shaked is running');
     expect(text(err)).toContain('Try again');
     expect(html(<LoadingState label="Loading runs…" rows={2} />)).toContain('aria-busy="true"');
     expect(text(html(<Notice onDismiss={() => {}}>moved</Notice>))).toBe('moved Dismiss');

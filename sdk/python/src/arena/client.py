@@ -1,4 +1,4 @@
-"""The client: :class:`Arena` (a connection to one arenad), :class:`Branch`, :class:`AgentEndpoint` and
+"""The client: :class:`Arena` (a connection to one shaked), :class:`Branch`, :class:`AgentEndpoint` and
 :class:`Suite`."""
 
 from __future__ import annotations
@@ -33,13 +33,13 @@ TeamLike = Union[Team, Sequence[Agent], dict, None]
 
 
 class Arena:
-    """A connection to a running arenad.
+    """A connection to a running shaked.
 
     >>> arena = Arena("http://127.0.0.1:4510")
     >>> arena.benchmark().name
     'retail'
 
-    Use :meth:`Arena.local` to start an arenad of your own for the length of a ``with`` block.
+    Use :meth:`Arena.local` to start a shaked of your own for the length of a ``with`` block.
     """
 
     def __init__(self, url: str = DEFAULT_URL, timeout: float = 900.0, retries: int = 3):
@@ -53,7 +53,7 @@ class Arena:
     # -------------------------------------------------------------- plumbing
 
     def _request(self, method: str, path: str, *, json: Any = None, params: Any = None) -> Any:
-        """One API call; idempotent reads are tried again when arenad can't be reached (it may be
+        """One API call; idempotent reads are tried again when shaked can't be reached (it may be
         restarting)."""
         tries = self.retries if method == "GET" else 1
         for attempt in range(tries):
@@ -62,7 +62,7 @@ class Arena:
                 break
             except httpx.TransportError as e:
                 if attempt + 1 >= tries:
-                    raise ConnectionFailed(f"arenad at {self.url}: {e}") from e
+                    raise ConnectionFailed(f"shaked at {self.url}: {e}") from e
                 time.sleep(min(2**attempt, 8))
         if r.status_code >= 400:
             try:
@@ -98,7 +98,7 @@ class Arena:
 
     @classmethod
     def local(cls, **kw: Any) -> "Arena":
-        """Starts arenad as a subprocess and connects to it; it stops when the ``with`` block (or
+        """Starts shaked as a subprocess and connects to it; it stops when the ``with`` block (or
         :meth:`close`) ends. See :func:`arena.local.start` for the arguments."""
         from .local import LocalArena
 
@@ -157,7 +157,7 @@ class Arena:
     ) -> "Branch":
         """Starts a run of ``task`` and returns its first branch.
 
-        ``runner`` is ``chain`` (arenad runs the agents one after another), ``concurrent`` (all at
+        ``runner`` is ``chain`` (shaked runs the agents one after another), ``concurrent`` (all at
         once) or ``external`` (your code drives them; prefer :meth:`external_run`). ``team`` defaults
         to the benchmark's suggested team. ``scenario`` is a :class:`Scenario`, a list of disruption
         ids / :class:`Disruption`, or the raw dict. ``seed`` fixes the world's seed (random when
@@ -191,7 +191,7 @@ class Arena:
         """Starts a run your code drives and registers ``agents`` (ids or :class:`Agent`, kind
         ``external`` by default). Each gets an MCP endpoint (the world's tools) and a gateway (an
         OpenAI-compatible base URL): ``branch.agents[id].mcp_url`` / ``.gateway_url``. Call
-        :meth:`Branch.finish` when the team is done; arenad then scores the world."""
+        :meth:`Branch.finish` when the team is done; shaked then scores the world."""
         branch = self.run(task, team=[], runner="external", scenario=scenario, seed=seed, name=name)
         for a in agents:
             branch.register(a)
@@ -259,7 +259,7 @@ class Arena:
     # -------------------------------------------------------------- AI review
 
     def review_settings(self) -> dict[str, Any]:
-        """``{enabled, model, why?}``: whether arenad's AI review is on, and with which model."""
+        """``{enabled, model, why?}``: whether shaked's AI review is on, and with which model."""
         return self.get("/api/review/settings")
 
     def _review(
@@ -305,7 +305,7 @@ class Arena:
     # -------------------------------------------------------------- features
 
     def supports_pause(self) -> bool:
-        """True when this arenad has pause, resume and stop (``POST /api/branches/{id}/pause``)."""
+        """True when this shaked has pause, resume and stop (``POST /api/branches/{id}/pause``)."""
         if self._pause_supported is None:
             try:
                 self.post("/api/branches/arena-sdk-probe/pause")
@@ -364,7 +364,7 @@ def _bid(b: Union[str, "Branch"]) -> str:
 
 
 class Branch:
-    """A branch of a run: the original run, or a fork. Cheap to make; reads go to arenad each time."""
+    """A branch of a run: the original run, or a fork. Cheap to make; reads go to shaked each time."""
 
     def __init__(
         self,
@@ -431,7 +431,7 @@ class Branch:
     def stream(self, reconnect: int = 5) -> Iterator[Event]:
         """The branch's events as they happen: first those recorded so far, then each new one,
         ending when the branch ends (``self.final`` then holds ``{status, error}``). If the
-        connection drops (arenad restarting), it reconnects up to ``reconnect`` times and goes on
+        connection drops (shaked restarting), it reconnects up to ``reconnect`` times and goes on
         after the last event it gave."""
         seen = [0]  # the last seq given
         tries = 0
@@ -513,7 +513,7 @@ class Branch:
         """An AI review of this ended branch: where it went wrong and what to change. ``review`` is
         ``{verdict, went_wrong: [{title, why, steps, severity}], suggestions: [{change, why, kind,
         agent?, prompt_text?, step?}], went_well, confidence}``, with ``model``, ``cost_usd`` and
-        ``issues`` (citations arenad dropped). Stored with the branch; ``again=True`` asks for a new
+        ``issues`` (citations shaked dropped). Stored with the branch; ``again=True`` asks for a new
         one. Runs a real model (it costs what the model costs); 409 when AI review is off."""
         path = f"/api/branches/{self.id}/review"
         return self.arena._review(path, {}, again, wait, timeout, poll)
@@ -584,8 +584,8 @@ class Branch:
         except NotFound as e:
             if "no such route" in e.message:
                 raise NotSupported(
-                    f"this arenad has no {what} (POST /api/branches/{{id}}/{what}); "
-                    "update arenad to pause, resume or stop a live branch"
+                    f"this shaked has no {what} (POST /api/branches/{{id}}/{what}); "
+                    "update shaked to pause, resume or stop a live branch"
                 ) from e
             raise
 
@@ -677,7 +677,7 @@ class AgentEndpoint:
         return self._tools
 
     def call(self, name: str, arguments: Optional[dict[str, Any]] = None, **kw: Any) -> ToolResult:
-        """Calls a tool as this agent; arenad runs it in the world and records it."""
+        """Calls a tool as this agent; shaked runs it in the world and records it."""
         return self.mcp.call_tool(name, {**(arguments or {}), **kw})
 
     def report_usage(self, **usage: Any) -> int:
@@ -753,7 +753,7 @@ class Suite:
         return self.report.get("summary") or {}
 
     def wait(self, timeout: Optional[float] = None, poll: float = 5.0) -> dict[str, Any]:
-        """Waits until the suite is no longer ``running`` (arenad runs it) and returns the report."""
+        """Waits until the suite is no longer ``running`` (shaked runs it) and returns the report."""
         def timed_out(_: dict[str, Any]) -> str:
             return f"suite {self.id} still running after {timeout} s"
 

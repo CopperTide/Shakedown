@@ -49,5 +49,5 @@ const EXPERIMENT: Record<ExperimentStatus, Mark> = {
   stopped: MARK.stopped,
 };
 
-/** An experiment's status (a stopped one ended early, by choice or because arenad stopped). */
+/** An experiment's status (a stopped one ended early, by choice or because shaked stopped). */
 export const experimentMark = (s: ExperimentStatus): Mark => EXPERIMENT[s];

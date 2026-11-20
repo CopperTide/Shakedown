@@ -157,7 +157,7 @@ impl Part for Folder {
         Ok(())
     }
 
-    /// Everything the part keeps is inside `ARENA_SAVES`, which arenad measures.
+    /// Everything the part keeps is inside `ARENA_SAVES`, which shaked measures.
     async fn usage(&self) -> Result<Usage, PartError> {
         Ok(Usage { bytes: 0 })
     }

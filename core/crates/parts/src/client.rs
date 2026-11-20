@@ -293,7 +293,7 @@ impl Client {
     }
 
     /// Like `spawn`, with extra environment variables for command mode (they override the ones
-    /// passed through). Image mode ignores them: a container gets no environment from arenad.
+    /// passed through). Image mode ignores them: a container gets no environment from shaked.
     pub async fn spawn_with_env(
         m: &Manifest,
         bin_dir: &Path,

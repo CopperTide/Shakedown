@@ -35,7 +35,7 @@ pub trait Part: Send + Sync + 'static {
     async fn connect(&self, _p: IdParams) -> R<Value> {
         Err(PartError::method_not_found("connect"))
     }
-    /// The hosts the instance serves through arenad's proxy (default: none, method not found).
+    /// The hosts the instance serves through shaked's proxy (default: none, method not found).
     async fn http_routes(&self, _p: IdParams) -> R<HttpRoutes> {
         Err(PartError::method_not_found("http_routes"))
     }

@@ -1,4 +1,4 @@
-"""A stand-in for arenad's part of a run: it advances each part on the clock, turns events into the link calls the
+"""A stand-in for shaked's part of a run: it advances each part on the clock, turns events into the link calls the
 world declares (a string starting with `/` is a pointer into the event's data) and records every call as a step,
 and every input each part got, in order. `Board` is a neutral twin on the kit that people ask and answer on."""
 from dataclasses import dataclass, field

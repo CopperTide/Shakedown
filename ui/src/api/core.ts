@@ -1,4 +1,4 @@
-// Which Arena core (arenad) the UI talks to. Same origin by default; a build can name one with
+// Which Arena core (shaked) the UI talks to. Same origin by default; a build can name one with
 // VITE_ARENA_URL, and the address can choose another with `?core=<url>`, which this browser then
 // remembers (`?core=` with nothing clears it). A core on another origin must allow this UI's
 // origin: start it with ARENA_CORS_ORIGIN=<the UI's origin>.

@@ -1,4 +1,4 @@
-# List prices arenad uses to estimate a run's cost when the provider reports none.
+# List prices shaked uses to estimate a run's cost when the provider reports none.
 #
 # Each entry is the public list price, in US dollars per million tokens, of one model on one
 # provider: the base input price and the output price. An entry may also list its cache prices

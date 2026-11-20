@@ -36,27 +36,9 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "axum",
- "base64 0.22.1",
- "bytes",
- "chrono",
- "futures-util",
- "http-body-util",
- "hyper",
- "hyper-util",
- "libc",
  "parts",
- "rcgen",
- "reqwest",
- "ring",
- "serde",
- "serde_json",
- "thiserror",
+ "shaked",
  "tokio",
- "tokio-postgres",
- "tokio-rustls",
- "toml",
- "tower",
- "uuid",
 ]
 
 [[package]]
@@ -1263,6 +1245,35 @@ dependencies = [
  "cfg-if",
  "cpufeatures",
  "digest",
+]
+
+[[package]]
+name = "shaked"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "base64 0.22.1",
+ "bytes",
+ "chrono",
+ "futures-util",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
+ "libc",
+ "parts",
+ "rcgen",
+ "reqwest",
+ "ring",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tokio-postgres",
+ "tokio-rustls",
+ "toml",
+ "tower",
+ "uuid",
 ]
 
 [[package]]

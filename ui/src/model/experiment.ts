@@ -1,4 +1,4 @@
-// Mirrors arenad's experiments API (`api/experiments.rs`): an experiment is one scenario run by
+// Mirrors shaked's experiments API (`api/experiments.rs`): an experiment is one scenario run by
 // 1–4 agent setups, N times each; each setup is stored as a suite, so its report is a SetupReport.
 import type { ExperimentStatus, SetupReport } from './report';
 import type { ScenarioChoice } from './scenario';

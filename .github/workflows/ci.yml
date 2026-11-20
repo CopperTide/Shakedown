@@ -85,7 +85,7 @@ jobs:
         run: |
           (cd integrations/factory-01-erp && uv run --with pytest pytest -q)
           (cd benchmarks/factory-01 && uv run --with pytest pytest -q)
-      # Without an arenad build and Postgres the SDK's integration tests skip; the unit tests run.
+      # Without a shaked build and Postgres the SDK's integration tests skip; the unit tests run.
       - name: Test the Python SDK
         working-directory: sdk/python
         run: uv run pytest -q

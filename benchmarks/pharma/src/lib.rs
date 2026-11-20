@@ -26,7 +26,7 @@ type R<T> = Result<T, PartError>;
 
 pub const VERSION: &str = "0.1.0";
 
-/// The benchmark; `team` is the deployment of `data/teams.json` it offers as arenad's default
+/// The benchmark; `team` is the deployment of `data/teams.json` it offers as shaked's default
 /// team (`single`, `dispatch` or `team`); it offers the others beside it.
 pub struct Pharma {
     pub team: String,

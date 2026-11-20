@@ -1,4 +1,4 @@
-"""HTTP twins: a part whose instances are web services reached through arenad's proxy."""
+"""HTTP twins: a part whose instances are web services reached through shaked's proxy."""
 from .part import Done, HttpTwin, TwinCtx
 from .router import Headers, Request, Response, Router, not_found
 from .store import Store

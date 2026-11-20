@@ -1,4 +1,4 @@
-"""Errors the SDK raises. Every error from arenad carries its HTTP status and arenad's message."""
+"""Errors the SDK raises. Every error from shaked carries its HTTP status and shaked's message."""
 
 from __future__ import annotations
 
@@ -8,11 +8,11 @@ class ArenaError(Exception):
 
 
 class ConnectionFailed(ArenaError):
-    """arenad could not be reached (not running, wrong URL, or it went away)."""
+    """shaked could not be reached (not running, wrong URL, or it went away)."""
 
 
 class ApiError(ArenaError):
-    """arenad answered with an error status. ``status`` is the HTTP status, ``message`` arenad's
+    """shaked answered with an error status. ``status`` is the HTTP status, ``message`` shaked's
     ``{error}`` text."""
 
     def __init__(self, status: int, message: str, method: str = "", path: str = ""):
@@ -37,11 +37,11 @@ class Conflict(ApiError):
 
 
 class DiskFull(ApiError):
-    """507: the saves reached arenad's disk limit; delete old runs."""
+    """507: the saves reached shaked's disk limit; delete old runs."""
 
 
 class NotSupported(ArenaError):
-    """The connected arenad doesn't have this feature (for example pause and resume)."""
+    """The connected shaked doesn't have this feature (for example pause and resume)."""
 
 
 def from_status(status: int, message: str, method: str = "", path: str = "") -> ApiError:

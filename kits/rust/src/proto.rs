@@ -93,12 +93,12 @@ pub struct Describe {
     /// What kind of system this part is, for monitoring views (absent: not said).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub system: Option<SystemInfo>,
-    /// When arenad saves the part (absent: after every step that wrote to it).
+    /// When shaked saves the part (absent: after every step that wrote to it).
     #[serde(default, skip_serializing_if = "SaveAt::is_step")]
     pub save_at: SaveAt,
 }
 
-/// When arenad saves a part: after each step that wrote to it (`step`, the default), or only at
+/// When shaked saves a part: after each step that wrote to it (`step`, the default), or only at
 /// save points (`points`: before a model call when it changed, on request, at run end).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -122,22 +122,22 @@ pub struct WorldTimeParams {
 }
 
 /// The header an upstream answers a proxied request with to say whether it read or wrote
-/// (`read` or `write`); arenad strips it before the client sees the answer.
+/// (`read` or `write`); shaked strips it before the client sees the answer.
 pub const EFFECT_HEADER: &str = "x-arena-effect";
 
-/// The header arenad's proxy names the agent behind a request with (a client's own copy is
+/// The header shaked's proxy names the agent behind a request with (a client's own copy is
 /// dropped); none for a driver's request no agent's model call came before.
 pub const AGENT_HEADER: &str = "x-arena-agent";
 
-/// The header (`1`) arenad's proxy marks a read-only agent's request with, sent only to routes
+/// The header (`1`) shaked's proxy marks a read-only agent's request with, sent only to routes
 /// that say `honours_readonly`: the part must then refuse its writes itself.
 pub const READONLY_HEADER: &str = "x-arena-readonly";
 
-/// A host an instance serves through arenad's proxy: requests to `host` go to `upstream`. `env`
+/// A host an instance serves through shaked's proxy: requests to `host` go to `upstream`. `env`
 /// is what drivers and agents are given to find it (`GITHUB_API_URL`); each of `reads` is a
 /// `METHOD glob` pattern of requests that only read (`POST */git-upload-pack`). With
 /// `honours_readonly`, a read-only agent's requests are sent on marked `READONLY_HEADER` (the part
-/// refuses their writes); without it arenad refuses those that write by the method rule.
+/// refuses their writes); without it shaked refuses those that write by the method rule.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct HttpRoute {
     pub host: String,
@@ -374,13 +374,13 @@ pub struct TaskInfo {
     pub id: String,
     pub reason: String,
     pub ticket: String,
-    /// Calls arenad makes on a run's world right after it starts, before any agent: the task's
+    /// Calls shaked makes on a run's world right after it starts, before any agent: the task's
     /// scripted setup (a scenario, a disruption). The tools they call are the world's own: agents
     /// don't get them.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub setup: Vec<SetupCall>,
     /// The world's date and time at clock 0 (`YYYY-MM-DDTHH:MM:SS`, the world's local time), for a
-    /// world whose clock is not today's: arenad then tells every agent the world's current date and
+    /// world whose clock is not today's: shaked then tells every agent the world's current date and
     /// time (clock 0 plus the branch clock), so agents read the world's dates against its own clock
     /// rather than the date their environment reports.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -435,7 +435,7 @@ pub struct Gate {
     pub require: Map<String, Value>,
 }
 
-/// A team a benchmark suggests: its agents in the order they run, and the arenad runner its
+/// A team a benchmark suggests: its agents in the order they run, and the shaked runner its
 /// prompts are written for (`chain`, `concurrent` or `dispatch`; absent: any). In a `dispatch`
 /// run the first agent leads.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -455,10 +455,10 @@ pub struct BenchDescribe {
     pub world: Vec<WorldPart>,
     pub tasks: Vec<TaskInfo>,
     pub instructions: String,
-    /// The heading over `instructions` in each agent's input; arenad uses a generic one if absent.
+    /// The heading over `instructions` in each agent's input; shaked uses a generic one if absent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub instructions_title: Option<String>,
-    /// The team the benchmark suggests; arenad suggests a generic one if absent.
+    /// The team the benchmark suggests; shaked suggests a generic one if absent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub team: Option<BenchTeam>,
     /// Other teams it suggests beside `team` (a dispatching team, a chain), offered one click

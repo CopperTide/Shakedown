@@ -1,6 +1,6 @@
 """The smoke test of a started pod, before any run uses it: vLLM is healthy, its ``/v1`` needs
 the key, gpt-oss calls a tool with its reasoning in ``message.reasoning`` and answers after the
-tool's result, and its decode speed; optionally, that a call through arenad's gateway records
+tool's result, and its decode speed; optionally, that a call through shaked's gateway records
 the reasoning as a ``reasoning`` event of the call."""
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ GET_TIME = {"type": "function", "function": {
     "name": "get_time", "description": "The current time.",
     "parameters": {"type": "object", "properties": {}}}}
 ASK = [{"role": "user", "content": "What time is it? Use the tool."}]
-#: The key arenad's gateway takes from a client (it holds the real one).
+#: The key shaked's gateway takes from a client (it holds the real one).
 GATEWAY_KEY = "shakedown"
 
 
@@ -112,14 +112,14 @@ class _Smoke:
         self.check("decode speed", tokens > 0, "no completion tokens")
 
 
-def smoke(ops: Ops, base: str, key: str, model: str, through_arenad: Optional[str] = None,
+def smoke(ops: Ops, base: str, key: str, model: str, through_shaked: Optional[str] = None,
           arena_factory: Optional[Callable[[str], Any]] = None) -> SmokeReport:
     s = _Smoke(ops, base, key, model)
     s.models()
     s.tool_round()
     s.decode()
-    if through_arenad:
-        _through_arenad(s, through_arenad, arena_factory or _arena, ops.spec.arenad_provider)
+    if through_shaked:
+        _through_shaked(s, through_shaked, arena_factory or _arena, ops.spec.shaked_provider)
     return s.report
 
 
@@ -129,7 +129,7 @@ def _arena(url: str) -> Any:
     return Arena(url)
 
 
-def _through_arenad(s: _Smoke, url: str, factory: Callable[[str], Any], provider: str) -> None:
+def _through_shaked(s: _Smoke, url: str, factory: Callable[[str], Any], provider: str) -> None:
     """One gateway call of an external run of the benchmark's first task; the run is stopped
     (unscored) and deleted after."""
     arena = factory(url)
@@ -141,7 +141,7 @@ def _through_arenad(s: _Smoke, url: str, factory: Callable[[str], Any], provider
                     json={"model": s.model, "messages": ASK, "tools": [GET_TIME], "max_tokens": 1024})
         found = any(e.kind == "reasoning" and (e.payload or {}).get("source") == "gateway"
                     and (e.payload or {}).get("model_call_seq") is not None for e in branch.events())
-        s.check("reasoning recorded through arenad", found,
+        s.check("reasoning recorded through shaked", found,
                 "no reasoning event from the gateway with its model_call_seq")
     finally:
         branch.stop()

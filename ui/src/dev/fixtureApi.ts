@@ -1,5 +1,5 @@
 // Dev only: answers /api with the pharma fixtures, so the real pages (world view, run page,
-// compare, Run once and New experiment) render without arenad. Bundled only when the build
+// compare, Run once and New experiment) render without shaked. Bundled only when the build
 // sets VITE_ARENA_FIXTURES=1 (see main.tsx); never in a normal build.
 import { form as builderForm, preview as builderPreview, templates as builderTemplates } from '@/features/build/fixtures';
 import { scenarioOptions } from '@/features/scenario/fixtures';
@@ -85,7 +85,7 @@ function answer(path: string, url: URL): Response {
   return new Response(JSON.stringify({ error: `fixture API has no ${path}` }), { status: 404, headers: { 'content-type': 'application/json' } });
 }
 
-/** `POST /api/agents/check`, as arenad answers it: an HTTP agent says hello (a URL with "fail" in it doesn't), a Bedrock model answers (one with "fail" is refused). */
+/** `POST /api/agents/check`, as shaked answers it: an HTTP agent says hello (a URL with "fail" in it doesn't), a Bedrock model answers (one with "fail" is refused). */
 export function checkAnswer(body: Record<string, unknown>): unknown {
   if (body.kind === 'bedrock') {
     const model = String(body.model_id ?? ''), region = String(body.region ?? '');

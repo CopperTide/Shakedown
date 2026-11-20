@@ -5,8 +5,8 @@ endpoint) and a model gateway (OpenAI-compatible), and records everything.
 
 - ``claude-code`` (default): Claude Code CLI pointed at the agent's MCP URL (``arena.claude_code``).
 - ``openai`` / ``openrouter`` / ``anthropic``: a minimal tool-calling loop written here, speaking
-  OpenAI chat completions to the agent's gateway, which forwards to the provider with arenad's key and
-  records every call. Needs the provider's key in arenad's environment; skips otherwise.
+  OpenAI chat completions to the agent's gateway, which forwards to the provider with shaked's key and
+  records every call. Needs the provider's key in shaked's environment; skips otherwise.
 
 Real model calls: it costs credits.
 """
@@ -62,8 +62,8 @@ with connect() as arena:
         status = {p["id"]: p for p in arena.providers()}.get(via)
         if not status or not status.get("available"):
             why = (status or {}).get("why", f"unknown provider {via}")
-            sys.exit(f"skipped: the {via} provider is not available in this arenad ({why}); "
-                     "set its key in arenad's environment")
+            sys.exit(f"skipped: the {via} provider is not available in this shaked ({why}); "
+                     "set its key in shaked's environment")
         spec = Agent.external("agent", model=model, provider=via)
 
     branch = arena.external_run(task, agents=[spec], seed=1)

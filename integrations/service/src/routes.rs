@@ -1,5 +1,5 @@
-//! The hosts an instance serves through arenad's proxy (`http_routes`): each `http` entry of its
-//! config, its upstream the port Docker published for the compose service. arenad asks again
+//! The hosts an instance serves through shaked's proxy (`http_routes`): each `http` entry of its
+//! config, its upstream the port Docker published for the compose service. shaked asks again
 //! after each save, and a save that restarted a service may have moved it to a new port, so a
 //! route is given only once its port accepts connections.
 

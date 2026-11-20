@@ -1,5 +1,5 @@
 """The pycontribs `jira` client, unchanged, against the twin: the client talks to the public host, and a
-transport stands in for arenad's proxy (it forwards to the twin with X-Forwarded-* and the agent)."""
+transport stands in for shaked's proxy (it forwards to the twin with X-Forwarded-* and the agent)."""
 from urllib.parse import urlsplit, urlunsplit
 
 import pytest

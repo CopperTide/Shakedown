@@ -187,7 +187,7 @@ impl Part for Sculptured {
         self.saves.remove(&p.save).map_err(PartError::internal_from)
     }
 
-    /// A no-op for an instance that is not running (arenad stops instances it is unsure of).
+    /// A no-op for an instance that is not running (shaked stops instances it is unsure of).
     async fn stop(&self, p: IdParams) -> R<()> {
         self.stop_instance(&p.instance).await
     }

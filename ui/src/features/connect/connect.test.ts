@@ -40,7 +40,7 @@ describe('the form and the check it sends', () => {
     expect(formProblem({ ...emptyForm('bedrock'), model: 'm', region: 'mars' })).toBe('Name an AWS region, like us-east-1.');
     expect(emptyForm('bedrock').region).toBe('us-east-1');
   });
-  it('builds the body arenad takes', () => {
+  it('builds the body shaked takes', () => {
     expect(checkBody(emptyForm())).toBeNull();
     expect(checkBody({ ...emptyForm(), url: ' http://localhost:8800/agent ' })).toEqual({ kind: 'http', url: 'http://localhost:8800/agent' });
     expect(checkBody({ ...emptyForm(), url: 'https://a.example.com', headers: 'Authorization: Bearer x' }))
@@ -61,11 +61,11 @@ describe('the team made of a check answer', () => {
     expect(connectedAgent({ ok: true, agent: http({ name: '' }), ms: 1 }).name).toBe('agent.example.com');
     expect(connectedAgent({ ok: true, agent: bedrock({ name: '' }), ms: 1 }).name).toBe('anthropic.claude-3-5-haiku-20241022-v1:0');
   });
-  it('never carries a header value, only the references arenad answered with', () => {
+  it('never carries a header value, only the references shaked answered with', () => {
     const leaky = http({ headers: { Authorization: 'Bearer sk-live', 'X-Key': { secret: 'ab12' } } });
     expect(connectedAgent({ ok: true, agent: leaky, ms: 1 }).headers).toEqual({ 'X-Key': { secret: 'ab12' } });
   });
-  it('goes to arenad as it came back: the URL and the secret references', () => {
+  it('goes to shaked as it came back: the URL and the secret references', () => {
     const run = teamForRun(connectedTeam(http()), 'chain');
     expect(run.agents[0]).toMatchObject({ kind: 'http', url: 'https://agent.example.com/arena', headers: { Authorization: { secret: '3f9a' } } });
     expect(run).not.toHaveProperty('runner');

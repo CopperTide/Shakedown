@@ -1,5 +1,5 @@
 //! The query face: `ANY /q/{prometheus|loki|tempo}/{*path}`, or any path at the root of a host
-//! whose first label names the store (`prometheus.<domain>`, as agents reach it through arenad's
+//! whose first label names the store (`prometheus.<domain>`, as agents reach it through shaked's
 //! proxy, which sends the public host as `X-Forwarded-Host`). An agent's query without its time
 //! is asked at world now (`shift::default_params`). A query with `X-Shakedown-Shift: wall`
 //! (Grafana's datasources) has its window moved from wall to world time and the answer's times

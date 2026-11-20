@@ -81,7 +81,7 @@ pub struct Stop(pub IdParams);
 #[serde(transparent)]
 pub struct Connect(pub IdParams);
 
-/// `http_routes`: the hosts an instance serves through arenad's proxy.
+/// `http_routes`: the hosts an instance serves through shaked's proxy.
 #[derive(Debug, Clone, Serialize)]
 #[serde(transparent)]
 pub struct GetHttpRoutes(pub IdParams);

@@ -1,4 +1,4 @@
-//! The single agent this benchmark suggests as arenad's default team: one agent does every role's
+//! The single agent this benchmark suggests as shaked's default team: one agent does every role's
 //! work and, as the only role, decides the changes it proposes. The incident team (`team`) stays
 //! one click away, for a chain.
 use arena_part::proto::{BenchTeam, TeamRole};
@@ -12,7 +12,7 @@ another role decides a change is for teams; you are the only role, so you decide
 propose (`decide_change`), approving only what is within the limits. End with a short summary of what \
 you did.";
 
-/// The single agent, offered as arenad's default team.
+/// The single agent, offered as shaked's default team.
 pub fn team() -> BenchTeam {
     BenchTeam {
         id: "single".into(),

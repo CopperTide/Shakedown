@@ -15,7 +15,7 @@ import { changedFields } from './timeline';
 
 const MODES: AgentKind[] = ['claude_code', 'codex', 'open'];
 
-/** The agent the fork would run: `c` applied as arenad's `fork::apply_change` does. */
+/** The agent the fork would run: `c` applied as shaked's `fork::apply_change` does. */
 export function applied(a: AgentSpec, c: Change): AgentSpec {
   const kindChanged = c.kind != null && c.kind !== a.kind;
   const providerChanged = c.provider != null && providerId(c.provider) !== providerOf(a);

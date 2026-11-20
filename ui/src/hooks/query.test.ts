@@ -32,9 +32,9 @@ describe('Query', () => {
     calls[0].resolve(1);
     await flush();
     q.fetch();
-    calls[1].reject(new Error('arenad is down'));
+    calls[1].reject(new Error('shaked is down'));
     await flush();
-    expect(q.get()).toMatchObject({ data: 1, error: 'arenad is down' });
+    expect(q.get()).toMatchObject({ data: 1, error: 'shaked is down' });
     q.fetch();
     calls[2].resolve(2);
     await flush();

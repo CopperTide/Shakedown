@@ -1,5 +1,5 @@
 """Fakes: a runpodctl that answers from the hand-written fixtures (see fixtures/README.md), a
-vLLM gpt-oss server and an arenad as httpx transports, and operations wired to them in a temp
+vLLM gpt-oss server and a shaked as httpx transports, and operations wired to them in a temp
 folder. Nothing here reaches RunPod, a model or the real home folder."""
 
 from __future__ import annotations
@@ -110,7 +110,7 @@ def _chat(body: dict, reasoning: bool) -> dict:
                       "total_tokens": sum(usage)}}
 
 
-def arenad(runs: list[dict]) -> Callable[[httpx.Request], httpx.Response]:
+def shaked(runs: list[dict]) -> Callable[[httpx.Request], httpx.Response]:
     def handle(req: httpx.Request) -> httpx.Response:
         if req.url.path == "/api/runs":
             return httpx.Response(200, json=runs)
@@ -120,7 +120,7 @@ def arenad(runs: list[dict]) -> Callable[[httpx.Request], httpx.Response]:
 
 
 POD_HOST = "p7h9k2m4n6-8000.proxy.runpod.net"
-ARENAD_HOST = "127.0.0.1"
+SHAKED_HOST = "127.0.0.1"
 
 
 def route(hosts: Optional[dict[str, Callable[[httpx.Request], httpx.Response]]] = None) -> httpx.Client:
@@ -160,4 +160,4 @@ def make_ops(tmp_path: Path, runner: FakeRunner, clock: Clock, http: Optional[ht
                spec=load_spec(), env_path=tmp_path / "config" / "runpod.env",
                state_dir=tmp_path / "state", http=http or route(), out=lines.append,
                now=clock.now, sleep=clock.sleep, spawn=Spawned(),
-               arenad_url="http://127.0.0.1:4510")
+               shaked_url="http://127.0.0.1:4510")

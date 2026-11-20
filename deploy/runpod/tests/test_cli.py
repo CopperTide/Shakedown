@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from conftest import ARENAD_HOST, POD_HOST, arenad, make_ops, route, vllm
+from conftest import SHAKED_HOST, POD_HOST, shaked, make_ops, route, vllm
 from gpupod import cli
 
 
@@ -25,7 +25,7 @@ def test_the_cli_prints_the_rate_then_refuses_past_the_cap(tmp_path, runner, clo
 
 def test_the_cli_starts_within_the_cap_and_smoke_records_the_speed(tmp_path, runner, clock):
     out: list[str] = []
-    http = route({POD_HOST: vllm("unused"), ARENAD_HOST: arenad([])})
+    http = route({POD_HOST: vllm("unused"), SHAKED_HOST: shaked([])})
     assert _main(tmp_path, runner, clock, ["start", "--confirm-rate", "2.69", "--hours", "2"], out, http) == 0
     key = (tmp_path / "config" / "runpod.env").read_text().split("ARENA_LOCAL_KEY_RUNPOD=")[1].split("\n")[0]
     http = route({POD_HOST: vllm(key)})
@@ -39,3 +39,8 @@ def test_the_cli_quotes_without_starting(tmp_path, runner, clock):
     assert _main(tmp_path, runner, clock, ["quote", "--gpu", "NVIDIA L40S", "--hours", "1"], out) == 0
     assert out[0].startswith("NVIDIA L40S, community: $0.79/h")
     assert runner.commands() == [("gpu", "list"), ("user",)]
+
+
+def test_the_cli_takes_the_old_arenad_flags():
+    args = cli.parser().parse_args(["--arenad", "http://127.0.0.1:9", "smoke", "--through-arenad", "http://x"])
+    assert (args.shaked, args.through_shaked) == ("http://127.0.0.1:9", "http://x")

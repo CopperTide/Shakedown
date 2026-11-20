@@ -33,4 +33,4 @@ packages = ["src/arena"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-markers = ["core: needs a running or startable arenad (skipped when there is none)"]
+markers = ["core: needs a running or startable shaked (skipped when there is none)"]

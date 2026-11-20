@@ -16,7 +16,7 @@ def test_describe_is_the_world_with_its_folder_filled_in(built_shop):   # a worl
     assert d["team"]["id"] == "shop-team" and d["tasks"][0]["id"] == "alpha-task"
 
 
-def test_describe_has_what_arenad_reads_and_nothing_of_the_build(built_shop):
+def test_describe_has_what_shaked_reads_and_nothing_of_the_build(built_shop):
     d = WorldBenchmark(built_shop / "world.json", version="1.0.0+abc").describe()
     assert (d["name"], d["version"], d["protocol"]) == ("example-co", "1.0.0+abc", 1)
     assert d["world"][0]["config"]["seed"] == f"{built_shop.resolve()}/files/seed/"

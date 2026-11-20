@@ -36,7 +36,7 @@ def test_a_preview_with_problems_still_names_the_world(builder_without_docker):
                              {"path": "needs.images.toy:1", "message": "the Docker image toy:1 is missing: make toy"}]
 
 
-def test_generate_writes_a_package_arenad_can_load(builder, tmp_path):
+def test_generate_writes_a_package_shaked_can_load(builder, tmp_path):
     out = call(builder, "generate", {"id": "shop", "choices": {}, "dir": str(tmp_path / "acme")})
     toml = tomllib.loads((tmp_path / "acme" / "arena-package.toml").read_text())
     assert toml["kind"] == "benchmark" and toml["opt_in"] is True and toml["world"]["template"] == "shop"

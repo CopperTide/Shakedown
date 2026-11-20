@@ -1,5 +1,5 @@
 // The digital twin a benchmark draws (twin contract): generic, so any world can
-// give one. arenad records a `world_view` event after setup and after every step that wrote
+// give one. shaked records a `world_view` event after setup and after every step that wrote
 // anything; `GET /api/branches/{id}/views` returns a branch's views, inherited ones included.
 
 /** One thing in an area: a work order, a lot, an order, a lane, a change. */

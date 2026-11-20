@@ -19,7 +19,7 @@ with connect() as arena:
     print(f"{bench.name} {bench.version}, task {task}, team: "
           + ", ".join(f"{a.id} ({a.kind} {a.model})" for a in team.agents))
 
-    branch = arena.run(task, team=team, seed=1)       # arenad runs the agents one after another
+    branch = arena.run(task, team=team, seed=1)       # shaked runs the agents one after another
     print(f"run {branch.run_id}, branch {branch.id}\n")
     for event in branch.stream():                    # live; ends when the branch has been scored
         print(event.summary())

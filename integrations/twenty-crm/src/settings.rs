@@ -1,4 +1,4 @@
-//! Which server this program runs: from env, then the config of the first start. arenad runs
+//! Which server this program runs: from env, then the config of the first start. shaked runs
 //! programs with a cleared environment, so the config is how a test names a server of its own.
 use std::path::PathBuf;
 

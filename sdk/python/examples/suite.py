@@ -25,7 +25,7 @@ with connect() as arena:
         tasks = tasks_arg.split(",")
     suite = arena.suite(team=arena.default_team(model=model), tasks=tasks, repeats=repeats,
                         name=f"sdk example, {model}")
-    print(f"suite {suite.id}: {len(suite.report['runs'])} runs, arenad runs them one after another ...")
+    print(f"suite {suite.id}: {len(suite.report['runs'])} runs, shaked runs them one after another ...")
     report = suite.wait()
     s = report["summary"]
     print(f"\n{report['status']}: {s['scored']} scored of {s['runs']}, pass rate {s['pass_rate']}, "

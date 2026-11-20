@@ -1,4 +1,4 @@
-"""What arenad's proxy tells a part about a request: the public base URL, for the absolute URLs a
+"""What shaked's proxy tells a part about a request: the public base URL, for the absolute URLs a
 part mints, the agent that sent it, and whether that agent may only read (docs/protocol.md,
 "Serving HTTP")."""
 from typing import Mapping

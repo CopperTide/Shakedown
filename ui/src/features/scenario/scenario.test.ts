@@ -34,7 +34,7 @@ describe('scenario builder', () => {
     expect(scenarioOf(opts, toggled(initialSelection(opts), 'courier-capacity', false))).toBeUndefined();
   });
 
-  it('fills templates as arenad does: a lone placeholder keeps its type, unknown ones stay', () => {
+  it('fills templates as shaked does: a lone placeholder keeps its type, unknown ones stay', () => {
     expect(fill(retest.template, { lot: 'CVX-2608', after: 4 })).toEqual({
       id: 'retest-fails', when: { after_calls: 4 }, do: { kind: 'result_fails', lot: 'CVX-2608', test: 'Sterility' },
       text: "CVX-2608's sterility retest fails after 4 calls to the LIMS.",
@@ -62,7 +62,7 @@ describe('scenario builder', () => {
     expect(scenarioProblem(opts, toggled(sel, 'courier-capacity', false), ['carrier-no-capacity'])).toBeNull();
   });
 
-  it('fills an option\'s label and description with its parameters, as arenad does', () => {
+  it('fills an option\'s label and description with its parameters, as shaked does', () => {
     const d = { ...retest, label: '{lot} retest fails', description: "{lot}'s sterility retest fails after {after} LIMS call(s); the agents are not told" };
     expect(optionWords(d, { lot: 'CVX-2608', after: 2 })).toEqual({
       label: 'CVX-2608 retest fails', description: "CVX-2608's sterility retest fails after 2 LIMS call(s); the agents are not told",

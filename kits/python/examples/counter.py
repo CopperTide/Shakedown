@@ -164,7 +164,7 @@ class Counter(Part):
         self.instances.pop(instance, None)
 
     def usage(self):
-        # Every save lives in ARENA_SAVES, which arenad measures itself: nothing else is kept.
+        # Every save lives in ARENA_SAVES, which shaked measures itself: nothing else is kept.
         return {"bytes": 0}
 
 

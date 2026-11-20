@@ -21,7 +21,7 @@ enum Layout {
 }
 
 /// One JSON record per running instance, under `dir` (a dot folder such as `<package saves>/.live`,
-/// which arenad's sweep and `gc`'s save removal leave alone).
+/// which shaked's sweep and `gc`'s save removal leave alone).
 #[derive(Debug, Clone)]
 pub struct LiveRecords<T> {
     dir: PathBuf,

@@ -1,4 +1,4 @@
-"""Server-Sent Events parsing (arenad's ``/api/branches/{id}/stream``)."""
+"""Server-Sent Events parsing (shaked's ``/api/branches/{id}/stream``)."""
 
 from __future__ import annotations
 

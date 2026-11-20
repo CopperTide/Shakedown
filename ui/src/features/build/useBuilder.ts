@@ -53,7 +53,7 @@ function usePreview(form: TemplateForm | null, draft: Draft, active: boolean, se
   return { preview: mine?.preview ?? null, error: mine?.error ?? null, people: people && people.template === form?.id ? people.people : null };
 }
 
-/** Why a build was refused, in words: its first problem, or the taken name with the free one arenad suggests. */
+/** Why a build was refused, in words: its first problem, or the taken name with the free one shaked suggests. */
 function refusal(e: unknown): Error {
   if (!(e instanceof ApiError)) return e instanceof Error ? e : new Error(String(e));
   const body = e.body as { problems?: Problem[]; error?: string; suggested?: string } | undefined;

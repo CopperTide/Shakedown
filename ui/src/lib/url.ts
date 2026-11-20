@@ -1,4 +1,4 @@
-// Paths and queries with their values encoded once, here: for arenad's API and the UI's own routes.
+// Paths and queries with their values encoded once, here: for shaked's API and the UI's own routes.
 
 /** A path whose interpolated values are encoded as segments: path`/api/branches/${id}/rows`. */
 export function path(strings: TemplateStringsArray, ...values: (string | number)[]): string {

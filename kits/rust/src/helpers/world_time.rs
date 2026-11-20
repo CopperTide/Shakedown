@@ -1,5 +1,5 @@
 //! World time for what a part emits (metrics, logs, traces): the world's epoch plus its clock, so
-//! telemetry follows the world clock and stands still while the branch is paused. arenad gives a
+//! telemetry follows the world clock and stands still while the branch is paused. shaked gives a
 //! part `world_time {epoch_ms, speed}` at `start` (docs/protocol.md, "World time").
 
 use std::time::Instant;

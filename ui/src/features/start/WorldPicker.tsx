@@ -19,7 +19,7 @@ export default function WorldPicker({ value, worlds, onChoose, busy }: { value: 
   );
 }
 
-/** The picker over arenad's worlds: choosing one makes it current and reloads the page, whose every read is of that world. */
+/** The picker over shaked's worlds: choosing one makes it current and reloads the page, whose every read is of that world. */
 export function CurrentWorldPicker({ busy }: { busy: boolean }) {
   const list = useQuery('worlds', fetchWorlds, { shared: true, fresh: true });
   const choose = useAction(async (name: string) => { await chooseWorld(name); window.location.reload(); }, { stayBusy: true });

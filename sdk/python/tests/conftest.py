@@ -1,12 +1,12 @@
 """The core the integration tests use.
 
-- ``ARENA_SDK_URL``: an arenad that is already running (any benchmark); or
-- an arenad the tests start (``Arena.local``) with the retail example benchmark, from
+- ``ARENA_SDK_URL``: a shaked that is already running (any benchmark); or
+- a shaked the tests start (``Arena.local``) with the retail example benchmark, from
   ``ARENA_SDK_BIN_DIR`` (default ``core/target/release``, then ``core/target/debug``; it needs
-  ``arenad``, ``arena-retail`` and ``arena-postgres``) on the Postgres at ``ARENA_SDK_PG_URL``
+  ``shaked``, ``arena-retail`` and ``arena-postgres``) on the Postgres at ``ARENA_SDK_PG_URL``
   (default ``deploy/compose.yml``'s, ``postgres://arena:arena@127.0.0.1:5544/postgres``).
 
-The arenad the tests start cleans up unreferenced saves when it starts, like any arenad, so point
+The shaked the tests start cleans up unreferenced saves when it starts, like any shaked, so point
 ``ARENA_SDK_PG_URL`` at a Postgres server no other test run is using at the same time.
 
 Without either, the tests marked ``core`` are skipped. They drive the API directly (start and finish
@@ -27,7 +27,7 @@ import pytest
 from arena import Arena
 
 REPO = Path(__file__).resolve().parents[3]
-NEEDED = ("arenad", "arena-retail", "arena-postgres")
+NEEDED = ("shaked", "arena-retail", "arena-postgres")
 
 
 def _bin_dir() -> str | None:
@@ -62,7 +62,7 @@ def arena():
     bin_dir = _bin_dir()
     pg = os.environ.get("ARENA_SDK_PG_URL", "postgres://arena:arena@127.0.0.1:5544/postgres")
     if bin_dir is None:
-        pytest.skip("no arenad build (set ARENA_SDK_BIN_DIR or ARENA_SDK_URL)")
+        pytest.skip("no shaked build (set ARENA_SDK_BIN_DIR or ARENA_SDK_URL)")
     if not _reachable(pg):
         pytest.skip(f"no Postgres at {urlparse(pg).hostname}:{urlparse(pg).port} (set ARENA_SDK_PG_URL)")
     saves = tempfile.mkdtemp(prefix="arena-sdk-test-saves-")

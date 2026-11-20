@@ -531,7 +531,7 @@ async fn legacy_drop_save_drops_snap_and_branch_only() {
         assert!(!t.exists(&todo[0]).await.unwrap(), "snap_ is dropped");
         assert!(!t.exists(&todo[1]).await.unwrap(), "branch_ is dropped");
         assert!(t.exists(&todo[2]).await.unwrap(), "gold_ is kept");
-        // A save that isn't there (any more) is -32002: arenad counts it as already gone.
+        // A save that isn't there (any more) is -32002: shaked counts it as already gone.
         let gone = p
             .drop_save(SaveId {
                 save: todo[0].clone(),

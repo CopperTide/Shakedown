@@ -1,6 +1,6 @@
 import type { AgentSpec, Runner, Team } from './types';
 
-/** What makes two teams the same for `isUntouched`: their agents as arenad runs them. */
+/** What makes two teams the same for `isUntouched`: their agents as shaked runs them. */
 const sameAgents = (a: Team, b: Team) =>
   JSON.stringify(a.agents.map(({ id, name, kind, model, prompt, read_only }) => [id, name, kind, model, prompt, !!read_only]))
   === JSON.stringify(b.agents.map(({ id, name, kind, model, prompt, read_only }) => [id, name, kind, model, prompt, !!read_only]));
@@ -15,7 +15,7 @@ export function isUntouched(stored: Team, suggested: Team[]): boolean {
 
 /**
  * The team as a run takes it: an open agent's blank provider dropped; with the `external` runner,
- * every agent is `external` (the system that drives the run runs them, not arenad). The board,
+ * every agent is `external` (the system that drives the run runs them, not shaked). The board,
  * the suggested runner and the picked mark stay in the browser.
  */
 export function teamForRun({ board: _board, runner: _runner, picked: _picked, connection: _connection, ...team }: Team, runner: Runner = 'chain'): Team {

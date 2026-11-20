@@ -102,7 +102,7 @@ class _Handler(BaseHTTPRequestHandler):
                 self.wfile.write(b"%x\r\n%s\r\n" % (len(chunk), chunk))
         self.wfile.write(b"0\r\n\r\n")
 
-    def log_message(self, format, *args):  # quiet: arenad records every request itself
+    def log_message(self, format, *args):  # quiet: shaked records every request itself
         pass
 
 

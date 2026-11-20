@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# `claude`, run inside an ephemeral OpenShell sandbox. Put this folder first in arenad's PATH and every
-# Claude Code agent arenad starts runs sandboxed under $ARENA_OPENSHELL_POLICY. When the agent ends, the
-# sandbox's policy denials are posted to arenad as world events (POST /api/branches/{id}/sandbox-events),
+# `claude`, run inside an ephemeral OpenShell sandbox. Put this folder first in shaked's PATH and every
+# Claude Code agent shaked starts runs sandboxed under $ARENA_OPENSHELL_POLICY. When the agent ends, the
+# sandbox's policy denials are posted to shaked as world events (POST /api/branches/{id}/sandbox-events),
 # so they show on the run's timeline with their reasons. Nothing is made up: no denial in the log, no event.
 #
 # Env: OPENSHELL_HOME (bin/openshell, state/, cliconf/), ARENA_OPENSHELL_IMAGE, ARENA_OPENSHELL_POLICY.

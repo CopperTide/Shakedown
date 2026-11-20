@@ -73,7 +73,7 @@ def test_wait_minutes_is_capped_at_thirty():
         assert len(polls) == 1 + 3
 
 
-def test_the_window_comes_from_arenad_or_the_run_start(monkeypatch):
+def test_the_window_comes_from_shaked_or_the_run_start(monkeypatch):
     from factory_designs.toolbox import minutes_text, window_minutes
     with FakeModel({}) as fake:
         monkeypatch.delenv("ARENA_WORLD_MINUTES", raising=False)

@@ -43,7 +43,7 @@ impl Runtime {
     }
 }
 
-/// The record to keep for a start with `given` (the config as arenad gave it): the images of
+/// The record to keep for a start with `given` (the config as shaked gave it): the images of
 /// the save `from` win over the config's, in `config` too.
 pub fn record_with_saved_images(given: &Value, config: &mut Config, from: Option<&Path>) -> Value {
     let saved = from.and_then(Manifest::read).map(|m| m.images);

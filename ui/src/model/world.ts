@@ -1,4 +1,4 @@
-// The world builder's shapes, as arenad passes the builder's answers on (docs/protocol.md, "Builder calls") and
+// The world builder's shapes, as shaked passes the builder's answers on (docs/protocol.md, "Builder calls") and
 // as it lists the benchmarks a user can choose between (`/api/worlds`, docs/reference.md).
 import type { ParamSpec } from './scenario';
 

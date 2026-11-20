@@ -1,4 +1,4 @@
-"""Errors a part reports to arenad as JSON-RPC errors."""
+"""Errors a part reports to shaked as JSON-RPC errors."""
 
 
 class PartError(Exception):

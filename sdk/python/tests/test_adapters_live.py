@@ -1,7 +1,7 @@
-"""Each example driver (examples/drivers) against a real arenad and a real model through the gateway:
+"""Each example driver (examples/drivers) against a real shaked and a real model through the gateway:
 every agent it registered worked in the world, the run was scored, and some reasoning was recorded.
 
-Needs the framework's extra and a provider arenad's gateway can reach (its key in arenad's environment);
+Needs the framework's extra and a provider shaked's gateway can reach (its key in shaked's environment);
 each test skips, saying which is missing. Real model calls: it costs credits.
 """
 
@@ -25,7 +25,7 @@ def _provider(arena) -> tuple[str, str]:
         if p.get("available") and p["id"] in MODELS:
             return p["id"], MODELS[p["id"]]
     pytest.skip("no gateway provider: set OPENAI_API_KEY (or OPENROUTER_API_KEY, ANTHROPIC_API_KEY) "
-                "in arenad's environment")
+                "in shaked's environment")
 
 
 @pytest.mark.parametrize("framework,module", [

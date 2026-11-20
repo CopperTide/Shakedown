@@ -5,7 +5,7 @@ export const LOCAL_COST_SOURCE = 'local (no API charge)';
 
 export const MODE_LABEL: Record<AgentKind, string> = { claude_code: 'Claude Code', codex: 'Codex', open: 'API mode', external: 'External', http: 'HTTP agent' };
 
-/** A Bedrock provider (`bedrock:<region>`): arenad calls it with the machine's AWS credentials, and lists it nowhere. */
+/** A Bedrock provider (`bedrock:<region>`): shaked calls it with the machine's AWS credentials, and lists it nowhere. */
 export const isBedrock = (id: string | null | undefined) => !!id?.trim().startsWith('bedrock:');
 
 /** `bedrock:us-east-1` → `us-east-1`. */
@@ -49,7 +49,7 @@ export function providerName(id: string): string {
 /** Only OpenRouter has a default model; the others need one named. */
 export const hasDefaultModel = (id: string) => !isBedrock(id) && kindOf(id) === 'openrouter';
 
-/** OpenAI and Anthropic report no price, and arenad keeps no price table. */
+/** OpenAI and Anthropic report no price, and shaked keeps no price table. */
 export const costIsUnknown = (id: string) => kindOf(id) === 'openai' || kindOf(id) === 'anthropic';
 
 /** The providers of a team's open agents. */
@@ -66,7 +66,7 @@ export function modelOf(a: Labelled): string {
   const m = a.model?.trim();
   if (a.kind === 'http') return hostOf(a.url) || 'Its own model';
   if (a.kind === 'open') return m || (hasDefaultModel(providerOf(a)) ? `${DEFAULT_OPENROUTER_MODEL} (default)` : 'No model');
-  // arenad starts Claude Code with Sonnet when the team names no model.
+  // shaked starts Claude Code with Sonnet when the team names no model.
   if (!m) return a.kind === 'claude_code' ? 'Sonnet' : a.kind === 'external' ? 'Its own model' : 'Default model';
   return modelWord(m);
 }

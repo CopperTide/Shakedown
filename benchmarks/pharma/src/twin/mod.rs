@@ -1,7 +1,7 @@
 //! The digital twin of Larchmont Biologics (`view`): the fill line, the QC lab, the warehouse's
 //! lots, the customers' open orders, the carriers' lanes and the approvals, as live state. The
 //! ERP is read through its connection with the reports' readers; the simulated parts and the
-//! approvals come as their `inspect` docs, which arenad passes (`describe.view.docs`).
+//! approvals come as their `inspect` docs, which shaked passes (`describe.view.docs`).
 mod areas;
 mod orders;
 mod read;

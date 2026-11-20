@@ -1,13 +1,13 @@
-// Mirrors arenad's model.rs / fork.rs / compare.rs / recorded.rs (serde snake_case).
+// Mirrors shaked's model.rs / fork.rs / compare.rs / recorded.rs (serde snake_case).
 import type { Board } from '@/features/team/board';
 import type { SystemInfo, ToolInfo } from './report';
 import type { RecordedScenario, ScenarioOptions } from './scenario';
 import type { WorldViewPayload } from './twin';
 
-/** `http`: an agent someone deployed, reached at its URL (`arena-agent/1`); arenad doesn't run it, it calls it. */
+/** `http`: an agent someone deployed, reached at its URL (`arena-agent/1`); shaked doesn't run it, it calls it. */
 export type AgentKind = 'claude_code' | 'codex' | 'open' | 'external' | 'http';
 
-/** A header value as arenad answers it: never the secret itself, a reference to it (valid until arenad restarts). */
+/** A header value as shaked answers it: never the secret itself, a reference to it (valid until shaked restarts). */
 export interface SecretRef {
   secret: string;
 }
@@ -18,7 +18,7 @@ export interface SecretRef {
  */
 export type Runner = 'chain' | 'concurrent' | 'dispatch' | 'external';
 
-/** Model arenad uses for an OpenRouter agent with no model set (`providers/mod.rs`). */
+/** Model shaked uses for an OpenRouter agent with no model set (`providers/mod.rs`). */
 export const DEFAULT_OPENROUTER_MODEL = 'deepseek/deepseek-chat-v3.1';
 
 /** The provider of an open agent that names none (and of calls recorded before providers). */
@@ -61,7 +61,7 @@ export type EventKind =
   | 'delegation'
   /** An agent of a dispatch run reports to its lead (`payload: {to, text, turn_end?}`). */
   | 'report'
-  /** arenad starts an agent's turn in a dispatch run (`payload: {reason, mail, idle_wake?, input}`). */
+  /** shaked starts an agent's turn in a dispatch run (`payload: {reason, mail, idle_wake?, input}`). */
   | 'wake'
   /** An agent of a dispatch run ended its turn and waits (`payload: {ok, error?, text}`). */
   | 'idle'
@@ -70,7 +70,7 @@ export type EventKind =
   /** What an agent thought or said it would do (`payload: {text, kind: 'thinking'|'step'|'plan', source:
    *  'agent'|'gateway'|'claude_code', model_call_seq?, truncated?}`); not a step of its own. */
   | 'reasoning'
-  /** arenad saved the parts that save at points (`payload: {reason, saves, error?, paused_ms}`); not a step. */
+  /** shaked saved the parts that save at points (`payload: {reason, saves, error?, paused_ms}`); not a step. */
   | 'save_point';
 
 export type RestoreMode = 'exact' | 'approximate';
@@ -116,7 +116,7 @@ export interface RunStartPayload {
   /** The run's rules; absent in runs recorded before runners (a chain with a handoff required). */
   runner?: Runner;
   handoff?: 'required' | 'optional';
-  /** The scenario the run was started with, as arenad expanded it (absent: none chosen). */
+  /** The scenario the run was started with, as shaked expanded it (absent: none chosen). */
   scenario?: RecordedScenario;
   /** Each part's kind of system, and each tool's effect and part (absent in runs recorded before they were kept). */
   systems?: Record<string, SystemInfo>;
@@ -134,9 +134,9 @@ export interface AgentSpec {
   model: string | null;
   /** Open agents only: `openrouter` (the default when absent), `openai`, `anthropic`, `local:<name>` or `bedrock:<region>`. */
   provider?: string | null;
-  /** HTTP agents only: where arenad calls the agent. */
+  /** HTTP agents only: where shaked calls the agent. */
   url?: string;
-  /** HTTP agents only: headers sent with every call; arenad answers each value as a `SecretRef`. */
+  /** HTTP agents only: headers sent with every call; shaked answers each value as a `SecretRef`. */
   headers?: Record<string, string | SecretRef>;
   prompt: string;
   /** True when the team keeps this agent to read tools; absent or false, it may use every tool. */
@@ -149,7 +149,7 @@ export interface Team {
   id: string;
   name: string;
   agents: AgentSpec[];
-  /** A CopperTide design's board (groups, places, arrows), kept in this browser; never sent to arenad. */
+  /** A CopperTide design's board (groups, places, arrows), kept in this browser; never sent to shaked. */
   board?: Board;
   /** The runner a suggested team's prompts are written for (`GET /api/teams`); kept in this browser. */
   runner?: Runner;
@@ -175,7 +175,7 @@ interface EventBase {
   agent: string | null;
 }
 
-/** An event whose payload has the shape arenad writes for its kind (`Payloads`). */
+/** An event whose payload has the shape shaked writes for its kind (`Payloads`). */
 export type TypedEvent = { [K in EventKind]: EventBase & { kind: K; payload: Payloads[K] } }[EventKind];
 
 /** A recorded event: `kind` says the shape of its payload. */
@@ -269,7 +269,7 @@ export interface DelegationPayload {
   task: string;
 }
 
-/** An agent's report to the lead; `turn_end` when arenad passed on what it said at the end of its turn. */
+/** An agent's report to the lead; `turn_end` when shaked passed on what it said at the end of its turn. */
 export interface ReportPayload {
   to: string;
   text: string;
@@ -320,7 +320,7 @@ export interface ReasoningPayload {
   truncated?: boolean;
 }
 
-/** Each event kind's payload as arenad writes it. */
+/** Each event kind's payload as shaked writes it. */
 export interface Payloads {
   run_start: RunStartPayload;
   agent_start: AgentStartPayload;
@@ -387,7 +387,7 @@ export interface Branch {
   error: string | null;
   created_at: string;
   ended_at: string | null;
-  /** The restore a fork asked for (null for a run's first branch; absent from older arenads). */
+  /** The restore a fork asked for (null for a run's first branch; absent from older shaked versions). */
   restore_mode?: RestoreMode | null;
   /** How each part of a fork's world was restored (empty for a run's first branch). */
   restored?: RestoredPart[];

@@ -1,5 +1,5 @@
 """A minimal SSH server, for running this part on a GPU machine whose container has no sshd and no root (the
-Isaac Sim image runs as uid 1234), so that arenad can start it with `ARENA_RUN_ISAAC_SIM="ssh ... -- <command>"`.
+Isaac Sim image runs as uid 1234), so that shaked can start it with `ARENA_RUN_ISAAC_SIM="ssh ... -- <command>"`.
 
 Key login only (any user name; the keys in AUTHORIZED_KEYS). Each session runs one command with `bash -c`, its
 stdin, stdout and stderr copied to and from the session's, as bytes. When the session closes first, the command gets EOF on

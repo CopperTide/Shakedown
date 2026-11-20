@@ -29,7 +29,7 @@ describe('requests', () => {
     expect(await del('/api/runs/r1')).toEqual({ dropped: 1 });
     expect(f.mock.calls[0][1]).toEqual({ method: 'DELETE' });
   });
-  it('a failed request throws ApiError with arenad’s error, else the text, else the status text', async () => {
+  it('a failed request throws ApiError with shaked’s error, else the text, else the status text', async () => {
     answer('{"error":"no such run"}', 404);
     await expect(get('/api/runs/x')).rejects.toEqual(new ApiError(404, 'no such run'));
     answer('plain words', 500);
@@ -40,7 +40,7 @@ describe('requests', () => {
 });
 
 describe('a refusal', () => {
-  it('keeps the JSON arenad answered, for answers that say more than an error', async () => {
+  it('keeps the JSON shaked answered, for answers that say more than an error', async () => {
     answer('{"problems":[{"path":"company.name","message":"Give the company a name"}]}', 422);
     await expect(get('/api/x')).rejects.toMatchObject({ status: 422, body: { problems: [{ path: 'company.name', message: 'Give the company a name' }] } });
   });

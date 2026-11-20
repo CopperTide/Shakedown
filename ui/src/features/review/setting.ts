@@ -35,13 +35,13 @@ const subscribe = (f: () => void) => { listeners.add(f); return () => { listener
 /** This browser's choice, kept in step across the page. */
 export const useReviewOn = () => useSyncExternalStore(subscribe, () => on, () => on);
 
-/** arenad's settings, asked once per page: null while asking; a failure counts as off, and is asked again next time. */
+/** shaked's settings, asked once per page: null while asking; a failure counts as off, and is asked again next time. */
 export function useServerReview(): ReviewSettings | null {
   const { data, error } = useQuery('review-settings', reviewSettings, { shared: true });
   return data ?? (error != null ? { enabled: false, model: '', why: error } : null);
 }
 
-/** Whether review cards show: on in this browser and in arenad. */
+/** Whether review cards show: on in this browser and in shaked. */
 export function useReviewEnabled(): boolean {
   const mine = useReviewOn();
   const s = useServerReview();

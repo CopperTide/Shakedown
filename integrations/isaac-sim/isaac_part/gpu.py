@@ -1,5 +1,5 @@
 """The GPU and driver the isaac fingerprint records. Read from the driver's /proc files, which don't query the
-GPU; nvidia-smi only when those are absent. arenad compares fingerprints exactly, so a transient failure is an
+GPU; nvidia-smi only when those are absent. shaked compares fingerprints exactly, so a transient failure is an
 error, never a recorded null: null means there is no NVIDIA driver at all."""
 import re
 import shutil

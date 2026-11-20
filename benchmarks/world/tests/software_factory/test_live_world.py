@@ -1,4 +1,4 @@
-"""The whole software-factory world under arenad (live; not yet run). Needs: arenad at `ARENA_URL` with this
+"""The whole software-factory world under shaked (live; not yet run). Needs: shaked at `ARENA_URL` with this
 checkout's packages (the live-service part's `arena-live-service` binary and the worldclock-gateway image from the
 `factory` branch's Rust work, the twins and the people part), every image `images/build.sh all` and images.yaml's
 hints give, and Docker with about 3 GB free. One platform at a time; each test stops what it started."""

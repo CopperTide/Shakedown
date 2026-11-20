@@ -8,7 +8,7 @@ pub fn var_name(package: &str) -> String {
     format!("ARENA_RUN_{}", package.to_uppercase().replace('-', "_"))
 }
 
-/// The override set for `package` in arenad's environment, if it is set and not blank.
+/// The override set for `package` in shaked's environment, if it is set and not blank.
 pub fn from_env(package: &str) -> Option<String> {
     std::env::var(var_name(package))
         .ok()

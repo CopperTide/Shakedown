@@ -79,7 +79,7 @@ impl Postgres {
 
     pub fn from_env() -> Postgres {
         let url = std::env::var("ARENA_PG_URL").unwrap_or_else(|_| DEFAULT_URL.into());
-        // arenad passes `ARENA_PG_URL` on to programs but not other variables, so the namespace can
+        // shaked passes `ARENA_PG_URL` on to programs but not other variables, so the namespace can
         // also ride on the URL as `?arena_ns=<ns>`.
         let (url, from_url) = split_ns(&url);
         let ns = std::env::var("ARENA_PG_NS").unwrap_or(from_url);
@@ -657,7 +657,7 @@ impl Part for Postgres {
 
     async fn stop(&self, p: IdParams) -> Result<(), PartError> {
         self.check_id(&p.instance)?;
-        // arenad saves what it wants to keep before it stops an instance.
+        // shaked saves what it wants to keep before it stops an instance.
         let db = self.pi(&p.instance);
         self.live.lock().unwrap().remove(&db);
         self.pg.drop(&db).await.map_err(PartError::internal_from)

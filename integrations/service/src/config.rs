@@ -148,7 +148,7 @@ impl VolumeSpec {
     }
 }
 
-/// A host the instance serves through arenad's proxy: requests to `host` go to `port` of the
+/// A host the instance serves through shaked's proxy: requests to `host` go to `port` of the
 /// compose service `service`.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct HttpSpec {

@@ -65,7 +65,7 @@ export function scenarioOf(options: ScenarioOptions | null, sel: Selection): Sce
 const PLACEHOLDER = /\{([a-z0-9_]+)\}/gi;
 
 /**
- * A template with its `{param}` placeholders filled, as arenad expands it. A string that is only a
+ * A template with its `{param}` placeholders filled, as shaked expands it. A string that is only a
  * placeholder takes the parameter's own type (`"{calls}"` becomes 2); unknown placeholders stay.
  */
 export function fill(template: unknown, params: Record<string, ParamValue>): unknown {
@@ -81,7 +81,7 @@ export function fill(template: unknown, params: Record<string, ParamValue>): unk
   return template;
 }
 
-/** An option's label and description with its `{param}` placeholders filled, as arenad fills them. */
+/** An option's label and description with its `{param}` placeholders filled, as shaked fills them. */
 export function optionWords(d: DisruptionOption, params: Record<string, ParamValue>): { label: string; description: string } {
   return { label: String(fill(d.label, params)), description: String(fill(d.description, params)) };
 }

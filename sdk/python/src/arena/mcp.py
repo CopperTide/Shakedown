@@ -1,6 +1,6 @@
 """A minimal client for an agent's MCP endpoint (the world's tools and the talk tools).
 
-arenad's endpoint answers JSON-RPC over plain HTTP POST (MCP streamable HTTP, JSON answers), so a few
+shaked's endpoint answers JSON-RPC over plain HTTP POST (MCP streamable HTTP, JSON answers), so a few
 lines do: ``tools/list`` and ``tools/call``. Any MCP client works too: point it at ``mcp_url``.
 """
 
@@ -48,7 +48,7 @@ class Tool:
 
 @dataclass
 class ToolResult:
-    """A tool call's outcome. A refused or failed call is ``is_error`` with arenad's or the part's
+    """A tool call's outcome. A refused or failed call is ``is_error`` with shaked's or the part's
     message in ``text``; it is recorded like any other call."""
 
     text: str

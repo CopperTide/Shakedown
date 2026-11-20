@@ -5,7 +5,7 @@ prompt (or model), rerun from there with the world restored, and compare the two
 
 Without a branch id it first runs the benchmark's team (Claude Code) on the first task. Real model
 calls: it costs credits. With ``ARENA_URL`` unset, the branch id must come from the same run of this
-script (the arenad it starts stops at the end).
+script (the shaked it starts stops at the end).
 """
 
 import sys

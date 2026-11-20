@@ -111,7 +111,7 @@ def same_inputs(part, instance):
 
 def test_replay_equals():
     a = started("a")
-    b = started("b", part=a)  # two instances in one process, as arenad runs them
+    b = started("b", part=a)  # two instances in one process, as shaked runs them
     assert same_inputs(a, "a") == same_inputs(a, "b")
     assert docs(a, "a") == docs(a, "b")
     assert docs(a, "a")["technician/T-1"]["machine"] == "PR-C1"
@@ -504,11 +504,11 @@ def test_recording_paths_and_frame_spacing(tmp_path):
 
 
 def test_save_goes_to_the_save_folder_by_convention(saves_root, tmp_path):
-    """arenad's `dir` is its own path; the program, which may run elsewhere, keeps saves under its ARENA_SAVES."""
+    """shaked's `dir` is its own path; the program, which may run elsewhere, keeps saves under its ARENA_SAVES."""
     part = started()
-    part.save("i1", "s1", str(tmp_path / "arenad-side" / "s1"))
+    part.save("i1", "s1", str(tmp_path / "shaked-side" / "s1"))
     assert (saves_root / "isaac-sim" / "s1" / "plant.pkl.gz").exists()
-    assert not (tmp_path / "arenad-side").exists()
+    assert not (tmp_path / "shaked-side").exists()
 
 
 def test_steps_that_never_reach_the_plant_are_an_error():

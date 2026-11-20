@@ -53,7 +53,7 @@ class Ops:
     now: Callable[[], datetime] = utc_now
     sleep: Callable[[float], None] = time.sleep
     spawn: Callable[[list[str], Path], int] = field(default=spawn_detached)
-    arenad_url: str = "http://127.0.0.1:4510"
+    shaked_url: str = "http://127.0.0.1:4510"
 
     def base(self, pod_id: str) -> str:
         return proxy_base(pod_id, self.spec.port)
@@ -153,7 +153,7 @@ def _bring_up(ops: Ops, gpu: Gpu, low_memory: bool) -> tuple[str, str, bool] | s
     if s and s["gpu_id"] != gpu.id:
         return f"Refused: the stopped pod {s['pod_id']} has {s['gpu_id']}; delete it first (gpupod delete)."
     if s:
-        key = read_env(ops).get(f"ARENA_LOCAL_KEY_{ops.spec.arenad_provider.upper()}")
+        key = read_env(ops).get(f"ARENA_LOCAL_KEY_{ops.spec.shaked_provider.upper()}")
         if not key:
             return f"Refused: {ops.env_path} has no key for pod {s['pod_id']}; delete the pod and start again."
         call(ops.runner, "pod", "start", s["pod_id"])
@@ -180,8 +180,8 @@ def create_argv(spec: PodSpec, gpu: Gpu, env: dict, low_memory: bool) -> list[st
 
 
 def write_env(ops: Ops, pod_id: str, key: str) -> None:
-    """``runpod.env`` (mode 0600): what arenad needs to reach the pod as ``local:<provider>``."""
-    name, (p_in, p_out) = ops.spec.arenad_provider, ops.spec.hosted_price_per_mtok
+    """``runpod.env`` (mode 0600): what shaked needs to reach the pod as ``local:<provider>``."""
+    name, (p_in, p_out) = ops.spec.shaked_provider, ops.spec.hosted_price_per_mtok
     lines = [f"ARENA_LOCAL_MODELS={name}={ops.base(pod_id)}/v1",
              f"ARENA_LOCAL_KEY_{name.upper()}={key}",
              f"ARENA_LOCAL_PRICE_{name.upper()}={p_in:.2f},{p_out:.2f}"]
@@ -204,7 +204,7 @@ def read_env(ops: Ops) -> dict[str, str]:
 
 def _start_watchdog(ops: Ops, pod_id: str) -> None:
     argv = [sys.executable, "-m", "gpupod.cli", "--ledger", str(ops.ledger.path),
-            "--state-dir", str(ops.state_dir), "--arenad", ops.arenad_url, "watch", pod_id]
+            "--state-dir", str(ops.state_dir), "--shaked", ops.shaked_url, "watch", pod_id]
     pid = ops.spawn(argv, ops.state_dir / "runpod-watchdog.log")
     ops.state_dir.mkdir(parents=True, exist_ok=True)
     (ops.state_dir / "runpod-watchdog.pid").write_text(f"{pid}\n")
@@ -230,7 +230,7 @@ def _until_ready(ops: Ops, pod_id: str) -> int:
         ops.sleep(HEALTH_POLL_S)
     ops.ledger.append({"kind": "ready", "pod_id": pod_id, "url": f"{ops.base(pod_id)}/v1"})
     ops.out(f"Ready: {ops.base(pod_id)}/v1 (public URL; /v1 needs the key in {ops.env_path}; "
-            f"restart arenad with that file)")
+            f"restart shaked with that file)")
     return 0
 
 
@@ -248,8 +248,8 @@ def stop(ops: Ops, by: str = "owner") -> int:
     return 0
 
 
-def arenad_running(http: httpx.Client, url: str) -> Optional[bool]:
-    """Whether any run in arenad is running (None: arenad did not answer)."""
+def shaked_running(http: httpx.Client, url: str) -> Optional[bool]:
+    """Whether any run in shaked is running (None: shaked did not answer)."""
     try:
         runs = http.get(f"{url}/api/runs", timeout=10).raise_for_status().json()
     except (httpx.HTTPError, ValueError):
@@ -263,8 +263,8 @@ def delete(ops: Ops, force: bool = False) -> int:
     if not s:
         ops.out("No pod to delete.")
         return 0
-    if arenad_running(ops.http, ops.arenad_url) and not force:
-        ops.out("Refused: a run in arenad is running. Wait for it, or delete with --force.")
+    if shaked_running(ops.http, ops.shaked_url) and not force:
+        ops.out("Refused: a run in shaked is running. Wait for it, or delete with --force.")
         return 2
     call(ops.runner, "pod", "delete", s["pod_id"])
     ops.ledger.append({"kind": "delete", "pod_id": s["pod_id"]})

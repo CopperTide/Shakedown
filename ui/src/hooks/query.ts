@@ -1,4 +1,4 @@
-// A value read from arenad, outside React: who reads it, the last answer, and when to ask again.
+// A value read from shaked, outside React: who reads it, the last answer, and when to ask again.
 // `useQuery` puts one on screen; the rules live here so they can be tested without a DOM.
 import { errorMessage } from '@/lib/errors';
 

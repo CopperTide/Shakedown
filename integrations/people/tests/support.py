@@ -1,5 +1,5 @@
 """Neutral fixtures and a driver for the people part: a few people of each fixture role, the fixture rules, and
-an engine that takes notices and runs the world clock the way arenad does."""
+an engine that takes notices and runs the world clock the way shaked does."""
 import copy
 from pathlib import Path
 

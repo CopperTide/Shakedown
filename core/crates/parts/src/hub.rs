@@ -17,7 +17,7 @@ struct Slot {
 }
 
 pub struct Hub {
-    /// Written only to add a package installed while arenad runs.
+    /// Written only to add a package installed while shaked runs.
     registry: RwLock<Registry>,
     bin_dir: PathBuf,
     /// Substituted for `${ARENA_DIR}` in commands (left as it is when empty).
@@ -57,7 +57,7 @@ impl Hub {
         self.registry.read().unwrap()
     }
 
-    /// Installs the package in `dir` (its `arena-package.toml`) while arenad runs; refuses a
+    /// Installs the package in `dir` (its `arena-package.toml`) while shaked runs; refuses a
     /// name that is installed already.
     pub fn install(&self, dir: &Path) -> Result<Manifest> {
         let m = Manifest::load(dir)?;

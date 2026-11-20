@@ -57,7 +57,7 @@ impl Factory {
         }
     }
 
-    /// The team offered as arenad's default (`team::named`: `single`, `incident` or `shift`).
+    /// The team offered as shaked's default (`team::named`: `single`, `incident` or `shift`).
     pub fn with_team(mut self, team: &str) -> Factory {
         self.team = team.into();
         self
@@ -134,7 +134,7 @@ impl Benchmark for Factory {
         })
     }
 
-    /// None: the run's ids (a change's) are made up as it goes, so no list could name them. arenad
+    /// None: the run's ids (a change's) are made up as it goes, so no list could name them. shaked
     /// doesn't ask a scored benchmark for them; `tests/` hold the path that passes.
     async fn gold_actions(&self, _p: GoldParams) -> R<GoldActions> {
         Ok(GoldActions::default())

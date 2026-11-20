@@ -173,7 +173,7 @@ class HttpTwin(DocsPart):
         return self._instance(instance)
 
     def now_ms(self, instance) -> int:
-        """World ms (unix) when arenad gave the world's time at `start`, else the wall clock."""
+        """World ms (unix) when shaked gave the world's time at `start`, else the wall clock."""
         w = self.world_time(instance)
         return w.now_ms() if w is not None else self._wall()
 

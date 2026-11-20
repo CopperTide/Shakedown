@@ -35,7 +35,7 @@ def _chain(exc: BaseException) -> Iterator[BaseException]:
 
 
 def _reason(e: BaseException) -> Optional[str]:
-    if isinstance(e, (Conflict, NotFound)):  # arenad itself: the run's clock or record is gone
+    if isinstance(e, (Conflict, NotFound)):  # shaked itself: the run's clock or record is gone
         return "the run ended"
     if isinstance(e, openai.APIStatusError):
         code = e.status_code

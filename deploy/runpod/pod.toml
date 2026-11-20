@@ -10,10 +10,10 @@ port = 8000                        # exposed as "8000/http": https://<pod>-8000.
 idle_minutes = 10
 max_session_hours = 8
 budget_usd = 50.0
-# The pod's name as an arenad local provider: `local:runpod`, ARENA_LOCAL_*_RUNPOD.
-arenad_provider = "runpod"
+# The pod's name as a shaked local provider: `local:runpod`, ARENA_LOCAL_*_RUNPOD.
+shaked_provider = "runpod"
 # The hosted-equivalent token rate (OpenRouter's list price of openai/gpt-oss-120b per Mtok,
-# read 2026-11-19), given to arenad as ARENA_LOCAL_PRICE_RUNPOD.
+# read 2026-11-19), given to shaked as ARENA_LOCAL_PRICE_RUNPOD.
 hosted_price_per_mtok = [0.15, 0.60]
 # The arguments after the image's `vllm serve`; {model} and {revision} come from the GPU entry.
 serve_args = ["{model}", "--revision", "{revision}", "--host", "0.0.0.0", "--port", "8000",

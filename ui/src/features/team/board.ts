@@ -25,7 +25,7 @@ export interface BoardLink {
   to: string;
 }
 
-/** A CopperTide design's board, kept with the team in this browser (arenad ignores it). */
+/** A CopperTide design's board, kept with the team in this browser (shaked ignores it). */
 export interface Board {
   groups: BoardGroup[];
   /** Each card's top-left corner, by agent id. */

@@ -1,4 +1,4 @@
-// AI review, as arenad stores it (`GET/POST /api/branches/{id}/review`, `/api/compare/review`,
+// AI review, as shaked stores it (`GET/POST /api/branches/{id}/review`, `/api/compare/review`,
 // `/api/suites/compare/review`).
 
 export type Severity = 'safety' | 'goal' | 'efficiency';
@@ -9,7 +9,7 @@ export interface WentWrong {
   why: string;
   steps: number[];
   severity: Severity;
-  /** Every step it cited was not in the run, so arenad dropped them. */
+  /** Every step it cited was not in the run, so shaked dropped them. */
   unverified?: boolean;
 }
 
@@ -73,7 +73,7 @@ export interface ReviewSettings {
   why?: string;
 }
 
-/** What a review is of: one branch, two branches, or two setups of an experiment (arenad's suites). */
+/** What a review is of: one branch, two branches, or two setups of an experiment (shaked's suites). */
 export type Target =
   | { kind: 'run'; branch: string }
   | { kind: 'compare'; a: string; b: string }

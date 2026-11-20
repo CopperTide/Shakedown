@@ -1,4 +1,4 @@
-"""Integration tests against a real arenad (see conftest.py). They check the API contracts the SDK
+"""Integration tests against a real shaked (see conftest.py). They check the API contracts the SDK
 relies on by driving the API directly; no agent, scripted or otherwise, takes part."""
 
 from __future__ import annotations
@@ -139,7 +139,7 @@ def test_pause_is_feature_detected(arena, cleanup):
 
 def test_cors_origin_is_configurable(arena):
     if not hasattr(arena, "process"):
-        pytest.skip("only for an arenad the tests started")
+        pytest.skip("only for a shaked the tests started")
     ok = httpx.options(f"{arena.url}/api/runs", headers={
         "origin": "http://127.0.0.1:5173", "access-control-request-method": "POST"})
     assert ok.status_code == 204
@@ -186,7 +186,7 @@ def test_external_suite_claim_and_export(arena, cleanup, tmp_path):
 
 
 def _live_model(arena):
-    """A real model to drive an agent with: a provider arenad's gateway can reach, else Claude Code
+    """A real model to drive an agent with: a provider shaked's gateway can reach, else Claude Code
     signed in on this machine. Skips, saying why, with neither."""
     from arena import claude_code
 
@@ -197,7 +197,7 @@ def _live_model(arena):
             return p["id"], models[p["id"]]
     if claude_code.available():
         return "claude-code", "haiku"
-    pytest.skip("no model: no provider key in arenad's environment and no `claude` on PATH")
+    pytest.skip("no model: no provider key in shaked's environment and no `claude` on PATH")
 
 
 def test_driver_round_trip(arena, monkeypatch):

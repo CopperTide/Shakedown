@@ -38,7 +38,7 @@ class _Branch:
 
     def register(self, agent, **kw):
         self.registered = (agent, kw)
-        return type("Ep", (), {"gateway_url": "https://arenad.test/gateway/b1/smoke/v1"})()
+        return type("Ep", (), {"gateway_url": "https://shaked.test/gateway/b1/smoke/v1"})()
 
     def events(self):
         return self._events
@@ -65,24 +65,24 @@ def _event(kind, payload):
     return type("E", (), {"kind": kind, "payload": payload})()
 
 
-def test_smoke_through_arenad_finds_the_gateway_reasoning(tmp_path, runner, clock):
+def test_smoke_through_shaked_finds_the_gateway_reasoning(tmp_path, runner, clock):
     branch = _Branch([_event("model_call", {}), _event("reasoning", {"source": "gateway", "model_call_seq": 3})])
     arena = _Arena(branch)
-    hosts = {POD_HOST: vllm("k1"), "arenad.test": lambda r: httpx.Response(200, json={"ok": True})}
+    hosts = {POD_HOST: vllm("k1"), "shaked.test": lambda r: httpx.Response(200, json={"ok": True})}
     ops = make_ops(tmp_path, runner, clock, http=route(hosts))
-    report = smoke(ops, BASE, "k1", "openai/gpt-oss-120b", through_arenad="http://127.0.0.1:4510",
+    report = smoke(ops, BASE, "k1", "openai/gpt-oss-120b", through_shaked="http://127.0.0.1:4510",
                    arena_factory=lambda url: arena)
     assert report.ok, report.lines()
-    assert report.checks[-1].name == "reasoning recorded through arenad"
+    assert report.checks[-1].name == "reasoning recorded through shaked"
     assert branch.registered == ("smoke", {"kind": "external", "provider": "local:runpod",
                                            "model": "openai/gpt-oss-120b"})
     assert branch.stopped and arena.deleted == ["r1"]
 
 
-def test_smoke_through_arenad_without_reasoning_fails(tmp_path, runner, clock):
+def test_smoke_through_shaked_without_reasoning_fails(tmp_path, runner, clock):
     branch = _Branch([_event("model_call", {})])
-    hosts = {POD_HOST: vllm("k1"), "arenad.test": lambda r: httpx.Response(200, json={"ok": True})}
+    hosts = {POD_HOST: vllm("k1"), "shaked.test": lambda r: httpx.Response(200, json={"ok": True})}
     ops = make_ops(tmp_path, runner, clock, http=route(hosts))
-    report = smoke(ops, BASE, "k1", "openai/gpt-oss-120b", through_arenad="http://x",
+    report = smoke(ops, BASE, "k1", "openai/gpt-oss-120b", through_shaked="http://x",
                    arena_factory=lambda url: _Arena(branch))
     assert not report.ok and branch.stopped

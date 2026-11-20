@@ -4,7 +4,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
-/// `describe.view`: the benchmark answers `view`, and arenad passes it the `inspect` docs of
+/// `describe.view`: the benchmark answers `view`, and shaked passes it the `inspect` docs of
 /// `docs` (part names) besides the connections.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ViewInfo {

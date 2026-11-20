@@ -1,4 +1,4 @@
-"""Start an arenad of your own as a subprocess (``Arena.local``)."""
+"""Start a shaked of your own as a subprocess (``Arena.local``)."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from .errors import ArenaError, ConnectionFailed
 
 
 class StartFailed(ArenaError):
-    """arenad exited or didn't answer while starting; the message ends with its log."""
+    """shaked exited or didn't answer while starting; the message ends with its log."""
 
 
 def free_port() -> int:
@@ -25,40 +25,47 @@ def free_port() -> int:
         return s.getsockname()[1]
 
 
-def find_arenad(arenad: Optional[str], bin_dir: Optional[str]) -> str:
-    """``arenad`` as given, else ``<bin_dir>/arenad``, else ``$ARENA_BIN_DIR/arenad``, else on PATH."""
-    for cand in (arenad, bin_dir and os.path.join(bin_dir, "arenad"),
-                 os.environ.get("ARENA_BIN_DIR") and os.path.join(os.environ["ARENA_BIN_DIR"], "arenad"),
-                 shutil.which("arenad")):
+#: The program's names, newest first: ``arenad`` is what shaked was called until 2026-11-19, so an
+#: older build is found too.
+NAMES = ("shaked", "arenad")
+
+
+def find_shaked(shaked: Optional[str], bin_dir: Optional[str]) -> str:
+    """``shaked`` as given, else ``shaked`` (or ``arenad``) in ``bin_dir``, else in ``$ARENA_BIN_DIR``,
+    else on PATH."""
+    dirs = [d for d in (bin_dir, os.environ.get("ARENA_BIN_DIR")) if d]
+    cands = [shaked] + [os.path.join(d, n) for d in dirs for n in NAMES] + [shutil.which(n) for n in NAMES]
+    for cand in cands:
         if cand and os.path.isfile(cand) and os.access(cand, os.X_OK):
             return cand
     raise StartFailed(
-        "no arenad binary: pass arenad=<path> or bin_dir=<folder>, or set ARENA_BIN_DIR "
-        "(build it with `cd core && cargo build --release -p arenad`)"
+        "no shaked binary: pass shaked=<path> or bin_dir=<folder>, or set ARENA_BIN_DIR "
+        "(build it with `cd core && cargo build --release -p shaked`)"
     )
 
 
 class LocalArena(Arena):
-    """An :class:`Arena` connected to an arenad this object started. Use it in a ``with`` block (or
+    """An :class:`Arena` connected to a shaked this object started. Use it in a ``with`` block (or
     call :meth:`close`) so the process stops.
 
     Args:
         benchmark: the benchmark package new runs use (``ARENA_BENCHMARK``), e.g. ``"retail"``.
         packages: folders whose subfolders hold ``arena-package.toml`` (``ARENA_PACKAGES``); default:
-            arenad's own (``integrations`` and ``benchmarks`` of its checkout).
-        pg_url: the Postgres server for arenad's records (``ARENA_PG_URL``); default arenad's
+            shaked's own (``integrations`` and ``benchmarks`` of its checkout).
+        pg_url: the Postgres server for shaked's records (``ARENA_PG_URL``); default shaked's
             (``postgres://arena:arena@127.0.0.1:5544/postgres``, ``deploy/compose.yml``).
         saves: where saves go (``ARENA_SAVES``); default a temporary folder removed on close.
-        bin_dir: what ``${ARENA_BIN_DIR}`` means in package manifests, and where to find arenad.
-        arenad: the arenad binary (default: found in ``bin_dir``, ``$ARENA_BIN_DIR`` or PATH).
+        bin_dir: what ``${ARENA_BIN_DIR}`` means in package manifests, and where to find shaked.
+        shaked: the shaked binary (default: found in ``bin_dir``, ``$ARENA_BIN_DIR`` or PATH).
+            ``arenad=`` is its old name.
         port: the port (default: a free one).
         max_db_bytes: the saves' disk limit (``ARENA_MAX_DB_BYTES``).
         cors_origin: web origins allowed to call the API from a browser (``ARENA_CORS_ORIGIN``).
-        env: more environment variables for arenad (model provider keys, ``ARENA_LOCAL_MODELS``, ...);
-            arenad otherwise inherits this process's environment.
-        log: a file for arenad's output (default: a temporary file, ``self.log_path``, removed on
+        env: more environment variables for shaked (model provider keys, ``ARENA_LOCAL_MODELS``, ...);
+            shaked otherwise inherits this process's environment.
+        log: a file for shaked's output (default: a temporary file, ``self.log_path``, removed on
             close; a failed start quotes its end).
-        startup_timeout: seconds to wait for arenad to answer.
+        startup_timeout: seconds to wait for shaked to answer.
     """
 
     def __init__(
@@ -68,16 +75,17 @@ class LocalArena(Arena):
         pg_url: Optional[str] = None,
         saves: Optional[str] = None,
         bin_dir: Optional[str] = None,
-        arenad: Optional[str] = None,
+        shaked: Optional[str] = None,
         port: Optional[int] = None,
         max_db_bytes: Optional[int] = None,
         cors_origin: Optional[str] = None,
         env: Optional[Mapping[str, str]] = None,
         log: Optional[str] = None,
         startup_timeout: float = 120.0,
+        arenad: Optional[str] = None,
         **client: Any,
     ):
-        binary = find_arenad(arenad, bin_dir)
+        binary = find_shaked(shaked or arenad, bin_dir)
         self.port = port or free_port()
         self._tmp_saves = None
         if saves is None:
@@ -96,7 +104,7 @@ class LocalArena(Arena):
         e = {**os.environ, **{k: v for k, v in settings.items() if v}, **(env or {})}
         self._tmp_log = log is None
         if log is None:
-            fd, log = tempfile.mkstemp(prefix="arenad-", suffix=".log")
+            fd, log = tempfile.mkstemp(prefix="shaked-", suffix=".log")
             os.close(fd)
         self.log_path = log
         self._log = open(log, "ab")
@@ -114,13 +122,13 @@ class LocalArena(Arena):
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             if self.process.poll() is not None:
-                raise StartFailed(f"arenad exited with {self.process.returncode}:\n{self.log_tail()}")
+                raise StartFailed(f"shaked exited with {self.process.returncode}:\n{self.log_tail()}")
             try:
                 self._http.get("/api/health", timeout=5.0).raise_for_status()
                 return
             except Exception:
                 time.sleep(0.3)
-        raise StartFailed(f"arenad did not answer within {timeout} s:\n{self.log_tail()}")
+        raise StartFailed(f"shaked did not answer within {timeout} s:\n{self.log_tail()}")
 
     def log_tail(self, lines: int = 30) -> str:
         try:
@@ -130,7 +138,7 @@ class LocalArena(Arena):
             return ""
 
     def close(self) -> None:
-        """Stops arenad (ctrl-c, then kill after 15 s) and removes a temporary saves folder and log."""
+        """Stops shaked (ctrl-c, then kill after 15 s) and removes a temporary saves folder and log."""
         super().close()
         p = getattr(self, "process", None)
         if p is not None and p.poll() is None:
@@ -156,4 +164,7 @@ class LocalArena(Arena):
         return f"LocalArena({self.url!r}, pid={self.process.pid})"
 
 
-__all__ = ["LocalArena", "StartFailed", "ConnectionFailed", "free_port", "find_arenad"]
+#: Its old name.
+find_arenad = find_shaked
+
+__all__ = ["LocalArena", "StartFailed", "ConnectionFailed", "free_port", "find_shaked"]

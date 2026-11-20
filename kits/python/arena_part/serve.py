@@ -52,11 +52,11 @@ class Part:
         raise errors.method_not_found("connect")
 
     def world_time(self, instance):
-        """The instance's world time (a `WorldTime`), when arenad gave one at `start`; else None."""
+        """The instance's world time (a `WorldTime`), when shaked gave one at `start`; else None."""
         return getattr(self, "_world_times", {}).get(instance)
 
     def http_routes(self, instance):
-        """The hosts the instance serves through arenad's proxy: `{"routes": [{host, upstream,
+        """The hosts the instance serves through shaked's proxy: `{"routes": [{host, upstream,
         env?, reads?}]}`. Not answered by default: the part serves none."""
         raise errors.method_not_found("http_routes")
 

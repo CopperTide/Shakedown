@@ -1,5 +1,5 @@
 // Neutral builder fixtures for tests and the dev fixture API: a template form as the builder answers `template`,
-// its preview, and built worlds as arenad lists them.
+// its preview, and built worlds as shaked lists them.
 import type { BuiltWorld, Person, Preview, TemplateForm, TemplateSummary } from '@/model/world';
 
 export const form: TemplateForm = {

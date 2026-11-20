@@ -8,7 +8,7 @@
 //! helper image); a `live_copy` one copied without stopping anything; a `skip` one not saved.
 //! Starting from a save makes a new project whose volumes are filled from it. Each running
 //! instance's config (with the images it runs now) is kept in `.live/<instance>.json` and its
-//! last save in `.last/<instance>.json`, so a restarted program still knows them. arenad saves
+//! last save in `.last/<instance>.json`, so a restarted program still knows them. shaked saves
 //! the part at save points (`save_at: "points"`). Live volumes are not counted by `usage`: `stop`
 //! removes them.
 //!

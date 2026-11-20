@@ -321,7 +321,7 @@ impl Part for Counter {
     }
 
     async fn usage(&self) -> Result<Usage, PartError> {
-        // Every save lives in ARENA_SAVES, which arenad measures itself: nothing else is kept.
+        // Every save lives in ARENA_SAVES, which shaked measures itself: nothing else is kept.
         Ok(Usage { bytes: 0 })
     }
 }

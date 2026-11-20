@@ -1,6 +1,6 @@
 // Code connections: a saved command that starts a team's own driver program (LangGraph, CrewAI,
 // the OpenAI Agents SDK or anything else), which Shakedown launches on this computer for each run
-// that uses it (`/api/connections`). Secret env values come back redacted and stay in arenad.
+// that uses it (`/api/connections`). Secret env values come back redacted and stay in shaked.
 import { useMemo } from 'react';
 import { listConnections } from '@/api/connections';
 import { useQuery } from '@/hooks/useQuery';
@@ -69,7 +69,7 @@ export function codeTeam(c: Connection): Team {
   return { id: `code-${c.id}`, name: c.name, agents: [], runner: 'external', connection: c.id };
 }
 
-/** The saved Code connections as teams to pick, with `first` (one just made) among them; none while arenad can't say. */
+/** The saved Code connections as teams to pick, with `first` (one just made) among them; none while shaked can't say. */
 export function useCodeTeams(first?: Team): Team[] {
   const { data } = useQuery(`connections:${first?.id ?? ''}`, listConnections, { keepOnError: true, keepPrevious: true });
   return useMemo(() => {

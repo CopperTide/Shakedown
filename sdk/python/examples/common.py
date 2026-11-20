@@ -1,6 +1,6 @@
-"""Shared by the examples: connect to arenad.
+"""Shared by the examples: connect to shaked.
 
-- ``ARENA_URL`` set: connect to that arenad (any benchmark).
+- ``ARENA_URL`` set: connect to that shaked (any benchmark).
 - otherwise: start one with ``Arena.local`` from ``ARENA_BIN_DIR`` (a ``cargo build --release`` of this
   repository: ``core/target/release``), on the Postgres at ``ARENA_PG_URL`` (default
   ``deploy/compose.yml``'s), with the benchmark ``ARENA_BENCHMARK`` (default ``retail``).

@@ -1,7 +1,7 @@
 //! Running instances on disk: `<package saves>/.live/<instance>/` holds the server's data folder
 //! (`data/`), its home (`home/`), its log (`serve.log`), `run.json`, the record a restarted
 //! program reads to reach, save and stop the instance, and `aliases.json`, its re-raised changes.
-//! A dot folder: arenad's sweep and `gc`'s save removal leave it alone.
+//! A dot folder: shaked's sweep and `gc`'s save removal leave it alone.
 use std::io;
 use std::path::{Path, PathBuf};
 

@@ -1,4 +1,4 @@
-//! Errors a part reports to arenad as JSON-RPC errors.
+//! Errors a part reports to shaked as JSON-RPC errors.
 use std::fmt;
 
 /// A JSON-RPC error with the arena-part/1 codes.

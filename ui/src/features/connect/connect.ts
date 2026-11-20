@@ -1,7 +1,7 @@
-// Bring your own agent: the Connect screen's form, the handshake arenad answers
+// Bring your own agent: the Connect screen's form, the handshake shaked answers
 // (`POST /api/agents/check`), the one-agent team made of its answer, and the connected agents
-// this browser keeps. A header value is a secret: it goes to arenad once, in the check, and only
-// the reference arenad answers with is ever kept or sent again.
+// this browser keeps. A header value is a secret: it goes to shaked once, in the check, and only
+// the reference shaked answers with is ever kept or sent again.
 import type { CheckAnswer, CheckBody } from '@/model/connection';
 import { hostOf, isBedrock, modelOf } from '@/model/providers';
 import type { AgentSpec, SecretRef, Team } from '@/model/types';
@@ -81,7 +81,7 @@ export function withoutSecrets(a: AgentSpec): AgentSpec {
   return { ...a, headers };
 }
 
-/** The agent as connected: arenad's, named by what it called itself (else arenad's name, else the host or model). */
+/** The agent as connected: shaked's, named by what it called itself (else shaked's name, else the host or model). */
 export function connectedAgent(answer: Extract<CheckAnswer, { ok: true }>): AgentSpec {
   const a = withoutSecrets(answer.agent);
   const fallback = a.kind === 'http' ? hostOf(a.url) : a.model ?? 'Bedrock agent';

@@ -96,8 +96,8 @@ class IsaacSim(DocsPart):
         return self._instance(instance).advance(clock_ms)
 
     def save(self, instance, save, dir):
-        """Written to `$ARENA_SAVES/isaac-sim/<save>`, which is `dir` when arenad runs this program itself. When it
-        runs on another machine (ARENA_RUN_ISAAC_SIM), `dir` is arenad's path and the saves stay on this one."""
+        """Written to `$ARENA_SAVES/isaac-sim/<save>`, which is `dir` when shaked runs this program itself. When it
+        runs on another machine (ARENA_RUN_ISAAC_SIM), `dir` is shaked's path and the saves stay on this one."""
         del dir
         return {"bytes": state.write(saves.root(NAME) / save, self._instance(instance)), "exact": False}
 

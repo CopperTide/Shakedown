@@ -1,5 +1,5 @@
 """The real gh 2.45 reads the twin's Actions over HTTPS on 127.0.0.1 (the TLS front standing in for
-arenad's proxy): `gh run list/view/watch/rerun` and `gh pr checks`, on runs a fake Docker answers
+shaked's proxy): `gh run list/view/watch/rerun` and `gh pr checks`, on runs a fake Docker answers
 (`live`: needs the gh binary)."""
 import json
 import subprocess

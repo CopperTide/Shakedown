@@ -1,4 +1,4 @@
-//! The public base URL of a request that came through arenad's proxy, for the absolute URLs a part
+//! The public base URL of a request that came through shaked's proxy, for the absolute URLs a part
 //! mints (docs/protocol.md, "Serving HTTP").
 
 /// `<proto>://<host>` from the request's `X-Forwarded-Proto` and `X-Forwarded-Host`; `fallback`

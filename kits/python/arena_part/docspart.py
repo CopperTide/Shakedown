@@ -58,7 +58,7 @@ class DocsPart(Part):
         self.instances.pop(instance, None)
 
     def usage(self):
-        return {"bytes": 0}  # every save lives under ARENA_SAVES, which arenad measures itself
+        return {"bytes": 0}  # every save lives under ARENA_SAVES, which shaked measures itself
 
     def gc(self, keep):
         return saves.gc(self.NAME, keep)

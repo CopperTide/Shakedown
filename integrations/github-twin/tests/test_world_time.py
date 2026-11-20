@@ -1,4 +1,4 @@
-"""The twin stamps what it makes in world time: the epoch arenad gives at start plus the branch clock."""
+"""The twin stamps what it makes in world time: the epoch shaked gives at start plus the branch clock."""
 from arena_part.serve import dispatch
 
 from conftest import Clock, Twin, api, config

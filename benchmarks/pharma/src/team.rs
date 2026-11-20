@@ -1,6 +1,6 @@
 //! The incident's ticket, the rules every agent gets and the deployments this benchmark suggests
-//! (`data/teams.json`): a single agent (arenad's default), a dispatching team whose lead delegates
-//! to the roles (for arenad's `dispatch` runner), and the coordinated team for a chain, whose roles
+//! (`data/teams.json`): a single agent (shaked's default), a dispatching team whose lead delegates
+//! to the roles (for shaked's `dispatch` runner), and the coordinated team for a chain, whose roles
 //! have only the tools their decisions need, with short prompts and compact reports. Arena imposes
 //! none of it.
 use std::sync::OnceLock;
@@ -52,7 +52,7 @@ pub struct Role {
 pub struct Deployment {
     pub id: String,
     pub name: String,
-    /// The arenad runner its prompts are written for (absent: any).
+    /// The shaked runner its prompts are written for (absent: any).
     #[serde(default)]
     pub runner: Option<String>,
     pub roles: Vec<Role>,
@@ -86,7 +86,7 @@ fn deployment(id: &str) -> &'static Deployment {
     found.expect("data/teams.json has every deployment of DEPLOYMENTS")
 }
 
-/// `id`'s deployment as arenad's team: in a chain every role but the last hands off.
+/// `id`'s deployment as shaked's team: in a chain every role but the last hands off.
 pub fn bench_team(id: &str) -> BenchTeam {
     let d = deployment(id);
     let last = d.roles.len().saturating_sub(1);
@@ -111,7 +111,7 @@ pub fn bench_team(id: &str) -> BenchTeam {
     }
 }
 
-/// Every deployment but `default`, as the other teams arenad offers.
+/// Every deployment but `default`, as the other teams shaked offers.
 pub fn other_teams(default: &str) -> Vec<BenchTeam> {
     let others = DEPLOYMENTS.iter().filter(|id| **id != default);
     others.map(|id| bench_team(id)).collect()

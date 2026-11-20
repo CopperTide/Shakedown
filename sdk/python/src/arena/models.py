@@ -1,4 +1,4 @@
-"""Typed views of arenad's API objects.
+"""Typed views of shaked's API objects.
 
 Plain dataclasses. Each object built from an answer keeps the answer itself in ``raw``, so a field
 the SDK doesn't model yet (newer cores add fields) is still at hand.
@@ -31,8 +31,8 @@ def _ts(v: Any) -> Optional[_dt.datetime]:
 class Agent:
     """One agent of a team.
 
-    ``kind`` picks who runs it: ``claude_code`` or ``codex`` (arenad starts the CLI headless, with only
-    the world's tools), ``open`` (arenad's own loop, model calls through its gateway to ``provider``),
+    ``kind`` picks who runs it: ``claude_code`` or ``codex`` (shaked starts the CLI headless, with only
+    the world's tools), ``open`` (shaked's own loop, model calls through its gateway to ``provider``),
     or ``external`` (your code drives it through its MCP endpoint and gateway).
     """
 

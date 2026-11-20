@@ -1,7 +1,7 @@
 """Run a headless Claude Code CLI (``claude -p``) as one of your external agents.
 
 The CLI gets only the agent's MCP endpoint (the world's tools and the talk tools): built-in tools off,
-settings sources empty, strict MCP config, as arenad's own CLI mode runs it. Every model call the CLI
+settings sources empty, strict MCP config, as shaked's own CLI mode runs it. Every model call the CLI
 reports is recorded on the branch (``report_usage``) and the agent's end with its tokens and cost.
 It needs ``claude`` on PATH and signed in; it uses real model calls and costs credits.
 """
@@ -48,7 +48,7 @@ def available() -> bool:
 
 
 def task_prompt(task: Task, role: str = "") -> str:
-    """The input arenad's own runners give an agent: its role prompt, the ticket and the
+    """The input shaked's own runners give an agent: its role prompt, the ticket and the
     benchmark's instructions."""
     parts = [p for p in (role.strip(), f"# Ticket\n\n{task.ticket}", task.instructions) if p]
     return "\n\n".join(parts)

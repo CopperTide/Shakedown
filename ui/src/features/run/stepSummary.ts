@@ -30,7 +30,7 @@ function outcomeLine(a: Action): string {
   return a.durationMs == null ? 'It worked.' : `It worked, in ${formatDuration(a.durationMs)}.`;
 }
 
-/** arenad's own refusals of a request through its proxy (its other errors are failures). */
+/** shaked's own refusals of a request through its proxy (its other errors are failures). */
 const HTTP_REFUSAL = /is not part of this world|takes HTTPS on port 443 only|not available to this agent|is over 256 MiB/;
 
 /** A request an agent's client sent through the proxy: method, URL, the part serving it, and its status. */

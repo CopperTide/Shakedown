@@ -12,7 +12,7 @@ STILL_SETTLE_FRAMES = 32  # frames a still waits after a cut, for the renderer's
 
 def path_for(record: str, root: Path, instance: str) -> Path:
     """The MP4 of one instance: `record` (relative to `root`, the part's save folder), with `-<instance>` before
-    its suffix, since arenad runs a base and then a branch on the same config."""
+    its suffix, since shaked runs a base and then a branch on the same config."""
     p = Path(record)
     p = p if p.is_absolute() else root / p
     return p.with_name(f"{p.stem}-{instance}{p.suffix or '.mp4'}")

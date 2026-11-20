@@ -1,5 +1,5 @@
 """The framework adapters against a stand-in for an agent's endpoint: the tools they build call it
-with the model's arguments, and a refused call reaches the agent as text. No arenad, no model."""
+with the model's arguments, and a refused call reaches the agent as text. No shaked, no model."""
 
 from __future__ import annotations
 

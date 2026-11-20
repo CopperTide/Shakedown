@@ -2,7 +2,7 @@
 
     uv run --project deploy/runpod gpupod quote
     uv run --project deploy/runpod gpupod start --confirm-rate 2.69 [--hours 8]
-    uv run --project deploy/runpod gpupod smoke [--through-arenad http://127.0.0.1:4510]
+    uv run --project deploy/runpod gpupod smoke [--through-shaked http://127.0.0.1:4510]
     uv run --project deploy/runpod gpupod status | stop | delete [--force] | reconcile
 """
 
@@ -33,7 +33,9 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("--ledger", default=str(LEDGER))
     p.add_argument("--env-file", default=str(ENV_FILE))
     p.add_argument("--state-dir", default=str(STATE_DIR))
-    p.add_argument("--arenad", default=os.environ.get("ARENA_URL") or "http://127.0.0.1:4510")
+    # --arenad and --through-arenad: the old names (shaked was arenad until 2026-11-19).
+    p.add_argument("--shaked", "--arenad", dest="shaked",
+                   default=os.environ.get("ARENA_URL") or "http://127.0.0.1:4510")
     sub = p.add_subparsers(dest="cmd", required=True)
     q = sub.add_parser("quote", help="the GPU's hourly rate now, and the spend so far")
     q.add_argument("--gpu")
@@ -46,7 +48,7 @@ def parser() -> argparse.ArgumentParser:
     for name in ("status", "stop", "reconcile"):
         sub.add_parser(name)
     sub.add_parser("delete").add_argument("--force", action="store_true")
-    sub.add_parser("smoke").add_argument("--through-arenad")
+    sub.add_parser("smoke").add_argument("--through-shaked", "--through-arenad", dest="through_shaked")
     sub.add_parser("watch", help="the watchdog (start runs it)").add_argument("pod_id")
     return p
 
@@ -54,13 +56,13 @@ def parser() -> argparse.ArgumentParser:
 def real_ops(args: argparse.Namespace) -> Ops:
     return Ops(runner=RealRunner(), ledger=Ledger(Path(args.ledger)), spec=load_spec(),
                env_path=Path(args.env_file), state_dir=Path(args.state_dir),
-               http=httpx.Client(timeout=30), arenad_url=args.arenad)
+               http=httpx.Client(timeout=30), shaked_url=args.shaked)
 
 
 def _smoke(ops: Ops, through: Optional[str]) -> int:
     s = ops.ledger.open_session()
     env = read_env(ops)
-    name = ops.spec.arenad_provider
+    name = ops.spec.shaked_provider
     url = env.get("ARENA_LOCAL_MODELS", "").removeprefix(f"{name}=")
     key = env.get(f"ARENA_LOCAL_KEY_{name.upper()}")
     if not (s and url and key):
@@ -91,7 +93,7 @@ def _run(ops: Ops, args: argparse.Namespace) -> int:
         "stop": lambda: stop(ops),
         "delete": lambda: delete(ops, args.force),
         "reconcile": lambda: reconcile(ops),
-        "smoke": lambda: _smoke(ops, args.through_arenad),
+        "smoke": lambda: _smoke(ops, args.through_shaked),
         "watch": lambda: _watch(ops, args.pod_id),
     }
     return commands[args.cmd]()

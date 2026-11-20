@@ -1,5 +1,5 @@
 """Real clients against the twin over HTTPS on 127.0.0.1 (a TLS front with a test CA standing in for
-arenad's proxy): PyGithub with `base_url`, and gh in GHES mode (`live`: needs the gh binary)."""
+shaked's proxy): PyGithub with `base_url`, and gh in GHES mode (`live`: needs the gh binary)."""
 import shutil
 import subprocess
 
