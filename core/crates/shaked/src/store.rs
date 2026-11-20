@@ -1,20 +1,25 @@
 use std::{collections::HashMap, sync::Mutex};
 
 use anyhow::{anyhow, Context, Result};
+use deadpool_postgres::Pool;
 use serde_json::Value;
 use tokio::sync::{broadcast, Mutex as AsyncMutex};
-use tokio_postgres::{Client, NoTls, Row};
+use tokio_postgres::Row;
 
 use crate::{model::*, overhead::Overhead, pg::Admin};
 use parts::proto::Mode;
 
 mod connections;
 mod experiments;
+mod open;
 mod reviews;
+mod seed;
 mod suites;
 pub use connections::{is_secret, Connection, NewConnection, REDACTED};
 pub use experiments::{NewExperiment, NewSetup};
+pub use open::{prepare_db, template_key};
 pub use reviews::{ReviewDone, StoredReview};
+pub use seed::{LOCAL_ORG_ID, LOCAL_USER_ID};
 pub use suites::NewSuite;
 
 pub type RunId = String;
@@ -34,70 +39,19 @@ pub async fn pick_db(admin: &Admin, name: &str, old: &str) -> Result<String> {
     Ok(name.to_string())
 }
 
-const SCHEMA: &str = r#"
-CREATE TABLE IF NOT EXISTS runs (
-    id text PRIMARY KEY,
-    task_id text NOT NULL,
-    team jsonb NOT NULL,
-    created_at timestamptz NOT NULL DEFAULT now()
-);
-CREATE TABLE IF NOT EXISTS branches (
-    id text PRIMARY KEY,
-    run_id text NOT NULL REFERENCES runs(id),
-    parent_id text REFERENCES branches(id),
-    start_seq bigint,
-    team jsonb NOT NULL,
-    changes jsonb NOT NULL DEFAULT '[]',
-    fork_note text,
-    status text NOT NULL DEFAULT 'running',
-    error text,
-    created_at timestamptz NOT NULL DEFAULT now(),
-    ended_at timestamptz
-);
-CREATE TABLE IF NOT EXISTS events (
-    branch_id text NOT NULL REFERENCES branches(id),
-    seq bigint NOT NULL,
-    at timestamptz NOT NULL DEFAULT clock_timestamp(),
-    agent text,
-    kind text NOT NULL,
-    payload jsonb NOT NULL,
-    PRIMARY KEY (branch_id, seq)
-);
-ALTER TABLE runs ADD COLUMN IF NOT EXISTS name text;
-ALTER TABLE branches ADD COLUMN IF NOT EXISTS restore_mode text;
-ALTER TABLE branches ADD COLUMN IF NOT EXISTS restored jsonb NOT NULL DEFAULT '[]';
-"#;
-
 const BRANCH_COLS: &str = "id, run_id, parent_id, start_seq, team, changes, fork_note, status, \
      error, created_at, ended_at, restore_mode, restored";
 const EVENT_COLS: &str = "branch_id, seq, at, agent, kind, payload";
-
-/// Makes the tables (adding what newer shaked versions keep), and marks what was running when shaked
-/// last stopped as interrupted.
-async fn migrate(client: &Client) -> Result<()> {
-    client.batch_execute(SCHEMA).await?;
-    client.batch_execute(suites::SCHEMA).await?;
-    client.batch_execute(experiments::SCHEMA).await?;
-    client.batch_execute(reviews::SCHEMA).await?;
-    client.batch_execute(connections::SCHEMA).await?;
-    client
-        .execute(
-            "UPDATE branches SET status = 'interrupted', ended_at = now() WHERE status = 'running'",
-            &[],
-        )
-        .await?;
-    client.execute(suites::INTERRUPT, &[]).await?;
-    client.execute(experiments::INTERRUPT, &[]).await?;
-    client.execute(reviews::INTERRUPT, &[]).await?;
-    Ok(())
-}
 
 fn new_id() -> String {
     uuid::Uuid::new_v4().simple().to_string()
 }
 
 pub struct Store {
-    client: Client,
+    /// Request paths' connections (in Task 5 on: under row-level security).
+    app: Pool,
+    /// Background jobs that span orgs (`crate::jobs`).
+    system: Pool,
     tx: broadcast::Sender<Event>,
     // Per-branch locks make `max(seq)+1` appends atomic within this process.
     locks: Mutex<HashMap<String, std::sync::Arc<AsyncMutex<()>>>>,
@@ -114,7 +68,9 @@ impl Store {
         Store::open_named(admin, &db).await
     }
 
-    /// Like `open`, with a custom database name (tests use a fresh one each).
+    /// Like `open`, with a custom database name (tests use a fresh one each): makes it when
+    /// missing, brings its schema up to date and seeds the local owner ([`prepare_db`]), and marks
+    /// what was running when shaked last stopped as interrupted.
     pub async fn open_named(admin: &Admin, name: &str) -> Result<Store> {
         if !admin.exists(name).await? {
             // Concurrent creators may race; tolerate losing.
@@ -124,17 +80,31 @@ impl Store {
                 }
             }
         }
-        let (client, conn) = tokio_postgres::connect(&admin.db_url(name), NoTls)
-            .await
-            .with_context(|| format!("connecting to {name}"))?;
-        tokio::spawn(conn);
-        migrate(&client).await?;
+        prepare_db(admin, name).await?;
+        let url = admin.db_url(name);
+        let store = Store::with_pools(open::pool(&url)?, open::pool(&url)?);
+        crate::jobs::interrupt_at_start(&store).await?;
+        Ok(store)
+    }
+
+    fn with_pools(app: Pool, system: Pool) -> Store {
         let (tx, _) = broadcast::channel(1024);
-        Ok(Store {
-            client,
+        Store {
+            app,
+            system,
             tx,
             locks: Mutex::new(HashMap::new()),
-        })
+        }
+    }
+
+    /// A pooled connection for a request path.
+    async fn db(&self) -> Result<deadpool_postgres::Object> {
+        Ok(self.app.get().await?)
+    }
+
+    /// A pooled connection for a background job ([`crate::jobs`]).
+    pub(crate) async fn system_db(&self) -> Result<deadpool_postgres::Object> {
+        Ok(self.system.get().await?)
     }
 
     fn lock_for(&self, branch: &str) -> std::sync::Arc<AsyncMutex<()>> {
@@ -148,7 +118,8 @@ impl Store {
 
     pub async fn create_run(&self, task_id: &str, team: &Team) -> Result<RunId> {
         let id = new_id();
-        self.client
+        self.db()
+            .await?
             .execute(
                 "INSERT INTO runs (id, task_id, team) VALUES ($1, $2, $3)",
                 &[&id, &task_id, &serde_json::to_value(team)?],
@@ -160,7 +131,8 @@ impl Store {
     /// Sets a run's display name without changing its task or recorded events.
     pub async fn name_run(&self, id: &str, name: &str) -> Result<bool> {
         Ok(self
-            .client
+            .db()
+            .await?
             .execute("UPDATE runs SET name = $2 WHERE id = $1", &[&id, &name])
             .await?
             == 1)
@@ -180,7 +152,8 @@ impl Store {
             Some((p, s)) => (Some(p.to_string()), Some(s)),
             None => (None, None),
         };
-        self.client
+        self.db()
+            .await?
             .execute(
                 "INSERT INTO branches (id, run_id, parent_id, start_seq, team, changes, fork_note)
                  VALUES ($1, $2, $3, $4, $5, $6, $7)",
@@ -200,7 +173,8 @@ impl Store {
 
     /// Replaces a branch's team (an external system registered another agent).
     pub async fn set_team(&self, branch_id: &str, team: &Team) -> Result<()> {
-        self.client
+        self.db()
+            .await?
             .execute(
                 "UPDATE branches SET team = $2 WHERE id = $1",
                 &[&branch_id, &serde_json::to_value(team)?],
@@ -216,7 +190,8 @@ impl Store {
         mode: Mode,
         restored: &[RestoredPart],
     ) -> Result<()> {
-        self.client
+        self.db()
+            .await?
             .execute(
                 "UPDATE branches SET restore_mode = $2, restored = $3 WHERE id = $1",
                 &[
@@ -279,8 +254,7 @@ impl Store {
     ) -> Result<Event> {
         let lock = self.lock_for(branch_id);
         let _g = lock.lock().await;
-        let row = self
-            .client
+        let row = self.db().await?
             .query_one(
                 &format!(
                     "INSERT INTO events (branch_id, seq, agent, kind, payload)
@@ -297,7 +271,8 @@ impl Store {
 
     pub async fn events(&self, branch_id: &str) -> Result<Vec<Event>> {
         let rows = self
-            .client
+            .db()
+            .await?
             .query(
                 &format!("SELECT {EVENT_COLS} FROM events WHERE branch_id = $1 ORDER BY seq"),
                 &[&branch_id],
@@ -312,7 +287,8 @@ impl Store {
         status: BranchStatus,
         error: Option<String>,
     ) -> Result<()> {
-        self.client
+        self.db()
+            .await?
             .execute(
                 "UPDATE branches SET status = $2, error = $3,
                  ended_at = CASE WHEN $2 = 'running' THEN NULL ELSE now() END WHERE id = $1",
@@ -331,7 +307,8 @@ impl Store {
     /// Like `branch`, but a missing branch is `Ok(None)` rather than an error.
     pub async fn find_branch(&self, id: &str) -> Result<Option<Branch>> {
         let row = self
-            .client
+            .db()
+            .await?
             .query_opt(
                 &format!("SELECT {BRANCH_COLS} FROM branches WHERE id = $1"),
                 &[&id],
@@ -342,7 +319,8 @@ impl Store {
 
     pub async fn runs(&self) -> Result<Vec<RunSummary>> {
         let runs = self
-            .client
+            .db()
+            .await?
             .query(
                 "SELECT id, name, task_id, created_at FROM runs ORDER BY created_at DESC, id",
                 &[],
@@ -367,12 +345,12 @@ impl Store {
     /// The run `id` with its branches, oldest first; None when there is no such run.
     pub async fn run(&self, id: &str) -> Result<Option<RunSummary>> {
         let sql = "SELECT id, name, task_id, created_at FROM runs WHERE id = $1";
-        let Some(r) = self.client.query_opt(sql, &[&id]).await? else {
+        let Some(r) = self.db().await?.query_opt(sql, &[&id]).await? else {
             return Ok(None);
         };
         let sql =
             format!("SELECT {BRANCH_COLS} FROM branches WHERE run_id = $1 ORDER BY created_at, id");
-        let rows = self.client.query(&sql, &[&id]).await?;
+        let rows = self.db().await?.query(&sql, &[&id]).await?;
         Ok(Some(RunSummary {
             branches: rows.iter().map(branch_from).collect::<Result<_>>()?,
             id: r.get("id"),
@@ -385,7 +363,8 @@ impl Store {
     /// Every branch, grouped by its run, oldest first.
     async fn branches_by_run(&self) -> Result<HashMap<String, Vec<Branch>>> {
         let rows = self
-            .client
+            .db()
+            .await?
             .query(
                 &format!("SELECT {BRANCH_COLS} FROM branches ORDER BY created_at, id"),
                 &[],
@@ -402,7 +381,7 @@ impl Store {
     /// The ids of the run's branches.
     pub async fn run_branches(&self, run_id: &str) -> Result<Vec<BranchId>> {
         let sql = "SELECT id FROM branches WHERE run_id = $1 ORDER BY created_at, id";
-        let rows = self.client.query(sql, &[&run_id]).await?;
+        let rows = self.db().await?.query(sql, &[&run_id]).await?;
         Ok(rows.iter().map(|r| r.get(0)).collect())
     }
 
@@ -413,7 +392,7 @@ impl Store {
             [EventKind::RunStart, EventKind::ToolCall, EventKind::Check].map(|k| k.as_str());
         let sql =
             format!("SELECT {EVENT_COLS} FROM events WHERE kind = ANY($1) ORDER BY branch_id, seq");
-        let rows = self.client.query(&sql, &[&kinds.as_slice()]).await?;
+        let rows = self.db().await?.query(&sql, &[&kinds.as_slice()]).await?;
         rows.iter().map(event_from).collect()
     }
 
@@ -421,7 +400,8 @@ impl Store {
     pub async fn delete_run(&self, run_id: &str) -> Result<()> {
         let ids = self.run_branches(run_id).await?;
         // One statement, so the branch/parent foreign keys are checked at its end.
-        self.client
+        self.db()
+            .await?
             .execute(
                 "WITH ev AS (DELETE FROM events WHERE branch_id = ANY($2)),
                       br AS (DELETE FROM branches WHERE run_id = $1)
@@ -435,7 +415,8 @@ impl Store {
     /// True if some branch of the run has status `running`.
     pub async fn run_has_running(&self, run_id: &str) -> Result<bool> {
         Ok(self
-            .client
+            .db()
+            .await?
             .query_one(
                 "SELECT EXISTS (SELECT 1 FROM branches WHERE run_id = $1 AND status = 'running')",
                 &[&run_id],
@@ -446,7 +427,8 @@ impl Store {
 
     pub async fn run_exists(&self, run_id: &str) -> Result<bool> {
         Ok(self
-            .client
+            .db()
+            .await?
             .query_one(
                 "SELECT EXISTS (SELECT 1 FROM runs WHERE id = $1)",
                 &[&run_id],
@@ -468,7 +450,8 @@ impl Store {
     ) -> Result<()> {
         let lock = self.lock_for(to_branch);
         let _g = lock.lock().await;
-        self.client
+        self.db()
+            .await?
             .execute(
                 "INSERT INTO events (branch_id, seq, at, agent, kind, payload)
                  SELECT $2, seq, at, agent, kind, payload FROM events

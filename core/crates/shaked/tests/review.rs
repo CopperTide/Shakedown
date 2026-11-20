@@ -25,20 +25,12 @@ use support::{pg, run};
 
 mod support;
 
-fn db_name() -> String {
-    format!(
-        "shakedown_test_review_{}",
-        &uuid::Uuid::new_v4().simple().to_string()[..8]
-    )
-}
-
 #[test]
 fn reviews_are_stored_once_kept_and_replaced_only_when_asked() {
     run(async {
         let admin = pg::admin();
-        let name = db_name();
         let clean = pg::Cleanup::new();
-        clean.add(&name);
+        let name = pg::fresh_db("review", &clean).await;
         let store = Store::open_named(&admin, &name).await.unwrap();
         let key = review::branch_key("b1");
         assert!(store.review(&key).await.unwrap().is_none());

@@ -358,19 +358,18 @@ fn assert_external_report(r: &Value, peaks: &[f64]) {
     assert_eq!(seen, (&json!(min), &json!(max)), "{peak}");
 }
 
-/// A fresh metadata database's name, dropped with the returned guard.
-fn fresh_db() -> (String, Cleanup) {
-    let id = uuid::Uuid::new_v4().simple().to_string();
-    let name = format!("shakedown_test_suites_restart_{}", &id[..8]);
+/// A fresh metadata database's name (copied from the migrated template), dropped with the
+/// returned guard.
+async fn fresh_db() -> (String, Cleanup) {
     let clean = Cleanup::new();
-    clean.add(&name);
+    let name = pg::fresh_db("suites_restart", &clean).await;
     (name, clean)
 }
 
 #[test]
 fn a_builtin_suite_left_running_is_stopped_when_shaked_starts_again() {
     run(async {
-        let (name, _clean) = fresh_db();
+        let (name, _clean) = fresh_db().await;
         let store = Store::open_named(&pg::admin(), &name).await.unwrap();
         let team: Team = serde_json::from_value(team_data()).unwrap();
         let (tasks, scenario) = (vec!["t1".to_string()], Default::default());
@@ -405,7 +404,7 @@ fn a_builtin_suite_left_running_is_stopped_when_shaked_starts_again() {
 #[test]
 fn a_suite_keeps_its_scenario() {
     run(async {
-        let (name, _clean) = fresh_db();
+        let (name, _clean) = fresh_db().await;
         let store = Store::open_named(&pg::admin(), &name).await.unwrap();
         let team: Team = serde_json::from_value(team_data()).unwrap();
         let tasks = vec!["t1".to_string()];
@@ -443,7 +442,7 @@ fn jam(after: i64) -> shaked::scenario::Scenario {
 #[test]
 fn a_suite_varies_its_runs_over_its_scenarios() {
     run(async {
-        let (name, _clean) = fresh_db();
+        let (name, _clean) = fresh_db().await;
         let store = Store::open_named(&pg::admin(), &name).await.unwrap();
         let team: Team = serde_json::from_value(team_data()).unwrap();
         let tasks = vec!["t1".to_string()];

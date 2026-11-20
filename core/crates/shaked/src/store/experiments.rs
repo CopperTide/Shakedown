@@ -16,24 +16,6 @@ use crate::{
     suite::Suite,
 };
 
-pub(super) const SCHEMA: &str = r#"
-CREATE TABLE IF NOT EXISTS experiments (
-    id text PRIMARY KEY,
-    name text NOT NULL,
-    task_id text NOT NULL,
-    benchmark text NOT NULL,
-    runs integer NOT NULL,
-    created_at timestamptz NOT NULL DEFAULT now(),
-    ended_at timestamptz,
-    error text
-);
-"#;
-
-/// Experiments shaked was driving when it stopped get no more runs (their suites are built-in
-/// ones, which `suites::INTERRUPT` ends).
-pub(super) const INTERRUPT: &str = "UPDATE experiments SET ended_at = now(), \
-     error = 'shaked stopped before the experiment finished' WHERE ended_at IS NULL";
-
 const COLS: &str = "id, name, task_id, benchmark, runs, created_at, ended_at, error";
 
 /// One setup of a new experiment: its name, team and runner.
@@ -103,7 +85,7 @@ impl Store {
                    VALUES ($1, $2, $3, $4, $5)";
         let params: [&(dyn tokio_postgres::types::ToSql + Sync); 5] =
             [&id, &new.name, &new.task, &new.benchmark, &new.runs];
-        self.client.execute(sql, &params).await?;
+        self.db().await?.execute(sql, &params).await?;
         let tasks = [new.task.to_string()];
         let mut suites = vec![];
         for (ord, s) in (0..).zip(new.setups) {
@@ -123,13 +105,13 @@ impl Store {
     /// Every experiment, newest first.
     pub async fn experiments(&self) -> Result<Vec<Experiment>> {
         let sql = format!("SELECT {COLS} FROM experiments ORDER BY created_at DESC, id");
-        let rows = self.client.query(&sql, &[]).await?;
+        let rows = self.db().await?.query(&sql, &[]).await?;
         Ok(rows.iter().map(experiment_from).collect())
     }
 
     pub async fn experiment(&self, id: &str) -> Result<Option<Experiment>> {
         let sql = format!("SELECT {COLS} FROM experiments WHERE id = $1");
-        let row = self.client.query_opt(&sql, &[&id]).await?;
+        let row = self.db().await?.query_opt(&sql, &[&id]).await?;
         Ok(row.as_ref().map(experiment_from))
     }
 
@@ -137,14 +119,14 @@ impl Store {
     pub async fn experiment_suites(&self, id: &str) -> Result<Vec<Suite>> {
         let sql =
             format!("SELECT {SUITE_COLS} FROM suites WHERE experiment_id = $1 ORDER BY setup_ord");
-        let rows = self.client.query(&sql, &[&id]).await?;
+        let rows = self.db().await?.query(&sql, &[&id]).await?;
         rows.iter().map(suite_from).collect()
     }
 
     /// True once the experiment ended (finished or stopped); a missing one counts as ended.
     pub async fn experiment_ended(&self, id: &str) -> Result<bool> {
         let sql = "SELECT ended_at IS NOT NULL AS ended FROM experiments WHERE id = $1";
-        let row = self.client.query_opt(sql, &[&id]).await?;
+        let row = self.db().await?.query_opt(sql, &[&id]).await?;
         Ok(row.is_none_or(|r| r.get("ended")))
     }
 
@@ -155,7 +137,7 @@ impl Store {
                               WHERE id = $1 AND ended_at IS NULL RETURNING id)
                    UPDATE suites SET ended_at = now(), error = $2
                    FROM e WHERE suites.experiment_id = e.id AND suites.ended_at IS NULL";
-        self.client.execute(sql, &[&id, &error]).await?;
+        self.db().await?.execute(sql, &[&id, &error]).await?;
         Ok(())
     }
 }

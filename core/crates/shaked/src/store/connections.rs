@@ -11,18 +11,6 @@ use tokio_postgres::Row;
 
 use super::{new_id, Store};
 
-pub(super) const SCHEMA: &str = r#"
-CREATE TABLE IF NOT EXISTS connections (
-    id text PRIMARY KEY,
-    name text NOT NULL,
-    kind text NOT NULL DEFAULT 'code',
-    command jsonb NOT NULL,
-    workdir text,
-    env jsonb NOT NULL DEFAULT '{}',
-    created_at timestamptz NOT NULL DEFAULT now()
-);
-"#;
-
 const COLS: &str = "id, name, kind, command, workdir, env, created_at";
 
 /// What a value of an env var whose name says it is a secret reads as in answers.
@@ -96,27 +84,28 @@ impl Store {
         );
         let params: [&(dyn tokio_postgres::types::ToSql + Sync); 5] =
             [&id, &new.name, &command, &new.workdir, &env];
-        let row = self.client.query_one(&sql, &params).await?;
+        let row = self.db().await?.query_one(&sql, &params).await?;
         connection_from(&row)
     }
 
     /// Every connection, newest first.
     pub async fn connections(&self) -> Result<Vec<Connection>> {
         let sql = format!("SELECT {COLS} FROM connections ORDER BY created_at DESC, id");
-        let rows = self.client.query(&sql, &[]).await?;
+        let rows = self.db().await?.query(&sql, &[]).await?;
         rows.iter().map(connection_from).collect()
     }
 
     pub async fn connection(&self, id: &str) -> Result<Option<Connection>> {
         let sql = format!("SELECT {COLS} FROM connections WHERE id = $1");
-        let row = self.client.query_opt(&sql, &[&id]).await?;
+        let row = self.db().await?.query_opt(&sql, &[&id]).await?;
         row.as_ref().map(connection_from).transpose()
     }
 
     /// Deletes the connection: false when there was none. Runs that used it keep its id.
     pub async fn delete_connection(&self, id: &str) -> Result<bool> {
         let n = self
-            .client
+            .db()
+            .await?
             .execute("DELETE FROM connections WHERE id = $1", &[&id])
             .await?;
         Ok(n > 0)

@@ -9,29 +9,6 @@ use tokio_postgres::Row;
 
 use super::Store;
 
-pub(super) const SCHEMA: &str = r#"
-CREATE TABLE IF NOT EXISTS reviews (
-    key text PRIMARY KEY,
-    kind text NOT NULL,
-    status text NOT NULL,
-    model text NOT NULL,
-    review jsonb,
-    issues jsonb NOT NULL DEFAULT '[]',
-    error text,
-    cost_usd double precision,
-    cost_source text,
-    tokens bigint,
-    seconds double precision,
-    digest_bytes bigint,
-    created_at timestamptz NOT NULL DEFAULT now(),
-    finished_at timestamptz
-);
-"#;
-
-/// Reviews that were running when shaked stopped won't finish.
-pub(super) const INTERRUPT: &str = "UPDATE reviews SET status = 'error', finished_at = now(), \
-     error = 'shaked stopped before the review finished' WHERE status = 'running'";
-
 const COLS: &str =
     "key, kind, status, model, review, issues, error, cost_usd, cost_source, tokens, \
      seconds, digest_bytes, created_at, finished_at";
@@ -92,7 +69,7 @@ fn review_from(r: &Row) -> StoredReview {
 impl Store {
     pub async fn review(&self, key: &str) -> Result<Option<StoredReview>> {
         let sql = format!("SELECT {COLS} FROM reviews WHERE key = $1");
-        let row = self.client.query_opt(&sql, &[&key]).await?;
+        let row = self.db().await?.query_opt(&sql, &[&key]).await?;
         Ok(row.as_ref().map(review_from))
     }
 
@@ -113,14 +90,19 @@ impl Store {
              WHERE reviews.status <> 'running'
              RETURNING {COLS}"
         );
-        let row = self.client.query_opt(&sql, &[&key, &kind, &model]).await?;
+        let row = self
+            .db()
+            .await?
+            .query_opt(&sql, &[&key, &kind, &model])
+            .await?;
         Ok(row.as_ref().map(review_from))
     }
 
     pub async fn finish_review(&self, key: &str, done: ReviewDone<'_>) -> Result<()> {
         let issues = serde_json::to_value(done.issues)?;
         let bytes = done.digest_bytes as i64;
-        self.client
+        self.db()
+            .await?
             .execute(
                 "UPDATE reviews SET status = 'done', review = $2, issues = $3, cost_usd = $4,
                      cost_source = $5, tokens = $6, seconds = $7, digest_bytes = $8,
@@ -142,7 +124,7 @@ impl Store {
     }
 
     pub async fn fail_review(&self, key: &str, error: &str) -> Result<()> {
-        self.client
+        self.db().await?
             .execute(
                 "UPDATE reviews SET status = 'error', error = $2, finished_at = now() WHERE key = $1",
                 &[&key, &error],

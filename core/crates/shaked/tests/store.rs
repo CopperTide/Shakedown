@@ -14,19 +14,10 @@ fn team() -> Team {
     }
 }
 
-fn db_name(tag: &str) -> String {
-    format!(
-        "shakedown_test_{}_{}",
-        tag,
-        &uuid::Uuid::new_v4().simple().to_string()[..8]
-    )
-}
-
 async fn fresh(tag: &str) -> (Admin, String, Store, pg::Cleanup) {
     let admin = pg::admin();
-    let name = db_name(tag);
     let clean = pg::Cleanup::new();
-    clean.add(&name);
+    let name = pg::fresh_db(tag, &clean).await;
     let store = Store::open_named(&admin, &name).await.unwrap();
     (admin, name, store, clean)
 }
@@ -260,7 +251,7 @@ fn one_run_reads_as_the_list_has_it() {
 fn the_store_keeps_an_old_named_database_until_a_new_one_exists() {
     run(async {
         let admin = pg::admin();
-        let (new, old) = (db_name("pick_new"), db_name("pick_old"));
+        let (new, old) = (pg::db_name("pick_new"), pg::db_name("pick_old"));
         let clean = pg::Cleanup::new();
         clean.add(&new);
         clean.add(&old);

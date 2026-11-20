@@ -13,6 +13,7 @@ pub mod flow;
 pub mod fork;
 pub mod gateway;
 pub mod gc;
+pub mod jobs;
 pub mod launch;
 pub mod live;
 pub mod mcp;

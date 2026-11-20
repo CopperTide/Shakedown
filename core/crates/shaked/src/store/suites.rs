@@ -12,46 +12,6 @@ use crate::{
     suite::{slots_of, variant_count, Slot, Suite},
 };
 
-pub(super) const SCHEMA: &str = r#"
-CREATE TABLE IF NOT EXISTS suites (
-    id text PRIMARY KEY,
-    name text NOT NULL,
-    team jsonb NOT NULL,
-    tasks jsonb NOT NULL,
-    repeats integer NOT NULL,
-    runner text NOT NULL,
-    benchmark text NOT NULL,
-    created_at timestamptz NOT NULL DEFAULT now(),
-    ended_at timestamptz,
-    error text
-);
-CREATE TABLE IF NOT EXISTS suite_runs (
-    suite_id text NOT NULL REFERENCES suites(id),
-    ord integer NOT NULL,
-    task_id text NOT NULL,
-    repeat integer NOT NULL,
-    claimed boolean NOT NULL DEFAULT false,
-    run_id text,
-    branch_id text,
-    error text,
-    PRIMARY KEY (suite_id, ord)
-);
-ALTER TABLE suites ADD COLUMN IF NOT EXISTS scenario jsonb NOT NULL DEFAULT '{}';
-ALTER TABLE suites ADD COLUMN IF NOT EXISTS variants jsonb NOT NULL DEFAULT '[]';
-ALTER TABLE suite_runs ADD COLUMN IF NOT EXISTS variant integer NOT NULL DEFAULT 0;
-ALTER TABLE suites ADD COLUMN IF NOT EXISTS experiment_id text;
-ALTER TABLE suites ADD COLUMN IF NOT EXISTS setup_ord integer;
-ALTER TABLE suites ADD COLUMN IF NOT EXISTS max_cost_usd double precision;
-ALTER TABLE suites ADD COLUMN IF NOT EXISTS connection text;
-ALTER TABLE suites ADD COLUMN IF NOT EXISTS base_seed bigint;
-ALTER TABLE suites ADD COLUMN IF NOT EXISTS world_minutes double precision;
-"#;
-
-/// Built-in suites shaked was driving when it stopped get no more runs.
-pub(super) const INTERRUPT: &str = "UPDATE suites SET ended_at = now(), \
-     error = 'shaked stopped before the suite finished' \
-     WHERE (runner <> 'external' OR connection IS NOT NULL) AND ended_at IS NULL";
-
 pub(super) const SUITE_COLS: &str =
     "id, name, team, tasks, repeats, runner, benchmark, created_at, ended_at, error, scenario, variants, \
      experiment_id, setup_ord, max_cost_usd, connection, base_seed, world_minutes";
@@ -198,7 +158,7 @@ impl Store {
             &of.map(|o| o.base_seed as i64), // at most 2^53 - 1
             &of.and_then(|o| o.world_minutes),
         ];
-        self.client.execute(INSERT_SUITE, &params).await?;
+        self.db().await?.execute(INSERT_SUITE, &params).await?;
         self.just_stored(&id).await
     }
 
@@ -211,20 +171,20 @@ impl Store {
     /// Every suite, newest first.
     pub async fn suites(&self) -> Result<Vec<Suite>> {
         let sql = format!("SELECT {SUITE_COLS} FROM suites ORDER BY created_at DESC, id");
-        let rows = self.client.query(&sql, &[]).await?;
+        let rows = self.db().await?.query(&sql, &[]).await?;
         rows.iter().map(suite_from).collect()
     }
 
     pub async fn suite(&self, id: &str) -> Result<Option<Suite>> {
         let sql = format!("SELECT {SUITE_COLS} FROM suites WHERE id = $1");
-        let row = self.client.query_opt(&sql, &[&id]).await?;
+        let row = self.db().await?.query_opt(&sql, &[&id]).await?;
         row.as_ref().map(suite_from).transpose()
     }
 
     /// The suite's slots, in run order.
     pub async fn slots(&self, suite: &str) -> Result<Vec<Slot>> {
         let sql = format!("SELECT {SLOT_COLS} FROM suite_runs WHERE suite_id = $1 ORDER BY ord");
-        let rows = self.client.query(&sql, &[&suite]).await?;
+        let rows = self.db().await?.query(&sql, &[&suite]).await?;
         Ok(rows.iter().map(slot_from).collect())
     }
 
@@ -236,7 +196,7 @@ impl Store {
                  SELECT min(ord) FROM suite_runs WHERE suite_id = $1 AND NOT claimed)
              RETURNING {SLOT_COLS}"
         );
-        let row = self.client.query_opt(&sql, &[&suite]).await?;
+        let row = self.db().await?.query_opt(&sql, &[&suite]).await?;
         Ok(row.as_ref().map(slot_from))
     }
 
@@ -244,7 +204,8 @@ impl Store {
     pub async fn fill_slot(&self, suite: &str, ord: i32, run: &str, branch: &str) -> Result<()> {
         let sql =
             "UPDATE suite_runs SET run_id = $3, branch_id = $4 WHERE suite_id = $1 AND ord = $2";
-        self.client
+        self.db()
+            .await?
             .execute(sql, &[&suite, &ord, &run, &branch])
             .await?;
         Ok(())
@@ -253,14 +214,17 @@ impl Store {
     /// Records why a slot's run could not start.
     pub async fn slot_failed(&self, suite: &str, ord: i32, error: &str) -> Result<()> {
         let sql = "UPDATE suite_runs SET error = $3 WHERE suite_id = $1 AND ord = $2";
-        self.client.execute(sql, &[&suite, &ord, &error]).await?;
+        self.db()
+            .await?
+            .execute(sql, &[&suite, &ord, &error])
+            .await?;
         Ok(())
     }
 
     /// Records that shaked stopped driving a built-in suite, with why when it stopped early.
     pub async fn end_suite(&self, suite: &str, error: Option<&str>) -> Result<()> {
         let sql = "UPDATE suites SET ended_at = now(), error = $2 WHERE id = $1";
-        self.client.execute(sql, &[&suite, &error]).await?;
+        self.db().await?.execute(sql, &[&suite, &error]).await?;
         Ok(())
     }
 }

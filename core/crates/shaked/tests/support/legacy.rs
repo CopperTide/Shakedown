@@ -135,3 +135,35 @@ fn run_events<'a>(team: &'a Team, snap: &str) -> Vec<(Option<&'a str>, EventKind
     events.push((None, EventKind::Check, check));
     events
 }
+
+/// The tables shaked kept in `public` until 2026-11-20 (its SCHEMA strings at bb8e7e8).
+pub const TODAYS_PUBLIC_SCHEMA: &str =
+    include_str!("../../../coppertide-schema/tests/fixtures/shaked-bb8e7e8.sql");
+
+/// Makes database `name` as an old shaked left it: its tables in `public`, one run with a root
+/// branch and two events. The run's and the branch's ids.
+pub async fn old_public_db(name: &str) -> (String, String) {
+    admin().create_db_from(name, "template1").await.unwrap();
+    let (run, branch) = (
+        "0123456789abcdef0123456789abcdef",
+        "fedcba9876543210fedcba9876543210",
+    );
+    let team = r#"{"id":"t","name":"T","agents":[]}"#;
+    let sql = format!(
+        "{TODAYS_PUBLIC_SCHEMA}
+         INSERT INTO runs (id, task_id, team) VALUES ('{run}', 'task', '{team}');
+         INSERT INTO branches (id, run_id, team) VALUES ('{branch}', '{run}', '{team}');
+         INSERT INTO events (branch_id, seq, kind, payload) VALUES
+           ('{branch}', 1, 'message', '{{\"text\": \"first\"}}'),
+           ('{branch}', 2, 'message', '{{\"text\": \"kept\"}}');"
+    );
+    let url = admin().db_url(name);
+    let (client, conn) = tokio_postgres::connect(&url, tokio_postgres::NoTls)
+        .await
+        .unwrap();
+    let task = tokio::spawn(conn);
+    client.batch_execute(&sql).await.unwrap();
+    drop(client);
+    let _ = task.await;
+    (run.to_string(), branch.to_string())
+}

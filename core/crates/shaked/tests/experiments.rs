@@ -433,19 +433,18 @@ fn an_experiment_takes_more_than_four_setups_and_a_hundred_runs() {
     });
 }
 
-/// A fresh metadata database's name, dropped with the returned guard.
-fn fresh_db() -> (String, Cleanup) {
-    let id = uuid::Uuid::new_v4().simple().to_string();
-    let name = format!("shakedown_test_experiments_restart_{}", &id[..8]);
+/// A fresh metadata database's name (copied from the migrated template), dropped with the
+/// returned guard.
+async fn fresh_db() -> (String, Cleanup) {
     let clean = Cleanup::new();
-    clean.add(&name);
+    let name = pg::fresh_db("experiments_restart", &clean).await;
     (name, clean)
 }
 
 #[test]
 fn an_experiment_left_running_is_stopped_when_shaked_starts_again() {
     run(async {
-        let (name, _clean) = fresh_db();
+        let (name, _clean) = fresh_db().await;
         let store = Store::open_named(&pg::admin(), &name).await.unwrap();
         let (_, exp) = stored(&store).await;
         drop(store);

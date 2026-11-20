@@ -5,6 +5,8 @@ edition = "2021"
 
 [dependencies]
 parts = { path = "../parts" }
+coppertide-schema = { path = "../coppertide-schema" }
+deadpool-postgres = { version = "0.14", default-features = false, features = ["rt_tokio_1"] }
 tokio = { workspace = true }
 tokio-postgres = { workspace = true }
 serde = { workspace = true }
