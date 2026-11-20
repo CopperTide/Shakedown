@@ -157,7 +157,8 @@ pub struct AppState {
     /// Branches currently running, by branch id.
     pub live: LiveBranches,
     pub config: Config,
-    /// Shared HTTP client (gateway upstream and open agent loop).
+    /// Shared HTTP client (gateway upstream, open agent loop, key tests and model lists), guarded
+    /// by the layer's policy ([`crate::providers::reach::guard`]).
     pub http: reqwest::Client,
     /// Set once, after the `Arc<AppState>` exists (the open driver holds a `Weak` to it).
     pub drivers: OnceLock<Drivers>,
@@ -175,13 +176,19 @@ pub struct AppState {
     pub objects: Option<Arc<crate::objects::ObjectStores>>,
 }
 
+/// The shared HTTP client, guarded by `policy` ([`crate::providers::reach::guard`]).
+fn shared_client(policy: &crate::layer::Policy) -> reqwest::Client {
+    let http = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(300));
+    crate::providers::reach::guard(http, policy)
+        .build()
+        .expect("http client")
+}
+
 impl AppState {
     pub fn new(store: Arc<Store>, hub: Arc<Hub>, config: Config) -> AppState {
-        let http = reqwest::Client::builder()
-            .connect_timeout(std::time::Duration::from_secs(10))
-            .timeout(std::time::Duration::from_secs(300))
-            .build()
-            .expect("http client");
+        let http = shared_client(store.layer().policy());
         let named = config.start_benchmark.clone();
         let benchmark = named.clone().unwrap_or_else(|| only_benchmark(&hub));
         let remembered = || crate::worlds::remembered(&hub, config.worlds_dir.as_deref());

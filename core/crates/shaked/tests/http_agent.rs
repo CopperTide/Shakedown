@@ -410,3 +410,31 @@ fn teams_with_an_http_agent_are_refused_where_it_cannot_run() {
         );
     });
 }
+
+/// C2: where private URLs are forbidden (a shaked that serves others), `POST /api/agents/check`
+/// never reaches an agent on a private address: it is refused before any request leaves.
+#[test]
+fn a_hosted_check_never_reaches_a_private_agent() {
+    run(async {
+        let seen = Shared::default();
+        let agent = agent_server(seen.clone()).await;
+        let hosted = shaked::layer::Policy {
+            serves_others: true,
+            private_model_urls: false,
+            runs_packages_here: false,
+        };
+        let spy = shaked::harness::SpyLayer::new().with_policy(hosted);
+        let fx = AppFx::idle("http_agent", "hostedcheck")
+            .layer(Arc::new(spy))
+            .start()
+            .await;
+        for url in [format!("{agent}/error"), "https://127.0.0.1:9/ok".into()] {
+            let body = json!({"kind": "http", "url": url});
+            let (st, v) = fx.post("/api/agents/check", body).await;
+            assert_eq!((st, &v["ok"]), (200, &json!(false)), "{v}");
+            let error = v["error"].as_str().unwrap();
+            assert!(error.contains("an agent"), "{v}");
+        }
+        assert!(seen.lock().unwrap().bodies.is_empty(), "no request left");
+    })
+}

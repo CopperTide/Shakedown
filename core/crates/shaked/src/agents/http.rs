@@ -19,6 +19,7 @@ use serde_json::{json, Value};
 
 use super::{AgentResult, AgentRun, Driver, FailureKind};
 use crate::{
+    layer::Policy,
     model::{AgentSpec, TokenUsage},
     store::Store,
 };
@@ -43,8 +44,8 @@ pub struct HttpDriver {
 
 impl HttpDriver {
     pub fn new(agent_base: String, store: Arc<Store>, timeout: Duration) -> HttpDriver {
-        let http = reqwest::Client::builder()
-            .connect_timeout(Duration::from_secs(10))
+        let http = reqwest::Client::builder().connect_timeout(Duration::from_secs(10));
+        let http = crate::providers::reach::guard(http, store.layer().policy())
             .build()
             .expect("http client");
         HttpDriver {
@@ -162,26 +163,35 @@ fn answered(host: &str, status: u16, body: &str) -> AgentResult {
 /// protocol name, for agents written before 2026-11-19 that check the name. The last answer.
 async fn post_speaking(
     http: &reqwest::Client,
+    policy: &Policy,
     spec: &AgentSpec,
     body: &Value,
 ) -> Result<(u16, String), String> {
-    let first = post(http, spec, body).await?;
+    let first = post(http, policy, spec, body).await?;
     if !(400..500).contains(&first.0) {
         return Ok(first);
     }
     let mut old = body.clone();
     old["protocol"] = json!(OLD_PROTOCOL);
-    post(http, spec, &old).await
+    post(http, policy, spec, &old).await
 }
 
-/// POSTs `body` to the agent; the status and body of its answer.
+/// What the reach checks call an agent.
+const AN_AGENT: &str = "an agent";
+
+/// POSTs `body` to the agent, once its URL passes the policy's reach checks (where private URLs
+/// are forbidden, an https URL on public addresses only); the status and body of its answer.
 async fn post(
     http: &reqwest::Client,
+    policy: &Policy,
     spec: &AgentSpec,
     body: &Value,
 ) -> Result<(u16, String), String> {
     let url = spec.url.as_deref().unwrap_or_default();
     let host = host_of(url);
+    crate::providers::reach::reach_as(url, policy, AN_AGENT)
+        .await
+        .map_err(|why| format!("the agent at {host} cannot be reached from here: {why}"))?;
     let r = http
         .post(url)
         .headers(headers_of(spec)?)
@@ -200,10 +210,15 @@ async fn post(
 }
 
 /// What a hello learnt: the name the agent gives itself, if any.
-pub async fn hello(http: &reqwest::Client, spec: &AgentSpec) -> Result<Option<String>, String> {
+pub async fn hello(
+    http: &reqwest::Client,
+    policy: &Policy,
+    spec: &AgentSpec,
+) -> Result<Option<String>, String> {
     let host = host_of(spec.url.as_deref().unwrap_or_default());
     let body = json!({"protocol": PROTOCOL, "type": "hello"});
-    let (status, text) = tokio::time::timeout(HELLO_TIMEOUT, post_speaking(http, spec, &body))
+    let said = post_speaking(http, policy, spec, &body);
+    let (status, text) = tokio::time::timeout(HELLO_TIMEOUT, said)
         .await
         .map_err(|_| {
             format!(
@@ -212,6 +227,10 @@ pub async fn hello(http: &reqwest::Client, spec: &AgentSpec) -> Result<Option<St
             )
         })??;
     if !(200..300).contains(&status) {
+        // Where shaked serves others its answer never carries another server's body.
+        if !policy.private_model_urls {
+            return Err(format!("the agent at {host} answered HTTP {status}"));
+        }
         let tail: String = text.trim().chars().take(300).collect();
         return Err(format!(
             "the agent at {host} answered HTTP {status}: {tail}"
@@ -278,7 +297,10 @@ impl HttpDriver {
         let waited = run
             .branch
             .flow
-            .timeout(self.timeout, post_speaking(&self.http, &run.spec, &body))
+            .timeout(
+                self.timeout,
+                post_speaking(&self.http, self.store.layer().policy(), &run.spec, &body),
+            )
             .await;
         let mut r = match waited {
             None => {
