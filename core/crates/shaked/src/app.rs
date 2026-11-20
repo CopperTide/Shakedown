@@ -53,6 +53,14 @@ pub struct Config {
     /// The benchmark to start on (`SHAKEDOWN_BENCHMARK`); it wins over the one remembered in
     /// `worlds_dir`. None: the remembered one, else the only one installed.
     pub start_benchmark: Option<String>,
+    /// Local (one user, the default) or hosted (`crate::mode`).
+    pub mode: crate::mode::Mode,
+    /// The base URL every URL handed to an agent or a caller starts with (`SHAKEDOWN_PUBLIC_URL`,
+    /// set by shaked's main). Empty means `self_base`.
+    pub public_url: String,
+    /// The Host names `/api` answers (`SHAKEDOWN_ALLOWED_HOSTS` plus the public URL's host).
+    /// Empty means this machine's loopback names only.
+    pub allowed_hosts: Vec<String>,
 }
 
 pub const DEFAULT_DRIVER_GRACE: Duration = Duration::from_secs(30);
@@ -61,6 +69,13 @@ pub const DEFAULT_RETRY_BASE: Duration = Duration::from_secs(1);
 pub const DEFAULT_PROXY_TIMEOUT: Duration = Duration::from_secs(300);
 
 pub use crate::providers::{is_openrouter_url, OPENROUTER_BASE};
+
+/// The number setting `key`, when it is set and parses.
+fn env_number(key: &str) -> Option<u64> {
+    parts::settings::var(key)
+        .ok()
+        .and_then(|v| v.trim().parse().ok())
+}
 
 impl Default for Config {
     fn default() -> Config {
@@ -74,10 +89,7 @@ impl Config {
         Config {
             providers: ProviderConfig::from_env(),
             self_base: String::new(),
-            max_db_bytes: parts::settings::var("SHAKEDOWN_MAX_DB_BYTES")
-                .ok()
-                .and_then(|v| v.trim().parse().ok())
-                .unwrap_or(DEFAULT_MAX_DB_BYTES),
+            max_db_bytes: env_number("SHAKEDOWN_MAX_DB_BYTES").unwrap_or(DEFAULT_MAX_DB_BYTES),
             retry_base: DEFAULT_RETRY_BASE,
             cors_origins: cors_origins_from(
                 &parts::settings::var("SHAKEDOWN_CORS_ORIGIN").unwrap_or_default(),
@@ -86,19 +98,42 @@ impl Config {
             http_agent_timeout: Duration::from_secs(crate::agents::CLI_TIMEOUT_SECS),
             driver_grace: DEFAULT_DRIVER_GRACE,
             code_run_limit: Duration::from_secs(
-                parts::settings::var("SHAKEDOWN_CODE_RUN_SECS")
-                    .ok()
-                    .and_then(|v| v.trim().parse().ok())
-                    .unwrap_or(crate::agents::CLI_TIMEOUT_SECS),
+                env_number("SHAKEDOWN_CODE_RUN_SECS").unwrap_or(crate::agents::CLI_TIMEOUT_SECS),
             ),
             worlds_dir: None,
-            proxy_timeout: parts::settings::var("SHAKEDOWN_PROXY_TIMEOUT_SECS")
-                .ok()
-                .and_then(|v| v.trim().parse().ok())
+            proxy_timeout: env_number("SHAKEDOWN_PROXY_TIMEOUT_SECS")
                 .map_or(DEFAULT_PROXY_TIMEOUT, Duration::from_secs),
             start_benchmark: parts::settings::var("SHAKEDOWN_BENCHMARK")
                 .ok()
                 .filter(|b| !b.is_empty()),
+            mode: crate::mode::Mode::Local,
+            public_url: String::new(),
+            allowed_hosts: Vec::new(),
+        }
+    }
+
+    /// The base of every URL handed out: `public_url`, else `self_base`, without a trailing `/`.
+    pub fn public_base(&self) -> &str {
+        match self.public_url.trim() {
+            "" => self.self_base.trim_end_matches('/'),
+            p => p.trim_end_matches('/'),
+        }
+    }
+
+    /// The base an `http` agent is told to reach shaked at: `agent_base` (the old
+    /// `SHAKEDOWN_AGENT_BASE`, for a tunnel), else the public base.
+    pub fn http_agent_base(&self) -> String {
+        match self.agent_base.trim() {
+            "" => self.public_base().to_string(),
+            b => b.to_string(),
+        }
+    }
+
+    /// The Host names `/api` answers.
+    pub fn hosts(&self) -> Vec<String> {
+        match self.allowed_hosts.is_empty() {
+            true => crate::mode::loopback_hosts(),
+            false => self.allowed_hosts.clone(),
         }
     }
 
@@ -292,21 +327,18 @@ fn only_benchmark(hub: &Hub) -> String {
     }
 }
 
-/// The real drivers for every agent kind. Call once, after `config.self_base` is final.
+/// The real drivers for every agent kind. Call once, after `config.self_base` and
+/// `config.public_url` are final: the agents get URLs on the public base.
 pub fn install_default_drivers(state: &Arc<AppState>) -> bool {
-    let base = state.config.self_base.clone();
+    let base = state.config.public_base().to_string();
     let mut m: Drivers = HashMap::new();
     m.insert(AgentKind::Open, Arc::new(OpenDriver::new(state.clone())));
     m.insert(
         AgentKind::ClaudeCode,
         Arc::new(ClaudeDriver::new(base.clone())),
     );
-    let agent_base = match state.config.agent_base.trim() {
-        "" => base.clone(),
-        b => b.to_string(),
-    };
     let http = HttpDriver::new(
-        agent_base,
+        state.config.http_agent_base(),
         state.store.clone(),
         state.config.http_agent_timeout,
     );
@@ -317,30 +349,15 @@ pub fn install_default_drivers(state: &Arc<AppState>) -> bool {
 
 /// True when `host` (a Host header value) names this machine's loopback: `127.0.0.1`, `localhost`
 /// or `[::1]`, with an optional port.
+#[cfg(test)]
 fn is_loopback_host(host: &str) -> bool {
-    let name = match host.strip_prefix('[') {
-        Some(rest) => match rest.split_once(']') {
-            Some((ip, "")) => return ip == "::1",
-            Some((ip, port)) => {
-                return ip == "::1"
-                    && port
-                        .strip_prefix(':')
-                        .is_some_and(|p| p.parse::<u16>().is_ok())
-            }
-            None => return false,
-        },
-        None => match host.split_once(':') {
-            Some((n, port)) if port.parse::<u16>().is_ok() => n,
-            Some(_) => return false,
-            None => host,
-        },
-    };
-    name == "127.0.0.1" || name.eq_ignore_ascii_case("localhost")
+    crate::mode::host_allowed(host, &crate::mode::loopback_hosts())
 }
 
-/// DNS-rebinding guard: a web page on another origin can resolve its own name to 127.0.0.1, so the
-/// browser would send that name in `Host`. Only loopback names reach the API.
-async fn loopback_host_only(
+/// DNS-rebinding guard: a web page on another origin can resolve its own name to this machine, so
+/// the browser would send that name in `Host`. Only the allowed names reach the API.
+async fn allowed_host(
+    axum::extract::State(hosts): axum::extract::State<Arc<Vec<String>>>,
     req: axum::extract::Request,
     next: axum::middleware::Next,
 ) -> axum::response::Response {
@@ -349,7 +366,7 @@ async fn loopback_host_only(
         .headers()
         .get(axum::http::header::HOST)
         .and_then(|h| h.to_str().ok())
-        .is_some_and(is_loopback_host);
+        .is_some_and(|h| crate::mode::host_allowed(h, &hosts));
     if !ok {
         return (
             axum::http::StatusCode::FORBIDDEN,
@@ -358,6 +375,19 @@ async fn loopback_host_only(
             .into_response();
     }
     next.run(req).await
+}
+
+/// Hosted mode until shaked can tell who is calling: routes that change this machine's worlds are
+/// refused (403), and every other `/api` request asks the caller to sign in (401). Fails closed.
+async fn hosted_gate(req: axum::extract::Request) -> axum::response::Response {
+    use axum::{http::StatusCode, response::IntoResponse, Json};
+    if crate::mode::local_only_route(req.method().as_str(), req.uri().path()) {
+        let body = Json(serde_json::json!({"error": crate::mode::HOSTED_REFUSAL}));
+        return (StatusCode::FORBIDDEN, body).into_response();
+    }
+    let body =
+        Json(serde_json::json!({"error": "sign in through the gateway or send an API token"}));
+    (StatusCode::UNAUTHORIZED, body).into_response()
 }
 
 /// The origins of `SHAKEDOWN_CORS_ORIGIN` (comma-separated, each `http(s)://host[:port]` without a
@@ -434,8 +464,15 @@ fn preflight_answer() -> axum::response::Response {
 
 pub fn router(state: Arc<AppState>) -> Router {
     let origins = Arc::new(state.config.cors_origins.clone());
-    let api = crate::api::router()
-        .layer(axum::middleware::from_fn(loopback_host_only))
+    let hosts = Arc::new(state.config.hosts());
+    let mut api = crate::api::router();
+    if state.config.mode == crate::mode::Mode::Hosted {
+        api = api.layer(axum::middleware::from_fn(
+            |req, _next: axum::middleware::Next| hosted_gate(req),
+        ));
+    }
+    let api = api
+        .layer(axum::middleware::from_fn_with_state(hosts, allowed_host))
         .layer(axum::middleware::from_fn_with_state(origins, cors));
     crate::mcp::router()
         .merge(crate::gateway::router())

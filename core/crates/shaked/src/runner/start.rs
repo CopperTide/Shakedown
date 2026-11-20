@@ -231,6 +231,8 @@ async fn start_world(
     planned: Plan,
     of: RunStartOf<'_>,
 ) -> Result<(World, i64, f64)> {
+    crate::mode::local_only(&state.config, "starting a world's parts")
+        .map_err(anyhow::Error::msg)?;
     let branch_id = of.branch_id;
     let seed = of.scenario.seed.unwrap_or_else(new_seed);
     let (hub, mut planned) = (state.hub.clone(), planned);

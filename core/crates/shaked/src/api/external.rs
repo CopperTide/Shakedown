@@ -126,7 +126,7 @@ async fn register(
     }
     let spec = external::register(&state.store, &ctx, &join).await?;
     let env = env_for(&state, &ctx, Some(&spec.id));
-    let mut v = serde_json::to_value(endpoints(&state.config.self_base, &id, &spec.id, env))?;
+    let mut v = serde_json::to_value(endpoints(state.config.public_base(), &id, &spec.id, env))?;
     v["tools"] = json!(tool_schemas(&ctx, &spec.id));
     v["spec"] = serde_json::to_value(&spec)?;
     Ok(Json(v))

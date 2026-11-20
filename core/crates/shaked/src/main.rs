@@ -1,7 +1,11 @@
 //! shaked, the Shakedown service (`cargo run -p shaked` from `core`). `core/crates/arenad-alias` builds
 //! this same file as `arenad`, its name until 2026-11-19.
 //!
-//! Environment: `SHAKEDOWN_PG_URL`, `SHAKEDOWN_PORT` (4510), `SHAKEDOWN_PROXY_PORT` (the recording proxy,
+//! Environment: `SHAKEDOWN_PG_URL`, `SHAKEDOWN_BIND` (`127.0.0.1:4510`; the old `SHAKEDOWN_PORT`
+//! still binds `127.0.0.1:<port>`), `SHAKEDOWN_PUBLIC_URL` (the base of every URL handed out;
+//! default `http://<bind>`), `SHAKEDOWN_ALLOWED_HOSTS` (more Host names `/api` answers; see
+//! `shaked::mode`), `SHAKEDOWN_MODE=hosted` or `--hosted` (a bind beyond loopback needs it),
+//! `SHAKEDOWN_PROXY_PORT` (the recording proxy,
 //! on 127.0.0.1; default: a free port), `SHAKEDOWN_PROXY_TIMEOUT_SECS` (300: how long a proxied
 //! request may take before it is answered 504),
 //! the model providers of open agents (`OPENROUTER_API_KEY`, `OPENAI_API_KEY`,
@@ -34,6 +38,7 @@ use std::{path::PathBuf, sync::Arc};
 use parts::{proto::BenchDescribe, Hub, Registry};
 use shaked::{
     app::{self, AppState, Config},
+    mode::{Bind, Mode},
     pg::Admin,
     store::Store,
 };
@@ -89,25 +94,44 @@ fn hub(pg_url: &str, worlds: &std::path::Path) -> anyhow::Result<Hub> {
 }
 
 /// The store and the hub.
-async fn app_state(url: &str, port: u16) -> anyhow::Result<Arc<AppState>> {
+async fn app_state(url: &str, bind: &Bind, mode: Mode) -> anyhow::Result<Arc<AppState>> {
     let admin = Admin::connect(url).await?;
     let store = Arc::new(Store::open(&admin).await?);
     let worlds = worlds_dir()?;
     let hub = Arc::new(hub(url, &worlds)?);
     let mut config = Config::new();
-    config.self_base = format!("http://127.0.0.1:{port}");
+    config.self_base = format!("http://{}", loopback_of(bind.addr));
+    config.public_url = bind.public_url.to_string();
+    config.allowed_hosts = bind.allowed_hosts.clone();
+    config.mode = mode;
     config.worlds_dir = Some(worlds);
     Ok(Arc::new(AppState::new(store, hub, config)))
 }
 
-/// `SHAKEDOWN_PORT`, or 4510.
-fn port_from_env() -> anyhow::Result<u16> {
-    match parts::settings::var("SHAKEDOWN_PORT") {
-        Ok(p) => p
-            .parse()
-            .map_err(|_| anyhow::anyhow!("SHAKEDOWN_PORT {p:?} is not a port number")),
-        Err(_) => Ok(4510),
+/// Where shaked reaches itself: `addr`, or loopback on its port when it listens on every address.
+fn loopback_of(addr: std::net::SocketAddr) -> std::net::SocketAddr {
+    match addr.ip().is_unspecified() {
+        true => std::net::SocketAddr::from(([127, 0, 0, 1], addr.port())),
+        false => addr,
     }
+}
+
+/// The mode (`--hosted`, `SHAKEDOWN_MODE`) and where to listen.
+fn mode_and_bind() -> anyhow::Result<(Mode, Bind)> {
+    let mode = Mode::from_args_and_env(
+        std::env::args(),
+        parts::settings::var("SHAKEDOWN_MODE").ok(),
+    );
+    let bind = shaked::mode::bind_from(|k| parts::settings::var(k).ok(), mode == Mode::Hosted)
+        .map_err(anyhow::Error::msg)?;
+    if mode == Mode::Hosted {
+        // Hosted needs the org-aware store and request auth, which land later in milestone 1.
+        anyhow::bail!(
+            "hosted mode is not available in this build yet: {}",
+            shaked::mode::HOSTED_REFUSAL
+        );
+    }
+    Ok((mode, bind))
 }
 
 /// The modes this machine can run, for the startup line.
@@ -171,11 +195,11 @@ async fn start_proxy(state: &std::sync::Arc<shaked::app::AppState>) -> anyhow::R
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    let (mode, bind) = mode_and_bind()?;
     let url = shaked::pg::configured_url().await;
-    let port = port_from_env()?;
     let ui_dist = ui_dist_from_env();
 
-    let state = app_state(&url, port).await?;
+    let state = app_state(&url, &bind, mode).await?;
     let bench = state.startup_bench().await?;
     if std::env::args().nth(1).as_deref() == Some("base") {
         return build_base(&state, &bench).await;
@@ -188,10 +212,12 @@ async fn main() -> anyhow::Result<()> {
     if let Some(dist) = &ui_dist {
         router = shaked::api::with_ui(router, dist.clone());
     }
-    let listener = tokio::net::TcpListener::bind(("127.0.0.1", port)).await?;
+    let listener = tokio::net::TcpListener::bind(bind.addr).await?;
     start_proxy(&state).await?;
     println!(
-        "shaked: listening on http://127.0.0.1:{port} (benchmark: {} {}; modes: {}; ui: {})",
+        "shaked: listening on http://{} as {} (benchmark: {} {}; modes: {}; ui: {})",
+        bind.addr,
+        state.config.public_base(),
         bench.name,
         bench.version,
         available_modes(&state).join(", "),

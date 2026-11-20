@@ -18,6 +18,7 @@ pub mod launch;
 pub mod live;
 pub mod mcp;
 pub mod metrics;
+pub mod mode;
 pub mod model;
 pub mod overhead;
 pub mod pg;

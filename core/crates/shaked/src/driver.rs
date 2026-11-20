@@ -166,15 +166,23 @@ async fn time_env(
     env
 }
 
-/// Starts `conn`'s command for the run `ids` and watches it (see the module's notes).
-pub async fn launch(state: &Arc<AppState>, conn: &Connection, ids: RunIds<'_>) -> Result<Launched> {
-    let ctx = state.live.get(ids.branch_id);
+/// What the driver of `branch` gets besides its ids: the world's variables and its time.
+async fn launch_env(state: &Arc<AppState>, branch: &str) -> BTreeMap<String, String> {
+    let ctx = state.live.get(branch);
     let mut world_env = ctx
         .as_ref()
         .map(|c| env_for(state, c, None))
         .unwrap_or_default();
-    world_env.extend(time_env(state, ids.branch_id, ctx.as_deref()).await);
-    let mut cmd = command_for(&state.config.self_base, conn, &ids, &world_env)?;
+    world_env.extend(time_env(state, branch, ctx.as_deref()).await);
+    world_env
+}
+
+/// Starts `conn`'s command for the run `ids` and watches it (see the module's notes).
+pub async fn launch(state: &Arc<AppState>, conn: &Connection, ids: RunIds<'_>) -> Result<Launched> {
+    crate::mode::local_only(&state.config, "a Code connection's driver")
+        .map_err(anyhow::Error::msg)?;
+    let world_env = launch_env(state, ids.branch_id).await;
+    let mut cmd = command_for(state.config.public_base(), conn, &ids, &world_env)?;
     let what = || format!("starting the driver `{}`", conn.command.join(" "));
     let mut child = cmd.spawn().with_context(what)?;
     let launched = Launched {

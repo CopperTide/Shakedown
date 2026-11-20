@@ -135,7 +135,7 @@ async fn live_child(
     plan: ForkPlan,
     events: &[Event],
 ) -> ForkResponse {
-    let (branch_id, base) = (ctx.branch_id.clone(), &state.config.self_base);
+    let (branch_id, base) = (ctx.branch_id.clone(), state.config.public_base());
     let mut agents =
         external::resumables(base, &branch_id, &ctx.roster.team, events, plan.start_seq);
     for a in &mut agents {

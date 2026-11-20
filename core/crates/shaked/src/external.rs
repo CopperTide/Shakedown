@@ -77,7 +77,7 @@ pub(crate) async fn go(state: &AppState, ctx: &Arc<BranchCtx>) -> anyhow::Result
             .await?;
         let env = env_for(state, ctx, Some(&spec.id));
         agents.push(endpoints(
-            &state.config.self_base,
+            state.config.public_base(),
             &ctx.branch_id,
             &spec.id,
             env,
