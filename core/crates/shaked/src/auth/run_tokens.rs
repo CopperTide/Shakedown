@@ -8,8 +8,8 @@ use uuid::Uuid;
 use super::{Caller, RunTokenKind, SystemScope};
 use crate::store::Store;
 
-/// How long a token lives without a run limit of its own: a day (the `local` plan's longest
-/// branch, `docs/quotas.toml`).
+/// How long a token lives: a day, longer than a run is expected to take (a local shaked sets no
+/// limit on a branch's length).
 pub const DEFAULT_TOKEN_SECS: u64 = 86_400;
 
 /// The prefix of each kind's tokens.

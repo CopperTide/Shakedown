@@ -47,6 +47,7 @@ fn hits(line: &str) -> bool {
             "tenant",
             "membership",
             "row level security",
+            "row-level security",
             "set_config('app.",
         ]
         .iter()
@@ -78,6 +79,7 @@ fn the_check_sees_what_it_should() {
     assert!(hits("WHERE org_id = $1"));
     assert!(hits("// each org's runs"));
     assert!(hits("ALTER TABLE t ENABLE ROW LEVEL SECURITY"));
+    assert!(hits("// under row-level security"));
     assert!(hits("SELECT set_config('app.user_id', $1, true)"));
     assert!(!hits("organise the forks; a borg_queue"));
 }
