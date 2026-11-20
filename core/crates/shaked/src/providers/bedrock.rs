@@ -20,7 +20,7 @@ pub(super) fn base_url(region: &str) -> String {
 }
 
 /// True for a region name AWS could have: lower-case letters, digits and dashes.
-pub(super) fn valid_region(region: &str) -> bool {
+pub(crate) fn valid_region(region: &str) -> bool {
     !region.is_empty()
         && region
             .bytes()
@@ -37,7 +37,10 @@ pub(super) async fn send(
     http: &reqwest::Client,
     chat: &Value,
 ) -> Result<Upstream, String> {
-    let auth = credentials::resolve().await?;
+    let auth = match &p.endpoint.key {
+        Some(own) => credentials::from_json(own.expose())?,
+        None => credentials::resolve().await?,
+    };
     send_with(p, http, chat, &auth).await
 }
 

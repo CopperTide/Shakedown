@@ -12,10 +12,10 @@ use serde_json::{json, Value};
 use crate::{
     app::AppState,
     exec::BranchCtx,
-    layer::{Costly, KeySource, Meter, ModelWant, Usage},
+    layer::{Costly, KeySource, Meter, Usage},
     model::*,
     overhead::{ms_since, Cat},
-    providers::{Provider, ProviderKind, Upstream},
+    providers::{Provider, Upstream},
     reasoning,
     store::Store,
 };
@@ -303,7 +303,9 @@ async fn call(
     asked: Option<&str>,
     since: Instant,
 ) -> Response {
-    let (provider, paid_by) = provider_for(state, ctx, asked, &body).await;
+    let model = body["model"].as_str().unwrap_or_default();
+    let (provider, paid_by) =
+        crate::providers::keys::provider_for(state, &ctx.caller, asked, model).await;
     ctx.roster.note_model_call(agent);
     let (upstream, upstream_ms) = timed_upstream(state, &provider, &body).await;
     let (status, payload) = model_call_payload(body, &provider, &upstream);
@@ -319,39 +321,6 @@ async fn call(
     };
     meter_call(state, ctx, &provider, &payload, seq, paid_by).await;
     reply(status, payload.response, &upstream)
-}
-
-/// The provider `asked` names and whose key pays: the layer's fallback when that provider needs a
-/// key the environment does not have.
-async fn provider_for(
-    state: &AppState,
-    ctx: &BranchCtx,
-    asked: Option<&str>,
-    body: &Value,
-) -> (Result<Provider, String>, KeySource) {
-    let found = state.config.providers.resolve(asked);
-    let keyed = [
-        ProviderKind::OpenRouter,
-        ProviderKind::OpenAi,
-        ProviderKind::Anthropic,
-    ];
-    let keyless = matches!(&found, Ok(p) if keyed.contains(&p.kind) && p.endpoint.key.is_none());
-    if keyless {
-        let model = body["model"].as_str().unwrap_or_default();
-        let want = ModelWant {
-            provider: asked,
-            model,
-        };
-        if let Some(f) = state
-            .store
-            .layer()
-            .fallback_provider(&ctx.caller, want)
-            .await
-        {
-            return (Ok(f.provider), KeySource::Fallback(f.source));
-        }
-    }
-    (found, KeySource::Environment)
 }
 
 /// The layer's meters for one recorded call: its cost in micro-USD and its tokens.

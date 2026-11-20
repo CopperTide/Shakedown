@@ -2,6 +2,7 @@
 //! an external suite's next run, and compare two suites.
 
 use crate::auth::{Caller, Who};
+use crate::providers::ProviderConfig;
 use std::{collections::HashMap, sync::Arc};
 
 use axum::{
@@ -118,15 +119,15 @@ pub(super) async fn suite_tasks(
 }
 
 /// 400 unless the request's repeats and team suit its runner.
-fn validate_suite(state: &AppState, req: &NewSuiteReq) -> Result<(), ApiError> {
+fn validate_suite(providers: &ProviderConfig, req: &NewSuiteReq) -> Result<(), ApiError> {
     if !(1..=MAX_REPEATS).contains(&req.repeats) {
         return Err(ApiError::bad(format!(
             "repeats must be from 1 to {MAX_REPEATS}"
         )));
     }
     let checked = match req.runner {
-        Runner::External => team::validate_agents(providers_of(state), &req.team.agents),
-        runner => team::validate_builtin(providers_of(state), &req.team, runner),
+        Runner::External => team::validate_agents(providers, &req.team.agents),
+        runner => team::validate_builtin(providers, &req.team, runner),
     };
     Ok(checked?)
 }
@@ -139,7 +140,7 @@ async fn create(
     JsonBody(mut req): JsonBody<NewSuiteReq>,
 ) -> ApiResult<SuiteReport> {
     settle_providers(&mut req.team);
-    validate_suite(&state, &req)?;
+    validate_suite(&providers_of(&state, &caller).await, &req)?;
     let bench = super::benchmark_asked(&state, req.benchmark.as_deref())?;
     let (scenario, variants) = suite_scenarios(&state, &bench, &req).await?;
     let tasks = suite_tasks(&state, &bench, std::mem::take(&mut req.tasks)).await?;

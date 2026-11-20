@@ -55,6 +55,24 @@ fn from_env() -> Option<Auth> {
     }))
 }
 
+/// Your own access keys, as Settings → Models keeps them: JSON
+/// `{access_key_id, secret_access_key, session_token?}`.
+pub(crate) fn from_json(text: &str) -> Result<Auth, String> {
+    let bad = || "a Bedrock key is JSON with access_key_id and secret_access_key".to_string();
+    let v: serde_json::Value = serde_json::from_str(text).map_err(|_| bad())?;
+    let field = |k: &str| v[k].as_str().filter(|s| !s.trim().is_empty());
+    let (Some(access_key), Some(secret)) = (field("access_key_id"), field("secret_access_key"))
+    else {
+        return Err(bad());
+    };
+    Ok(Auth::Keys(Keys {
+        access_key: access_key.to_string(),
+        secret: Secret::new(secret),
+        session_token: field("session_token").map(Secret::new),
+        expires: None,
+    }))
+}
+
 /// True when some source of credentials is there, judged without asking the AWS CLI.
 pub(crate) fn some_source() -> bool {
     from_env().is_some() || crate::api::on_path("aws")

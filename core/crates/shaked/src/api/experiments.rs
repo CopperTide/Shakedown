@@ -2,6 +2,7 @@
 //! Suites made on their own show up as one-setup experiments (`legacy`).
 
 use crate::auth::{Caller, Who};
+use crate::providers::ProviderConfig;
 use std::sync::Arc;
 
 use axum::{
@@ -94,7 +95,11 @@ fn base_seed(asked: Option<u64>) -> Result<u64, ApiError> {
 
 /// 400 unless shaked can run the setup itself: a built-in runner and a team it can run. The
 /// error names the setup.
-fn validate_setup(state: &AppState, name: &str, setup: &mut SetupReq) -> Result<(), ApiError> {
+fn validate_setup(
+    providers: &ProviderConfig,
+    name: &str,
+    setup: &mut SetupReq,
+) -> Result<(), ApiError> {
     if setup.connection.is_some() {
         if !matches!(setup.runner, Runner::Chain | Runner::External) {
             return Err(ApiError::bad(format!(
@@ -102,7 +107,7 @@ fn validate_setup(state: &AppState, name: &str, setup: &mut SetupReq) -> Result<
             )));
         }
         setup.runner = Runner::External;
-        return team::validate_agents(providers_of(state), &setup.team.agents)
+        return team::validate_agents(providers, &setup.team.agents)
             .map_err(|e| ApiError::bad(format!("{name}: {e}")));
     }
     if setup.runner == Runner::External {
@@ -110,12 +115,15 @@ fn validate_setup(state: &AppState, name: &str, setup: &mut SetupReq) -> Result<
             "{name}: an experiment's setups run on shaked's runners, or a Code connection's driver"
         )));
     }
-    team::validate_builtin(providers_of(state), &setup.team, setup.runner)
+    team::validate_builtin(providers, &setup.team, setup.runner)
         .map_err(|e| ApiError::bad(format!("{name}: {e}")))
 }
 
 /// The setups' names, after checking their number, the runs and each setup (400 otherwise).
-fn validate(state: &AppState, req: &mut NewExperimentReq) -> Result<Vec<String>, ApiError> {
+fn validate(
+    providers: &ProviderConfig,
+    req: &mut NewExperimentReq,
+) -> Result<Vec<String>, ApiError> {
     if !(1..=MAX_SETUPS).contains(&req.setups.len()) {
         return Err(ApiError::bad(format!(
             "an experiment has 1 to {MAX_SETUPS} setups"
@@ -128,7 +136,7 @@ fn validate(state: &AppState, req: &mut NewExperimentReq) -> Result<Vec<String>,
     let names = experiment::setup_names(&asked).map_err(ApiError::bad)?;
     for (name, setup) in names.iter().zip(&mut req.setups) {
         settle_providers(&mut setup.team);
-        validate_setup(state, name, setup)?;
+        validate_setup(providers, name, setup)?;
     }
     Ok(names)
 }
@@ -174,7 +182,7 @@ async fn create(
     headers: axum::http::HeaderMap,
     JsonBody(mut req): JsonBody<NewExperimentReq>,
 ) -> ApiResult<Detail> {
-    let names = validate(&state, &mut req)?;
+    let names = validate(&providers_of(&state, &caller).await, &mut req)?;
     check_connections(&state, &caller, &headers, &names, &req.setups).await?;
     let max_cost_usd = super::max_cost(req.max_cost_usd)?;
     let (seed, world_minutes) = (

@@ -7,8 +7,10 @@
 mod anthropic;
 pub(crate) mod bedrock;
 mod config;
+pub mod keys;
 mod listing;
 mod openai;
+pub mod reach;
 mod status;
 mod transport;
 
@@ -27,6 +29,9 @@ pub const OPENROUTER: &str = "openrouter";
 pub const OPENAI: &str = "openai";
 pub const ANTHROPIC: &str = "anthropic";
 pub const LOCAL_PREFIX: &str = "local:";
+/// One of your own OpenAI-compatible servers (Settings → Models): `custom:<name>`. It takes over
+/// from a `local:<name>` of `SHAKEDOWN_LOCAL_MODELS` with the same name.
+pub const CUSTOM_PREFIX: &str = "custom:";
 /// Amazon Bedrock in one AWS region: `bedrock:<region>`.
 pub const BEDROCK_PREFIX: &str = "bedrock:";
 /// The local provider the old single-upstream override becomes.
@@ -141,9 +146,9 @@ impl Provider {
             ProviderKind::OpenAi => missing("OPENAI_API_KEY"),
             ProviderKind::Anthropic => missing("ANTHROPIC_API_KEY"),
             ProviderKind::Local => None,
-            ProviderKind::Bedrock => {
-                (!bedrock::credentials::some_source()).then_some(Unavailable::NoAwsCredentials)
-            }
+            ProviderKind::Bedrock => (self.endpoint.key.is_none()
+                && !bedrock::credentials::some_source())
+            .then_some(Unavailable::NoAwsCredentials),
         }
     }
 
@@ -185,9 +190,9 @@ impl ProviderConfig {
             )),
             OPENAI => Some(Provider::new(id, ProviderKind::OpenAi, &self.openai)),
             ANTHROPIC => Some(self.anthropic()),
-            _ if id.starts_with(BEDROCK_PREFIX) => Self::bedrock(id)?,
-            _ => id
-                .strip_prefix(LOCAL_PREFIX)
+            _ if id.starts_with(BEDROCK_PREFIX) => self.bedrock(id)?,
+            _ => (id.strip_prefix(LOCAL_PREFIX))
+                .or_else(|| id.strip_prefix(CUSTOM_PREFIX))
                 .and_then(|name| self.local(name))
                 .map(|l| Provider::local(id, l)),
         };
@@ -197,15 +202,29 @@ impl ProviderConfig {
         })
     }
 
+    /// What prices calls to provider `id` where your keys are not at hand (an agent loop's cost
+    /// label): [`ProviderConfig::resolve`], and for one of your `custom:<name>` servers the
+    /// environment does not know, a local server without a declared rate (its calls cost 0).
+    pub fn resolve_pricing(&self, id: Option<&str>) -> Result<Provider, String> {
+        self.resolve(id).or_else(|e| match self.id_of(id) {
+            custom if custom.starts_with(CUSTOM_PREFIX) => {
+                let blank = Endpoint::new("", None);
+                Ok(Provider::new(custom, ProviderKind::Local, &blank))
+            }
+            _ => Err(e),
+        })
+    }
+
     /// Bedrock in the region `id` names (`Ok(None)` never: a bad region is an error).
-    fn bedrock(id: &str) -> Result<Option<Provider>, String> {
+    fn bedrock(&self, id: &str) -> Result<Option<Provider>, String> {
         let region = id.strip_prefix(BEDROCK_PREFIX).unwrap_or_default();
         if !bedrock::valid_region(region) {
             return Err(format!(
                 "{id:?} names no AWS region (for example bedrock:us-east-1)"
             ));
         }
-        let endpoint = Endpoint::new(&bedrock::base_url(region), None);
+        let own = (self.bedrock_keys.iter()).find_map(|(r, k)| (r == region).then(|| k.clone()));
+        let endpoint = Endpoint::new(&bedrock::base_url(region), own);
         Ok(Some(Provider::new(id, ProviderKind::Bedrock, &endpoint)))
     }
 

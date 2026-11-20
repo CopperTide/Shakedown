@@ -45,6 +45,7 @@ struct Spy {
     admission: Mutex<Option<Admission>>,
     fallback: Mutex<Option<Fallback>>,
     routes: Mutex<Option<MakeRoutes>>,
+    policy: std::sync::OnceLock<Policy>,
 }
 
 /// A layer that records every hook call; it allows everything unless told otherwise.
@@ -83,6 +84,12 @@ impl SpyLayer {
         self
     }
 
+    /// `policy` answers `p` (else [`Policy::LOCAL`]); set once.
+    pub fn with_policy(self, p: Policy) -> SpyLayer {
+        let _ = self.0.policy.set(p);
+        self
+    }
+
     /// `routes` serves what `r` makes.
     pub fn with_routes(self, r: MakeRoutes) -> SpyLayer {
         *self.0.routes.lock().unwrap() = Some(r);
@@ -111,7 +118,7 @@ impl SpyLayer {
 
 impl Layer for SpyLayer {
     fn policy(&self) -> &Policy {
-        &Policy::LOCAL
+        self.0.policy.get().unwrap_or(&Policy::LOCAL)
     }
 
     fn authenticate<'a>(

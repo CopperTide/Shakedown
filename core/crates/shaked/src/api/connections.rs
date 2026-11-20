@@ -211,7 +211,7 @@ pub(super) async fn start_code_run(
     conn: Connection,
     run: CodeRun,
 ) -> Result<(Value, Option<Launched>), ApiError> {
-    team::validate_agents(providers_of(&state), &run.team.agents)?;
+    team::validate_agents(&providers_of(&state, &caller).await, &run.team.agents)?;
     permit.check_disk(&state).await?;
     detached(async move {
         let _permit = permit;

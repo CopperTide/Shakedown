@@ -410,7 +410,11 @@ fn provider_and_model<'a>(
     state: &AppState,
     spec: &'a AgentSpec,
 ) -> Result<(Provider, &'a str), Fault> {
-    let provider = state.config.providers.resolve(spec.provider.as_deref())?;
+    // The gateway resolves the real provider with your keys; this one prices the calls.
+    let provider = state
+        .config
+        .providers
+        .resolve_pricing(spec.provider.as_deref())?;
     let named = spec.model.as_deref().filter(|m| !m.trim().is_empty());
     let model = named.or(provider.default_model()).ok_or_else(|| {
         Fault::Infra(format!(

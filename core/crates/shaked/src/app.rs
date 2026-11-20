@@ -167,6 +167,9 @@ pub struct AppState {
     pub cleanup: Arc<tokio::sync::RwLock<()>>,
     /// The recording proxy agents' own HTTP clients reach the world's hosts through.
     pub proxy: crate::proxy::Proxy,
+    /// The vault your model keys are sealed with: set on first use from the environment
+    /// ([`crate::vault::Vault::from_env`]), or beforehand (tests).
+    pub vault: OnceLock<Arc<crate::vault::Vault>>,
 }
 
 impl AppState {
@@ -198,6 +201,7 @@ impl AppState {
             shutdown: tokio::sync::watch::channel(false).0,
             cleanup: Arc::default(),
             proxy: crate::proxy::Proxy::default(),
+            vault: OnceLock::new(),
         }
     }
 
@@ -247,6 +251,15 @@ impl AppState {
 }
 
 impl AppState {
+    /// The vault for your model keys, read (or made) on first use.
+    pub fn vault(&self) -> Result<Arc<crate::vault::Vault>, String> {
+        if let Some(v) = self.vault.get() {
+            return Ok(v.clone());
+        }
+        let made = Arc::new(crate::vault::Vault::from_env()?);
+        Ok(self.vault.get_or_init(|| made).clone())
+    }
+
     /// The `describe` of the benchmark new runs use: its world, tasks, instructions and tools.
     pub async fn bench(&self) -> anyhow::Result<BenchDescribe> {
         self.bench_named(&self.benchmark()).await

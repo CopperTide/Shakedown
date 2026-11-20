@@ -74,7 +74,7 @@ pub enum Decision {
 pub fn engine_check(c: &Caller, a: &Action, t: &Target<'_>) -> Decision {
     match &c.kind {
         CallerKind::Person => Decision::Allow,
-        CallerKind::ApiToken { scopes, .. } => by_scope(scopes, a),
+        CallerKind::ApiToken { scopes, .. } => by_scope(scopes, a, t),
         CallerKind::RunToken {
             branch, kind: k, ..
         } => in_run(branch, *k, a, t),
@@ -84,9 +84,15 @@ pub fn engine_check(c: &Caller, a: &Action, t: &Target<'_>) -> Decision {
 /// `read` views, `run` also starts, forks, stops and records (and drives a run it started:
 /// registers agents, reports, finishes), `admin` does everything; no API token calls tools or
 /// models or links a sandbox.
-fn by_scope(scopes: &[TokenScope], a: &Action) -> Decision {
+fn by_scope(scopes: &[TokenScope], a: &Action, t: &Target<'_>) -> Decision {
     use Action::*;
+    let key = |t: &Target<'_>| match t {
+        Target::Kind(k) | Target::Resource { kind: k, .. } => *k == ResourceKind::ProviderKey,
+        _ => false,
+    };
     let needs = match a {
+        // Model keys are secrets that steer every model call: only admin tokens change them.
+        Create | ChangeSetup if key(t) => TokenScope::Admin,
         Read => TokenScope::Read,
         Create | Start | Fork | Stop | Record | UseInRun | Rename | ChangeSetup | DeleteFork
         | RegisterAgent | Report | Finish => TokenScope::Run,

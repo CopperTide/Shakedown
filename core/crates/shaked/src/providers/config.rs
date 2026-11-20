@@ -114,6 +114,9 @@ pub struct ProviderConfig {
     /// The provider of agents that name none: `openrouter`, or `local:custom` after
     /// [`ProviderConfig::set_upstream`].
     pub default: String,
+    /// Bedrock credentials of your own, by region: JSON
+    /// `{access_key_id, secret_access_key, session_token?}` (else the environment's are used).
+    pub bedrock_keys: Vec<(String, Secret)>,
 }
 
 impl Default for ProviderConfig {
@@ -126,6 +129,7 @@ impl Default for ProviderConfig {
             locals: vec![],
             anthropic_max_tokens: DEFAULT_ANTHROPIC_MAX_TOKENS,
             default: OPENROUTER.to_string(),
+            bedrock_keys: vec![],
         }
     }
 }

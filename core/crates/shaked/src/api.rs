@@ -35,6 +35,7 @@ mod external;
 mod extract;
 mod flow;
 mod me;
+mod models;
 mod names;
 mod recording;
 mod review;
@@ -84,6 +85,7 @@ fn modules() -> Router<Arc<AppState>> {
         .merge(flow::router())
         .merge(me::router())
         .merge(tokens::router())
+        .merge(models::router())
         .merge(suites::router())
         .merge(experiments::router())
         .merge(review::router())
@@ -234,7 +236,7 @@ fn parse_body<T: serde::de::DeserializeOwned>(body: &Bytes) -> Result<T, ApiErro
 /// 400 when the team the fork would run (`changes` applied to `parent`) puts a changed agent in
 /// open mode on a provider that can't run it.
 fn check_fork_team(
-    state: &AppState,
+    providers: &providers::ProviderConfig,
     parent: &Team,
     changes: &HashMap<String, Change>,
 ) -> Result<(), ApiError> {
@@ -244,11 +246,7 @@ fn check_fork_team(
         .iter()
         .filter(|a| a.kind == AgentKind::Open && changes.contains_key(&a.id));
     for a in changed_open {
-        team::open_check(
-            providers_of(state),
-            a.provider.as_deref(),
-            a.model.as_deref(),
-        )?;
+        team::open_check(providers, a.provider.as_deref(), a.model.as_deref())?;
     }
     Ok(())
 }
@@ -260,9 +258,9 @@ fn settle_providers(team: &mut Team) {
     }
 }
 
-/// The providers open agents run on, for [`team`]'s checks.
-fn providers_of(state: &AppState) -> &providers::ProviderConfig {
-    &state.config.providers
+/// The providers `caller`'s open agents run on (your keys applied), for [`team`]'s checks.
+async fn providers_of(state: &AppState, caller: &Caller) -> providers::ProviderConfig {
+    providers::keys::config_for(state, caller).await
 }
 
 /// Runs `f` on its own task and waits for it, so a client disconnect can't cancel it midway.
@@ -317,8 +315,12 @@ async fn health(State(state): State<Arc<AppState>>) -> ApiResult<Value> {
 
 /// `[{id, kind, label, available, why?, models?}]`: each provider, asking the ones that list
 /// their models (each bounded by `providers::LIST_TIMEOUT`, all at once).
-async fn list_providers(State(state): State<Arc<AppState>>) -> Json<Vec<ProviderStatus>> {
-    Json(providers::statuses(&state.config.providers, &state.http).await)
+async fn list_providers(
+    State(state): State<Arc<AppState>>,
+    Who(caller): Who,
+) -> Json<Vec<ProviderStatus>> {
+    let config = providers_of(&state, &caller).await;
+    Json(providers::statuses(&config, &state.http).await)
 }
 
 /// 507 when the Shakedown's saves already use at least the configured limit.
@@ -564,7 +566,7 @@ async fn start_run(
     if req.runner == Runner::External {
         return create_external_run(state, caller, permit, req, bench, scenario).await;
     }
-    team::validate_builtin(providers_of(&state), &req.team, req.runner)?;
+    team::validate_builtin(&providers_of(&state, &caller).await, &req.team, req.runner)?;
     let max = max_cost(req.max_cost_usd)?;
     permit.check_disk(&state).await?;
     let (run_id, branch_id) = detached(async move {
@@ -678,10 +680,11 @@ async fn fork_admitted(
     let parent = forkable(&state, &caller, &id).await?;
     guard_code_fork(&state, &caller, &headers, &id).await?;
     fork::settle_changes(&parent.team, &mut req.changes, &state.config.providers);
-    check_fork_team(&state, &parent.team, &req.changes)?;
+    let providers = providers_of(&state, &caller).await;
+    check_fork_team(&providers, &parent.team, &req.changes)?;
     if let Some(team) = &mut req.team {
         settle_providers(team);
-        team::validate(providers_of(&state), team)?;
+        team::validate(&providers, team)?;
     }
     permit.check_disk(&state).await?;
     let req = fork::ForkRequest {

@@ -52,7 +52,7 @@ pub(super) async fn create_run(
     scenario: crate::scenario::Scenario,
     (max_cost_usd, world_minutes): (Option<f64>, Option<f64>),
 ) -> ApiResult<Value> {
-    team::validate_agents(providers_of(&state), &team.agents)?;
+    team::validate_agents(&providers_of(&state, &caller).await, &team.agents)?;
     permit.check_disk(&state).await?;
     let rules = Rules::new(Runner::External)
         .with_max_cost(super::max_cost(max_cost_usd)?)
@@ -141,7 +141,7 @@ async fn register(
     team::validate_id(&join.id)?;
     let ctx = external_branch(&state, &caller, &id)?;
     if ctx.roster.agent(&join.id).is_none() {
-        team::validate_agents(providers_of(&state), &[join.spec()])?;
+        team::validate_agents(&providers_of(&state, &caller).await, &[join.spec()])?;
     }
     let spec = external::register(&state.store, &ctx, &join).await?;
     let env = env_for(&state, &ctx, Some(&spec.id));
