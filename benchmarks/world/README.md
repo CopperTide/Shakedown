@@ -11,7 +11,7 @@ Templates written as data, worlds generated from them, and the benchmark a built
   defaults in range).
 - `worldbench.expand`: placeholders (`{company.name}`, `{size}`, `{seed}`, `{people.<role>}`,
   `{people.<role>.<field>}` (that field of each of the role's people, a list), `{param.<name>}`, `{world_dir}`, …;
-  `{{` and `}}` are literal braces) and includes (`@file.yaml`, `@file.md`, `@folder/`; the path may hold
+  `{{` and `}}` are literal braces) and includes (`@file.yaml`, `@file.md`, `@file.diff`, `@folder/`; the path may hold
   placeholders, as `@env/{options.obs.profile}.yaml`), which never leave the template folder; a folder copied
   holds no links and never holds or sits in another one copied.
 - A system may have no parts of its own and an `apply` (the events' ops, plus `merge`, which updates an object in

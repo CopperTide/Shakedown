@@ -130,3 +130,8 @@ def test_a_check_of_an_event_is_kept_only_while_the_event_is_on(fixtures, tmp_pa
     assert {"what": "check late_noticed of task alpha-task", "why": "needs the event slow-supplier, not on"} in r.dropped
     with pytest.raises(TemplateError, match="no event omega"):
         load_template(copy_with(t.dir, tmp_path / "bad", {"tasks.0.checks.0.events": ["omega"]}))
+
+
+def test_a_patch_file_is_included_as_text(tmp_path):
+    (tmp_path / "fix.diff").write_text("--- a/x\n+++ b/x\n@@ -1 +1 @@\n-a\n+b {company.name}\n")
+    assert expand("@fix.diff", ctx(), tmp_path, []) == "--- a/x\n+++ b/x\n@@ -1 +1 @@\n-a\n+b Acme\n"

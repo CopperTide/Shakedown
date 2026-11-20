@@ -11,7 +11,7 @@ from .errors import TemplateError, key_path
 WORLD_DIR = "${WORLD_DIR}"
 _TOKEN = re.compile(r"\{\{|\}\}|\{([a-z_]+(?:\.[a-z0-9_-]+)*)\}")
 _PARSED = {".yaml", ".yml", ".json"}
-_TEXT = {".md", ".txt"}
+_TEXT = {".md", ".txt", ".diff", ".patch"}
 
 
 @dataclass
