@@ -14,14 +14,18 @@ use std::sync::{Arc, Mutex};
 /// The fake: logs its arguments (one line a call) to `log` beside its `bin`, and fails where the environment says so. `port` answers the
 /// n-th of `FAKE_PORTS` after the n-th `up` or `start` (a restarted service gets a new port). A
 /// compose command run with `IMAGE_*` or `ARENA_CLOCK_DIR` set logs them first, as `env: <sorted
-/// variables>`; `ps` answers `FAKE_HEALTH` (default `running healthy`).
+/// variables>`; `ps` of one service answers `FAKE_HEALTH` (default `running healthy`), of every
+/// service `FAKE_PS` (tab-separated service, state, health and exit code lines).
 pub const FAKE: &str = r#"#!/bin/sh
 LOG="$(dirname "$0")/../log"
 vars=$(env | grep -E '^(IMAGE_|ARENA_CLOCK_DIR=)' | sort | tr '\n' ' ')
 case "$1:$vars" in compose:?*) echo "env: $vars" >> "$LOG" ;; esac
 { printf '%s' "$*" | tr '\n' ' '; echo; } >> "$LOG"
 case "$*" in
-  *" ps "*) echo "${FAKE_HEALTH:-running healthy}" ;;
+  *" ps "*) case "$*" in
+             *Service*) printf '%b\n' "${FAKE_PS:-web\trunning\thealthy\t0}" ;;
+             *) echo "${FAKE_HEALTH:-running healthy}" ;;
+           esac ;;
   *" stop") [ -n "$FAKE_STOP_FAIL" ] && { echo no stop >&2; exit 1; } ;;
   *" up "*) [ -n "$FAKE_UP_FAIL" ] && { echo no up >&2; exit 1; } ;;
   *-cpf*) case "$*" in *_bad:/v*) echo no export >&2; exit 1 ;; *) printf tar ;; esac ;;

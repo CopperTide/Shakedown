@@ -229,6 +229,7 @@ the prefix `live_` and needs Docker or a real server. Each folder's README has t
 | `postgres` | A Postgres database per instance | save | no | no | Tests against the `postgres:17-alpine` server of `deploy/compose.yml`, with the `arena-part-check` run (`integrations/postgres/tests/part.rs`); the retail example runs on it through arenad |
 | `folder` | A folder of files per instance | save | no | no | Tests on local disk with the `arena-part-check` run (`integrations/folder/tests/part.rs`); no service involved |
 | `service` | Any Docker Compose project per instance | save | no | no | `live_service_roundtrip` against a real Redis 6.2 project in Docker. No `arena-part-check` run |
+| `live-service` | A Docker Compose platform on the world clock (clock file, deploys as a world tool, probes and watches) | save | no | yes | `live_platform_deploys_a_new_image` against the software factory's real platform: deploy, world-time telemetry, save and restore |
 | `mariadb` | A MariaDB database per instance (saves are binary-log positions) | save | no | no | Seven `live_mariadb_*` tests against MariaDB 11.8 in Docker, including `arena-part-check` |
 | `erpnext` | An ERPNext site per instance (saves are binary-log positions plus the site's files) | save | no | no | `live_erpnext_roundtrip` against ERPNext v16.53.0 in Docker, including `arena-part-check` |
 | `twenty-crm` | A Twenty CRM server per instance (saves are copies of its Postgres database) | save | no | no | `live_twenty_roundtrip` against Twenty v2.51.0 in Docker, including `arena-part-check` |

@@ -437,3 +437,30 @@ async fn a_live_copy_volume_stops_nothing() {
         "{lines:?}"
     );
 }
+
+#[tokio::test]
+async fn a_live_start_waits_for_health_and_lets_one_shots_finish() {
+    let f = Fake::new("liveup");
+    let extra = json!({"FAKE_PS": "web\trunning\thealthy\t0\nseed\texited\t\t0"});
+    f.live_part()
+        .start(live_start("a", live_config(&f, extra, json!({}))))
+        .await
+        .unwrap();
+    let log = f.log();
+    assert!(log.lines().any(|l| l.ends_with(" up -d")), "{log}");
+    assert!(!log.contains("--wait"), "{log}");
+    assert!(log.contains(" ps -a --format "), "{log}");
+}
+
+#[tokio::test]
+async fn a_live_start_fails_when_a_one_shot_fails() {
+    let f = Fake::new("liveshot");
+    let extra = json!({"FAKE_PS": "web\trunning\thealthy\t0\nseed\texited\t\t3"});
+    let e = f
+        .live_part()
+        .start(live_start("a", live_config(&f, extra, json!({}))))
+        .await
+        .unwrap_err();
+    assert!(e.message.contains("seed exited with 3"), "{}", e.message);
+    assert!(f.log().trim_end().ends_with(" down -v"), "{}", f.log());
+}

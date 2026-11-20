@@ -28,6 +28,7 @@ mod watches;
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::Duration;
 
 use arena_part::helpers::blocking;
 use arena_part::helpers::compose::Project;
@@ -227,13 +228,17 @@ impl Service {
 }
 
 /// Starts the project fresh, or from the folders of `save`; a failure leaves nothing running.
-fn bring_up(inst: &Instance, save: Option<&Path>) -> Result<(), PartError> {
+/// With `wait` (the live package) compose does not wait itself: the project is up once every
+/// container is healthy or a one-shot that finished well (`deploy::wait_up`), at most `wait`.
+fn bring_up(inst: &Instance, save: Option<&Path>, wait: Option<Duration>) -> Result<(), PartError> {
     let start = || {
         inst.project.down_with_volumes()?; // a leftover project would keep its old volumes
-        match save {
-            Some(dir) => volumes::restore_all(inst, dir),
-            None => inst.project.up(),
+        match (save, wait) {
+            (Some(dir), _) => volumes::restore_all(inst, dir)?,
+            (None, Some(_)) => inst.project.up_services(&[])?,
+            (None, None) => inst.project.up()?,
         }
+        wait.map_or(Ok(()), |w| deploy::wait_up(&inst.project, w))
     };
     start().map_err(|e| {
         let _ = inst.project.down_with_volumes();
@@ -275,7 +280,10 @@ impl Part for Service {
             .record(id, &record)
             .map_err(PartError::internal_from)?;
         let up = match self.write_first_clock(id, &config, &p) {
-            Ok(()) => blocking(move || bring_up(&inst, from.as_deref())).await,
+            Ok(()) => {
+                let wait = (self.mode == Mode::Live).then(|| config.deploy_wait());
+                blocking(move || bring_up(&inst, from.as_deref(), wait)).await
+            }
             Err(e) => Err(e),
         };
         match (&up, &p.from) {

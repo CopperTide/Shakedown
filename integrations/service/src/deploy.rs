@@ -89,6 +89,31 @@ pub fn roll_out(project: &Project, service: &str, wait: Duration) -> Result<()> 
     }
 }
 
+/// Waits until every container of `project` is up (healthy, or running without a health check)
+/// or finished well (a one-shot that exited 0), at most `wait`; a container that failed (exited
+/// otherwise, or unhealthy) fails it at once.
+pub fn wait_up(project: &Project, wait: Duration) -> Result<()> {
+    let since = Instant::now();
+    loop {
+        let states = project.states()?;
+        let mut waiting = None;
+        for [service, state, health, code] in &states {
+            match (state.as_str(), judge(&format!("{state} {health}"))) {
+                ("exited", _) if code == "0" => {}
+                ("exited", _) => bail!("{service} exited with {code}"),
+                (_, Some(true)) => {}
+                (_, Some(false)) => bail!("{service} is {state} {health}"),
+                (_, None) => waiting = Some(format!("{service} is {state} {health}")),
+            }
+        }
+        let Some(why) = waiting else { return Ok(()) };
+        if since.elapsed() >= wait {
+            bail!("the project was not up within {} s: {why}", wait.as_secs());
+        }
+        std::thread::sleep(Duration::from_millis(500));
+    }
+}
+
 /// Whether compose's `<state> <health>` is up (Some(true)), failed (Some(false)) or not yet.
 fn judge(state: &str) -> Option<bool> {
     let mut words = state.split_whitespace();

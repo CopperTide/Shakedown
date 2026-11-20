@@ -166,6 +166,25 @@ impl Project {
         Ok(out.lines().next().unwrap_or("").trim().to_string())
     }
 
+    /// Every container of the project as compose says it: `(service, state, health, exit
+    /// code)`, health empty for a service without a health check.
+    pub fn states(&self) -> Result<Vec<[String; 4]>> {
+        let fmt = "{{.Service}}\t{{.State}}\t{{.Health}}\t{{.ExitCode}}";
+        let out = run_out(
+            self.compose(&["ps", "-a", "--format", fmt]),
+            "docker compose ps",
+        )?;
+        let row = |l: &str| {
+            let mut f = l.split('\t').map(|x| x.trim().to_string());
+            [(); 4].map(|()| f.next().unwrap_or_default())
+        };
+        Ok(out
+            .lines()
+            .filter(|l| !l.trim().is_empty())
+            .map(row)
+            .collect())
+    }
+
     /// A compose command `args` followed by the service names `s`, each checked.
     fn compose_on(&self, args: &[&str], s: &[&str]) -> Result<Command> {
         if let Some(bad) = s.iter().find(|n| !name_ok(n, b"-")) {

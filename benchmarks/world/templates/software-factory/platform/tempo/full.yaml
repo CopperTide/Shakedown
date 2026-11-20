@@ -36,6 +36,9 @@ storage:
       path: /var/tempo/blocks
     wal:
       path: /var/tempo/wal
+      # Spans come stamped in world time, which may be far behind the wall clock (a fork run later): without
+      # this Tempo keeps them but its searches leave out traces more than 2 m from its own clock.
+      ingestion_time_range_slack: 168h
 
 usage_report:
   reporting_enabled: false
