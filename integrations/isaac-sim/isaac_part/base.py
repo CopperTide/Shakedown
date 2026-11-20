@@ -6,7 +6,7 @@ from . import views
 
 
 class DocsPart(KitDocsPart):
-    NAME = ""  # the package name; saves are at $ARENA_SAVES/<NAME>/<save>/
+    NAME = ""  # the package name; saves are at $SHAKEDOWN_SAVES/<NAME>/<save>/
 
     def saved_docs(self, save_dir) -> dict:
         return views.read_docs(save_dir)

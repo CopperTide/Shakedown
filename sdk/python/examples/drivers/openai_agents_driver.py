@@ -1,11 +1,12 @@
-"""An OpenAI Agents SDK team in Shakedown: triage hands off to a resolver. ARENA_PROVIDER/ARENA_MODEL pick the model."""
+"""An OpenAI Agents SDK team in Shakedown: triage hands off to a resolver. SHAKEDOWN_PROVIDER/SHAKEDOWN_MODEL pick the model."""
 import os
 
 from agents import Agent, Runner
 
 from shakedown.adapters import openai_agents as sd
+from shakedown.settings import setting
 
-PROVIDER, MODEL = os.environ.get("ARENA_PROVIDER", "openai"), os.environ.get("ARENA_MODEL", "gpt-4.1-mini")
+PROVIDER, MODEL = setting("SHAKEDOWN_PROVIDER", "openai"), setting("SHAKEDOWN_MODEL", "gpt-4.1-mini")
 
 with sd.run() as run:
     def member(id: str, instructions: str, **kw) -> Agent:

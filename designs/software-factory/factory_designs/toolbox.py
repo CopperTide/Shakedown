@@ -15,6 +15,7 @@ from typing import Any, Callable, Optional
 from shakedown.mcp import Tool, ToolResult
 
 from .workbench import Workbench
+from shakedown.settings import setting
 
 TOOL_NAMES = ("shell", "read_file", "write_file", "run_tests", "wait_minutes")
 #: The longest one ``wait_minutes`` call waits, in world minutes.
@@ -77,10 +78,10 @@ def wait_minutes(run: Any, minutes: float, poll_s: float = 2.0) -> str:
 
 
 def window_minutes(run: Any) -> Optional[float]:
-    """The run's world time window in minutes: ``ARENA_WORLD_MINUTES`` when shaked gives it,
+    """The run's world time window in minutes: ``SHAKEDOWN_WORLD_MINUTES`` when shaked gives it,
     else the run's start record; None when the run has no window."""
-    if os.environ.get("ARENA_WORLD_MINUTES"):
-        return float(os.environ["ARENA_WORLD_MINUTES"])
+    if setting("SHAKEDOWN_WORLD_MINUTES"):
+        return float(setting("SHAKEDOWN_WORLD_MINUTES"))
     try:
         value = run.branch.record().run_start.get("world_minutes")
     except Exception:  # noqa: BLE001 - an older shaked: no window known

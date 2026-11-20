@@ -94,7 +94,7 @@ def running(sf_dir, platform, tmp_path_factory):
     folder = tmp_path_factory.mktemp("clock")
     folder.chmod(0o755)
     clock = WorldClock(folder)
-    env = {**os.environ, **profile_env(platform, "lean"), **named, "ARENA_CLOCK_DIR": str(folder),
+    env = {**os.environ, **profile_env(platform, "lean"), **named, "SHAKEDOWN_CLOCK_DIR": str(folder),
            "PROD_ORDERS_ROWS": "2000"}
     try:
         up = compose(platform, env, "up", "-d", "--pull", "never", *SERVICES)

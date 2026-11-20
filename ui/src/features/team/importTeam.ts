@@ -17,7 +17,7 @@ const list = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
 
 const KIND: Record<string, AgentKind> = { claude: 'claude_code', codex: 'codex' };
 const SCULPTURED_KIND_NAME: Record<string, string> = { opencode: 'OpenCode' };
-const ARENA_KINDS: AgentKind[] = ['claude_code', 'codex', 'open', 'external'];
+const SHAKEDOWN_KINDS: AgentKind[] = ['claude_code', 'codex', 'open', 'external'];
 
 /** A CopperTide agent id as an Arena one (`^[a-z0-9_-]+$`), unique in `taken`. */
 function arenaId(id: string, taken: Set<string>): string {
@@ -87,7 +87,7 @@ function fromSculptured(d: Json): Imported {
 }
 
 /** True when an agent has what Shakedown runs it with: an id, a name, a kind it can run and a prompt. */
-const isAgent = (a: Json) => !!str(a.id) && !!str(a.name) && ARENA_KINDS.includes(a.kind as AgentKind) && typeof a.prompt === 'string';
+const isAgent = (a: Json) => !!str(a.id) && !!str(a.name) && SHAKEDOWN_KINDS.includes(a.kind as AgentKind) && typeof a.prompt === 'string';
 
 /** True when the file is a Shakedown team as it is: an id, a name and agents Shakedown can run. */
 const isTeam = (d: Json): d is Json & Team =>

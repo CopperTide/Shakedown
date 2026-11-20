@@ -1,6 +1,6 @@
 // Dev only: answers /api with the pharma fixtures, so the real pages (world view, run page,
 // compare, Run once and New experiment) render without shaked. Bundled only when the build
-// sets VITE_ARENA_FIXTURES=1 (see main.tsx); never in a normal build.
+// sets VITE_SHAKEDOWN_FIXTURES=1 (see main.tsx); never in a normal build.
 import { form as builderForm, preview as builderPreview, templates as builderTemplates } from '@/features/build/fixtures';
 import { scenarioOptions } from '@/features/scenario/fixtures';
 import { comparison, runs, team, v1Detail, v2Detail, views } from '@/features/world/fixtures';

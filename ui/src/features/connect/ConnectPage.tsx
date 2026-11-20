@@ -73,7 +73,7 @@ function CodeFields({ form, set, busy }: { form: ConnectForm; set: (p: Partial<C
       <Field label={<span>Folder <span className="font-normal text-faint">· Optional</span></span>}>
         <Input value={form.workdir} onChange={(e) => set({ workdir: e.target.value })} disabled={busy} spellCheck={false} autoComplete="off" placeholder="/path/to/your/agents" className="h-8 font-mono text-xs" />
       </Field>
-      <SecretLines label="Environment" value={form.env} onChange={(env) => set({ env })} disabled={busy} placeholder="ARENA_MODEL=gpt-4.1-mini" aria="Environment, one NAME=value per line"
+      <SecretLines label="Environment" value={form.env} onChange={(env) => set({ env })} disabled={busy} placeholder="SHAKEDOWN_MODEL=gpt-4.1-mini" aria="Environment, one NAME=value per line"
         tip="Given to your driver. Model keys stay in Shakedown: the agents' gateway holds them." />
     </>
   );

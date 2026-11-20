@@ -1,4 +1,4 @@
 # Both workspaces (core/ and this one) share one target directory, where shaked finds the package programs
-# (ARENA_BIN_DIR defaults to core/target/release).
+# (SHAKEDOWN_BIN_DIR defaults to core/target/release).
 [build]
 target-dir = "core/target"

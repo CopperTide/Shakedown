@@ -108,13 +108,13 @@ def test_a_save_restores_the_scenario_and_the_reviews(tmp_path):
 
 def test_conformance(tmp_path):
     """`arena-part-check` (describe, start, the examples, save and restore, diff, replay, drop_save)."""
-    bin_dir = Path(os.environ.get("ARENA_BIN_DIR", ARENA / "core" / "target" / "debug"))
+    bin_dir = Path(os.environ.get("SHAKEDOWN_BIN_DIR", ARENA / "core" / "target" / "debug"))
     check = bin_dir / "arena-part-check"
     if not check.exists() or shutil.which("uv") is None:
         pytest.skip(f"no {check} (cargo build -p parts --bin arena-part-check) or no uv")
     config = tmp_path / "config.json"
     config.write_text(json.dumps(lims_config()))
-    env = {**os.environ, "ARENA_BIN_DIR": str(bin_dir)}
+    env = {**os.environ, "SHAKEDOWN_BIN_DIR": str(bin_dir)}
     run = subprocess.run([str(check), str(PACKAGE), "--config", str(config)], capture_output=True, text=True,
                          env=env, timeout=300)
     assert run.returncode == 0, run.stdout + run.stderr

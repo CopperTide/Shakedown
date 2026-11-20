@@ -1,7 +1,7 @@
 """The world builder program: `templates`, `template`, `preview` and `generate` over the line protocol
 (docs/protocol.md, "Builder calls"). Templates come from the package's own `templates/`, the roots its command
 names (`--templates DIR`, repeatable; the manifest names `library`, the templates shipped with it) and the
-`:`-separated `ARENA_TEMPLATES` roots."""
+`:`-separated `SHAKEDOWN_TEMPLATES` roots."""
 import argparse
 import os
 from pathlib import Path
@@ -13,6 +13,7 @@ from arena_part.serve import _need
 from . import install
 from .preview import assess, preview
 from .template import Template, form, list_templates
+from arena_part.settings import setting
 
 PACKAGE_TEMPLATES = Path(__file__).resolve().parents[1] / "templates"
 
@@ -25,7 +26,7 @@ class Builder:
 
     @classmethod
     def from_env(cls, named: tuple = ()) -> "Builder":
-        extra = [Path(p) for p in os.environ.get("ARENA_TEMPLATES", "").split(":") if p]
+        extra = [Path(p) for p in setting("SHAKEDOWN_TEMPLATES", "").split(":") if p]
         return cls([PACKAGE_TEMPLATES, *map(Path, named), *extra])
 
     def find(self, id: str) -> Template:

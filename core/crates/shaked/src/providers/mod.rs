@@ -96,7 +96,7 @@ pub struct Provider {
     pub endpoint: Endpoint,
     /// The `max_tokens` of a call that names none, for an API that requires one (Claude's).
     pub max_tokens: u64,
-    /// A local server's declared token rate (`ARENA_LOCAL_PRICE_<NAME>`).
+    /// A local server's declared token rate (`SHAKEDOWN_LOCAL_PRICE_<NAME>`).
     pub rate: Option<Rate>,
 }
 

@@ -6,9 +6,9 @@ use std::{
     time::{Duration, Instant},
 };
 
-/// The speed of new branch clocks: env `ARENA_CLOCK_SPEED` (a positive number), default 1.
+/// The speed of new branch clocks: env `SHAKEDOWN_CLOCK_SPEED` (a positive number), default 1.
 pub fn speed_from_env() -> f64 {
-    std::env::var("ARENA_CLOCK_SPEED")
+    parts::settings::var("SHAKEDOWN_CLOCK_SPEED")
         .ok()
         .and_then(|v| v.trim().parse::<f64>().ok())
         .filter(|s| s.is_finite() && *s >= 0.0)
@@ -60,7 +60,7 @@ impl BranchClock {
         }
     }
 
-    /// A running clock from `base_ms` at the speed `ARENA_CLOCK_SPEED` sets.
+    /// A running clock from `base_ms` at the speed `SHAKEDOWN_CLOCK_SPEED` sets.
     pub fn from_env(base_ms: i64) -> BranchClock {
         BranchClock::new(base_ms, speed_from_env())
     }

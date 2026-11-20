@@ -1,6 +1,6 @@
 //! Runs real `coppertide serve` instances: `cargo test -p arena-sculptured -- --ignored live_`.
 //! Needs the CopperTide program (`coppertide` on `PATH`, or env
-//! `ARENA_COPPERTIDE_BINARY`; `sculptured` and `ARENA_SCULPTURED_BINARY` still work); without it the test says so and passes. Every server and folder
+//! `SHAKEDOWN_COPPERTIDE_BINARY`; `sculptured` and `SHAKEDOWN_SCULPTURED_BINARY` still work); without it the test says so and passes. Every server and folder
 //! the test makes is removed afterwards, even on failure (the drop runs the integration's `gc`).
 use arena_part::proto::*;
 use arena_part::Part;
@@ -57,8 +57,8 @@ impl Drop for World {
 }
 
 fn binary() -> Option<PathBuf> {
-    let b = std::env::var_os("ARENA_COPPERTIDE_BINARY")
-        .or_else(|| std::env::var_os("ARENA_SCULPTURED_BINARY"))
+    let b = arena_part::settings::var_os("SHAKEDOWN_COPPERTIDE_BINARY")
+        .or_else(|| arena_part::settings::var_os("SHAKEDOWN_SCULPTURED_BINARY"))
         .map(PathBuf::from)
         .or_else(arena_sculptured::default_binary)?;
     b.is_file().then_some(b)

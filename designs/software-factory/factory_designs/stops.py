@@ -15,6 +15,7 @@ from shakedown import driver
 from shakedown.errors import ShakedownError, Conflict, NotFound
 
 from .bridge import ProxyBridge, bridge_socket
+from shakedown.settings import setting
 
 #: Statuses the OpenAI client retries; seeing one means its retries ran out.
 RETRIED = {408, 429}
@@ -65,7 +66,7 @@ def _report(run: Any, reason: str) -> None:
 
 
 def _proxy_url() -> Optional[str]:
-    return os.environ.get("ARENA_PROXY") or os.environ.get("HTTPS_PROXY")
+    return setting("SHAKEDOWN_PROXY") or os.environ.get("HTTPS_PROXY")
 
 
 def run_design(main: Callable[[Any], None],

@@ -1,9 +1,11 @@
 // Which Arena core (shaked) the UI talks to. Same origin by default; a build can name one with
-// VITE_ARENA_URL, and the address can choose another with `?core=<url>`, which this browser then
+// VITE_SHAKEDOWN_URL (or its old name VITE_ARENA_URL), and the address can choose another with `?core=<url>`, which this browser then
 // remembers (`?core=` with nothing clears it). A core on another origin must allow this UI's
-// origin: start it with ARENA_CORS_ORIGIN=<the UI's origin>.
+// origin: start it with SHAKEDOWN_CORS_ORIGIN=<the UI's origin>.
 
 export const CORE_KEY = 'arena.core';
+/** The core this build was made for: `VITE_SHAKEDOWN_URL`, else its old name `VITE_ARENA_URL`. */
+const BUILT_CORE: string | undefined = import.meta.env.VITE_SHAKEDOWN_URL ?? import.meta.env.VITE_ARENA_URL;
 
 /** A core URL as a base for paths: http(s) only, no trailing slash; '' (same origin) for blank, null for anything else. */
 export function normalizeCore(raw: string | null | undefined): string | null {
@@ -40,11 +42,11 @@ function storage(): Storage | null {
 }
 
 function initial(): string {
-  if (typeof window === 'undefined') return normalizeCore(import.meta.env.VITE_ARENA_URL) ?? '';
+  if (typeof window === 'undefined') return normalizeCore(BUILT_CORE) ?? '';
   const s = storage();
   let stored: string | null = null;
   try { stored = s?.getItem(CORE_KEY) ?? null; } catch { /* storage blocked */ }
-  const { base, remember } = resolveCore(window.location.search, stored, import.meta.env.VITE_ARENA_URL);
+  const { base, remember } = resolveCore(window.location.search, stored, BUILT_CORE);
   try {
     if (remember === '') s?.removeItem(CORE_KEY);
     else if (remember) s?.setItem(CORE_KEY, remember);

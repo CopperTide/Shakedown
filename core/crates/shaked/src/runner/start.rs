@@ -48,7 +48,7 @@ pub async fn start_run(
 }
 
 /// How a run on shaked's own runners starts: its runner, its scenario (else the task as it is)
-/// and its model-spend limit (else `ARENA_MAX_COST_USD`, else none).
+/// and its model-spend limit (else `SHAKEDOWN_MAX_COST_USD`, else none).
 #[derive(Debug, Clone, Copy)]
 pub struct RunOptions<'a> {
     runner: Runner,

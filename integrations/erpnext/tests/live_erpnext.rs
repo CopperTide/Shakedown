@@ -74,7 +74,7 @@ impl Drop for Env {
             .args(["compose", "-p", &self.stack.project, "-f"])
             .arg(&self.stack.compose_file)
             .args(["down", "-v"])
-            .env("ARENA_ERPNEXT_SITES", &sites)
+            .env("SHAKEDOWN_ERPNEXT_SITES", &sites)
             .output();
         let _ = Command::new("docker")
             .args(["volume", "rm", "-f", &self.stack.server.volume])
@@ -313,8 +313,8 @@ fn conformance(e: &Env) {
         .arg(a.join("integrations/erpnext/check"))
         .arg("--config")
         .arg(e.check_config())
-        .env("ARENA_BIN_DIR", a.join("core/target/debug"))
-        .env("ARENA_SAVES", &e.saves)
+        .env("SHAKEDOWN_BIN_DIR", a.join("core/target/debug"))
+        .env("SHAKEDOWN_SAVES", &e.saves)
         .output()
         .unwrap();
     let stdout = String::from_utf8_lossy(&out.stdout).to_string();

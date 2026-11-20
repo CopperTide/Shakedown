@@ -22,6 +22,7 @@ from .runpodctl import RealRunner, RunpodError
 from .smoke import smoke
 from .spec import POD_TOML, load_spec
 from .watchdog import watch
+from shakedown.settings import setting
 
 LEDGER = POD_TOML.parent / "ledger.jsonl"
 ENV_FILE = Path.home() / ".config" / "shakedown" / "runpod.env"
@@ -35,7 +36,7 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("--state-dir", default=str(STATE_DIR))
     # --arenad and --through-arenad: the old names (shaked was arenad until 2026-11-19).
     p.add_argument("--shaked", "--arenad", dest="shaked",
-                   default=os.environ.get("ARENA_URL") or "http://127.0.0.1:4510")
+                   default=setting("SHAKEDOWN_URL") or "http://127.0.0.1:4510")
     sub = p.add_subparsers(dest="cmd", required=True)
     q = sub.add_parser("quote", help="the GPU's hourly rate now, and the spend so far")
     q.add_argument("--gpu")
@@ -63,8 +64,8 @@ def _smoke(ops: Ops, through: Optional[str]) -> int:
     s = ops.ledger.open_session()
     env = read_env(ops)
     name = ops.spec.shaked_provider
-    url = env.get("ARENA_LOCAL_MODELS", "").removeprefix(f"{name}=")
-    key = env.get(f"ARENA_LOCAL_KEY_{name.upper()}")
+    url = env.get("SHAKEDOWN_LOCAL_MODELS", "").removeprefix(f"{name}=")
+    key = env.get(f"SHAKEDOWN_LOCAL_KEY_{name.upper()}")
     if not (s and url and key):
         ops.out(f"No started pod in {ops.env_path}: run gpupod start first.")
         return 2

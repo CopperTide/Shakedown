@@ -1,5 +1,5 @@
 //! The real packages (`arena-postgres`, `arena-retail`, built once per test binary) behind a hub
-//! of the test's own: its own Postgres namespace (`?arena_ns=` on `ARENA_PG_URL`) and its own save
+//! of the test's own: its own Postgres namespace (`?arena_ns=` on `SHAKEDOWN_PG_URL`) and its own save
 //! folder, both removed when the `TestHub` drops, so tests never touch each other's databases or
 //! the live shaked's.
 #![allow(dead_code)]
@@ -25,15 +25,15 @@ pub fn arena() -> PathBuf {
         .unwrap()
 }
 
-/// Where `build()` puts the package binaries: `ARENA_BIN_DIR`, set when `CARGO_TARGET_DIR` moves
+/// Where `build()` puts the package binaries: `SHAKEDOWN_BIN_DIR`, set when `CARGO_TARGET_DIR` moves
 /// the build, else `core/target/debug`.
 pub fn bin_dir() -> PathBuf {
-    std::env::var_os("ARENA_BIN_DIR")
+    parts::settings::var_os("SHAKEDOWN_BIN_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|| arena().join("core/target/debug"))
 }
 
-/// The roots `ARENA_PACKAGES` would name: `<arena>/integrations` and `<arena>/benchmarks`.
+/// The roots `SHAKEDOWN_PACKAGES` would name: `<arena>/integrations` and `<arena>/benchmarks`.
 pub fn package_roots() -> Vec<PathBuf> {
     vec![arena().join("integrations"), arena().join("benchmarks")]
 }
@@ -65,7 +65,7 @@ pub fn plain_hub(saves: &Path) -> Arc<Hub> {
     build();
     let registry = Registry::scan(&package_roots()).unwrap();
     let hub = Hub::new(registry, bin_dir(), saves.to_path_buf())
-        .with_env(vec![("ARENA_PG_URL".into(), pg_url())]);
+        .with_env(vec![("SHAKEDOWN_PG_URL".into(), pg_url())]);
     Arc::new(hub)
 }
 
@@ -148,7 +148,7 @@ fn hub_on(ns: &str, saves: &Path, extra: &[PathBuf]) -> Arc<Hub> {
     )
     .with_arena_dir(arena())
     .with_env(vec![(
-        "ARENA_PG_URL".into(),
+        "SHAKEDOWN_PG_URL".into(),
         format!("{url}{sep}arena_ns={ns}"),
     )]);
     Arc::new(hub)
@@ -218,7 +218,7 @@ pub fn toy(name: &str, kind: &'static str, args: &[&str]) -> Package {
 
 /// An integration running the kit's `counter` example with `args` (e.g. `--flavour replay_only`).
 pub fn counter(name: &str, args: &[&str]) -> Package {
-    let mut command = vec!["${ARENA_BIN_DIR}/examples/counter".to_string()];
+    let mut command = vec!["${SHAKEDOWN_BIN_DIR}/examples/counter".to_string()];
     command.extend(args.iter().map(|a| a.to_string()));
     Package {
         name: name.to_string(),

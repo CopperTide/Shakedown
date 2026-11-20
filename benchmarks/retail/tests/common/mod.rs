@@ -13,7 +13,7 @@ pub fn data_dir() -> PathBuf {
 }
 
 pub fn pg_url() -> String {
-    std::env::var("ARENA_PG_URL")
+    arena_part::settings::var("SHAKEDOWN_PG_URL")
         .unwrap_or_else(|_| "postgres://arena:arena@127.0.0.1:5544/postgres".into())
 }
 

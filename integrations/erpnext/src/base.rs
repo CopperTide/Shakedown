@@ -1,5 +1,5 @@
 //! The base every instance starts from: a site with ERPNext installed and set up, made once and
-//! kept in `$ARENA_SAVES/erpnext/.base/` as a save (a dump-rooted manifest and the site's
+//! kept in `$SHAKEDOWN_SAVES/erpnext/.base/` as a save (a dump-rooted manifest and the site's
 //! files) plus what every site made from it needs: the shared site config and the
 //! Administrator's API key.
 use std::io;

@@ -1,4 +1,4 @@
-"""The whole software-factory world under shaked (live; not yet run). Needs: shaked at `ARENA_URL` with this
+"""The whole software-factory world under shaked (live; not yet run). Needs: shaked at `SHAKEDOWN_URL` with this
 checkout's packages (the live-service part's `arena-live-service` binary and the worldclock-gateway image from the
 `factory` branch's Rust work, the twins and the people part), every image `images/build.sh all` and images.yaml's
 hints give, and Docker with about 3 GB free. One platform at a time; each test stops what it started."""
@@ -10,7 +10,7 @@ import urllib.request
 import pytest
 
 pytestmark = pytest.mark.live
-ARENA = os.environ.get("ARENA_URL", "http://127.0.0.1:7700")
+ARENA = os.environ.get("SHAKEDOWN_URL", "http://127.0.0.1:7700")
 
 
 def api(method: str, path: str, body=None) -> dict:

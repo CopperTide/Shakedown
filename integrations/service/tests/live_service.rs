@@ -181,7 +181,7 @@ async fn live_service_roundtrip() {
 }
 
 /// A project with a Postgres database (`postgres` volume `pg`), a file holder (`hardlink`
-/// volume `files`) and a cache (`skip`): the database image from `ARENA_TEST_POSTGRES_IMAGE`
+/// volume `files`) and a cache (`skip`): the database image from `SHAKEDOWN_TEST_POSTGRES_IMAGE`
 /// (default `postgres:17-alpine`); the helper is the default `redis:6.2-alpine`.
 fn strategies_compose(pg_image: &str) -> String {
     format!(
@@ -229,7 +229,8 @@ fn files(instance: &str, script: &str) -> String {
 
 /// The strategies' world and config.
 fn strategies_world() -> (World, Value) {
-    let pg = std::env::var("ARENA_TEST_POSTGRES_IMAGE").unwrap_or("postgres:17-alpine".into());
+    let pg = arena_part::settings::var("SHAKEDOWN_TEST_POSTGRES_IMAGE")
+        .unwrap_or("postgres:17-alpine".into());
     let w = World::new();
     fs::write(w.dir.join("compose.yml"), strategies_compose(&pg)).unwrap();
     let volumes = json!([{"name": "pg", "save": "postgres", "service": "db"},

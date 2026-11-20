@@ -73,12 +73,12 @@ pub struct Service {
 }
 
 impl Service {
-    /// The `service` package, saves under env `ARENA_SAVES`.
+    /// The `service` package, saves under env `SHAKEDOWN_SAVES`.
     pub fn from_env() -> Service {
         Service::package_from_env(Mode::Plain)
     }
 
-    /// The `live-service` package, saves under env `ARENA_SAVES`.
+    /// The `live-service` package, saves under env `SHAKEDOWN_SAVES`.
     pub fn live_from_env() -> Service {
         Service::package_from_env(Mode::Live)
     }
@@ -89,7 +89,7 @@ impl Service {
         Service::with(mode, saves)
     }
 
-    /// The `service` package, saves in `package_folder` (`<ARENA_SAVES>/service`).
+    /// The `service` package, saves in `package_folder` (`<SHAKEDOWN_SAVES>/service`).
     pub fn new(package_folder: PathBuf) -> Service {
         Service::with(Mode::Plain, SaveDirs::under(package_folder))
     }
@@ -125,13 +125,13 @@ impl Service {
     }
 
     /// The instance `id` with `config`, its project not yet run: compose gets the config's env,
-    /// each image as `IMAGE_<SERVICE>` and, when live, the clock folder as `ARENA_CLOCK_DIR`.
+    /// each image as `IMAGE_<SERVICE>` and, when live, the clock folder as `SHAKEDOWN_CLOCK_DIR`.
     fn new_instance(&self, id: &str, config: &Config) -> Result<Instance, PartError> {
         let mut env = config.env.clone();
         env.extend((config.images.iter()).map(|(s, i)| (image_var(s), i.clone())));
         if config.live {
             let dir = self.clock_dir(id).to_string_lossy().into_owned();
-            env.insert("ARENA_CLOCK_DIR".into(), dir);
+            env.extend(arena_part::settings::both("SHAKEDOWN_CLOCK_DIR", dir));
         }
         let name = format!("arena_{id}");
         let project = Project::new(&name, &config.compose_file, &env);
@@ -372,7 +372,7 @@ impl Part for Service {
         blocking(move || routes().map_err(PartError::internal_from)).await
     }
 
-    /// Nothing is kept outside `ARENA_SAVES`: live volumes are removed by `stop`.
+    /// Nothing is kept outside `SHAKEDOWN_SAVES`: live volumes are removed by `stop`.
     async fn usage(&self) -> Result<Usage, PartError> {
         Ok(Usage { bytes: 0 })
     }

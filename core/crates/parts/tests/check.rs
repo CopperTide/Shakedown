@@ -115,7 +115,7 @@ fn flavour_pkg(flavour: &str) -> PathBuf {
         d.join("arena-package.toml"),
         format!(
             "kind = \"integration\"\nname = \"counter\"\nversion = \"0.1.0\"\nprotocol = 1\n\
-             run = {{ command = [\"${{ARENA_BIN_DIR}}/examples/counter\", \"--flavour\", \"{flavour}\"] }}\n\n\
+             run = {{ command = [\"${{SHAKEDOWN_BIN_DIR}}/examples/counter\", \"--flavour\", \"{flavour}\"] }}\n\n\
              [[example]]\ntool = \"add\"\nargs = {{ n = 1 }}\n\n[[example]]\ntool = \"get\"\nargs = {{}}\n"
         ),
     )

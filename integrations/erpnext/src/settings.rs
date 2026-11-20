@@ -1,4 +1,4 @@
-//! Settings: the ERPNext install (one per program: env `ARENA_ERPNEXT_*` or defaults, which the
+//! Settings: the ERPNext install (one per program: env `SHAKEDOWN_ERPNEXT_*` or defaults, which the
 //! config of the first start may override) and an instance's settings (from the world config).
 use std::path::PathBuf;
 
@@ -58,7 +58,7 @@ impl Default for StackConfig {
 
 /// `var` parsed, or `default` when it is not set.
 fn env_or<T: std::str::FromStr>(var: &str, default: T) -> Result<T, PartError> {
-    match std::env::var(var) {
+    match arena_part::settings::var(var) {
         Err(_) => Ok(default),
         Ok(s) => s
             .parse()
@@ -73,16 +73,16 @@ impl StackConfig {
         let s = &d.server;
         let c = StackConfig {
             server: ServerConfig {
-                container: env_or("ARENA_ERPNEXT_DB_CONTAINER", s.container.clone())?,
-                port: env_or("ARENA_ERPNEXT_DB_PORT", s.port)?,
-                volume: env_or("ARENA_ERPNEXT_DB_VOLUME", s.volume.clone())?,
-                root_password: env_or("ARENA_ERPNEXT_DB_PASSWORD", s.root_password.clone())?,
+                container: env_or("SHAKEDOWN_ERPNEXT_DB_CONTAINER", s.container.clone())?,
+                port: env_or("SHAKEDOWN_ERPNEXT_DB_PORT", s.port)?,
+                volume: env_or("SHAKEDOWN_ERPNEXT_DB_VOLUME", s.volume.clone())?,
+                root_password: env_or("SHAKEDOWN_ERPNEXT_DB_PASSWORD", s.root_password.clone())?,
                 flags: s.flags.clone(),
             },
-            project: env_or("ARENA_ERPNEXT_PROJECT", d.project.clone())?,
-            port: env_or("ARENA_ERPNEXT_PORT", d.port)?,
-            image: env_or("ARENA_ERPNEXT_IMAGE", d.image.clone())?,
-            compose_file: env_or("ARENA_ERPNEXT_COMPOSE", d.compose_file.clone())?,
+            project: env_or("SHAKEDOWN_ERPNEXT_PROJECT", d.project.clone())?,
+            port: env_or("SHAKEDOWN_ERPNEXT_PORT", d.port)?,
+            image: env_or("SHAKEDOWN_ERPNEXT_IMAGE", d.image.clone())?,
+            compose_file: env_or("SHAKEDOWN_ERPNEXT_COMPOSE", d.compose_file.clone())?,
         };
         c.check()?;
         Ok(c)

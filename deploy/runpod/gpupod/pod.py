@@ -153,7 +153,7 @@ def _bring_up(ops: Ops, gpu: Gpu, low_memory: bool) -> tuple[str, str, bool] | s
     if s and s["gpu_id"] != gpu.id:
         return f"Refused: the stopped pod {s['pod_id']} has {s['gpu_id']}; delete it first (gpupod delete)."
     if s:
-        key = read_env(ops).get(f"ARENA_LOCAL_KEY_{ops.spec.shaked_provider.upper()}")
+        key = read_env(ops).get(f"SHAKEDOWN_LOCAL_KEY_{ops.spec.shaked_provider.upper()}")
         if not key:
             return f"Refused: {ops.env_path} has no key for pod {s['pod_id']}; delete the pod and start again."
         call(ops.runner, "pod", "start", s["pod_id"])
@@ -182,9 +182,9 @@ def create_argv(spec: PodSpec, gpu: Gpu, env: dict, low_memory: bool) -> list[st
 def write_env(ops: Ops, pod_id: str, key: str) -> None:
     """``runpod.env`` (mode 0600): what shaked needs to reach the pod as ``local:<provider>``."""
     name, (p_in, p_out) = ops.spec.shaked_provider, ops.spec.hosted_price_per_mtok
-    lines = [f"ARENA_LOCAL_MODELS={name}={ops.base(pod_id)}/v1",
-             f"ARENA_LOCAL_KEY_{name.upper()}={key}",
-             f"ARENA_LOCAL_PRICE_{name.upper()}={p_in:.2f},{p_out:.2f}"]
+    lines = [f"SHAKEDOWN_LOCAL_MODELS={name}={ops.base(pod_id)}/v1",
+             f"SHAKEDOWN_LOCAL_KEY_{name.upper()}={key}",
+             f"SHAKEDOWN_LOCAL_PRICE_{name.upper()}={p_in:.2f},{p_out:.2f}"]
     ops.env_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     fd = os.open(ops.env_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w") as f:

@@ -205,7 +205,7 @@ def test_driver_round_trip(arena, monkeypatch):
     from shakedown import claude_code, driver
 
     via, model = _live_model(arena)
-    for k in ("ARENA_BRANCH", "ARENA_RUN", "ARENA_TASK", "ARENA_FORK_OF"):
+    for k in ("SHAKEDOWN_BRANCH", "SHAKEDOWN_RUN", "SHAKEDOWN_TASK", "SHAKEDOWN_FORK_OF"):
         monkeypatch.delenv(k, raising=False)
     with driver.run(task=arena.tasks()[0].id, url=arena.url) as run:
         if via == "claude-code":
@@ -233,7 +233,7 @@ def test_driver_round_trip(arena, monkeypatch):
 def test_driver_that_raises_ends_the_run_failed_and_scored(arena, monkeypatch):
     from shakedown import driver
 
-    for k in ("ARENA_BRANCH", "ARENA_RUN", "ARENA_TASK", "ARENA_FORK_OF"):
+    for k in ("SHAKEDOWN_BRANCH", "SHAKEDOWN_RUN", "SHAKEDOWN_TASK", "SHAKEDOWN_FORK_OF"):
         monkeypatch.delenv(k, raising=False)
     with pytest.raises(RuntimeError):
         with driver.run(task=arena.tasks()[0].id, url=arena.url) as run:

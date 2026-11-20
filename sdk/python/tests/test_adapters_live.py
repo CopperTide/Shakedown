@@ -35,9 +35,9 @@ def test_example_driver_runs_a_scored_run(arena, framework, module):
     pytest.importorskip(module, reason=f"needs the {framework.replace('_', '-')} extra")
     provider, model = _provider(arena)
     before = {r.id for r in arena.runs()}
-    env = {k: v for k, v in os.environ.items() if not k.startswith("ARENA_")}
-    env.update(ARENA_URL=arena.url, ARENA_TASK=arena.tasks()[0].id, ARENA_PROVIDER=provider,
-               ARENA_MODEL=model)
+    env = {k: v for k, v in os.environ.items() if not k.startswith("SHAKEDOWN_")}
+    env.update(SHAKEDOWN_URL=arena.url, SHAKEDOWN_TASK=arena.tasks()[0].id, SHAKEDOWN_PROVIDER=provider,
+               SHAKEDOWN_MODEL=model)
     done = subprocess.run([sys.executable, str(DRIVERS / f"{framework}_driver.py")], env=env,
                           capture_output=True, text=True, timeout=900)
     new = [r for r in arena.runs() if r.id not in before]

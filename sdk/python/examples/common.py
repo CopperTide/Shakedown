@@ -1,9 +1,9 @@
 """Shared by the examples: connect to shaked.
 
-- ``ARENA_URL`` set: connect to that shaked (any benchmark).
-- otherwise: start one with ``Shakedown.local`` from ``ARENA_BIN_DIR`` (a ``cargo build --release`` of this
-  repository: ``core/target/release``), on the Postgres at ``ARENA_PG_URL`` (default
-  ``deploy/compose.yml``'s), with the benchmark ``ARENA_BENCHMARK`` (default ``retail``).
+- ``SHAKEDOWN_URL`` set: connect to that shaked (any benchmark).
+- otherwise: start one with ``Shakedown.local`` from ``SHAKEDOWN_BIN_DIR`` (a ``cargo build --release`` of this
+  repository: ``core/target/release``), on the Postgres at ``SHAKEDOWN_PG_URL`` (default
+  ``deploy/compose.yml``'s), with the benchmark ``SHAKEDOWN_BENCHMARK`` (default ``retail``).
 """
 
 from __future__ import annotations
@@ -14,21 +14,22 @@ import sys
 from pathlib import Path
 
 from shakedown import Shakedown
+from shakedown.settings import setting
 
 REPO = Path(__file__).resolve().parents[3]
 
 
 def connect() -> Shakedown:
-    url = os.environ.get("ARENA_URL")
+    url = setting("SHAKEDOWN_URL")
     if url:
         return Shakedown(url)
-    bin_dir = os.environ.get("ARENA_BIN_DIR", str(REPO / "core/target/release"))
+    bin_dir = setting("SHAKEDOWN_BIN_DIR", str(REPO / "core/target/release"))
     return Shakedown.local(
-        benchmark=os.environ.get("ARENA_BENCHMARK", "retail"),
+        benchmark=setting("SHAKEDOWN_BENCHMARK", "retail"),
         packages=[str(REPO / "integrations"), str(REPO / "benchmarks")],
         bin_dir=bin_dir,
-        pg_url=os.environ.get("ARENA_PG_URL"),
-        saves=os.environ.get("ARENA_SAVES"),
+        pg_url=setting("SHAKEDOWN_PG_URL"),
+        saves=setting("SHAKEDOWN_SAVES"),
     )
 
 

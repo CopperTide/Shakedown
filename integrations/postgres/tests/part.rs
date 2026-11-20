@@ -10,7 +10,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::OnceLock;
 
 fn url() -> String {
-    std::env::var("ARENA_PG_URL")
+    arena_part::settings::var("SHAKEDOWN_PG_URL")
         .unwrap_or_else(|_| "postgres://arena:arena@127.0.0.1:5544/postgres".into())
 }
 
@@ -312,9 +312,9 @@ async fn run_part_check(cfgfile: PathBuf, saves: PathBuf, ns: String) -> std::pr
             .arg(a.join("integrations/postgres/check"))
             .arg("--config")
             .arg(&cfgfile)
-            .env("ARENA_BIN_DIR", a.join("core/target/debug"))
-            .env("ARENA_SAVES", &saves)
-            .env("ARENA_PG_URL", format!("{}?arena_ns={}", url(), ns))
+            .env("SHAKEDOWN_BIN_DIR", a.join("core/target/debug"))
+            .env("SHAKEDOWN_SAVES", &saves)
+            .env("SHAKEDOWN_PG_URL", format!("{}?arena_ns={}", url(), ns))
             .output()
             .unwrap()
     })

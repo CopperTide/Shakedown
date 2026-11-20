@@ -1,4 +1,4 @@
-//! Saves on disk, `$ARENA_SAVES/sculptured/<save>/`: `data/`, the server's data folder,
+//! Saves on disk, `$SHAKEDOWN_SAVES/sculptured/<save>/`: `data/`, the server's data folder,
 //! `changes.json`, the team's changes as the tools showed them (what `inspect` and `diff` read),
 //! and `meta.json`, the sculptured build that wrote the store and the re-raised changes.
 //!

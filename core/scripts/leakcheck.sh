@@ -8,7 +8,7 @@
 # stores `arena_test%`.
 # MariaDB (the `mariadb` integration, integrations/mariadb/src): instances `mi_%`, scratch views
 # `mx_%`; counted too when LEAKCHECK_MARIADB names a server container of the integration (its root
-# password in ARENA_MARIADB_PASSWORD, default `arena`). Never point it at a server you didn't start
+# password in SHAKEDOWN_MARIADB_PASSWORD, or its old name ARENA_MARIADB_PASSWORD, default `arena`). Never point it at a server you didn't start
 # for this.
 set -u
 PG_KINDS=(pi ps branch snap)
@@ -33,7 +33,7 @@ pg() {
 }
 
 mariadb() {
-  docker exec -e MYSQL_PWD="${ARENA_MARIADB_PASSWORD:-arena}" "$LEAKCHECK_MARIADB" \
+  docker exec -e MYSQL_PWD="${SHAKEDOWN_MARIADB_PASSWORD:-${ARENA_MARIADB_PASSWORD:-arena}}" "$LEAKCHECK_MARIADB" \
     mariadb -uroot -N -B -e "$1"
 }
 

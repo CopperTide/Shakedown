@@ -32,7 +32,7 @@ pub struct Endpoints {
 }
 
 /// The endpoints of `agent` on `branch`, on the shaked at `self_base`, with the variables `env`
-/// (`proxy_url` is its `ARENA_PROXY`).
+/// (`proxy_url` is its `SHAKEDOWN_PROXY`).
 pub fn endpoints(
     self_base: &str,
     branch: &str,
@@ -44,7 +44,7 @@ pub fn endpoints(
         agent: agent.to_string(),
         mcp_url: format!("{base}/mcp/{branch}/{agent}"),
         gateway_url: format!("{base}/gateway/{branch}/{agent}/v1"),
-        proxy_url: env.get("ARENA_PROXY").cloned(),
+        proxy_url: env.get("SHAKEDOWN_PROXY").cloned(),
         env,
     }
 }

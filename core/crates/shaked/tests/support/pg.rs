@@ -7,7 +7,7 @@ use std::{future::Future, sync::Mutex};
 use shaked::pg::Admin;
 
 pub fn pg_url() -> String {
-    std::env::var("ARENA_PG_URL")
+    parts::settings::var("SHAKEDOWN_PG_URL")
         .unwrap_or_else(|_| "postgres://arena:arena@127.0.0.1:5544/postgres".to_string())
 }
 

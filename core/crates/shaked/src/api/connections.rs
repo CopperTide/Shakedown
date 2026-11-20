@@ -53,7 +53,7 @@ fn loopback_origin(origin: &str) -> bool {
 
 /// 415 unless the request is JSON, 403 when it comes from a web page on another origin. A
 /// browser sends a JSON request to another origin only after a CORS preflight, which shaked
-/// answers for `ARENA_CORS_ORIGIN` alone, so a web page can't make shaked start a program.
+/// answers for `SHAKEDOWN_CORS_ORIGIN` alone, so a web page can't make shaked start a program.
 pub(super) fn guard_launch(state: &AppState, headers: &HeaderMap) -> Result<(), ApiError> {
     let json = headers
         .get(header::CONTENT_TYPE)

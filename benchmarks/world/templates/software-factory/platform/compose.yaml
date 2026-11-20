@@ -2,7 +2,7 @@
 # observability stack (collector, world-time gateway, Prometheus, Alertmanager, Loki, Tempo, Grafana, GlitchTip).
 # Run by the `service` part as one project. Images come as IMAGE_<SERVICE> (images.yaml), memory limits and
 # program knobs as MEM_<SERVICE> and friends (profiles/lean.yaml or profiles/full.yaml); services only the full
-# profile runs are under `profiles: [full]`. The part mounts the world clock at ARENA_CLOCK_DIR.
+# profile runs are under `profiles: [full]`. The part mounts the world clock at SHAKEDOWN_CLOCK_DIR.
 
 x-app-health: &app-health
   test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=2)"]
@@ -50,7 +50,7 @@ services:
       INVENTORY_URL: http://prod-inventory:8000
       ORDERS_URL: http://prod-orders:8000
       SENTRY_DSN: http://5f0c3a8e2b5d4c1e9a7f6b3d2c1e0a91@glitchtip:8000/1
-    volumes: ["${ARENA_CLOCK_DIR:?set by the service part}:/shakedown:ro"]
+    volumes: ["${SHAKEDOWN_CLOCK_DIR:?set by the service part}:/shakedown:ro"]
     healthcheck: *app-health
     ports: ["127.0.0.1::8000"]
     mem_limit: ${MEM_PROD_STOREFRONT}
@@ -67,7 +67,7 @@ services:
       DB_SCHEMA: orders
       INVENTORY_URL: http://prod-inventory:8000
       SENTRY_DSN: http://8b1d4e7a3c6f4a2b9e5d1c7f3a8b2e64@glitchtip:8000/2
-    volumes: ["${ARENA_CLOCK_DIR:?set by the service part}:/shakedown:ro"]
+    volumes: ["${SHAKEDOWN_CLOCK_DIR:?set by the service part}:/shakedown:ro"]
     healthcheck: *app-health
     ports: ["127.0.0.1::8000"]
     mem_limit: ${MEM_PROD_ORDERS}
@@ -84,7 +84,7 @@ services:
       DB_SCHEMA: inventory
       HOLD_SECONDS: "900"
       SENTRY_DSN: http://c7e2a9d4f1b84e6a8d3c5b9e7f2a4d18@glitchtip:8000/3
-    volumes: ["${ARENA_CLOCK_DIR:?set by the service part}:/shakedown:ro"]
+    volumes: ["${SHAKEDOWN_CLOCK_DIR:?set by the service part}:/shakedown:ro"]
     healthcheck: *app-health
     ports: ["127.0.0.1::8000"]
     mem_limit: ${MEM_PROD_INVENTORY}
@@ -121,7 +121,7 @@ services:
       TRAFFIC_EVENTS: ${TRAFFIC_EVENTS:-}
       TRAFFIC_SEED: ${TRAFFIC_SEED:-}
     volumes:
-      - "${ARENA_CLOCK_DIR:?set by the service part}:/shakedown:ro"
+      - "${SHAKEDOWN_CLOCK_DIR:?set by the service part}:/shakedown:ro"
       - ./traffic:/app/traffic:ro
       - ./contracts:/app/contracts:ro
     healthcheck:
@@ -155,7 +155,7 @@ services:
       INVENTORY_URL: http://staging-inventory:8000
       ORDERS_URL: http://staging-orders:8000
       SENTRY_DSN: http://5f0c3a8e2b5d4c1e9a7f6b3d2c1e0a91@glitchtip:8000/1
-    volumes: ["${ARENA_CLOCK_DIR:?set by the service part}:/shakedown:ro"]
+    volumes: ["${SHAKEDOWN_CLOCK_DIR:?set by the service part}:/shakedown:ro"]
     healthcheck: *app-health
     ports: ["127.0.0.1::8000"]
     mem_limit: ${MEM_STAGING_STOREFRONT}
@@ -172,7 +172,7 @@ services:
       DB_SCHEMA: orders
       INVENTORY_URL: http://staging-inventory:8000
       SENTRY_DSN: http://8b1d4e7a3c6f4a2b9e5d1c7f3a8b2e64@glitchtip:8000/2
-    volumes: ["${ARENA_CLOCK_DIR:?set by the service part}:/shakedown:ro"]
+    volumes: ["${SHAKEDOWN_CLOCK_DIR:?set by the service part}:/shakedown:ro"]
     healthcheck: *app-health
     mem_limit: ${MEM_STAGING_ORDERS}
 
@@ -188,7 +188,7 @@ services:
       DB_SCHEMA: inventory
       HOLD_SECONDS: "900"
       SENTRY_DSN: http://c7e2a9d4f1b84e6a8d3c5b9e7f2a4d18@glitchtip:8000/3
-    volumes: ["${ARENA_CLOCK_DIR:?set by the service part}:/shakedown:ro"]
+    volumes: ["${SHAKEDOWN_CLOCK_DIR:?set by the service part}:/shakedown:ro"]
     healthcheck: *app-health
     mem_limit: ${MEM_STAGING_INVENTORY}
 
@@ -225,7 +225,7 @@ services:
       PROMETHEUS_URL: http://prometheus:9090
       LOKI_URL: http://loki:3100
       TEMPO_URL: http://tempo:3200
-    volumes: ["${ARENA_CLOCK_DIR:?set by the service part}:/shakedown:ro"]
+    volumes: ["${SHAKEDOWN_CLOCK_DIR:?set by the service part}:/shakedown:ro"]
     ports: ["127.0.0.1::4319"]
     mem_limit: ${MEM_WORLDCLOCK_GATEWAY}
 

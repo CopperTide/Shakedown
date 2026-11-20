@@ -64,7 +64,7 @@ pub struct Erpnext {
 type R<T> = Result<T, PartError>;
 
 impl Erpnext {
-    /// The install of env `ARENA_ERPNEXT_*`, saves under `$ARENA_SAVES/erpnext`.
+    /// The install of env `SHAKEDOWN_ERPNEXT_*`, saves under `$SHAKEDOWN_SAVES/erpnext`.
     pub fn from_env() -> R<Erpnext> {
         let dirs = SaveDirs::new("erpnext");
         Ok(Erpnext::new(

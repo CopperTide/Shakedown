@@ -84,9 +84,9 @@ def test_env_file_is_private_and_the_ledger_has_no_key(tmp_path, runner, clock):
     env = ops.env_path.read_text()
     assert stat.S_IMODE(ops.env_path.stat().st_mode) == 0o600
     lines = dict(line.split("=", 1) for line in env.splitlines() if line)
-    assert lines["ARENA_LOCAL_MODELS"] == f"runpod=https://{POD_HOST}/v1"
-    assert lines["ARENA_LOCAL_PRICE_RUNPOD"] == "0.15,0.60"
-    key = lines["ARENA_LOCAL_KEY_RUNPOD"]
+    assert lines["SHAKEDOWN_LOCAL_MODELS"] == f"runpod=https://{POD_HOST}/v1"
+    assert lines["SHAKEDOWN_LOCAL_PRICE_RUNPOD"] == "0.15,0.60"
+    key = lines["SHAKEDOWN_LOCAL_KEY_RUNPOD"]
     assert len(key) >= 32
     create = next(c for c in runner.calls if c[:2] == ["pod", "create"])
     assert json.loads(create[create.index("--env") + 1])["VLLM_API_KEY"] == key

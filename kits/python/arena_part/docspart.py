@@ -1,5 +1,5 @@
 """A part read as `{key: doc}`: its instances live (`live_docs`) and its saves from their folders
-(`saved_docs`), with `inspect`, `diff`, the save folders under `$ARENA_SAVES/<NAME>/` and the instance table
+(`saved_docs`), with `inspect`, `diff`, the save folders under `$SHAKEDOWN_SAVES/<NAME>/` and the instance table
 every part keeps.
 
 Subclass `DocsPart` and give it `NAME` (the package name, which names its save folders), `live_docs(instance)`
@@ -58,7 +58,7 @@ class DocsPart(Part):
         self.instances.pop(instance, None)
 
     def usage(self):
-        return {"bytes": 0}  # every save lives under ARENA_SAVES, which shaked measures itself
+        return {"bytes": 0}  # every save lives under SHAKEDOWN_SAVES, which shaked measures itself
 
     def gc(self, keep):
         return saves.gc(self.NAME, keep)

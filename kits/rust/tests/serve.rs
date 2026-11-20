@@ -54,7 +54,7 @@ fn flavour_client(f: &str) -> Client {
     Client::new(counter::Counter::new(counter::Flavour::parse(f).unwrap()))
 }
 
-/// The test process's save root (`ARENA_SAVES`, set once), shared by the tests that save while
+/// The test process's save root (`SHAKEDOWN_SAVES`, set once), shared by the tests that save while
 /// they run, and removed when the last of them ends (after a failure too).
 struct Saves;
 
@@ -68,7 +68,7 @@ fn saves_root() -> std::path::PathBuf {
 impl Saves {
     fn take() -> Saves {
         static ENV: std::sync::Once = std::sync::Once::new();
-        ENV.call_once(|| std::env::set_var("ARENA_SAVES", saves_root()));
+        ENV.call_once(|| std::env::set_var("SHAKEDOWN_SAVES", saves_root()));
         *SAVES_USERS.lock().unwrap_or_else(|e| e.into_inner()) += 1;
         Saves
     }
@@ -254,7 +254,7 @@ async fn fresh_process_starts_from_other_processs_save() {
 
 #[tokio::test]
 async fn unknown_save_is_32002() {
-    let _saves = Saves::take(); // sets ARENA_SAVES
+    let _saves = Saves::take(); // sets SHAKEDOWN_SAVES
     let mut c = client();
     let r = c
         .call(

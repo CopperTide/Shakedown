@@ -22,8 +22,8 @@ from .errors import ShakedownError
 from .models import Task
 
 #: Environment variables the CLI never gets (database URLs, other vendors' keys).
-SCRUB = ("PGPASSWORD", "PGUSER", "PGHOST", "PGDATABASE", "PGPORT", "ARENA_PG_URL", "DATABASE_URL",
-         "OPENROUTER_API_KEY", "OPENAI_API_KEY", "ARENA_LOCAL_MODELS")
+SCRUB = ("PGPASSWORD", "PGUSER", "PGHOST", "PGDATABASE", "PGPORT", "SHAKEDOWN_PG_URL", "ARENA_PG_URL",
+         "DATABASE_URL", "OPENROUTER_API_KEY", "OPENAI_API_KEY", "SHAKEDOWN_LOCAL_MODELS", "ARENA_LOCAL_MODELS")
 
 
 class ClaudeCodeMissing(ShakedownError):

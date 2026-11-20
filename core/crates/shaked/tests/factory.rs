@@ -85,8 +85,8 @@ async fn run_and_report(hub: &Arc<Hub>, live: &Live, polls: usize) {
 }
 
 /// The incident with the benchmark's own team. For a run whose parts are not the defaults, set by
-/// the environment: `ARENA_RUN_FACTORY` (e.g. `--backend isaac --plant-config ...`),
-/// `ARENA_RUN_ISAAC_SIM` (the plant on another machine) and `ARENA_CLOCK_SPEED` (default 20). It
+/// the environment: `SHAKEDOWN_RUN_FACTORY` (e.g. `--backend isaac --plant-config ...`),
+/// `SHAKEDOWN_RUN_ISAAC_SIM` (the plant on another machine) and `SHAKEDOWN_CLOCK_SPEED` (default 20). It
 /// waits up to an hour, since Isaac Sim starts and steps far slower than the stand-in.
 #[test]
 #[ignore = "live: runs a real model on a whole world (see the module doc)"]
@@ -99,9 +99,9 @@ fn live_factory_team_runs_the_incident_and_arena_scores_it() {
         return;
     };
     build();
-    if std::env::var_os("ARENA_CLOCK_SPEED").is_none() {
+    if parts::settings::var_os("SHAKEDOWN_CLOCK_SPEED").is_none() {
         // SAFETY: set before the runtime or any thread that reads the environment starts.
-        unsafe { std::env::set_var("ARENA_CLOCK_SPEED", "20") };
+        unsafe { std::env::set_var("SHAKEDOWN_CLOCK_SPEED", "20") };
     }
     let stack = Stack::new("t13");
     let hub = Hub::new(

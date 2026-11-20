@@ -10,8 +10,8 @@ use crate::names::{Site, INSTANCE_PREFIX, VIEW_PREFIX};
 use crate::Erpnext;
 
 impl Erpnext {
-    /// What this part keeps outside `ARENA_SAVES`: its server's binlog and the sites'
-    /// databases. (The sites' folders are under `ARENA_SAVES/erpnext/.sites`, which shaked
+    /// What this part keeps outside `SHAKEDOWN_SAVES`: its server's binlog and the sites'
+    /// databases. (The sites' folders are under `SHAKEDOWN_SAVES/erpnext/.sites`, which shaked
     /// counts.) Nothing when the server is not running.
     pub(crate) async fn bytes_used(&self) -> Result<Usage, PartError> {
         let server = self.server();

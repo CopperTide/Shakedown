@@ -128,12 +128,12 @@ async fn run_override_replaces_the_manifest_command() {
     write_pkg(&root, "relay-counter", r#"["/nonexistent/relay-counter"]"#);
     // Only this test uses the package, so no other test sees the variable.
     std::env::set_var(
-        "ARENA_RUN_RELAY_COUNTER",
-        "exec \"${ARENA_BIN_DIR}/examples/counter\"",
+        "SHAKEDOWN_RUN_RELAY_COUNTER",
+        "exec \"${SHAKEDOWN_BIN_DIR}/examples/counter\"",
     );
     let hub = hub_for(std::slice::from_ref(&root), &saves);
     let d = hub.describe("relay-counter").await.unwrap();
-    std::env::remove_var("ARENA_RUN_RELAY_COUNTER");
+    std::env::remove_var("SHAKEDOWN_RUN_RELAY_COUNTER");
     assert_eq!(d.protocol, 1);
     drop(hub);
     std::fs::remove_dir_all(&root).unwrap();
@@ -144,7 +144,11 @@ async fn run_override_replaces_the_manifest_command() {
 async fn hub_spawns_rust_counter_and_saves() {
     build_counter();
     let (root, saves) = (temp("rust"), temp("rust-saves"));
-    write_pkg(&root, "counter", r#"["${ARENA_BIN_DIR}/examples/counter"]"#);
+    write_pkg(
+        &root,
+        "counter",
+        r#"["${SHAKEDOWN_BIN_DIR}/examples/counter"]"#,
+    );
     let hub = hub_for(std::slice::from_ref(&root), &saves);
     exercise(&hub, "counter").await;
     assert!(hub.saves_bytes() > 0);
@@ -176,7 +180,11 @@ async fn hub_spawns_python_counter() {
 async fn hub_respawns_after_crash() {
     build_counter();
     let (root, saves) = (temp("crash"), temp("crash-saves"));
-    write_pkg(&root, "counter", r#"["${ARENA_BIN_DIR}/examples/counter"]"#);
+    write_pkg(
+        &root,
+        "counter",
+        r#"["${SHAKEDOWN_BIN_DIR}/examples/counter"]"#,
+    );
     let hub = hub_for(std::slice::from_ref(&root), &saves);
     let c = hub.client("counter").await.unwrap();
     let _: Value = c.call("usage", json!({})).await.unwrap();
@@ -219,7 +227,7 @@ async fn command_mode_clears_environment() {
     write_pkg(
         &root,
         "envy",
-        r#"["sh", "-c", "echo ARENA_SAVES=$ARENA_SAVES FOO=$FOO >&2; exit 1"]"#,
+        r#"["sh", "-c", "echo SHAKEDOWN_SAVES=$SHAKEDOWN_SAVES FOO=$FOO >&2; exit 1"]"#,
     );
     std::env::set_var("FOO", "leaked");
     let hub = hub_for(std::slice::from_ref(&root), &saves);
@@ -227,7 +235,7 @@ async fn command_mode_clears_environment() {
     match c.call::<Value>("describe", json!({})).await {
         Err(CallError::Stopped(m)) => {
             assert!(
-                m.contains(&format!("ARENA_SAVES={}", saves.display())),
+                m.contains(&format!("SHAKEDOWN_SAVES={}", saves.display())),
                 "{m}"
             );
             assert!(!m.contains("leaked"), "{m}");
@@ -244,17 +252,20 @@ async fn hub_env_overrides_reach_command_programs() {
     write_pkg(
         &root,
         "envo",
-        r#"["sh", "-c", "echo ARENA_PG_URL=$ARENA_PG_URL EXTRA=$EXTRA >&2; exit 1"]"#,
+        r#"["sh", "-c", "echo SHAKEDOWN_PG_URL=$SHAKEDOWN_PG_URL EXTRA=$EXTRA >&2; exit 1"]"#,
     );
     let hub = hub_for(std::slice::from_ref(&root), &saves).with_env(vec![
-        ("ARENA_PG_URL".into(), "postgres://x/y?arena_ns=t_".into()),
+        (
+            "SHAKEDOWN_PG_URL".into(),
+            "postgres://x/y?arena_ns=t_".into(),
+        ),
         ("EXTRA".into(), "yes".into()),
     ]);
     let c = hub.client("envo").await.unwrap();
     match c.call::<Value>("describe", json!({})).await {
         Err(CallError::Stopped(m)) => {
             assert!(
-                m.contains("ARENA_PG_URL=postgres://x/y?arena_ns=t_ EXTRA=yes"),
+                m.contains("SHAKEDOWN_PG_URL=postgres://x/y?arena_ns=t_ EXTRA=yes"),
                 "{m}"
             );
         }
@@ -352,7 +363,11 @@ async fn killed_uv_python_respawns_and_leaves_no_process() {
 #[test]
 fn save_dirs_skips_dot_folders() {
     let (root, saves) = (temp("dots"), temp("dots-saves"));
-    write_pkg(&root, "counter", r#"["${ARENA_BIN_DIR}/examples/counter"]"#);
+    write_pkg(
+        &root,
+        "counter",
+        r#"["${SHAKEDOWN_BIN_DIR}/examples/counter"]"#,
+    );
     let hub = hub_for(std::slice::from_ref(&root), &saves);
     for dir in ["s1", ".live/a", ".tmp"] {
         std::fs::create_dir_all(saves.join("counter").join(dir)).unwrap();
@@ -367,7 +382,11 @@ fn save_dirs_skips_dot_folders() {
 fn remove_save_dir_removes_read_only_folders() {
     use std::os::unix::fs::PermissionsExt;
     let (root, saves) = (temp("ro"), temp("ro-saves"));
-    write_pkg(&root, "counter", r#"["${ARENA_BIN_DIR}/examples/counter"]"#);
+    write_pkg(
+        &root,
+        "counter",
+        r#"["${SHAKEDOWN_BIN_DIR}/examples/counter"]"#,
+    );
     let hub = hub_for(std::slice::from_ref(&root), &saves);
     let dir = hub.save_dir("counter", "s1");
     std::fs::create_dir_all(dir.join("a/b")).unwrap();

@@ -31,7 +31,7 @@ def test_compose_config_validates(platform, sf_dir, tmp_path, profile):
     if shutil.which("docker") is None or subprocess.run(["docker", "compose", "version"],
                                                         capture_output=True).returncode != 0:
         pytest.skip("docker compose is not installed")
-    env = {**os.environ, **profile_env(platform, profile), **images_env(sf_dir), "ARENA_CLOCK_DIR": str(tmp_path)}
+    env = {**os.environ, **profile_env(platform, profile), **images_env(sf_dir), "SHAKEDOWN_CLOCK_DIR": str(tmp_path)}
     argv = ["docker", "compose", "-p", "sf-config-check", "-f", str(platform / "compose.yaml"),
             *(["--profile", "full"] if profile == "full" else []), "config", "--quiet"]
     done = subprocess.run(argv, env=env, capture_output=True, text=True)
@@ -114,7 +114,7 @@ def test_every_app_container_sends_telemetry_and_errors_and_reads_the_clock(plat
         env = s["environment"]
         assert env["OTEL_EXPORTER_OTLP_ENDPOINT"] == "http://otel-collector:4318", name
         assert env["SENTRY_DSN"].startswith("http://") and "@glitchtip:8000/" in env["SENTRY_DSN"], name
-        assert "${ARENA_CLOCK_DIR" in s["volumes"][0] and s["volumes"][0].endswith(":/shakedown:ro"), name
+        assert "${SHAKEDOWN_CLOCK_DIR" in s["volumes"][0] and s["volumes"][0].endswith(":/shakedown:ro"), name
         assert s["image"] == f"${{IMAGE_{name.upper().replace('-', '_')}:?set by the service part}}", name
         assert "healthcheck" in s, name
 

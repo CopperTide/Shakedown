@@ -8,7 +8,7 @@
 //! (`benchmarks/pharma/src/checks/tests.rs`).
 //!
 //! `live_`: it starts an ERPNext stack and a Twenty server of its own and needs the Sculptured
-//! program (`ARENA_SCULPTURED_BINARY`: one recent enough to serve the changes route) and a model;
+//! program (`SHAKEDOWN_SCULPTURED_BINARY`: one recent enough to serve the changes route) and a model;
 //! everything it makes is removed when it ends. Run:
 //! `cargo test -p shaked --test pharma -- --ignored live_ --nocapture`.
 mod support;

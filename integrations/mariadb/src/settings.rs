@@ -1,4 +1,4 @@
-//! An instance's settings: the world config's keys, else env `ARENA_MARIADB_*`, else defaults.
+//! An instance's settings: the world config's keys, else env `SHAKEDOWN_MARIADB_*`, else defaults.
 use arena_part::helpers::mariadb::{valid_docker_name, ServerConfig};
 use arena_part::PartError;
 use serde_json::Value;
@@ -14,18 +14,18 @@ pub struct Settings {
 }
 
 /// Config key, env var.
-const CONTAINER: (&str, &str) = ("container", "ARENA_MARIADB_CONTAINER");
-const PORT: (&str, &str) = ("port", "ARENA_MARIADB_PORT");
-const VOLUME: (&str, &str) = ("volume", "ARENA_MARIADB_VOLUME");
-const PASSWORD: (&str, &str) = ("root_password", "ARENA_MARIADB_PASSWORD");
-const DUMP_AFTER: (&str, &str) = ("dump_after_bytes", "ARENA_MARIADB_DUMP_AFTER_BYTES");
+const CONTAINER: (&str, &str) = ("container", "SHAKEDOWN_MARIADB_CONTAINER");
+const PORT: (&str, &str) = ("port", "SHAKEDOWN_MARIADB_PORT");
+const VOLUME: (&str, &str) = ("volume", "SHAKEDOWN_MARIADB_VOLUME");
+const PASSWORD: (&str, &str) = ("root_password", "SHAKEDOWN_MARIADB_PASSWORD");
+const DUMP_AFTER: (&str, &str) = ("dump_after_bytes", "SHAKEDOWN_MARIADB_DUMP_AFTER_BYTES");
 
 /// The value of a setting as text: the config key's, else the env var's.
 fn lookup(config: &Value, (key, var): (&str, &str)) -> Option<String> {
     match config.get(key) {
         Some(Value::String(s)) => Some(s.clone()),
         Some(Value::Number(n)) => Some(n.to_string()),
-        _ => std::env::var(var).ok(),
+        _ => arena_part::settings::var(var).ok(),
     }
 }
 

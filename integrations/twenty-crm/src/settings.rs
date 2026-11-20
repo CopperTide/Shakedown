@@ -37,16 +37,16 @@ impl Default for Settings {
 }
 
 impl Settings {
-    /// `ARENA_TWENTY_PROJECT`, `_DB_PORT`, `_IMAGE`, else the defaults.
+    /// `SHAKEDOWN_TWENTY_PROJECT`, `_DB_PORT`, `_IMAGE`, else the defaults.
     pub fn from_env() -> Result<Settings> {
         let mut s = Settings::default();
-        if let Ok(project) = std::env::var("ARENA_TWENTY_PROJECT") {
+        if let Ok(project) = arena_part::settings::var("SHAKEDOWN_TWENTY_PROJECT") {
             s.project = project;
         }
-        if let Ok(port) = std::env::var("ARENA_TWENTY_DB_PORT") {
-            s.db_port = port.parse().context("ARENA_TWENTY_DB_PORT")?;
+        if let Ok(port) = arena_part::settings::var("SHAKEDOWN_TWENTY_DB_PORT") {
+            s.db_port = port.parse().context("SHAKEDOWN_TWENTY_DB_PORT")?;
         }
-        if let Ok(image) = std::env::var("ARENA_TWENTY_IMAGE") {
+        if let Ok(image) = arena_part::settings::var("SHAKEDOWN_TWENTY_IMAGE") {
             s.image = image;
         }
         s.check()?;

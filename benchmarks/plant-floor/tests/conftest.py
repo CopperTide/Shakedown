@@ -9,4 +9,4 @@ sys.path[:0] = [str(ROOT / "integrations" / "plant-opcua"), str(ROOT / "integrat
 
 @pytest.fixture(autouse=True)
 def saves_root(monkeypatch, tmp_path):
-    monkeypatch.setenv("ARENA_SAVES", str(tmp_path / "saves"))
+    monkeypatch.setenv("SHAKEDOWN_SAVES", str(tmp_path / "saves"))

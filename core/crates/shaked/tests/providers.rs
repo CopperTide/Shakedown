@@ -385,7 +385,7 @@ async fn an_agent_calls_its_own_provider_and_records_its_cost(live: Live) {
 fn assert_no_key_in(record: &Value, config: &Config) {
     let config = format!("{config:?}");
     for k in ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY"] {
-        if let Ok(key) = std::env::var(k) {
+        if let Ok(key) = parts::settings::var(k) {
             assert!(!record.to_string().contains(&key), "{k} recorded");
             assert!(!config.contains(&key), "{k} in Debug");
         }

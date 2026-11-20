@@ -46,20 +46,22 @@ const FINISH_GRACE: Duration = Duration::from_secs(45);
 const END_WAIT: Duration = Duration::from_secs(20);
 
 impl Limits {
-    /// The limits `ARENA_DISPATCH_MAX_MINUTES`, `ARENA_DISPATCH_IDLE_SECS` and
-    /// `ARENA_DISPATCH_IDLE_WAKES` set, else the defaults (60 min, 20 s, 3).
+    /// The limits `SHAKEDOWN_DISPATCH_MAX_MINUTES`, `SHAKEDOWN_DISPATCH_IDLE_SECS` and
+    /// `SHAKEDOWN_DISPATCH_IDLE_WAKES` set, else the defaults (60 min, 20 s, 3).
     pub fn from_env() -> Limits {
         let num = |k: &str| {
-            std::env::var(k)
+            parts::settings::var(k)
                 .ok()
                 .and_then(|v| v.trim().parse::<u64>().ok())
         };
         let d = Limits::default();
         Limits {
-            max_run: num("ARENA_DISPATCH_MAX_MINUTES")
+            max_run: num("SHAKEDOWN_DISPATCH_MAX_MINUTES")
                 .map_or(d.max_run, |m| Duration::from_secs(m * 60)),
-            idle_grace: num("ARENA_DISPATCH_IDLE_SECS").map_or(d.idle_grace, Duration::from_secs),
-            max_idle_wakes: num("ARENA_DISPATCH_IDLE_WAKES").map_or(d.max_idle_wakes, |n| n as u32),
+            idle_grace: num("SHAKEDOWN_DISPATCH_IDLE_SECS")
+                .map_or(d.idle_grace, Duration::from_secs),
+            max_idle_wakes: num("SHAKEDOWN_DISPATCH_IDLE_WAKES")
+                .map_or(d.max_idle_wakes, |n| n as u32),
         }
     }
 }

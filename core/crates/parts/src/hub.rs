@@ -20,10 +20,10 @@ pub struct Hub {
     /// Written only to add a package installed while shaked runs.
     registry: RwLock<Registry>,
     bin_dir: PathBuf,
-    /// Substituted for `${ARENA_DIR}` in commands (left as it is when empty).
+    /// Substituted for `${SHAKEDOWN_DIR}` in commands (left as it is when empty).
     arena_dir: PathBuf,
     saves_root: PathBuf,
-    /// Extra environment for command-mode programs (e.g. `ARENA_PG_URL`).
+    /// Extra environment for command-mode programs (e.g. `SHAKEDOWN_PG_URL`).
     env: Vec<(String, String)>,
     slots: Mutex<HashMap<String, Slot>>,
 }
@@ -46,7 +46,7 @@ impl Hub {
         self
     }
 
-    /// The arena folder `${ARENA_DIR}` names in package commands.
+    /// The arena folder `${SHAKEDOWN_DIR}` names in package commands.
     pub fn with_arena_dir(mut self, dir: PathBuf) -> Hub {
         self.arena_dir = dir;
         self

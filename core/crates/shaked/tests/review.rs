@@ -1,7 +1,7 @@
 //! AI review: its storage (on Postgres), and the reviewer itself, live, on a real model.
 //!
 //! The live test reviews a recorded run (the single Claude Code Sonnet agent of the pharma demo,
-//! from the review module's test data) with Claude Code on `ARENA_LIVE_MODEL` (default `haiku`)
+//! from the review module's test data) with Claude Code on `SHAKEDOWN_LIVE_MODEL` (default `haiku`)
 //! and checks that the answer is a valid review whose every cited step is a step of that run. It
 //! prints `skipped: …` and passes without `claude`.
 
@@ -173,7 +173,7 @@ fn live_review_of_a_recorded_run_is_valid_and_cites_real_steps() {
         println!("skipped: claude is not installed");
         return;
     }
-    let model = std::env::var("ARENA_LIVE_MODEL").unwrap_or_else(|_| "haiku".into());
+    let model = parts::settings::var("SHAKEDOWN_LIVE_MODEL").unwrap_or_else(|_| "haiku".into());
     let (events, job) = recorded_run_job();
     let reviewer = ReviewerModel::ClaudeCode { model };
     let cfg = shaked::providers::ProviderConfig::from_env();

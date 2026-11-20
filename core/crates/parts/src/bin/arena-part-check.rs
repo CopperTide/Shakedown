@@ -37,17 +37,17 @@ fn parse_args(
     Ok((dir.ok_or_else(|| anyhow::anyhow!(USAGE))?, config))
 }
 
-/// Where the binaries are (`ARENA_BIN_DIR`, else the release build).
+/// Where the binaries are (`SHAKEDOWN_BIN_DIR`, else the release build).
 fn bin_dir() -> PathBuf {
     let arena = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    std::env::var_os("ARENA_BIN_DIR")
+    arena_part::settings::var_os("SHAKEDOWN_BIN_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|| arena.join("core/target/release"))
 }
 
-/// Where saves go (`ARENA_SAVES`, else a fresh temp folder) and whether to remove it afterwards.
+/// Where saves go (`SHAKEDOWN_SAVES`, else a fresh temp folder) and whether to remove it afterwards.
 fn saves_dir() -> std::io::Result<(PathBuf, bool)> {
-    match std::env::var_os("ARENA_SAVES") {
+    match arena_part::settings::var_os("SHAKEDOWN_SAVES") {
         Some(s) => Ok((PathBuf::from(s), false)),
         None => Ok((unique_temp_dir()?, true)),
     }

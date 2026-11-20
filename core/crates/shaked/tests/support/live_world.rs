@@ -27,27 +27,30 @@ impl Stack {
 
     pub fn env(&self) -> Vec<(String, String)> {
         let mut out = vec![
-            ("ARENA_PG_URL".to_string(), pg_url()),
+            ("SHAKEDOWN_PG_URL".to_string(), pg_url()),
             ("PATH".to_string(), path_with_sculptured()),
         ];
         let port = |n: u16| (n + (std::process::id() % 1000) as u16).to_string();
         for (k, v) in [
             (
-                "ARENA_ERPNEXT_DB_CONTAINER",
+                "SHAKEDOWN_ERPNEXT_DB_CONTAINER",
                 format!("arena-erpnext-db-{}", self.id),
             ),
             (
-                "ARENA_ERPNEXT_DB_VOLUME",
+                "SHAKEDOWN_ERPNEXT_DB_VOLUME",
                 format!("arena-erpnext-db-{}", self.id),
             ),
-            ("ARENA_ERPNEXT_DB_PORT", port(23000)),
+            ("SHAKEDOWN_ERPNEXT_DB_PORT", port(23000)),
             (
-                "ARENA_ERPNEXT_PROJECT",
+                "SHAKEDOWN_ERPNEXT_PROJECT",
                 format!("arena_erpnext_{}", self.id),
             ),
-            ("ARENA_ERPNEXT_PORT", port(24000)),
-            ("ARENA_TWENTY_PROJECT", format!("arena_twenty_{}", self.id)),
-            ("ARENA_TWENTY_DB_PORT", port(25000)),
+            ("SHAKEDOWN_ERPNEXT_PORT", port(24000)),
+            (
+                "SHAKEDOWN_TWENTY_PROJECT",
+                format!("arena_twenty_{}", self.id),
+            ),
+            ("SHAKEDOWN_TWENTY_DB_PORT", port(25000)),
         ] {
             out.push((k.to_string(), v));
         }
@@ -87,7 +90,7 @@ impl Drop for Stack {
         let project = format!("arena_erpnext_{}", self.id);
         let mut down = Command::new("docker");
         down.args(["compose", "-p", &project, "-f"]).arg(&compose);
-        down.env("ARENA_ERPNEXT_SITES", self.saves.join("erpnext/.sites"));
+        down.env("SHAKEDOWN_ERPNEXT_SITES", self.saves.join("erpnext/.sites"));
         let _ = down.args(["down", "-v"]).output();
         let _ = Command::new("docker")
             .args(["volume", "rm", "-f", &db])
@@ -97,12 +100,12 @@ impl Drop for Stack {
     }
 }
 
-/// `PATH` with the Sculptured program to use first: `ARENA_SCULPTURED_BINARY`, else a release build
+/// `PATH` with the Sculptured program to use first: `SHAKEDOWN_SCULPTURED_BINARY`, else a release build
 /// next to the arena checkout, else the one already on it.
 pub fn path_with_sculptured() -> String {
     let path = std::env::var("PATH").unwrap_or_default();
     let local = arena().join("../sculptured/target/release/sculptured");
-    let set = std::env::var_os("ARENA_SCULPTURED_BINARY").map(PathBuf::from);
+    let set = parts::settings::var_os("SHAKEDOWN_SCULPTURED_BINARY").map(PathBuf::from);
     let binary = set.or_else(|| local.exists().then_some(local));
     match binary.as_deref().and_then(|b| b.parent()) {
         Some(dir) => format!("{}:{path}", dir.display()),

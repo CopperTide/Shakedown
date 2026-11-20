@@ -42,7 +42,7 @@ pub struct TwentyCrm {
 }
 
 impl TwentyCrm {
-    /// The server of env `ARENA_TWENTY_*`, files under `$ARENA_SAVES/twenty-crm`.
+    /// The server of env `SHAKEDOWN_TWENTY_*`, files under `$SHAKEDOWN_SAVES/twenty-crm`.
     pub fn from_env() -> anyhow::Result<TwentyCrm> {
         let root = SaveDirs::new("twenty-crm").root().to_path_buf();
         Ok(TwentyCrm::new(Settings::from_env()?, root))

@@ -12,11 +12,11 @@ use std::sync::Mutex;
 use crate::prices::{self, CallTokens};
 
 /// Env default for a run that names no `max_cost_usd`.
-pub const ENV: &str = "ARENA_MAX_COST_USD";
+pub const ENV: &str = "SHAKEDOWN_MAX_COST_USD";
 
-/// The limit `ARENA_MAX_COST_USD` sets for runs that name none: a positive number, else none.
+/// The limit `SHAKEDOWN_MAX_COST_USD` sets for runs that name none: a positive number, else none.
 pub fn env_default() -> Option<f64> {
-    positive(std::env::var(ENV).ok()?.trim().parse().ok()?)
+    positive(parts::settings::var(ENV).ok()?.trim().parse().ok()?)
 }
 
 /// `v` when it is a positive finite number of dollars.

@@ -34,14 +34,17 @@ pub struct Stack {
 impl Stack {
     /// The stack of `cfg` with its sites in `sites` (an absolute path). Nothing is started.
     pub fn new(cfg: StackConfig, server: Server, sites: PathBuf) -> Result<Stack> {
-        let env = BTreeMap::from([
+        let env: BTreeMap<String, String> = [
             (
-                "ARENA_ERPNEXT_SITES".to_string(),
+                "SHAKEDOWN_ERPNEXT_SITES",
                 sites.to_string_lossy().into_owned(),
             ),
-            ("ARENA_ERPNEXT_PORT".to_string(), cfg.port.to_string()),
-            ("ARENA_ERPNEXT_IMAGE".to_string(), cfg.image.clone()),
-        ]);
+            ("SHAKEDOWN_ERPNEXT_PORT", cfg.port.to_string()),
+            ("SHAKEDOWN_ERPNEXT_IMAGE", cfg.image.clone()),
+        ]
+        .into_iter()
+        .flat_map(|(k, v)| arena_part::settings::both(k, v))
+        .collect();
         let project = Project::new(&cfg.project, &cfg.compose_file, &env)?;
         Ok(Stack {
             rest: Rest::new(cfg.port)?,

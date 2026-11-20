@@ -45,7 +45,7 @@ pub struct Mariadb {
 type R<T> = Result<T, PartError>;
 
 impl Mariadb {
-    /// Saves under `$ARENA_SAVES/mariadb`.
+    /// Saves under `$SHAKEDOWN_SAVES/mariadb`.
     pub fn from_env() -> Mariadb {
         let dirs = SaveDirs::new("mariadb");
         Mariadb::new(dirs.root().to_path_buf())

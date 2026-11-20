@@ -218,7 +218,7 @@ pub(crate) fn fail(error: String) -> AgentResult {
 /// The secrets a CLI child doesn't get (except its own vendor's key): database credentials,
 /// every model provider's key, and the local model servers.
 const SECRET_ENV: [&str; 7] = [
-    "ARENA_PG_URL",
+    "SHAKEDOWN_PG_URL",
     "DATABASE_URL",
     "PGPASSWORD",
     "OPENROUTER_API_KEY",
@@ -229,7 +229,10 @@ const SECRET_ENV: [&str; 7] = [
 
 /// True for the name of an env var a CLI child must not see.
 fn is_secret_env(name: &str) -> bool {
-    name.starts_with("PG") || name.starts_with(LOCAL_KEY_PREFIX) || SECRET_ENV.contains(&name)
+    let name = parts::settings::new_name(name);
+    name.starts_with("PG")
+        || name.starts_with(LOCAL_KEY_PREFIX)
+        || SECRET_ENV.contains(&name.as_str())
 }
 
 /// The env vars to remove from a CLI child, of those named in `present`: every secret but
@@ -237,7 +240,11 @@ fn is_secret_env(name: &str) -> bool {
 /// Codex with `OPENAI_API_KEY`).
 fn scrubbed(present: impl Iterator<Item = String>, keep: &str) -> Vec<String> {
     let mut out: Vec<String> = present.filter(|k| is_secret_env(k)).collect();
-    out.extend(SECRET_ENV.iter().map(|k| k.to_string()));
+    out.extend(
+        SECRET_ENV
+            .iter()
+            .flat_map(|k| [k.to_string(), parts::settings::old_name(k)]),
+    );
     out.retain(|k| k != keep);
     out.sort();
     out.dedup();
@@ -267,12 +274,26 @@ mod tests {
     }
 
     #[test]
+    fn secrets_under_their_old_names_are_removed_too() {
+        let present = ["ARENA_LOCAL_KEY_OLLAMA", "ARENA_PORT"].map(String::from);
+        let gone = scrubbed(present.into_iter(), "ANTHROPIC_API_KEY");
+        for k in [
+            "ARENA_LOCAL_KEY_OLLAMA",
+            "ARENA_PG_URL",
+            "ARENA_LOCAL_MODELS",
+        ] {
+            assert!(gone.iter().any(|g| g == k), "{k} kept");
+        }
+        assert!(!gone.iter().any(|g| g == "ARENA_PORT"));
+    }
+
+    #[test]
     fn each_cli_keeps_only_its_own_vendor_key() {
         let present = [
             "PATH",
             "HOME",
-            "ARENA_PORT",
-            "ARENA_LOCAL_KEY_OLLAMA",
+            "SHAKEDOWN_PORT",
+            "SHAKEDOWN_LOCAL_KEY_OLLAMA",
             "PGUSER",
         ];
         for (keep, other) in [
@@ -283,16 +304,16 @@ mod tests {
             for k in [
                 other,
                 "OPENROUTER_API_KEY",
-                "ARENA_LOCAL_KEY_OLLAMA",
-                "ARENA_LOCAL_MODELS",
+                "SHAKEDOWN_LOCAL_KEY_OLLAMA",
+                "SHAKEDOWN_LOCAL_MODELS",
                 "PGUSER",
                 "PGPASSWORD",
-                "ARENA_PG_URL",
+                "SHAKEDOWN_PG_URL",
                 "DATABASE_URL",
             ] {
                 assert!(gone.iter().any(|g| g == k), "{k} kept with {keep}");
             }
-            for k in [keep, "PATH", "HOME", "ARENA_PORT"] {
+            for k in [keep, "PATH", "HOME", "SHAKEDOWN_PORT"] {
                 assert!(!gone.iter().any(|g| g == k), "{k} removed with {keep}");
             }
         }

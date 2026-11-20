@@ -318,8 +318,8 @@ fn conformance(e: &Env) {
         .arg(a.join("integrations/twenty-crm/check"))
         .arg("--config")
         .arg(&config)
-        .env("ARENA_BIN_DIR", bin)
-        .env("ARENA_SAVES", &e.saves)
+        .env("SHAKEDOWN_BIN_DIR", bin)
+        .env("SHAKEDOWN_SAVES", &e.saves)
         .output()
         .unwrap();
     let stdout = String::from_utf8_lossy(&out.stdout).to_string();

@@ -50,7 +50,7 @@ def test_the_package_names_the_world_and_runs_the_world_benchmark(builder, tmp_p
     assert out == {"name": "aero-q-co", "title": "Ærø \"Q\" Co", "version": toml["version"]}
     assert (toml["name"], toml["protocol"], toml["world"]["title"]) == ("aero-q-co", 1, "Ærø \"Q\" Co")
     assert toml["world"]["template_name"] == "Shop" and toml["needs"] == {"gpu_vram_gb": 0, "services": []}
-    assert toml["run"]["command"] == ["uv", "run", "--project", "${ARENA_DIR}/benchmarks/world", "python", "-m",
+    assert toml["run"]["command"] == ["uv", "run", "--project", "${SHAKEDOWN_DIR}/benchmarks/world", "python", "-m",
                                       "worldbench", "--world", "world.json", "--version", toml["version"]]
     world = json.loads((tmp_path / "w" / "world.json").read_text())
     assert world["name"] == "aero-q-co" and (tmp_path / "w" / "files" / "seed" / "readme.txt").is_file()
@@ -85,7 +85,7 @@ def test_generate_into_an_existing_dir_is_refused(builder, tmp_path):
 
 def test_templates_lists_every_root(fixtures, tmp_path, monkeypatch):
     copy_with(fixtures / "shop", tmp_path, {"id": "other-shop", "name": "Other shop"})
-    monkeypatch.setenv("ARENA_TEMPLATES", f"{tmp_path}::{tmp_path / 'missing'}")
+    monkeypatch.setenv("SHAKEDOWN_TEMPLATES", f"{tmp_path}::{tmp_path / 'missing'}")
     listed = call(Builder.from_env(), "templates", {})
     other = next(t for t in listed if t["id"] == "other-shop")
     assert other == {"id": "other-shop", "name": "Other shop", "summary": "A neutral fixture template",
@@ -116,7 +116,7 @@ def test_the_program_answers_templates_over_the_line_protocol(fixtures, tmp_path
     import os
     import subprocess
     import sys
-    env = {**os.environ, "ARENA_TEMPLATES": str(fixtures)}
+    env = {**os.environ, "SHAKEDOWN_TEMPLATES": str(fixtures)}
     proc = subprocess.run([sys.executable, "-m", "worldbench.builder"], cwd=tmp_path, env=env, capture_output=True,
                           text=True, input='{"jsonrpc":"2.0","id":1,"method":"templates"}\n', timeout=30)
     ids = [t["id"] for t in json.loads(proc.stdout.splitlines()[0])["result"]]
@@ -127,7 +127,7 @@ def test_the_program_adds_the_template_roots_its_command_names(fixtures, tmp_pat
     import os
     import subprocess
     import sys
-    env = {k: v for k, v in os.environ.items() if k != "ARENA_TEMPLATES"}
+    env = {k: v for k, v in os.environ.items() if k != "SHAKEDOWN_TEMPLATES"}
     proc = subprocess.run([sys.executable, "-m", "worldbench.builder", "--templates", str(fixtures)], cwd=tmp_path,
                           env=env, capture_output=True, text=True,
                           input='{"jsonrpc":"2.0","id":1,"method":"templates"}\n', timeout=30)

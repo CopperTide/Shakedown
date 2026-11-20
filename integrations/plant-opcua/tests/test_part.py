@@ -86,7 +86,7 @@ def test_bad_writes_are_not_taken_and_are_not_interlock_events(plant, node, valu
 
 def test_a_save_restores_the_plan_and_serves_it_again(plant):
     write(plant, "Plant2/Lines/A/Queue", ["SO-2001"])
-    plant.save("i1", "s1", str(Path(os.environ["ARENA_SAVES"]) / "plant-opcua" / "s1"))
+    plant.save("i1", "s1", str(Path(os.environ["SHAKEDOWN_SAVES"]) / "plant-opcua" / "s1"))
     plant.start("i2", config(), 0, 0, {"save": "s1", "mode": "exact"})
     assert plant.diff({"instance": "i2"}, {"save": "s1"}) == {"differing": []}
     assert plant.call_tool("i2", "opcua_read", {"nodes": ["Plant2/Lines/A/Queue"]}, 0)["result"]["values"] == \

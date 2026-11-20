@@ -1,7 +1,7 @@
 //! The generic `postgres` integration: each instance is a database, each save a copy of one.
 //!
-//! Databases are `pi_<ns><instance>` and `ps_<ns><save>`. `ns` is empty unless env `ARENA_PG_NS`
-//! (or `?arena_ns=` on `ARENA_PG_URL`) sets it (tests use it to keep their databases apart from everyone else's). With an empty `ns`,
+//! Databases are `pi_<ns><instance>` and `ps_<ns><save>`. `ns` is empty unless env `SHAKEDOWN_PG_NS`
+//! (or `?arena_ns=` on `SHAKEDOWN_PG_URL`) sets it (tests use it to keep their databases apart from everyone else's). With an empty `ns`,
 //! ids that name an existing legacy database (`snap_*`, `branch_*`, `gold_*`, `world_base`) are
 //! used as they are, so runs recorded before saves were parts still open.
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -78,11 +78,12 @@ impl Postgres {
     }
 
     pub fn from_env() -> Postgres {
-        let url = std::env::var("ARENA_PG_URL").unwrap_or_else(|_| DEFAULT_URL.into());
-        // shaked passes `ARENA_PG_URL` on to programs but not other variables, so the namespace can
+        let url =
+            arena_part::settings::var("SHAKEDOWN_PG_URL").unwrap_or_else(|_| DEFAULT_URL.into());
+        // shaked passes `SHAKEDOWN_PG_URL` on to programs but not other variables, so the namespace can
         // also ride on the URL as `?arena_ns=<ns>`.
         let (url, from_url) = split_ns(&url);
-        let ns = std::env::var("ARENA_PG_NS").unwrap_or(from_url);
+        let ns = arena_part::settings::var("SHAKEDOWN_PG_NS").unwrap_or(from_url);
         Postgres::new(&url, &ns)
     }
 

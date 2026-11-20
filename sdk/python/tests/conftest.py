@@ -1,13 +1,13 @@
 """The core the integration tests use.
 
-- ``ARENA_SDK_URL``: a shaked that is already running (any benchmark); or
+- ``SHAKEDOWN_SDK_URL``: a shaked that is already running (any benchmark); or
 - a shaked the tests start (``Shakedown.local``) with the retail example benchmark, from
-  ``ARENA_SDK_BIN_DIR`` (default ``core/target/release``, then ``core/target/debug``; it needs
-  ``shaked``, ``arena-retail`` and ``arena-postgres``) on the Postgres at ``ARENA_SDK_PG_URL``
+  ``SHAKEDOWN_SDK_BIN_DIR`` (default ``core/target/release``, then ``core/target/debug``; it needs
+  ``shaked``, ``arena-retail`` and ``arena-postgres``) on the Postgres at ``SHAKEDOWN_SDK_PG_URL``
   (default ``deploy/compose.yml``'s, ``postgres://arena:arena@127.0.0.1:5544/postgres``).
 
 The shaked the tests start cleans up unreferenced saves when it starts, like any shaked, so point
-``ARENA_SDK_PG_URL`` at a Postgres server no other test run is using at the same time.
+``SHAKEDOWN_SDK_PG_URL`` at a Postgres server no other test run is using at the same time.
 
 Without either, the tests marked ``core`` are skipped. They drive the API directly (start and finish
 external runs, call a tool endpoint, fork, read records, export) and never pose as an agent. The one
@@ -27,6 +27,7 @@ from urllib.parse import urlparse
 import pytest
 
 from shakedown import Shakedown
+from shakedown.settings import setting
 
 REPO = Path(__file__).resolve().parents[3]
 #: First on the PATH of the shaked the tests start: a stand-in `claude` that calls no model.
@@ -35,7 +36,7 @@ NEEDED = ("shaked", "arena-retail", "arena-postgres")
 
 
 def _bin_dir() -> str | None:
-    cands = [os.environ.get("ARENA_SDK_BIN_DIR"), REPO / "core/target/release", REPO / "core/target/debug"]
+    cands = [setting("SHAKEDOWN_SDK_BIN_DIR"), REPO / "core/target/release", REPO / "core/target/debug"]
     for c in cands:
         if c and all((Path(c) / n).is_file() for n in NEEDED):
             return str(c)
@@ -53,22 +54,22 @@ def _reachable(pg_url: str) -> bool:
 
 @pytest.fixture(scope="session")
 def arena():
-    url = os.environ.get("ARENA_SDK_URL")
+    url = setting("SHAKEDOWN_SDK_URL")
     if url:
         a = Shakedown(url)
         try:
             a.health()
         except Exception as e:  # noqa: BLE001
-            pytest.skip(f"ARENA_SDK_URL={url} does not answer: {e}")
+            pytest.skip(f"SHAKEDOWN_SDK_URL={url} does not answer: {e}")
         yield a
         a.close()
         return
     bin_dir = _bin_dir()
-    pg = os.environ.get("ARENA_SDK_PG_URL", "postgres://arena:arena@127.0.0.1:5544/postgres")
+    pg = setting("SHAKEDOWN_SDK_PG_URL", "postgres://arena:arena@127.0.0.1:5544/postgres")
     if bin_dir is None:
-        pytest.skip("no shaked build (set ARENA_SDK_BIN_DIR or ARENA_SDK_URL)")
+        pytest.skip("no shaked build (set SHAKEDOWN_SDK_BIN_DIR or SHAKEDOWN_SDK_URL)")
     if not _reachable(pg):
-        pytest.skip(f"no Postgres at {urlparse(pg).hostname}:{urlparse(pg).port} (set ARENA_SDK_PG_URL)")
+        pytest.skip(f"no Postgres at {urlparse(pg).hostname}:{urlparse(pg).port} (set SHAKEDOWN_SDK_PG_URL)")
     saves = tempfile.mkdtemp(prefix="arena-sdk-test-saves-")
     a = Shakedown.local(
         benchmark="retail",

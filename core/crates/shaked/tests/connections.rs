@@ -270,7 +270,7 @@ impl AppFx {
     async fn example_connection(&self) -> String {
         let driver = sdk_dir().join("examples/drivers/openai_agents_driver.py");
         let command = json!(["uv", "run", "--extra", "openai-agents", "python", driver]);
-        let env = json!({"ARENA_PROVIDER": "openai", "ARENA_MODEL": "gpt-4.1-mini"});
+        let env = json!({"SHAKEDOWN_PROVIDER": "openai", "SHAKEDOWN_MODEL": "gpt-4.1-mini"});
         let body = json!({"name": "OpenAI Agents team", "command": command, "workdir": sdk_dir(), "env": env});
         let (status, conn) = self.post("/api/connections", body).await;
         assert_eq!(status, 200, "{conn}");

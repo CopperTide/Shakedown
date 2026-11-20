@@ -246,10 +246,10 @@ def _fake_shaked(monkeypatch, calls: list, ended: bool = False):
         return a
 
     monkeypatch.setattr(driver, "Shakedown", fake)
-    for k, v in {"ARENA_URL": "http://127.0.0.1:1", "ARENA_RUN": "r1", "ARENA_BRANCH": "b1",
-                 "ARENA_TASK": "t1"}.items():
+    for k, v in {"SHAKEDOWN_URL": "http://127.0.0.1:1", "SHAKEDOWN_RUN": "r1", "SHAKEDOWN_BRANCH": "b1",
+                 "SHAKEDOWN_TASK": "t1"}.items():
         monkeypatch.setenv(k, v)
-    monkeypatch.delenv("ARENA_FORK_OF", raising=False)
+    monkeypatch.delenv("SHAKEDOWN_FORK_OF", raising=False)
     return driver
 
 
@@ -349,7 +349,7 @@ def _program(folder, name):
 def test_find_shaked_prefers_shaked_and_still_finds_a_build_named_arenad(tmp_path, monkeypatch):
     from shakedown.local import find_shaked
 
-    monkeypatch.delenv("ARENA_BIN_DIR", raising=False)
+    monkeypatch.delenv("SHAKEDOWN_BIN_DIR", raising=False)
     monkeypatch.setenv("PATH", str(tmp_path / "nowhere"))
     old = _program(tmp_path, "arenad")
     assert find_shaked(None, str(tmp_path)) == old

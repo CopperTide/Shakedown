@@ -5,7 +5,7 @@ import json
 import os
 import urllib.request
 
-base = f"{os.environ['ARENA_URL']}/api/branches/{os.environ['ARENA_BRANCH']}"
+base = f"{os.environ['SHAKEDOWN_URL']}/api/branches/{os.environ['SHAKEDOWN_BRANCH']}"
 
 
 def post(path, body):

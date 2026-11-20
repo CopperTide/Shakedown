@@ -1,4 +1,4 @@
-//! Saves as manifests in `$ARENA_SAVES/mariadb/<save>/manifest.json`, dumps in `.blobs/`.
+//! Saves as manifests in `$SHAKEDOWN_SAVES/mariadb/<save>/manifest.json`, dumps in `.blobs/`.
 use std::path::Path;
 
 use arena_part::helpers::mariadb::{saves_in, used_roots, Manifest, Tracked, TrackedChange};

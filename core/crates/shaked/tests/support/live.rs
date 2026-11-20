@@ -7,15 +7,15 @@
 //! Every such test is named `live_…` and `#[ignore]`d. When no model is available it prints
 //! `skipped: …` and passes. Which model it runs on:
 //!
-//! - Claude Code (`claude` on `PATH`, signed in), with `ARENA_LIVE_MODEL` (default `haiku`, the
+//! - Claude Code (`claude` on `PATH`, signed in), with `SHAKEDOWN_LIVE_MODEL` (default `haiku`, the
 //!   cheapest). Its tool calls are recorded through shaked's MCP endpoint; its model calls are
 //!   its own, so a test that needs recorded model calls skips it.
 //! - shaked's own agent loop on an API provider, when its key is set: `ANTHROPIC_API_KEY`
 //!   (`claude-haiku-4-5`), `OPENAI_API_KEY` (`gpt-4.1-mini`), `OPENROUTER_API_KEY`
-//!   (`anthropic/claude-haiku-4.5`), or the first server in `ARENA_LOCAL_MODELS` (name its model
-//!   in `ARENA_LIVE_MODEL`). Every model call then goes through shaked's recording gateway.
+//!   (`anthropic/claude-haiku-4.5`), or the first server in `SHAKEDOWN_LOCAL_MODELS` (name its model
+//!   in `SHAKEDOWN_LIVE_MODEL`). Every model call then goes through shaked's recording gateway.
 //!
-//! `ARENA_LIVE_AGENT=claude` or `=api` picks one; unset, Claude Code is used when it is installed,
+//! `SHAKEDOWN_LIVE_AGENT=claude` or `=api` picks one; unset, Claude Code is used when it is installed,
 //! else the API provider. Run them one at a time (they start worlds and agents):
 //! `cargo test -p shaked -- --ignored live_ --test-threads 1 --nocapture`.
 #![allow(dead_code)]
@@ -34,16 +34,16 @@ pub enum Live {
     Api { provider: String, model: String },
 }
 
-/// The model `ARENA_LIVE_MODEL` names, else `default`.
+/// The model `SHAKEDOWN_LIVE_MODEL` names, else `default`.
 fn model_or(default: &str) -> String {
-    std::env::var("ARENA_LIVE_MODEL")
+    parts::settings::var("SHAKEDOWN_LIVE_MODEL")
         .ok()
         .filter(|m| !m.trim().is_empty())
         .unwrap_or_else(|| default.to_string())
 }
 
 fn set(name: &str) -> bool {
-    std::env::var(name).is_ok_and(|v| !v.trim().is_empty())
+    parts::settings::var(name).is_ok_and(|v| !v.trim().is_empty())
 }
 
 fn claude_installed() -> bool {
@@ -68,10 +68,10 @@ fn api_provider() -> Option<Live> {
     if set("OPENROUTER_API_KEY") {
         return Some(api("openrouter", "anthropic/claude-haiku-4.5"));
     }
-    let locals = std::env::var(shaked::providers::LOCAL_MODELS_ENV).unwrap_or_default();
+    let locals = parts::settings::var(shaked::providers::LOCAL_MODELS_ENV).unwrap_or_default();
     let first = locals.split(',').next().and_then(|s| s.split_once('='));
     let name = first.map(|(n, _)| n.trim().to_string());
-    match (name, std::env::var("ARENA_LIVE_MODEL")) {
+    match (name, parts::settings::var("SHAKEDOWN_LIVE_MODEL")) {
         (Some(n), Ok(m)) if !n.is_empty() && !m.trim().is_empty() => Some(Live::Api {
             provider: format!("local:{n}"),
             model: m,
@@ -87,7 +87,7 @@ fn skip(test: &str, why: &str) {
 impl Live {
     /// The model to run `test`'s agents on, or `None` (said why) when there is none.
     pub fn any(test: &str) -> Option<Live> {
-        let choice = std::env::var("ARENA_LIVE_AGENT").unwrap_or_default();
+        let choice = parts::settings::var("SHAKEDOWN_LIVE_AGENT").unwrap_or_default();
         let claude = || {
             claude_installed().then(|| Live::Claude {
                 model: model_or("haiku"),
@@ -121,7 +121,7 @@ impl Live {
     pub fn api(test: &str) -> Option<Live> {
         let found = api_provider();
         if found.is_none() {
-            skip(test, "needs shaked's own agent loop: set ANTHROPIC_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY or ARENA_LOCAL_MODELS with ARENA_LIVE_MODEL");
+            skip(test, "needs shaked's own agent loop: set ANTHROPIC_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY or SHAKEDOWN_LOCAL_MODELS with SHAKEDOWN_LIVE_MODEL");
         }
         found
     }
@@ -454,7 +454,7 @@ fn claude_command(
         .args(["--", prompt])
         .stdin(std::process::Stdio::null())
         .kill_on_drop(true);
-    for k in ["ARENA_PG_URL", "DATABASE_URL", "PGPASSWORD"] {
+    for k in ["SHAKEDOWN_PG_URL", "DATABASE_URL", "PGPASSWORD"] {
         c.env_remove(k);
     }
     c

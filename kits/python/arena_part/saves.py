@@ -1,13 +1,14 @@
-"""Save folders by convention: `$ARENA_SAVES/<package name>/<save>/`."""
+"""Save folders by convention: `$SHAKEDOWN_SAVES/<package name>/<save>/`."""
 import os
 import shutil
 from pathlib import Path
 
 from .serve import kept, valid_id
+from .settings import setting
 
 
 def root(package: str) -> Path:
-    return Path(os.environ.get("ARENA_SAVES", "saves")) / package
+    return Path(setting("SHAKEDOWN_SAVES", "saves")) / package
 
 
 def drop(package: str, save: str) -> None:

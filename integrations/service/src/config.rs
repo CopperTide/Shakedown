@@ -177,7 +177,7 @@ pub struct Config {
     #[serde(default)]
     pub env: BTreeMap<String, String>,
     /// Writes the world clock to `clock.json` in a folder the compose file mounts
-    /// (`ARENA_CLOCK_DIR`) at start and each advance (the `live-service` package only).
+    /// (`SHAKEDOWN_CLOCK_DIR`) at start and each advance (the `live-service` package only).
     #[serde(default)]
     pub live: bool,
     /// The image each compose service runs, passed as `IMAGE_<SERVICE>`; `service_deploy`

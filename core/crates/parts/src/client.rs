@@ -74,7 +74,7 @@ fn kill_group(pid: u32) {
     }
 }
 
-/// The folders a program is started with: `${ARENA_BIN_DIR}` and `${ARENA_DIR}` in its command,
+/// The folders a program is started with: `${SHAKEDOWN_BIN_DIR}` and `${SHAKEDOWN_DIR}` in its command,
 /// and its save storage.
 #[derive(Debug, Clone, Copy)]
 pub struct ProgramDirs<'a> {
@@ -84,21 +84,27 @@ pub struct ProgramDirs<'a> {
     pub saves: &'a Path,
 }
 
-/// A command argument with `${ARENA_BIN_DIR}` and `${ARENA_DIR}` replaced (`${ARENA_DIR}` only
+/// A command argument with `${SHAKEDOWN_BIN_DIR}` and `${SHAKEDOWN_DIR}` replaced (`${SHAKEDOWN_DIR}` only
 /// when `arena_dir` is set).
 fn expand_arg(arg: &str, bin_dir: &Path, arena_dir: &Path) -> String {
-    let arg = arg.replace("${ARENA_BIN_DIR}", &bin_dir.to_string_lossy());
-    match arena_dir.as_os_str().is_empty() {
-        true => arg,
-        false => arg.replace("${ARENA_DIR}", &arena_dir.to_string_lossy()),
+    let mut arg = arg.to_string();
+    // `${ARENA_BIN_DIR}` and `${ARENA_DIR}`: the old names, in manifests written before 2026-11-19.
+    for name in ["${SHAKEDOWN_BIN_DIR}", "${ARENA_BIN_DIR}"] {
+        arg = arg.replace(name, &bin_dir.to_string_lossy());
     }
+    if !arena_dir.as_os_str().is_empty() {
+        for name in ["${SHAKEDOWN_DIR}", "${ARENA_DIR}"] {
+            arg = arg.replace(name, &arena_dir.to_string_lossy());
+        }
+    }
+    arg
 }
 
 /// Env vars a command-mode part inherits; everything else is cleared.
 const PASSED_ENV: [&str; 6] = [
     "PATH",
     "HOME",
-    "ARENA_PG_URL",
+    "SHAKEDOWN_PG_URL",
     "UV_CACHE_DIR",
     "XDG_CACHE_HOME",
     "RUST_LOG",
@@ -142,11 +148,9 @@ fn program_command(
     let mut c = Command::new(&args[0]);
     c.args(&args[1..]).current_dir(&m.dir).env_clear();
     for k in PASSED_ENV {
-        if let Some(v) = std::env::var_os(k) {
-            c.env(k, v);
-        }
+        c.envs(arena_part::settings::passed(k));
     }
-    c.env("ARENA_SAVES", dirs.saves);
+    c.envs(arena_part::settings::both("SHAKEDOWN_SAVES", dirs.saves));
     for (k, v) in env {
         c.env(k, v);
     }
@@ -282,7 +286,7 @@ impl Client {
         Client::spawn_with_env(m, bin_dir, saves_root, &[]).await
     }
 
-    /// Like `spawn_with_env`, with `${ARENA_DIR}` substituted too.
+    /// Like `spawn_with_env`, with `${SHAKEDOWN_DIR}` substituted too.
     pub async fn spawn_in(
         m: &Manifest,
         dirs: ProgramDirs<'_>,
@@ -479,9 +483,9 @@ mod tests {
     #[test]
     fn arena_dir_is_substituted_in_commands() {
         let (bin, arena) = (Path::new("/b"), Path::new("/a"));
-        let got = expand_arg("${ARENA_DIR}/benchmarks/world", bin, arena);
+        let got = expand_arg("${SHAKEDOWN_DIR}/benchmarks/world", bin, arena);
         assert_eq!(got, "/a/benchmarks/world");
-        assert_eq!(expand_arg("${ARENA_BIN_DIR}/x", bin, arena), "/b/x");
+        assert_eq!(expand_arg("${SHAKEDOWN_BIN_DIR}/x", bin, arena), "/b/x");
     }
 
     #[test]

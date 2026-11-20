@@ -148,7 +148,7 @@ def over_stdio(requests, saves_root):
     lines = "".join(json.dumps({"jsonrpc": "2.0", "id": i, "method": m, "params": p}) + "\n"
                     for i, (m, p) in enumerate(requests, 1))
     r = subprocess.run([sys.executable, "-m", "isaac_part", "--backend", "standin"], input=lines, cwd=PACKAGE,
-                       capture_output=True, text=True, env={**os.environ, "ARENA_SAVES": str(saves_root)}, timeout=120)
+                       capture_output=True, text=True, env={**os.environ, "SHAKEDOWN_SAVES": str(saves_root)}, timeout=120)
     replies = [json.loads(line) for line in r.stdout.splitlines()]
     assert len(replies) == len(requests), r.stderr[-2000:]
     return replies
@@ -379,7 +379,7 @@ def test_mirror_mode_has_no_tools_and_relays_events(stub_plant, saves_root):
 
 
 def checker():
-    dirs = [Path(os.environ["ARENA_BIN_DIR"])] if os.environ.get("ARENA_BIN_DIR") else []
+    dirs = [Path(os.environ["SHAKEDOWN_BIN_DIR"])] if os.environ.get("SHAKEDOWN_BIN_DIR") else []
     for d in dirs + [ARENA / "core" / "target" / profile for profile in ("debug", "release")]:
         if (d / "arena-part-check").is_file():
             return d / "arena-part-check"
@@ -403,7 +403,7 @@ def test_conformance(tmp_path, config):
     (tmp_path / "pkg" / "arena-package.toml").write_text(re.sub(r"^run = .*$", run, manifest, flags=re.M))
     saves = tmp_path / "check-saves"
     saves.mkdir()
-    env = {**os.environ, "ARENA_SAVES": str(saves)}
+    env = {**os.environ, "SHAKEDOWN_SAVES": str(saves)}
     args = [str(binary), str(tmp_path / "pkg")]
     if config:
         (tmp_path / "config.json").write_text(json.dumps(json.loads(SHIFT_PLANT.read_text())["plant"]))
@@ -504,7 +504,7 @@ def test_recording_paths_and_frame_spacing(tmp_path):
 
 
 def test_save_goes_to_the_save_folder_by_convention(saves_root, tmp_path):
-    """shaked's `dir` is its own path; the program, which may run elsewhere, keeps saves under its ARENA_SAVES."""
+    """shaked's `dir` is its own path; the program, which may run elsewhere, keeps saves under its SHAKEDOWN_SAVES."""
     part = started()
     part.save("i1", "s1", str(tmp_path / "shaked-side" / "s1"))
     assert (saves_root / "isaac-sim" / "s1" / "plant.pkl.gz").exists()

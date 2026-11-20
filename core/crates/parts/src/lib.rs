@@ -7,7 +7,7 @@ pub mod request;
 mod run_override;
 
 /// The protocol's wire types, for the core's crates (only `parts` depends on the kit).
-pub use arena_part::proto;
+pub use arena_part::{proto, settings};
 pub use check::{check, Report, Step};
 pub use client::{CallError, Client, ProgramDirs};
 pub use hub::Hub;

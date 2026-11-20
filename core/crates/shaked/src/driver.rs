@@ -19,6 +19,7 @@ use std::{
 };
 
 use anyhow::{Context, Result};
+use parts::settings;
 use serde_json::json;
 use tokio::{io::AsyncReadExt, process::Child};
 
@@ -120,19 +121,20 @@ fn command_for(
     cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
     cmd.process_group(0).kill_on_drop(true);
     for k in PASSED_ENV {
-        if let Ok(v) = std::env::var(k) {
-            cmd.env(k, v);
-        }
+        cmd.envs(settings::passed(k));
     }
-    cmd.envs(world_env)
-        .envs(&conn.env)
-        .env("ARENA_URL", base)
-        .env("ARENA_RUN", ids.run_id)
-        .env("ARENA_BRANCH", ids.branch_id)
-        .env("ARENA_TASK", ids.task_id)
-        .env("ARENA_CONNECTION", &conn.id);
+    cmd.envs(world_env).envs(&conn.env);
+    for (k, v) in [
+        ("SHAKEDOWN_URL", base),
+        ("SHAKEDOWN_RUN", ids.run_id),
+        ("SHAKEDOWN_BRANCH", ids.branch_id),
+        ("SHAKEDOWN_TASK", ids.task_id),
+        ("SHAKEDOWN_CONNECTION", &conn.id),
+    ] {
+        cmd.envs(settings::both(k, v));
+    }
     if let Some(parent) = ids.fork_of {
-        cmd.env("ARENA_FORK_OF", parent);
+        cmd.envs(settings::both("SHAKEDOWN_FORK_OF", parent));
     }
     if let Some(dir) = &conn.workdir {
         cmd.current_dir(dir);
@@ -140,7 +142,7 @@ fn command_for(
     Ok(cmd)
 }
 
-/// `ARENA_WORLD_EPOCH_MS` (the run's world clock 0, unix ms) and `ARENA_CLOCK_SPEED` (world ms
+/// `SHAKEDOWN_WORLD_EPOCH_MS` (the run's world clock 0, unix ms) and `SHAKEDOWN_CLOCK_SPEED` (world ms
 /// per wall ms) for a driver of `branch`.
 async fn time_env(
     state: &AppState,
@@ -151,12 +153,15 @@ async fn time_env(
     let epoch = crate::recorded::world_epoch_ms(&events);
     let speed = ctx.map_or_else(crate::clock::speed_from_env, |c| c.clock.speed());
     let pairs = [
-        ("ARENA_WORLD_EPOCH_MS", epoch.to_string()),
-        ("ARENA_CLOCK_SPEED", speed.to_string()),
+        ("SHAKEDOWN_WORLD_EPOCH_MS", epoch.to_string()),
+        ("SHAKEDOWN_CLOCK_SPEED", speed.to_string()),
     ];
-    let mut env: BTreeMap<String, String> = pairs.map(|(k, v)| (k.to_string(), v)).into();
+    let mut env: BTreeMap<String, String> = pairs
+        .into_iter()
+        .flat_map(|(k, v)| settings::both(k, v))
+        .collect();
     if let Some(m) = ctx.and_then(|c| c.rules.world_minutes) {
-        env.insert("ARENA_WORLD_MINUTES".into(), m.to_string());
+        env.extend(settings::both("SHAKEDOWN_WORLD_MINUTES", m.to_string()));
     }
     env
 }

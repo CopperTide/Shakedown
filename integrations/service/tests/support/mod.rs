@@ -13,12 +13,12 @@ use std::sync::{Arc, Mutex};
 
 /// The fake: logs its arguments (one line a call) to `log` beside its `bin`, and fails where the environment says so. `port` answers the
 /// n-th of `FAKE_PORTS` after the n-th `up` or `start` (a restarted service gets a new port). A
-/// compose command run with `IMAGE_*` or `ARENA_CLOCK_DIR` set logs them first, as `env: <sorted
+/// compose command run with `IMAGE_*` or `SHAKEDOWN_CLOCK_DIR` set logs them first, as `env: <sorted
 /// variables>`; `ps` of one service answers `FAKE_HEALTH` (default `running healthy`), of every
 /// service `FAKE_PS` (tab-separated service, state, health and exit code lines).
 pub const FAKE: &str = r#"#!/bin/sh
 LOG="$(dirname "$0")/../log"
-vars=$(env | grep -E '^(IMAGE_|ARENA_CLOCK_DIR=)' | sort | tr '\n' ' ')
+vars=$(env | grep -E '^(IMAGE_|SHAKEDOWN_CLOCK_DIR=)' | sort | tr '\n' ' ')
 case "$1:$vars" in compose:?*) echo "env: $vars" >> "$LOG" ;; esac
 { printf '%s' "$*" | tr '\n' ' '; echo; } >> "$LOG"
 case "$*" in

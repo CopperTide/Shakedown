@@ -62,7 +62,7 @@ pub struct BranchCtx {
 }
 
 impl BranchCtx {
-    /// A branch whose clock starts at 0 (at the speed `ARENA_CLOCK_SPEED` sets), under the rules
+    /// A branch whose clock starts at 0 (at the speed `SHAKEDOWN_CLOCK_SPEED` sets), under the rules
     /// of runs recorded before runners (see [`Rules::legacy`]) until `with_rules` says otherwise.
     pub fn new(branch_id: String, world: Arc<World>, team: Team, task_id: String) -> BranchCtx {
         BranchCtx {

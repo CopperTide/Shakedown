@@ -19,7 +19,7 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   # The Postgres service below, with the credentials of deploy/compose.yml.
-  ARENA_PG_URL: postgres://arena:arena@127.0.0.1:5544/postgres
+  SHAKEDOWN_PG_URL: postgres://arena:arena@127.0.0.1:5544/postgres
 
 jobs:
   rust:

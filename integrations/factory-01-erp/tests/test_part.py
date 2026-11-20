@@ -130,7 +130,7 @@ def test_a_save_restores_the_state_exactly(tmp_path):
     part, _ = started()
     call(part, "reserve_stock", order_id="SO-1001", item="M-15", qty=24)
     call(part, "create_purchase_order", supplier="BOLT", item="M-15", qty=16, expedite=True)
-    save_dir = Path(os.environ["ARENA_SAVES"]) / "factory-01-erp" / "s1"
+    save_dir = Path(os.environ["SHAKEDOWN_SAVES"]) / "factory-01-erp" / "s1"
     part.save("i1", "s1", str(save_dir))
     other = Factory01Erp()
     other.start("i2", config(), 0, 0, {"save": "s1", "mode": "exact"})

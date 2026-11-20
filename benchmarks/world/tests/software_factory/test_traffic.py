@@ -40,7 +40,7 @@ def test_the_traffic_runs_in_compose_on_the_pinned_python_image_within_64_mib(pl
     assert "traffic" in pinned["services"] and "@sha256:" in pinned["image"]
     assert images_env(sf_dir)["IMAGE_TRAFFIC"] == load_yaml(platform / "service.yaml")["images"]["traffic"]
     assert s["command"] == ["python", "-m", "traffic"] and s["working_dir"] == "/app"
-    assert set(s["volumes"]) == {"${ARENA_CLOCK_DIR:?set by the service part}:/shakedown:ro",
+    assert set(s["volumes"]) == {"${SHAKEDOWN_CLOCK_DIR:?set by the service part}:/shakedown:ro",
                                  "./traffic:/app/traffic:ro", "./contracts:/app/contracts:ro"}
     assert s["ports"] == ["127.0.0.1::9100"] and s["environment"]["OTEL_EXPORTER_OTLP_ENDPOINT"] == \
         "http://otel-collector:4318"

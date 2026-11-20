@@ -1,5 +1,5 @@
 //! Built worlds: shaked asks the world builder for templates and previews, builds a world into
-//! `ARENA_WORLDS` (a benchmark package it installs while it runs), prepares its base in the
+//! `SHAKEDOWN_WORLDS` (a benchmark package it installs while it runs), prepares its base in the
 //! background and makes it the current benchmark. Runs, suites and experiments keep the benchmark
 //! they were created with. The builder here is `tests/fixtures/builder.py` (one template `toy`);
 //! the live test at the end uses the real one (`benchmarks/world`) and its small manufacturer.
@@ -332,7 +332,7 @@ fn choosing_a_world_makes_it_current_and_an_unknown_one_is_a_404() {
     });
 }
 
-/// A built world is installed from `ARENA_WORLDS` when shaked starts again, ready since its base
+/// A built world is installed from `SHAKEDOWN_WORLDS` when shaked starts again, ready since its base
 /// saves exist, and still current: shaked remembers the choice (owner ruling, 2026-11-19).
 #[test]
 fn a_built_world_survives_a_restart() {
@@ -386,7 +386,7 @@ impl Start {
         Start { toys, saves }
     }
 
-    /// shaked's state as it starts over these packages, `ARENA_BENCHMARK` being `env`.
+    /// shaked's state as it starts over these packages, `SHAKEDOWN_BENCHMARK` being `env`.
     async fn state(&self, env: Option<&str>) -> (support::pg::Cleanup, shaked::app::AppState) {
         let registry = Registry::scan(std::slice::from_ref(&self.toys.0)).unwrap();
         let hub = Arc::new(Hub::new(registry, bin_dir(), self.saves.0.clone()));

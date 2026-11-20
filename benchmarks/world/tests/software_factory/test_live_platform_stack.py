@@ -31,7 +31,7 @@ def stack(sf_dir, platform, tmp_path_factory):
         if subprocess.run(["docker", "image", "inspect", ref], capture_output=True).returncode != 0:
             pytest.skip(f"{ref} is not on this machine")
     env = {**os.environ, **profile_env(platform, "lean"), **named,
-           "ARENA_CLOCK_DIR": str(tmp_path_factory.mktemp("clock"))}
+           "SHAKEDOWN_CLOCK_DIR": str(tmp_path_factory.mktemp("clock"))}
     try:
         up = compose(platform, env, "up", "-d", "--pull", "never", "--wait", "--wait-timeout", "300", *STACK)
         assert up.returncode == 0, up.stdout[-2000:] + up.stderr[-2000:]

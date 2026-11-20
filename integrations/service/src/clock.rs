@@ -1,6 +1,6 @@
 //! The world clock file of a live instance: `<clock folder>/clock.json`
 //! `{epoch_ms, clock_ms, world_ms, speed, wall_ms}`, written at start and on each advance, read
-//! by the containers that mount the folder (`ARENA_CLOCK_DIR`) to stamp what they emit in world
+//! by the containers that mount the folder (`SHAKEDOWN_CLOCK_DIR`) to stamp what they emit in world
 //! time. It is replaced whole (written beside and renamed), so a reader never sees half of it.
 
 use std::path::{Path, PathBuf};

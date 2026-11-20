@@ -6,8 +6,8 @@
         planner = run.agent("planner", provider="openai", model="gpt-4.1-mini")
         my_graph.invoke({"ticket": run.ticket}, tools=..., model=...)   # your code, unchanged
 
-When Shakedown starts the driver itself (a Code connection), it sets ``ARENA_URL``, ``ARENA_RUN``,
-``ARENA_BRANCH``, ``ARENA_TASK`` (and ``ARENA_FORK_OF`` on a fork) and :func:`run` joins that
+When Shakedown starts the driver itself (a Code connection), it sets ``SHAKEDOWN_URL``, ``SHAKEDOWN_RUN``,
+``SHAKEDOWN_BRANCH``, ``SHAKEDOWN_TASK`` (and ``SHAKEDOWN_FORK_OF`` on a fork) and :func:`run` joins that
 branch. Run by hand, it starts a run of its own. When the block ends the agents it registered are
 ended and the run is finished, so Shakedown scores the world. If the block raises, the run still
 gets scored, ends ``failed`` with the error, and the exception goes on up. If the run had already
@@ -25,6 +25,7 @@ from typing import Iterator, Optional
 from .client import DEFAULT_URL, AgentEndpoint, Shakedown, Branch
 from .errors import Conflict
 from .models import Event, Task
+from .settings import setting
 
 
 class DriverRun:
@@ -92,20 +93,20 @@ class DriverRun:
 
 @contextmanager
 def run(task: Optional[str] = None, url: Optional[str] = None) -> Iterator[DriverRun]:
-    """Joins the run Shakedown started this driver for (``ARENA_BRANCH``), or starts one of
-    ``task`` (default ``ARENA_TASK``, else the benchmark's first task). Finishes it at the end."""
-    arena = Shakedown(url or os.environ.get("ARENA_URL") or DEFAULT_URL)
-    branch_id = os.environ.get("ARENA_BRANCH")
-    task_id = task or os.environ.get("ARENA_TASK")
+    """Joins the run Shakedown started this driver for (``SHAKEDOWN_BRANCH``), or starts one of
+    ``task`` (default ``SHAKEDOWN_TASK``, else the benchmark's first task). Finishes it at the end."""
+    arena = Shakedown(url or setting("SHAKEDOWN_URL") or DEFAULT_URL)
+    branch_id = setting("SHAKEDOWN_BRANCH")
+    task_id = task or setting("SHAKEDOWN_TASK")
     if branch_id:
         t = arena.task(task_id) if task_id else None
-        branch = Branch(arena, branch_id, os.environ.get("ARENA_RUN", ""), task_id=task_id)
+        branch = Branch(arena, branch_id, setting("SHAKEDOWN_RUN", ""), task_id=task_id)
         if t is None:
             t = arena.task(branch.record().run_start["task_id"])
     else:
         t = arena.task(task_id) if task_id else arena.tasks()[0]
         branch = arena.external_run(t)
-    dr = DriverRun(arena, branch, t, fork_of=os.environ.get("ARENA_FORK_OF") or None)
+    dr = DriverRun(arena, branch, t, fork_of=setting("SHAKEDOWN_FORK_OF") or None)
     try:
         yield dr
     except BaseException as exc:

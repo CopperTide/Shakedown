@@ -611,8 +611,8 @@ async fn live_mariadb_conformance() {
         .arg(a.join("integrations/mariadb/check"))
         .arg("--config")
         .arg(&cfgfile)
-        .env("ARENA_BIN_DIR", a.join("core/target/debug"))
-        .env("ARENA_SAVES", &saves)
+        .env("SHAKEDOWN_BIN_DIR", a.join("core/target/debug"))
+        .env("SHAKEDOWN_SAVES", &saves)
         .output()
         .unwrap();
     let stdout = String::from_utf8_lossy(&out.stdout).to_string();

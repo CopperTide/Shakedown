@@ -23,7 +23,7 @@ class Program:
     """A part or benchmark program run as `python -m <module>` in its folder, called line by line."""
 
     def __init__(self, module: str, cwd: Path, saves: Path):
-        env = {"PATH": "/usr/bin:/bin", "ARENA_SAVES": str(saves)}
+        env = {"PATH": "/usr/bin:/bin", "SHAKEDOWN_SAVES": str(saves)}
         self.p = subprocess.Popen([sys.executable, "-m", module], cwd=cwd, env=env, text=True,
                                   stdin=subprocess.PIPE, stdout=subprocess.PIPE)
         self.n = 0

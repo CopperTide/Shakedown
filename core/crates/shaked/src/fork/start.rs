@@ -32,7 +32,7 @@ pub struct ForkResponse {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agents: Option<Vec<external::Resumable>>,
     /// For a run a Code connection drives: `relaunched` when shaked started its driver again for
-    /// the new branch (with `ARENA_FORK_OF`), `failed` when it couldn't (the branch then ended
+    /// the new branch (with `SHAKEDOWN_FORK_OF`), `failed` when it couldn't (the branch then ended
     /// `failed`, saying why).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub driver: Option<&'static str>,

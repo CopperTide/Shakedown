@@ -298,7 +298,7 @@ def test_describe_declares_clock_restore_and_seed():
 
 
 def checker():
-    dirs = [Path(os.environ["ARENA_BIN_DIR"])] if os.environ.get("ARENA_BIN_DIR") else []
+    dirs = [Path(os.environ["SHAKEDOWN_BIN_DIR"])] if os.environ.get("SHAKEDOWN_BIN_DIR") else []
     for d in dirs + [ARENA / "core" / "target" / profile for profile in ("debug", "release")]:
         if (d / "arena-part-check").is_file():
             return d / "arena-part-check"
@@ -311,6 +311,6 @@ def test_conformance(tmp_path):
         pytest.skip("arena-part-check is not built (cargo build -p parts --bin arena-part-check) or uv missing")
     saves = tmp_path / "check-saves"
     saves.mkdir()
-    env = {**os.environ, "ARENA_SAVES": str(saves)}
+    env = {**os.environ, "SHAKEDOWN_SAVES": str(saves)}
     r = subprocess.run([str(binary), str(PACKAGE)], capture_output=True, text=True, env=env, timeout=300)
     assert r.returncode == 0, r.stdout + r.stderr

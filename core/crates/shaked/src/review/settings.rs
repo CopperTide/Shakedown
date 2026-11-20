@@ -1,5 +1,5 @@
-//! Whether AI review is on, and with which model: `ARENA_REVIEW` (`on` or `off`; on by default
-//! when the model is available) and `ARENA_REVIEW_MODEL` (`claude_code:<model>`, the default
+//! Whether AI review is on, and with which model: `SHAKEDOWN_REVIEW` (`on` or `off`; on by default
+//! when the model is available) and `SHAKEDOWN_REVIEW_MODEL` (`claude_code:<model>`, the default
 //! `claude_code:sonnet`, or `<provider>:<model>` for one of shaked's model providers, such as
 //! `openrouter:<model>`, `anthropic:<model>` or `local:<name>:<model>`). Read once.
 
@@ -9,8 +9,8 @@ use serde::Serialize;
 
 use crate::providers::{ProviderConfig, LOCAL_PREFIX};
 
-pub const SWITCH_ENV: &str = "ARENA_REVIEW";
-pub const MODEL_ENV: &str = "ARENA_REVIEW_MODEL";
+pub const SWITCH_ENV: &str = "SHAKEDOWN_REVIEW";
+pub const MODEL_ENV: &str = "SHAKEDOWN_REVIEW_MODEL";
 pub const DEFAULT_MODEL: &str = "claude_code:sonnet";
 
 /// The model that reviews.
@@ -135,8 +135,8 @@ static SETTINGS: OnceLock<ReviewSettings> = OnceLock::new();
 /// The settings from the environment, read on first use.
 pub fn settings(providers: &ProviderConfig) -> &'static ReviewSettings {
     SETTINGS.get_or_init(|| {
-        let switch = std::env::var(SWITCH_ENV).ok();
-        let model = std::env::var(MODEL_ENV).ok();
+        let switch = parts::settings::var(SWITCH_ENV).ok();
+        let model = parts::settings::var(MODEL_ENV).ok();
         decide(switch.as_deref(), model.as_deref(), |m| {
             availability(m, providers)
         })
@@ -182,7 +182,7 @@ mod tests {
         assert_eq!(s.model, DEFAULT_MODEL);
         let s = decide(Some("off"), None, yes);
         assert!(!s.enabled && s.reviewer.is_none());
-        assert_eq!(s.why.as_deref(), Some("ARENA_REVIEW is off"));
+        assert_eq!(s.why.as_deref(), Some("SHAKEDOWN_REVIEW is off"));
         // On, but the model can't run: off, saying why.
         let s = decide(Some("on"), Some("anthropic:claude-x"), |_| {
             Err("ANTHROPIC_API_KEY is not set".into())

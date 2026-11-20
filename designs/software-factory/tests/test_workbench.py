@@ -7,10 +7,10 @@ from factory_designs.workbench import Completed, Workbench, container_env
 
 def test_container_env_points_proxies_at_the_bridge_and_keeps_the_ticket():
     env = {"HTTPS_PROXY": "http://arena:t1@127.0.0.1:4600", "http_proxy": "http://arena:t1@127.0.0.1:4600/",
-           "ARENA_PROXY": "http://arena:t1@127.0.0.1:4600", "GH_HOST": "github.acme.test"}
+           "SHAKEDOWN_PROXY": "http://arena:t1@127.0.0.1:4600", "GH_HOST": "github.acme.test"}
     assert container_env(env) == {
         "HTTPS_PROXY": "http://arena:t1@127.0.0.1:3128", "http_proxy": "http://arena:t1@127.0.0.1:3128/",
-        "ARENA_PROXY": "http://arena:t1@127.0.0.1:3128", "GH_HOST": "github.acme.test"}
+        "SHAKEDOWN_PROXY": "http://arena:t1@127.0.0.1:3128", "GH_HOST": "github.acme.test"}
 
 
 def test_the_container_command_line(tmp_path: Path, settings):

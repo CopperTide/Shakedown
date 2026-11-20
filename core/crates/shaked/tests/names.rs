@@ -4,7 +4,7 @@
 //!
 //! Each runs as a real process on a toy world of its own (its own packages, saves and worlds
 //! folders), so its startup cleanup touches nothing but those. Like any shaked it opens the
-//! metadata store on `ARENA_PG_URL`; never run a shaked of your own there while tests run.
+//! metadata store on `SHAKEDOWN_PG_URL`; never run a shaked of your own there while tests run.
 mod support;
 
 use std::{
@@ -67,14 +67,14 @@ fn start(binary: &Path, tag: &str, port: u16, packages_root: &Path) -> Service {
     let base = std::env::temp_dir().join(format!("shaked-names-{tag}-{}", std::process::id()));
     let (saves, worlds) = (base.join("saves"), base.join("worlds"));
     let child = Command::new(binary)
-        .env("ARENA_PG_URL", pg_url())
-        .env("ARENA_PORT", port.to_string())
-        .env("ARENA_PROXY_PORT", "0")
-        .env("ARENA_PACKAGES", packages_root)
-        .env("ARENA_BENCHMARK", "toybench")
-        .env("ARENA_BIN_DIR", packages::bin_dir())
-        .env("ARENA_SAVES", &saves)
-        .env("ARENA_WORLDS", &worlds)
+        .env("SHAKEDOWN_PG_URL", pg_url())
+        .env("SHAKEDOWN_PORT", port.to_string())
+        .env("SHAKEDOWN_PROXY_PORT", "0")
+        .env("SHAKEDOWN_PACKAGES", packages_root)
+        .env("SHAKEDOWN_BENCHMARK", "toybench")
+        .env("SHAKEDOWN_BIN_DIR", packages::bin_dir())
+        .env("SHAKEDOWN_SAVES", &saves)
+        .env("SHAKEDOWN_WORLDS", &worlds)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())

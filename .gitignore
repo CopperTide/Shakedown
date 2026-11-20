@@ -9,5 +9,5 @@ ui/lint/node_modules/
 # Local git worktrees
 /.worktrees/
 
-# Built worlds (ARENA_WORLDS default)
+# Built worlds (SHAKEDOWN_WORLDS default)
 core/worlds/

@@ -1,14 +1,14 @@
 //! Which providers this shaked can use, read once from the environment at start.
 //!
 //! - `OPENROUTER_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`;
-//! - `ARENA_LOCAL_MODELS="name=url[,name=url…]"`: OpenAI-compatible servers (Ollama, vLLM, LM
+//! - `SHAKEDOWN_LOCAL_MODELS="name=url[,name=url…]"`: OpenAI-compatible servers (Ollama, vLLM, LM
 //!   Studio, llama.cpp server), each the provider `local:<name>`;
-//! - `ARENA_LOCAL_KEY_<NAME>`: an optional key for `local:<name>` (`<NAME>` upper-cased, `-` as
+//! - `SHAKEDOWN_LOCAL_KEY_<NAME>`: an optional key for `local:<name>` (`<NAME>` upper-cased, `-` as
 //!   `_`);
-//! - `ARENA_LOCAL_PRICE_<NAME>="<in>,<out>"`: an optional token rate for `local:<name>`, in USD per
+//! - `SHAKEDOWN_LOCAL_PRICE_<NAME>="<in>,<out>"`: an optional token rate for `local:<name>`, in USD per
 //!   million prompt and completion tokens, so its calls are priced (and count toward a run's
 //!   spend limit);
-//! - `ARENA_ANTHROPIC_MAX_TOKENS`: the output budget of a Claude call that names none (16000).
+//! - `SHAKEDOWN_ANTHROPIC_MAX_TOKENS`: the output budget of a Claude call that names none (16000).
 //!
 //! Keys are held as [`Secret`]s: never logged, printed, serialized or recorded.
 
@@ -17,10 +17,10 @@ use super::{CUSTOM_LOCAL, LOCAL_PREFIX, OPENROUTER};
 pub const OPENROUTER_BASE: &str = "https://openrouter.ai/api/v1";
 pub const OPENAI_BASE: &str = "https://api.openai.com/v1";
 pub const ANTHROPIC_BASE: &str = "https://api.anthropic.com/v1";
-pub const LOCAL_MODELS_ENV: &str = "ARENA_LOCAL_MODELS";
-pub const LOCAL_KEY_PREFIX: &str = "ARENA_LOCAL_KEY_";
-pub const LOCAL_PRICE_PREFIX: &str = "ARENA_LOCAL_PRICE_";
-pub const ANTHROPIC_MAX_TOKENS_ENV: &str = "ARENA_ANTHROPIC_MAX_TOKENS";
+pub const LOCAL_MODELS_ENV: &str = "SHAKEDOWN_LOCAL_MODELS";
+pub const LOCAL_KEY_PREFIX: &str = "SHAKEDOWN_LOCAL_KEY_";
+pub const LOCAL_PRICE_PREFIX: &str = "SHAKEDOWN_LOCAL_PRICE_";
+pub const ANTHROPIC_MAX_TOKENS_ENV: &str = "SHAKEDOWN_ANTHROPIC_MAX_TOKENS";
 /// The `max_tokens` of a Claude call that names none (the Messages API requires one).
 pub const DEFAULT_ANTHROPIC_MAX_TOKENS: u64 = 16_000;
 
@@ -66,7 +66,7 @@ impl Endpoint {
 pub struct LocalEndpoint {
     pub name: String,
     pub endpoint: Endpoint,
-    /// The token rate declared for it (`ARENA_LOCAL_PRICE_<NAME>`); None: its calls cost 0.
+    /// The token rate declared for it (`SHAKEDOWN_LOCAL_PRICE_<NAME>`); None: its calls cost 0.
     pub rate: Option<Rate>,
 }
 
@@ -188,7 +188,7 @@ impl ProviderConfig {
     /// The configuration in the process environment; its problems are printed (never with a
     /// key or a URL) and the setting they concern is skipped.
     pub fn from_env() -> ProviderConfig {
-        let (config, problems) = ProviderConfig::from_lookup(|k| std::env::var(k).ok());
+        let (config, problems) = ProviderConfig::from_lookup(|k| parts::settings::var(k).ok());
         for p in problems {
             eprintln!("shaked: {p}");
         }
@@ -258,7 +258,7 @@ fn secret(name: &str, value: Option<String>, problems: &mut Vec<String>) -> Opti
     Some(Secret::new(value))
 }
 
-/// The `ARENA_ANTHROPIC_MAX_TOKENS` setting: the default when unset; `Err` (with the default
+/// The `SHAKEDOWN_ANTHROPIC_MAX_TOKENS` setting: the default when unset; `Err` (with the default
 /// kept) when it isn't a positive whole number.
 fn max_tokens(value: Option<String>) -> Result<u64, String> {
     let Some(v) = value.filter(|v| !v.trim().is_empty()) else {
@@ -333,7 +333,7 @@ mod tests {
                 LOCAL_MODELS_ENV,
                 " ollama=http://127.0.0.1:11434/v1 , lm-studio=http://127.0.0.1:1234/v1,",
             ),
-            ("ARENA_LOCAL_KEY_LM_STUDIO", "sk-local"),
+            ("SHAKEDOWN_LOCAL_KEY_LM_STUDIO", "sk-local"),
         ]);
         assert!(problems.is_empty(), "{problems:?}");
         assert_eq!(c.openrouter.key, None);
@@ -392,7 +392,7 @@ mod tests {
         let (c, _) = config_of(&[
             ("OPENROUTER_API_KEY", "sk-or-secret"),
             (LOCAL_MODELS_ENV, "a=http://a"),
-            ("ARENA_LOCAL_KEY_A", "sk-local-secret"),
+            ("SHAKEDOWN_LOCAL_KEY_A", "sk-local-secret"),
         ]);
         let text = format!("{c:?}");
         assert!(!text.contains("secret"), "{text}");
@@ -410,14 +410,14 @@ mod tests {
             c.local("custom").unwrap().endpoint.base,
             "http://127.0.0.1:9/v1"
         );
-        assert_eq!(local_key_env("my-box"), "ARENA_LOCAL_KEY_MY_BOX");
+        assert_eq!(local_key_env("my-box"), "SHAKEDOWN_LOCAL_KEY_MY_BOX");
     }
 
     #[test]
     fn local_prices_come_from_the_environment() {
         let (c, problems) = config_of(&[
             (LOCAL_MODELS_ENV, "pod=http://a/v1,box=http://b/v1"),
-            ("ARENA_LOCAL_PRICE_POD", " 0.15,0.60 "),
+            ("SHAKEDOWN_LOCAL_PRICE_POD", " 0.15,0.60 "),
         ]);
         assert!(problems.is_empty(), "{problems:?}");
         let rate = Rate {
@@ -425,15 +425,15 @@ mod tests {
             output_per_mtok: 0.60,
         };
         assert_eq!((c.locals[0].rate, c.locals[1].rate), (Some(rate), None));
-        assert_eq!(local_price_env("my-box"), "ARENA_LOCAL_PRICE_MY_BOX");
+        assert_eq!(local_price_env("my-box"), "SHAKEDOWN_LOCAL_PRICE_MY_BOX");
         for bad in ["-1,2", "x", "1", "1,2,3", "inf,1"] {
             let (c, problems) = config_of(&[
                 (LOCAL_MODELS_ENV, "pod=http://a/v1"),
-                ("ARENA_LOCAL_PRICE_POD", bad),
+                ("SHAKEDOWN_LOCAL_PRICE_POD", bad),
             ]);
             assert_eq!((c.locals[0].rate, problems.len()), (None, 1), "{bad}");
             assert!(
-                problems[0].starts_with("ARENA_LOCAL_PRICE_POD"),
+                problems[0].starts_with("SHAKEDOWN_LOCAL_PRICE_POD"),
                 "{problems:?}"
             );
             assert!(!problems[0].contains(bad), "{problems:?}");

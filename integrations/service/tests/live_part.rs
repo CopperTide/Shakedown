@@ -76,8 +76,8 @@ fn clock_dir(f: &Fake) -> PathBuf {
     let log = f.log();
     let var = log
         .split_whitespace()
-        .find_map(|w| w.strip_prefix("ARENA_CLOCK_DIR="))
-        .unwrap_or_else(|| panic!("no ARENA_CLOCK_DIR in {log}"));
+        .find_map(|w| w.strip_prefix("SHAKEDOWN_CLOCK_DIR="))
+        .unwrap_or_else(|| panic!("no SHAKEDOWN_CLOCK_DIR in {log}"));
     PathBuf::from(var)
 }
 

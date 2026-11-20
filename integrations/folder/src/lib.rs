@@ -31,14 +31,14 @@ pub struct Folder {
 }
 
 impl Folder {
-    /// Saves under env `ARENA_SAVES`.
+    /// Saves under env `SHAKEDOWN_SAVES`.
     pub fn from_env() -> Folder {
         let saves = SaveDirs::new(PACKAGE);
         saves.sweep_scratch();
         Folder::with(saves)
     }
 
-    /// Saves in `package_folder` (`<ARENA_SAVES>/folder`).
+    /// Saves in `package_folder` (`<SHAKEDOWN_SAVES>/folder`).
     pub fn new(package_folder: PathBuf) -> Folder {
         Folder::with(SaveDirs::under(package_folder))
     }
@@ -157,7 +157,7 @@ impl Part for Folder {
         Ok(())
     }
 
-    /// Everything the part keeps is inside `ARENA_SAVES`, which shaked measures.
+    /// Everything the part keeps is inside `SHAKEDOWN_SAVES`, which shaked measures.
     async fn usage(&self) -> Result<Usage, PartError> {
         Ok(Usage { bytes: 0 })
     }

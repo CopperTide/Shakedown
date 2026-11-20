@@ -150,12 +150,12 @@ fn assert_secrets_scrubbed(c: &std::process::Command) {
         .map(|(k, _)| k.to_string_lossy().into_owned())
         .collect();
     for k in [
-        "ARENA_PG_URL",
+        "SHAKEDOWN_PG_URL",
         "DATABASE_URL",
         "PGPASSWORD",
         "OPENROUTER_API_KEY",
         "ANTHROPIC_API_KEY",
-        "ARENA_LOCAL_MODELS",
+        "SHAKEDOWN_LOCAL_MODELS",
     ] {
         assert!(removed.contains(&k.to_string()), "{k} not scrubbed");
     }

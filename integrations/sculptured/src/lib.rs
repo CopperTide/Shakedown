@@ -71,12 +71,12 @@ impl Instance {
 }
 
 impl Sculptured {
-    /// Saves under env `ARENA_SAVES`.
+    /// Saves under env `SHAKEDOWN_SAVES`.
     pub fn from_env() -> Sculptured {
         Sculptured::with(SaveDirs::new(PACKAGE))
     }
 
-    /// Saves in `package_folder` (`<ARENA_SAVES>/sculptured`).
+    /// Saves in `package_folder` (`<SHAKEDOWN_SAVES>/sculptured`).
     pub fn new(package_folder: PathBuf) -> Sculptured {
         Sculptured::with(SaveDirs::under(package_folder))
     }
@@ -192,7 +192,7 @@ impl Part for Sculptured {
         self.stop_instance(&p.instance).await
     }
 
-    /// Nothing is kept outside `ARENA_SAVES` but the runners' scratch folders, which `stop`
+    /// Nothing is kept outside `SHAKEDOWN_SAVES` but the runners' scratch folders, which `stop`
     /// and `gc` remove.
     async fn usage(&self) -> R<Usage> {
         Ok(Usage { bytes: 0 })

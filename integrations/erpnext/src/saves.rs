@@ -1,4 +1,4 @@
-//! Saves in `$ARENA_SAVES/erpnext/<save>/`: `manifest.json` (the database, written last),
+//! Saves in `$SHAKEDOWN_SAVES/erpnext/<save>/`: `manifest.json` (the database, written last),
 //! `files/` (the site's public and private files) and `site.json` (what `diff` compares).
 use std::io;
 use std::path::{Path, PathBuf};

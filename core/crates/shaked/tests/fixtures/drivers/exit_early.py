@@ -5,7 +5,7 @@ import os
 import sys
 import urllib.request
 
-url = f"{os.environ['ARENA_URL']}/api/branches/{os.environ['ARENA_BRANCH']}/agents"
+url = f"{os.environ['SHAKEDOWN_URL']}/api/branches/{os.environ['SHAKEDOWN_BRANCH']}/agents"
 req = urllib.request.Request(url, json.dumps({"id": "crasher"}).encode(),
                              {"content-type": "application/json"})
 urllib.request.urlopen(req).read()

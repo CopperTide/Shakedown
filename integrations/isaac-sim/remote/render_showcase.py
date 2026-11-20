@@ -4,8 +4,8 @@
     /isaac-sim/python.sh remote/render_showcase.py --seconds 3 --stills wide,press_a --out look.mp4
     /isaac-sim/python.sh remote/render_showcase.py --shift --calm --seconds 40 --at "10:safe_stop_cell:{\\"cell\\":\\"CELL-R1\\"}"
 
-Run it with PYTHONPATH=<arena>/kits/python and ARENA_SAVES set (an MP4 path that is not absolute goes under
-$ARENA_SAVES/isaac-sim/). It drives the same part shaked drives (start, advance, call_tool, stop) with the arena seed,
+Run it with PYTHONPATH=<arena>/kits/python and SHAKEDOWN_SAVES set (an MP4 path that is not absolute goes under
+$SHAKEDOWN_SAVES/isaac-sim/). It drives the same part shaked drives (start, advance, call_tool, stop) with the arena seed,
 so the plant runs its own scenario on its own clock. With --stills it renders no video: it steps physics to --seconds,
 then writes one image of each named shot to --stills-dir.
 

@@ -8,7 +8,7 @@ from pathlib import Path
 from .errors import TemplateError
 from .generate import Result, world_json
 
-_PROJECT = "${ARENA_DIR}/benchmarks/world"
+_PROJECT = "${SHAKEDOWN_DIR}/benchmarks/world"
 
 
 def _toml(s: str) -> str:

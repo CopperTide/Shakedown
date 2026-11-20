@@ -363,7 +363,7 @@ struct NewRun {
     /// The world's seed (at most 2^53 - 1); random when absent.
     #[serde(default)]
     seed: Option<u64>,
-    /// The run's model-spend limit in USD (`crate::budget`); `ARENA_MAX_COST_USD` when absent.
+    /// The run's model-spend limit in USD (`crate::budget`); `SHAKEDOWN_MAX_COST_USD` when absent.
     #[serde(default)]
     max_cost_usd: Option<f64>,
     /// A Code connection: shaked launches its driver, which drives the run (`runner` is then

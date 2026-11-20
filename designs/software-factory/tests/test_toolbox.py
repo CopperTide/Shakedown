@@ -76,8 +76,8 @@ def test_wait_minutes_is_capped_at_thirty():
 def test_the_window_comes_from_shaked_or_the_run_start(monkeypatch):
     from factory_designs.toolbox import minutes_text, window_minutes
     with FakeModel({}) as fake:
-        monkeypatch.delenv("ARENA_WORLD_MINUTES", raising=False)
+        monkeypatch.delenv("SHAKEDOWN_WORLD_MINUTES", raising=False)
         assert window_minutes(FakeRun(fake, world_minutes=20.0)) == 20.0
         assert minutes_text(FakeRun(fake, world_minutes=None)) == "a limited number of"
-        monkeypatch.setenv("ARENA_WORLD_MINUTES", "45")
+        monkeypatch.setenv("SHAKEDOWN_WORLD_MINUTES", "45")
         assert minutes_text(FakeRun(fake, world_minutes=20.0)) == "45"

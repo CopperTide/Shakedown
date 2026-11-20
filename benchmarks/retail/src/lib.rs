@@ -13,10 +13,10 @@ use serde_json::{json, Value};
 
 type R<T> = Result<T, PartError>;
 
-/// `ARENA_RETAIL_DATA` if set (tests and dev), else `../../data/retail` from the working
+/// `SHAKEDOWN_RETAIL_DATA` if set (tests and dev), else `../../data/retail` from the working
 /// directory (the hub runs the program in its manifest folder).
 pub fn data_dir_from_env() -> PathBuf {
-    std::env::var_os("ARENA_RETAIL_DATA")
+    arena_part::settings::var_os("SHAKEDOWN_RETAIL_DATA")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("../../data/retail"))
 }

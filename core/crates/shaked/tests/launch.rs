@@ -174,7 +174,7 @@ fn a_driver_in_a_world_that_serves_http_gets_the_proxy_and_the_hosts() {
             (
                 &env["HTTPS_PROXY"],
                 &env["https_proxy"],
-                &env["ARENA_PROXY"]
+                &env["SHAKEDOWN_PROXY"]
             ),
             (&env["HTTP_PROXY"], &env["HTTP_PROXY"], &env["HTTP_PROXY"])
         );
@@ -192,12 +192,12 @@ fn a_driver_in_a_world_without_http_gets_no_proxy() {
             "HTTP_PROXY",
             "HTTPS_PROXY",
             "NO_PROXY",
-            "ARENA_PROXY",
+            "SHAKEDOWN_PROXY",
             "SSL_CERT_FILE",
         ] {
             assert!(env.get(k).is_none(), "{k}");
         }
-        assert!(env["ARENA_BRANCH"].is_string());
+        assert!(env["SHAKEDOWN_BRANCH"].is_string());
     })
 }
 
@@ -205,13 +205,17 @@ fn a_driver_in_a_world_without_http_gets_no_proxy() {
 fn every_driver_gets_the_worlds_epoch_and_clock_speed() {
     run(async {
         let env = dumped_env("envtime", &[]).await;
-        let epoch: i64 = env["ARENA_WORLD_EPOCH_MS"]
+        let epoch: i64 = env["SHAKEDOWN_WORLD_EPOCH_MS"]
             .as_str()
             .unwrap()
             .parse()
             .unwrap();
         assert!(epoch > 1_700_000_000_000, "{epoch}");
-        let speed: f64 = env["ARENA_CLOCK_SPEED"].as_str().unwrap().parse().unwrap();
+        let speed: f64 = env["SHAKEDOWN_CLOCK_SPEED"]
+            .as_str()
+            .unwrap()
+            .parse()
+            .unwrap();
         assert!(speed > 0.0);
     })
 }

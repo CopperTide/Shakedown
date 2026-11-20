@@ -33,7 +33,7 @@ def world(tmp_path_factory):
     """PR #1 (head `f`, a check run, a pending status, reviewer's approval, a comment) and issue #2."""
     tmp = tmp_path_factory.mktemp("world")
     mp = pytest.MonkeyPatch()
-    mp.setenv("ARENA_SAVES", str(tmp / "saves"))
+    mp.setenv("SHAKEDOWN_SAVES", str(tmp / "saves"))
     t = started(config())
     try:
         git(tmp, "clone", "-q", t.git_url("acme", "app"), "app", creds=TOKEN)

@@ -31,11 +31,11 @@ pub struct Config {
     /// overloaded or rate-limited, doubling for each further retry (unless it says how long).
     pub retry_base: Duration,
     /// Web origins (`scheme://host[:port]`) other than shaked's own that may call `/api` from a
-    /// browser, such as a UI served from elsewhere: env `ARENA_CORS_ORIGIN`, comma-separated.
+    /// browser, such as a UI served from elsewhere: env `SHAKEDOWN_CORS_ORIGIN`, comma-separated.
     /// Empty: same origin only.
     pub cors_origins: Vec<String>,
     /// The base URL an `http` agent is told to reach its MCP endpoint at: env
-    /// `ARENA_AGENT_BASE` (for an agent elsewhere, through a tunnel); empty means `self_base`.
+    /// `SHAKEDOWN_AGENT_BASE` (for an agent elsewhere, through a tunnel); empty means `self_base`.
     pub agent_base: String,
     /// How long shaked waits for an `http` agent to answer a run (time paused left out).
     pub http_agent_timeout: Duration,
@@ -44,13 +44,13 @@ pub struct Config {
     /// How long a Code connection's driver may drive its run before shaked ends the run
     /// `failed` (scored) for it (time paused counted too).
     pub code_run_limit: Duration,
-    /// Where built worlds are written and the current benchmark is remembered (`ARENA_WORLDS`,
+    /// Where built worlds are written and the current benchmark is remembered (`SHAKEDOWN_WORLDS`,
     /// set by shaked's main). None: no world can be built and nothing is remembered.
     pub worlds_dir: Option<std::path::PathBuf>,
     /// How long a request through the recording proxy may take, answer read whole, before it is
-    /// answered 504 (recorded) and the branch goes on: env `ARENA_PROXY_TIMEOUT_SECS`.
+    /// answered 504 (recorded) and the branch goes on: env `SHAKEDOWN_PROXY_TIMEOUT_SECS`.
     pub proxy_timeout: Duration,
-    /// The benchmark to start on (`ARENA_BENCHMARK`); it wins over the one remembered in
+    /// The benchmark to start on (`SHAKEDOWN_BENCHMARK`); it wins over the one remembered in
     /// `worlds_dir`. None: the remembered one, else the only one installed.
     pub start_benchmark: Option<String>,
 }
@@ -74,29 +74,29 @@ impl Config {
         Config {
             providers: ProviderConfig::from_env(),
             self_base: String::new(),
-            max_db_bytes: std::env::var("ARENA_MAX_DB_BYTES")
+            max_db_bytes: parts::settings::var("SHAKEDOWN_MAX_DB_BYTES")
                 .ok()
                 .and_then(|v| v.trim().parse().ok())
                 .unwrap_or(DEFAULT_MAX_DB_BYTES),
             retry_base: DEFAULT_RETRY_BASE,
             cors_origins: cors_origins_from(
-                &std::env::var("ARENA_CORS_ORIGIN").unwrap_or_default(),
+                &parts::settings::var("SHAKEDOWN_CORS_ORIGIN").unwrap_or_default(),
             ),
-            agent_base: std::env::var("ARENA_AGENT_BASE").unwrap_or_default(),
+            agent_base: parts::settings::var("SHAKEDOWN_AGENT_BASE").unwrap_or_default(),
             http_agent_timeout: Duration::from_secs(crate::agents::CLI_TIMEOUT_SECS),
             driver_grace: DEFAULT_DRIVER_GRACE,
             code_run_limit: Duration::from_secs(
-                std::env::var("ARENA_CODE_RUN_SECS")
+                parts::settings::var("SHAKEDOWN_CODE_RUN_SECS")
                     .ok()
                     .and_then(|v| v.trim().parse().ok())
                     .unwrap_or(crate::agents::CLI_TIMEOUT_SECS),
             ),
             worlds_dir: None,
-            proxy_timeout: std::env::var("ARENA_PROXY_TIMEOUT_SECS")
+            proxy_timeout: parts::settings::var("SHAKEDOWN_PROXY_TIMEOUT_SECS")
                 .ok()
                 .and_then(|v| v.trim().parse().ok())
                 .map_or(DEFAULT_PROXY_TIMEOUT, Duration::from_secs),
-            start_benchmark: std::env::var("ARENA_BENCHMARK")
+            start_benchmark: parts::settings::var("SHAKEDOWN_BENCHMARK")
                 .ok()
                 .filter(|b| !b.is_empty()),
         }
@@ -112,10 +112,10 @@ pub struct AppState {
     pub store: Arc<Store>,
     /// The installed integrations and benchmarks, their programs started on first use.
     pub hub: Arc<Hub>,
-    /// The benchmark chosen at start: env `ARENA_BENCHMARK`, else the only one installed; empty
+    /// The benchmark chosen at start: env `SHAKEDOWN_BENCHMARK`, else the only one installed; empty
     /// when neither names one. New runs use [`AppState::benchmark`], which may since have changed.
     pub benchmark: String,
-    /// The benchmark new runs use: env `ARENA_BENCHMARK`, else the one remembered in
+    /// The benchmark new runs use: env `SHAKEDOWN_BENCHMARK`, else the one remembered in
     /// `worlds_dir`, else `benchmark` (also when the remembered one can't describe itself at
     /// start); changed by [`AppState::use_benchmark`].
     current: std::sync::RwLock<String>,
@@ -262,7 +262,7 @@ impl AppState {
     }
 }
 
-/// Why no benchmark is chosen: none is installed, or several are and `ARENA_BENCHMARK` names none.
+/// Why no benchmark is chosen: none is installed, or several are and `SHAKEDOWN_BENCHMARK` names none.
 fn no_benchmark_chosen(hub: &Hub) -> String {
     let installed: Vec<String> = hub
         .registry()
@@ -270,11 +270,11 @@ fn no_benchmark_chosen(hub: &Hub) -> String {
         .map(|m| m.name.clone())
         .collect();
     if installed.is_empty() {
-        return "no benchmark is installed: no folder in ARENA_PACKAGES holds a benchmark package"
+        return "no benchmark is installed: no folder in SHAKEDOWN_PACKAGES holds a benchmark package"
             .into();
     }
     format!(
-        "several benchmarks are installed: set ARENA_BENCHMARK to one of: {}",
+        "several benchmarks are installed: set SHAKEDOWN_BENCHMARK to one of: {}",
         installed.join(", ")
     )
 }
@@ -360,7 +360,7 @@ async fn loopback_host_only(
     next.run(req).await
 }
 
-/// The origins of `ARENA_CORS_ORIGIN` (comma-separated, each `http(s)://host[:port]` without a
+/// The origins of `SHAKEDOWN_CORS_ORIGIN` (comma-separated, each `http(s)://host[:port]` without a
 /// path); anything else, `*` included, is skipped with a warning, since a wildcard would let any
 /// web page drive this machine's arena.
 pub fn cors_origins_from(value: &str) -> Vec<String> {
@@ -377,14 +377,14 @@ pub fn cors_origins_from(value: &str) -> Vec<String> {
                 out.push(o.to_string())
             }
             _ => eprintln!(
-                "shaked: ARENA_CORS_ORIGIN: skipped {o:?} (expected http(s)://host[:port])"
+                "shaked: SHAKEDOWN_CORS_ORIGIN: skipped {o:?} (expected http(s)://host[:port])"
             ),
         }
     }
     out
 }
 
-/// CORS for the origins in `ARENA_CORS_ORIGIN`: a request from one of them gets
+/// CORS for the origins in `SHAKEDOWN_CORS_ORIGIN`: a request from one of them gets
 /// `Access-Control-Allow-Origin`, and its preflight (`OPTIONS`) is answered here. Requests from
 /// any other origin are left as they are (the browser then refuses the answer).
 async fn cors(

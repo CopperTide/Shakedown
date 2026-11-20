@@ -27,7 +27,7 @@ def test_the_cli_starts_within_the_cap_and_smoke_records_the_speed(tmp_path, run
     out: list[str] = []
     http = route({POD_HOST: vllm("unused"), SHAKED_HOST: shaked([])})
     assert _main(tmp_path, runner, clock, ["start", "--confirm-rate", "2.69", "--hours", "2"], out, http) == 0
-    key = (tmp_path / "config" / "runpod.env").read_text().split("ARENA_LOCAL_KEY_RUNPOD=")[1].split("\n")[0]
+    key = (tmp_path / "config" / "runpod.env").read_text().split("SHAKEDOWN_LOCAL_KEY_RUNPOD=")[1].split("\n")[0]
     http = route({POD_HOST: vllm(key)})
     assert _main(tmp_path, runner, clock, ["smoke"], out, http) == 0
     kinds = [line for line in (tmp_path / "ledger.jsonl").read_text().splitlines() if '"measure"' in line]

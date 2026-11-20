@@ -1,17 +1,18 @@
 #!/usr/bin/env bash
 # `claude`, run inside an ephemeral OpenShell sandbox. Put this folder first in shaked's PATH and every
-# Claude Code agent shaked starts runs sandboxed under $ARENA_OPENSHELL_POLICY. When the agent ends, the
+# Claude Code agent shaked starts runs sandboxed under $SHAKEDOWN_OPENSHELL_POLICY. When the agent ends, the
 # sandbox's policy denials are posted to shaked as world events (POST /api/branches/{id}/sandbox-events),
 # so they show on the run's timeline with their reasons. Nothing is made up: no denial in the log, no event.
 #
-# Env: OPENSHELL_HOME (bin/openshell, state/, cliconf/), ARENA_OPENSHELL_IMAGE, ARENA_OPENSHELL_POLICY.
+# Env: OPENSHELL_HOME (bin/openshell, state/, cliconf/), SHAKEDOWN_OPENSHELL_IMAGE, SHAKEDOWN_OPENSHELL_POLICY (or their old
+# names ARENA_OPENSHELL_*).
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 : "${OPENSHELL_HOME:?set OPENSHELL_HOME to the folder with bin/openshell, state/ and cliconf/}"
 export XDG_STATE_HOME=$OPENSHELL_HOME/state XDG_CONFIG_HOME=$OPENSHELL_HOME/cliconf
 OS=$OPENSHELL_HOME/bin/openshell
-IMAGE=${ARENA_OPENSHELL_IMAGE:-openshell-arena-claude:latest}
-POLICY=${ARENA_OPENSHELL_POLICY:-$here/factory-01.yaml}
+IMAGE=${SHAKEDOWN_OPENSHELL_IMAGE:-${ARENA_OPENSHELL_IMAGE:-openshell-arena-claude:latest}}
+POLICY=${SHAKEDOWN_OPENSHELL_POLICY:-${ARENA_OPENSHELL_POLICY:-$here/factory-01.yaml}}
 NAME="ar-$$-$RANDOM"          # sandbox names are at most 19 characters
 
 # Shakedown's MCP URL names the branch and the agent: http://127.0.0.1:<port>/mcp/<branch>/<agent>.

@@ -13,6 +13,7 @@ from typing import Any, Mapping, Optional, Sequence
 
 from .client import Shakedown
 from .errors import ShakedownError, ConnectionFailed
+from .settings import setting
 
 
 class StartFailed(ShakedownError):
@@ -31,15 +32,15 @@ NAMES = ("shaked", "arenad")
 
 
 def find_shaked(shaked: Optional[str], bin_dir: Optional[str]) -> str:
-    """``shaked`` as given, else ``shaked`` (or ``arenad``) in ``bin_dir``, else in ``$ARENA_BIN_DIR``,
+    """``shaked`` as given, else ``shaked`` (or ``arenad``) in ``bin_dir``, else in ``$SHAKEDOWN_BIN_DIR``,
     else on PATH."""
-    dirs = [d for d in (bin_dir, os.environ.get("ARENA_BIN_DIR")) if d]
+    dirs = [d for d in (bin_dir, setting("SHAKEDOWN_BIN_DIR")) if d]
     cands = [shaked] + [os.path.join(d, n) for d in dirs for n in NAMES] + [shutil.which(n) for n in NAMES]
     for cand in cands:
         if cand and os.path.isfile(cand) and os.access(cand, os.X_OK):
             return cand
     raise StartFailed(
-        "no shaked binary: pass shaked=<path> or bin_dir=<folder>, or set ARENA_BIN_DIR "
+        "no shaked binary: pass shaked=<path> or bin_dir=<folder>, or set SHAKEDOWN_BIN_DIR "
         "(build it with `cd core && cargo build --release -p shaked`)"
     )
 
@@ -49,19 +50,19 @@ class LocalShakedown(Shakedown):
     call :meth:`close`) so the process stops.
 
     Args:
-        benchmark: the benchmark package new runs use (``ARENA_BENCHMARK``), e.g. ``"retail"``.
-        packages: folders whose subfolders hold ``arena-package.toml`` (``ARENA_PACKAGES``); default:
+        benchmark: the benchmark package new runs use (``SHAKEDOWN_BENCHMARK``), e.g. ``"retail"``.
+        packages: folders whose subfolders hold ``arena-package.toml`` (``SHAKEDOWN_PACKAGES``); default:
             shaked's own (``integrations`` and ``benchmarks`` of its checkout).
-        pg_url: the Postgres server for shaked's records (``ARENA_PG_URL``); default shaked's
+        pg_url: the Postgres server for shaked's records (``SHAKEDOWN_PG_URL``); default shaked's
             (``postgres://arena:arena@127.0.0.1:5544/postgres``, ``deploy/compose.yml``).
-        saves: where saves go (``ARENA_SAVES``); default a temporary folder removed on close.
-        bin_dir: what ``${ARENA_BIN_DIR}`` means in package manifests, and where to find shaked.
-        shaked: the shaked binary (default: found in ``bin_dir``, ``$ARENA_BIN_DIR`` or PATH).
+        saves: where saves go (``SHAKEDOWN_SAVES``); default a temporary folder removed on close.
+        bin_dir: what ``${SHAKEDOWN_BIN_DIR}`` means in package manifests, and where to find shaked.
+        shaked: the shaked binary (default: found in ``bin_dir``, ``$SHAKEDOWN_BIN_DIR`` or PATH).
             ``arenad=`` is its old name.
         port: the port (default: a free one).
-        max_db_bytes: the saves' disk limit (``ARENA_MAX_DB_BYTES``).
-        cors_origin: web origins allowed to call the API from a browser (``ARENA_CORS_ORIGIN``).
-        env: more environment variables for shaked (model provider keys, ``ARENA_LOCAL_MODELS``, ...);
+        max_db_bytes: the saves' disk limit (``SHAKEDOWN_MAX_DB_BYTES``).
+        cors_origin: web origins allowed to call the API from a browser (``SHAKEDOWN_CORS_ORIGIN``).
+        env: more environment variables for shaked (model provider keys, ``SHAKEDOWN_LOCAL_MODELS``, ...);
             shaked otherwise inherits this process's environment.
         log: a file for shaked's output (default: a temporary file, ``self.log_path``, removed on
             close; a failed start quotes its end).
@@ -92,14 +93,14 @@ class LocalShakedown(Shakedown):
             self._tmp_saves = tempfile.mkdtemp(prefix="arena-saves-")
             saves = self._tmp_saves
         settings = {
-            "ARENA_PORT": str(self.port),
-            "ARENA_SAVES": os.path.abspath(saves),
-            "ARENA_BENCHMARK": benchmark,
-            "ARENA_PACKAGES": packages and os.pathsep.join(os.path.abspath(p) for p in packages),
-            "ARENA_PG_URL": pg_url,
-            "ARENA_BIN_DIR": bin_dir and os.path.abspath(bin_dir),
-            "ARENA_MAX_DB_BYTES": None if max_db_bytes is None else str(max_db_bytes),
-            "ARENA_CORS_ORIGIN": cors_origin,
+            "SHAKEDOWN_PORT": str(self.port),
+            "SHAKEDOWN_SAVES": os.path.abspath(saves),
+            "SHAKEDOWN_BENCHMARK": benchmark,
+            "SHAKEDOWN_PACKAGES": packages and os.pathsep.join(os.path.abspath(p) for p in packages),
+            "SHAKEDOWN_PG_URL": pg_url,
+            "SHAKEDOWN_BIN_DIR": bin_dir and os.path.abspath(bin_dir),
+            "SHAKEDOWN_MAX_DB_BYTES": None if max_db_bytes is None else str(max_db_bytes),
+            "SHAKEDOWN_CORS_ORIGIN": cors_origin,
         }
         e = {**os.environ, **{k: v for k, v in settings.items() if v}, **(env or {})}
         self._tmp_log = log is None
