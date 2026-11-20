@@ -59,6 +59,23 @@ fn a_refused_admission_starts_nothing() {
     })
 }
 
+/// A run over its quota is refused before shaked looks up its world: a hosted shaked without
+/// packages here would otherwise answer 500 instead of naming the quota.
+#[test]
+fn a_refused_run_is_refused_before_its_world_is_looked_up() {
+    run(async {
+        let spy = SpyLayer::new().admitting(refused_runs());
+        let fx = AppFx::idle("layer", "refusefirst")
+            .layer(Arc::new(spy.clone()))
+            .start()
+            .await;
+        let mut body = external_run();
+        body["benchmark"] = json!("no-such-benchmark");
+        let (status, v) = fx.post("/api/runs", body).await;
+        assert_eq!((status, &v["error"]), (429, &json!("runs quota reached")));
+    })
+}
+
 #[test]
 fn an_admitted_run_is_metered_once() {
     run(async {

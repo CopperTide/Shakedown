@@ -530,7 +530,8 @@ async fn new_run_world(
 }
 
 /// `POST /api/runs`: the layer admits and meters the run where every run starts
-/// ([`launch`](crate::launch::launch)); its warning, if any, is in the answer.
+/// ([`launch`](crate::launch::launch)); its warning, if any, is in the answer. A run the layer
+/// refuses is refused first, before its world is looked up, so the answer names the quota.
 async fn create_run(
     State(state): State<Arc<AppState>>,
     Who(caller): Who,
@@ -538,6 +539,7 @@ async fn create_run(
     headers: axum::http::HeaderMap,
     JsonBody(req): JsonBody<NewRun>,
 ) -> ApiResult<Value> {
+    crate::layer::admit(&state.store, &caller, Costly::StartRun).await?;
     start_run(state, caller, permit, headers, req).await
 }
 
