@@ -42,7 +42,7 @@ class Plant:
         it directly. With `video_path`, the backend renders the plant there as it steps."""
         self.backend, self.cfg = backend, cfg
         self.hz = physics_hz(cfg, mods)
-        self.steps = clock_ms * self.hz // 1000  # physics steps done, counted from arena time 0
+        self.steps = clock_ms * self.hz // 1000  # physics steps done, counted from world time 0
         self.last_seq = 0  # the last factory event `advance` returned
         mods.factory.time = mods.factory.datetime = CLOCK
         data = mods.press_model.load_data(cfg.data_path)

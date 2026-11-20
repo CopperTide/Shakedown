@@ -50,7 +50,7 @@ fn heading(team: &Team, m: &Mail) -> String {
         MailKind::Delegation => format!("Work from {from}, step {}", m.seq),
         MailKind::Report => format!("Report from {from}, step {}", m.seq),
         MailKind::Message => format!("Message from {from}, step {}", m.seq),
-        MailKind::Notice => "Notice from arena".to_string(),
+        MailKind::Notice => "Notice from Shakedown".to_string(),
     }
 }
 

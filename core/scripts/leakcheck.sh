@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Runs each integration-test binary on its own and fails if it leaves databases behind: the count of
-# each kind must be the same before and after. Run from arena/core with the compose Postgres
+# each kind must be the same before and after. Run from core/ with the compose Postgres
 # (container deploy-pg-1) up.
 #
 # Postgres (the `postgres` integration, integrations/postgres/src/lib.rs): instances `pi_%`, saves
