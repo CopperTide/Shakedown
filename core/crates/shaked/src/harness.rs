@@ -46,6 +46,8 @@ struct Spy {
     fallback: Mutex<Option<Fallback>>,
     routes: Mutex<Option<MakeRoutes>>,
     policy: std::sync::OnceLock<Policy>,
+    /// The policy once packages are sandboxed (see [`SpyLayer::sandbox_packages`]).
+    sandboxed: std::sync::OnceLock<Policy>,
     headers: Mutex<Vec<String>>,
     shares_keys: std::sync::atomic::AtomicBool,
 }
@@ -92,6 +94,20 @@ impl SpyLayer {
         self
     }
 
+    /// From now on `policy` says packages run only in sandboxes (`runs_packages_here` false),
+    /// the rest as it was: for records made locally, then refused a world.
+    pub fn sandbox_packages(&self) {
+        let p = Policy {
+            runs_packages_here: false,
+            ..*self.policy_now()
+        };
+        let _ = self.0.sandboxed.set(p);
+    }
+
+    fn policy_now(&self) -> &Policy {
+        self.0.policy.get().unwrap_or(&Policy::LOCAL)
+    }
+
     /// `own_keys` answers none: every key is someone else's, shared with the caller.
     pub fn sharing_keys(self) -> SpyLayer {
         (self.0.shares_keys).store(true, std::sync::atomic::Ordering::Relaxed);
@@ -131,7 +147,7 @@ impl SpyLayer {
 
 impl Layer for SpyLayer {
     fn policy(&self) -> &Policy {
-        self.0.policy.get().unwrap_or(&Policy::LOCAL)
+        self.0.sandboxed.get().unwrap_or_else(|| self.policy_now())
     }
 
     fn authenticate<'a>(

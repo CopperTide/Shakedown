@@ -159,3 +159,85 @@ fn a_local_shaked_answers_the_api_on_loopback_names_only() {
         assert_eq!(fx.get("/api/runs").await.0, 200, "loopback still answers");
     })
 }
+
+/// A Code connection that would run `true` here.
+fn connection() -> shaked::store::Connection {
+    shaked::store::Connection {
+        id: "c".into(),
+        name: "C".into(),
+        kind: "code".into(),
+        command: vec!["true".into()],
+        workdir: None,
+        env: BTreeMap::new(),
+        created_at: chrono::Utc::now(),
+    }
+}
+
+/// A built-in run of task 27 whose agent cannot reach a model: the answer to `POST /api/runs`.
+async fn post_run(fx: &AppFx) -> (u16, serde_json::Value) {
+    let agent = serde_json::json!({"id": "planner", "name": "Planner", "kind": "open",
+                                   "model": "m", "prompt": "Poke the box."});
+    let team = serde_json::json!({"id": "o", "name": "Open", "agents": [agent]});
+    fx.post(
+        "/api/runs",
+        serde_json::json!({"task_id": "27", "team": team}),
+    )
+    .await
+}
+
+/// [`post_run`], ended: its branch.
+async fn ended_run(fx: &AppFx) -> String {
+    let (status, v) = post_run(fx).await;
+    assert_eq!(status, 200, "{v}");
+    let branch = v["branch_id"].as_str().unwrap().to_string();
+    for _ in 0..100 {
+        let (_, b) = fx.get(&format!("/api/branches/{branch}")).await;
+        if b["branch"]["status"] != "running" && b["status"] != "running" {
+            return branch;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    panic!("the run never ended");
+}
+
+const SANDBOXES: &str = "this shaked runs packages only in sandboxes";
+
+/// Fork `parent` at its last event and launch a Code connection's driver here: both refused.
+async fn fork_and_driver_are_refused(fx: &AppFx, parent: &str) {
+    let events = support::records(&fx.state.store).events(parent).await;
+    let at = events.unwrap().last().unwrap().seq;
+    let forked = shaked::fork::fork(&fx.state, parent, at, Default::default()).await;
+    let e = forked.expect_err("a fork started a world here");
+    assert!(format!("{e:#}").contains(SANDBOXES), "{e:#}");
+    let ids = shaked::driver::RunIds {
+        run_id: "r",
+        branch_id: "b",
+        task_id: "27",
+        fork_of: None,
+    };
+    let launched = shaked::driver::launch(&fx.state, &connection(), ids).await;
+    let e = launched.err().expect("a driver launched here");
+    assert!(format!("{e:#}").contains(SANDBOXES), "{e:#}");
+}
+
+/// I8: under a layer whose packages run only in sandboxes, nothing starts a world's parts or a
+/// driver on this machine: not the machine's world routes, a new run, a fork of a run made
+/// before, nor a Code connection's driver.
+#[test]
+fn a_layer_that_runs_no_packages_here_starts_no_world_driver_or_fork() {
+    run(async {
+        let spy = shaked::harness::SpyLayer::new();
+        let fx = AppFx::idle("modes", "sandboxed")
+            .layer(std::sync::Arc::new(spy.clone()))
+            .start()
+            .await;
+        let parent = ended_run(&fx).await;
+        spy.sandbox_packages();
+        let (status, v) = fx.post("/api/worlds/x/use", serde_json::json!({})).await;
+        assert_eq!((status, v["error"].as_str()), (403, Some(SANDBOXES)), "{v}");
+        let (status, v) = post_run(&fx).await;
+        assert_ne!(status, 200, "{v}");
+        assert!(v["error"].as_str().unwrap_or("").contains(SANDBOXES), "{v}");
+        fork_and_driver_are_refused(&fx, &parent).await;
+    })
+}

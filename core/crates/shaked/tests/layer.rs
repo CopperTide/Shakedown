@@ -120,7 +120,11 @@ fn a_claimed_suite_run_is_admitted_and_metered_once() {
         let (status, c) = fx.post(&format!("/api/suites/{id}/claim"), json!({})).await;
         assert_eq!(status, 200, "{c}");
         let run_id = c["run_id"].as_str().unwrap();
-        assert!(spy.calls().contains(&Call::Admit("StartRun".into())), "{:?}", spy.calls());
+        assert!(
+            spy.calls().contains(&Call::Admit("StartRun".into())),
+            "{:?}",
+            spy.calls()
+        );
         let want = Call::Meter(shaked::layer::Meter::Runs, format!("run:{run_id}"));
         assert_eq!(runs_metered(&spy), [want]);
     })
@@ -142,6 +146,18 @@ fn a_refused_admission_starts_no_claimed_suite_run() {
     })
 }
 
+/// True once suite `id` is no longer running (within 10 s).
+async fn suite_ended(fx: &AppFx, id: &str) -> bool {
+    for _ in 0..100 {
+        let (_, s) = fx.get(&format!("/api/suites/{id}")).await;
+        if s["status"] != "running" {
+            return true;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    false
+}
+
 #[test]
 fn a_refused_admission_starts_no_builtin_suite_run() {
     run(async {
@@ -156,18 +172,15 @@ fn a_refused_admission_starts_no_builtin_suite_run() {
         let body = json!({"team": team, "tasks": ["27"], "repeats": 1});
         let (status, v) = fx.post("/api/suites", body).await;
         assert_eq!(status, 200, "{v}");
-        let id = v["id"].as_str().unwrap();
-        let mut ended = false;
-        for _ in 0..100 {
-            let (_, s) = fx.get(&format!("/api/suites/{id}")).await;
-            if s["status"] != "running" {
-                ended = true;
-                break;
-            }
-            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-        }
-        assert!(ended, "the suite ended");
-        assert!(spy.calls().contains(&Call::Admit("StartRun".into())), "{:?}", spy.calls());
+        assert!(
+            suite_ended(&fx, v["id"].as_str().unwrap()).await,
+            "the suite ended"
+        );
+        assert!(
+            spy.calls().contains(&Call::Admit("StartRun".into())),
+            "{:?}",
+            spy.calls()
+        );
         assert!(records(&fx.state.store).runs().await.unwrap().is_empty());
         assert!(runs_metered(&spy).is_empty());
     })
@@ -326,7 +339,9 @@ fn gateway_headers_reach_only_a_layer_that_serves_others() {
             let url = format!("{}/api/runs", fx.base);
             let r = fx.http.get(url).header("x-sculptured-user", "someone");
             assert_eq!(r.send().await.unwrap().status(), 200);
-            let seen = spy.seen_headers().contains(&"x-sculptured-user".to_string());
+            let seen = spy
+                .seen_headers()
+                .contains(&"x-sculptured-user".to_string());
             assert_eq!(seen, kept, "{policy:?}");
         }
     })
@@ -379,7 +394,11 @@ fn a_layer_without_environment_keys_lends_none_of_the_operators() {
             let caller = support::local();
             for asked in ["openai", "anthropic"] {
                 let (p, _) = provider_for(&fx.state, caller, Some(asked), "m").await;
-                assert_eq!(p.unwrap().endpoint.key.is_some(), lent, "{asked} {policy:?}");
+                assert_eq!(
+                    p.unwrap().endpoint.key.is_some(),
+                    lent,
+                    "{asked} {policy:?}"
+                );
             }
             let (lab, _) = provider_for(&fx.state, caller, Some("local:lab"), "m").await;
             assert_eq!(lab.is_ok(), lent, "{policy:?}");
@@ -458,11 +477,17 @@ fn a_unique_violation_is_a_conflict() {
             .await
             .unwrap();
         let task = tokio::spawn(conn);
-        c.batch_execute("CREATE TEMP TABLE u (x int CONSTRAINT u_x_key UNIQUE); INSERT INTO u VALUES (1)")
+        c.batch_execute(
+            "CREATE TEMP TABLE u (x int CONSTRAINT u_x_key UNIQUE); INSERT INTO u VALUES (1)",
+        )
+        .await
+        .unwrap();
+        let e = c
+            .execute("INSERT INTO u VALUES (1)", &[])
             .await
-            .unwrap();
-        let e = c.execute("INSERT INTO u VALUES (1)", &[]).await.unwrap_err();
-        let r = shaked::api::ApiError::from(anyhow::Error::from(e).context("adding")).into_response();
+            .unwrap_err();
+        let r =
+            shaked::api::ApiError::from(anyhow::Error::from(e).context("adding")).into_response();
         assert_eq!(r.status(), StatusCode::CONFLICT);
         drop(c);
         let _ = task.await;
