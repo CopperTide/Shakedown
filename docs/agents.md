@@ -73,13 +73,15 @@ task with it (spend limit $0.50) and says whether its agents worked. Shakedown s
 listens on 127.0.0.1 alone, and the routes that start one refuse requests a web page could make (anything not
 JSON, or from another origin). Any program on this computer can still reach it, so run Shakedown with Code
 connections only on a computer whose other accounts you trust. A driver that drives its run longer than
-`ARENA_CODE_RUN_SECS` (default 900) has its run ended `failed`, scored.
+`ARENA_CODE_RUN_SECS` (default 900) has its run ended `failed`, scored; a run with a world time window
+(`world_minutes`) allows at least the window's wall time plus the driver grace, and is scored when the window ends
+([concepts](concepts.md#world-time-windows)).
 
 ### The world's time
 
 Every driver Shakedown launches gets `ARENA_WORLD_EPOCH_MS` (the unix ms of the world clock's 0: the task's
 `clock_start` read as UTC, else the run's start; a fork keeps its run's) and `ARENA_CLOCK_SPEED` (world ms per wall
-ms). `GET /api/branches/{id}/clock` (SDK: `Branch.clock()`) answers `{clock_ms, speed, paused, world_epoch_ms,
+ms), and `ARENA_WORLD_MINUTES` when the run has a world time window. `GET /api/branches/{id}/clock` (SDK: `Branch.clock()`) answers `{clock_ms, speed, paused, world_epoch_ms,
 world_ms}` for a live branch (409 once it ended). Simulated traffic and twins stamp what they emit with
 `world_epoch_ms + clock_ms` (the kits' `WorldTime`), so dashboards follow the world clock and its pauses.
 

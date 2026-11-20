@@ -206,7 +206,7 @@ impl Team {
 }
 
 /// The rules a branch runs under, recorded in its run's `RunStart` (`runner`, `handoff`,
-/// `max_cost_usd`, `connection`).
+/// `max_cost_usd`, `connection`, `world_minutes`).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Rules {
     pub runner: Runner,
@@ -217,6 +217,9 @@ pub struct Rules {
     pub max_cost_usd: Option<f64>,
     /// The Code connection whose driver Shakedown launched for the run (`crate::driver`).
     pub connection: Option<String>,
+    /// The run's world time window in minutes (`crate::window`): a run an external system
+    /// drives is scored when it ends; None: no window.
+    pub world_minutes: Option<f64>,
 }
 
 impl Rules {
@@ -227,7 +230,14 @@ impl Rules {
             handoff_required: false,
             max_cost_usd: crate::budget::env_default(),
             connection: None,
+            world_minutes: None,
         }
+    }
+
+    /// These rules with the world time window `m` (minutes; see `crate::window::valid_minutes`).
+    pub fn with_world_minutes(mut self, m: Option<f64>) -> Rules {
+        self.world_minutes = m;
+        self
     }
 
     /// These rules with the spend limit `max` (`None` keeps the env default).
@@ -245,6 +255,7 @@ impl Rules {
             handoff_required: true,
             max_cost_usd: None,
             connection: None,
+            world_minutes: None,
         }
     }
 
@@ -256,6 +267,7 @@ impl Rules {
                 handoff_required: start.handoff.as_deref() == Some("required"),
                 max_cost_usd: start.max_cost_usd.and_then(crate::budget::positive),
                 connection: start.connection.clone(),
+                world_minutes: start.world_minutes,
             },
             None => Rules::legacy(),
         }

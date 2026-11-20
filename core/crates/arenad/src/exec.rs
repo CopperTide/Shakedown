@@ -57,6 +57,8 @@ pub struct BranchCtx {
     pub lifecycle: Lifecycle,
     /// The arena's time on this branch since its last event (see [`crate::overhead`]).
     pub overhead: Ledger,
+    /// A finish held until the run's world time window ends (see [`crate::window`]).
+    pub window: std::sync::Mutex<Option<crate::window::Held>>,
 }
 
 impl BranchCtx {
@@ -76,6 +78,7 @@ impl BranchCtx {
             mailbox: Mailbox::default(),
             lifecycle: Lifecycle::default(),
             overhead: Ledger::default(),
+            window: std::sync::Mutex::default(),
         }
     }
 

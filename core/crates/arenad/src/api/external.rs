@@ -40,9 +40,9 @@ pub(super) async fn create_run(
     state: Arc<AppState>,
     permit: StartPermit,
     benchmark: String,
-    task_id: String,
-    team: Team,
+    (task_id, team): (String, Team),
     scenario: crate::scenario::Scenario,
+    rules: Rules,
 ) -> ApiResult<Value> {
     team::validate_agents(providers_of(&state), &team.agents)?;
     permit.check_disk(&state).await?;
@@ -52,7 +52,7 @@ pub(super) async fn create_run(
             task_id: &task_id,
             team,
             scenario: &scenario,
-            rules: Rules::new(Runner::External),
+            rules,
             driver: None,
             benchmark: Some(&benchmark),
         };
@@ -193,21 +193,29 @@ struct FinishReq {
 
 /// `POST /api/branches/{id}/finish`: the run is over. arenad freezes and scores the world, stops
 /// it and answers how the branch ended. With `{"error"}` the run went wrong on the system's side:
-/// it is still scored, and ends `failed` with that error.
+/// it is still scored, and ends `failed` with that error. Before the end of the run's world time
+/// window the finish is held (`window::hold`): it answers `{status: "running",
+/// held_until_clock_ms}` and the run is scored when the window ends.
 async fn finish(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
     OptionalJson(req): OptionalJson<FinishReq>,
-) -> ApiResult<Finished> {
+) -> ApiResult<Value> {
     let ctx = external_branch(&state, &id)?;
+    let error = req.error.filter(|e| !e.trim().is_empty());
+    if let Some(until) = crate::window::hold(&ctx, error.clone()) {
+        return Ok(Json(
+            json!({"status": BranchStatus::Running, "held_until_clock_ms": until}),
+        ));
+    }
     detached(async move {
-        let ended = match req.error.filter(|e| !e.trim().is_empty()) {
+        let ended = match error {
             Some(why) => runner::finish_failed(&state, &ctx, why).await,
             None => runner::finish(&state, &ctx).await,
         };
         let runner::Ending { status, error } =
             ended.ok_or_else(|| ApiError::conflict("the branch is ending already"))?;
-        Ok(Json(Finished { error, status }))
+        Ok(Json(serde_json::to_value(Finished { error, status })?))
     })
     .await
 }

@@ -387,3 +387,226 @@ async fn assert_team_swap(fx: &AppFx, branch: &str, at: i64) {
     assert!(stored.fork_note.unwrap().contains("Single agent"));
     assert_eq!(fx.finish(swapped).await.0, 200);
 }
+
+// ---------------------------------------------------------------- run limits: window and spend
+
+/// Starts an external run of task 27 with `extra` fields (`world_minutes`, `max_cost_usd`): its
+/// branch id.
+async fn start_with(fx: &AppFx, extra: Value) -> String {
+    let mut body = json!({"task_id": "27", "team": team(json!([])), "runner": "external"});
+    body.as_object_mut()
+        .unwrap()
+        .extend(extra.as_object().unwrap().clone());
+    let (status, v) = fx.post("/api/runs", body).await;
+    assert_eq!(status, 200, "{v}");
+    v["branch_id"].as_str().unwrap().to_string()
+}
+
+async fn status_of(fx: &AppFx, branch: &str) -> Value {
+    let (_, b) = send(fx.http.get(format!("{}/api/branches/{branch}", fx.base))).await;
+    b
+}
+
+/// Waits (at most `secs`) until the branch is no longer running: its record. Scoring a run of
+/// task 27 first builds the task's gold save on the test's own hub, which can take seconds of its
+/// own beside other tests, so the waits leave room past the window.
+async fn ended_within(fx: &AppFx, branch: &str, secs: u64) -> Value {
+    let since = std::time::Instant::now();
+    loop {
+        let b = status_of(fx, branch).await;
+        if b["status"] != "running" {
+            return b;
+        }
+        if since.elapsed().as_secs() >= secs {
+            let evs = fx.events(branch).await;
+            let said: Vec<String> = (evs.iter())
+                .map(|e| format!("{:?} {} {}", e.kind, e.payload["part"], e.payload["kind"]))
+                .collect();
+            panic!("still running after {secs} s: {said:?}");
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+}
+
+/// The payload of the branch's world event `part`/`kind`, if it has one.
+async fn world_event(fx: &AppFx, branch: &str, part: &str, kind: &str) -> Option<Value> {
+    let evs = fx.events(branch).await;
+    let hit = |e: &&Event| {
+        e.kind == EventKind::WorldEvent && e.payload["part"] == part && e.payload["kind"] == kind
+    };
+    evs.iter().find(hit).map(|e| e.payload.clone())
+}
+
+/// The branch was scored after its window's end at clock `at_least` or later.
+async fn scored_at_the_window(fx: &AppFx, branch: &str, at_least: i64) {
+    let evs = fx.events(branch).await;
+    let up = |e: &&Event| e.kind == EventKind::WorldEvent && e.payload["kind"] == "time_up";
+    let up = evs.iter().find(up).expect("a time_up event");
+    let check = evs
+        .iter()
+        .find(|e| e.kind == EventKind::Check)
+        .expect("the run was scored");
+    assert!(
+        up.payload["clock_ms"].as_i64().unwrap() >= at_least,
+        "{}",
+        up.payload
+    );
+    assert!(check.seq > up.seq, "scored before the window ended");
+}
+
+#[test]
+fn a_world_time_window_ends_the_run_scored_at_its_limit() {
+    run(async {
+        let fx = setup("window").await;
+        let branch = start_with(&fx, json!({"world_minutes": 0.05})).await;
+        ended_within(&fx, &branch, 30).await;
+        scored_at_the_window(&fx, &branch, 3000).await;
+        let up = world_event(&fx, &branch, "window", "time_up")
+            .await
+            .expect("a time_up event");
+        assert!(up["clock_ms"].as_i64().unwrap() >= 3000, "{up}");
+        assert_eq!(up["text"], "the run's world time window (0.05 min) ended");
+    })
+}
+
+#[test]
+fn a_driver_that_finishes_early_is_scored_at_the_limit() {
+    run(async {
+        let fx = setup("window-early").await;
+        let branch = start_with(&fx, json!({"world_minutes": 0.1})).await;
+        register(&fx, &branch, json!({"id": "a"})).await;
+        let (status, v) = fx.finish(&branch).await;
+        assert_eq!(
+            (status, &v),
+            (
+                200,
+                &json!({"status": "running", "held_until_clock_ms": 6000})
+            )
+        );
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        assert_eq!(status_of(&fx, &branch).await["status"], "running");
+        ended_within(&fx, &branch, 30).await;
+        scored_at_the_window(&fx, &branch, 6000).await;
+    })
+}
+
+#[test]
+fn a_held_finish_with_an_error_ends_failed_and_scored() {
+    run(async {
+        let fx = setup("window-error").await;
+        let branch = start_with(&fx, json!({"world_minutes": 0.05})).await;
+        let (status, v) = fx
+            .finish_with(&branch, json!({"error": "driver raised X"}))
+            .await;
+        assert_eq!((status, &v["status"]), (200, &json!("running")), "{v}");
+        let b = ended_within(&fx, &branch, 30).await;
+        assert_eq!(
+            (&b["status"], &b["error"]),
+            (&json!("failed"), &json!("driver raised X"))
+        );
+        assert!(kinds(&fx.events(&branch).await).contains(&EventKind::Check));
+    })
+}
+
+#[test]
+fn a_pause_holds_the_window() {
+    run(async {
+        let fx = setup("window-pause").await;
+        let since = std::time::Instant::now();
+        let branch = start_with(&fx, json!({"world_minutes": 0.05})).await;
+        assert_eq!(fx.on(&branch, "pause", json!({})).await.0, 200);
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        assert_eq!(fx.on(&branch, "resume", json!({})).await.0, 200);
+        ended_within(&fx, &branch, 30).await;
+        assert!(since.elapsed().as_millis() >= 5000, "{:?}", since.elapsed());
+    })
+}
+
+#[test]
+fn world_minutes_are_checked_and_recorded() {
+    run(async {
+        let fx = setup("window-bad").await;
+        for bad in [json!(0), json!(-1), json!(1441)] {
+            let body = json!({"task_id": "27", "team": team(json!([])), "runner": "external", "world_minutes": bad});
+            let (status, v) = fx.post("/api/runs", body).await;
+            assert_eq!(status, 400, "{v}");
+            assert_eq!(
+                v["error"],
+                "world_minutes must be from 0 to 1440 minutes of world time"
+            );
+        }
+        let branch = start_with(&fx, json!({"world_minutes": 60})).await;
+        let evs = fx.events(&branch).await;
+        let start = evs.iter().find(|e| e.kind == EventKind::RunStart).unwrap();
+        assert_eq!(start.payload["world_minutes"], json!(60.0));
+        assert_eq!(fx.on(&branch, "stop", json!({})).await.0, 200);
+    })
+}
+
+#[test]
+fn runs_without_a_window_finish_as_before() {
+    run(async {
+        let fx = setup("no-window").await;
+        let branch = start(&fx).await;
+        let (status, v) = fx.finish(&branch).await;
+        assert_eq!(status, 200, "{v}");
+        assert_ne!(v["status"], "running", "{v}");
+        assert!(v.get("held_until_clock_ms").is_none(), "{v}");
+    })
+}
+
+/// An app whose one provider, `local:pod`, is the fake server at `base` with a high rate.
+async fn rated_pod(tag: &str, base: &str) -> AppFx {
+    use arenad::providers::{Endpoint, LocalEndpoint, ProviderConfig, Rate};
+    let mut providers = ProviderConfig::default();
+    let rate = Some(Rate {
+        input_per_mtok: 1000.0,
+        output_per_mtok: 1000.0,
+    });
+    let endpoint = Endpoint::new(base, None);
+    let pod = LocalEndpoint {
+        name: "pod".into(),
+        endpoint,
+        rate,
+    };
+    providers.locals.push(pod);
+    AppFx::idle("external", tag)
+        .providers(providers)
+        .start()
+        .await
+}
+
+/// The statuses of `n` model calls through the gateway `gateway_url`.
+async fn calls(fx: &AppFx, gateway_url: &str, n: usize) -> Vec<u16> {
+    let url = format!("{gateway_url}/chat/completions");
+    let call = json!({"model": "m", "messages": [{"role": "user", "content": "go"}]});
+    let mut statuses = vec![];
+    for _ in 0..n {
+        let r = fx.http.post(&url).json(&call).send().await.unwrap();
+        statuses.push(r.status().as_u16());
+    }
+    statuses
+}
+
+#[test]
+fn a_run_over_its_spend_limit_is_refused_further_model_calls() {
+    use support::fake_llm::{fake_llm, gpt_oss};
+    run(async {
+        let llm = fake_llm(vec![(200, gpt_oss("t", None))]).await;
+        let fx = rated_pod("spend", &llm.base).await;
+        let branch = start_with(&fx, json!({"max_cost_usd": 0.01})).await;
+        let join = json!({"id": "a", "provider": "local:pod", "model": "m"});
+        let reg = register(&fx, &branch, join).await;
+        let statuses = calls(&fx, reg["gateway_url"].as_str().unwrap(), 3).await;
+        assert_eq!(statuses, [200, 402, 402]);
+        assert_eq!(llm.seen.lock().unwrap().len(), 1);
+        let evs = fx.events(&branch).await;
+        let reached =
+            |e: &&Event| e.kind == EventKind::WorldEvent && e.payload["kind"] == "limit_reached";
+        assert_eq!(evs.iter().filter(reached).count(), 1);
+        assert!(world_event(&fx, &branch, "budget", "limit_reached")
+            .await
+            .is_some());
+        assert_eq!(fx.finish(&branch).await.0, 200);
+    })
+}

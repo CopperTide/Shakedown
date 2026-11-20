@@ -6,6 +6,7 @@
 //! scored as it stands (a failure). An agent kind whose usage is seen only at a turn's end (the
 //! one-shot `claude -p`, Codex) is checked when that turn ends.
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
 use crate::prices::{self, CallTokens};
@@ -34,6 +35,8 @@ pub struct Budget {
     limit: Option<f64>,
     /// agent -> (cost reported by finished turns, estimate of calls since then)
     spent: Mutex<HashMap<String, (f64, f64)>>,
+    /// Set once a model call was refused for the limit.
+    refused: AtomicBool,
 }
 
 impl Budget {
@@ -41,6 +44,7 @@ impl Budget {
         Budget {
             limit: limit.and_then(positive),
             spent: Mutex::default(),
+            refused: AtomicBool::new(false),
         }
     }
 
@@ -78,6 +82,11 @@ impl Budget {
             .unwrap()
             .insert(agent.to_string(), (reported_total.max(0.0), 0.0));
         self.over()
+    }
+
+    /// True the first time it is asked (the first model call refused for the limit), false after.
+    pub fn first_refusal(&self) -> bool {
+        !self.refused.swap(true, Ordering::SeqCst)
     }
 
     /// The reason to stop: the estimate is past the limit.

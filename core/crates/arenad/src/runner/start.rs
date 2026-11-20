@@ -287,5 +287,6 @@ fn run_start(
         max_cost_usd: of.rules.max_cost_usd,
         connection: of.rules.connection.clone(),
         world_epoch_ms: None,
+        world_minutes: of.rules.world_minutes,
     }
 }

@@ -164,6 +164,8 @@ pub(super) struct CodeRun {
     pub team: Team,
     pub scenario: crate::scenario::Scenario,
     pub max_cost_usd: Option<f64>,
+    /// Its world time window in minutes (`crate::window`).
+    pub world_minutes: Option<f64>,
     /// The benchmark it runs on (read once when it was asked for).
     pub benchmark: String,
 }
@@ -203,7 +205,7 @@ pub(super) async fn start_code_run(
             task_id: &run.task_id,
             team: run.team,
             scenario: &run.scenario,
-            rules: driver::rules_for(&conn.id, run.max_cost_usd),
+            rules: driver::rules_for(&conn.id, run.max_cost_usd, run.world_minutes),
             driver: Some(&conn),
             benchmark: Some(&run.benchmark),
         };
@@ -236,6 +238,7 @@ async fn test_run(state: &AppState, conn: &Connection) -> Result<CodeRun, ApiErr
         team,
         scenario: Default::default(),
         max_cost_usd: Some(TEST_MAX_COST_USD),
+        world_minutes: None,
         benchmark: bench.name,
     })
 }

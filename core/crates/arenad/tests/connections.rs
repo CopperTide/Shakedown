@@ -543,3 +543,51 @@ fn live_a_fork_of_a_code_run_relaunches_the_driver() {
         assert!(has(EventKind::Check, start));
     })
 }
+
+impl AppFx {
+    /// Starts a run of task 27 with the connection `id` and a world time window of `minutes`.
+    async fn start_windowed(&self, id: &str, minutes: f64) -> String {
+        let team = json!({"id": "own", "name": "Own", "agents": []});
+        let body =
+            json!({"task_id": "27", "team": team, "connection": id, "world_minutes": minutes});
+        let (status, v) = self.post("/api/runs", body).await;
+        assert_eq!(status, 200, "{v}");
+        v["branch_id"].as_str().unwrap().to_string()
+    }
+}
+
+/// The branch's events have its window's end.
+fn has_time_up(evs: &[Event]) -> bool {
+    let up = |e: &Event| e.kind == EventKind::WorldEvent && e.payload["part"] == "window";
+    evs.iter().any(|e| up(e) && e.payload["kind"] == "time_up")
+}
+
+#[test]
+fn a_driver_that_exits_holding_a_finish_leaves_its_run_to_the_window() {
+    run(async {
+        let fx = setup("held-exit").await;
+        let id = fx.connection("finish_early.py", json!({})).await;
+        let branch = fx.start_windowed(&id, 0.1).await;
+        let b = fx.ended(&branch).await;
+        let error = b.error.unwrap_or_default();
+        assert!(!error.contains("driver"), "{error}");
+        let evs = fx.state.store.events(&branch).await.unwrap();
+        assert!(has_time_up(&evs), "the window ended the run");
+        assert!(evs.iter().any(|e| e.kind == EventKind::Check));
+        driver_exit(&fx, &branch).await;
+    })
+}
+
+#[test]
+fn a_windowed_run_is_not_cut_off_before_its_window_ends() {
+    run(async {
+        let fx = setup("window-cut").await; // drivers are cut off after 4 s
+        let id = fx.connection("hang.py", json!({})).await;
+        let branch = fx.start_windowed(&id, 0.12).await; // 7.2 s of world time
+        let b = fx.ended(&branch).await;
+        let error = b.error.unwrap_or_default();
+        assert!(!error.contains("still running after"), "{error}");
+        let evs = fx.state.store.events(&branch).await.unwrap();
+        assert!(has_time_up(&evs), "the window ended the run");
+    })
+}

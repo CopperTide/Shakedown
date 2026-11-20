@@ -39,6 +39,7 @@ pub mod suite;
 pub(crate) mod testkit;
 pub mod text;
 pub mod ticker;
+pub mod window;
 pub mod world;
 pub mod world_clock;
 pub mod worlds;

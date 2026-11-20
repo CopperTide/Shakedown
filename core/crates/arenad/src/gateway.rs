@@ -215,6 +215,39 @@ async fn save_before_model_call(state: &AppState, ctx: &BranchCtx) {
     }
 }
 
+/// Why the call can't go on once the branch lets it: 409 when the branch stopped (a paused one
+/// holds the call until it resumes, a wait that is no part of the gateway's), 402 past the spend
+/// limit of a run an external system drives.
+async fn held_back(state: &AppState, ctx: &BranchCtx) -> Option<Response> {
+    if ctx.flow.go().await.is_err() {
+        return Some(error_response(StatusCode::CONFLICT, crate::flow::STOPPED));
+    }
+    let why = over_the_limit(state, ctx).await?;
+    Some(error_response(StatusCode::PAYMENT_REQUIRED, why))
+}
+
+/// Why a run an external system drives may make no more model calls: its spend estimate passed
+/// its limit (arenad's own runners end such a run themselves). The first refusal is recorded as
+/// `budget/limit_reached`; nothing is sent upstream.
+async fn over_the_limit(state: &AppState, ctx: &BranchCtx) -> Option<String> {
+    if ctx.rules.runner != Runner::External {
+        return None;
+    }
+    let why = ctx.budget.over()?;
+    if ctx.budget.first_refusal() {
+        let ev = json!({"part": "budget", "kind": "limit_reached", "text": why, "data": null,
+                        "clock_ms": ctx.clock.now_ms()});
+        let recorded = ctx.append_now(&state.store, None, EventKind::WorldEvent, ev);
+        if let Err(e) = recorded.await {
+            eprintln!(
+                "gateway: recording the spend limit on {}: {e:#}",
+                ctx.branch_id
+            );
+        }
+    }
+    Some(why)
+}
+
 /// The provider's answer to `body`, and how long it took (ms).
 async fn timed_upstream(
     state: &AppState,
@@ -236,9 +269,8 @@ async fn handle(
         Ok(found) => found,
         Err((status, why)) => return error_response(status, why),
     };
-    // A paused branch holds the call until it resumes; that wait is no part of the gateway's.
-    if ctx.flow.go().await.is_err() {
-        return error_response(StatusCode::CONFLICT, crate::flow::STOPPED);
+    if let Some(refused) = held_back(&state, &ctx).await {
+        return refused;
     }
     save_before_model_call(&state, &ctx).await;
     let since = Instant::now();

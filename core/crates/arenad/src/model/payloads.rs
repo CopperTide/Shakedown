@@ -97,6 +97,13 @@ pub struct RunStartPayload {
         skip_serializing_if = "Option::is_none"
     )]
     pub world_epoch_ms: Option<i64>,
+    /// The run's world time window in minutes, when it has one (`crate::window`).
+    #[serde(
+        default,
+        deserialize_with = "lenient",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub world_minutes: Option<f64>,
 }
 
 impl EventPayload for RunStartPayload {

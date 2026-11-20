@@ -62,7 +62,9 @@ pub async fn launch_driver(
 /// task; a run an external system drives made live, with its agents' starts (their endpoints).
 async fn go(state: &Arc<AppState>, ctx: Arc<BranchCtx>) -> anyhow::Result<Vec<Endpoints>> {
     if ctx.rules.runner == Runner::External {
-        return external::go(state, &ctx).await;
+        let agents = external::go(state, &ctx).await?;
+        crate::window::watch(state, &ctx.branch_id);
+        return Ok(agents);
     }
     runner::spawn_branch(state, ctx, StartPoint::default());
     Ok(vec![])

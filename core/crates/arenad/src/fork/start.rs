@@ -78,6 +78,7 @@ pub async fn fork_with(
     if ctx.rules.runner == Runner::External {
         let conn = ctx.rules.connection.clone();
         let mut res = live_child(state, ctx, rerun.plan, &events).await;
+        crate::window::watch(state, &res.branch_id);
         if let Some(conn) = conn {
             let ids = (parent.run_id.as_str(), parent.id.as_str(), task_id.as_str());
             res.driver = Some(relaunch(state, &conn, ids, &res.branch_id).await);

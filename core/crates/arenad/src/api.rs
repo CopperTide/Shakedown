@@ -373,6 +373,17 @@ struct NewRun {
     /// The benchmark it is made on (absent: the current one); 409 when it isn't installed.
     #[serde(default)]
     benchmark: Option<String>,
+    /// A world time window in minutes for a run an external system drives (`crate::window`).
+    #[serde(default)]
+    world_minutes: Option<f64>,
+}
+
+/// A request's world time window: absent, or from 0 to 1440 minutes (else 400).
+pub(crate) fn world_minutes(asked: Option<f64>) -> Result<Option<f64>, ApiError> {
+    match asked {
+        Some(m) if !crate::window::valid_minutes(m) => Err(ApiError::bad(crate::window::INVALID)),
+        m => Ok(m),
+    }
 }
 
 /// The benchmark a new run, suite or experiment is made on: the one it asks for (409 when it isn't
@@ -408,16 +419,34 @@ async fn create_code_run(
     scenario: crate::scenario::Scenario,
 ) -> ApiResult<Value> {
     let max_cost_usd = max_cost(req.max_cost_usd)?;
+    let world_minutes = world_minutes(req.world_minutes)?;
     let (task_id, team) = (req.task_id, req.team);
     let run = connections::CodeRun {
         task_id,
         team,
         scenario,
         max_cost_usd,
+        world_minutes,
         benchmark: bench,
     };
     let id = req.connection.unwrap_or_default();
     connections::create_run(state, permit, headers, (&id, req.runner), run).await
+}
+
+/// `POST /api/runs` with `runner: external` (see `external::create_run`): its spend limit and
+/// world time window checked.
+async fn create_external_run(
+    state: Arc<AppState>,
+    permit: StartPermit,
+    req: NewRun,
+    bench: String,
+    scenario: crate::scenario::Scenario,
+) -> ApiResult<Value> {
+    let rules = Rules::new(Runner::External)
+        .with_max_cost(max_cost(req.max_cost_usd)?)
+        .with_world_minutes(world_minutes(req.world_minutes)?);
+    let run = (req.task_id, req.team);
+    external::create_run(state, permit, bench, run, scenario, rules).await
 }
 
 async fn create_run(
@@ -437,8 +466,7 @@ async fn create_run(
         return create_code_run(state, permit, &headers, req, bench, scenario).await;
     }
     if req.runner == Runner::External {
-        let (task, team) = (req.task_id, req.team);
-        return external::create_run(state, permit, bench, task, team, scenario).await;
+        return create_external_run(state, permit, req, bench, scenario).await;
     }
     team::validate_builtin(providers_of(&state), &req.team, req.runner)?;
     let max = max_cost(req.max_cost_usd)?;

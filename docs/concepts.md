@@ -294,6 +294,23 @@ work, not after:
   `api_equivalent_estimate+list_price_estimate` with its earlier turns'), so the run's cost is known.
 - Agents whose usage arenad sees only at a turn's end (`claude -p` in a chain or concurrent run, Codex, `http`
   agents) are checked when that turn ends. A fork starts its own estimate from zero under the same limit.
+- A run an external system drives (or a Code connection's driver) keeps its limit too: once the estimate is past
+  it, the gateway answers each further model call 402 `{error}` without sending it upstream, and the first refusal
+  is recorded as the world event `budget/limit_reached`. The run goes on (its driver decides to stop) and is scored
+  when it finishes or its window ends.
+
+## World time windows
+
+A run an external system drives may have a world time window, `world_minutes` (on `POST /api/runs`, more than 0 and
+at most 1440; recorded in `RunStart`, and given to a Code connection's driver as `ARENA_WORLD_MINUTES`). When its
+branch clock reaches the window's end, arenad records the world event `window/time_up` and scores the run as
+`finish` would, whatever its driver is doing, so runs of different designs are scored at the same world time. A
+paused clock stands still, so a pause extends the window; a fork keeps its run's window (it counts from the run's
+clock 0). A driver that finishes earlier is held: `finish` answers `{status: "running", held_until_clock_ms}`, the
+run's agents are ended (their endpoints answer no one), and the run is scored when the window ends, `failed` with
+the finish's `error` when it carried one. A driver that exits holding a finish does not fail its run, and a driver of
+a windowed run is cut off only after the longer of `ARENA_CODE_RUN_SECS` and the window's wall time plus the driver
+grace.
 
 ## What the world says about itself
 

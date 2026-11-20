@@ -154,7 +154,11 @@ async fn time_env(
         ("ARENA_WORLD_EPOCH_MS", epoch.to_string()),
         ("ARENA_CLOCK_SPEED", speed.to_string()),
     ];
-    pairs.map(|(k, v)| (k.to_string(), v)).into()
+    let mut env: BTreeMap<String, String> = pairs.map(|(k, v)| (k.to_string(), v)).into();
+    if let Some(m) = ctx.and_then(|c| c.rules.world_minutes) {
+        env.insert("ARENA_WORLD_MINUTES".into(), m.to_string());
+    }
+    env
 }
 
 /// Starts `conn`'s command for the run `ids` and watches it (see the module's notes).
@@ -205,10 +209,16 @@ where
     })
 }
 
-/// Ends the run `failed` (scored) when its driver has driven it for longer than the limit.
+/// Ends the run `failed` (scored) when its driver has driven it for longer than the limit: the
+/// configured one, or its world time window's wall time and the grace when that is longer. A run
+/// whose finish is held waits for its window instead.
 async fn cut_off(state: &AppState, branch: &str, since: Instant) {
-    let limit = state.config.code_run_limit;
-    if since.elapsed() < limit {
+    let Some(ctx) = state.live.get(branch) else {
+        return;
+    };
+    let (configured, grace) = (state.config.code_run_limit, state.config.driver_grace);
+    let limit = crate::window::driver_limit(&ctx, configured, grace);
+    if since.elapsed() < limit || crate::window::is_held(&ctx) {
         return;
     }
     let mins = (limit.as_secs_f64() / 60.0).max(0.1);
@@ -264,6 +274,28 @@ fn exit_words(status: Option<ExitStatus>) -> String {
 async fn exited(state: &Arc<AppState>, branch: &str, status: Option<ExitStatus>, l: &Launched) {
     let words = exit_words(status);
     *l.exit.lock().unwrap() = Some(words.clone());
+    let stderr = record_exit(state, branch, &words, l).await;
+    let how = match status.and_then(|s| s.code()) {
+        Some(c) => format!("exited with code {c}"),
+        None => words.replace("exit", "exited"),
+    };
+    let held = state
+        .live
+        .get(branch)
+        .is_some_and(|c| crate::window::is_held(&c));
+    if held {
+        return; // it finished before it exited: the window ends the run
+    }
+    let tail = crate::text::last_chars(stderr.trim(), ERROR_TAIL_CHARS);
+    let why = match tail.is_empty() {
+        true => format!("the driver {how} before finishing"),
+        false => format!("the driver {how} before finishing: {tail}"),
+    };
+    state.live.fail_if_live(state, branch, why).await;
+}
+
+/// Records the driver's exit (`driver/exit`, with the tails of its output): its stderr tail.
+async fn record_exit(state: &AppState, branch: &str, words: &str, l: &Launched) -> String {
     let stderr = l.stderr_tail();
     let ev = json!({
         "part": "driver",
@@ -279,22 +311,14 @@ async fn exited(state: &Arc<AppState>, branch: &str, status: Option<ExitStatus>,
     if let Err(e) = recorded {
         eprintln!("branch {branch}: recording the driver's exit: {e:#}");
     }
-    let how = match status.and_then(|s| s.code()) {
-        Some(c) => format!("exited with code {c}"),
-        None => words.replace("exit", "exited"),
-    };
-    let tail = crate::text::last_chars(stderr.trim(), ERROR_TAIL_CHARS);
-    let why = match tail.is_empty() {
-        true => format!("the driver {how} before finishing"),
-        false => format!("the driver {how} before finishing: {tail}"),
-    };
-    state.live.fail_if_live(state, branch, why).await;
+    stderr
 }
 
 /// The rules of a run a Code connection drives.
-pub fn rules_for(conn_id: &str, max_cost_usd: Option<f64>) -> Rules {
+pub fn rules_for(conn_id: &str, max_cost_usd: Option<f64>, world_minutes: Option<f64>) -> Rules {
     Rules::new(Runner::External)
         .with_max_cost(max_cost_usd)
+        .with_world_minutes(world_minutes)
         .with_connection(Some(conn_id.to_string()))
 }
 
@@ -308,7 +332,7 @@ async fn start_run(
     conn_id: &str,
 ) -> Result<Option<crate::launch::Launched>> {
     let _permit = slots::permit(state, suite, slot).await?;
-    let rules = rules_for(conn_id, suite.max_cost_usd);
+    let rules = rules_for(conn_id, suite.max_cost_usd, None);
     let start = crate::launch::launch(state, suite::slot_spec(suite, slot, rules));
     match slots::run_slot(state, suite, slot, start).await? {
         SlotOutcome::Filled(l) => Ok(Some(l)),
