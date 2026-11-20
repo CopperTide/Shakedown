@@ -277,3 +277,66 @@ fn a_read_token_cannot_add_keys() {
         assert_eq!(list, json!([]));
     })
 }
+
+/// Adds key `body`: its id.
+async fn added(fx: &AppFx, body: Value) -> Uuid {
+    let (status, made) = fx.post("/api/models/keys", body).await;
+    assert_eq!(status, 200, "{made}");
+    made["id"].as_str().unwrap().parse().unwrap()
+}
+
+/// Adds `their-openai` on its own server at `base`, and `team-claude`: team-claude's id.
+async fn add_shared(fx: &AppFx, base: &str) -> Uuid {
+    let proxy = json!({"name": "their-openai", "kind": "openai", "secret": "sk-theirs-1111",
+                       "base_url": base});
+    added(fx, proxy).await;
+    let claude = json!({"name": "team-claude", "kind": "anthropic", "secret": "sk-ant-team-2222"});
+    added(fx, claude).await
+}
+
+/// A shared key (another member's, visible to the caller) applies only when an agent names it
+/// (`key:<name>`), and never one that names its own server: its owner's server would receive
+/// everyone's prompts. Where every key is the caller's own (here), they apply by kind as before.
+#[test]
+fn a_shared_key_applies_only_when_named_and_never_with_its_own_server() {
+    run(async {
+        let llm = fake_llm(vec![]).await;
+        let fx = AppFx::idle("keys", "shared")
+            .layer(Arc::new(SpyLayer::new().sharing_keys()))
+            .start()
+            .await;
+        with_vault(&fx);
+        let claude = add_shared(&fx, &llm.base).await;
+        let for_ = |asked: &'static str| provider_for(&fx.state, local(), Some(asked), "m");
+        let (p, paid) = for_("openai").await;
+        assert!(p.unwrap().endpoint.key.is_none(), "not applied by kind");
+        assert_eq!(paid, KeySource::Environment);
+        let (p, _) = for_("anthropic").await;
+        assert!(p.unwrap().endpoint.key.is_none(), "not applied by kind");
+        let (p, paid) = for_("key:team-claude").await;
+        assert_eq!(paid, KeySource::Own(claude));
+        let p = p.unwrap();
+        assert_eq!(p.id, "anthropic");
+        assert_eq!(key_of(Ok(p)), "sk-ant-team-2222");
+        let (p, _) = for_("key:their-openai").await;
+        let e = p.unwrap_err();
+        assert!(e.contains("its own server"), "{e}");
+    })
+}
+
+/// Locally every key is the person's own: it applies by kind, and also answers to its name.
+#[test]
+fn your_own_key_applies_by_kind_and_by_name() {
+    run(async {
+        let fx = app("ownbyname").await;
+        let id = added(&fx, openai_key("mine", "k-own-3333")).await;
+        for asked in ["openai", "key:mine"] {
+            let (p, paid) = provider_for(&fx.state, local(), Some(asked), "m").await;
+            assert_eq!(
+                (paid, key_of(p)),
+                (KeySource::Own(id), "k-own-3333".into()),
+                "{asked}"
+            );
+        }
+    })
+}

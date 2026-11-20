@@ -54,6 +54,14 @@ pub trait Layer: Send + Sync + 'static {
     fn me<'a>(&'a self, c: &'a Caller) -> BoxFuture<'a, MeExtra>;
     /// The first segment of every object key the caller's records name.
     fn object_prefix(&self, c: &Caller) -> String;
+    /// Which of the model keys `keys` (all of them visible to `c`) are `c`'s own: those apply to
+    /// `c`'s agents by kind. The rest are shared with `c`; an agent uses one only by naming it
+    /// (provider `key:<name>`), and never one that names its own server.
+    fn own_keys<'a>(
+        &'a self,
+        c: &'a Caller,
+        keys: &'a [uuid::Uuid],
+    ) -> BoxFuture<'a, anyhow::Result<Vec<uuid::Uuid>>>;
 }
 
 /// Personal use: this machine only, everything allowed, nothing metered.
@@ -141,6 +149,15 @@ impl Layer for LocalLayer {
 
     fn object_prefix(&self, _c: &Caller) -> String {
         "local".to_string()
+    }
+
+    /// All of them: one person has every key here.
+    fn own_keys<'a>(
+        &'a self,
+        _c: &'a Caller,
+        keys: &'a [uuid::Uuid],
+    ) -> BoxFuture<'a, anyhow::Result<Vec<uuid::Uuid>>> {
+        async move { Ok(keys.to_vec()) }.boxed()
     }
 }
 

@@ -32,6 +32,9 @@ pub const LOCAL_PREFIX: &str = "local:";
 /// One of your own OpenAI-compatible servers (Settings → Models): `custom:<name>`. It takes over
 /// from a `local:<name>` of `SHAKEDOWN_LOCAL_MODELS` with the same name.
 pub const CUSTOM_PREFIX: &str = "custom:";
+/// One of the model keys you can see, by its name: `key:<name>`. The only way a key shared with
+/// you (another member's) serves your agents.
+pub const KEY_PREFIX: &str = "key:";
 /// Amazon Bedrock in one AWS region: `bedrock:<region>`.
 pub const BEDROCK_PREFIX: &str = "bedrock:";
 /// The local provider the old single-upstream override becomes.
@@ -203,6 +206,9 @@ impl ProviderConfig {
             OPENAI => Some(Provider::new(id, ProviderKind::OpenAi, &self.openai)),
             ANTHROPIC => Some(self.anthropic()),
             _ if id.starts_with(BEDROCK_PREFIX) => self.bedrock(id)?,
+            _ if id.starts_with(KEY_PREFIX) => (self.named.iter())
+                .find(|(n, _)| Some(n.as_str()) == id.strip_prefix(KEY_PREFIX))
+                .map(|(_, p)| p.clone()),
             _ => (id.strip_prefix(LOCAL_PREFIX))
                 .or_else(|| id.strip_prefix(CUSTOM_PREFIX))
                 .and_then(|name| self.local(name))

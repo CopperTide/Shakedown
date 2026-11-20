@@ -47,6 +47,7 @@ struct Spy {
     routes: Mutex<Option<MakeRoutes>>,
     policy: std::sync::OnceLock<Policy>,
     headers: Mutex<Vec<String>>,
+    shares_keys: std::sync::atomic::AtomicBool,
 }
 
 /// A layer that records every hook call; it allows everything unless told otherwise.
@@ -88,6 +89,12 @@ impl SpyLayer {
     /// `policy` answers `p` (else [`Policy::LOCAL`]); set once.
     pub fn with_policy(self, p: Policy) -> SpyLayer {
         let _ = self.0.policy.set(p);
+        self
+    }
+
+    /// `own_keys` answers none: every key is someone else's, shared with the caller.
+    pub fn sharing_keys(self) -> SpyLayer {
+        (self.0.shares_keys).store(true, std::sync::atomic::Ordering::Relaxed);
         self
     }
 
@@ -209,6 +216,18 @@ impl Layer for SpyLayer {
 
     fn object_prefix(&self, c: &Caller) -> String {
         LocalLayer.object_prefix(c)
+    }
+
+    fn own_keys<'a>(
+        &'a self,
+        _c: &'a Caller,
+        keys: &'a [uuid::Uuid],
+    ) -> BoxFuture<'a, anyhow::Result<Vec<uuid::Uuid>>> {
+        let shared = self
+            .0
+            .shares_keys
+            .load(std::sync::atomic::Ordering::Relaxed);
+        async move { Ok(if shared { vec![] } else { keys.to_vec() }) }.boxed()
     }
 }
 

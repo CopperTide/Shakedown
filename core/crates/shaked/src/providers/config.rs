@@ -119,6 +119,8 @@ pub struct ProviderConfig {
     pub bedrock_keys: Vec<(String, Secret)>,
     /// Bedrock without a key of its own may sign with the machine's AWS credentials.
     pub machine_credentials: bool,
+    /// The keys an agent can name (`key:<name>`), by name, each as the provider it keys.
+    pub named: Vec<(String, super::Provider)>,
 }
 
 impl Default for ProviderConfig {
@@ -133,6 +135,7 @@ impl Default for ProviderConfig {
             default: OPENROUTER.to_string(),
             bedrock_keys: vec![],
             machine_credentials: true,
+            named: vec![],
         }
     }
 }

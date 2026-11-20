@@ -202,7 +202,9 @@ Your own keys (Settings → Models, or `/api/models/keys`) come first: an `opena
 key replaces the environment's key for that provider (on its server, unless the key names a `base_url`), a
 `bedrock` key is used for its region, and a `custom` server is the provider `custom:<name>` (taking over a
 `local:<name>` of the same name). The newest key of a provider wins. Without one, the environment's key is
-used.
+used. An agent can also name one key as its provider, `key:<name>`. Where keys are shared between people (a
+hosted org), only your own keys apply by kind: another member's key serves your agent only when it names it
+`key:<name>`, and never when that key names its own server.
 
 A local provider is any server that speaks the OpenAI chat-completions API, such as Ollama, vLLM, LM Studio or
 llama.cpp's server. For example:
