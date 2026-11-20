@@ -86,12 +86,20 @@ impl WorldCa {
         Ok(config)
     }
 
-    fn leaf_config(&self, host: &str) -> anyhow::Result<rustls::ServerConfig> {
+    /// A certificate for `host` signed by the CA, and its key.
+    fn leaf(&self, host: &str) -> anyhow::Result<(Certificate, KeyPair)> {
         let mut p = CertificateParams::new(vec![host.to_string()])?;
         p.distinguished_name.push(DnType::CommonName, host);
+        // Strict verifiers (Python 3.13's default context) want the CA's key named in the leaf.
+        p.use_authority_key_identifier_extension = true;
         validity(&mut p);
         let key = KeyPair::generate()?;
         let leaf = p.signed_by(&key, &self.cert, &self.key)?;
+        Ok((leaf, key))
+    }
+
+    fn leaf_config(&self, host: &str) -> anyhow::Result<rustls::ServerConfig> {
+        let (leaf, key) = self.leaf(host)?;
         let chain: Vec<CertificateDer<'static>> = vec![leaf.der().clone(), self.cert.der().clone()];
         let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(key.serialize_der()));
         let provider = Arc::new(rustls::crypto::ring::default_provider());
@@ -207,6 +215,26 @@ mod tests {
         assert!(!handshake(&ca, server, "other.test").await);
         drop(ca);
         assert!(!dir.exists());
+    }
+
+    /// Whether `der` has the extension `oid` (its DER encoding, `06 03 55 1d <n>` for id-ce-n).
+    fn has_extension(der: &[u8], oid: &[u8]) -> bool {
+        der.windows(oid.len()).any(|w| w == oid)
+    }
+
+    #[test]
+    fn a_leaf_names_its_cas_key_as_strict_verifiers_require() {
+        // Python 3.13's default context (VERIFY_X509_STRICT) refuses a leaf without the
+        // Authority Key Identifier: "Missing Authority Key Identifier".
+        let dir = std::env::temp_dir().join(format!("arena-tls-aki-{}", std::process::id()));
+        let ca = WorldCa::new("b_aki", &dir).unwrap();
+        let (leaf, _) = ca.leaf("toy.test").unwrap();
+        let (aki, ski) = (
+            [0x06, 0x03, 0x55, 0x1d, 0x23],
+            [0x06, 0x03, 0x55, 0x1d, 0x0e],
+        );
+        assert!(has_extension(leaf.der(), &aki), "the leaf has an AKI");
+        assert!(has_extension(ca.cert.der(), &ski), "the CA has an SKI");
     }
 
     #[test]
