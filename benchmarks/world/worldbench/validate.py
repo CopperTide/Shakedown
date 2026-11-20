@@ -42,17 +42,30 @@ def _schema(data, definition: str | None = None, path: str = "") -> None:
 
 
 def _included(data, folder: Path) -> None:
-    """Name pools and a task's checks in their own file are held to the same schema as when written in place."""
+    """Name pools and a task's checks in their own file are held to the same schema as when written in place, and
+    a check names only the template's systems."""
     if isinstance(data.get("names"), str):
         _included_file(data["names"], folder, "names", "namePools")
+    known = {s["id"] for s in data["systems"]}
     for i, task in enumerate(data["tasks"]):
-        if isinstance(task["checks"], str):
-            _included_file(task["checks"], folder, f"tasks[{i}].checks", "checks")
+        path, checks = f"tasks[{i}].checks", task["checks"]
+        if isinstance(checks, str):
+            path, checks = f"{path}@{checks[1:]}", _included_file(checks, folder, path, "checks")
+        _check_needs(checks, known, path)
 
 
-def _included_file(include: str, folder: Path, path: str, definition: str) -> None:
+def _included_file(include: str, folder: Path, path: str, definition: str):
     rel = include[1:]
-    _schema(read_include(rel, folder, path), definition, f"{path}@{rel}")
+    value = read_include(rel, folder, path)
+    _schema(value, definition, f"{path}@{rel}")
+    return value
+
+
+def _check_needs(checks: list, known: set, path: str) -> None:
+    for i, item in enumerate(checks):
+        for j, sid in enumerate(item.get("needs", [])):
+            if sid not in known:
+                raise TemplateError(f"{path}[{i}].needs[{j}]", f"no system {sid}")
 
 
 def _first_repeat(items, key: str, path: str) -> None:

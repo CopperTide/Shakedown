@@ -31,7 +31,7 @@ def assess(t, raw_choices: dict) -> Assessed:
 
 
 def _hosts(t, c: Choices, company: dict) -> tuple[list, list]:
-    ctx = Context(company=company, size=c.size, options=c.options, people=[], params={})
+    ctx = Context(company=company, size=c.size, options=c.options, people=[], params={}, seed=c.seed)
     hosts = []
     for i, s in enumerate(t.systems):
         if s["id"] not in c.systems:

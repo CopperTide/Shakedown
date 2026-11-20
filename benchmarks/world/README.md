@@ -9,9 +9,14 @@ Templates written as data, worlds generated from them, and the benchmark a built
   `worldbench/schema/template.schema.json` (JSON Schema draft 2020-12) and by the cross-checks in
   `worldbench/validate.py` (ids unique per list, the systems a list names exist, `rules` files exist, sizes and
   defaults in range).
-- `worldbench.expand`: placeholders (`{company.name}`, `{size}`, `{people.<role>}`, `{param.<name>}`,
-  `{world_dir}`, …; `{{` and `}}` are literal braces) and includes (`@file.yaml`, `@file.md`, `@folder/`), which
-  never leave the template folder; a folder copied holds no links and never holds or sits in another one copied.
+- `worldbench.expand`: placeholders (`{company.name}`, `{size}`, `{seed}`, `{people.<role>}`,
+  `{people.<role>.<field>}` (that field of each of the role's people, a list), `{param.<name>}`, `{world_dir}`, …;
+  `{{` and `}}` are literal braces) and includes (`@file.yaml`, `@file.md`, `@folder/`; the path may hold
+  placeholders, as `@env/{options.obs.profile}.yaml`), which never leave the template folder; a folder copied
+  holds no links and never holds or sits in another one copied.
+- A system may have no parts of its own and an `apply` (the events' ops, plus `merge`, which updates an object in
+  a part's config): a chosen system's ops are applied, in template order, before the events'. A task's check may
+  name the systems it `needs`; without them it is dropped (and listed in `dropped`).
 - `worldbench/limits.py`: what bounds a template (file size, values and nesting per file, include depth and
   cycles, what one value expands to, a copied folder's files and bytes); the schema bounds the size, name pools
   and list lengths. A template that can't be read, whatever is wrong with it, is logged and left out of the list.

@@ -31,7 +31,7 @@ class Kept:
     dropped: list = field(default_factory=list)
 
 
-def _systems_phrase(ids: list[str]) -> str:
+def systems_phrase(ids: list[str]) -> str:
     return f"the system {ids[0]}" if len(ids) == 1 else "the systems " + ", ".join(ids)
 
 
@@ -40,7 +40,7 @@ def _needing_all(items, field_: str, chosen: set, what, dropped: list) -> list:
     for item in items:
         missing = [s for s in item.get(field_, []) if s not in chosen]
         if missing:
-            dropped.append({"what": what(item), "why": f"needs {_systems_phrase(missing)}, not chosen"})
+            dropped.append({"what": what(item), "why": f"needs {systems_phrase(missing)}, not chosen"})
         else:
             kept.append(item)
     return kept
@@ -54,7 +54,7 @@ def _roles(roles, chosen: set, dropped: list) -> list:
         elif len(r["systems"]) == 1:
             dropped.append({"what": f"role {r['id']}", "why": f"needs the system {r['systems'][0]}, not chosen"})
         else:
-            dropped.append({"what": f"role {r['id']}", "why": f"needs one of {_systems_phrase(r['systems'])}, "
+            dropped.append({"what": f"role {r['id']}", "why": f"needs one of {systems_phrase(r['systems'])}, "
                                                               "none chosen"})
     return kept
 

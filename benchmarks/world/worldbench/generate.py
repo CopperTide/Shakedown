@@ -8,7 +8,7 @@ from pathlib import Path
 from . import select
 from .choices import Choices, problem
 from .errors import TemplateError
-from .events import apply_events
+from .events import apply_events, apply_systems
 from .expand import Context, expand
 from .people import apply_edits, generate_people
 from .slug import key_of, slug_of
@@ -69,7 +69,7 @@ def company_of(t, name: str) -> dict:
 
 def _build(t, c: Choices, kept: select.Kept, people: list) -> tuple[dict, list]:
     company = company_of(t, c.company)
-    ctx = Context(company=company, size=c.size, options=c.options, people=people, params={})
+    ctx = Context(company=company, size=c.size, options=c.options, people=people, params={}, seed=c.seed)
     files: list = []
 
     def fill(value, path: str):
@@ -78,13 +78,14 @@ def _build(t, c: Choices, kept: select.Kept, people: list) -> tuple[dict, list]:
     world = {"format": FORMAT, "name": company["slug"], "title": c.company, "seed": c.seed,
              "template": {"id": t.id, "name": t.name, "version": t.version}, "choices": c.to_json(),
              "company": company, "people": people, "parts": _parts(t, c, fill),
-             "tasks": [_task(t, task, company, fill) for task in kept.tasks],
+             "tasks": [_task(t, task, company, fill, _Checks(c.systems, kept.dropped)) for task in kept.tasks],
              "links": [fill(_without_needs(x), _at(t.data["links"], x, "links")) for x in kept.links],
              "gates": [_without_needs(g) for g in kept.gates],
              "instructions": fill(t.data.get("instructions", ""), "instructions"),
              "teams": fill(t.data.get("teams", []), "teams"),
              "events": [_event(t, e, c, ctx) for e in kept.events]}
     world.update(_passed_through(t))
+    apply_systems(t, c, ctx, world, files)
     apply_events(t, kept.events, c, ctx, world, files)
     return world, files
 
@@ -103,13 +104,32 @@ def _parts(t, c: Choices, fill) -> list:
             for i, s in enumerate(t.systems) if s["id"] in c.systems for j, p in enumerate(s["parts"])]
 
 
-def _task(t, task: dict, company: dict, fill) -> dict:
+@dataclass
+class _Checks:
+    """Which of a task's checks stay: those whose `needs` were all chosen; the rest go to `dropped`."""
+    systems: list
+    dropped: list
+
+    def keep(self, task_id: str, checks: list) -> list:
+        kept = []
+        for item in checks:
+            missing = [s for s in item.get("needs", []) if s not in self.systems]
+            if missing:
+                self.dropped.append({"what": f"check {item.get('name')} of task {task_id}",
+                                     "why": f"needs {select.systems_phrase(missing)}, not chosen"})
+            else:
+                kept.append({k: v for k, v in item.items() if k != "needs"})
+        return kept
+
+
+def _task(t, task: dict, company: dict, fill, checks: _Checks) -> dict:
     path = _at(t.tasks, task, "tasks")
     out = {"id": task["id"], "reason": fill(task["reason"], f"{path}.reason"),
            "ticket": fill(task["ticket"], f"{path}.ticket"), "setup": fill(task.get("setup", []), f"{path}.setup"),
            "checks": fill(task["checks"], f"{path}.checks")}
     if not isinstance(out["checks"], list):
         raise TemplateError(f"{path}.checks", "checks must be a list")
+    out["checks"] = checks.keep(task["id"], out["checks"])
     clock = task.get("clock_start") or company.get("clock_start")
     return {**out, "clock_start": clock} if clock else out
 

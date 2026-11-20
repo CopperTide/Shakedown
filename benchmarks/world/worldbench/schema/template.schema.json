@@ -260,10 +260,17 @@
         },
         "parts": {
           "type": "array",
-          "minItems": 1,
+          "minItems": 0,
           "items": {
             "$ref": "#/$defs/part"
           }
+        },
+        "apply": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/apply"
+          },
+          "$comment": "applied to the world's parts when the system is chosen, before the events' apply"
         }
       }
     },
@@ -546,6 +553,24 @@
         {
           "type": "object",
           "required": [
+            "part",
+            "merge",
+            "value"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "part": {
+              "$ref": "#/$defs/id"
+            },
+            "merge": {
+              "$ref": "#/$defs/text"
+            },
+            "value": true
+          }
+        },
+        {
+          "type": "object",
+          "required": [
             "setup"
           ],
           "additionalProperties": false,
@@ -749,6 +774,9 @@
         },
         "check": {
           "$ref": "#/$defs/check"
+        },
+        "needs": {
+          "$ref": "#/$defs/ids"
         }
       }
     },
@@ -915,7 +943,7 @@
           }
         }
       ],
-      "$comment": "people the user adds are <role>-added-001…, so no role may end in -added"
+      "$comment": "people the user adds are <role>-added-001\u2026, so no role may end in -added"
     },
     "namePools": {
       "type": "object",
