@@ -1,0 +1,17 @@
+# Quota presets by plan: what an org may use unless a row in shakedown.quotas overrides a meter.
+# An org's plan is identity.orgs.plan. A meter a plan does not list is unlimited in shaked (the gateway
+# enforces seats). `period` is "month" (a monthly total) or "none" (a gauge, or a cap on one item);
+# `hard = false` warns instead of refusing. shaked builds this file in; SHAKEDOWN_QUOTAS names another.
+
+# A local shaked: one person on their own machine. Branches are capped at a day, nothing else.
+[plans.local]
+branch_seconds_max = { value = 86400, period = "none" }
+
+# Hosted design partners (the hosted design's S4 numbers). The trial on CopperTide's model keys is off
+# until the owner sets it; model spend per month and seats are not limited here.
+[plans.beta]
+concurrent_sandboxes = { value = 2, period = "none" }
+sandbox_seconds = { value = 180000, period = "month" }
+branch_seconds_max = { value = 3600, period = "none" }
+saves_bytes = { value = 21474836480, period = "none" }
+trial_usd_micros = { value = 0, period = "month" }
