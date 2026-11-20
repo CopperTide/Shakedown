@@ -6,7 +6,7 @@ use anyhow::Result;
 use ring::rand::{SecureRandom, SystemRandom};
 use uuid::Uuid;
 
-use super::{Caller, SystemJob, TokenScope};
+use super::{Caller, SystemScope, TokenScope};
 use crate::store::Store;
 
 pub const API_PREFIX: &str = "sd_";
@@ -51,7 +51,7 @@ pub async fn resolve_api_token(store: &Store, bearer: &str) -> Result<Option<Cal
     if !bearer.starts_with(API_PREFIX) {
         return Ok(None);
     }
-    let tx = store.system_tx(SystemJob::ResolveToken).await?;
+    let tx = store.system_tx(SystemScope::resolve_token()).await?;
     let Some(row) = tx.query_opt(LOOKUP, &[&hash(bearer)]).await? else {
         return Ok(None);
     };

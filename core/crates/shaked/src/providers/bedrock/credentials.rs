@@ -32,6 +32,9 @@ pub(crate) enum Auth {
 
 const BEARER_ENV: &str = "AWS_BEARER_TOKEN_BEDROCK";
 /// What to do when no credentials are found.
+/// Where the machine's AWS credentials serve no caller (a layer without environment keys).
+pub(crate) const NO_OWN_KEY: &str =
+    "Bedrock here needs a key of your own: add one in Settings → Models";
 pub(crate) const NO_CREDENTIALS: &str = "no AWS credentials: set AWS_BEARER_TOKEN_BEDROCK, or AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY, or sign in with the aws CLI";
 
 fn env(name: &str) -> Option<String> {

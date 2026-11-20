@@ -15,8 +15,9 @@ const POOL_SIZE: usize = 16;
 
 /// A database an unreleased build migrated. Names no connection string.
 const RETIRED_HINT: &str = "this database was migrated by an unreleased factory build of shaked \
-     (2026-11-20); convert it as docs/superpowers/plans/2026-11-20-hosted-m1-foundation.md, step O1, \
-     says, or point SHAKEDOWN_DB at another database";
+     (2026-11-20); convert it with core/scripts/o1-retire-factory-orgs.sql, as \
+     docs/superpowers/plans/2026-11-20-hosted-m1-foundation.md, step O1, says, or point \
+     SHAKEDOWN_DB at another database";
 
 /// Brings database `name` up to date, on one connection it closes before returning: stream
 /// `shakedown` and the database's default search path. A database from the retired factory build

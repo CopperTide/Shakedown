@@ -19,7 +19,16 @@ pub struct Policy {
     pub private_model_urls: bool,
     /// Packages and code connections run on this machine (else only in sandboxes).
     pub runs_packages_here: bool,
+    /// The operator's own model keys (`OPENAI_API_KEY` and the rest, local servers) and the
+    /// machine's AWS credentials (env, the aws CLI, an instance role) may serve callers. Off for a
+    /// layer that serves others: each caller brings keys of their own, else the layer's fallback.
+    pub environment_keys: bool,
 }
+
+/// The SHA-256 of a request's body. A layer that serves others finds it in the request's
+/// extensions in `authenticate`, so a signature it checks can cover the body.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BodySha256(pub [u8; 32]);
 
 /// An answer that stops a request: its status and message.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -55,6 +64,10 @@ pub enum Costly<'a> {
         branch: &'a str,
         provider: &'a str,
         model: &'a str,
+        /// The call's own `max_tokens` (or `max_completion_tokens`), if it names one.
+        max_tokens: Option<u64>,
+        /// The request body's length, for estimating its prompt.
+        request_bytes: u64,
     },
     StoreSave {
         bytes: u64,

@@ -7,11 +7,20 @@ use tokio_postgres::{types::ToSql, Row};
 
 use super::Store;
 use crate::{
-    auth::{Caller, SystemJob},
+    auth::{Caller, SystemScope},
     layer::TxFor,
 };
 
 /// An open transaction.
+///
+/// Only shaked's own jobs open a system transaction (every owner's rows, on the system pool): code
+/// outside the crate, a layer among it, cannot.
+///
+/// ```compile_fail,E0624
+/// async fn every_org(store: &shaked::store::Store, job: shaked::auth::SystemJob) {
+///     let _ = store.system_tx(job).await;
+/// }
+/// ```
 pub struct Tx {
     conn: Option<Object>,
     committed: bool,
@@ -72,10 +81,11 @@ impl Store {
         self.begin(&self.pool, TxFor::Caller(c)).await
     }
 
-    /// A transaction of a system job: on the system pool when there is one.
-    pub async fn system_tx(&self, job: SystemJob) -> Result<Tx> {
+    /// A transaction of a system job: on the system pool when there is one. Only shaked's own
+    /// jobs open one (a [`SystemScope`] is built only in this crate).
+    pub(crate) async fn system_tx(&self, scope: SystemScope) -> Result<Tx> {
         let pool = self.system.as_ref().unwrap_or(&self.pool);
-        self.begin(pool, TxFor::System(job)).await
+        self.begin(pool, TxFor::System(scope.job())).await
     }
 
     async fn begin(&self, pool: &deadpool_postgres::Pool, on: TxFor<'_>) -> Result<Tx> {

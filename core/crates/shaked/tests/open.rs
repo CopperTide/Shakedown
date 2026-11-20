@@ -180,7 +180,9 @@ fn gateway_wants_the_agents_bearer_token_once_it_has_one() {
             let r = req.send().await.unwrap();
             assert_eq!(r.status(), 401, "bearer {bearer:?}");
             let v: Value = r.json().await.unwrap();
-            assert_eq!(v["error"], "this endpoint wants the run's bearer token");
+            assert_eq!(v["error"], shaked::external::TOKEN_WANTED);
+            let why = v["error"].as_str().unwrap_or_default();
+            assert!(why.contains("`token`") && why.contains("shakedown-sdk 0.2.0"));
         }
         assert!(events(&fx).await.is_empty(), "nothing was recorded");
         let r = reqwest::Client::new()

@@ -32,6 +32,9 @@ pub const LOCAL_PREFIX: &str = "local:";
 /// One of your own OpenAI-compatible servers (Settings → Models): `custom:<name>`. It takes over
 /// from a `local:<name>` of `SHAKEDOWN_LOCAL_MODELS` with the same name.
 pub const CUSTOM_PREFIX: &str = "custom:";
+/// One of the model keys you can see, by its name: `key:<name>`. The only way a key shared with
+/// you (another member's) serves your agents.
+pub const KEY_PREFIX: &str = "key:";
 /// Amazon Bedrock in one AWS region: `bedrock:<region>`.
 pub const BEDROCK_PREFIX: &str = "bedrock:";
 /// The local provider the old single-upstream override becomes.
@@ -59,6 +62,8 @@ pub enum Unavailable {
     MissingKey(&'static str),
     /// No AWS credentials in the environment and no AWS CLI to find them.
     NoAwsCredentials,
+    /// Bedrock with no key of your own where the machine's AWS credentials serve no caller.
+    NoOwnBedrockKey,
 }
 
 impl Unavailable {
@@ -67,6 +72,7 @@ impl Unavailable {
         match self {
             Unavailable::MissingKey(env) => format!("{env} is not set"),
             Unavailable::NoAwsCredentials => bedrock::credentials::NO_CREDENTIALS.into(),
+            Unavailable::NoOwnBedrockKey => bedrock::credentials::NO_OWN_KEY.into(),
         }
     }
 
@@ -77,6 +83,7 @@ impl Unavailable {
             Unavailable::NoAwsCredentials => {
                 format!("Bedrock needs {}", bedrock::credentials::NO_CREDENTIALS)
             }
+            Unavailable::NoOwnBedrockKey => bedrock::credentials::NO_OWN_KEY.into(),
         }
     }
 }
@@ -103,6 +110,55 @@ pub struct Provider {
     pub max_tokens: u64,
     /// A local server's declared token rate (`SHAKEDOWN_LOCAL_PRICE_<NAME>`).
     pub rate: Option<Rate>,
+    /// Bedrock without a key of its own may sign with the machine's AWS credentials (env, the aws
+    /// CLI, an instance role); false where the layer lends no environment keys.
+    pub machine_credentials: bool,
+    /// Limits every call through this provider must keep (a layer's lent provider sets them).
+    pub cap: Option<CallCap>,
+}
+
+/// Limits a call is held to before it is sent: its `max_tokens` (set when the call names none),
+/// and on OpenRouter the most it may cost per million tokens (`provider.max_price`), so the
+/// provider itself refuses a dearer route.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CallCap {
+    pub max_tokens: u64,
+    /// (prompt, completion) in USD per million tokens.
+    pub max_price_per_mtok: Option<(f64, f64)>,
+}
+
+impl CallCap {
+    /// `body` held to the cap (see [`CallCap`]) for a call to a provider of `kind`.
+    pub fn apply(&self, kind: ProviderKind, mut body: serde_json::Value) -> serde_json::Value {
+        let Some(obj) = body.as_object_mut() else {
+            return body;
+        };
+        let mut named = false;
+        for field in ["max_tokens", "max_completion_tokens"] {
+            if let Some(n) = obj.get(field).and_then(serde_json::Value::as_u64) {
+                obj.insert(field.into(), n.min(self.max_tokens).into());
+                named = true;
+            } else if obj.contains_key(field) {
+                obj.insert(field.into(), self.max_tokens.into());
+                named = true;
+            }
+        }
+        if !named {
+            obj.insert("max_tokens".into(), self.max_tokens.into());
+        }
+        if let (ProviderKind::OpenRouter, Some((prompt, completion))) =
+            (kind, self.max_price_per_mtok)
+        {
+            let routing = obj
+                .entry("provider")
+                .or_insert_with(|| serde_json::json!({}));
+            if !routing.is_object() {
+                *routing = serde_json::json!({});
+            }
+            routing["max_price"] = serde_json::json!({"prompt": prompt, "completion": completion});
+        }
+        body
+    }
 }
 
 impl Provider {
@@ -113,6 +169,8 @@ impl Provider {
             endpoint: endpoint.clone(),
             max_tokens: DEFAULT_ANTHROPIC_MAX_TOKENS,
             rate: None,
+            machine_credentials: true,
+            cap: None,
         }
     }
 
@@ -146,9 +204,13 @@ impl Provider {
             ProviderKind::OpenAi => missing("OPENAI_API_KEY"),
             ProviderKind::Anthropic => missing("ANTHROPIC_API_KEY"),
             ProviderKind::Local => None,
-            ProviderKind::Bedrock => (self.endpoint.key.is_none()
-                && !bedrock::credentials::some_source())
-            .then_some(Unavailable::NoAwsCredentials),
+            ProviderKind::Bedrock if self.endpoint.key.is_some() => None,
+            ProviderKind::Bedrock if !self.machine_credentials => {
+                Some(Unavailable::NoOwnBedrockKey)
+            }
+            ProviderKind::Bedrock => {
+                (!bedrock::credentials::some_source()).then_some(Unavailable::NoAwsCredentials)
+            }
         }
     }
 
@@ -191,6 +253,9 @@ impl ProviderConfig {
             OPENAI => Some(Provider::new(id, ProviderKind::OpenAi, &self.openai)),
             ANTHROPIC => Some(self.anthropic()),
             _ if id.starts_with(BEDROCK_PREFIX) => self.bedrock(id)?,
+            _ if id.starts_with(KEY_PREFIX) => (self.named.iter())
+                .find(|(n, _)| Some(n.as_str()) == id.strip_prefix(KEY_PREFIX))
+                .map(|(_, p)| p.clone()),
             _ => (id.strip_prefix(LOCAL_PREFIX))
                 .or_else(|| id.strip_prefix(CUSTOM_PREFIX))
                 .and_then(|name| self.local(name))
@@ -225,7 +290,10 @@ impl ProviderConfig {
         }
         let own = (self.bedrock_keys.iter()).find_map(|(r, k)| (r == region).then(|| k.clone()));
         let endpoint = Endpoint::new(&bedrock::base_url(region), own);
-        Ok(Some(Provider::new(id, ProviderKind::Bedrock, &endpoint)))
+        Ok(Some(Provider {
+            machine_credentials: self.machine_credentials,
+            ..Provider::new(id, ProviderKind::Bedrock, &endpoint)
+        }))
     }
 
     fn anthropic(&self) -> Provider {

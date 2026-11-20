@@ -117,14 +117,21 @@ impl ApiError {
 
 impl From<anyhow::Error> for ApiError {
     /// A write the database refused for this caller (SQLSTATE 42501, insufficient privilege: a
-    /// hosting layer's policies) is 403; anything else is 500.
+    /// hosting layer's policies) is 403; a unique violation (23505) is 409, naming the constraint;
+    /// anything else is 500 (its text hidden where the layer serves others, see `app::router`).
     fn from(e: anyhow::Error) -> ApiError {
-        let refused = (e.chain())
-            .filter_map(|c| c.downcast_ref::<tokio_postgres::Error>())
-            .any(|p| p.code() == Some(&tokio_postgres::error::SqlState::INSUFFICIENT_PRIVILEGE));
-        match refused {
-            true => ApiError(StatusCode::FORBIDDEN, "you may not do that".into()),
-            false => ApiError(StatusCode::INTERNAL_SERVER_ERROR, format!("{e:#}")),
+        use tokio_postgres::error::SqlState;
+        let pg = (e.chain()).find_map(|c| c.downcast_ref::<tokio_postgres::Error>());
+        match pg.and_then(|p| p.code()) {
+            Some(c) if *c == SqlState::INSUFFICIENT_PRIVILEGE => {
+                ApiError(StatusCode::FORBIDDEN, "you may not do that".into())
+            }
+            Some(c) if *c == SqlState::UNIQUE_VIOLATION => {
+                let db = pg.and_then(|p| p.as_db_error());
+                let which = db.and_then(|d| d.constraint()).unwrap_or("a unique key");
+                ApiError::conflict(format!("that already exists ({which})"))
+            }
+            _ => ApiError(StatusCode::INTERNAL_SERVER_ERROR, format!("{e:#}")),
         }
     }
 }
@@ -158,6 +165,7 @@ impl From<runner::RunError> for ApiError {
     fn from(e: runner::RunError) -> ApiError {
         match e {
             runner::RunError::UnknownTask(_) => ApiError::not_found(e.to_string()),
+            runner::RunError::Refused(r) => r.into(),
             runner::RunError::Other(e) => e.into(),
         }
     }
@@ -521,7 +529,9 @@ async fn new_run_world(
     Ok((bench, scenario))
 }
 
-/// `POST /api/runs`.
+/// `POST /api/runs`: the layer admits and meters the run where every run starts
+/// ([`launch`](crate::launch::launch)); its warning, if any, is in the answer. A run the layer
+/// refuses is refused first, before its world is looked up, so the answer names the quota.
 async fn create_run(
     State(state): State<Arc<AppState>>,
     Who(caller): Who,
@@ -529,18 +539,19 @@ async fn create_run(
     headers: axum::http::HeaderMap,
     JsonBody(req): JsonBody<NewRun>,
 ) -> ApiResult<Value> {
-    let warning = crate::layer::admit(&state.store, &caller, Costly::StartRun).await?;
-    let Json(mut v) = start_run(state.clone(), caller.clone(), permit, headers, req).await?;
-    let (run, branch) = (v["run_id"].as_str(), v["branch_id"].as_str());
-    let key = format!("run:{}", run.unwrap_or_default());
-    crate::layer::meter(&state.store, &caller, runs_usage(key, run, branch)).await;
+    crate::layer::admit(&state.store, &caller, Costly::StartRun).await?;
+    start_run(state, caller, permit, headers, req).await
+}
+
+/// `v` with the layer's admission `warning`, when there is one.
+pub(crate) fn with_warning(mut v: Value, warning: Option<String>) -> Value {
     if let Some(w) = warning {
         v["warning"] = json!(w);
     }
-    Ok(Json(v))
+    v
 }
 
-/// One run (or fork) started, for the layer's `runs` meter.
+/// One fork started, for the layer's `runs` meter.
 fn runs_usage<'a>(key: String, run: Option<&'a str>, branch: Option<&'a str>) -> Usage<'a> {
     Usage {
         meter: Meter::Runs,
@@ -559,6 +570,11 @@ async fn start_run(
     headers: axum::http::HeaderMap,
     mut req: NewRun,
 ) -> ApiResult<Value> {
+    if let Some(id) = req.connection.as_deref() {
+        let kind = crate::auth::ResourceKind::Connection;
+        let named = Target::Resource { kind, id };
+        authorize(&state, &caller, Action::UseInRun, named).await?;
+    }
     let (bench, scenario) = new_run_world(&state, &mut req).await?;
     if req.connection.is_some() {
         return create_code_run(state, caller, permit, &headers, req, bench, scenario).await;
@@ -569,17 +585,19 @@ async fn start_run(
     team::validate_builtin(&providers_of(&state, &caller).await, &req.team, req.runner)?;
     let max = max_cost(req.max_cost_usd)?;
     permit.check_disk(&state).await?;
-    let (run_id, branch_id) = detached(async move {
+    let v = detached(async move {
         let _permit = permit;
         let (task, team) = (&req.task_id, req.team);
         let run = runner::RunOptions::new(req.runner)
             .scenario(&scenario)
             .scope(&caller);
         let run = run.benchmark(&bench);
-        Ok(run.max_cost(max).start(&state, task, team).await?)
+        let l = run.max_cost(max).launch(&state, task, team).await?;
+        let v = json!({"run_id": l.run_id, "branch_id": l.branch_id});
+        Ok(with_warning(v, l.warning))
     })
     .await?;
-    Ok(Json(json!({"run_id": run_id, "branch_id": branch_id})))
+    Ok(Json(v))
 }
 
 async fn get_branch(

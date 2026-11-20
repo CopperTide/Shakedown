@@ -23,6 +23,7 @@ from .errors import (
     ConnectionFailed,
     DiskFull,
     NotFound,
+    Unauthorized,
     NotSupported,
 )
 from . import driver
@@ -44,13 +45,13 @@ from .models import (
     Team,
 )
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
     "Shakedown", "Branch", "Rewind", "AgentEndpoint", "Suite", "DEFAULT_URL",
     "Agent", "Team", "Change", "Scenario", "Disruption", "Task", "Benchmark", "Event",
     "BranchRecord", "CheckResult", "NamedCheck", "RunSummary", "ForkInfo", "ENDED",
     "Tool", "ToolResult",
-    "ShakedownError", "ApiError", "BadRequest", "NotFound", "Conflict", "DiskFull",
+    "ShakedownError", "ApiError", "BadRequest", "Unauthorized", "NotFound", "Conflict", "DiskFull",
     "ConnectionFailed", "NotSupported", "driver",
 ]

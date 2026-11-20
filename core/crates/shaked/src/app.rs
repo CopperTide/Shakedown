@@ -56,8 +56,9 @@ pub struct Config {
     /// The base URL every URL handed to an agent or a caller starts with (`SHAKEDOWN_PUBLIC_URL`,
     /// set by shaked's main). Empty means `self_base`.
     pub public_url: String,
-    /// The Host names `/api` answers (`SHAKEDOWN_ALLOWED_HOSTS` plus the public URL's host).
-    /// Empty means this machine's loopback names only.
+    /// The Host names `/api` answers where the layer serves others (`SHAKEDOWN_ALLOWED_HOSTS`
+    /// plus the public URL's host). Empty, or a layer that does not serve others, means this
+    /// machine's loopback names only.
     pub allowed_hosts: Vec<String>,
 }
 
@@ -156,7 +157,8 @@ pub struct AppState {
     /// Branches currently running, by branch id.
     pub live: LiveBranches,
     pub config: Config,
-    /// Shared HTTP client (gateway upstream and open agent loop).
+    /// Shared HTTP client (gateway upstream, open agent loop, key tests and model lists), guarded
+    /// by the layer's policy ([`crate::providers::reach::guard`]).
     pub http: reqwest::Client,
     /// Set once, after the `Arc<AppState>` exists (the open driver holds a `Weak` to it).
     pub drivers: OnceLock<Drivers>,
@@ -168,19 +170,29 @@ pub struct AppState {
     /// The recording proxy agents' own HTTP clients reach the world's hosts through.
     pub proxy: crate::proxy::Proxy,
     /// The vault your model keys are sealed with: set on first use from the environment
-    /// ([`crate::vault::Vault::from_env`]), or beforehand (tests).
+    /// ([`crate::vault::Vault::for_policy`]), or beforehand (tests).
     pub vault: OnceLock<Arc<crate::vault::Vault>>,
     /// The object stores `SHAKEDOWN_OBJECT_STORE` names (None: unset).
     pub objects: Option<Arc<crate::objects::ObjectStores>>,
 }
 
+/// The shared HTTP client, guarded by `policy` ([`crate::providers::reach::guard`]).
+fn shared_client(policy: &crate::layer::Policy) -> reqwest::Client {
+    let http = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(300));
+    crate::providers::reach::guard(http, policy)
+        .build()
+        .expect("http client")
+}
+
 impl AppState {
-    pub fn new(store: Arc<Store>, hub: Arc<Hub>, config: Config) -> AppState {
-        let http = reqwest::Client::builder()
-            .connect_timeout(std::time::Duration::from_secs(10))
-            .timeout(std::time::Duration::from_secs(300))
-            .build()
-            .expect("http client");
+    pub fn new(store: Arc<Store>, hub: Arc<Hub>, mut config: Config) -> AppState {
+        let policy = store.layer().policy();
+        let http = shared_client(policy);
+        if !policy.environment_keys {
+            config.providers = ProviderConfig::without_environment();
+        }
         let named = config.start_benchmark.clone();
         let benchmark = named.clone().unwrap_or_else(|| only_benchmark(&hub));
         let remembered = || crate::worlds::remembered(&hub, config.worlds_dir.as_deref());
@@ -259,7 +271,8 @@ impl AppState {
         if let Some(v) = self.vault.get() {
             return Ok(v.clone());
         }
-        let made = Arc::new(crate::vault::Vault::from_env()?);
+        let policy = self.store.layer().policy();
+        let made = Arc::new(crate::vault::Vault::for_policy(policy)?);
         Ok(self.vault.get_or_init(|| made).clone())
     }
 
@@ -367,6 +380,28 @@ fn is_loopback_host(host: &str) -> bool {
     crate::mode::host_allowed(host, &crate::mode::loopback_hosts())
 }
 
+/// Where the layer serves others, a 500's text (a query's error, a path, a constraint) stays in
+/// the log: the answer is a generic message with a reference to find the detail by.
+async fn hide_internal_errors(
+    req: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    let path = req.uri().path().to_string();
+    let r = next.run(req).await;
+    if r.status() != axum::http::StatusCode::INTERNAL_SERVER_ERROR {
+        return r;
+    }
+    let detail = axum::body::to_bytes(r.into_body(), 64 * 1024).await;
+    let detail = detail.unwrap_or_default();
+    let reference = uuid::Uuid::new_v4().simple().to_string()[..12].to_string();
+    let detail = String::from_utf8_lossy(&detail);
+    eprintln!("shaked: 500 on {path} (ref {reference}): {detail}");
+    let error = format!("something went wrong on our side (ref {reference})");
+    let status = axum::http::StatusCode::INTERNAL_SERVER_ERROR;
+    (status, axum::Json(serde_json::json!({ "error": error }))).into_response()
+}
+
 /// DNS-rebinding guard: a web page on another origin can resolve its own name to this machine, so
 /// the browser would send that name in `Host`. Only the allowed names reach the API.
 async fn allowed_host(
@@ -464,7 +499,12 @@ fn preflight_answer() -> axum::response::Response {
 
 pub fn router(state: Arc<AppState>) -> Router {
     let origins = Arc::new(state.config.cors_origins.clone());
-    let hosts = Arc::new(state.config.hosts());
+    // Locally a tokenless request is the person at this machine: only loopback names reach /api,
+    // whatever the config says (a tunnel's Host never does).
+    let hosts = Arc::new(match state.store.layer().policy().serves_others {
+        true => state.config.hosts(),
+        false => crate::mode::loopback_hosts(),
+    });
     let authorize =
         axum::middleware::from_fn_with_state(state.clone(), crate::api::routes::authorize_route);
     let authenticate =
@@ -474,10 +514,14 @@ pub fn router(state: Arc<AppState>) -> Router {
     let api = api
         .layer(axum::middleware::from_fn_with_state(hosts, allowed_host))
         .layer(axum::middleware::from_fn_with_state(origins, cors));
-    crate::mcp::router()
+    let all = crate::mcp::router()
         .merge(crate::gateway::router())
-        .merge(api)
-        .with_state(state)
+        .merge(api);
+    let all = match state.store.layer().policy().serves_others {
+        true => all.layer(axum::middleware::from_fn(hide_internal_errors)),
+        false => all,
+    };
+    all.with_state(state)
 }
 
 #[cfg(test)]

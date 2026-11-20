@@ -195,6 +195,7 @@ fn a_database_from_the_retired_factory_build_is_refused_naming_the_fix() {
         let msg = format!("{err:#}");
         assert!(msg.contains("unreleased factory build"), "{msg}");
         assert!(msg.contains("step O1"), "{msg}");
+        assert!(msg.contains("core/scripts/o1-retire-factory-orgs.sql"), "{msg}");
         assert!(!msg.contains("postgres://"), "no connection string: {msg}");
         assert_eq!(rows(&name, count).await, ["5"], "nothing was written");
     })

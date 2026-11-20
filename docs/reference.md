@@ -92,13 +92,17 @@ Environment variables, read once at startup by shaked (each also under its old n
   at this machine and refuses a bind beyond loopback. The old `SHAKEDOWN_PORT=<port>` still binds
   `127.0.0.1:<port>`.
 - `SHAKEDOWN_PUBLIC_URL`: the base of every URL shaked hands out (MCP, gateway, register answers, drivers;
-  default `http://<bind>`). `SHAKEDOWN_AGENT_BASE`, its old name for HTTP agents, is still read.
-- `SHAKEDOWN_ALLOWED_HOSTS`: more `Host` names `/api` answers, comma-separated (default: loopback only).
+  default `http://<bind>`). `SHAKEDOWN_AGENT_BASE`, its old name for HTTP agents, is still read. An
+  open-source shaked uses it to shape those URLs only: `/api` still answers this machine's loopback names
+  alone, so a tunnel reaches `/mcp` and `/gateway` (which take the run's token) and never the API.
+- `SHAKEDOWN_ALLOWED_HOSTS`: more `Host` names `/api` answers, comma-separated, for a shaked that serves
+  others (default: loopback only). An open-source shaked refuses to start with it set.
 - `SHAKEDOWN_DB`: the database of shaked's records on that server (default `shakedown`, else an existing
   `arena`).
 - `SHAKEDOWN_VAULT_KEY` (64 hex characters) or `SHAKEDOWN_VAULT_KEY_FILE`: the key your model keys are sealed
   with (AES-256-GCM, each bound to its row). Without either, `core/vault.key` is made (mode 0600, ignored by
-  git) the first time a key is saved. A lost vault key makes the saved keys unreadable: add them again.
+  git) the first time a key is saved; a shaked whose layer serves others refuses to start without one of the
+  two. A lost vault key makes the saved keys unreadable: add them again.
 - `SHAKEDOWN_OBJECT_STORE`: object stores for saves, transcripts and exports, `name=url,name=url` or one URL
   (named `default`): `r2://<bucket>?account=<id>[&prefix=p]`, `s3://<bucket>?region=<r>[&endpoint=<url>][&allow_http=true][&prefix=p]`,
   `file:///dir` or `memory://`. Rows keep the store's name and the key, never a URL; any listed store serves
@@ -199,7 +203,9 @@ Your own keys (Settings → Models, or `/api/models/keys`) come first: an `opena
 key replaces the environment's key for that provider (on its server, unless the key names a `base_url`), a
 `bedrock` key is used for its region, and a `custom` server is the provider `custom:<name>` (taking over a
 `local:<name>` of the same name). The newest key of a provider wins. Without one, the environment's key is
-used.
+used. An agent can also name one key as its provider, `key:<name>`. Where keys are shared between people (a
+hosted org), only your own keys apply by kind: another member's key serves your agent only when it names it
+`key:<name>`, and never when that key names its own server.
 
 A local provider is any server that speaks the OpenAI chat-completions API, such as Ollama, vLLM, LM Studio or
 llama.cpp's server. For example:

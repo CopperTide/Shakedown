@@ -1,7 +1,8 @@
 //! Secrets at rest (your model keys): AES-256-GCM with this machine's vault key, which lives
 //! outside the database: `SHAKEDOWN_VAULT_KEY` (64 hex characters), or the file
 //! `SHAKEDOWN_VAULT_KEY_FILE` names, else `<repo>/core/vault.key`, made (mode 0600) the first time
-//! it is needed. Each sealed value is bound to its row, so a value copied to another row does not
+//! it is needed. A shaked that serves others needs one of the two variables, and refuses to start
+//! without it. Each sealed value is bound to its row, so a value copied to another row does not
 //! open. A lost vault key makes saved keys unreadable: add them again. The format is CopperTide
 //! Cloud's (`version ‖ nonce ‖ ciphertext+tag`, version 1).
 
@@ -79,19 +80,27 @@ impl Vault {
         })
     }
 
-    /// The vault from the environment: `SHAKEDOWN_VAULT_KEY`, else the file
-    /// `SHAKEDOWN_VAULT_KEY_FILE` names, else `<repo>/core/vault.key` (made if missing).
-    pub fn from_env() -> Result<Vault, String> {
-        let var = |k: &str| {
-            parts::settings::var(k)
-                .ok()
-                .filter(|v| !v.trim().is_empty())
-        };
+    /// The vault for a shaked under `policy`, from the environment ([`Vault::from_lookup`]).
+    pub fn for_policy(policy: &crate::layer::Policy) -> Result<Vault, String> {
+        Vault::from_lookup(|k| parts::settings::var(k).ok(), policy.serves_others)
+    }
+
+    /// The vault `get` (one env var) describes: `SHAKEDOWN_VAULT_KEY`, else the file
+    /// `SHAKEDOWN_VAULT_KEY_FILE` names, else `<repo>/core/vault.key` (made if missing). A shaked that `serves_others` needs the key named
+    /// explicitly: it never falls back to (or makes) the source checkout's `core/vault.key`.
+    pub fn from_lookup(
+        get: impl Fn(&str) -> Option<String>,
+        serves_others: bool,
+    ) -> Result<Vault, String> {
+        let var = |k: &str| get(k).filter(|v| !v.trim().is_empty());
         if let Some(k) = var("SHAKEDOWN_VAULT_KEY") {
             return Vault::from_hex(&k).map_err(|e| format!("SHAKEDOWN_VAULT_KEY: {e}"));
         }
-        let file = var("SHAKEDOWN_VAULT_KEY_FILE").map(PathBuf::from);
-        Vault::from_file(&file.unwrap_or_else(default_key_file))
+        match var("SHAKEDOWN_VAULT_KEY_FILE").map(PathBuf::from) {
+            Some(file) => Vault::from_file(&file),
+            None if serves_others => Err(NO_EXPLICIT_KEY.into()),
+            None => Vault::from_file(&default_key_file()),
+        }
     }
 
     /// The vault whose key `file` holds; a missing file is made with a fresh key, readable only
@@ -149,6 +158,11 @@ impl Vault {
         Ok(Zeroed(plain.to_vec()))
     }
 }
+
+/// Why a shaked that serves others has no vault.
+const NO_EXPLICIT_KEY: &str = "a shaked that serves others needs its vault key named: set \
+     SHAKEDOWN_VAULT_KEY (64 hex characters) or SHAKEDOWN_VAULT_KEY_FILE; it never uses the source \
+     checkout's core/vault.key";
 
 /// `<repo>/core/vault.key` (listed in `.gitignore`).
 fn default_key_file() -> PathBuf {
@@ -221,6 +235,23 @@ mod tests {
             format!("{:?}", Vault::from_hex(K).unwrap()),
             "Vault([redacted])"
         );
+    }
+
+    #[test]
+    fn a_shaked_that_serves_others_needs_an_explicit_vault_key() {
+        let hex = "00".repeat(32);
+        let none = |_: &str| None;
+        let err = Vault::from_lookup(none, true).err().unwrap_or_default();
+        assert!(err.contains("SHAKEDOWN_VAULT_KEY_FILE"), "{err}");
+        let given = |k: &str| (k == "SHAKEDOWN_VAULT_KEY").then(|| hex.clone());
+        assert!(Vault::from_lookup(given, true).is_ok());
+        let dir = std::env::temp_dir().join(format!("vault-explicit-{}", Uuid::new_v4().simple()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("vault.key");
+        std::fs::write(&file, &hex).unwrap();
+        let named = |k: &str| (k == "SHAKEDOWN_VAULT_KEY_FILE").then(|| file.display().to_string());
+        assert!(Vault::from_lookup(named, true).is_ok());
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

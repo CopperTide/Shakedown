@@ -201,7 +201,7 @@ fn live_agent(
     let provider = ctx.roster.provider_of(agent).ok_or(unknown)?;
     let authorization = headers.get(AUTHORIZATION).and_then(|v| v.to_str().ok());
     if !ctx.roster.token_ok(agent, authorization) {
-        let why = "this endpoint wants the run's bearer token";
+        let why = crate::external::TOKEN_WANTED;
         return Err((StatusCode::UNAUTHORIZED, why));
     }
     Ok((ctx, provider))
@@ -260,6 +260,20 @@ async fn timed_upstream(
     (upstream, ms_since(asked))
 }
 
+/// What the layer is asked before a call of `body` on `branch` to the provider `asked`.
+fn model_call<'a>(branch: &'a str, asked: &'a str, body: &'a Value) -> Costly<'a> {
+    let max_tokens = ["max_tokens", "max_completion_tokens"]
+        .iter()
+        .find_map(|f| body[*f].as_u64());
+    Costly::ModelCall {
+        branch,
+        provider: asked,
+        model: body["model"].as_str().unwrap_or_default(),
+        max_tokens,
+        request_bytes: body.to_string().len() as u64,
+    }
+}
+
 async fn handle(
     State(state): State<Arc<AppState>>,
     Path((branch, agent)): Path<(String, String)>,
@@ -281,13 +295,7 @@ async fn handle(
             "request body must be a JSON object",
         );
     }
-    let model = body["model"].as_str().unwrap_or_default();
-    let asked = provider.as_deref().unwrap_or_default();
-    let op = Costly::ModelCall {
-        branch: &branch,
-        provider: asked,
-        model,
-    };
+    let op = model_call(&branch, provider.as_deref().unwrap_or_default(), &body);
     if let Err(r) = crate::layer::admit(&state.store, &ctx.caller, op).await {
         return error_response(r.status, r.message);
     }
@@ -306,6 +314,14 @@ async fn call(
     let model = body["model"].as_str().unwrap_or_default();
     let (provider, paid_by) =
         crate::providers::keys::provider_for(state, &ctx.caller, asked, model).await;
+    let body = match &provider {
+        Ok(Provider {
+            cap: Some(cap),
+            kind,
+            ..
+        }) => cap.apply(*kind, body),
+        _ => body,
+    };
     ctx.roster.note_model_call(agent);
     let (upstream, upstream_ms) = timed_upstream(state, &provider, &body).await;
     let (status, payload) = model_call_payload(body, &provider, &upstream);

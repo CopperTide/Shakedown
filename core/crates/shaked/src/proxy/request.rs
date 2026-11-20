@@ -4,7 +4,10 @@ use bytes::Bytes;
 use http_body_util::{BodyExt, Full, Limited};
 use hyper::{body::Incoming, header, Request, Response};
 
-use super::{record::MAX_BODY, tickets::ticket_of, tickets::Holder};
+use super::{
+    record::MAX_BODY,
+    tickets::{ticket_of, Standing},
+};
 use crate::{
     app::AppState,
     exec::{HttpAnswer, HttpCall},
@@ -49,11 +52,21 @@ pub fn ticket_wanted() -> Answer {
     r
 }
 
-/// Who the request's ticket stands for.
-pub fn holder<B>(state: &AppState, req: &Request<B>) -> Option<Holder> {
+/// 410: the request's ticket was its branch's, and the branch has ended.
+pub fn branch_ended() -> Answer {
+    text(410, BRANCH_ENDED)
+}
+
+const BRANCH_ENDED: &str =
+    "the branch this proxy URL was for has ended; a new run gives a new proxy URL";
+
+/// What the request's ticket stands for (Unknown without one).
+pub fn standing<B>(state: &AppState, req: &Request<B>) -> Standing {
     let auth = req.headers().get(header::PROXY_AUTHORIZATION);
-    let ticket = ticket_of(auth.and_then(|v| v.to_str().ok()))?;
-    state.proxy.tickets.holder(&ticket)
+    match ticket_of(auth.and_then(|v| v.to_str().ok())) {
+        Some(ticket) => state.proxy.tickets.standing(&ticket),
+        None => Standing::Unknown,
+    }
 }
 
 /// A request read: the call, the call whose body was too large (with no body), or the proxy's

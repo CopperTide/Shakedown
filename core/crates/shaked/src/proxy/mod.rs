@@ -82,8 +82,10 @@ async fn serve_connection(state: Arc<AppState>, stream: tokio::net::TcpStream) {
 
 /// One request: its ticket checked, its branch running, then run as a step.
 async fn handle(state: Arc<AppState>, req: Request<Incoming>) -> Answer {
-    let Some(holder) = request::holder(&state, &req) else {
-        return request::ticket_wanted();
+    let holder = match request::standing(&state, &req) {
+        tickets::Standing::Good(holder) => holder,
+        tickets::Standing::Ended => return request::branch_ended(),
+        tickets::Standing::Unknown => return request::ticket_wanted(),
     };
     let Some(branch) = state.live.get(&holder.branch) else {
         return request::text(409, NOT_RUNNING);

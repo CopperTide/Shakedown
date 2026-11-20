@@ -40,6 +40,8 @@ pub struct Launched {
     pub driver: Option<driver::Launched>,
     /// An external run's run token (`sdr_…`), for whoever drives it.
     pub run_token: Option<String>,
+    /// What the layer warned when it admitted the run (a quota nearly used), if anything.
+    pub warning: Option<String>,
 }
 
 /// Launches the Code connection `conn_id`'s driver for the branch `ids` names (a new run's, or a
@@ -107,18 +109,11 @@ async fn launch_driver_of(
 /// Starts the run `spec` describes. shaked's own runners run its team on a spawned task, one
 /// agent after another (or as the runner says); a run an external system drives goes live, its
 /// team's agents (there may be none yet) started, and then its driver is launched, if it has one.
+/// The layer admits the run first (a refusal starts nothing) and meters it once it has begun, so
+/// every way a run starts (`POST /api/runs`, suites, experiments, a suite's claim) is counted.
 pub async fn launch(state: &Arc<AppState>, spec: LaunchSpec<'_>) -> Result<Launched, RunError> {
     let (task_id, driver) = (spec.task_id, spec.driver);
-    let begun = runner::begin_run(
-        state,
-        &spec.scope,
-        spec.benchmark,
-        task_id,
-        spec.team,
-        spec.rules,
-        spec.scenario,
-    );
-    let (run_id, ctx) = begun.await?;
+    let (warning, run_id, ctx) = admitted_begin(state, spec).await?;
     let branch_id = ctx.branch_id.clone();
     let run_token = run_token_of(state, &ctx, &run_id).await?;
     let agents = go(state, Arc::new(ctx)).await?;
@@ -135,5 +130,41 @@ pub async fn launch(state: &Arc<AppState>, spec: LaunchSpec<'_>) -> Result<Launc
         agents,
         driver,
         run_token,
+        warning,
     })
+}
+
+/// The run `spec` describes admitted by the layer, begun ([`runner::begin_run`]) and metered:
+/// the layer's warning, the run and its first branch.
+async fn admitted_begin(
+    state: &Arc<AppState>,
+    spec: LaunchSpec<'_>,
+) -> Result<(Option<String>, RunId, BranchCtx), RunError> {
+    let costly = crate::layer::Costly::StartRun;
+    let warning = crate::layer::admit(&state.store, &spec.scope, costly).await?;
+    let begun = runner::begin_run(
+        state,
+        &spec.scope,
+        spec.benchmark,
+        spec.task_id,
+        spec.team,
+        spec.rules,
+        spec.scenario,
+    );
+    let (run_id, ctx) = begun.await?;
+    let usage = runs_usage(&run_id, &ctx.branch_id);
+    crate::layer::meter(&state.store, &spec.scope, usage).await;
+    Ok((warning, run_id, ctx))
+}
+
+/// One run started, for the layer's `runs` meter (keyed by the run, so it counts once).
+fn runs_usage<'a>(run_id: &'a str, branch_id: &'a str) -> crate::layer::Usage<'a> {
+    crate::layer::Usage {
+        meter: crate::layer::Meter::Runs,
+        quantity: 1,
+        key: format!("run:{run_id}"),
+        run: Some(run_id),
+        branch: Some(branch_id),
+        paid_by: crate::layer::KeySource::Environment,
+    }
 }

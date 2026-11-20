@@ -100,7 +100,8 @@ request is recorded as an `http` step of the part that serves its host: inspecta
   (`args.attributed: "latest model call"`), else as no agent's.
 - The proxy listens on 127.0.0.1 only (`SHAKEDOWN_PROXY_PORT`, default a free port). Its URL carries a ticket of the
   run; a request without one is answered 407. A request to a host no part serves is refused (403) and recorded. A
-  read-only agent's writes are refused. Requests wait while the run is paused and are answered 409 once it ended.
+  read-only agent's writes are refused. Requests wait while the run is paused, are answered 409 while it ends, and
+  410 ("the branch this proxy URL was for has ended") for an hour after.
 - HTTPS to a served host goes through the proxy too (`CONNECT host:443`): the proxy terminates TLS with a CA of the
   run's branch, and the same variables give `SSL_CERT_FILE`, `REQUESTS_CA_BUNDLE`, `CURL_CA_BUNDLE`,
   `NODE_EXTRA_CA_CERTS` and `GIT_SSL_CAINFO` naming its certificate. Shakedown never installs it in a system trust
@@ -170,7 +171,9 @@ agent again". Errors name the URL's host, never its path or query, but the URL i
 put credentials in headers, not in the URL.
 
 **Where the agent runs.** shaked listens on 127.0.0.1 only. An agent on another machine reaches `mcp_url` through
-a tunnel you run; set `SHAKEDOWN_AGENT_BASE` to the tunnel's base URL and `mcp_url` uses it.
+a tunnel you run; set `SHAKEDOWN_AGENT_BASE` (or `SHAKEDOWN_PUBLIC_URL`) to the tunnel's base URL and `mcp_url`
+uses it. Through the tunnel only `/mcp` and `/gateway` answer, and each takes the run's token; `/api` answers this
+machine's loopback names alone, so the tunnel never opens your runs and keys to anyone.
 
 **Example.** `sdk/python/examples/agent_server.py` is a complete HTTP agent in about 70 lines: it takes the run
 and works the task with a real model, through the Claude API (`anthropic` package) when `ANTHROPIC_API_KEY` is

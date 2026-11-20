@@ -591,9 +591,11 @@ fn a_paused_branch_holds_requests_until_it_resumes() {
             Duration::from_secs(10),
             get_text(&c, "http://toy.test/hello"),
         );
-        // The branch's tickets died with it.
-        let gone = "this proxy wants the ticket in the proxy URL Shakedown gave";
-        assert_eq!(got.await.unwrap(), (407, gone.to_string()));
+        // M2: the branch's tickets died with it, and its proxy says so (not a 407 asking for a
+        // ticket the client already sent).
+        let (status, text) = got.await.unwrap();
+        assert_eq!(status, 410, "{text}");
+        assert!(text.contains("has ended"), "{text}");
     })
 }
 

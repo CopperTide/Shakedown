@@ -46,7 +46,11 @@ struct Spy {
     fallback: Mutex<Option<Fallback>>,
     routes: Mutex<Option<MakeRoutes>>,
     policy: std::sync::OnceLock<Policy>,
+    /// The policy once packages are sandboxed (see [`SpyLayer::sandbox_packages`]).
+    sandboxed: std::sync::OnceLock<Policy>,
     headers: Mutex<Vec<String>>,
+    digests: Mutex<Vec<Option<BodySha256>>>,
+    shares_keys: std::sync::atomic::AtomicBool,
 }
 
 /// A layer that records every hook call; it allows everything unless told otherwise.
@@ -91,10 +95,35 @@ impl SpyLayer {
         self
     }
 
+    /// From now on `policy` says packages run only in sandboxes (`runs_packages_here` false),
+    /// the rest as it was: for records made locally, then refused a world.
+    pub fn sandbox_packages(&self) {
+        let p = Policy {
+            runs_packages_here: false,
+            ..*self.policy_now()
+        };
+        let _ = self.0.sandboxed.set(p);
+    }
+
+    fn policy_now(&self) -> &Policy {
+        self.0.policy.get().unwrap_or(&Policy::LOCAL)
+    }
+
+    /// `own_keys` answers none: every key is someone else's, shared with the caller.
+    pub fn sharing_keys(self) -> SpyLayer {
+        (self.0.shares_keys).store(true, std::sync::atomic::Ordering::Relaxed);
+        self
+    }
+
     /// `routes` serves what `r` makes.
     pub fn with_routes(self, r: MakeRoutes) -> SpyLayer {
         *self.0.routes.lock().unwrap() = Some(r);
         self
+    }
+
+    /// The body digest `authenticate` was shown on each request, in order.
+    pub fn seen_digests(&self) -> Vec<Option<BodySha256>> {
+        self.0.digests.lock().unwrap().clone()
     }
 
     /// The header names `authenticate` was shown, over every request.
@@ -124,7 +153,7 @@ impl SpyLayer {
 
 impl Layer for SpyLayer {
     fn policy(&self) -> &Policy {
-        self.0.policy.get().unwrap_or(&Policy::LOCAL)
+        self.0.sandboxed.get().unwrap_or_else(|| self.policy_now())
     }
 
     fn authenticate<'a>(
@@ -135,6 +164,8 @@ impl Layer for SpyLayer {
         self.saw(Call::Authenticate);
         let names = req.headers.keys().map(|k| k.as_str().to_string());
         self.0.headers.lock().unwrap().extend(names);
+        let digest = req.extensions.get::<BodySha256>().copied();
+        self.0.digests.lock().unwrap().push(digest);
         let refused = self.0.refuse.lock().unwrap().clone();
         async move {
             match refused {
@@ -209,6 +240,18 @@ impl Layer for SpyLayer {
 
     fn object_prefix(&self, c: &Caller) -> String {
         LocalLayer.object_prefix(c)
+    }
+
+    fn own_keys<'a>(
+        &'a self,
+        _c: &'a Caller,
+        keys: &'a [uuid::Uuid],
+    ) -> BoxFuture<'a, anyhow::Result<Vec<uuid::Uuid>>> {
+        let shared = self
+            .0
+            .shares_keys
+            .load(std::sync::atomic::Ordering::Relaxed);
+        async move { Ok(if shared { vec![] } else { keys.to_vec() }) }.boxed()
     }
 }
 
@@ -312,4 +355,16 @@ pub async fn serve_app(store: Store) -> (String, ServeHandle) {
         _saves: saves,
     };
     (base, handle)
+}
+
+/// Who a system job's transaction runs as: the login and whether it bypasses row-level security
+/// (one fixed query; a test cannot open a system transaction of its own).
+pub async fn system_job_login(store: &Store) -> anyhow::Result<(String, bool)> {
+    let tx = store
+        .system_tx(crate::auth::SystemScope::startup_gc())
+        .await?;
+    let sql = "SELECT current_user::text, rolbypassrls FROM pg_roles WHERE rolname = current_user";
+    let row = tx.query_one(sql, &[]).await?;
+    tx.commit().await?;
+    Ok((row.get(0), row.get(1)))
 }

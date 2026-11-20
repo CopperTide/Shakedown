@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use super::{Scoped, Store};
 use crate::{
-    auth::SystemJob,
+    auth::SystemScope,
     objects::{copy::SaveOnStore, ObjectKey, Stored},
 };
 
@@ -93,7 +93,7 @@ impl Scoped<'_> {
 
 /// The live saves on store `from`, for a copy (a system job: every owner's).
 pub(crate) async fn saves_on(store: &Store, from: &str) -> Result<Vec<SaveOnStore>> {
-    let tx = store.system_tx(SystemJob::StoreCopy).await?;
+    let tx = store.system_tx(SystemScope::store_copy()).await?;
     let sql = "SELECT id, object_key, sha256 FROM saves WHERE store = $1 AND state <> 'deleted'";
     let rows = tx.query(sql, &[&from]).await?;
     tx.commit().await?;
@@ -114,7 +114,7 @@ pub(crate) async fn repoint_saves(
     from: &str,
     to: &str,
 ) -> Result<u64> {
-    let tx = store.system_tx(SystemJob::StoreCopy).await?;
+    let tx = store.system_tx(SystemScope::store_copy()).await?;
     let sql = "UPDATE saves SET store = $3 WHERE id = ANY($1) AND store = $2";
     let n = tx.execute(sql, &[&ids, &from, &to]).await?;
     tx.commit().await?;

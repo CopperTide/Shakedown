@@ -41,6 +41,8 @@ fn is_bedrock(a: &AgentSpec) -> bool {
 /// One Converse call of one token: the credentials, the region and the model all work.
 async fn ping_bedrock(state: &AppState, a: &AgentSpec) -> Result<(), String> {
     let provider = state.config.providers.resolve(a.provider.as_deref())?;
+    let policy = state.store.layer().policy();
+    crate::providers::reach::reach(&provider.endpoint.base, policy).await?;
     let Some(model) = a.model.as_deref().and_then(trimmed) else {
         return Err("name the Bedrock model id".into());
     };
@@ -61,7 +63,7 @@ async fn reach(state: &AppState, a: &AgentSpec) -> Result<Option<String>, String
     if is_bedrock(a) {
         return ping_bedrock(state, a).await.map(|()| None);
     }
-    hello(&state.http, a).await
+    hello(&state.http, state.store.layer().policy(), a).await
 }
 
 /// What an agent that names itself nothing is called: its host, or its model.

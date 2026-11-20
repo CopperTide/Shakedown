@@ -269,3 +269,29 @@ fn the_store_keeps_an_old_named_database_until_a_new_one_exists() {
         drop(clean);
     });
 }
+
+/// A transaction dropped before its commit takes its connection with it, so the layer's session
+/// settings and the open transaction never reach the next caller; a committed one goes back.
+/// Ported from the first attempt's `rls.rs` (I8).
+#[test]
+fn an_uncommitted_tx_never_returns_its_connection() {
+    run(async {
+        let (_admin, _name, store, _clean) = fresh("txdrop").await;
+        let me = shaked::auth::Caller::person();
+        let tx = store.tx(&me).await.unwrap();
+        let before = store.pool_status().size;
+        drop(tx);
+        assert_eq!(
+            store.pool_status().size,
+            before - 1,
+            "the dropped one closed"
+        );
+        let tx = store.tx(&me).await.unwrap();
+        tx.commit().await.unwrap();
+        assert_eq!(
+            store.pool_status().size,
+            before,
+            "a committed one goes back"
+        );
+    })
+}

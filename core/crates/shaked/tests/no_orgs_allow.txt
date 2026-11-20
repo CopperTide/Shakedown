@@ -2,3 +2,8 @@
 core/crates/shaked/src/metrics.rs:assert_eq!(m.cost.source.as_deref(), Some("https://example.org/prices"));
 core/crates/shaked/src/metrics.rs:source = "https://example.org/prices"
 core/crates/shaked/src/prices.rs:source = "https://example.org"
+# The retired factory build's conversion script, which the refusal names (M3).
+core/crates/shaked/src/store/open.rs:(2026-11-20); convert it with core/scripts/o1-retire-factory-orgs.sql, as \
+# A layer may put its own policies under the store; these say what the engine does under one.
+core/crates/shaked/src/harness.rs:/// Who a system job's transaction runs as: the login and whether it bypasses row-level security
+core/crates/shaked/src/store.rs:/// row-level security) is not found.

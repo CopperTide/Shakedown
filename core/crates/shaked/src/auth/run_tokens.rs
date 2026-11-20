@@ -5,11 +5,11 @@
 use anyhow::Result;
 use uuid::Uuid;
 
-use super::{Caller, RunTokenKind, SystemJob};
+use super::{Caller, RunTokenKind, SystemScope};
 use crate::store::Store;
 
-/// How long a token lives without a run limit of its own: a day (the `local` plan's longest
-/// branch, `docs/quotas.toml`).
+/// How long a token lives: a day, longer than a run is expected to take (a local shaked sets no
+/// limit on a branch's length).
 pub const DEFAULT_TOKEN_SECS: u64 = 86_400;
 
 /// The prefix of each kind's tokens.
@@ -42,7 +42,7 @@ pub async fn resolve_run_token(store: &Store, bearer: &str) -> Result<Option<Cal
     if !(bearer.starts_with("sdr_") || bearer.starts_with("sdw_")) {
         return Ok(None);
     }
-    let tx = store.system_tx(SystemJob::ResolveToken).await?;
+    let tx = store.system_tx(SystemScope::resolve_token()).await?;
     let row = tx
         .query_opt(LOOKUP, &[&super::tokens::hash(bearer)])
         .await?;

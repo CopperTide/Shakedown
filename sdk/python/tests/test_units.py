@@ -479,3 +479,46 @@ def test_an_agents_token_reaches_its_mcp_calls_gateway_and_config():
     assert seen["auth"] == "Bearer sda_agent", "the agent's own token, not the API token"
     assert a.token == "sda_agent" and "sda_agent" not in repr(a)
     assert a.mcp_config()["mcpServers"]["shakedown"]["headers"] == {"Authorization": "Bearer sda_agent"}
+
+
+def test_the_api_token_never_goes_to_an_mcp_url_on_another_host():
+    import httpx
+    from shakedown import Shakedown
+    from shakedown.client import AgentEndpoint, Branch
+
+    seen = {}
+
+    def answer(request):
+        seen[request.url.host] = request.headers.get("authorization")
+        return httpx.Response(200, json={"jsonrpc": "2.0", "id": 1, "result": {"tools": []}})
+
+    sd = Shakedown("http://shaked.test", token="sd_api")
+    sd._http = httpx.Client(base_url=sd.url, headers=sd._http.headers, transport=httpx.MockTransport(answer))
+    branch = Branch.__new__(Branch)
+    branch.shakedown, branch.id = sd, "b1"
+    for host in ("shaked.test", "elsewhere.test"):
+        d = {"agent": "a", "mcp_url": f"http://{host}/mcp/b1/a", "gateway_url": f"http://{host}/gateway/b1/a/v1"}
+        AgentEndpoint.from_answer(branch, d).mcp.list_tools()
+    assert seen["shaked.test"] == "Bearer sd_api", "an older shaked of the same origin still gets the API token"
+    assert seen["elsewhere.test"] is None, "another host never sees the API token"
+
+
+def test_a_refused_token_from_the_environment_says_so(monkeypatch):
+    import httpx
+    from shakedown import Shakedown
+    from shakedown.errors import Unauthorized
+
+    monkeypatch.setenv("SHAKEDOWN_TOKEN", "sd_stale")
+    sd = Shakedown("http://shaked.test")
+    sd._http = httpx.Client(base_url=sd.url, headers=sd._http.headers,
+                            transport=httpx.MockTransport(lambda r: httpx.Response(401, json={"error": "unknown token"})))
+    with pytest.raises(Unauthorized) as e:
+        sd.get("/api/runs")
+    assert e.value.status == 401 and "SHAKEDOWN_TOKEN" in str(e.value)
+    monkeypatch.delenv("SHAKEDOWN_TOKEN")
+    sd = Shakedown("http://shaked.test", token="sd_given")
+    sd._http = httpx.Client(base_url=sd.url, headers=sd._http.headers,
+                            transport=httpx.MockTransport(lambda r: httpx.Response(401, json={"error": "unknown token"})))
+    with pytest.raises(Unauthorized) as e:
+        sd.get("/api/runs")
+    assert "SHAKEDOWN_TOKEN" not in str(e.value)

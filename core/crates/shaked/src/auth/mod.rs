@@ -12,4 +12,4 @@ pub mod tokens;
 pub use caller::{Caller, CallerKind, RunTokenKind, TokenScope};
 pub use can::{engine_check, Action, Decision, ResourceKind, Target};
 pub use extract::Who;
-pub use system::SystemJob;
+pub use system::{SystemJob, SystemScope};

@@ -54,6 +54,8 @@ class Shakedown:
         else ``$SHAKEDOWN_TOKEN``; sent as ``Authorization: Bearer`` and never shown."""
         self.url = url.rstrip("/")
         self.retries = retries
+        #: Where the token came from, for a clear error when shaked refuses it.
+        self._token_from_env = not token and bool(os.environ.get("SHAKEDOWN_TOKEN"))
         token = token or os.environ.get("SHAKEDOWN_TOKEN") or None
         headers = {"Authorization": f"Bearer {token}"} if token else {}
         self._http = httpx.Client(
@@ -80,6 +82,9 @@ class Shakedown:
                 msg = r.json().get("error", r.text)
             except ValueError:
                 msg = r.text
+            if r.status_code == 401 and self._token_from_env:
+                msg = (f"{msg} (the token in $SHAKEDOWN_TOKEN was refused: it may be stale or for "
+                       "another shaked; unset SHAKEDOWN_TOKEN or pass token=)")
             raise from_status(r.status_code, msg, method, path)
         if not r.content:
             return None

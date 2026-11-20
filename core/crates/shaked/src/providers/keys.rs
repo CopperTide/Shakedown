@@ -1,6 +1,7 @@
 //! Your own keys over the environment's providers. Lookup for an agent's provider: your key for
 //! it, then the environment's key, then the layer's fallback (`Layer::fallback_provider`; none
-//! locally). A key's own server is checked against the layer's policy before each call
+//! locally). A key shared with you (another member's, `Layer::own_keys`) serves only an agent that
+//! names it (`key:<name>`), and never when it names its own server. A key's own server is checked against the layer's policy before each call
 //! ([`super::reach`]). Test makes a one-token call with the key and records the outcome.
 
 use serde_json::{json, Value};
@@ -8,7 +9,7 @@ use uuid::Uuid;
 
 use super::{
     bedrock, listing, reach, Endpoint, LocalEndpoint, Provider, ProviderConfig, ProviderKind,
-    Secret, BEDROCK_PREFIX, CUSTOM_PREFIX, LOCAL_PREFIX,
+    Secret, BEDROCK_PREFIX, CUSTOM_PREFIX, KEY_PREFIX, LOCAL_PREFIX,
 };
 use crate::{
     app::AppState,
@@ -22,6 +23,8 @@ pub struct Overlay {
     pub config: ProviderConfig,
     /// `(provider id, key, the key names its own server)`, later entries winning.
     own: Vec<(String, Uuid, bool)>,
+    /// The names of keys shared with you that name their own server: never used for you.
+    withheld: Vec<String>,
 }
 
 impl Overlay {
@@ -49,10 +52,57 @@ pub fn provider_id(row: &KeyRow) -> String {
     }
 }
 
-/// `config` with `keys` applied, oldest first (a newer key of a provider wins).
-pub fn apply(mut config: ProviderConfig, keys: &[OpenKey]) -> Overlay {
-    let own = keys.iter().map(|k| apply_one(&mut config, k)).collect();
-    Overlay { config, own }
+/// `config` with `keys` applied, oldest first (a newer key of a provider wins), all of them yours.
+pub fn apply(config: ProviderConfig, keys: &[OpenKey]) -> Overlay {
+    apply_owned(config, keys, |_| true)
+}
+
+/// `config` with `keys` applied, oldest first: each of yours (`is_own`) by its kind, and every
+/// key by its name (`key:<name>`), except a shared one that names its own server: it is
+/// `withheld`, since that server would see your agents' prompts.
+fn apply_owned(
+    mut config: ProviderConfig,
+    keys: &[OpenKey],
+    is_own: impl Fn(Uuid) -> bool,
+) -> Overlay {
+    let mut own = vec![];
+    let mut withheld = vec![];
+    for k in keys {
+        let mine = is_own(k.row.id);
+        let own_url = names_its_server(&k.row);
+        if !mine && own_url {
+            withheld.push(k.row.name.clone());
+            continue;
+        }
+        if mine {
+            own.push(apply_one(&mut config, k));
+        }
+        if let Ok(p) = by_name(&config, k) {
+            config.named.retain(|(n, _)| *n != k.row.name);
+            config.named.push((k.row.name.clone(), p));
+            own.push((format!("{KEY_PREFIX}{}", k.row.name), k.row.id, own_url));
+        }
+    }
+    Overlay {
+        config,
+        own,
+        withheld,
+    }
+}
+
+/// True when key `row` names a server of its own (a Bedrock key's `base_url` is its region).
+fn names_its_server(row: &KeyRow) -> bool {
+    row.kind != KeyKind::Bedrock && row.base_url.is_some()
+}
+
+/// The provider key `k` alone keys, for `key:<name>`.
+fn by_name(config: &ProviderConfig, k: &OpenKey) -> Result<Provider, String> {
+    let mut one = ProviderConfig {
+        anthropic_max_tokens: config.anthropic_max_tokens,
+        ..ProviderConfig::default()
+    };
+    apply_one(&mut one, k);
+    one.resolve(Some(&provider_id(&k.row)))
 }
 
 /// Applies key `k` to `config`: the provider id it keys, its id, and whether it names its server.
@@ -82,7 +132,7 @@ fn apply_one(config: &mut ProviderConfig, k: &OpenKey) -> (String, Uuid, bool) {
             });
         }
     }
-    let own_url = row.kind != KeyKind::Bedrock && row.base_url.is_some();
+    let own_url = names_its_server(row);
     let id = provider_id(row).replace(CUSTOM_PREFIX, LOCAL_PREFIX);
     (id, row.id, own_url)
 }
@@ -100,7 +150,10 @@ pub async fn overlay(state: &AppState, caller: &Caller) -> Result<Overlay, Strin
         .open_keys(&vault)
         .await
         .map_err(|e| format!("{e:#}"))?;
-    Ok(apply(base, &keys))
+    let ids: Vec<Uuid> = keys.iter().map(|k| k.row.id).collect();
+    let layer = state.store.layer();
+    let mine = (layer.own_keys(caller, &ids).await).map_err(|e| format!("{e:#}"))?;
+    Ok(apply_owned(base, &keys, |id| mine.contains(&id)))
 }
 
 /// The providers `caller`'s agents run on, for a run's checks: the environment's when the keys
@@ -127,8 +180,13 @@ pub async fn provider_for(
         Ok(o) => o,
         Err(e) => return (Err(e), KeySource::Environment),
     };
+    if let Some(why) = withheld(&ov, asked) {
+        return (Err(why), KeySource::Environment);
+    }
     let found = ov.config.resolve(asked);
-    if let Some((id, own_url)) = found.as_ref().ok().and_then(|p| ov.own_of(&p.id)) {
+    let named = asked.filter(|a| a.starts_with(KEY_PREFIX));
+    let own = |p: &Provider| ov.own_of(named.unwrap_or(&p.id));
+    if let Some((id, own_url)) = found.as_ref().ok().and_then(own) {
         let policy = state.store.layer().policy();
         if let (true, Ok(p)) = (own_url, &found) {
             if let Err(e) = reach::reach(&p.endpoint.base, policy).await {
@@ -142,6 +200,17 @@ pub async fn provider_for(
         model,
     };
     environment_or_fallback(state, caller, found, want).await
+}
+
+/// Why `asked` names a key you may not use: another member's that names its own server.
+fn withheld(ov: &Overlay, asked: Option<&str>) -> Option<String> {
+    let name = asked?.strip_prefix(KEY_PREFIX)?;
+    ov.withheld.iter().any(|w| w == name).then(|| {
+        format!(
+            "the key {name:?} is another member's and names its own server, which would see \
+             your agents' prompts: add a key of your own"
+        )
+    })
 }
 
 /// `found` on the environment's key, else the layer's fallback when it needs a key the

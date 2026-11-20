@@ -31,6 +31,9 @@ pub fn new_seed() -> u64 {
 pub enum RunError {
     #[error("unknown task {0}")]
     UnknownTask(String),
+    /// The layer refused to admit the run (a quota reached).
+    #[error("{}", .0.message)]
+    Refused(crate::layer::Refusal),
     #[error(transparent)]
     Other(#[from] anyhow::Error),
 }
@@ -110,6 +113,17 @@ impl<'a> RunOptions<'a> {
         task_id: &str,
         team: Team,
     ) -> Result<(RunId, BranchId), RunError> {
+        let started = self.launch(state, task_id, team).await?;
+        Ok((started.run_id, started.branch_id))
+    }
+
+    /// Starts the run (see [`launch`](crate::launch::launch)): what started.
+    pub async fn launch(
+        self,
+        state: &Arc<AppState>,
+        task_id: &str,
+        team: Team,
+    ) -> Result<crate::launch::Launched, RunError> {
         let none = Scenario::default();
         let scope = match self.scope {
             Some(s) => s.clone(),
@@ -124,8 +138,7 @@ impl<'a> RunOptions<'a> {
             driver: None,
             benchmark: self.benchmark,
         };
-        let started = crate::launch::launch(state, spec).await?;
-        Ok((started.run_id, started.branch_id))
+        crate::launch::launch(state, spec).await
     }
 }
 
@@ -311,5 +324,11 @@ fn run_start(
         connection: of.rules.connection.clone(),
         world_epoch_ms: None,
         world_minutes: of.rules.world_minutes,
+    }
+}
+
+impl From<crate::layer::Refusal> for RunError {
+    fn from(r: crate::layer::Refusal) -> RunError {
+        RunError::Refused(r)
     }
 }
