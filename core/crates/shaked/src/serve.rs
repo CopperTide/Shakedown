@@ -40,7 +40,8 @@ impl ServeOptions {
 /// Starts shaked over `store` (its layer with it) and serves until ctrl-c.
 pub async fn run(store: Store, opts: ServeOptions) -> anyhow::Result<()> {
     let here = store.layer().policy().runs_packages_here;
-    let state = app_state(store, &opts)?;
+    let objects = object_stores(store.layer().policy()).await?;
+    let state = app_state(store, &opts, objects)?;
     let bench = match here {
         true => Some(local_start(&state).await?),
         false => None,
@@ -113,8 +114,26 @@ fn hub(pg_url: &str, worlds: &std::path::Path) -> anyhow::Result<Hub> {
         .with_env(program_env(pg_url)))
 }
 
+/// The stores `SHAKEDOWN_OBJECT_STORE` names; where the layer serves others, the write store is
+/// probed first and a start without a working one is refused.
+pub async fn object_stores(
+    policy: &Policy,
+) -> anyhow::Result<Option<Arc<crate::objects::ObjectStores>>> {
+    let Some(stores) = crate::objects::ObjectStores::from_env().map_err(anyhow::Error::msg)? else {
+        return Ok(None);
+    };
+    if policy.serves_others {
+        stores.probe().await.map_err(anyhow::Error::msg)?;
+    }
+    Ok(Some(Arc::new(stores)))
+}
+
 /// The state over `store` and the hub.
-fn app_state(store: Store, opts: &ServeOptions) -> anyhow::Result<Arc<AppState>> {
+fn app_state(
+    store: Store,
+    opts: &ServeOptions,
+    objects: Option<Arc<crate::objects::ObjectStores>>,
+) -> anyhow::Result<Arc<AppState>> {
     let (url, bind) = (&opts.pg_url, &opts.bind);
     let store = Arc::new(store);
     let worlds = worlds_dir()?;
@@ -124,7 +143,9 @@ fn app_state(store: Store, opts: &ServeOptions) -> anyhow::Result<Arc<AppState>>
     config.public_url = bind.public_url.to_string();
     config.allowed_hosts = bind.allowed_hosts.clone();
     config.worlds_dir = Some(worlds);
-    Ok(Arc::new(AppState::new(store, hub, config)))
+    let mut state = AppState::new(store, hub, config);
+    state.objects = objects;
+    Ok(Arc::new(state))
 }
 
 /// Where shaked reaches itself: `addr`, or loopback on its port when it listens on every address.

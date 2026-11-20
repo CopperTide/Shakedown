@@ -25,6 +25,7 @@ pub mod mcp;
 pub mod metrics;
 pub mod mode;
 pub mod model;
+pub mod objects;
 pub mod overhead;
 pub mod pg;
 pub mod prices;

@@ -25,6 +25,7 @@ mod open;
 mod provider_keys;
 mod reviews;
 mod run_tokens;
+mod saves;
 mod suites;
 mod tx;
 pub use api_tokens::ApiTokenRow;
@@ -33,6 +34,8 @@ pub use experiments::{NewExperiment, NewSetup};
 pub use open::{prepare_db, template_key};
 pub use provider_keys::{KeyKind, KeyRow, NameTaken, NewKey, OpenKey};
 pub use reviews::{ReviewDone, StoredReview};
+pub(crate) use saves::{repoint_saves, saves_on};
+pub use saves::{NewSave, SaveRow, SAVE_RETENTION};
 pub use suites::NewSuite;
 pub use tx::Tx;
 

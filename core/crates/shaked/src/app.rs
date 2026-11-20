@@ -170,6 +170,8 @@ pub struct AppState {
     /// The vault your model keys are sealed with: set on first use from the environment
     /// ([`crate::vault::Vault::from_env`]), or beforehand (tests).
     pub vault: OnceLock<Arc<crate::vault::Vault>>,
+    /// The object stores `SHAKEDOWN_OBJECT_STORE` names (None: unset).
+    pub objects: Option<Arc<crate::objects::ObjectStores>>,
 }
 
 impl AppState {
@@ -202,6 +204,7 @@ impl AppState {
             cleanup: Arc::default(),
             proxy: crate::proxy::Proxy::default(),
             vault: OnceLock::new(),
+            objects: None,
         }
     }
 
