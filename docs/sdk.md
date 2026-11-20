@@ -97,7 +97,7 @@ ex.mcp_url          # MCP (streamable HTTP): the world's tools + handoff, messag
 ex.gateway_url      # OpenAI-compatible base URL: calls go to the agent's provider, recorded
 ex.tools            # [Tool(name, description, input_schema)]; .openai_schema(), .anthropic_schema()
 ex.call("get_order_details", order_id="#W5270061")    # one tool call, recorded like any agent's
-ex.mcp_config()     # {"mcpServers": {"arena": {"type": "http", "url": ...}}} for Claude Code and MCP hosts
+ex.mcp_config()     # {"mcpServers": {"shakedown": {"type": "http", "url": ...}}} for Claude Code and MCP hosts
 ex.report_usage(input_tokens=1200, output_tokens=80, model="...")   # model calls made outside the gateway
 ex.end(ok=True, prompt_tokens=..., completion_tokens=..., cost_usd=...)
 branch.finish()     # freeze, score, stop the world: {"status": "passed"|"failed", "error": ...}
@@ -200,7 +200,7 @@ branch.export("data/run-72")        # events.jsonl, branches.jsonl, SCHEMA.md
 suite.export("data/suite-a")        # every run of the suite, plus suite.json
 ```
 
-The format (`arena-dataset/1`) is documented in [`sdk/python/src/shakedown/SCHEMA.md`](../sdk/python/src/shakedown/SCHEMA.md),
+The format (`shakedown-dataset/1`) is documented in [`sdk/python/src/shakedown/SCHEMA.md`](../sdk/python/src/shakedown/SCHEMA.md),
 copied into every export. `pd.read_json("events.jsonl", lines=True)` loads it.
 
 ## A step-loop environment for RL

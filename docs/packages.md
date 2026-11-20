@@ -9,7 +9,7 @@ package never depends on the core: it uses only the kits.
 
 A folder with an `shakedown-package.toml` (`kind = "integration"`, `name`, `version`, `protocol`, `run`, `needs`,
 `config_schema`, and `[[example]]` tool calls) and a program that speaks the protocol. The Rust kit
-(`kits/rust`, crate `arena-part`) and the Python kit (`kits/python`, package `shakedown_part`) read and write the
+(`kits/rust`, crate `shakedown-part`) and the Python kit (`kits/python`, package `shakedown_part`) read and write the
 lines and check the ids; you fill in `describe`, `start`, `call_tool`, `advance`, `save`, `inspect`, `diff`,
 `drop_save`, `stop` and `usage` (`gc` and `connect` are optional). `integrations/README.md` walks through the
 counter example (`kits/rust/examples/counter.rs`, `kits/python/examples/counter.py`). Then check it, from the
@@ -47,7 +47,7 @@ transport (`docs/protocol.md`, "Benchmark calls"). It answers:
   the gold world that branches are scored against.
 
 A benchmark's tools reach parts only through the parts' `connect` info (for `postgres`, `{url}`), so only parts
-with exact saves may be connected. In Rust, implement `arena_part::Benchmark` and end `main` with
+with exact saves may be connected. In Rust, implement `shakedown_part::Benchmark` and end `main` with
 `serve_benchmark(..)`; the Python kit has no benchmark support yet.
 
 `benchmarks/retail` is the included example: a Rust program (`src/main.rs`, `src/lib.rs`) whose world is one

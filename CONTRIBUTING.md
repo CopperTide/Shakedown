@@ -27,7 +27,7 @@ cargo build --release                          # integrations and benchmarks, in
 | Path | What it holds |
 |---|---|
 | `core/` | shaked (`crates/shaked`) and the package host and checker (`crates/parts`, `shakedown-part-check`). No code for any particular system. |
-| `kits/rust`, `kits/python` | The kits integrations and benchmarks are written with: crate `arena-part`, package `shakedown_part`. |
+| `kits/rust`, `kits/python` | The kits integrations and benchmarks are written with: crate `shakedown-part`, package `shakedown_part`. |
 | `integrations/<name>/` | One package per kind of system (Postgres, a folder, Docker Compose, MariaDB, ERPNext, ...). |
 | `benchmarks/<name>/` | Benchmarks: tasks, tools, seed data and gold actions. `benchmarks/retail` is the included example. |
 | `ui/` | The web UI (React, Vite). |
@@ -73,7 +73,7 @@ Give the integration a README that says what it puts in the world, its config, h
 
 ## Write a benchmark
 
-A benchmark is a package with `kind = "benchmark"` that names its world and answers `describe`, `seed`, `call_tool` and `gold_actions` ([docs/protocol.md](docs/protocol.md), "Benchmark calls"). In Rust, implement `arena_part::Benchmark` and end `main` with `serve_benchmark(..)`; `benchmarks/retail` is the example to copy, and `benchmarks/factory` shows links, gates and named checks. Credit and license any third-party data you include, as `data/retail/LICENSE` does.
+A benchmark is a package with `kind = "benchmark"` that names its world and answers `describe`, `seed`, `call_tool` and `gold_actions` ([docs/protocol.md](docs/protocol.md), "Benchmark calls"). In Rust, implement `shakedown_part::Benchmark` and end `main` with `serve_benchmark(..)`; `benchmarks/retail` is the example to copy, and `benchmarks/factory` shows links, gates and named checks. Credit and license any third-party data you include, as `data/retail/LICENSE` does.
 
 ## Code rules
 

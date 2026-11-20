@@ -8,11 +8,11 @@ through shaked's recording proxy, on the host names its config gives
 stands_in_for: "GitHub Enterprise Server", simulated: true}`. Restore: exact from a save (the SQLite store, and the
 repositories with their git objects hard-linked between saves); saved at save points; `uses_clock`: true.
 
-Each request acts as the agent the proxy names in `X-Arena-Agent` (a user made on first sight), else as the
+Each request acts as the agent the proxy names in `X-Shakedown-Agent` (a user made on first sight), else as the
 config's `default_user`. Every absolute URL is built from the request's `X-Forwarded-Proto`/`X-Forwarded-Host`.
-Its routes say `honours_readonly`: a request marked `X-Arena-Readonly: 1` (a read-only agent) gets its reads, and
+Its routes say `honours_readonly`: a request marked `X-Shakedown-Readonly: 1` (a read-only agent) gets its reads, and
 its writes (any REST method but GET/HEAD/OPTIONS, and a push) answer `403 {"message": "Resource not accessible by
-integration"}` with `X-Arena-Effect: read`. The proxy does not send either header yet (the Rust half is to come).
+integration"}` with `X-Shakedown-Effect: read`. The proxy does not send either header yet (the Rust half is to come).
 
 ## Config
 
@@ -52,7 +52,7 @@ integration"}` with `X-Arena-Effect: read`. The proxy does not send either heade
   paths (`isInMergeQueue`, `checkRunCount`, `blockedBy`, `WorkflowRun.event`, `pullRequestTemplates`,
   `autoMergeAllowed`, `SearchType.ISSUE_ADVANCED`) are left out. Validation errors are in graphql-ruby's words
   (`Field 'x' doesn't exist on type 'Y'`), execution errors carry GitHub's `type` (`NOT_FOUND`, `FORBIDDEN`,
-  `UNPROCESSABLE`). Queries answer `X-Arena-Effect: read`, a mutation that changed something `write`; a read-only
+  `UNPROCESSABLE`). Queries answer `X-Shakedown-Effect: read`, a mutation that changed something `write`; a read-only
   agent's mutation gets `FORBIDDEN` `Resource not accessible by integration` and changes nothing.
 - Actions (`actions.enabled`): a push, and a pull request opened, synchronised or reopened, start a run of each
   workflow in the commit's `.github/workflows/*.yml` whose `on` matches (`push`/`pull_request`, `branches`). The
@@ -95,7 +95,7 @@ At the next `advance` the twin reports `notice` events, `data = {system: "github
 ## Verified
 
 `uv run --with pytest pytest -q` here: clone, fetch and push with git 2.43 against the twin's own server on
-127.0.0.1 (with `X-Forwarded-*`, `X-Arena-Agent` and `X-Arena-Readonly` set as the proxy will set them),
+127.0.0.1 (with `X-Forwarded-*`, `X-Shakedown-Agent` and `X-Shakedown-Readonly` set as the proxy will set them),
 webhooks to a receiver on 127.0.0.1, every covered REST operation's answer against the schema, and every GraphQL
 query and mutation gh sent (`tests/gh_queries/`) validated and run over the twin.
 
@@ -106,7 +106,7 @@ approval refused, the reviewer's approval, squash merge); and, marked `live`, gh
 `pr view --json`, `pr review --approve` as the author (refused) and as the reviewer, `pr merge --squash
 --delete-branch`; a read-only agent's `pr list` served and `pr merge` refused. Because the front listens on a
 port (not 443), gh cannot match the clone's remote to `GH_HOST`, so the tests pass `-R <host:port>/acme/app`.
-Not yet verified through shaked's proxy (it does not send `X-Arena-Agent` yet).
+Not yet verified through shaked's proxy (it does not send `X-Shakedown-Agent` yet).
 
 Actions: `tests/test_actions_*.py` on a fake Docker (runs, needs and `if`, deploy result and world-time timeout,
 cancel, re-run, a run caught by a save run again after restore, the same runs from two twins giving the same docs);

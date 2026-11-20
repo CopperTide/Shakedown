@@ -6,12 +6,12 @@ config gives (`docs/protocol.md`, "Serving HTTP"). `describe.system` is `{kind: 
 (Web API)", stands_in_for: "Slack", simulated: true}`. Restore: exact from a save (one SQLite store); saved at
 save points; `uses_clock`: true, and every `ts` is world time (µs, unique in the workspace).
 
-Each call acts as the agent the proxy names in `X-Arena-Agent` (a user made on first sight), else as the
+Each call acts as the agent the proxy names in `X-Shakedown-Agent` (a user made on first sight), else as the
 config's `default_user`. Arguments come from the query, a form body or a JSON body; the token from
 `Authorization: Bearer` or a `token` argument. Every answer is HTTP 200, `{"ok": true, …}` or
-`{"ok": false, "error": "<code>"}`. Its routes say `honours_readonly`: a call marked `X-Arena-Readonly: 1` gets
+`{"ok": false, "error": "<code>"}`. Its routes say `honours_readonly`: a call marked `X-Shakedown-Readonly: 1` gets
 its reads, and its writes answer `{"ok": false, "error": "missing_scope", "needed": …, "provided": …}` with
-`X-Arena-Effect: read`. The read methods are listed in its routes' `reads` (slack_sdk POSTs every call).
+`X-Shakedown-Effect: read`. The read methods are listed in its routes' `reads` (slack_sdk POSTs every call).
 
 ## Config
 

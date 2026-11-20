@@ -134,7 +134,7 @@ Prompts are tool-agnostic and short; the shared rules (`src/team.rs`) are under 
 
 ```bash
 export CARGO_TARGET_DIR=/path/target SHAKEDOWN_BIN_DIR=/path/target/debug SHAKEDOWN_SAVES=/path/saves
-cargo build -p arena-pharma -p arena-erpnext -p arena-twenty-crm -p arena-sculptured
+cargo build -p shakedown-pharma -p shakedown-erpnext -p shakedown-twenty-crm -p shakedown-sculptured
 (cd core && SHAKEDOWN_BENCHMARK=pharma cargo run -p shaked -- base)
 ```
 It needs the Postgres of `deploy/compose.yml`, `uv` (the simulated parts are Python), a CopperTide program on `PATH`,
@@ -142,20 +142,20 @@ the ERPNext and Twenty images, and shaked stopped. It is `opt_in`.
 
 ## Tests
 
-- `cargo test -p arena-pharma` needs nothing: every check against end states made in the test (the gold paths of the
+- `cargo test -p shakedown-pharma` needs nothing: every check against end states made in the test (the gold paths of the
   base and of the short-dated scenario pass all 13; each wrong path fails the checks it should, safety ones included),
   the data, the scenarios' setup, the documents the seed writes, the deployments.
-- `PHARMA_ERP_CONNECT=erp.json cargo test -p arena-pharma --test live_seed -- --ignored` seeds an ERPNext site that is
+- `PHARMA_ERP_CONNECT=erp.json cargo test -p shakedown-pharma --test live_seed -- --ignored` seeds an ERPNext site that is
   already running (its `connect` info in the file) and reads the reports back.
 - `(cd core && cargo test -p shaked --test pharma -- --ignored live_ --nocapture)` runs the whole world with the
   coordinated team on a real model (Claude Code with `haiku` by default; see `docs/reference.md`, "Tests"): the base
   incident, recorded, gated and scored with every check, and the base incident with Tundra full after its first
   quote, whose disruption must show in the twin's views once it fires. Which end states pass which check (the right
-  paths, the failing batch released without approval and shipped) is `cargo test -p arena-pharma`'s job. It starts an
+  paths, the failing batch released without approval and shipped) is `cargo test -p shakedown-pharma`'s job. It starts an
   ERPNext stack and a Twenty server of its own and removes them after.
 
 **Verified (Linux, 2026-11-06):**
-- `cargo test -p arena-pharma` passes (25 tests).
+- `cargo test -p shakedown-pharma` passes (25 tests).
 - `live_seed` against a fresh site of the `erpnext` integration (`frappe/erpnext:v16.53.0`): the whole ERP seed wrote
   in about 30 s, and the four reports read it back right (free stock 1,000 of CVX-2604 and 2,500 of CVX-2598; 8
   affected orders; CVX-2598 and CVX-2604 eligible for Pinecrest on 2026-11-12; 3 work orders). On the same site, by
@@ -166,7 +166,7 @@ the ERPNext and Twenty images, and shaked stopped. It is `opt_in`.
   as the links send them.
 - `pharma-lims` and `pharma-logistics`: their pytest suites and `shakedown-part-check`.
 
-**Verified (Linux, 2026-11-07):** `cargo test -p arena-pharma` passes (32 tests, the twin's and the options' included).
+**Verified (Linux, 2026-11-07):** `cargo test -p shakedown-pharma` passes (32 tests, the twin's and the options' included).
 `live_pharma_a_disruption_shows_in_the_twin` (shaked's `tests/pharma.rs`, with the CopperTide build of 2026-11-04 as
 `SHAKEDOWN_SCULPTURED_BINARY`; the one on `PATH` from 2026-10-24 lacks the changes route the approvals part needs) passed
 once: the base incident with Tundra full after its first quote, with the coordinated team scripted (each role's part

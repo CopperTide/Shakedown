@@ -57,7 +57,7 @@ it is missing. The dates stay as they were when it was made: `factory`'s version
 build another. On a machine where the build and saves are elsewhere:
 ```bash
 export CARGO_TARGET_DIR=/path/target SHAKEDOWN_BIN_DIR=/path/target/debug SHAKEDOWN_SAVES=/path/saves
-cargo build -p arena-factory -p arena-erpnext -p arena-twenty-crm -p arena-sculptured
+cargo build -p shakedown-factory -p shakedown-erpnext -p shakedown-twenty-crm -p shakedown-sculptured
 (cd core && SHAKEDOWN_BENCHMARK=factory cargo run -p shaked -- base)
 ```
 
@@ -178,7 +178,7 @@ orders at risk and covered, safety violations so far (the shift's safety checks)
 overtime, approved purchases and freight). It reads only the parts' `inspect` docs, not the ERP, so it is cheap. The same
 view serves the bearing task.
 
-**Verified (2026-11-07):** `cargo test -p arena-factory` (49 unit tests, the shift's checks and twin among them, and 3
+**Verified (2026-11-07):** `cargo test -p shakedown-factory` (49 unit tests, the shift's checks and twin among them, and 3
 describe tests); the three simulated parts', the hub's and the plant's pytest suites with `shakedown-part-check`. `shaked
 base` built the 0.4.0 base world (stand-in plant, `frappe/erpnext:v16.53.0`, `twentycrm/twenty:v2.51.0`, the CopperTide
 build with outside-system proposals). A run with no agents at all (the `external` runner, an empty team, finished at
@@ -233,13 +233,13 @@ With `SHAKEDOWN_RUN_ISAAC_SIM` the plant can run on a GPU machine over ssh (`int
 
 ## Tests
 
-- `cargo test -p arena-factory` needs nothing: every named check against end states made in the test, the seed
+- `cargo test -p shakedown-factory` needs nothing: every named check against end states made in the test, the seed
   records, the gates' shape, and what it answers without the example.
 - `(cd core && cargo test -p shaked --test factory -- --ignored live_ --nocapture)` runs the whole world with the
   benchmark's own team on a real model (Claude Code with `haiku` by default; see `docs/reference.md`, "Tests").
   Whatever the team does, it checks that every step is recorded, that a gated call naming a change no one proposed
   is refused before its part, and that every named check is scored; it prints the checks and the metrics. Which end
-  states pass which check (the right path, the wrong diagnosis and part) is `cargo test -p arena-factory`'s job. It
+  states pass which check (the right path, the wrong diagnosis and part) is `cargo test -p shakedown-factory`'s job. It
   starts an ERPNext stack and a Twenty server of its own and removes them after.
   It needs a current CopperTide (`SHAKEDOWN_SCULPTURED_BINARY`, a release build next to the checkout, or `PATH`); one too old
   to have the approvals API fails the base save with "no API route". With `CARGO_TARGET_DIR` set, set `SHAKEDOWN_BIN_DIR` to match.
@@ -259,7 +259,7 @@ site.
 minutes (`frappe/erpnext:v16.53.0`, `twentycrm/twenty:v2.51.0`, a debug build of CopperTide); while it ran, the ERP held
 1,083 sales orders, work orders and job cards. Sales orders are written five at a time and work orders one at a time
 (they all update the coil's stock row); the CRM is written through Twenty's batch endpoint, since Twenty limits an API key
-to 100 requests a minute (agents' CRM calls meet the same limit). `cargo test -p arena-factory` passes. **Not run at this
+to 100 requests a minute (agents' CRM calls meet the same limit). `cargo test -p shakedown-factory` passes. **Not run at this
 scale:** the live test with the scripted team, which then found the affected orders in the ERP and notifies all of them. The
 verifications below are of version 0.2.0 (three customers, eight orders).
 

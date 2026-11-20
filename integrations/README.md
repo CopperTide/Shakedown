@@ -57,7 +57,7 @@ The counter holds one integer per instance. Its Rust code is `kits/rust/examples
 
 1. Make a folder with an `shakedown-package.toml` (see `kits/rust/examples/counter/shakedown-package.toml`): `kind`, `name`,
    `version`, `protocol = 1`, `run`, `needs`, and one `[[example]]` per tool call the check may run.
-2. Depend on the kit crate `arena-part`. Write `impl Part for Counter` and end `main` with
+2. Depend on the kit crate `shakedown-part`. Write `impl Part for Counter` and end `main` with
    `serve(Counter::new(..)).await`. The kit reads and writes the lines and checks ids.
 3. `describe` returns the name, `restore: {exact: Save, approximate: false}`, `uses_clock`, a `fingerprint` and the
    tools. `add` has `effect: Write`, `get` has `effect: Read`.

@@ -12,11 +12,11 @@ it, so saving is a few milliseconds and the user's words hold: save the changes,
 database.
 
 - **Server:** container `shakedown-mariadb` (image `mariadb:11.8`, never pulled), volume
-  `arena_mariadb_data`, on `127.0.0.1:3307`, root password `arena`, started on the first `start` if it
+  `shakedown_mariadb_data`, on `127.0.0.1:3307`, root password `arena`, started on the first `start` if it
   is not running. Flags: `--log-bin=binlog --binlog-format=ROW --binlog-row-image=FULL --server-id=1
   --binlog_expire_logs_seconds=0 --max_binlog_size=64M`. The config keys `container`, `port`,
   `volume`, `root_password` (env fallbacks `SHAKEDOWN_MARIADB_CONTAINER`, `_PORT`, `_VOLUME`, `_PASSWORD`)
-  pick another server. Containers are made with the label `arena.part=mariadb`, and a container of
+  pick another server. Containers are made with the label `shakedown.part=mariadb`, and a container of
   the configured name without that label is refused, so no other MariaDB is ever touched.
 - **Server identity:** the first `ensure` writes a random id into `arena_meta.server`. Manifests record
   it, and a restore on a server with another id (a new volume behind the same name) is refused with
@@ -83,14 +83,14 @@ database.
   the instance's own account.
 - **fingerprint** `{server_version}` is the image's version, `11.8`.
 - **Conformance:** `check/shakedown-package.toml` is the package `mariadb-check`, this program with
-  `--sql-tools`. `cargo test -p arena-mariadb -- --ignored live_` runs it (and the other live tests)
+  `--sql-tools`. `cargo test -p shakedown-mariadb -- --ignored live_` runs it (and the other live tests)
   against a server of its own, removed afterwards.
 
-The helper is `arena_part::helpers::mariadb` (feature `mariadb`): `Server` (ensure, identity,
+The helper is `shakedown_part::helpers::mariadb` (feature `mariadb`): `Server` (ensure, identity,
 accounts, position, binlog files, dump, load, apply_log, restore, chain, rebase, purge_unneeded),
 `Tracked` (an instance's base, start and checked position), `Dumps` (the dumps and their gate;
 `save` chains or dumps a tracked database into a save, `remove_unused`), `used_roots`,
 `needed_positions`, `Manifest`, `saves_in`, `Position`, `Blobs`, `Login`, and the -32001 checks
 `check_same_server`, `restore_error`, `chain_error`. The `erpnext` integration uses the same
 helper on a server of its own. The SQL tool schemas, argument parsing and inspect key lookup are
-shared with `postgres` in `arena_part::helpers::sql_tools`.
+shared with `postgres` in `shakedown_part::helpers::sql_tools`.

@@ -7,7 +7,7 @@ no. `uses_clock`: false. Verified live: `live_service_roundtrip` ran once agains
 `check/` is empty, because the part has no tools and needs a compose file in its config.
 
 Each instance is a Docker Compose project `arena_<instance>`, run with
-`docker compose -p arena_<instance> -f <compose_file>` (`COMPOSE_PROJECT_NAME` is never passed on).
+`docker compose -p shakedown_<instance> -f <compose_file>` (`COMPOSE_PROJECT_NAME` is never passed on).
 Config: `{compose_file, volumes: [name], helper_image?, env?}`; `volumes` are the compose file's volumes
 that a save holds (letters, digits, `_`, `-`).
 
@@ -24,7 +24,7 @@ that a save holds (letters, digits, `_`, `-`).
   archive's entries (name, owner, mode, mtime, content; folder mtimes ignored). For a live instance both read the
   volume's files on disk (an archive made without stopping it).
 - `usage` is 0: saves are under `SHAKEDOWN_SAVES`, and live volumes are not counted (`stop` removes them).
-- Live test: `cargo test -p arena-service -- --ignored live_` (needs Docker and `redis:6.2-alpine`).
+- Live test: `cargo test -p shakedown-service -- --ignored live_` (needs Docker and `redis:6.2-alpine`).
 
 ## Save strategies, save points and hosts (designed; fake-Docker tested only)
 

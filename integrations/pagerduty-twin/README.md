@@ -11,10 +11,10 @@ points; `uses_clock`: true, and every time it stamps, and who is on call, is wor
 REST needs the token (`Authorization: Token token=…` or `Bearer`; else `401 {"error": {"message":
 "Authentication failed", "code": 2006}}`). A write (`PUT /incidents/{id}`, `POST …/notes`) must name a user's email
 in `From` (else `400 {"error": {"message": "You must specify a user's email address in the \"From\" header",
-"code": 2001}}`); it acts as the agent the proxy names in `X-Arena-Agent`, else as the `From` user. `users/me` is
+"code": 2001}}`); it acts as the agent the proxy names in `X-Shakedown-Agent`, else as the `From` user. `users/me` is
 the agent, else the config's `default_user`. The Events API takes the service's integration key as
-`routing_key`. Its routes say `honours_readonly`: a request marked `X-Arena-Readonly: 1` gets its reads (marked
-`X-Arena-Effect: read`), and its writes answer `403 {"error": {"message": "Access Denied", "code": 2010}}` (events:
+`routing_key`. Its routes say `honours_readonly`: a request marked `X-Shakedown-Readonly: 1` gets its reads (marked
+`X-Shakedown-Effect: read`), and its writes answer `403 {"error": {"message": "Access Denied", "code": 2010}}` (events:
 `403 {"status": "forbidden", "message": "Access Denied", …}`) marked a read.
 
 ## Config

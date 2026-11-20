@@ -1,7 +1,7 @@
 # `shakedown-part/1`
 
 The protocol between shaked and an integration (or benchmark) program, in any language. Kits: Rust
-(`kits/rust`, crate `arena-part`) and Python (`kits/python`). Wire types for Rust: `arena_part::proto`.
+(`kits/rust`, crate `shakedown-part`) and Python (`kits/python`). Wire types for Rust: `shakedown_part::proto`.
 
 ## Transport
 
@@ -397,19 +397,19 @@ request is recorded as a step named `http` owned by the part. A part that answer
   not set the same one.
 - `reads` lists `METHOD glob` patterns of requests that only read (`POST */git-upload-pack`; `*` matches any run of
   characters, `/` included). GET, HEAD and OPTIONS are reads; any other method is a write unless a pattern matches.
-- The upstream may answer with the header `X-Arena-Effect: read|write`, which has the last word on the effect (a
+- The upstream may answer with the header `X-Shakedown-Effect: read|write`, which has the last word on the effect (a
   GraphQL query is a `POST` that reads). shaked strips it before the client sees the answer.
 - The proxy keeps `Host: <host>` and adds `X-Forwarded-Proto`, `X-Forwarded-Host` and `X-Forwarded-Port`. Every
   absolute URL a part mints (`html_url`, `next` links) must be built from them, never from its upstream address: the
-  kits' `public_base` does this. A client's own `X-Forwarded-*`, `Forwarded` and `X-Arena-*` headers are dropped, so
+  kits' `public_base` does this. A client's own `X-Forwarded-*`, `Forwarded` and `X-Shakedown-*` headers are dropped, so
   what a part reads there is the proxy's.
-- `X-Arena-Agent: <agent id>` names the agent that sent the request (a driver's request is the agent's whose model call
+- `X-Shakedown-Agent: <agent id>` names the agent that sent the request (a driver's request is the agent's whose model call
   came last; none before any did). Rust kit: `proto::AGENT_HEADER`.
 - A read-only agent's request that writes by the rules above is refused (403) before it is sent, unless the route says
-  `honours_readonly: true`. To such a route every request of a read-only agent goes with `X-Arena-Readonly: 1`
+  `honours_readonly: true`. To such a route every request of a read-only agent goes with `X-Shakedown-Readonly: 1`
   (Rust kit: `proto::READONLY_HEADER`), and the part must refuse its writes
-  itself (a twin answers them `403` with `X-Arena-Effect: read`): so a GraphQL query, a `POST`, still reaches it. If
-  the part answers such a request with `X-Arena-Effect: write`, the step is recorded with the violation as its error
+  itself (a twin answers them `403` with `X-Shakedown-Effect: read`): so a GraphQL query, a `POST`, still reaches it. If
+  the part answers such a request with `X-Shakedown-Effect: write`, the step is recorded with the violation as its error
   and the branch ends `failed` with it.
 - Clients reach a host over plain HTTP or over HTTPS on port 443 (the proxy terminates TLS with a CA of the branch,
   which drivers and agents are told to trust); the upstream itself is plain HTTP or HTTPS as `upstream` says.
@@ -433,7 +433,7 @@ how many world ms pass per wall ms. A part stamps what it emits (metrics, logs, 
 The epoch is recorded in `RunStart.world_epoch_ms` (a run recorded before world time takes its `RunStart`'s time).
 Base and gold worlds get no `world_time`.
 
-The kits turn this into stamps: Rust `arena_part::helpers::world_time::WorldTime` and Python
+The kits turn this into stamps: Rust `shakedown_part::helpers::world_time::WorldTime` and Python
 `shakedown_part.world_time.WorldTime` (`at(clock_ms)`, `observe(clock_ms, now)`, `now_ms(now)`), with the formats
 `unix_nanos(ms)` (Loki push, OTLP `timeUnixNano`) and `rfc3339(ms)` (`2026-03-10T06:02:30.000Z`); Prometheus samples
 take the unix ms as it is. Between clocks, `now_ms` runs on at `speed` for at most 1 s of wall time past the last

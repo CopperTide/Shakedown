@@ -9,16 +9,16 @@ about 90 s, to build the base site.
 ERP is a wrapper on a database, so ERPNext saves are the mariadb integration's binlog saves plus the
 site's files. One ERPNext install runs; each instance is a site on it whose database is restored from
 a save, and a save records how to rebuild that database (see `integrations/mariadb/README.md`, whose
-helper this integration uses: `arena_part::helpers::mariadb`).
+helper this integration uses: `shakedown_part::helpers::mariadb`).
 
-- **Install:** compose project `arena_erpnext` from `compose.yml` (adapted from the factory's
+- **Install:** compose project `shakedown_erpnext` from `compose.yml` (adapted from the factory's
   `erp/compose.yml`): image `frappe/erpnext:v16.53.0` (never pulled), backend, one worker for all
   queues, websocket, frontend on `127.0.0.1:8180`, its own `redis-cache` and `redis-queue`. There is
   no `db` service, no `scheduler` and no `configurator`. It comes up on the first `start` (or the
   first call that needs it).
-- **Database server:** a MariaDB server made by the mariadb helper (labelled `arena.part=mariadb`, a
+- **Database server:** a MariaDB server made by the mariadb helper (labelled `shakedown.part=mariadb`, a
   foreign container of that name is refused), separate from the mariadb integration's:
-  container `arena-erpnext-db`, volume `arena_erpnext_db`, `127.0.0.1:3308`, root password `arena`,
+  container `shakedown-erpnext-db`, volume `shakedown_erpnext_db`, `127.0.0.1:3308`, root password `arena`,
   with Frappe's flags (`--character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
   --skip-character-set-client-handshake`) after the binlog flags. It is connected to the project's
   network with alias `db` (`docker network connect --alias db`). A server of its own means the
@@ -103,7 +103,7 @@ helper this integration uses: `arena_part::helpers::mariadb`).
 - **fingerprint** `{image, frappe, erpnext}`: the image tag and the app versions `bench version` prints
   (run once per program in a throwaway container).
 - **Conformance:** `check/shakedown-package.toml` (`erpnext-check`, the same program; its examples insert a
-  ToDo and an Item and read them). `cargo test -p arena-erpnext -- --ignored live_ --nocapture` runs
-  the round trip and the check against a project (`arena_erpnext_t<pid>`, on a free port) and a
+  ToDo and an Item and read them). `cargo test -p shakedown-erpnext -- --ignored live_ --nocapture` runs
+  the round trip and the check against a project (`shakedown_erpnext_t<pid>`, on a free port) and a
   server of its own, and removes them (`docker compose down -v`, the server's container and volume,
   the saves and sites) when it ends.

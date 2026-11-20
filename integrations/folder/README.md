@@ -1,7 +1,7 @@
 # folder integration
 
 Puts a folder of files in the world: one folder per instance. Restore: exact from a save (a copy, with unchanged files
-hard-linked); approximate: no. `uses_clock`: false. Verified: `cargo test -p arena-folder` runs on local disk only (no
+hard-linked); approximate: no. `uses_clock`: false. Verified: `cargo test -p shakedown-folder` runs on local disk only (no
 Docker), including the `shakedown-part-check` conformance run. Nothing here needs a service, so there is no `live_` test.
 
 Each instance is a folder of files; each save is a copy of it. Saves restore exactly.

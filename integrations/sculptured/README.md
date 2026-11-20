@@ -82,13 +82,13 @@ API.
 - **stop:** kills (SIGKILL) the recorded processes: serve's group, then the runner's group (recorded, and
   the one `hostd.pid` names now; serve starts it in a session of its own). Each process is killed only
   while it is still the recorded program (`/proc/<pid>/exe`) with a whole argument that is the data
-  folder or under it (the kit's `arena_part::helpers::process_group`, Linux only). Then the instance's
+  folder or under it (the kit's `shakedown_part::helpers::process_group`, Linux only). Then the instance's
   folder and scratch folder are removed. Stopping an instance that does not run is a no-op. `usage` is 0:
   everything is under `SHAKEDOWN_SAVES` except the scratch folders, which `stop` removes.
 - **gc:** stops (as `stop`) every instance under `.live/` that this program did not start (left running
   by a program that ended without stopping it), then drops the saves `keep` does not keep.
 - Not `uses_clock`. Fingerprint `{"integration": "sculptured"}`.
-- Tests: `cargo test -p arena-sculptured` (unit tests, `gc` on a simulated leaked instance, and the restore
-  refusals), `cargo test -p arena-sculptured -- --ignored live_` (runs real servers; skipped with a note when
+- Tests: `cargo test -p shakedown-sculptured` (unit tests, `gc` on a simulated leaked instance, and the restore
+  refusals), `cargo test -p shakedown-sculptured -- --ignored live_` (runs real servers; skipped with a note when
   the program is missing, or set `SHAKEDOWN_SCULPTURED_BINARY`).
   Conformance: `SHAKEDOWN_BIN_DIR=core/target/debug core/target/debug/shakedown-part-check integrations/sculptured`.

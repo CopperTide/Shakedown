@@ -9,13 +9,13 @@ simulated: true}`. Restore: exact from a save (one SQLite store); saved at save 
 and every time it stamps (created, updated, resolved, comments, sprints) and every relative JQL date is world
 time.
 
-Each request acts as the agent the proxy names in `X-Arena-Agent` (a user made on first sight), else as the
+Each request acts as the agent the proxy names in `X-Shakedown-Agent` (a user made on first sight), else as the
 config's `default_user`; the Basic user name does not choose (agents share one token, and must not pose as
 each other). Every `self` and URL is built from the request's `X-Forwarded-Proto`/`X-Forwarded-Host`, and
 dereferences: the client PUTs and GETs `self`. Its routes say `honours_readonly`: a request marked
-`X-Arena-Readonly: 1` gets its reads (searches by POST too) and its writes answer
+`X-Shakedown-Readonly: 1` gets its reads (searches by POST too) and its writes answer
 `403 {"errorMessages": ["You do not have permission to perform this operation: this agent may only read."]}`
-with `X-Arena-Effect: read`.
+with `X-Shakedown-Effect: read`.
 
 ## Config
 
