@@ -70,8 +70,33 @@ pub async fn hosted(State(state): State<Arc<AppState>>, mut req: Request, next: 
         Ok(s) => s,
         Err((status, error)) => return refuse(status, &error),
     };
+    if let Err((status, error)) = run_token_reach(&scope, req.uri().path()) {
+        return refuse(status, error);
+    }
     req.extensions_mut().insert(Arc::new(scope));
     next.run(req).await
+}
+
+/// A run, worker or ticket token reaches only its own branch's run-internal routes
+/// (`/api/branches/<branch>/agents…` and `/finish`): another branch is not found, anything else
+/// refused.
+fn run_token_reach(scope: &Scope, path: &str) -> Result<(), (StatusCode, &'static str)> {
+    let super::Principal::RunToken { branch, .. } = scope.principal() else {
+        return Ok(());
+    };
+    let parts: Vec<&str> = path.trim_end_matches('/').split('/').collect();
+    match parts.as_slice() {
+        ["", "api", "branches", b, "agents", ..] | ["", "api", "branches", b, "finish"] => {
+            match *b == branch {
+                true => Ok(()),
+                false => Err((StatusCode::NOT_FOUND, "no such branch")),
+            }
+        }
+        _ => Err((
+            StatusCode::FORBIDDEN,
+            "a run token reaches only its own run",
+        )),
+    }
 }
 
 /// What a request presents: a bearer token, and a good gateway signature's (user, org).
