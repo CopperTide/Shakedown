@@ -42,6 +42,10 @@ pub async fn run(store: Store, opts: ServeOptions) -> anyhow::Result<()> {
     let here = store.layer().policy().runs_packages_here;
     let objects = object_stores(store.layer().policy()).await?;
     let state = app_state(store, &opts, objects)?;
+    if state.store.layer().policy().serves_others {
+        // Read now: a shaked that serves others never starts without its vault key.
+        state.vault().map_err(anyhow::Error::msg)?;
+    }
     let bench = match here {
         true => Some(local_start(&state).await?),
         false => None,

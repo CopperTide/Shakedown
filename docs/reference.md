@@ -101,7 +101,8 @@ Environment variables, read once at startup by shaked (each also under its old n
   `arena`).
 - `SHAKEDOWN_VAULT_KEY` (64 hex characters) or `SHAKEDOWN_VAULT_KEY_FILE`: the key your model keys are sealed
   with (AES-256-GCM, each bound to its row). Without either, `core/vault.key` is made (mode 0600, ignored by
-  git) the first time a key is saved. A lost vault key makes the saved keys unreadable: add them again.
+  git) the first time a key is saved; a shaked whose layer serves others refuses to start without one of the
+  two. A lost vault key makes the saved keys unreadable: add them again.
 - `SHAKEDOWN_OBJECT_STORE`: object stores for saves, transcripts and exports, `name=url,name=url` or one URL
   (named `default`): `r2://<bucket>?account=<id>[&prefix=p]`, `s3://<bucket>?region=<r>[&endpoint=<url>][&allow_http=true][&prefix=p]`,
   `file:///dir` or `memory://`. Rows keep the store's name and the key, never a URL; any listed store serves

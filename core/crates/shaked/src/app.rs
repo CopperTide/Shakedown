@@ -170,7 +170,7 @@ pub struct AppState {
     /// The recording proxy agents' own HTTP clients reach the world's hosts through.
     pub proxy: crate::proxy::Proxy,
     /// The vault your model keys are sealed with: set on first use from the environment
-    /// ([`crate::vault::Vault::from_env`]), or beforehand (tests).
+    /// ([`crate::vault::Vault::for_policy`]), or beforehand (tests).
     pub vault: OnceLock<Arc<crate::vault::Vault>>,
     /// The object stores `SHAKEDOWN_OBJECT_STORE` names (None: unset).
     pub objects: Option<Arc<crate::objects::ObjectStores>>,
@@ -271,7 +271,8 @@ impl AppState {
         if let Some(v) = self.vault.get() {
             return Ok(v.clone());
         }
-        let made = Arc::new(crate::vault::Vault::from_env()?);
+        let policy = self.store.layer().policy();
+        let made = Arc::new(crate::vault::Vault::for_policy(policy)?);
         Ok(self.vault.get_or_init(|| made).clone())
     }
 

@@ -301,3 +301,26 @@ fn a_layer_without_environment_keys_lends_none_of_the_operators() {
         }
     })
 }
+
+/// A shaked that serves others never seals with the source checkout's vault key: without
+/// SHAKEDOWN_VAULT_KEY(_FILE) its vault is refused (and so is its start).
+#[test]
+fn a_layer_that_serves_others_has_no_default_vault() {
+    run(async {
+        let serving = Policy {
+            serves_others: true,
+            ..Policy::LOCAL
+        };
+        let spy = SpyLayer::new().with_policy(serving);
+        let fx = AppFx::idle("layer", "novault")
+            .layer(Arc::new(spy))
+            .start()
+            .await;
+        if std::env::var_os("SHAKEDOWN_VAULT_KEY").is_none()
+            && std::env::var_os("SHAKEDOWN_VAULT_KEY_FILE").is_none()
+        {
+            let e = fx.state.vault().err().unwrap_or_default();
+            assert!(e.contains("SHAKEDOWN_VAULT_KEY"), "{e}");
+        }
+    })
+}
