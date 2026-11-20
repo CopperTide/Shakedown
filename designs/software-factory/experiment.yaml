@@ -1,0 +1,17 @@
+# The comparison (plan docs/superpowers/plans/2026-11-19-models-and-designs.md, Task 8): both designs on the
+# software-factory world's sprint, the same model, paired seeds, one window and one spend cap per run.
+name: "Hierarchical team vs single agent"
+task: sprint                # the software-factory template's task id
+runs: 3                     # per design (owner ruling 2026-11-19)
+seed: 20261119              # base; run i of both setups starts its world from paired_seed(seed, i)
+world_minutes: 60
+max_cost_usd: 1.50          # hosted-equivalent tokens (M8)
+setups:
+  - {name: "A · LangGraph team", module: factory_designs.team_a}
+  - {name: "B · Agents SDK + test loop", module: factory_designs.solo_b}
+# What the export reads of production at a run's end. The world's GitHub org is the company's slug, which also
+# names the world; each service runs its main, or the seed image while main is the seeded commit.
+production:
+  services: [storefront, orders, inventory]
+  checks: {reached: changes_reached_production, error_rate: production_error_rate,
+           incidents: no_open_incidents, contracts: contracts_hold}

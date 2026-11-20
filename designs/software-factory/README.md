@@ -50,6 +50,33 @@ need their own dependencies there. Build it on the image the world's CI uses for
 software-factory world, `benchmarks/world/templates/software-factory/images/build.sh workbench` does this with the
 world's base image (`shakedown-sf/base:1.0.0`, its `images.yaml`).
 
+## The comparison experiment
+
+`experiment.yaml` is the experiment as data: both designs on the world's `sprint` task, 3 runs each, base seed
+20261119 (run i of both designs starts its world from the same paired seed), a 60-minute world time window and a
+$1.50 spend cap per run. `key_steps.yaml` says which recorded steps matter (merge, approval, revert, deploy,
+incident) by GitHub's own API shapes and the world's events.
+
+```sh
+uv run --project designs/software-factory python -m factory_designs.experiment create \
+    [--provider local:runpod] [--runs N] [--world-minutes M] [--task T] [--benchmark W] [--url http://127.0.0.1:4510]
+uv run --project designs/software-factory python -m factory_designs.experiment export <id> \
+    [--ledger deploy/runpod/ledger.jsonl] [--out comparison.json]
+```
+
+`create` makes each design a Code connection (`<setup> · <model> on <provider>`, reused by name; the driver is
+`uv run --project designs/software-factory python -m factory_designs.<design>` from the repository root, with
+`FACTORY_PROVIDER` and `FACTORY_MODEL`) and posts the experiment. `export` writes `comparison.json`, what stage 6's
+page reads: per design and run the checks as scored, what reached production (each service's version against its
+main, the error rate, open incidents, failed contracts), tokens, hosted-equivalent cost, wall and world minutes,
+GPU minutes and dollars (the ledger's pod session open at the run's start), the key steps with the reasoning
+their agent recorded just before, and why a run stopped; each design's pass rates and medians; and whether the
+runs shared one world, paired seeds and the same caps.
+
+`python tests/fake_model.py --port N` serves the scripted model (every conversation looks once with
+`gh api user`, then answers with JSON every role parses) as an OpenAI-compatible server, so the designs run end to
+end against a real world with no real model: start shaked with `SHAKEDOWN_LOCAL_MODELS=runpod=http://127.0.0.1:N/v1`.
+
 ## Tests
 
 ```sh
