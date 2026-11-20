@@ -170,7 +170,9 @@ agent again". Errors name the URL's host, never its path or query, but the URL i
 put credentials in headers, not in the URL.
 
 **Where the agent runs.** shaked listens on 127.0.0.1 only. An agent on another machine reaches `mcp_url` through
-a tunnel you run; set `SHAKEDOWN_AGENT_BASE` to the tunnel's base URL and `mcp_url` uses it.
+a tunnel you run; set `SHAKEDOWN_AGENT_BASE` (or `SHAKEDOWN_PUBLIC_URL`) to the tunnel's base URL and `mcp_url`
+uses it. Through the tunnel only `/mcp` and `/gateway` answer, and each takes the run's token; `/api` answers this
+machine's loopback names alone, so the tunnel never opens your runs and keys to anyone.
 
 **Example.** `sdk/python/examples/agent_server.py` is a complete HTTP agent in about 70 lines: it takes the run
 and works the task with a real model, through the Claude API (`anthropic` package) when `ANTHROPIC_API_KEY` is

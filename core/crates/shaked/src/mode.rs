@@ -19,9 +19,12 @@ const LOOPBACK_NAMES: [&str; 3] = ["127.0.0.1", "localhost", "[::1]"];
 
 /// The bind from settings (`get` reads one): `SHAKEDOWN_BIND` (default `127.0.0.1:4510`; the old
 /// `SHAKEDOWN_PORT` still binds `127.0.0.1:<port>`), `SHAKEDOWN_PUBLIC_URL` (default
-/// `http://<bind>`) and `SHAKEDOWN_ALLOWED_HOSTS` (comma-separated, added to the loopback names
-/// and the public URL's host). A bind beyond loopback needs `serves_others` (a layer that
-/// authenticates callers).
+/// `http://<bind>`) and `SHAKEDOWN_ALLOWED_HOSTS` (comma-separated). A bind beyond loopback needs
+/// `serves_others` (a layer that authenticates callers), and so do Host names beyond loopback:
+/// only then are the public URL's host and the allowed hosts added to the loopback names. Locally
+/// a tokenless `/api` request is the person at this machine, so a tunnel's Host must never reach
+/// it; the public URL only shapes the URLs handed out (a tunnel reaches `/mcp` and `/gateway`,
+/// which take tokens), and `SHAKEDOWN_ALLOWED_HOSTS` is refused.
 pub fn bind_from(
     get: impl Fn(&str) -> Option<String>,
     serves_others: bool,
@@ -41,18 +44,39 @@ pub fn bind_from(
     let public = set("SHAKEDOWN_PUBLIC_URL").unwrap_or_else(|| format!("http://{addr}"));
     let public_url =
         Url::parse(&public).map_err(|e| format!("SHAKEDOWN_PUBLIC_URL {public:?}: {e}"))?;
-    let mut allowed_hosts = loopback_hosts();
-    allowed_hosts.extend(public_url.host_str().map(str::to_string));
-    let listed = set("SHAKEDOWN_ALLOWED_HOSTS").unwrap_or_default();
-    let listed = listed.split(',').map(|h| h.trim().to_ascii_lowercase());
-    allowed_hosts.extend(listed.filter(|h| !h.is_empty()));
-    allowed_hosts.dedup();
+    let allowed_hosts = hosts_from(&public_url, set("SHAKEDOWN_ALLOWED_HOSTS"), serves_others)?;
     Ok(Bind {
         addr,
         public_url,
         allowed_hosts,
     })
 }
+
+/// The Host names `/api` answers: the loopback names, and, where the layer serves others, the
+/// public URL's host and the `listed` ones (refused otherwise).
+fn hosts_from(
+    public_url: &Url,
+    listed: Option<String>,
+    serves_others: bool,
+) -> Result<Vec<String>, String> {
+    let mut allowed_hosts = loopback_hosts();
+    match (serves_others, listed) {
+        (false, Some(_)) => return Err(LOCAL_HOSTS_ONLY.into()),
+        (false, None) => {}
+        (true, listed) => {
+            allowed_hosts.extend(public_url.host_str().map(str::to_string));
+            let listed = listed.unwrap_or_default();
+            let listed = listed.split(',').map(|h| h.trim().to_ascii_lowercase());
+            allowed_hosts.extend(listed.filter(|h| !h.is_empty()));
+        }
+    }
+    allowed_hosts.dedup();
+    Ok(allowed_hosts)
+}
+
+/// Why a local shaked refuses `SHAKEDOWN_ALLOWED_HOSTS`.
+const LOCAL_HOSTS_ONLY: &str = "SHAKEDOWN_ALLOWED_HOSTS: the open-source shaked answers /api on this \
+     machine's loopback names only (a tunnel reaches /mcp and /gateway, which take tokens); unset it";
 
 /// `SHAKEDOWN_BIND`, else `127.0.0.1:<SHAKEDOWN_PORT>`, else `127.0.0.1:4510`.
 fn addr_from(bind: Option<String>, port: Option<String>) -> Result<SocketAddr, String> {

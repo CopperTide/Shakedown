@@ -56,8 +56,9 @@ pub struct Config {
     /// The base URL every URL handed to an agent or a caller starts with (`SHAKEDOWN_PUBLIC_URL`,
     /// set by shaked's main). Empty means `self_base`.
     pub public_url: String,
-    /// The Host names `/api` answers (`SHAKEDOWN_ALLOWED_HOSTS` plus the public URL's host).
-    /// Empty means this machine's loopback names only.
+    /// The Host names `/api` answers where the layer serves others (`SHAKEDOWN_ALLOWED_HOSTS`
+    /// plus the public URL's host). Empty, or a layer that does not serve others, means this
+    /// machine's loopback names only.
     pub allowed_hosts: Vec<String>,
 }
 
@@ -464,7 +465,12 @@ fn preflight_answer() -> axum::response::Response {
 
 pub fn router(state: Arc<AppState>) -> Router {
     let origins = Arc::new(state.config.cors_origins.clone());
-    let hosts = Arc::new(state.config.hosts());
+    // Locally a tokenless request is the person at this machine: only loopback names reach /api,
+    // whatever the config says (a tunnel's Host never does).
+    let hosts = Arc::new(match state.store.layer().policy().serves_others {
+        true => state.config.hosts(),
+        false => crate::mode::loopback_hosts(),
+    });
     let authorize =
         axum::middleware::from_fn_with_state(state.clone(), crate::api::routes::authorize_route);
     let authenticate =

@@ -65,11 +65,7 @@ fn me_is_personal() {
 #[test]
 fn agent_urls_derive_from_the_public_url() {
     let b = bind(&[("SHAKEDOWN_PUBLIC_URL", "https://sd.example")], false).unwrap();
-    assert!(
-        b.allowed_hosts.iter().any(|h| h == "sd.example"),
-        "{:?}",
-        b.allowed_hosts
-    );
+    assert_eq!(b.allowed_hosts, shaked::mode::loopback_hosts(), "URLs only");
     let mut c = Config::new();
     c.self_base = "http://127.0.0.1:4510".into();
     c.agent_base = String::new();
@@ -120,7 +116,7 @@ fn allowed_hosts_keep_the_dns_rebinding_guard() {
     use shaked::mode::host_allowed as ok;
     let b = bind(
         &[("SHAKEDOWN_ALLOWED_HOSTS", "sd.example, Other.Example ")],
-        false,
+        true,
     )
     .unwrap();
     for h in ALLOWED {
@@ -136,5 +132,30 @@ fn local_mode_still_answers_the_api() {
     run(async {
         let fx = AppFx::idle("modes", "local").start().await;
         assert_eq!(fx.get("/api/runs").await.0, 200);
+    })
+}
+
+/// C1: a tunnel to a local shaked forwards the tunnel's own Host. A tokenless request is the
+/// person at this machine, so `/api` must never answer a name beyond loopback locally, whatever
+/// the public URL or the allowed hosts say.
+#[test]
+fn a_local_shaked_answers_the_api_on_loopback_names_only() {
+    let e = bind(&[("SHAKEDOWN_ALLOWED_HOSTS", "x.ngrok.app")], false).unwrap_err();
+    assert!(e.contains("SHAKEDOWN_ALLOWED_HOSTS"), "{e}");
+    let served = bind(&[("SHAKEDOWN_PUBLIC_URL", "https://sd.example")], true).unwrap();
+    assert!(served.allowed_hosts.iter().any(|h| h == "sd.example"));
+    run(async {
+        let fx = AppFx::idle("modes", "tunnel")
+            .config(|c| {
+                c.public_url = "https://x.ngrok.app".into();
+                c.allowed_hosts = vec!["x.ngrok.app".into(), "localhost".into()];
+            })
+            .start()
+            .await;
+        let url = format!("{}/api/runs", fx.base);
+        let through = fx.http.get(&url).header("host", "x.ngrok.app");
+        let (status, v) = support::app::send(through).await;
+        assert_eq!(status, 403, "{v}");
+        assert_eq!(fx.get("/api/runs").await.0, 200, "loopback still answers");
     })
 }

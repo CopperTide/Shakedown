@@ -92,8 +92,11 @@ Environment variables, read once at startup by shaked (each also under its old n
   at this machine and refuses a bind beyond loopback. The old `SHAKEDOWN_PORT=<port>` still binds
   `127.0.0.1:<port>`.
 - `SHAKEDOWN_PUBLIC_URL`: the base of every URL shaked hands out (MCP, gateway, register answers, drivers;
-  default `http://<bind>`). `SHAKEDOWN_AGENT_BASE`, its old name for HTTP agents, is still read.
-- `SHAKEDOWN_ALLOWED_HOSTS`: more `Host` names `/api` answers, comma-separated (default: loopback only).
+  default `http://<bind>`). `SHAKEDOWN_AGENT_BASE`, its old name for HTTP agents, is still read. An
+  open-source shaked uses it to shape those URLs only: `/api` still answers this machine's loopback names
+  alone, so a tunnel reaches `/mcp` and `/gateway` (which take the run's token) and never the API.
+- `SHAKEDOWN_ALLOWED_HOSTS`: more `Host` names `/api` answers, comma-separated, for a shaked that serves
+  others (default: loopback only). An open-source shaked refuses to start with it set.
 - `SHAKEDOWN_DB`: the database of shaked's records on that server (default `shakedown`, else an existing
   `arena`).
 - `SHAKEDOWN_VAULT_KEY` (64 hex characters) or `SHAKEDOWN_VAULT_KEY_FILE`: the key your model keys are sealed
