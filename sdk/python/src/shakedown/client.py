@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 import time
 from typing import Any, AsyncIterator, Iterator, Optional, Sequence, Union
 
@@ -42,11 +43,21 @@ class Shakedown:
     Use :meth:`Shakedown.local` to start a shaked of your own for the length of a ``with`` block.
     """
 
-    def __init__(self, url: str = DEFAULT_URL, timeout: float = 900.0, retries: int = 3):
+    def __init__(
+        self,
+        url: str = DEFAULT_URL,
+        timeout: float = 900.0,
+        retries: int = 3,
+        token: Optional[str] = None,
+    ):
+        """``token``: an API token (``sd_…``, from Settings → API tokens or ``shaked token create``),
+        else ``$SHAKEDOWN_TOKEN``; sent as ``Authorization: Bearer`` and never shown."""
         self.url = url.rstrip("/")
         self.retries = retries
+        token = token or os.environ.get("SHAKEDOWN_TOKEN") or None
+        headers = {"Authorization": f"Bearer {token}"} if token else {}
         self._http = httpx.Client(
-            base_url=self.url, timeout=httpx.Timeout(timeout, connect=10.0)
+            base_url=self.url, timeout=httpx.Timeout(timeout, connect=10.0), headers=headers
         )
         self._pause_supported: Optional[bool] = None
 

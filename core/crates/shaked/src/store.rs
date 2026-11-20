@@ -14,6 +14,7 @@ use crate::{
 };
 use parts::proto::Mode;
 
+mod api_tokens;
 mod connections;
 mod experiments;
 mod open;
@@ -21,6 +22,7 @@ mod reviews;
 mod seed;
 mod suites;
 mod tx;
+pub use api_tokens::ApiTokenRow;
 pub use connections::{is_secret, Connection, NewConnection, REDACTED};
 pub use experiments::{NewExperiment, NewSetup};
 pub use open::{prepare_db, template_key, DbUrls};

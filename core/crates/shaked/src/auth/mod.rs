@@ -2,6 +2,7 @@
 //! `can(principal, action, target)` (the accounts spec §3). Row-level security in Postgres is the
 //! second wall; levels finer than "may see" live here.
 
+pub mod audit;
 pub mod can;
 pub mod extract;
 pub mod identity;
@@ -10,6 +11,7 @@ pub mod principal;
 pub mod scope;
 pub mod signing;
 pub mod system;
+pub mod tokens;
 
 pub use can::{
     can, level, required, Action, Grant, Grantee, OrgFlags, Resource, ResourceKind, Target,

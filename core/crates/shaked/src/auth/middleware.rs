@@ -1,5 +1,5 @@
 //! The `/api` auth layer. Local mode: every request (past the Host guard) is the local owner's,
-//! and inbound gateway headers are dropped. Hosted mode: an API token (from Task 8 on), else a
+//! and inbound gateway headers are dropped. Hosted mode: an API token, else a
 //! request the gateway signed for a user in an org; neither is 401, a bad signature too, and a
 //! signed user who is not a member of the org is 403. World-changing routes are refused first.
 
@@ -14,7 +14,7 @@ use axum::{
 };
 use uuid::Uuid;
 
-use super::{identity, signing, Scope};
+use super::{identity, signing, tokens, Scope};
 use crate::app::AppState;
 
 fn refuse(status: StatusCode, error: &str) -> Response {
@@ -63,7 +63,7 @@ pub async fn hosted(State(state): State<Arc<AppState>>, mut req: Request, next: 
         return refuse(StatusCode::FORBIDDEN, crate::mode::HOSTED_REFUSAL);
     }
     let asked = Asked {
-        bearer: bearer(req.headers()).is_some(),
+        bearer: bearer(req.headers()).map(str::to_string),
         signed: (state.config.gateway_secret.as_ref()).and_then(|s| signed_caller(&s.0, &req)),
     };
     let scope = match caller_of(&state, asked).await {
@@ -76,7 +76,7 @@ pub async fn hosted(State(state): State<Arc<AppState>>, mut req: Request, next: 
 
 /// What a request presents: a bearer token, and a good gateway signature's (user, org).
 struct Asked {
-    bearer: bool,
+    bearer: Option<String>,
     signed: Option<(Uuid, Uuid)>,
 }
 
@@ -85,8 +85,15 @@ const SIGN_IN: &str = "sign in through the gateway or send an API token";
 /// The caller's scope, or the status and error to refuse it with.
 async fn caller_of(state: &AppState, asked: Asked) -> Result<Scope, (StatusCode, String)> {
     let no = |status, error: &str| Err((status, error.to_string()));
-    if asked.bearer {
-        return no(StatusCode::UNAUTHORIZED, "API tokens are not accepted yet");
+    if let Some(token) = &asked.bearer {
+        return match tokens::resolve_api_token(&state.store, token).await {
+            Ok(Some(p)) => Ok(Scope::of(p)),
+            Ok(None) => no(
+                StatusCode::UNAUTHORIZED,
+                "the token is unknown, revoked or expired",
+            ),
+            Err(e) => no(StatusCode::INTERNAL_SERVER_ERROR, &format!("{e:#}")),
+        };
     }
     let Some((user, org)) = asked.signed else {
         return no(StatusCode::UNAUTHORIZED, SIGN_IN);

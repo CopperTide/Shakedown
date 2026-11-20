@@ -3,6 +3,7 @@ pub mod api;
 pub mod app;
 pub mod auth;
 pub mod budget;
+pub mod cli;
 pub mod clock;
 pub mod compare;
 pub mod dispatch;

@@ -30,6 +30,13 @@ impl SystemScope {
         }
     }
 
+    /// Finding the token a bearer secret's hash names (one fixed query).
+    pub(crate) fn resolve_token() -> SystemScope {
+        SystemScope {
+            job: SystemJob::ResolveToken,
+        }
+    }
+
     /// Listing the orgs a user belongs to (`/api/me`).
     pub(crate) fn list_orgs_of_user() -> SystemScope {
         SystemScope {

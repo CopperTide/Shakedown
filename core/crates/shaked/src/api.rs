@@ -40,6 +40,7 @@ mod rows;
 mod sandbox;
 mod stream;
 mod suites;
+mod tokens;
 mod twin;
 mod ui;
 mod world;
@@ -79,6 +80,7 @@ fn modules() -> Router<Arc<AppState>> {
         .merge(connections::router())
         .merge(flow::router())
         .merge(me::router())
+        .merge(tokens::router())
         .merge(suites::router())
         .merge(experiments::router())
         .merge(review::router())
@@ -105,6 +107,9 @@ impl ApiError {
     }
     fn conflict(msg: impl Into<String>) -> ApiError {
         ApiError(StatusCode::CONFLICT, msg.into())
+    }
+    fn forbidden(msg: impl Into<String>) -> ApiError {
+        ApiError(StatusCode::FORBIDDEN, msg.into())
     }
 }
 

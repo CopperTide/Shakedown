@@ -429,3 +429,28 @@ def test_a_branch_suite_and_env_keep_their_connection_as_arena_too():
     assert b.shakedown is sd and b.arena is sd
     s = Suite(sd, {"id": "s1"})
     assert s.arena is sd
+
+
+def test_token_is_sent_and_never_shown(monkeypatch):
+    import httpx
+
+    from shakedown import Shakedown
+
+    seen = {}
+
+    def answer(request):
+        seen["auth"] = request.headers.get("authorization")
+        return httpx.Response(401, json={"error": "nope"})
+
+    monkeypatch.setenv("SHAKEDOWN_TOKEN", "sd_fromenv")
+    client = Shakedown("http://shaked.test", token="sd_x", retries=1)
+    client._http = httpx.Client(base_url=client.url, transport=httpx.MockTransport(answer),
+                                headers=client._http.headers)
+    with pytest.raises(ApiError) as e:
+        client.get("/api/runs")
+    assert seen["auth"] == "Bearer sd_x"
+    assert "sd_x" not in repr(client) and "sd_x" not in str(e.value)
+    from_env = Shakedown("http://shaked.test")
+    assert from_env._http.headers.get("authorization") == "Bearer sd_fromenv"
+    monkeypatch.delenv("SHAKEDOWN_TOKEN")
+    assert "authorization" not in Shakedown("http://shaked.test")._http.headers

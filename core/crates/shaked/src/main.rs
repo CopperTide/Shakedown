@@ -244,6 +244,10 @@ async fn local_start(state: &AppState) -> anyhow::Result<BenchDescribe> {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if let Some(done) = shaked::cli::run(&args).await {
+        return done;
+    }
     let (mode, bind) = mode_and_bind()?;
     let url = shaked::pg::configured_url().await;
     let ui_dist = ui_dist_from_env();
