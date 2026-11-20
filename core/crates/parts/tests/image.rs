@@ -56,7 +56,7 @@ async fn container_is_named_and_removed_on_drop() {
     wait_for_log(&log, "run", 100, 20).await;
     drop(c);
     let text = wait_for_log(&log, "rm -f", 40, 50).await;
-    let name = format!("arena-part-boxed-{}-", std::process::id());
+    let name = format!("shakedown-part-boxed-{}-", std::process::id());
     assert!(text.contains(&format!("--name {name}")), "{text}");
     assert!(text.contains(&format!("rm -f {name}")), "{text}");
     assert!(text.contains("--network none"), "{text}");

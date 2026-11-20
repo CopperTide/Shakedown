@@ -1,8 +1,8 @@
 //! The fake `docker` the service tests run against, and the params they start and save with.
 #![allow(dead_code)] // each test file uses its own share of these
-use arena_part::proto::*;
-use arena_service::Service;
 use serde_json::{json, Value};
+use shakedown_part::proto::*;
+use shakedown_service::Service;
 use std::collections::HashMap;
 use std::fs;
 use std::io::{BufRead, BufReader, Write};

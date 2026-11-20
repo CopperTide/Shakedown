@@ -124,7 +124,7 @@ class Plant:
         events = [e for e in self.factory.events if e["seq"] > self.last_seq]
         if events:
             self.last_seq = events[-1]["seq"]
-        return [views.arena_event(e) for e in events]
+        return [views.shakedown_event(e) for e in events]
 
     def advance(self, clock_ms: int) -> dict:
         n = self.step_to(clock_ms)

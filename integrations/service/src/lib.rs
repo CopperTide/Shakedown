@@ -1,4 +1,4 @@
-//! The `service` integration: each instance is a Docker Compose project `arena_<instance>`, and a
+//! The `service` integration: each instance is a Docker Compose project `shakedown_<instance>`, and a
 //! save holds copies of the volumes the config names, each its own way (`volumes::*`).
 //!
 //! A plain volume name is saved as before: the project stops, each volume is written to
@@ -30,15 +30,15 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use arena_part::helpers::blocking;
-use arena_part::helpers::compose::Project;
-use arena_part::helpers::instances::{KeyedLocks, LiveRecords, Registry};
-use arena_part::helpers::save_dirs::SaveDirs;
-use arena_part::proto::*;
-use arena_part::{Part, PartError};
 use async_trait::async_trait;
 use config::{image_var, Config};
 use serde_json::{json, Value};
+use shakedown_part::helpers::blocking;
+use shakedown_part::helpers::compose::Project;
+use shakedown_part::helpers::instances::{KeyedLocks, LiveRecords, Registry};
+use shakedown_part::helpers::save_dirs::SaveDirs;
+use shakedown_part::proto::*;
+use shakedown_part::{Part, PartError};
 use volumes::{Instance, Manifest};
 
 /// Which package the program is.
@@ -131,9 +131,9 @@ impl Service {
         env.extend((config.images.iter()).map(|(s, i)| (image_var(s), i.clone())));
         if config.live {
             let dir = self.clock_dir(id).to_string_lossy().into_owned();
-            env.extend(arena_part::settings::both("SHAKEDOWN_CLOCK_DIR", dir));
+            env.extend(shakedown_part::settings::both("SHAKEDOWN_CLOCK_DIR", dir));
         }
-        let name = format!("arena_{id}");
+        let name = format!("shakedown_{id}");
         let project = Project::new(&name, &config.compose_file, &env);
         let project = project.and_then(|p| p.with_helper(config.helper()));
         Ok(Instance {
@@ -201,7 +201,7 @@ impl Service {
     async fn live_digests(&self, inst: &Instance) -> Result<view::DigestMap, PartError> {
         let (inst, scratch) = (inst.clone(), self.saves.scratch());
         blocking(move || {
-            use arena_part::helpers::temp_dir::TempDir;
+            use shakedown_part::helpers::temp_dir::TempDir;
             let tmp = TempDir::new_in(&scratch, "inspect").map_err(PartError::internal_from)?;
             volumes::export_all(&inst, tmp.path()).map_err(PartError::internal_from)?;
             view::digests(tmp.path())

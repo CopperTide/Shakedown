@@ -7,8 +7,8 @@ use std::net::{SocketAddr, TcpStream};
 use std::time::{Duration, Instant};
 
 use anyhow::{bail, Context};
-use arena_part::helpers::compose::Project;
-use arena_part::proto::{HttpRoute, HttpRoutes};
+use shakedown_part::helpers::compose::Project;
+use shakedown_part::proto::{HttpRoute, HttpRoutes};
 
 use crate::config::HttpSpec;
 

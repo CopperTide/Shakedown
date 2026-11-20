@@ -5,10 +5,10 @@
 use std::io;
 use std::path::{Path, PathBuf};
 
-use arena_part::helpers::instances::LiveRecords;
-use arena_part::helpers::remove_tree_or_log;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use shakedown_part::helpers::instances::LiveRecords;
+use shakedown_part::helpers::remove_tree_or_log;
 
 use crate::aliases::Aliases;
 use crate::server::{Folders, Pids};

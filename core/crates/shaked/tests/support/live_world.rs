@@ -7,7 +7,7 @@ use std::{path::PathBuf, process::Command, sync::Arc, time::Duration};
 
 use shaked::{app::AppState, model::*, runner, scenario::Scenario};
 
-use super::packages::arena;
+use super::packages::repo;
 use super::pg::pg_url;
 
 /// The ERPNext stack and server, the saves and the sites of this test; removed on drop.
@@ -34,21 +34,21 @@ impl Stack {
         for (k, v) in [
             (
                 "SHAKEDOWN_ERPNEXT_DB_CONTAINER",
-                format!("arena-erpnext-db-{}", self.id),
+                format!("shakedown-erpnext-db-{}", self.id),
             ),
             (
                 "SHAKEDOWN_ERPNEXT_DB_VOLUME",
-                format!("arena-erpnext-db-{}", self.id),
+                format!("shakedown-erpnext-db-{}", self.id),
             ),
             ("SHAKEDOWN_ERPNEXT_DB_PORT", port(23000)),
             (
                 "SHAKEDOWN_ERPNEXT_PROJECT",
-                format!("arena_erpnext_{}", self.id),
+                format!("shakedown_erpnext_{}", self.id),
             ),
             ("SHAKEDOWN_ERPNEXT_PORT", port(24000)),
             (
                 "SHAKEDOWN_TWENTY_PROJECT",
-                format!("arena_twenty_{}", self.id),
+                format!("shakedown_twenty_{}", self.id),
             ),
             ("SHAKEDOWN_TWENTY_DB_PORT", port(25000)),
         ] {
@@ -61,7 +61,7 @@ impl Stack {
 impl Stack {
     /// The CRM's servers, then its database server, network and volume.
     fn remove_crm(&self) {
-        let name = format!("arena-twenty-{}", self.id);
+        let name = format!("shakedown-twenty-{}", self.id);
         let docker = |args: &[&str]| {
             let out = Command::new("docker").args(args).output();
             out.map_or(String::new(), |o| {
@@ -71,7 +71,7 @@ impl Stack {
         for c in docker(&["ps", "-aq", "--filter", &format!("name=^{name}")]).split_whitespace() {
             docker(&["rm", "-f", "-v", c]);
         }
-        let project = format!("name=arena_twenty_{}", self.id);
+        let project = format!("name=shakedown_twenty_{}", self.id);
         for n in docker(&["network", "ls", "-q", "--filter", &project]).split_whitespace() {
             docker(&["network", "rm", n]);
         }
@@ -82,12 +82,12 @@ impl Stack {
 
 impl Drop for Stack {
     fn drop(&mut self) {
-        let db = format!("arena-erpnext-db-{}", self.id);
+        let db = format!("shakedown-erpnext-db-{}", self.id);
         let _ = Command::new("docker")
             .args(["rm", "-f", "-v", &db])
             .output();
-        let compose = arena().join("integrations/erpnext/compose.yml");
-        let project = format!("arena_erpnext_{}", self.id);
+        let compose = repo().join("integrations/erpnext/compose.yml");
+        let project = format!("shakedown_erpnext_{}", self.id);
         let mut down = Command::new("docker");
         down.args(["compose", "-p", &project, "-f"]).arg(&compose);
         down.env("SHAKEDOWN_ERPNEXT_SITES", self.saves.join("erpnext/.sites"));
@@ -104,7 +104,7 @@ impl Drop for Stack {
 /// next to the arena checkout, else the one already on it.
 pub fn path_with_sculptured() -> String {
     let path = std::env::var("PATH").unwrap_or_default();
-    let local = arena().join("../sculptured/target/release/sculptured");
+    let local = repo().join("../sculptured/target/release/sculptured");
     let set = parts::settings::var_os("SHAKEDOWN_SCULPTURED_BINARY").map(PathBuf::from);
     let binary = set.or_else(|| local.exists().then_some(local));
     match binary.as_deref().and_then(|b| b.parent()) {

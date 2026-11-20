@@ -1,6 +1,6 @@
 //! The JSON config files of the bench and of each site.
-use arena_part::helpers::mariadb::Login;
 use serde_json::{json, Map, Value};
+use shakedown_part::helpers::mariadb::Login;
 
 /// `sites/apps.txt`: the apps the image has.
 pub const APPS_TXT: &str = "frappe\nerpnext\n";

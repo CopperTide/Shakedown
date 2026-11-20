@@ -2,11 +2,11 @@
 //! open passes its goal) and the hard safety checks, reported apart. Each passes or fails on the
 //! world's end state alone; which fronts opened is read from it too (the simulated parts keep their
 //! fired disruptions' effects in their documents).
-use arena_part::proto::NamedCheck;
 use serde_json::Value;
+use shakedown_part::proto::NamedCheck;
 
 use crate::checks::{check, stale_close_dates, unnoticed, untold, without_note, World};
-use arena_part::helpers::bench::{safety, Docs};
+use shakedown_part::helpers::bench::{safety, Docs};
 
 /// The orders the late truck puts at risk: on its line, due within the shift's priority days.
 #[derive(Debug, Clone, PartialEq, Default)]

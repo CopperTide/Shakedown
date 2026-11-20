@@ -1,18 +1,18 @@
 //! Live tests against a MariaDB server of their own (`mariadb:11.8`, never pulled). Each test
 //! makes its own container and volume and removes both when it ends, even when it fails.
-//! Run: `cargo test -p arena-mariadb -- --ignored live_ --nocapture`.
+//! Run: `cargo test -p shakedown-mariadb -- --ignored live_ --nocapture`.
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::OnceLock;
 use std::time::Instant;
 
-use arena_mariadb::Mariadb;
-use arena_part::helpers::mariadb::{Manifest, Server, ServerConfig};
-use arena_part::proto::*;
-use arena_part::Part;
 use serde_json::{json, Value};
+use shakedown_mariadb::Mariadb;
+use shakedown_part::helpers::mariadb::{Manifest, Server, ServerConfig};
+use shakedown_part::proto::*;
+use shakedown_part::Part;
 
-fn arena() -> PathBuf {
+fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .canonicalize()
@@ -37,8 +37,8 @@ impl Env {
             .port();
         let saves = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("mariadb-{id}"));
         Env {
-            container: format!("arena-mariadb-{id}"),
-            volume: format!("arena-mariadb-{id}"),
+            container: format!("shakedown-mariadb-{id}"),
+            volume: format!("shakedown-mariadb-{id}"),
             port,
             saves,
         }
@@ -372,7 +372,7 @@ async fn check_dump_freed_last(p: &Mariadb, e: &Env) {
 }
 
 async fn rotate_binlogs(e: &Env, times: usize) {
-    use arena_part::helpers::mariadb::mysql_async::prelude::Queryable;
+    use shakedown_part::helpers::mariadb::mysql_async::prelude::Queryable;
     let server = e.server();
     let flushed = server.with_conn(async |c| {
         for _ in 0..times {
@@ -480,7 +480,7 @@ async fn check_ddl_from_another_default_db_refuses_save(p: &Mariadb, e: &Env, cf
 
 /// Runs `sql` through the instance's `connect` account, with no default database.
 async fn run_without_default_db(p: &Mariadb, inst: &str, sql: &str) {
-    use arena_part::helpers::mariadb::mysql_async::{prelude::Queryable, Conn, Opts};
+    use shakedown_part::helpers::mariadb::mysql_async::{prelude::Queryable, Conn, Opts};
     let info = p
         .connect(IdParams {
             instance: inst.into(),
@@ -549,7 +549,7 @@ async fn check_replaced_server_refused(p: &Mariadb, e: &Env, cfg: &Value) {
 #[tokio::test]
 #[ignore]
 async fn live_mariadb_identity_migration() {
-    use arena_part::helpers::mariadb::mysql_async::prelude::Queryable;
+    use shakedown_part::helpers::mariadb::mysql_async::prelude::Queryable;
     let e = Env::new("identity");
     let p = e.part();
     p.start(start("a", &e.config(json!({})), None))
@@ -584,12 +584,12 @@ async fn live_mariadb_identity_migration() {
 fn build_all() {
     static ONCE: OnceLock<()> = OnceLock::new();
     ONCE.get_or_init(|| {
-        let a = arena();
+        let a = repo();
         let ok = |dir: PathBuf, args: &[&str]| {
             let s = Command::new("cargo").args(args).current_dir(dir).status();
             assert!(s.unwrap().success(), "cargo {args:?}");
         };
-        ok(a.clone(), &["build", "-p", "arena-mariadb"]);
+        ok(a.clone(), &["build", "-p", "shakedown-mariadb"]);
         ok(
             a.join("core"),
             &["build", "-p", "parts", "--bin", "shakedown-part-check"],
@@ -602,7 +602,7 @@ fn build_all() {
 async fn live_mariadb_conformance() {
     build_all();
     let e = Env::new("check");
-    let a = arena();
+    let a = repo();
     std::fs::create_dir_all(&e.saves).unwrap();
     let cfgfile = e.saves.join("check.json");
     std::fs::write(&cfgfile, e.config(json!({})).to_string()).unwrap();

@@ -5,11 +5,11 @@
 
 use std::path::Path;
 
-use arena_part::helpers::blocking;
-use arena_part::helpers::instances::Registry;
-use arena_part::proto::{Advanced, StartParams, ToolOutput, WorldEvent};
-use arena_part::PartError;
 use serde_json::{json, Map, Value};
+use shakedown_part::helpers::blocking;
+use shakedown_part::helpers::instances::Registry;
+use shakedown_part::proto::{Advanced, StartParams, ToolOutput, WorldEvent};
+use shakedown_part::PartError;
 
 use crate::clock::{wall_now_ms, Clock};
 use crate::config::Config;

@@ -36,6 +36,6 @@ pub use position::{
 pub use saving::{
     needed_positions, to_reroot, used_roots, Dumps, Standing, TrackedChange, DEFAULT_REROOT_AFTER,
 };
-pub use server::{valid_docker_name, Server, ServerConfig, IMAGE};
+pub use server::{valid_docker_name, Server, ServerConfig, IMAGE, OLD_CONTAINER, OLD_VOLUME};
 pub use sql::{names_db, query_misplaced, quote_ident};
 pub use tracked::{Chained, Misplaced, Tracked};

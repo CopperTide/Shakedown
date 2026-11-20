@@ -22,13 +22,13 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use arena_part::helpers::blocking;
-use arena_part::helpers::instances::KeyedLocks;
-use arena_part::helpers::save_dirs::SaveDirs;
-use arena_part::proto::*;
-use arena_part::{Part, PartError};
 use async_trait::async_trait;
 use serde_json::json;
+use shakedown_part::helpers::blocking;
+use shakedown_part::helpers::instances::KeyedLocks;
+use shakedown_part::helpers::save_dirs::SaveDirs;
+use shakedown_part::proto::*;
+use shakedown_part::{Part, PartError};
 
 pub use config::default_binary;
 

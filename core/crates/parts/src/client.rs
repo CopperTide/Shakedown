@@ -80,21 +80,21 @@ fn kill_group(pid: u32) {
 pub struct ProgramDirs<'a> {
     pub bin: &'a Path,
     /// Left unsubstituted when empty.
-    pub arena: &'a Path,
+    pub repo: &'a Path,
     pub saves: &'a Path,
 }
 
 /// A command argument with `${SHAKEDOWN_BIN_DIR}` and `${SHAKEDOWN_DIR}` replaced (`${SHAKEDOWN_DIR}` only
-/// when `arena_dir` is set).
-fn expand_arg(arg: &str, bin_dir: &Path, arena_dir: &Path) -> String {
+/// when `repo_dir` is set).
+fn expand_arg(arg: &str, bin_dir: &Path, repo_dir: &Path) -> String {
     let mut arg = arg.to_string();
     // `${ARENA_BIN_DIR}` and `${ARENA_DIR}`: the old names, in manifests written before 2026-11-19.
     for name in ["${SHAKEDOWN_BIN_DIR}", "${ARENA_BIN_DIR}"] {
         arg = arg.replace(name, &bin_dir.to_string_lossy());
     }
-    if !arena_dir.as_os_str().is_empty() {
+    if !repo_dir.as_os_str().is_empty() {
         for name in ["${SHAKEDOWN_DIR}", "${ARENA_DIR}"] {
-            arg = arg.replace(name, &arena_dir.to_string_lossy());
+            arg = arg.replace(name, &repo_dir.to_string_lossy());
         }
     }
     arg
@@ -140,7 +140,7 @@ fn program_command(
     dirs: ProgramDirs,
     env: &[(String, String)],
 ) -> Command {
-    let expand = |a: &String| expand_arg(a, dirs.bin, dirs.arena);
+    let expand = |a: &String| expand_arg(a, dirs.bin, dirs.repo);
     let mut args: Vec<String> = argv.iter().map(expand).collect();
     if args[0].contains('/') && Path::new(&args[0]).is_relative() {
         args[0] = m.dir.join(&args[0]).to_string_lossy().into_owned();
@@ -148,9 +148,12 @@ fn program_command(
     let mut c = Command::new(&args[0]);
     c.args(&args[1..]).current_dir(&m.dir).env_clear();
     for k in PASSED_ENV {
-        c.envs(arena_part::settings::passed(k));
+        c.envs(shakedown_part::settings::passed(k));
     }
-    c.envs(arena_part::settings::both("SHAKEDOWN_SAVES", dirs.saves));
+    c.envs(shakedown_part::settings::both(
+        "SHAKEDOWN_SAVES",
+        dirs.saves,
+    ));
     for (k, v) in env {
         c.env(k, v);
     }
@@ -164,7 +167,7 @@ fn container_command(m: &Manifest, image: &str, saves_root: &Path) -> Result<(Co
     std::fs::create_dir_all(&mine)?;
     static COUNTER: AtomicU64 = AtomicU64::new(0);
     let name = format!(
-        "arena-part-{}-{}-{}",
+        "shakedown-part-{}-{}-{}",
         m.name,
         std::process::id(),
         COUNTER.fetch_add(1, Ordering::Relaxed)
@@ -304,10 +307,9 @@ impl Client {
         saves_root: &Path,
         env: &[(String, String)],
     ) -> Result<Client> {
-        let arena = Path::new("");
         let dirs = ProgramDirs {
             bin: bin_dir,
-            arena,
+            repo: Path::new(""),
             saves: saves_root,
         };
         Client::spawn_in(m, dirs, env).await
@@ -481,11 +483,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn arena_dir_is_substituted_in_commands() {
-        let (bin, arena) = (Path::new("/b"), Path::new("/a"));
-        let got = expand_arg("${SHAKEDOWN_DIR}/benchmarks/world", bin, arena);
+    fn repo_dir_is_substituted_in_commands() {
+        let (bin, repo) = (Path::new("/b"), Path::new("/a"));
+        let got = expand_arg("${SHAKEDOWN_DIR}/benchmarks/world", bin, repo);
         assert_eq!(got, "/a/benchmarks/world");
-        assert_eq!(expand_arg("${SHAKEDOWN_BIN_DIR}/x", bin, arena), "/b/x");
+        assert_eq!(expand_arg("${SHAKEDOWN_BIN_DIR}/x", bin, repo), "/b/x");
     }
 
     #[test]

@@ -6,7 +6,7 @@
 use std::path::Path;
 
 use anyhow::{Context, Result};
-use arena_part::helpers::compose::Project;
+use shakedown_part::helpers::compose::Project;
 
 /// Where a helper sees the package's save folders.
 const SAVES: &str = "/saves";

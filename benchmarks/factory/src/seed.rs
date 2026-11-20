@@ -13,7 +13,7 @@ use crate::crm;
 use crate::date::Day;
 use crate::facts::{machine, MACHINE};
 use crate::scale;
-use arena_part::helpers::frappe::{name_of, Erp};
+use shakedown_part::helpers::frappe::{name_of, Erp};
 
 /// Shaft speed in Hz and the defect-frequency rows of a press's service manual.
 fn defect_table(drive: &Value) -> String {

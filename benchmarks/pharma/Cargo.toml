@@ -1,10 +1,10 @@
 [package]
-name = "arena-pharma"
+name = "shakedown-pharma"
 version = "0.1.0"
 edition = "2021"
 
 [lib]
-name = "arena_pharma"
+name = "shakedown_pharma"
 path = "src/lib.rs"
 
 [[bin]]
@@ -17,7 +17,7 @@ name = "arena-pharma"
 path = "src/old_name.rs"
 
 [dependencies]
-arena-part = { path = "../../kits/rust", features = ["http"] }
+shakedown-part = { path = "../../kits/rust", features = ["http"] }
 tokio.workspace = true
 serde.workspace = true
 serde_json.workspace = true

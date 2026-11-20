@@ -1,8 +1,8 @@
 //! What benchmarks' checks and scenario options share: the end state read by part and kind, goal
 //! and safety checks, and a disruption option.
-use arena_part::helpers::bench::{check, option, safety, Docs};
-use arena_part::proto::ScenarioParam;
 use serde_json::json;
+use shakedown_part::helpers::bench::{check, option, safety, Docs};
+use shakedown_part::proto::ScenarioParam;
 
 #[test]
 fn docs_of_a_kind_come_in_key_order() {

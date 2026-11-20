@@ -18,19 +18,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
-name = "arena-part"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "libc",
- "serde",
- "serde_json",
- "sha2",
- "tokio",
-]
-
-[[package]]
 name = "arenad"
 version = "0.1.0"
 dependencies = [
@@ -825,10 +812,10 @@ name = "parts"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "arena-part",
  "libc",
  "serde",
  "serde_json",
+ "shakedown-part",
  "thiserror",
  "tokio",
  "toml",
@@ -1274,6 +1261,19 @@ dependencies = [
  "toml",
  "tower",
  "uuid",
+]
+
+[[package]]
+name = "shakedown-part"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "libc",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tokio",
 ]
 
 [[package]]

@@ -37,127 +37,19 @@ name = "arena-erpnext"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "arena-part",
- "async-trait",
- "reqwest",
- "serde",
- "serde_json",
+ "shakedown-erpnext",
+ "shakedown-part",
  "tokio",
 ]
 
 [[package]]
 name = "arena-factory"
-version = "0.4.1"
-dependencies = [
- "anyhow",
- "arena-part",
- "async-trait",
- "serde_json",
- "tokio",
-]
-
-[[package]]
-name = "arena-folder"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "arena-part",
- "async-trait",
  "serde_json",
- "tokio",
-]
-
-[[package]]
-name = "arena-mariadb"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "arena-part",
- "async-trait",
- "mysql_async",
- "serde",
- "serde_json",
- "sha2 0.11.1",
- "tokio",
-]
-
-[[package]]
-name = "arena-part"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "flate2",
- "libc",
- "mysql_async",
- "reqwest",
- "serde",
- "serde_json",
- "sha2 0.11.1",
- "tokio",
- "tokio-postgres",
-]
-
-[[package]]
-name = "arena-pharma"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "arena-part",
- "async-trait",
- "serde",
- "serde_json",
- "tokio",
-]
-
-[[package]]
-name = "arena-postgres"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "arena-part",
- "async-trait",
- "serde_json",
- "tokio",
-]
-
-[[package]]
-name = "arena-retail"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "arena-part",
- "async-trait",
- "serde_json",
- "tokio",
- "tokio-postgres",
- "unicode-normalization",
-]
-
-[[package]]
-name = "arena-sculptured"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "arena-part",
- "async-trait",
- "reqwest",
- "rusqlite",
- "serde",
- "serde_json",
- "tokio",
-]
-
-[[package]]
-name = "arena-service"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "arena-part",
- "async-trait",
- "serde",
- "serde_json",
- "sha2 0.11.1",
+ "shakedown-factory",
+ "shakedown-part",
  "tokio",
 ]
 
@@ -166,11 +58,8 @@ name = "arena-twenty-crm"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "arena-part",
- "async-trait",
- "reqwest",
- "serde",
- "serde_json",
+ "shakedown-part",
+ "shakedown-twenty-crm",
  "tokio",
 ]
 
@@ -1614,6 +1503,148 @@ dependencies = [
 ]
 
 [[package]]
+name = "shakedown-erpnext"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "shakedown-part",
+ "tokio",
+]
+
+[[package]]
+name = "shakedown-factory"
+version = "0.4.1"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "serde_json",
+ "shakedown-part",
+ "tokio",
+]
+
+[[package]]
+name = "shakedown-folder"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "serde_json",
+ "shakedown-part",
+ "tokio",
+]
+
+[[package]]
+name = "shakedown-mariadb"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "mysql_async",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "shakedown-part",
+ "tokio",
+]
+
+[[package]]
+name = "shakedown-part"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "flate2",
+ "libc",
+ "mysql_async",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "tokio",
+ "tokio-postgres",
+]
+
+[[package]]
+name = "shakedown-pharma"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "serde",
+ "serde_json",
+ "shakedown-part",
+ "tokio",
+]
+
+[[package]]
+name = "shakedown-postgres"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "serde_json",
+ "shakedown-part",
+ "tokio",
+]
+
+[[package]]
+name = "shakedown-retail"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "serde_json",
+ "shakedown-part",
+ "tokio",
+ "tokio-postgres",
+ "unicode-normalization",
+]
+
+[[package]]
+name = "shakedown-sculptured"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "reqwest",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "shakedown-part",
+ "tokio",
+]
+
+[[package]]
+name = "shakedown-service"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "shakedown-part",
+ "tokio",
+]
+
+[[package]]
+name = "shakedown-twenty-crm"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "shakedown-part",
+ "tokio",
+]
+
+[[package]]
 name = "shlex"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2194,7 +2225,6 @@ name = "worldclock-gateway"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "arena-part",
  "axum",
  "form_urlencoded",
  "opentelemetry-proto",
@@ -2202,6 +2232,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "shakedown-part",
  "tokio",
 ]
 

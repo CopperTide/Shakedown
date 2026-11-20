@@ -5,9 +5,9 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use anyhow::{bail, Result};
-use arena_part::helpers::compose::Project;
-use arena_part::helpers::folder::{hex, Digest};
 use sha2::{Digest as _, Sha256};
+use shakedown_part::helpers::compose::Project;
+use shakedown_part::helpers::folder::{hex, Digest};
 
 use crate::config::VolumeSpec;
 

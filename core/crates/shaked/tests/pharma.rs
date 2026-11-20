@@ -23,7 +23,7 @@ use shaked::{
 };
 use support::live::Live;
 use support::live_world::{path_with_sculptured, walk_for, walk_in, Stack};
-use support::packages::{arena, bin_dir, package_roots};
+use support::packages::{bin_dir, package_roots, repo};
 use support::pg::Cleanup;
 use support::{app, live, live_world};
 
@@ -149,16 +149,16 @@ fn missing() -> Option<String> {
 
 fn build() {
     let packages = [
-        "arena-pharma",
-        "arena-erpnext",
-        "arena-sculptured",
-        "arena-twenty-crm",
+        "shakedown-pharma",
+        "shakedown-erpnext",
+        "shakedown-sculptured",
+        "shakedown-twenty-crm",
     ];
     let mut args = vec!["build", "-q"];
     packages.iter().for_each(|p| args.extend(["-p", p]));
     let st = Command::new("cargo")
         .args(args)
-        .current_dir(arena())
+        .current_dir(repo())
         .status()
         .unwrap();
     assert!(st.success(), "building the package binaries failed");

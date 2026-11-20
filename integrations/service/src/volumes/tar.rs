@@ -3,7 +3,7 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
-use arena_part::helpers::compose::Project;
+use shakedown_part::helpers::compose::Project;
 
 /// Where the archive of `volume` is in the folder `dir`.
 pub fn tar_path(dir: &Path, volume: &str) -> PathBuf {

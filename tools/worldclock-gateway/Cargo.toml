@@ -5,7 +5,7 @@ edition = "2021"
 description = "Restamps OTLP traces, logs and metrics from wall to world time, and answers store queries in world time"
 
 [dependencies]
-arena-part = { path = "../../kits/rust", default-features = false }
+shakedown-part = { path = "../../kits/rust", default-features = false }
 tokio = { workspace = true, features = ["net", "fs"] }
 serde.workspace = true
 serde_json.workspace = true

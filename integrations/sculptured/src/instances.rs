@@ -8,10 +8,10 @@ use std::io;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use arena_part::helpers::blocking;
-use arena_part::proto::{FromSave, StartParams};
-use arena_part::PartError;
 use serde_json::Value;
+use shakedown_part::helpers::blocking;
+use shakedown_part::proto::{FromSave, StartParams};
+use shakedown_part::PartError;
 
 use crate::api::Api;
 use crate::config::Config;

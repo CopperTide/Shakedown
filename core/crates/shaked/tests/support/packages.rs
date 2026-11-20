@@ -18,7 +18,7 @@ use parts::{Hub, Registry};
 use super::pg::{drop_databases, on_own_runtime, pg_url};
 
 /// The arena folder (this crate is core/crates/shaked).
-pub fn arena() -> PathBuf {
+pub fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../..")
         .canonicalize()
@@ -30,12 +30,12 @@ pub fn arena() -> PathBuf {
 pub fn bin_dir() -> PathBuf {
     parts::settings::var_os("SHAKEDOWN_BIN_DIR")
         .map(PathBuf::from)
-        .unwrap_or_else(|| arena().join("core/target/debug"))
+        .unwrap_or_else(|| repo().join("core/target/debug"))
 }
 
 /// The roots `SHAKEDOWN_PACKAGES` would name: `<arena>/integrations` and `<arena>/benchmarks`.
 pub fn package_roots() -> Vec<PathBuf> {
-    vec![arena().join("integrations"), arena().join("benchmarks")]
+    vec![repo().join("integrations"), repo().join("benchmarks")]
 }
 
 /// `cargo build -p arena-postgres -p arena-retail` and the kit's `counter` example (debug),
@@ -44,13 +44,27 @@ pub fn build() {
     static ONCE: OnceLock<()> = OnceLock::new();
     ONCE.get_or_init(|| {
         let builds: [&[&str]; 2] = [
-            &["build", "-q", "-p", "arena-postgres", "-p", "arena-retail"],
-            &["build", "-q", "--example", "counter", "-p", "arena-part"],
+            &[
+                "build",
+                "-q",
+                "-p",
+                "shakedown-postgres",
+                "-p",
+                "shakedown-retail",
+            ],
+            &[
+                "build",
+                "-q",
+                "--example",
+                "counter",
+                "-p",
+                "shakedown-part",
+            ],
         ];
         for args in builds {
             let st = Command::new("cargo")
                 .args(args)
-                .current_dir(arena())
+                .current_dir(repo())
                 .status()
                 .unwrap();
             assert!(st.success(), "building the package binaries failed");
@@ -146,7 +160,7 @@ fn hub_on(ns: &str, saves: &Path, extra: &[PathBuf]) -> Arc<Hub> {
         bin_dir(),
         saves.to_path_buf(),
     )
-    .with_arena_dir(arena())
+    .with_repo_dir(repo())
     .with_env(vec![(
         "SHAKEDOWN_PG_URL".into(),
         format!("{url}{sep}shakedown_ns={ns}"),
@@ -263,7 +277,7 @@ pub fn toy_world(tag: &str, part_args: &[&str], bench_args: &[&str]) -> ToyRoot 
 
 /// The `arguments` of the gold action `name` of a retail task (from `data/retail/tasks.json`).
 pub fn gold_action_args(task: &str, name: &str) -> serde_json::Value {
-    let text = std::fs::read_to_string(arena().join("data/retail/tasks.json")).unwrap();
+    let text = std::fs::read_to_string(repo().join("data/retail/tasks.json")).unwrap();
     let tasks: serde_json::Value = serde_json::from_str(&text).unwrap();
     let t = tasks
         .as_array()

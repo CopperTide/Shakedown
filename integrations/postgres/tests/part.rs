@@ -1,8 +1,8 @@
-use arena_part::helpers::pg::Templates;
-use arena_part::proto::*;
-use arena_part::Part;
-use arena_postgres::Postgres;
 use serde_json::{json, Value};
+use shakedown_part::helpers::pg::Templates;
+use shakedown_part::proto::*;
+use shakedown_part::Part;
+use shakedown_postgres::Postgres;
 use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -10,11 +10,11 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::OnceLock;
 
 fn url() -> String {
-    arena_part::settings::var("SHAKEDOWN_PG_URL")
+    shakedown_part::settings::var("SHAKEDOWN_PG_URL")
         .unwrap_or_else(|_| "postgres://shakedown:shakedown@127.0.0.1:5544/postgres".into())
 }
 
-fn arena() -> PathBuf {
+fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .canonicalize()
@@ -288,9 +288,9 @@ async fn gc_keeps_listed() {
 fn build_all() {
     static ONCE: OnceLock<()> = OnceLock::new();
     ONCE.get_or_init(|| {
-        let a = arena();
+        let a = repo();
         assert!(Command::new("cargo")
-            .args(["build", "-p", "arena-postgres"])
+            .args(["build", "-p", "shakedown-postgres"])
             .current_dir(&a)
             .status()
             .unwrap()
@@ -306,7 +306,7 @@ fn build_all() {
 
 /// Runs `shakedown-part-check` against the postgres package in the background and returns its output.
 async fn run_part_check(cfgfile: PathBuf, saves: PathBuf, ns: String) -> std::process::Output {
-    let a = arena();
+    let a = repo();
     tokio::task::spawn_blocking(move || {
         Command::new(a.join("core/target/debug/shakedown-part-check"))
             .arg(a.join("integrations/postgres/check"))
@@ -462,9 +462,9 @@ async fn save_closes_a_held_connection() {
     with_cleanup(&ns, &[], move || async move {
         let p = Postgres::new(&url(), &n).with_sql_tools();
         p.start(start("a", cfg(), None)).await.unwrap();
-        let (client, conn) = arena_part::helpers::pg::tokio_postgres::connect(
+        let (client, conn) = shakedown_part::helpers::pg::tokio_postgres::connect(
             &Templates::new(&url()).db_url(&format!("pi_{n}a")),
-            arena_part::helpers::pg::tokio_postgres::NoTls,
+            shakedown_part::helpers::pg::tokio_postgres::NoTls,
         )
         .await
         .unwrap();

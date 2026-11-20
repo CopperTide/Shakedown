@@ -1,8 +1,8 @@
 //! The benchmark's world: its parts (the simulated ones configured from the data), the links that
 //! hand every proposed change to the simulated QA head and supply chain director and their
 //! decisions back to the approvals part, and the gate that binds shipping to an approved change.
-use arena_part::proto::{Gate, Link, WorldPart};
 use serde_json::{json, Map, Value};
+use shakedown_part::proto::{Gate, Link, WorldPart};
 
 use crate::data::Data;
 

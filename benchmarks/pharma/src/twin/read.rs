@@ -5,7 +5,7 @@ use serde_json::{json, Map, Value};
 
 use crate::data::Data;
 use crate::reports;
-use arena_part::helpers::frappe::Erp;
+use shakedown_part::helpers::frappe::Erp;
 
 /// The world at one moment, as the twin needs it.
 pub struct Snapshot {

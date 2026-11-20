@@ -1,6 +1,6 @@
 //! The plant's areas: the press lines with their presses, the robot cells and the AMRs.
-use arena_part::proto::{TwinArea, TwinItem};
 use serde_json::Value;
+use shakedown_part::proto::{TwinArea, TwinItem};
 
 use super::text;
 use crate::checks::World;

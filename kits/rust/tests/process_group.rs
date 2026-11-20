@@ -1,6 +1,6 @@
 //! The process-group helper: a recorded process is killed, group and all, only when it is still
 //! the recorded program with an argument naming the part's folder.
-use arena_part::helpers::process_group::{is, kill, Identity};
+use shakedown_part::helpers::process_group::{is, kill, Identity};
 use std::io::{BufRead, BufReader};
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};

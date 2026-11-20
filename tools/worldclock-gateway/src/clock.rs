@@ -13,8 +13,8 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use arena_part::helpers::world_time::MAX_LEAD_MS;
 use serde::Deserialize;
+use shakedown_part::helpers::world_time::MAX_LEAD_MS;
 
 const NS_PER_MS: i128 = 1_000_000;
 const MAX_LEAD_NS: i128 = MAX_LEAD_MS as i128 * NS_PER_MS;

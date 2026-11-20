@@ -1,6 +1,6 @@
 //! The `mariadb` integration: each instance is a database `mi_<instance>` on a dedicated MariaDB
 //! server with row-based binary logging, and each save records how to rebuild it: an optional
-//! dump plus binlog segments (see `arena_part::helpers::mariadb`). Saves restore exactly.
+//! dump plus binlog segments (see `shakedown_part::helpers::mariadb`). Saves restore exactly.
 mod disk;
 mod instances;
 mod keys;
@@ -13,14 +13,14 @@ mod views;
 
 use std::path::PathBuf;
 
-use arena_part::helpers::busy::BusySet;
-use arena_part::helpers::instances::Registry;
-use arena_part::helpers::mariadb::{percent_encode, Dumps, DEFAULT_REROOT_AFTER, IMAGE};
-use arena_part::helpers::save_dirs::SaveDirs;
-use arena_part::proto::*;
-use arena_part::{Part, PartError};
 use async_trait::async_trait;
 use serde_json::{json, Value};
+use shakedown_part::helpers::busy::BusySet;
+use shakedown_part::helpers::instances::Registry;
+use shakedown_part::helpers::mariadb::{percent_encode, Dumps, DEFAULT_REROOT_AFTER, IMAGE};
+use shakedown_part::helpers::save_dirs::SaveDirs;
+use shakedown_part::proto::*;
+use shakedown_part::{Part, PartError};
 
 pub use keys::{keys, read_only};
 pub use settings::{Settings, DEFAULT_DUMP_AFTER};

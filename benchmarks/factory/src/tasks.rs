@@ -1,8 +1,8 @@
 //! The benchmark's tasks: the press bearing failure (one front, scenario A of the demo) and the
 //! shift (scenario B), whose fronts a run's scenario opens (`options`). The shift's setup calms
 //! the plant, so no press wears; its world is otherwise the same.
-use arena_part::proto::{SetupCall, TaskInfo};
 use serde_json::json;
+use shakedown_part::proto::{SetupCall, TaskInfo};
 
 use crate::team;
 

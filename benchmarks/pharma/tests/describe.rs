@@ -1,8 +1,8 @@
 //! What the benchmark says about itself, with no service running.
-use arena_part::proto::*;
-use arena_part::Benchmark;
-use arena_pharma::Pharma;
 use serde_json::Map;
+use shakedown_part::proto::*;
+use shakedown_part::Benchmark;
+use shakedown_pharma::Pharma;
 
 #[tokio::test]
 async fn it_describes_five_scenarios_over_five_parts() {

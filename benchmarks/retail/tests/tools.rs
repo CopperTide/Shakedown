@@ -1,14 +1,14 @@
 mod common;
-use arena_part::{
+use common::*;
+use serde_json::{json, Value};
+use shakedown_part::{
     proto::{BenchCallTool, Effect, GoldParams},
     Benchmark,
 };
-use arena_retail::{
+use shakedown_retail::{
     load::{dump, with_conn},
     tools,
 };
-use common::*;
-use serde_json::{json, Value};
 
 /// tau2-bench retail's tools that change the database.
 const WRITE_TOOLS: &[&str] = &[
@@ -45,7 +45,7 @@ fn eligible(task: &Value) -> bool {
     has_write && !nl
 }
 
-async fn call(url: &str, name: &str, args: Value) -> arena_part::proto::BenchToolOutput {
+async fn call(url: &str, name: &str, args: Value) -> shakedown_part::proto::BenchToolOutput {
     retail()
         .call_tool(BenchCallTool {
             name: name.into(),

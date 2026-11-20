@@ -1,23 +1,18 @@
 [package]
-name = "arena-erpnext"
+name = "shakedown-erpnext"
 version = "0.1.0"
 edition = "2021"
 
 [lib]
-name = "arena_erpnext"
+name = "shakedown_erpnext"
 path = "src/lib.rs"
 
 [[bin]]
 name = "shakedown-erpnext"
 path = "src/main.rs"
 
-# The program's name until 2026-11-19, built too for scripts that still run it.
-[[bin]]
-name = "arena-erpnext"
-path = "src/old_name.rs"
-
 [dependencies]
-arena-part = { path = "../../kits/rust", features = ["mariadb", "compose", "http"] }
+shakedown-part = { path = "../../kits/rust", features = ["mariadb", "compose", "http"] }
 reqwest = { version = "0.12", default-features = false, features = ["json"] }
 tokio.workspace = true
 serde.workspace = true

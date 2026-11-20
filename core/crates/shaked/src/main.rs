@@ -38,7 +38,7 @@ use shaked::{
     store::Store,
 };
 
-fn arena_dir() -> PathBuf {
+fn repo_dir() -> PathBuf {
     let here = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
     here.canonicalize().unwrap_or(here)
 }
@@ -52,7 +52,7 @@ fn env_path(key: &str, default: PathBuf) -> PathBuf {
 
 /// `SHAKEDOWN_WORLDS`, created, without the temporary folders a build left.
 fn worlds_dir() -> anyhow::Result<PathBuf> {
-    let dir = env_path("SHAKEDOWN_WORLDS", arena_dir().join("core/worlds"));
+    let dir = env_path("SHAKEDOWN_WORLDS", repo_dir().join("core/worlds"));
     std::fs::create_dir_all(&dir)?;
     shaked::worlds::remove_leftovers(&dir);
     Ok(dir)
@@ -73,7 +73,7 @@ fn program_env(pg_url: &str) -> Vec<(String, String)> {
 
 /// The hub over `SHAKEDOWN_PACKAGES` and the built worlds, `SHAKEDOWN_BIN_DIR` and `SHAKEDOWN_SAVES`.
 fn hub(pg_url: &str, worlds: &std::path::Path) -> anyhow::Result<Hub> {
-    let arena = arena_dir();
+    let arena = repo_dir();
     let mut roots: Vec<PathBuf> = match parts::settings::var("SHAKEDOWN_PACKAGES") {
         Ok(p) if !p.is_empty() => std::env::split_paths(&p).collect(),
         _ => vec![arena.join("integrations"), arena.join("benchmarks")],
@@ -84,7 +84,7 @@ fn hub(pg_url: &str, worlds: &std::path::Path) -> anyhow::Result<Hub> {
     std::fs::create_dir_all(&saves)?;
     let registry = Registry::scan(&roots)?;
     Ok(Hub::new(registry, bin_dir, saves)
-        .with_arena_dir(arena)
+        .with_repo_dir(arena)
         .with_env(program_env(pg_url)))
 }
 

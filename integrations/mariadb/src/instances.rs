@@ -2,12 +2,12 @@
 //!
 //! Each instance has its own account, named like its database, that may use only that database:
 //! its tools (and `connect`) can't turn binlogging off, purge the binlog or reach another database.
-use arena_part::helpers::mariadb::{
+use shakedown_part::helpers::mariadb::{
     check_same_server, restore_error, Login, Manifest, Position, Server, ServerRef, Tracked,
 };
-use arena_part::helpers::sql_tools::{sql_args, tool_error, tool_output, which, SqlTool};
-use arena_part::proto::{CallToolParams, StartParams, ToolOutput};
-use arena_part::PartError;
+use shakedown_part::helpers::sql_tools::{sql_args, tool_error, tool_output, which, SqlTool};
+use shakedown_part::proto::{CallToolParams, StartParams, ToolOutput};
+use shakedown_part::PartError;
 
 use crate::settings::Settings;
 use crate::{keys, rows, sql, Mariadb};

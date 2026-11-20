@@ -1,8 +1,8 @@
 //! The twin's areas besides the customers: the fill line, the QC lab, the warehouse, the carriers'
 //! lanes and the approvals.
-use arena_part::helpers::bench::Docs;
-use arena_part::proto::{TwinArea, TwinItem};
 use serde_json::Value;
+use shakedown_part::helpers::bench::Docs;
+use shakedown_part::proto::{TwinArea, TwinItem};
 
 use super::{item, text, Snapshot};
 use crate::checks::World;

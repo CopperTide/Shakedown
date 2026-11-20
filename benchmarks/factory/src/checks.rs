@@ -1,10 +1,10 @@
 //! The named checks of the press bearing failure: each one passes or fails on the world's end state
 //! alone. What the shift's checks share with them (the world read as the checks need it, notices
 //! and CRM records) is `pub(crate)`.
-pub(crate) use arena_part::helpers::bench::check;
-use arena_part::helpers::bench::Docs;
-use arena_part::proto::NamedCheck;
 use serde_json::Value;
+pub(crate) use shakedown_part::helpers::bench::check;
+use shakedown_part::helpers::bench::Docs;
+use shakedown_part::proto::NamedCheck;
 
 use crate::facts::Facts;
 

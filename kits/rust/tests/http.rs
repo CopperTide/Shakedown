@@ -5,9 +5,9 @@ use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::time::Duration;
 
-use arena_part::helpers::http::{is_gateway_error, Answer, Dialect, Reply, Rest};
-use arena_part::proto::ToolOutput;
 use serde_json::{json, Value};
+use shakedown_part::helpers::http::{is_gateway_error, Answer, Dialect, Reply, Rest};
+use shakedown_part::proto::ToolOutput;
 
 fn said(a: &Answer) -> String {
     a.body["error"].as_str().map_or_else(

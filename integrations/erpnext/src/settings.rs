@@ -2,10 +2,10 @@
 //! config of the first start may override) and an instance's settings (from the world config).
 use std::path::PathBuf;
 
-use arena_part::helpers::compose::valid_image;
-use arena_part::helpers::mariadb::{valid_docker_name, ServerConfig};
-use arena_part::PartError;
 use serde_json::Value;
+use shakedown_part::helpers::compose::valid_image;
+use shakedown_part::helpers::mariadb::{valid_docker_name, ServerConfig};
+use shakedown_part::PartError;
 
 /// Restores read at most this many binlog bytes before a save writes a dump instead.
 pub const DEFAULT_DUMP_AFTER: u64 = 64 << 20;
@@ -42,13 +42,13 @@ impl Default for StackConfig {
     fn default() -> Self {
         StackConfig {
             server: ServerConfig {
-                container: "arena-erpnext-db".into(),
+                container: "shakedown-erpnext-db".into(),
                 port: 3308,
-                volume: "arena_erpnext_db".into(),
+                volume: "shakedown_erpnext_db".into(),
                 root_password: "arena".into(),
                 flags: SERVER_FLAGS.map(String::from).into(),
             },
-            project: "arena_erpnext".into(),
+            project: "shakedown_erpnext".into(),
             port: 8180,
             image: "frappe/erpnext:v16.53.0".into(),
             compose_file: PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("compose.yml"),
@@ -58,7 +58,7 @@ impl Default for StackConfig {
 
 /// `var` parsed, or `default` when it is not set.
 fn env_or<T: std::str::FromStr>(var: &str, default: T) -> Result<T, PartError> {
-    match arena_part::settings::var(var) {
+    match shakedown_part::settings::var(var) {
         Err(_) => Ok(default),
         Ok(s) => s
             .parse()
@@ -84,8 +84,20 @@ impl StackConfig {
             image: env_or("SHAKEDOWN_ERPNEXT_IMAGE", d.image.clone())?,
             compose_file: env_or("SHAKEDOWN_ERPNEXT_COMPOSE", d.compose_file.clone())?,
         };
+        let c = c.or_existing_old(&d);
         c.check()?;
         Ok(c)
+    }
+
+    /// The stack's names until 2026-11-19 (`arena-erpnext-db`, `arena_erpnext_db`, `arena_erpnext`)
+    /// when its server still has the old default name and only that one exists.
+    fn or_existing_old(mut self, defaults: &StackConfig) -> StackConfig {
+        let new = defaults.server.container.as_str();
+        self.server = (self.server).or_existing_old(new, "arena-erpnext-db", "arena_erpnext_db");
+        if self.server.container != new && self.project == defaults.project {
+            self.project = "arena_erpnext".into();
+        }
+        self
     }
 
     /// These settings with the config's stack keys (`db_container`, `db_port`, `db_volume`,
@@ -221,9 +233,9 @@ mod tests {
     #[test]
     fn stack_defaults_are_the_arena_install() {
         let d = StackConfig::default();
-        assert_eq!((d.project.as_str(), d.port), ("arena_erpnext", 8180));
+        assert_eq!((d.project.as_str(), d.port), ("shakedown_erpnext", 8180));
         assert_eq!(d.image_tag(), "v16.53.0");
-        assert_eq!(d.server.container, "arena-erpnext-db");
+        assert_eq!(d.server.container, "shakedown-erpnext-db");
         assert!(d
             .server
             .flags

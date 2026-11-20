@@ -13,11 +13,11 @@ mod workspace;
 
 use std::path::PathBuf;
 
-use arena_part::helpers::save_dirs::SaveDirs;
-use arena_part::proto::*;
-use arena_part::{Part, PartError};
 use async_trait::async_trait;
 use serde_json::{json, Value};
+use shakedown_part::helpers::save_dirs::SaveDirs;
+use shakedown_part::proto::*;
+use shakedown_part::{Part, PartError};
 use tokio::sync::OnceCell;
 
 pub use settings::{Settings, DEFAULT_IMAGE};

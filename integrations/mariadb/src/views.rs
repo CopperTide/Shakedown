@@ -2,10 +2,10 @@
 //! `mx_<pid>_<n>` (unlogged) for the read and dropped after.
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use arena_part::helpers::mariadb::mysql_async::Conn;
-use arena_part::helpers::mariadb::{check_same_server, restore_error, Server};
-use arena_part::proto::{DiffParams, Differing, Docs, InspectParams, Target};
-use arena_part::PartError;
+use shakedown_part::helpers::mariadb::mysql_async::Conn;
+use shakedown_part::helpers::mariadb::{check_same_server, restore_error, Server};
+use shakedown_part::proto::{DiffParams, Differing, Docs, InspectParams, Target};
+use shakedown_part::PartError;
 
 use crate::{rows, Mariadb};
 

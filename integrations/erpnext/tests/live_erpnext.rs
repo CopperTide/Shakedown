@@ -1,19 +1,19 @@
 //! Live test of the erpnext integration: an ERPNext stack of the test's own (compose project
-//! `arena_erpnext_t<pid>`, image `frappe/erpnext:v16.53.0`, never pulled) on a free port, with a
-//! MariaDB server container and volume of the test's own, so a real `arena_erpnext` install is
+//! `shakedown_erpnext_t<pid>`, image `frappe/erpnext:v16.53.0`, never pulled) on a free port, with a
+//! MariaDB server container and volume of the test's own, so a real `shakedown_erpnext` install is
 //! never touched. Everything it makes (the stack and its volumes, the
 //! server, the saves and sites folder) is removed when the test ends, even when it fails.
-//! Run: `cargo test -p arena-erpnext -- --ignored live_ --nocapture`.
+//! Run: `cargo test -p shakedown-erpnext -- --ignored live_ --nocapture`.
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Instant;
 
-use arena_erpnext::{Erpnext, StackConfig};
-use arena_part::proto::*;
-use arena_part::Part;
 use serde_json::{json, Value};
+use shakedown_erpnext::{Erpnext, StackConfig};
+use shakedown_part::proto::*;
+use shakedown_part::Part;
 
-fn arena() -> PathBuf {
+fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .canonicalize()
@@ -30,10 +30,10 @@ impl Env {
     fn new() -> Env {
         let id = format!("t12-{}", std::process::id());
         let mut stack = StackConfig::default();
-        stack.server.container = format!("arena-erpnext-db-{id}");
-        stack.server.volume = format!("arena-erpnext-db-{id}");
+        stack.server.container = format!("shakedown-erpnext-db-{id}");
+        stack.server.volume = format!("shakedown-erpnext-db-{id}");
         stack.server.port = free_port();
-        stack.project = format!("arena_erpnext_t{}", std::process::id());
+        stack.project = format!("shakedown_erpnext_t{}", std::process::id());
         stack.port = free_port();
         let saves = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("erpnext-{id}"));
         std::fs::create_dir_all(&saves).unwrap();
@@ -52,7 +52,7 @@ impl Env {
             .into()
     }
 
-    /// The config that points a separate `arena-erpnext` process at the same server.
+    /// The config that points a separate `shakedown-erpnext` process at the same server.
     fn check_config(&self) -> PathBuf {
         let (st, s) = (&self.stack, &self.stack.server);
         let c = json!({"db_container": s.container, "db_volume": s.volume, "db_port": s.port,
@@ -205,7 +205,7 @@ async fn live_erpnext_roundtrip() {
     assert_nothing_left();
 }
 
-/// No container, volume or network of the stack or of an arena-erpnext server is left.
+/// No container, volume or network of the stack or of a shakedown-erpnext server is left.
 fn assert_nothing_left() {
     let list = |args: &[&str]| {
         let out = Command::new("docker").args(args).output().unwrap();
@@ -218,7 +218,16 @@ fn assert_nothing_left() {
     let all = format!("{containers}{volumes}{networks}");
     let left: Vec<&str> = all
         .lines()
-        .filter(|n| n.starts_with("arena_erpnext") || n.starts_with("arena-erpnext"))
+        .filter(|n| {
+            [
+                "shakedown_erpnext",
+                "shakedown-erpnext",
+                "arena_erpnext",
+                "arena-erpnext",
+            ]
+            .iter()
+            .any(|p| n.starts_with(p))
+        })
         .collect();
     assert!(left.is_empty(), "left over: {left:?}");
 }
@@ -298,12 +307,12 @@ async fn stop_and_drop(p: &Erpnext, instances: &[&str], saves: &[&str]) {
 }
 
 fn conformance(e: &Env) {
-    let a = arena();
+    let a = repo();
     let ok = |dir: PathBuf, args: &[&str]| {
         let s = Command::new("cargo").args(args).current_dir(dir).status();
         assert!(s.unwrap().success(), "cargo {args:?}");
     };
-    ok(a.clone(), &["build", "-p", "arena-erpnext"]);
+    ok(a.clone(), &["build", "-p", "shakedown-erpnext"]);
     ok(
         a.join("core"),
         &["build", "-p", "parts", "--bin", "shakedown-part-check"],

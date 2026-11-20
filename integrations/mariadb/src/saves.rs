@@ -1,9 +1,9 @@
 //! Saves as manifests in `$SHAKEDOWN_SAVES/mariadb/<save>/manifest.json`, dumps in `.blobs/`.
 use std::path::Path;
 
-use arena_part::helpers::mariadb::{saves_in, used_roots, Manifest, Tracked, TrackedChange};
-use arena_part::proto::{SaveParams, Saved};
-use arena_part::PartError;
+use shakedown_part::helpers::mariadb::{saves_in, used_roots, Manifest, Tracked, TrackedChange};
+use shakedown_part::proto::{SaveParams, Saved};
+use shakedown_part::PartError;
 
 use crate::Mariadb;
 

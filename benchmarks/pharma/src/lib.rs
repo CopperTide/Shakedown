@@ -16,11 +16,11 @@ pub mod team;
 pub mod twin;
 pub mod world;
 
-use arena_part::helpers::frappe;
-use arena_part::proto::*;
-use arena_part::{Benchmark, PartError};
 use async_trait::async_trait;
 use serde_json::{json, Value};
+use shakedown_part::helpers::frappe;
+use shakedown_part::proto::*;
+use shakedown_part::{Benchmark, PartError};
 
 type R<T> = Result<T, PartError>;
 

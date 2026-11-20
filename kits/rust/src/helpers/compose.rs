@@ -355,12 +355,12 @@ mod tests {
         assert!(!valid_image("") && !valid_image("-v") && !valid_image("a b"));
         assert!(!valid_volume("../x") && !valid_volume("a b") && !valid_volume(""));
         let p = |n| Project::new(n, Path::new("c.yml"), &BTreeMap::new());
-        assert!(p("arena_t1").is_ok());
+        assert!(p("shakedown_t1").is_ok());
         assert!(p("Arena").is_err() && p("a;b").is_err() && p("").is_err());
-        assert_eq!(p("arena_t1").unwrap().network(), "arena_t1_default");
-        assert!(valid_docker_name("arena-erpnext-db") && valid_docker_name("db"));
+        assert_eq!(p("shakedown_t1").unwrap().network(), "shakedown_t1_default");
+        assert!(valid_docker_name("shakedown-erpnext-db") && valid_docker_name("db"));
         assert!(!valid_docker_name("-x") && !valid_docker_name("a b") && !valid_docker_name(""));
-        let bad = p("arena_t1").unwrap();
+        let bad = p("shakedown_t1").unwrap();
         assert!(bad.connect("a b", "db").is_err() && bad.exec("Web;x", &["ls"]).is_err());
     }
 }

@@ -2,9 +2,9 @@
 //! unknown change, a change already decided) is the tool's error and changes nothing; only a
 //! server that can't be reached fails the call, and an unknown tool is -32602.
 use anyhow::Result;
-use arena_part::proto::ToolOutput;
-use arena_part::PartError;
 use serde_json::{json, Value};
+use shakedown_part::proto::ToolOutput;
+use shakedown_part::PartError;
 
 use crate::aliases::Aliases;
 use crate::api::Api;

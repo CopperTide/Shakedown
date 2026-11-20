@@ -5,8 +5,8 @@
 //! none of it.
 use std::sync::OnceLock;
 
-use arena_part::proto::{BenchTeam, TeamRole};
 use serde::Deserialize;
+use shakedown_part::proto::{BenchTeam, TeamRole};
 
 pub const INSTRUCTIONS_TITLE: &str = "Incident rules";
 

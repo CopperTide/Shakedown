@@ -7,8 +7,8 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
-use arena_part::proto::WorldTimeParams;
 use serde::{Deserialize, Serialize};
+use shakedown_part::proto::WorldTimeParams;
 
 pub const FILE: &str = "clock.json";
 

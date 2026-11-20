@@ -8,9 +8,9 @@ use std::sync::Arc;
 
 use tokio::sync::{oneshot, watch};
 
-use arena_part::proto::{DiffParams, Differing, Docs, InspectParams, Target};
-use arena_part::PartError;
 use serde_json::{json, Map, Value};
+use shakedown_part::proto::{DiffParams, Differing, Docs, InspectParams, Target};
+use shakedown_part::PartError;
 
 use crate::instances::close_site;
 use crate::names::{key, parse_key, Site};

@@ -4,12 +4,12 @@ use std::path::Path;
 use std::time::Duration;
 
 use anyhow::Context;
-use arena_part::helpers::instances::LiveRecords;
-use arena_part::helpers::pg::Templates;
-use arena_part::proto::*;
-use arena_part::PartError;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use shakedown_part::helpers::instances::LiveRecords;
+use shakedown_part::helpers::pg::Templates;
+use shakedown_part::proto::*;
+use shakedown_part::PartError;
 
 use crate::base::BASE_DB;
 use crate::rows;
@@ -336,12 +336,15 @@ mod tests {
         let root = std::env::temp_dir().join(format!("twenty-record-{}", std::process::id()));
         let record = Record {
             port: 7,
-            project: "arena_twenty_x".into(),
+            project: "shakedown_twenty_x".into(),
             db_port: 8,
         };
         write_record(&root, "a", &record).unwrap();
         assert_eq!(port_of(&root, "a").unwrap(), 7);
-        assert_eq!(recorded_settings(&root).unwrap().project, "arena_twenty_x");
+        assert_eq!(
+            recorded_settings(&root).unwrap().project,
+            "shakedown_twenty_x"
+        );
         assert_eq!(port_of(&root, "b").unwrap_err().code, -32002);
         std::fs::remove_dir_all(&root).unwrap();
     }
@@ -353,7 +356,7 @@ mod tests {
         let root = std::env::temp_dir().join(format!("twenty-restart-{}", std::process::id()));
         let file = root.join(".live/run_1.json");
         std::fs::create_dir_all(file.parent().unwrap()).unwrap();
-        let before = r#"{"port":41001,"project":"arena_twenty_p","db_port":5544}"#;
+        let before = r#"{"port":41001,"project":"shakedown_twenty_p","db_port":5544}"#;
         std::fs::write(&file, before).unwrap();
         assert_eq!(port_of(&root, "run_1").unwrap(), 41001);
         assert_eq!(recorded_settings(&root).unwrap().db_port, 5544);

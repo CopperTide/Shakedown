@@ -6,17 +6,17 @@ pub mod tools;
 
 use std::path::{Path, PathBuf};
 
-use arena_part::proto::*;
-use arena_part::{Benchmark, PartError};
 use async_trait::async_trait;
 use serde_json::{json, Value};
+use shakedown_part::proto::*;
+use shakedown_part::{Benchmark, PartError};
 
 type R<T> = Result<T, PartError>;
 
 /// `SHAKEDOWN_RETAIL_DATA` if set (tests and dev), else `../../data/retail` from the working
 /// directory (the hub runs the program in its manifest folder).
 pub fn data_dir_from_env() -> PathBuf {
-    arena_part::settings::var_os("SHAKEDOWN_RETAIL_DATA")
+    shakedown_part::settings::var_os("SHAKEDOWN_RETAIL_DATA")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("../../data/retail"))
 }

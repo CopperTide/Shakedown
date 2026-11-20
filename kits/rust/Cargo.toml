@@ -1,5 +1,5 @@
 [package]
-name = "arena-part"
+name = "shakedown-part"
 version = "0.1.0"
 edition = "2021"
 description = "Kit for writing Shakedown integrations (protocol shakedown-part/1)"

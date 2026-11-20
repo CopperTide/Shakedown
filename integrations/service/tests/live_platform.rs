@@ -10,11 +10,11 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, Instant};
 
-use arena_part::helpers::http::reqwest;
-use arena_part::proto::*;
-use arena_part::Part;
-use arena_service::Service;
 use serde_json::{json, Value};
+use shakedown_part::helpers::http::reqwest;
+use shakedown_part::proto::*;
+use shakedown_part::Part;
+use shakedown_service::Service;
 
 const DOMAIN: &str = "shop.test";
 /// How far the world runs behind the wall.
@@ -134,12 +134,12 @@ async fn doc(p: &Service, id: &str, key: &str) -> Value {
     docs.docs[key].clone()
 }
 
-/// The published port of `service`'s `port` in project `arena_<id>`.
+/// The published port of `service`'s `port` in project `shakedown_<id>`.
 fn published(id: &str, service: &str, port: u16) -> String {
     let args = [
         "compose",
         "-p",
-        &format!("arena_{id}"),
+        &format!("shakedown_{id}"),
         "port",
         service,
         &port.to_string(),
@@ -329,7 +329,7 @@ async fn live_platform_deploys_a_new_image() {
         format!("lp{}", std::process::id()),
         format!("lq{}", std::process::id()),
     );
-    let projects = vec![format!("arena_{id}"), format!("arena_{id2}")];
+    let projects = vec![format!("shakedown_{id}"), format!("shakedown_{id2}")];
     let mut made = Made {
         dir: dir.clone(),
         projects,

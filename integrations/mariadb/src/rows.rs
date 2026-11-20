@@ -2,13 +2,13 @@
 use std::collections::{BTreeMap, HashMap};
 
 use anyhow::Result;
-use arena_part::helpers::folder::hex;
-use arena_part::helpers::mariadb::mysql_async::prelude::Queryable;
-use arena_part::helpers::mariadb::mysql_async::Conn;
-use arena_part::helpers::mariadb::quote_ident;
-use arena_part::helpers::sql_tools::{lookup, KeyLookup};
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
+use shakedown_part::helpers::folder::hex;
+use shakedown_part::helpers::mariadb::mysql_async::prelude::Queryable;
+use shakedown_part::helpers::mariadb::mysql_async::Conn;
+use shakedown_part::helpers::mariadb::quote_ident;
+use shakedown_part::helpers::sql_tools::{lookup, KeyLookup};
 
 use crate::sql::rows;
 

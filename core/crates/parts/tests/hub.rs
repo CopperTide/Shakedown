@@ -5,7 +5,7 @@ use std::process::Command;
 use std::sync::OnceLock;
 
 /// The arena folder (this crate is core/crates/parts).
-fn arena() -> PathBuf {
+fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../..")
         .canonicalize()
@@ -13,15 +13,15 @@ fn arena() -> PathBuf {
 }
 
 fn bin_dir() -> PathBuf {
-    arena().join("core/target/debug")
+    repo().join("core/target/debug")
 }
 
 fn build_counter() {
     static ONCE: OnceLock<()> = OnceLock::new();
     ONCE.get_or_init(|| {
         let st = Command::new("cargo")
-            .args(["build", "--example", "counter", "-p", "arena-part"])
-            .current_dir(arena())
+            .args(["build", "--example", "counter", "-p", "shakedown-part"])
+            .current_dir(repo())
             .status()
             .unwrap();
         assert!(st.success());
@@ -190,7 +190,7 @@ async fn hub_spawns_rust_counter_and_saves() {
 async fn hub_spawns_python_counter() {
     let saves = temp("py-saves");
     // kits/python/examples holds the manifest, so kits/python is the package root
-    let hub = hub_for(&[arena().join("kits/python")], &saves);
+    let hub = hub_for(&[repo().join("kits/python")], &saves);
     exercise(&hub, "counter-py").await;
     drop(hub);
     std::fs::remove_dir_all(&saves).unwrap();
@@ -354,7 +354,7 @@ fn group_alive(pgid: u32) -> bool {
 #[tokio::test]
 async fn killed_uv_python_respawns_and_leaves_no_process() {
     let saves = temp("uvkill-saves");
-    let hub = hub_for(&[arena().join("kits/python")], &saves);
+    let hub = hub_for(&[repo().join("kits/python")], &saves);
     let c = hub.client("counter-py").await.unwrap();
     let _: Value = c.call("usage", json!({})).await.unwrap();
     Command::new("kill")
@@ -417,7 +417,7 @@ fn remove_save_dir_removes_read_only_folders() {
     hub.remove_save_dir("counter", "s1");
     let gone = !dir.exists();
     for d in [&root, &saves] {
-        arena_part::helpers::remove_tree(d).unwrap();
+        shakedown_part::helpers::remove_tree(d).unwrap();
     }
     assert!(gone);
 }

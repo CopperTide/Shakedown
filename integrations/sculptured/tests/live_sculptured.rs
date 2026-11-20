@@ -2,10 +2,10 @@
 //! Needs the CopperTide program (`coppertide` on `PATH`, or env
 //! `SHAKEDOWN_COPPERTIDE_BINARY`; `sculptured` and `SHAKEDOWN_SCULPTURED_BINARY` still work); without it the test says so and passes. Every server and folder
 //! the test makes is removed afterwards, even on failure (the drop runs the integration's `gc`).
-use arena_part::proto::*;
-use arena_part::Part;
-use arena_sculptured::Sculptured;
 use serde_json::{json, Value};
+use shakedown_part::proto::*;
+use shakedown_part::Part;
+use shakedown_sculptured::Sculptured;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
@@ -57,10 +57,10 @@ impl Drop for World {
 }
 
 fn binary() -> Option<PathBuf> {
-    let b = arena_part::settings::var_os("SHAKEDOWN_COPPERTIDE_BINARY")
-        .or_else(|| arena_part::settings::var_os("SHAKEDOWN_SCULPTURED_BINARY"))
+    let b = shakedown_part::settings::var_os("SHAKEDOWN_COPPERTIDE_BINARY")
+        .or_else(|| shakedown_part::settings::var_os("SHAKEDOWN_SCULPTURED_BINARY"))
         .map(PathBuf::from)
-        .or_else(arena_sculptured::default_binary)?;
+        .or_else(shakedown_sculptured::default_binary)?;
     b.is_file().then_some(b)
 }
 

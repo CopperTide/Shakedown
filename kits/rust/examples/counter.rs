@@ -15,10 +15,10 @@ use std::io::Read;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
-use arena_part::proto::*;
-use arena_part::{serve, Part, PartError};
 use async_trait::async_trait;
 use serde_json::{json, Value};
+use shakedown_part::proto::*;
+use shakedown_part::{serve, Part, PartError};
 
 const KEY: &str = "counter/value";
 
@@ -71,7 +71,7 @@ impl Default for Counter {
 
 /// Saves live at `$SHAKEDOWN_SAVES/counter/<save>/` by convention.
 fn saves_root() -> PathBuf {
-    let root = arena_part::settings::var("SHAKEDOWN_SAVES").unwrap_or_else(|_| "saves".into());
+    let root = shakedown_part::settings::var("SHAKEDOWN_SAVES").unwrap_or_else(|_| "saves".into());
     PathBuf::from(root).join("counter")
 }
 

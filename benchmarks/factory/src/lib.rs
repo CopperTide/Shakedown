@@ -21,11 +21,11 @@ pub mod world;
 use std::path::PathBuf;
 use std::sync::OnceLock;
 
-use arena_part::helpers::frappe;
-use arena_part::proto::*;
-use arena_part::{Benchmark, PartError};
 use async_trait::async_trait;
 use serde_json::{json, Value};
+use shakedown_part::helpers::frappe;
+use shakedown_part::proto::*;
+use shakedown_part::{Benchmark, PartError};
 
 pub use facts::{Facts, DEFAULT_DATA};
 pub use tasks::{SHIFT_TASK, TASK};

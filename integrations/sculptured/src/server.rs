@@ -13,9 +13,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
-use arena_part::helpers::blocking;
-use arena_part::helpers::process_group::{self, Identity};
 use serde::{Deserialize, Serialize};
+use shakedown_part::helpers::blocking;
+use shakedown_part::helpers::process_group::{self, Identity};
 
 use crate::api::{Api, Expect};
 use crate::poll;

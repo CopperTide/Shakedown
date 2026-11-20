@@ -8,8 +8,8 @@ mod tar;
 use std::path::Path;
 
 use anyhow::{bail, Result};
-use arena_part::helpers::compose::Project;
-use arena_part::helpers::folder;
+use shakedown_part::helpers::compose::Project;
+use shakedown_part::helpers::folder;
 
 use crate::config::{SaveHow, VolumeSpec};
 pub use manifest::{Manifest, SavedVolume};

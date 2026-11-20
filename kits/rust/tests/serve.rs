@@ -3,9 +3,9 @@
 #[path = "../examples/counter.rs"]
 mod counter;
 
-use arena_part::proto::*;
-use arena_part::PartError;
 use serde_json::{json, Value};
+use shakedown_part::proto::*;
+use shakedown_part::PartError;
 use tokio::io::{duplex, AsyncBufReadExt, AsyncWriteExt, BufReader, DuplexStream};
 
 struct Client {
@@ -15,11 +15,11 @@ struct Client {
 }
 
 impl Client {
-    fn new<P: arena_part::Part>(flavour_part: P) -> Client {
+    fn new<P: shakedown_part::Part>(flavour_part: P) -> Client {
         let (cw, sr) = duplex(1 << 16);
         let (sw, cr) = duplex(1 << 16);
         tokio::spawn(async move {
-            let _ = arena_part::serve_on(flavour_part, BufReader::new(sr), sw).await;
+            let _ = shakedown_part::serve_on(flavour_part, BufReader::new(sr), sw).await;
         });
         Client {
             w: cw,
@@ -85,7 +85,7 @@ impl Drop for Saves {
         let mut users = SAVES_USERS.lock().unwrap_or_else(|e| e.into_inner());
         *users -= 1;
         if *users == 0 {
-            let _ = arena_part::helpers::remove_tree(&saves_root());
+            let _ = shakedown_part::helpers::remove_tree(&saves_root());
         }
     }
 }
@@ -95,7 +95,7 @@ impl Drop for Saves {
 struct Odd(std::sync::Arc<tokio::sync::Notify>);
 
 #[async_trait::async_trait]
-impl arena_part::Part for Odd {
+impl shakedown_part::Part for Odd {
     async fn describe(&self) -> Result<Describe, PartError> {
         Err(PartError::internal("n/a"))
     }
@@ -405,7 +405,7 @@ async fn advance_is_split_independent() {
 struct Defaults;
 
 #[async_trait::async_trait]
-impl arena_part::Part for Defaults {
+impl shakedown_part::Part for Defaults {
     async fn describe(&self) -> Result<Describe, PartError> {
         Err(PartError::internal("unused"))
     }

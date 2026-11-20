@@ -3,11 +3,11 @@
 use std::io;
 use std::path::{Path, PathBuf};
 
-use arena_part::helpers::folder;
-use arena_part::helpers::mariadb::{saves_in, used_roots, Manifest, TrackedChange};
-use arena_part::proto::{SaveParams, Saved};
-use arena_part::PartError;
 use serde::{Deserialize, Serialize};
+use shakedown_part::helpers::folder;
+use shakedown_part::helpers::mariadb::{saves_in, used_roots, Manifest, TrackedChange};
+use shakedown_part::proto::{SaveParams, Saved};
+use shakedown_part::PartError;
 
 use crate::instances::Instance;
 use crate::jobs::{drain, JOBS_TIMEOUT};

@@ -2,9 +2,9 @@
 //! Each is scheduled in a simulated part through its scenario tool; the agents are not told.
 use std::collections::BTreeMap;
 
-use arena_part::helpers::bench;
-use arena_part::proto::{DisruptionOption, ScenarioOptions, ScenarioParam, SetupTemplate};
 use serde_json::{json, Value};
+use shakedown_part::helpers::bench;
+use shakedown_part::proto::{DisruptionOption, ScenarioOptions, ScenarioParam, SetupTemplate};
 
 use crate::data::{Data, Lot};
 use crate::scenario::{BASE, SCENARIOS};

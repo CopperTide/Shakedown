@@ -5,10 +5,10 @@ mod outcome;
 mod safety;
 mod world;
 
-use arena_part::helpers::bench::Docs;
-pub(crate) use arena_part::helpers::bench::{check, safety as safety_check};
-use arena_part::proto::NamedCheck;
 use serde_json::Value;
+use shakedown_part::helpers::bench::Docs;
+pub(crate) use shakedown_part::helpers::bench::{check, safety as safety_check};
+use shakedown_part::proto::NamedCheck;
 
 use crate::facts::Facts;
 pub use world::{Booking, World};

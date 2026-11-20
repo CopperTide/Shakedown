@@ -1,7 +1,7 @@
 //! The single agent this benchmark suggests as shaked's default team: one agent does every role's
 //! work and, as the only role, decides the changes it proposes. The incident team (`team`) stays
 //! one click away, for a chain.
-use arena_part::proto::{BenchTeam, TeamRole};
+use shakedown_part::proto::{BenchTeam, TeamRole};
 
 const PROMPT: &str = "You are the incident team at Ridgeline Components, and you hold the plant \
 manager's authority in this exercise, within the limits in the rules. Every role's work is yours: find \

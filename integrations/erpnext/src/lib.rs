@@ -1,7 +1,7 @@
-//! The `erpnext` integration: one ERPNext install (compose project `arena_erpnext`) whose sites
+//! The `erpnext` integration: one ERPNext install (compose project `shakedown_erpnext`) whose sites
 //! are the instances. A site's database lives on the integration's MariaDB server, made by the
 //! kit's mariadb helper with binary logging, so a save is that database's binlog manifest (see
-//! `arena_part::helpers::mariadb`) plus a copy of the site's files. Saves restore exactly.
+//! `shakedown_part::helpers::mariadb`) plus a copy of the site's files. Saves restore exactly.
 mod base;
 mod disk;
 mod doc_cache;
@@ -24,14 +24,14 @@ mod views;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use arena_part::helpers::busy::BusySet;
-use arena_part::helpers::instances::Registry;
-use arena_part::helpers::mariadb::{Dumps, Server, DEFAULT_REROOT_AFTER};
-use arena_part::helpers::save_dirs::SaveDirs;
-use arena_part::proto::*;
-use arena_part::{Part, PartError};
 use async_trait::async_trait;
 use serde_json::{json, Value};
+use shakedown_part::helpers::busy::BusySet;
+use shakedown_part::helpers::instances::Registry;
+use shakedown_part::helpers::mariadb::{Dumps, Server, DEFAULT_REROOT_AFTER};
+use shakedown_part::helpers::save_dirs::SaveDirs;
+use shakedown_part::proto::*;
+use shakedown_part::{Part, PartError};
 use tokio::sync::{OnceCell, RwLock};
 
 pub use settings::{Settings, StackConfig, DEFAULT_DIFF_DOCTYPES, DEFAULT_DUMP_AFTER};

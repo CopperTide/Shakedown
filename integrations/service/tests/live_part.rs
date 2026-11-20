@@ -5,10 +5,10 @@ mod support;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use arena_part::proto::*;
-use arena_part::Part;
-use arena_service::Service;
 use serde_json::{json, Value};
+use shakedown_part::proto::*;
+use shakedown_part::Part;
+use shakedown_service::Service;
 use std::fs;
 use support::*;
 
@@ -429,11 +429,11 @@ async fn a_live_copy_volume_stops_nothing() {
         "{lines:?}"
     );
     assert!(
-        lines.iter().any(|l| l.contains("arena_a_prom:/v:ro")),
+        lines.iter().any(|l| l.contains("shakedown_a_prom:/v:ro")),
         "{lines:?}"
     );
     assert!(
-        lines.iter().any(|l| l.contains("arena_a_logs:/v")),
+        lines.iter().any(|l| l.contains("shakedown_a_logs:/v")),
         "{lines:?}"
     );
 }

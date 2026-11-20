@@ -1,7 +1,7 @@
 //! The world's end state, `{part: {key: doc}}`, read the way the checks need it: the approvals'
 //! decided changes, the ERP's batches and orders, the carriers' shipments and notices, the CRM.
-use arena_part::helpers::bench::Docs;
 use serde_json::Value;
+use shakedown_part::helpers::bench::Docs;
 
 use crate::days::day;
 

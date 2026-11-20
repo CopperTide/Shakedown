@@ -1,9 +1,9 @@
 //! The config of a `coppertide` instance: the program to run and the team the tools use.
 use std::path::PathBuf;
 
-use arena_part::PartError;
 use serde::Deserialize;
 use serde_json::Value;
+use shakedown_part::PartError;
 
 /// The team the tools use unless the config names another.
 pub const DEFAULT_TEAM: &str = "arena";

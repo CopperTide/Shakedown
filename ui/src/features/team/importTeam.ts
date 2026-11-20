@@ -20,7 +20,7 @@ const SCULPTURED_KIND_NAME: Record<string, string> = { opencode: 'OpenCode' };
 const SHAKEDOWN_KINDS: AgentKind[] = ['claude_code', 'codex', 'open', 'external'];
 
 /** A CopperTide agent id as an Arena one (`^[a-z0-9_-]+$`), unique in `taken`. */
-function arenaId(id: string, taken: Set<string>): string {
+function shakedownId(id: string, taken: Set<string>): string {
   const base = id.toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || 'agent';
   let out = base;
   for (let n = 2; taken.has(out); n++) out = `${base}-${n}`;
@@ -58,7 +58,7 @@ function fromSculptured(d: Json): Imported {
   }
   const groups = new Map(list(d.groups).map(obj).map((g) => [String(g.id), g]));
   const taken = new Set<string>();
-  const ids = new Map(raw.map((a) => [String(a.id), arenaId(String(a.id), taken)]));
+  const ids = new Map(raw.map((a) => [String(a.id), shakedownId(String(a.id), taken)]));
   const links = list(d.connections).map(obj)
     .filter((c) => c.kind === 'hands-work-to' && ids.has(String(c.from)) && ids.has(String(c.to)))
     .map((c) => ({ from: ids.get(String(c.from))!, to: ids.get(String(c.to))! }));
@@ -82,7 +82,7 @@ function fromSculptured(d: Json): Imported {
     links,
     ...(Object.keys(decides).length ? { decides } : {}),
   };
-  const team: Team = { id: arenaId(str(d.id) ?? 'sculptured-team', new Set()), name: str(d.name) ?? 'Imported team', agents: workOrder(agents, links), board };
+  const team: Team = { id: shakedownId(str(d.id) ?? 'sculptured-team', new Set()), name: str(d.name) ?? 'Imported team', agents: workOrder(agents, links), board };
   return { team, from: 'Sculptured' };
 }
 
@@ -93,7 +93,7 @@ const isAgent = (a: Json) => !!str(a.id) && !!str(a.name) && SHAKEDOWN_KINDS.inc
 const isTeam = (d: Json): d is Json & Team =>
   typeof d.id === 'string' && typeof d.name === 'string' && list(d.agents).every((a) => isAgent(obj(a)));
 
-function fromArena(d: Json): Imported {
+function fromShakedown(d: Json): Imported {
   if (isTeam(d)) return { team: d, from: 'Arena' };
   const bad = list(d.agents).map(obj).find((a) => !isAgent(a));
   return { error: `The agent ${str(bad?.name) ?? str(bad?.id) ?? '(unnamed)'} needs an id, a name, a kind (claude_code, codex or open) and a prompt.` };
@@ -111,6 +111,6 @@ export function importTeam(text: string): Imported {
   const agents = list(d.agents).map(obj);
   if (!agents.length) return { error: 'There are no agents in this file.' };
   if (agents.some((a) => 'job' in a) && 'connections' in d) return fromSculptured(d);
-  if (str(d.id) && str(d.name)) return fromArena(d);
+  if (str(d.id) && str(d.name)) return fromShakedown(d);
   return { error: 'This file is neither a CopperTide design nor a Shakedown team.' };
 }

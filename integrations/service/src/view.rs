@@ -3,12 +3,12 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
-use arena_part::helpers::folder::Digest;
-use arena_part::helpers::tar_digest;
-use arena_part::helpers::temp_dir::TempDir;
-use arena_part::proto::Docs;
-use arena_part::PartError;
 use serde_json::{json, Map, Value};
+use shakedown_part::helpers::folder::Digest;
+use shakedown_part::helpers::tar_digest;
+use shakedown_part::helpers::temp_dir::TempDir;
+use shakedown_part::proto::Docs;
+use shakedown_part::PartError;
 
 use crate::volumes::{self, Manifest};
 

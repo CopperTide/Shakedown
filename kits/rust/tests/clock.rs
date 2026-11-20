@@ -1,6 +1,6 @@
 //! The fixed-step clock: the way to meet the clock contract (the state after `advance` does not depend
 //! on how the advances were split).
-use arena_part::helpers::clock::FixedStep;
+use shakedown_part::helpers::clock::FixedStep;
 
 #[test]
 fn whole_steps_run_and_the_remainder_waits() {

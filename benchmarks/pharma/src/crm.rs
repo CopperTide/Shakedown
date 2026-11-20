@@ -2,8 +2,8 @@
 //! opportunity per sales order, closing when the order is due. An opportunity's name starts with
 //! its order's customer PO number, by which the checks find it.
 use anyhow::Result;
-use arena_part::helpers::twenty::Crm;
 use serde_json::{json, Value};
+use shakedown_part::helpers::twenty::Crm;
 
 use crate::data::{Contact, Customer, Data, Order};
 

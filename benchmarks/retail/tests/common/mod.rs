@@ -2,9 +2,9 @@
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use arena_part::helpers::pg::Templates;
-use arena_retail::Retail;
 use serde_json::{json, Map, Value};
+use shakedown_part::helpers::pg::Templates;
+use shakedown_retail::Retail;
 
 static N: AtomicU32 = AtomicU32::new(0);
 
@@ -13,7 +13,7 @@ pub fn data_dir() -> PathBuf {
 }
 
 pub fn pg_url() -> String {
-    arena_part::settings::var("SHAKEDOWN_PG_URL")
+    shakedown_part::settings::var("SHAKEDOWN_PG_URL")
         .unwrap_or_else(|_| "postgres://shakedown:shakedown@127.0.0.1:5544/postgres".into())
 }
 
@@ -55,8 +55,8 @@ impl TestDb {
 
     /// A database seeded through the benchmark's own `seed`.
     pub async fn seeded(tag: &str) -> TestDb {
-        use arena_part::proto::SeedParams;
-        use arena_part::Benchmark;
+        use shakedown_part::proto::SeedParams;
+        use shakedown_part::Benchmark;
         let db = TestDb::empty(tag).await;
         retail()
             .seed(SeedParams {

@@ -1,13 +1,13 @@
-use arena_folder::Folder;
-use arena_part::proto::*;
-use arena_part::Part;
 use serde_json::{json, Map, Value};
+use shakedown_folder::Folder;
+use shakedown_part::proto::*;
+use shakedown_part::Part;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::OnceLock;
 
-fn arena() -> PathBuf {
+fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .canonicalize()
@@ -36,7 +36,7 @@ impl Saves {
 
 impl Drop for Saves {
     fn drop(&mut self) {
-        let _ = arena_part::helpers::remove_tree(&self.0);
+        let _ = shakedown_part::helpers::remove_tree(&self.0);
     }
 }
 
@@ -270,7 +270,7 @@ async fn describe_is_exact_with_three_tools() {
 fn build_all() {
     static ONCE: OnceLock<()> = OnceLock::new();
     ONCE.get_or_init(|| {
-        let a = arena();
+        let a = repo();
         let run = |dir: PathBuf, args: &[&str]| {
             assert!(Command::new("cargo")
                 .args(args)
@@ -279,7 +279,7 @@ fn build_all() {
                 .unwrap()
                 .success());
         };
-        run(a.clone(), &["build", "-p", "arena-folder"]);
+        run(a.clone(), &["build", "-p", "shakedown-folder"]);
         run(
             a.join("core"),
             &["build", "-p", "parts", "--bin", "shakedown-part-check"],
@@ -290,7 +290,7 @@ fn build_all() {
 #[test]
 fn conformance_check_passes() {
     build_all();
-    let a = arena();
+    let a = repo();
     let saves = Saves::new("check");
     let out = Command::new(a.join("core/target/debug/shakedown-part-check"))
         .arg(a.join("integrations/folder/check"))

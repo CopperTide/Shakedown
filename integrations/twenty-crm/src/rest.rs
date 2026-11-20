@@ -2,11 +2,11 @@
 use std::time::Duration;
 
 use anyhow::Result;
-use arena_part::helpers::http::{self, Answer, Dialect};
 use reqwest::{Method, RequestBuilder};
 use serde_json::Value;
+use shakedown_part::helpers::http::{self, Answer, Dialect};
 
-pub use arena_part::helpers::http::Reply;
+pub use shakedown_part::helpers::http::Reply;
 
 /// How long one request may take.
 const TIMEOUT: Duration = Duration::from_secs(60);

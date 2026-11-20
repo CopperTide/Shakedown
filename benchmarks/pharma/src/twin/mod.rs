@@ -7,13 +7,13 @@ mod orders;
 mod read;
 
 use anyhow::{anyhow, Result};
-use arena_part::proto::{TwinItem, TwinKpi, TwinView, ViewParams};
 use serde_json::Value;
+use shakedown_part::proto::{TwinItem, TwinKpi, TwinView, ViewParams};
 
 use crate::checks;
 use crate::data::Data;
 use crate::facts::Facts;
-use arena_part::helpers::frappe::Erp;
+use shakedown_part::helpers::frappe::Erp;
 
 pub use read::Snapshot;
 

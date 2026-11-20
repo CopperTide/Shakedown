@@ -10,7 +10,7 @@ pub fn var_name(package: &str) -> String {
 
 /// The override set for `package` in shaked's environment, if it is set and not blank.
 pub fn from_env(package: &str) -> Option<String> {
-    arena_part::settings::var(&var_name(package))
+    shakedown_part::settings::var(&var_name(package))
         .ok()
         .filter(|line| !line.trim().is_empty())
 }

@@ -2,8 +2,8 @@
 //! an open opportunity per sales order, due when the order is. An opportunity's name starts with
 //! the order's id, by which a notice about the order finds it.
 use anyhow::{anyhow, bail, Result};
-use arena_part::helpers::twenty::Crm;
 use serde_json::{json, Value};
+use shakedown_part::helpers::twenty::Crm;
 
 use crate::company::{list, Company};
 

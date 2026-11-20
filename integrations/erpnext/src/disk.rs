@@ -2,9 +2,9 @@
 //! dumps on disk.
 use std::collections::HashSet;
 
-use arena_part::helpers::mariadb::{needed_positions, replay_user, Position, Server, Standing};
-use arena_part::proto::{valid_id, GcResult, Usage};
-use arena_part::PartError;
+use shakedown_part::helpers::mariadb::{needed_positions, replay_user, Position, Server, Standing};
+use shakedown_part::proto::{valid_id, GcResult, Usage};
+use shakedown_part::PartError;
 
 use crate::names::{Site, INSTANCE_PREFIX, VIEW_PREFIX};
 use crate::Erpnext;

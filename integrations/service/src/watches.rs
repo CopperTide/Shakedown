@@ -9,9 +9,9 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use anyhow::Result;
-use arena_part::proto::WorldEvent;
 use serde::Deserialize;
 use serde_json::{Map, Value};
+use shakedown_part::proto::WorldEvent;
 
 const FILE: &str = "watches.json";
 

@@ -1,17 +1,17 @@
 //! Live test of the twenty-crm integration: a database server and Twenty servers of the test's own
-//! (compose project `arena_twenty_t<pid>`, image `twentycrm/twenty:v2.51.0`, never pulled), and the
+//! (compose project `shakedown_twenty_t<pid>`, image `twentycrm/twenty:v2.51.0`, never pulled), and the
 //! conformance check against them. Everything it makes is removed when it ends, even when it fails.
-//! Run: `cargo test -p arena-twenty-crm -- --ignored live_ --nocapture`.
+//! Run: `cargo test -p shakedown-twenty-crm -- --ignored live_ --nocapture`.
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Instant;
 
-use arena_part::proto::*;
-use arena_part::Part;
-use arena_twenty_crm::{Settings, TwentyCrm};
 use serde_json::{json, Value};
+use shakedown_part::proto::*;
+use shakedown_part::Part;
+use shakedown_twenty_crm::{Settings, TwentyCrm};
 
-fn arena() -> PathBuf {
+fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .canonicalize()
@@ -28,7 +28,7 @@ impl Env {
     fn new() -> Env {
         let pid = std::process::id();
         let settings = Settings {
-            project: format!("arena_twenty_t{pid}"),
+            project: format!("shakedown_twenty_t{pid}"),
             db_port: free_port(),
             ..Settings::default()
         };
@@ -304,7 +304,7 @@ fn cargo(dir: PathBuf, args: &[&str]) {
 
 /// `shakedown-part-check` on a program of its own, against the test's server.
 fn conformance(e: &Env) {
-    let a = arena();
+    let a = repo();
     let program = Path::new(env!("CARGO_BIN_EXE_shakedown-twenty-crm"));
     let bin = program.parent().unwrap();
     cargo(

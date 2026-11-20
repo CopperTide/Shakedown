@@ -1,8 +1,8 @@
 //! The twin's areas around the plant: the energy meter and the utility's events, the OT network,
 //! the shift's stations, the trucks and the approvals; the flows (a truck to its line, a session to
 //! its zone); the load and the cost so far.
-use arena_part::proto::{TwinArea, TwinFlow, TwinItem};
 use serde_json::Value;
+use shakedown_part::proto::{TwinArea, TwinFlow, TwinItem};
 
 use super::text;
 use crate::checks::World;

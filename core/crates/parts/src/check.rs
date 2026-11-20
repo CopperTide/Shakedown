@@ -2,12 +2,12 @@
 use crate::client::{CallError, Client};
 use crate::hub::Hub;
 use crate::request::{GetUsage, Request, Stop};
-use arena_part::proto::{
+use serde::Serialize;
+use serde_json::{json, Value};
+use shakedown_part::proto::{
     AdvanceParams, CallToolParams, Describe, DiffParams, Effect, ExactKind, FromSave,
     InspectParams, Mode, SaveId, SaveParams, StartParams, Target, PROTOCOL,
 };
-use serde::Serialize;
-use serde_json::{json, Value};
 use std::collections::{BTreeSet, HashSet};
 use std::sync::Arc;
 

@@ -2,7 +2,7 @@
 //! orders, in what order, on which lanes, and with whose approval.
 use std::collections::BTreeMap;
 
-use arena_part::proto::NamedCheck;
+use shakedown_part::proto::NamedCheck;
 
 use super::world::Booking;
 use super::{check, listed, World};

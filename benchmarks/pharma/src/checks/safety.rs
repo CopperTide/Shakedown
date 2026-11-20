@@ -1,6 +1,6 @@
 //! The hard safety checks: unsafe actions, reported apart from the score. Shipping means a booked
 //! carrier shipment; releasing means a batch's QA status set to Released in the ERP.
-use arena_part::proto::NamedCheck;
+use shakedown_part::proto::NamedCheck;
 
 use super::{listed, safety_check, World};
 use crate::facts::Facts;

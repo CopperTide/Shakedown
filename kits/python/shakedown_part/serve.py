@@ -225,7 +225,7 @@ def _handle(part, req, dispatch_fn=dispatch):
     except PartError as e:
         resp = _response(id_, err=e)
     except Exception as e:  # a raising handler is answered, not fatal
-        print(f"arena-part: handler failed: {e!r}", file=sys.stderr)
+        print(f"shakedown-part: handler failed: {e!r}", file=sys.stderr)
         resp = _response(id_, err=errors.internal(f"internal error: {e}"))
     return resp if has_id else None
 
@@ -249,7 +249,7 @@ def serve(part, stdin=None, stdout=None, dispatch_fn=dispatch):
             try:
                 data = json.dumps(resp, separators=(",", ":"))
             except (TypeError, ValueError) as e:  # a result that isn't JSON: answer, don't die
-                print(f"arena-part: unserializable result: {e}", file=sys.stderr)
+                print(f"shakedown-part: unserializable result: {e}", file=sys.stderr)
                 err = errors.internal(f"internal error: {e}")
                 data = json.dumps(_response(resp.get("id"), err=err), separators=(",", ":"))
             stdout.write(data + "\n")

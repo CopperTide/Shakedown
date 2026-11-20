@@ -3,8 +3,8 @@
 use std::collections::BTreeMap;
 
 use anyhow::{Context, Result};
-use arena_part::helpers::pg::tokio_postgres::Client;
 use serde_json::Value;
+use shakedown_part::helpers::pg::tokio_postgres::Client;
 
 /// The records agents change. Every other table is copied by a save but neither read nor compared.
 const TABLES: [&str; 7] = [

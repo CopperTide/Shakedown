@@ -17,7 +17,7 @@ use serde_json::json;
 use shaked::app::{AppState, Config};
 use support::live::Live;
 use support::live_world::{path_with_sculptured, walk_for, Stack};
-use support::packages::{arena, bin_dir, package_roots};
+use support::packages::{bin_dir, package_roots, repo};
 use support::pg::Cleanup;
 use support::{app, live, live_world};
 
@@ -25,7 +25,7 @@ const TASK: &str = "press-a1-bearing";
 
 /// Why this machine can't run the world, if it can't.
 fn missing() -> Option<String> {
-    let example = arena().join("../Sculptured-Examples/factory/data/ridgeline.json");
+    let example = repo().join("../Sculptured-Examples/factory/data/ridgeline.json");
     if !example.exists() {
         return Some(format!("no factory example at {}", example.display()));
     }
@@ -43,15 +43,15 @@ fn build() {
             "build",
             "-q",
             "-p",
-            "arena-factory",
+            "shakedown-factory",
             "-p",
-            "arena-erpnext",
+            "shakedown-erpnext",
             "-p",
-            "arena-sculptured",
+            "shakedown-sculptured",
             "-p",
-            "arena-twenty-crm",
+            "shakedown-twenty-crm",
         ])
-        .current_dir(arena())
+        .current_dir(repo())
         .status()
         .unwrap();
     assert!(st.success(), "building the package binaries failed");

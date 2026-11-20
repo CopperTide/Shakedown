@@ -9,10 +9,10 @@
 use std::time::{Duration, Instant};
 
 use anyhow::{bail, Result};
-use arena_part::helpers::compose::{valid_image, Project};
-use arena_part::proto::{Effect, ToolSchema, WorldEvent};
 use serde::Deserialize;
 use serde_json::{json, Value};
+use shakedown_part::helpers::compose::{valid_image, Project};
+use shakedown_part::proto::{Effect, ToolSchema, WorldEvent};
 
 pub const TOOL: &str = "service_deploy";
 

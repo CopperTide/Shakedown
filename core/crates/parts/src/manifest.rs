@@ -1,8 +1,8 @@
 //! `shakedown-package.toml` (or its old name `arena-package.toml`) and the registry of installed
 //! packages.
 use anyhow::{anyhow, bail, Context, Result};
-use arena_part::proto::{protocol_version, valid_package_name, PROTOCOL};
 use serde_json::Value;
+use shakedown_part::proto::{protocol_version, valid_package_name, PROTOCOL};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 

@@ -7,12 +7,12 @@ pub use orders::unresolved_sales_orders;
 mod plant;
 mod systems;
 
-use arena_part::proto::{TwinKpi, TwinView};
 use serde_json::Value;
+use shakedown_part::proto::{TwinKpi, TwinView};
 
 use crate::checks::World;
 use crate::Facts;
-use arena_part::helpers::bench::Docs;
+use shakedown_part::helpers::bench::Docs;
 
 /// The parts whose `inspect` docs the view reads.
 pub const DOC_PARTS: [&str; 6] = ["plant", "hub", "approvals", "utility", "network", "roster"];

@@ -6,8 +6,8 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use anyhow::{Context, Result};
-use arena_part::helpers::compose::Project;
 use serde::{Deserialize, Serialize};
+use shakedown_part::helpers::compose::Project;
 
 use crate::config::SaveHow;
 
@@ -71,7 +71,7 @@ impl Manifest {
         let Some(image) = self.tree_image() else {
             return Ok(None);
         };
-        let project = Project::helpers_only("arena_saves", &self.env)?;
+        let project = Project::helpers_only("shakedown_saves", &self.env)?;
         Ok(Some(project.with_helper(image)?))
     }
 

@@ -7,14 +7,14 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Mutex;
 
-use arena_part::helpers::pg::{tokio_postgres, Templates};
-use arena_part::helpers::sql_tools::{
-    lookup, schemas, sql_args, tool_error, tool_output, which, KeyLookup, SqlTool,
-};
-use arena_part::proto::*;
-use arena_part::{Part, PartError};
 use async_trait::async_trait;
 use serde_json::{json, Map, Value};
+use shakedown_part::helpers::pg::{tokio_postgres, Templates};
+use shakedown_part::helpers::sql_tools::{
+    lookup, schemas, sql_args, tool_error, tool_output, which, KeyLookup, SqlTool,
+};
+use shakedown_part::proto::*;
+use shakedown_part::{Part, PartError};
 use tokio_postgres::types::{ToSql, Type};
 use tokio_postgres::Client;
 
@@ -82,12 +82,12 @@ impl Postgres {
     }
 
     pub fn from_env() -> Postgres {
-        let url =
-            arena_part::settings::var("SHAKEDOWN_PG_URL").unwrap_or_else(|_| DEFAULT_URL.into());
+        let url = shakedown_part::settings::var("SHAKEDOWN_PG_URL")
+            .unwrap_or_else(|_| DEFAULT_URL.into());
         // shaked passes `SHAKEDOWN_PG_URL` on to programs but not other variables, so the namespace can
         // also ride on the URL as `?shakedown_ns=<ns>`.
         let (url, from_url) = split_ns(&url);
-        let ns = arena_part::settings::var("SHAKEDOWN_PG_NS").unwrap_or(from_url);
+        let ns = shakedown_part::settings::var("SHAKEDOWN_PG_NS").unwrap_or(from_url);
         Postgres::new(&url, &ns)
     }
 

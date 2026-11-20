@@ -2,9 +2,9 @@
 #![cfg(feature = "folder")]
 use std::path::PathBuf;
 
-use arena_part::helpers::busy::BusySet;
-use arena_part::helpers::save_dirs::SaveDirs;
-use arena_part::helpers::temp_dir::TempDir;
+use shakedown_part::helpers::busy::BusySet;
+use shakedown_part::helpers::save_dirs::SaveDirs;
+use shakedown_part::helpers::temp_dir::TempDir;
 
 fn scratch() -> TempDir {
     TempDir::new_in(&PathBuf::from(env!("CARGO_TARGET_TMPDIR")), "save_dirs").unwrap()

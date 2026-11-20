@@ -3,7 +3,7 @@
 //! example, each role does its own work with its own tools, and a change is decided by another role
 //! than the one that proposed it. shaked runs a team in order, each agent handing off to the next,
 //! so a change is acted on by the role that decided it or a later one.
-use arena_part::proto::{BenchTeam, TeamRole};
+use shakedown_part::proto::{BenchTeam, TeamRole};
 
 pub const INSTRUCTIONS_TITLE: &str = "Plant rules";
 

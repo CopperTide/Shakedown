@@ -1,6 +1,6 @@
 //! The tar digest: order-free, sensitive to content and metadata.
 #![cfg(feature = "compose")]
-use arena_part::helpers::tar_digest::digest;
+use shakedown_part::helpers::tar_digest::digest;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -58,7 +58,7 @@ fn digest_ignores_order_and_sees_changes() {
 
 #[test]
 fn digest_reader_matches_digest() {
-    use arena_part::helpers::tar_digest::digest_reader;
+    use shakedown_part::helpers::tar_digest::digest_reader;
     let t = Tmp(std::env::temp_dir().join(format!("arena_kit_tar_reader_{}", std::process::id())));
     fs::create_dir_all(t.0.join("src")).unwrap();
     fs::write(t.0.join("src/a"), "aaaa").unwrap();

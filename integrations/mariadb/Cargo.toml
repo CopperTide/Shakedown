@@ -1,10 +1,10 @@
 [package]
-name = "arena-mariadb"
+name = "shakedown-mariadb"
 version = "0.1.0"
 edition = "2021"
 
 [lib]
-name = "arena_mariadb"
+name = "shakedown_mariadb"
 path = "src/lib.rs"
 
 [[bin]]
@@ -17,7 +17,7 @@ name = "arena-mariadb"
 path = "src/old_name.rs"
 
 [dependencies]
-arena-part = { path = "../../kits/rust", features = ["mariadb"] }
+shakedown-part = { path = "../../kits/rust", features = ["mariadb"] }
 mysql_async.workspace = true
 sha2.workspace = true
 tokio.workspace = true

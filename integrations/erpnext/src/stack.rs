@@ -6,9 +6,9 @@ use std::process::Command;
 use std::time::{Duration, Instant};
 
 use anyhow::{bail, Context, Result};
-use arena_part::helpers::blocking;
-use arena_part::helpers::compose::Project;
-use arena_part::helpers::mariadb::Server;
+use shakedown_part::helpers::blocking;
+use shakedown_part::helpers::compose::Project;
+use shakedown_part::helpers::mariadb::Server;
 
 use crate::frappe::parse_versions;
 use crate::rest::Rest;
@@ -43,7 +43,7 @@ impl Stack {
             ("SHAKEDOWN_ERPNEXT_IMAGE", cfg.image.clone()),
         ]
         .into_iter()
-        .flat_map(|(k, v)| arena_part::settings::both(k, v))
+        .flat_map(|(k, v)| shakedown_part::settings::both(k, v))
         .collect();
         let project = Project::new(&cfg.project, &cfg.compose_file, &env)?;
         Ok(Stack {

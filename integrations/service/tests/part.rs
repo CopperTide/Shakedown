@@ -1,8 +1,8 @@
 //! Service tests that need no Docker: config checks, ids and the part's description.
-use arena_part::proto::*;
-use arena_part::Part;
-use arena_service::Service;
 use serde_json::{json, Value};
+use shakedown_part::proto::*;
+use shakedown_part::Part;
+use shakedown_service::Service;
 use std::path::PathBuf;
 
 fn part() -> Service {

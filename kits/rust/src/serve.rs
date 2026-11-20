@@ -144,7 +144,7 @@ where
     let out = answer(req, handler).await;
     if let Some(id) = id {
         if let Err(e) = write_line(w, response(id, out)).await {
-            eprintln!("arena-part: write failed: {e}");
+            eprintln!("shakedown-part: write failed: {e}");
         }
     }
 }

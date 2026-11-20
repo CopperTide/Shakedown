@@ -3,10 +3,12 @@
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
-use arena_part::helpers::busy::Busy;
-use arena_part::helpers::mariadb::{check_same_server, restore_error, Manifest, Position, Tracked};
-use arena_part::proto::StartParams;
-use arena_part::PartError;
+use shakedown_part::helpers::busy::Busy;
+use shakedown_part::helpers::mariadb::{
+    check_same_server, restore_error, Manifest, Position, Tracked,
+};
+use shakedown_part::proto::StartParams;
+use shakedown_part::PartError;
 
 use crate::names::Site;
 use crate::ready::Ready;

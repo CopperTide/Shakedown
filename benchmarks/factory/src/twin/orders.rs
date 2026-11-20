@@ -1,7 +1,7 @@
 //! The orders at risk: those the press outage affects once PR-A1 is down, and the shift's priority
 //! orders once their truck is late, each covered when its customer was sent a notice on an
 //! approved change.
-use arena_part::proto::{TwinArea, TwinItem};
+use shakedown_part::proto::{TwinArea, TwinItem};
 
 use crate::checks::{unnoticed, World};
 use crate::shift_checks::Priority;

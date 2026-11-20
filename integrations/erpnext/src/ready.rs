@@ -2,8 +2,8 @@
 use std::path::PathBuf;
 use std::time::Instant;
 
-use arena_part::helpers::mariadb::{Server, ServerRef};
-use arena_part::PartError;
+use shakedown_part::helpers::mariadb::{Server, ServerRef};
+use shakedown_part::PartError;
 
 use crate::base::{self, Base};
 use crate::rest::Rest;

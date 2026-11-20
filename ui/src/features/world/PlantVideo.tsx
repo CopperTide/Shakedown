@@ -3,14 +3,14 @@ import { recording } from '@/api/branches';
 import { Panel } from '@/components/ui/panel';
 import { useQuery } from '@/hooks/useQuery';
 import type { Event } from '@/model/types';
-import { arenaSecondAt, clockText } from './recording';
+import { worldSecondAt, clockText } from './recording';
 
 /** "Plant (Isaac Sim)": the branch's recorded plant, held at the arena second of the step on screen. Nothing when the
  *  branch has no recording. Its own controls play on from there. */
 export default function PlantVideo({ branchId, events, step }: { branchId: string; events: Event[]; step: number | null }) {
   const { data: rec } = useQuery(branchId, () => recording(branchId), { keepPrevious: true });
   const ref = useRef<HTMLVideoElement>(null);
-  const t = arenaSecondAt(events, step);
+  const t = worldSecondAt(events, step);
   useEffect(() => {
     const v = ref.current;
     if (!v || t == null) return;

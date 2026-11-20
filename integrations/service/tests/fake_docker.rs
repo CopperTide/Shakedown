@@ -1,9 +1,9 @@
 //! Service behaviour when Docker misbehaves, with a fake `docker` program first on the PATH.
 mod support;
 
-use arena_part::proto::*;
-use arena_part::Part;
 use serde_json::{json, Value};
+use shakedown_part::proto::*;
+use shakedown_part::Part;
 use std::fs;
 use support::*;
 
@@ -137,7 +137,7 @@ async fn plain_volume_names_save_as_before() {
         lines[0].ends_with(" stop") && lines[2].ends_with(" start"),
         "{lines:?}"
     );
-    let export = "--network none --entrypoint tar -v arena_a_data:/v redis:6.2-alpine -C /v -cpf - --numeric-owner .";
+    let export = "--network none --entrypoint tar -v shakedown_a_data:/v redis:6.2-alpine -C /v -cpf - --numeric-owner .";
     assert!(
         lines[1].starts_with("run --rm --pull never ") && lines[1].ends_with(export),
         "{lines:?}"
@@ -210,7 +210,7 @@ async fn a_skipped_volume_is_neither_saved_nor_restored() {
     p.start(from).await.unwrap();
     let log = f.log();
     assert!(
-        log.contains("arena_a_data:/v") && log.contains("arena_b_data:/v"),
+        log.contains("shakedown_a_data:/v") && log.contains("shakedown_b_data:/v"),
         "{log}"
     );
     assert!(!log.contains("_cache:/v"), "{log}");
@@ -237,7 +237,7 @@ async fn a_hardlink_volume_links_against_the_previous_save() {
     p.save(save_as(&f, "a", "s2")).await.unwrap();
     let copies = tree_copies(&f);
     assert_eq!(copies.len(), 2, "{copies:?}");
-    let helper = "--pull never --network none --entrypoint  -v arena_a_files:/v:ro";
+    let helper = "--pull never --network none --entrypoint  -v shakedown_a_files:/v:ro";
     assert!(copies.iter().all(|l| l.contains(helper)), "{copies:?}");
     assert!(
         copies
@@ -273,7 +273,7 @@ async fn a_hardlink_tree_is_archived_by_the_same_helper_and_tar_as_a_live_volume
         .collect();
     let tar = "redis:6.2-alpine -C /v -cpf - --numeric-owner .";
     assert_eq!(tars.len(), 2, "{tars:?}");
-    let live = format!("--entrypoint tar -v arena_a_files:/v {tar}");
+    let live = format!("--entrypoint tar -v shakedown_a_files:/v {tar}");
     assert!(tars[0].ends_with(&live), "{tars:?}");
     let tree = f.0.join("saves/service/s1/files");
     let tree = format!("--entrypoint tar -v {}:/v:ro {tar}", tree.display());

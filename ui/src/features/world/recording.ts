@@ -4,7 +4,7 @@ import { asRecord } from '@/lib/record';
 import type { Event } from '@/model/types';
 
 /** The arena second of step `seq`: its own world clock, else the last one recorded before it (null when none). */
-export function arenaSecondAt(events: Event[], seq: number | null): number | null {
+export function worldSecondAt(events: Event[], seq: number | null): number | null {
   if (seq == null) return null;
   let found: number | null = null;
   for (const e of events) {

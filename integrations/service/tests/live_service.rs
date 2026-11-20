@@ -1,9 +1,9 @@
 //! Runs real Docker Compose projects: `cargo test -p arena-service -- --ignored live_`.
 //! Every project, volume and folder the test makes is removed afterwards, even on failure.
-use arena_part::proto::*;
-use arena_part::Part;
-use arena_service::Service;
 use serde_json::{json, Value};
+use shakedown_part::proto::*;
+use shakedown_part::Part;
+use shakedown_service::Service;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
@@ -39,7 +39,7 @@ impl World {
     /// Runs `args` in the instance's container and returns its trimmed output.
     fn exec(&self, instance: &str, args: &[&str]) -> String {
         let out = Command::new("docker")
-            .args(["exec", &format!("arena_{instance}-redis-1")])
+            .args(["exec", &format!("shakedown_{instance}-redis-1")])
             .args(args)
             .output()
             .unwrap();
@@ -58,7 +58,7 @@ impl World {
 
     /// Starts instance `id` (tracked for removal) from `from`.
     async fn start(&mut self, p: &Service, id: &str, from: Option<&str>) {
-        self.projects.push(format!("arena_{id}"));
+        self.projects.push(format!("shakedown_{id}"));
         p.start(start(id, self.config(), from)).await.unwrap();
     }
 }
@@ -195,7 +195,7 @@ fn sql(w: &World, instance: &str, query: &str) -> String {
     let out = Command::new("docker")
         .args([
             "exec",
-            &format!("arena_{instance}-db-1"),
+            &format!("shakedown_{instance}-db-1"),
             "psql",
             "-U",
             "postgres",
@@ -217,7 +217,7 @@ fn files(instance: &str, script: &str) -> String {
     let out = Command::new("docker")
         .args([
             "exec",
-            &format!("arena_{instance}-files-1"),
+            &format!("shakedown_{instance}-files-1"),
             "sh",
             "-c",
             script,
@@ -229,7 +229,7 @@ fn files(instance: &str, script: &str) -> String {
 
 /// The strategies' world and config.
 fn strategies_world() -> (World, Value) {
-    let pg = arena_part::settings::var("SHAKEDOWN_TEST_POSTGRES_IMAGE")
+    let pg = shakedown_part::settings::var("SHAKEDOWN_TEST_POSTGRES_IMAGE")
         .unwrap_or("postgres:17-alpine".into());
     let w = World::new();
     fs::write(w.dir.join("compose.yml"), strategies_compose(&pg)).unwrap();
@@ -252,7 +252,7 @@ async fn live_vs_save(p: &Service, a: &str, save: &str) -> Vec<String> {
 /// Waits (at most 60 s) until the database of `instance` takes connections over TCP.
 fn wait_db(instance: &str) {
     let ready = || {
-        let c = format!("arena_{instance}-db-1");
+        let c = format!("shakedown_{instance}-db-1");
         let args = [
             "exec",
             &c,
@@ -314,7 +314,7 @@ async fn live_service_strategies() {
     let (a, b) = (format!("t11_{id}_a"), format!("t11_{id}_b"));
     let p = w.part();
     w.projects
-        .extend([format!("arena_{a}"), format!("arena_{b}")]);
+        .extend([format!("shakedown_{a}"), format!("shakedown_{b}")]);
     p.start(start(&a, config.clone(), None)).await.unwrap();
     let (s1, s2) = two_saves(&w, &p, &a).await;
     check_saves(&p, &a, (&s1, &s2)).await;

@@ -2,9 +2,9 @@
 //! which are at risk, and the bookings as flows from a lot to an order.
 use std::collections::BTreeSet;
 
-use arena_part::helpers::bench::Docs;
-use arena_part::proto::{TwinArea, TwinFlow, TwinItem};
 use serde_json::Value;
+use shakedown_part::helpers::bench::Docs;
+use shakedown_part::proto::{TwinArea, TwinFlow, TwinItem};
 
 use super::{item, text, Snapshot};
 use crate::checks::{Booking, World};

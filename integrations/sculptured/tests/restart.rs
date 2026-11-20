@@ -1,10 +1,10 @@
 //! A program restarted while an instance runs reaches it by its record (`.live/<id>/run.json`): it
 //! still inspects, saves and stops it. The instance is a stand-in: a process on the instance's data
 //! folder, as serve names it, and a loopback server answering CopperTide's changes route.
-use arena_part::proto::{IdParams, InspectParams, SaveParams, Target};
-use arena_part::Part;
-use arena_sculptured::Sculptured;
 use serde_json::json;
+use shakedown_part::proto::{IdParams, InspectParams, SaveParams, Target};
+use shakedown_part::Part;
+use shakedown_sculptured::Sculptured;
 use std::fs;
 use std::io::{Read, Write};
 use std::net::TcpListener;
@@ -73,7 +73,7 @@ fn record(saves: &Path, id: &str, pid: u32, port: u16, tmp: &Path) {
 }
 
 /// What inspecting running instance `a` gives.
-async fn inspected(part: &Sculptured) -> arena_part::proto::Docs {
+async fn inspected(part: &Sculptured) -> shakedown_part::proto::Docs {
     let target = Target::Instance {
         instance: "a".into(),
     };
@@ -85,7 +85,7 @@ async fn inspected(part: &Sculptured) -> arena_part::proto::Docs {
 }
 
 /// Saves running instance `a` as `s1` in `dir`.
-async fn saved(part: &Sculptured, dir: &Path) -> arena_part::proto::Saved {
+async fn saved(part: &Sculptured, dir: &Path) -> shakedown_part::proto::Saved {
     let saved = part.save(SaveParams {
         instance: "a".into(),
         save: "s1".into(),

@@ -2,10 +2,10 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use arena_part::helpers::compose::{valid_image, valid_volume, DEFAULT_HELPER};
-use arena_part::PartError;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use shakedown_part::helpers::compose::{valid_image, valid_volume, DEFAULT_HELPER};
+use shakedown_part::PartError;
 
 pub use crate::probes::ProbeSpec;
 pub use crate::watches::WatchSpec;

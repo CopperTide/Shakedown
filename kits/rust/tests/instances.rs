@@ -3,8 +3,8 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use arena_part::helpers::instances::{KeyedLocks, LiveRecords, Registry};
 use serde::{Deserialize, Serialize};
+use shakedown_part::helpers::instances::{KeyedLocks, LiveRecords, Registry};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 struct Run {

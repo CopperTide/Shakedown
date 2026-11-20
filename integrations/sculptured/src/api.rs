@@ -3,11 +3,11 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{bail, Result};
-use arena_part::helpers::http::{self, Answer, Dialect};
 use reqwest::Method;
 use serde_json::Value;
+use shakedown_part::helpers::http::{self, Answer, Dialect};
 
-pub use arena_part::helpers::http::Reply;
+pub use shakedown_part::helpers::http::Reply;
 
 /// How long one request may take.
 const TIMEOUT: Duration = Duration::from_secs(30);
@@ -81,5 +81,5 @@ fn request_id() -> String {
         .duration_since(UNIX_EPOCH)
         .map_or(0, |d| d.as_nanos());
     let n = COUNT.fetch_add(1, Ordering::Relaxed);
-    format!("arena-{}-{nanos}-{n}", std::process::id())
+    format!("shakedown-{}-{nanos}-{n}", std::process::id())
 }

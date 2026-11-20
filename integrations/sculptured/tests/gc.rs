@@ -1,10 +1,10 @@
 //! `gc` stops instances a program left running (it ended without stopping them), by their
 //! record: a `run.json` naming a process of the recorded program on the instance's data folder.
 //! A process that is not that program on that folder is left alone.
-use arena_part::proto::{GcParams, IdParams};
-use arena_part::Part;
-use arena_sculptured::Sculptured;
 use serde_json::json;
+use shakedown_part::proto::{GcParams, IdParams};
+use shakedown_part::Part;
+use shakedown_sculptured::Sculptured;
 use std::fs;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};

@@ -3,8 +3,8 @@ use crate::client::{Client, ProgramDirs};
 use crate::manifest::{Manifest, Registry};
 use crate::request;
 use anyhow::{anyhow, Result};
-use arena_part::helpers::remove_tree_or_log;
-use arena_part::proto::{valid_id, BenchDescribe, Describe};
+use shakedown_part::helpers::remove_tree_or_log;
+use shakedown_part::proto::{valid_id, BenchDescribe, Describe};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock, RwLockReadGuard};
@@ -21,7 +21,7 @@ pub struct Hub {
     registry: RwLock<Registry>,
     bin_dir: PathBuf,
     /// Substituted for `${SHAKEDOWN_DIR}` in commands (left as it is when empty).
-    arena_dir: PathBuf,
+    repo_dir: PathBuf,
     saves_root: PathBuf,
     /// Extra environment for command-mode programs (e.g. `SHAKEDOWN_PG_URL`).
     env: Vec<(String, String)>,
@@ -33,7 +33,7 @@ impl Hub {
         Hub {
             registry: RwLock::new(registry),
             bin_dir,
-            arena_dir: PathBuf::new(),
+            repo_dir: PathBuf::new(),
             saves_root,
             env: vec![],
             slots: Mutex::default(),
@@ -47,8 +47,8 @@ impl Hub {
     }
 
     /// The arena folder `${SHAKEDOWN_DIR}` names in package commands.
-    pub fn with_arena_dir(mut self, dir: PathBuf) -> Hub {
-        self.arena_dir = dir;
+    pub fn with_repo_dir(mut self, dir: PathBuf) -> Hub {
+        self.repo_dir = dir;
         self
     }
 
@@ -68,7 +68,7 @@ impl Hub {
     fn dirs(&self) -> ProgramDirs<'_> {
         ProgramDirs {
             bin: &self.bin_dir,
-            arena: &self.arena_dir,
+            repo: &self.repo_dir,
             saves: &self.saves_root,
         }
     }

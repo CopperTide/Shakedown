@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["kits/rust", "integrations/postgres", "integrations/folder", "integrations/service", "integrations/mariadb", "integrations/erpnext", "integrations/twenty-crm", "integrations/sculptured", "benchmarks/retail", "benchmarks/factory", "benchmarks/pharma", "tools/worldclock-gateway"]
+members = ["kits/rust", "integrations/postgres", "integrations/folder", "integrations/service", "integrations/mariadb", "integrations/erpnext", "integrations/twenty-crm", "integrations/sculptured", "benchmarks/retail", "benchmarks/factory", "benchmarks/pharma", "tools/worldclock-gateway", "benchmarks/factory/arena-alias", "integrations/erpnext/arena-alias", "integrations/twenty-crm/arena-alias"]
 exclude = ["core"]
 
 [workspace.dependencies]

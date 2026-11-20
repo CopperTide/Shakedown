@@ -4,8 +4,8 @@ use std::io;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 
-use arena_part::helpers::{folder, remove_tree};
 use serde_json::Value;
+use shakedown_part::helpers::{folder, remove_tree};
 
 use crate::json_file;
 use crate::site_config::{common_config, APPS_TXT};
@@ -111,8 +111,8 @@ impl SitesDir {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use arena_part::helpers::temp_dir::TempDir;
     use serde_json::json;
+    use shakedown_part::helpers::temp_dir::TempDir;
 
     /// A sites folder and a save's `files/` with one public file.
     fn setup(tmp: &TempDir) -> (SitesDir, PathBuf) {

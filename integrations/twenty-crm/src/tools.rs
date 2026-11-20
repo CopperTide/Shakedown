@@ -1,10 +1,10 @@
 //! The agents' tools, on Twenty's REST API. A refusal or a bad argument is the tool's error; only
 //! Twenty not answering fails the call.
 use anyhow::Error;
-use arena_part::helpers::args::{self, given};
-use arena_part::proto::ToolOutput;
-use arena_part::PartError;
 use serde_json::{json, Value};
+use shakedown_part::helpers::args::{self, given};
+use shakedown_part::proto::ToolOutput;
+use shakedown_part::PartError;
 
 use crate::rest::{Reply, Rest};
 

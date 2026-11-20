@@ -2,9 +2,9 @@
 use std::collections::HashMap;
 use std::sync::Mutex;
 
-use arena_part::helpers::mariadb::{Server, ServerConfig, ServerRef};
-use arena_part::PartError;
 use serde_json::json;
+use shakedown_part::helpers::mariadb::{Server, ServerConfig, ServerRef};
+use shakedown_part::PartError;
 
 use crate::settings::Settings;
 

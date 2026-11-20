@@ -65,7 +65,7 @@ class Mirror(DocsPart):
                                   f"{error or 'something other than a list of events'}")
         if found:
             link.last_seq = found[-1]["seq"]
-        events = [views.arena_event(e) for e in found]
+        events = [views.shakedown_event(e) for e in found]
         return {"changed": bool(events), "events": events}
 
     def save(self, instance, save, dir):
