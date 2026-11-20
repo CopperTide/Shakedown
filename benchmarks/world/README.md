@@ -17,6 +17,9 @@ Templates written as data, worlds generated from them, and the benchmark a built
 - A system may have no parts of its own and an `apply` (the events' ops, plus `merge`, which updates an object in
   a part's config): a chosen system's ops are applied, in template order, before the events'. A task's check may
   name the systems it `needs`; without them it is dropped (and listed in `dropped`).
+- An event may be written in its own file (`events: ["@events/x.yaml"]`, held to the event's schema). A `fixed`
+  event is a fact of the template's data (a flaky test in a repository, say): always on, it may apply nothing, and
+  turning it off is a problem.
 - `worldbench/limits.py`: what bounds a template (file size, values and nesting per file, include depth and
   cycles, what one value expands to, a copied folder's files and bytes); the schema bounds the size, name pools
   and list lengths. A template that can't be read, whatever is wrong with it, is logged and left out of the list.

@@ -168,7 +168,11 @@ def _events(t, raw: dict, out: list) -> dict:
 
 
 def _event(e: dict, asked: dict, out: list) -> dict:
-    on = asked.get("on", e.get("default", False))
+    on = asked.get("on", e.get("default", False) or e.get("fixed", False))
+    if e.get("fixed") and not on:
+        out.append(problem(f"events.{e['id']}.on", f"{e['label']} is part of the template's data and can't be "
+                                                   "turned off"))
+        on = True
     params = {p["name"]: p["default"] for p in e.get("params", [])}
     specs = {p["name"]: p for p in e.get("params", [])}
     for name, v in _object(asked, "params", out, f"events.{e['id']}.params").items():

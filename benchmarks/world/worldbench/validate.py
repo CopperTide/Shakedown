@@ -22,8 +22,22 @@ def _validator(definition: str | None = None) -> jsonschema.Draft202012Validator
     return jsonschema.Draft202012Validator(schema)
 
 
+def with_event_files(data, folder: Path):
+    """`data` with each event written in its own file (`"@events/x.yaml"`) read in its place, held to the event's
+    schema."""
+    events = data.get("events") if isinstance(data, dict) else None
+    if not isinstance(events, list):
+        return data
+    out = []
+    for i, e in enumerate(events):
+        if isinstance(e, str) and e.startswith("@"):
+            e = _included_file(e, folder, f"events[{i}]", "event")
+        out.append(e)
+    return {**data, "events": out}
+
+
 def check(data, folder: Path) -> None:
-    """Raises the first TemplateError of `data`, the parsed template.yaml of `folder`."""
+    """Raises the first TemplateError of `data`, the parsed template.yaml of `folder` (its event files read in)."""
     _schema(data)
     _included(data, folder)
     _unique_ids(data)
@@ -123,6 +137,8 @@ def _ranges(data) -> None:
     for i, e in enumerate(data.get("events", [])):
         for j, p in enumerate(e.get("params", [])):
             _param_default(p, f"events[{i}].params[{j}].default")
+        if not e["apply"] and not e.get("fixed"):
+            raise TemplateError(f"events[{i}].apply", "an event that isn't fixed applies something")
 
 
 def _param_default(p: dict, path: str) -> None:

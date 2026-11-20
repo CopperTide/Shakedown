@@ -92,3 +92,29 @@ def test_a_system_apply_names_known_parts(fixtures, tmp_path):
     t = _with_systems(fixtures, tmp_path, **{"systems.1.apply": [{"part": "omega", "set": "x", "value": 1}]})
     r = generate(t, {})
     assert r.problems == [{"path": "systems[1].apply[0].part", "message": "no part omega in this world"}]
+
+
+def test_an_event_may_be_written_in_its_own_file(fixtures, tmp_path):
+    t = _with_systems(fixtures, tmp_path)
+    data = yaml.safe_load((t.dir / "template.yaml").read_text())
+    (t.dir / "events").mkdir()
+    (t.dir / "events" / "rush.yaml").write_text(yaml.safe_dump(data["events"][1]))
+    data["events"][1] = "@events/rush.yaml"
+    (t.dir / "template.yaml").write_text(yaml.safe_dump(data, sort_keys=False))
+    loaded = load_template(t.dir)
+    assert loaded.events[1]["id"] == "rush" and generate(loaded, {}).world == generate(t, {}).world
+    (t.dir / "events" / "rush.yaml").write_text(yaml.safe_dump({**data["events"][0], "kind": "surprise"}))
+    with pytest.raises(TemplateError) as e:
+        load_template(t.dir)
+    assert e.value.path.startswith("events[1]@events/rush.yaml")
+
+
+def test_a_fixed_event_is_part_of_the_data_and_cannot_be_turned_off(fixtures, tmp_path):
+    t = _with_systems(fixtures, tmp_path, **{"events.0.fixed": True, "events.0.default": True, "events.0.apply": []})
+    assert [e["on"] for e in generate(t, {}).world["events"]][:1] == [True]
+    r = generate(t, {"events": {"slow-supplier": {"on": False}}})
+    assert r.problems == [{"path": "events.slow-supplier.on",
+                           "message": "A supplier is slow is part of the template's data and can't be turned off"}]
+    with pytest.raises(TemplateError, match="an event that isn't fixed applies something") as e:
+        load_template(copy_with(t.dir, tmp_path / "bad", {"events.1.apply": []}))
+    assert e.value.path == "events[1].apply"
