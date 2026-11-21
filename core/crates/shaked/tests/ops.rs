@@ -289,3 +289,34 @@ fn apply_then_tell_writes_directly() {
         assert!(dir.path().join("scenarios/direct.yaml").is_file());
     });
 }
+
+/// A token of `scopes`, as the person mints it.
+async fn token(fx: &AppFx, scopes: Value) -> String {
+    let (_, minted) = fx
+        .post("/api/tokens", json!({"name": "t", "scopes": scopes}))
+        .await;
+    minted["token"].as_str().unwrap().to_string()
+}
+
+/// `PUT /api/project` as `token`: the status.
+async fn put_settings(fx: &AppFx, token: &str) -> u16 {
+    let body = json!({"body": settings("apply_then_tell"), "confirm": true});
+    let req = fx.http.put(format!("{}/api/project", fx.base));
+    let res = req.bearer_auth(token).json(&body).send().await.unwrap();
+    res.status().as_u16()
+}
+
+#[test]
+fn update_needs_admin_token() {
+    run(async {
+        let dir = larkspur();
+        let fx = AppFx::idle("ops", "settings-token")
+            .project(dir.path())
+            .start()
+            .await;
+        let runner = token(&fx, json!(["read", "run"])).await;
+        assert_eq!(put_settings(&fx, &runner).await, 403);
+        let admin = token(&fx, json!(["read", "run", "admin"])).await;
+        assert_eq!(put_settings(&fx, &admin).await, 200);
+    });
+}

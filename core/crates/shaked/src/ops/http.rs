@@ -76,10 +76,10 @@ pub fn route_rows() -> &'static [RouteCase] {
 }
 
 fn row(op: &Operation) -> RouteCase {
-    let on = match (op.target, op.path.contains('{')) {
-        (None, _) => On::Instance,
-        (Some(_), false) => On::Kind(ResourceKind::ProjectFile),
-        (Some(_), true) => On::Resource(ResourceKind::ProjectFile),
+    let on = match target_of(op, "") {
+        Target::Instance => On::Instance,
+        Target::Kind(k) => On::Kind(k),
+        _ => On::Resource(ResourceKind::ProjectFile),
     };
     RouteCase {
         method: op.method,
@@ -100,10 +100,12 @@ pub(super) fn action_of(access: Access) -> Action {
     }
 }
 
-/// What an operation acts on, for item `id` (empty for none).
+/// What an operation acts on, for item `id` (empty for none). Reading the project's status is
+/// the instance's; changing the project (its settings, an import) changes its files.
 pub(super) fn target_of<'a>(op: &Operation, id: &'a str) -> Target<'a> {
     match (op.target, op.path.contains('{')) {
-        (None, _) => Target::Instance,
+        (None, _) if op.access == Access::Read => Target::Instance,
+        (None, _) => Target::Kind(ResourceKind::ProjectFile),
         (Some(_), false) => Target::Kind(ResourceKind::ProjectFile),
         (Some(_), true) => Target::Resource {
             kind: ResourceKind::ProjectFile,
