@@ -15,7 +15,7 @@ fn larkspur() -> tempfile::TempDir {
 
 async fn call(fx: &AppFx, name: &str, input: Value) -> Result<Value, ops::OpError> {
     let op = ops::find(name).unwrap_or_else(|| panic!("no operation {name}"));
-    (op.run)(&fx.state, op, input).await
+    (op.run)(&ops::OpCtx::of(&fx.state), op, input).await
 }
 
 fn scenario_body(label: &str) -> Value {

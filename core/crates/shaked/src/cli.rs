@@ -1,4 +1,4 @@
-//! shaked's commands besides serving: `shaked token create` and `shaked store copy`.
+//! shaked's commands besides serving: `shaked token create`, `shaked store copy` and `shaked mcp`.
 
 use anyhow::{bail, Context, Result};
 
@@ -13,8 +13,25 @@ pub async fn run(args: &[String]) -> Option<Result<()>> {
     match args.first().map(String::as_str) {
         Some("token") => Some(token(&args[1..]).await),
         Some("store") => Some(store_copy(&args[1..]).await),
+        Some("mcp") => Some(mcp(&args[1..]).await),
         _ => None,
     }
+}
+
+/// `mcp [--project <dir>]`: the control MCP server over stdio for the project folder `dir`
+/// (default `SHAKEDOWN_PROJECT`).
+async fn mcp(args: &[String]) -> Result<()> {
+    let dir = match args {
+        [flag, dir] if flag == "--project" => Some(std::path::PathBuf::from(dir)),
+        [] => parts::settings::var_os("SHAKEDOWN_PROJECT")
+            .filter(|v| !v.is_empty())
+            .map(Into::into),
+        _ => bail!("usage: shaked mcp [--project <folder>]"),
+    };
+    let Some(dir) = dir else {
+        bail!("shaked mcp needs a project: pass --project <folder> or set SHAKEDOWN_PROJECT");
+    };
+    crate::ops::stdio::run(&crate::project_state::ProjectState::new(Some(dir))).await
 }
 
 /// `token create --name <n> [--scope read|run|admin ...] [--expires-days N]`: prints a token of

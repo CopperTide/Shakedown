@@ -102,6 +102,11 @@ fn modules() -> Router<Arc<AppState>> {
 pub struct ApiError(StatusCode, String);
 
 impl ApiError {
+    /// What went wrong, as the caller sees it.
+    pub fn message(&self) -> &str {
+        &self.1
+    }
+
     fn bad(msg: impl Into<String>) -> ApiError {
         ApiError(StatusCode::BAD_REQUEST, msg.into())
     }

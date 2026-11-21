@@ -11,8 +11,7 @@ use shakedown_project::format::{
 use shakedown_project::{item_file, Id, ItemBody, Project};
 
 use super::project_ops::NoInput;
-use super::{input, schema, view, Access, OpError, OpFn, OpFuture, Operation};
-use crate::app::AppState;
+use super::{input, schema, view, Access, OpCtx, OpError, OpFn, OpFuture, Operation};
 
 pub(super) fn ops() -> Vec<Operation> {
     Kind::ALL.iter().flat_map(|kind| for_kind(*kind)).collect()
@@ -128,9 +127,9 @@ fn kind_of(op: &Operation) -> Result<Kind, OpError> {
         .ok_or_else(|| OpError::bad_request("this operation acts on no kind of item"))
 }
 
-fn list<'a>(state: &'a AppState, op: &'static Operation, _: Value) -> OpFuture<'a> {
+fn list<'a>(ctx: &'a OpCtx<'a>, op: &'static Operation, _: Value) -> OpFuture<'a> {
     Box::pin(async move {
-        let (kind, project) = (kind_of(op)?, state.project()?);
+        let (kind, project) = (kind_of(op)?, ctx.project.current()?);
         let items: Vec<Value> = project
             .list(kind)
             .into_iter()
@@ -140,37 +139,37 @@ fn list<'a>(state: &'a AppState, op: &'static Operation, _: Value) -> OpFuture<'
     })
 }
 
-fn get<'a>(state: &'a AppState, op: &'static Operation, value: Value) -> OpFuture<'a> {
+fn get<'a>(ctx: &'a OpCtx<'a>, op: &'static Operation, value: Value) -> OpFuture<'a> {
     Box::pin(async move {
         let (kind, id) = (kind_of(op)?, Id::parse(&input::<IdInput>(value)?.id)?);
-        let project = state.project()?;
+        let project = ctx.project.current()?;
         let item = project.get(kind, &id).ok_or_else(|| not_found(kind, &id))?;
         Ok(view::item(&project, item))
     })
 }
 
-fn put<'a>(state: &'a AppState, op: &'static Operation, value: Value) -> OpFuture<'a> {
+fn put<'a>(ctx: &'a OpCtx<'a>, op: &'static Operation, value: Value) -> OpFuture<'a> {
     Box::pin(async move {
         let kind = kind_of(op)?;
         let PutInput { id, body, confirm } = input(value)?;
         let id = Id::parse(&id)?;
         let body = parse_body(kind, &id, &body)?;
-        let project = state.project()?;
+        let project = ctx.project.current()?;
         let diff = diff_against(&project, kind, &id, &body)?;
         if project.config.permissions.edit == EditPolicy::DiffFirst && !confirm {
             return Ok(json!({ "proposed": true, "diff": diff }));
         }
-        let item = state.with_project_mut(|p| p.put(kind, &id, body))??;
-        let mut out = view::item(&state.project()?, &item);
+        let item = ctx.project.change(|p| p.put(kind, &id, body))??;
+        let mut out = view::item(&ctx.project.current()?, &item);
         out["diff"] = Value::String(diff);
         Ok(out)
     })
 }
 
-fn delete<'a>(state: &'a AppState, op: &'static Operation, value: Value) -> OpFuture<'a> {
+fn delete<'a>(ctx: &'a OpCtx<'a>, op: &'static Operation, value: Value) -> OpFuture<'a> {
     Box::pin(async move {
         let (kind, id) = (kind_of(op)?, Id::parse(&input::<IdInput>(value)?.id)?);
-        state.with_project_mut(|p| p.remove(kind, &id))??;
+        ctx.project.change(|p| p.remove(kind, &id))??;
         Ok(json!({ "deleted": id.as_str() }))
     })
 }

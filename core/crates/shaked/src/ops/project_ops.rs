@@ -6,8 +6,7 @@ use serde_json::{json, Value};
 use shakedown_project::format::Kind;
 use shakedown_project::Project;
 
-use super::{input, schema, view, Access, OpFuture, Operation};
-use crate::app::AppState;
+use super::{input, schema, view, Access, OpCtx, OpFuture, Operation};
 use crate::project_state::NoProject;
 
 pub(super) fn ops() -> Vec<Operation> {
@@ -53,14 +52,14 @@ struct InitInput {
     git: bool,
 }
 
-fn status<'a>(state: &'a AppState, _: &'static Operation, _: Value) -> OpFuture<'a> {
-    Box::pin(async move { Ok(status_of(&state.project()?)) })
+fn status<'a>(ctx: &'a OpCtx<'a>, _: &'static Operation, _: Value) -> OpFuture<'a> {
+    Box::pin(async move { Ok(status_of(&ctx.project.current()?)) })
 }
 
-fn init<'a>(state: &'a AppState, _: &'static Operation, value: Value) -> OpFuture<'a> {
+fn init<'a>(ctx: &'a OpCtx<'a>, _: &'static Operation, value: Value) -> OpFuture<'a> {
     Box::pin(async move {
         let InitInput { name, git } = input(value)?;
-        let root = state.project.root().ok_or(NoProject::NotConfigured)?;
+        let root = ctx.project.root().ok_or(NoProject::NotConfigured)?;
         let project = Project::init(root, &name, git)?;
         Ok(status_of(&project))
     })

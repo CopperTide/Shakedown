@@ -12,15 +12,12 @@ use serde_json::{json, Value};
 use crate::{
     app::AppState,
     exec::{tool_schemas, BranchCtx, ToolExec},
+    jsonrpc::{ok, rpc_error, tool_result},
     overhead::{ms_since, Cat},
 };
 
 pub fn router() -> Router<Arc<AppState>> {
     Router::new().route("/mcp/{branch}/{agent}", post(handle))
-}
-
-fn rpc_error(id: Value, code: i64, msg: &str) -> Value {
-    json!({"jsonrpc": "2.0", "id": id, "error": {"code": code, "message": msg}})
 }
 
 /// The JSON-RPC reply to one request; `None` for a notification (nothing to answer). The time
@@ -129,25 +126,6 @@ async fn call_tool(
         .run_outcome(ctx, agent, name, args, Some(id_string(id)))
         .await;
     tool_result(res)
-}
-
-/// A tool's outcome as an MCP `tools/call` result.
-fn tool_result(res: Result<Value, String>) -> Value {
-    match res {
-        Ok(v) => {
-            let mut r =
-                json!({"content": [{"type": "text", "text": v.to_string()}], "isError": false});
-            if v.is_object() {
-                r["structuredContent"] = v;
-            }
-            r
-        }
-        Err(e) => json!({"content": [{"type": "text", "text": e}], "isError": true}),
-    }
-}
-
-fn ok(id: Value, result: Value) -> Value {
-    json!({"jsonrpc": "2.0", "id": id, "result": result})
 }
 
 fn id_string(id: &Value) -> String {

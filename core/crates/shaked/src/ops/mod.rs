@@ -5,7 +5,9 @@
 mod error;
 pub mod http;
 mod item_ops;
+pub mod mcp;
 mod project_ops;
+pub mod stdio;
 mod view;
 
 use std::sync::OnceLock;
@@ -16,6 +18,7 @@ use serde_json::Value;
 use shakedown_project::format::Kind;
 
 use crate::app::AppState;
+use crate::project_state::ProjectState;
 
 pub use error::OpError;
 
@@ -35,8 +38,33 @@ pub enum Access {
 /// The future an operation's handler returns.
 pub type OpFuture<'a> = BoxFuture<'a, Result<Value, OpError>>;
 
-/// An operation's handler: the app, the operation itself (for its target kind) and the input.
-pub type OpFn = for<'a> fn(&'a AppState, &'static Operation, Value) -> OpFuture<'a>;
+/// An operation's handler: its context, the operation itself (for its target kind) and the input.
+pub type OpFn = for<'a> fn(&'a OpCtx<'a>, &'static Operation, Value) -> OpFuture<'a>;
+
+/// What an operation runs against: the project, and the running shaked when there is one.
+/// `shaked mcp` (stdio) runs project operations with no shaked, so no database is needed to
+/// edit files; operations that start runs need `app`.
+pub struct OpCtx<'a> {
+    /// The project folder.
+    pub project: &'a ProjectState,
+    /// The running shaked, if any.
+    pub app: Option<&'a AppState>,
+}
+
+impl<'a> OpCtx<'a> {
+    /// The context of a running shaked.
+    pub fn of(app: &'a AppState) -> OpCtx<'a> {
+        OpCtx {
+            project: &app.project,
+            app: Some(app),
+        }
+    }
+
+    /// The context of a project alone, with no shaked.
+    pub fn project_only(project: &'a ProjectState) -> OpCtx<'a> {
+        OpCtx { project, app: None }
+    }
+}
 
 /// One operation.
 #[derive(Debug)]

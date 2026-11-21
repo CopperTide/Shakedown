@@ -18,6 +18,7 @@ pub mod gc;
 #[cfg(feature = "harness")]
 pub mod harness;
 pub mod jobs;
+pub mod jsonrpc;
 pub mod launch;
 pub mod layer;
 pub mod live;

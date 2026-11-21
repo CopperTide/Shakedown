@@ -13,14 +13,14 @@ use axum::{
 };
 use serde_json::{Map, Value};
 
-use super::{all, Access, OpError, Operation};
+use super::{all, Access, OpCtx, OpError, Operation};
 use crate::{
     api::{
         routes::{On, RouteCase},
         ApiError,
     },
     app::AppState,
-    auth::{Action, ResourceKind},
+    auth::{Action, ResourceKind, Target},
 };
 
 /// A router with every operation at its method and path.
@@ -52,7 +52,9 @@ async fn serve(
     for (key, value) in &path {
         input.insert(key.to_string(), Value::String(value.to_string()));
     }
-    Ok(Json((op.run)(&state, op, Value::Object(input)).await?))
+    Ok(Json(
+        (op.run)(&OpCtx::of(&state), op, Value::Object(input)).await?,
+    ))
 }
 
 fn parse_body(body: &[u8]) -> Result<Map<String, Value>, OpError> {
@@ -73,12 +75,6 @@ pub fn route_rows() -> &'static [RouteCase] {
 }
 
 fn row(op: &Operation) -> RouteCase {
-    let action = match op.access {
-        Access::Read => Action::Read,
-        Access::Edit => Action::Create,
-        Access::Spend => Action::Start,
-        Access::Delete => Action::Delete,
-    };
     let on = match (op.target, op.path.contains('{')) {
         (None, _) => On::Instance,
         (Some(_), false) => On::Kind(ResourceKind::ProjectFile),
@@ -87,8 +83,30 @@ fn row(op: &Operation) -> RouteCase {
     RouteCase {
         method: op.method,
         path: op.path,
-        action,
+        action: action_of(op.access),
         on,
         public: false,
+    }
+}
+
+/// The action an access class asks for.
+pub(super) fn action_of(access: Access) -> Action {
+    match access {
+        Access::Read => Action::Read,
+        Access::Edit => Action::Create,
+        Access::Spend => Action::Start,
+        Access::Delete => Action::Delete,
+    }
+}
+
+/// What an operation acts on, for item `id` (empty for none).
+pub(super) fn target_of<'a>(op: &Operation, id: &'a str) -> Target<'a> {
+    match (op.target, op.path.contains('{')) {
+        (None, _) => Target::Instance,
+        (Some(_), false) => Target::Kind(ResourceKind::ProjectFile),
+        (Some(_), true) => Target::Resource {
+            kind: ResourceKind::ProjectFile,
+            id,
+        },
     }
 }

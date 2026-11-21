@@ -523,7 +523,9 @@ pub fn router(state: Arc<AppState>) -> Router {
         axum::middleware::from_fn_with_state(state.clone(), crate::api::routes::authorize_route);
     let authenticate =
         axum::middleware::from_fn_with_state(state.clone(), crate::auth::middleware::authenticate);
-    let api = crate::api::router().route_layer(authorize);
+    let api = crate::api::router()
+        .route_layer(authorize)
+        .route("/mcp", axum::routing::post(crate::ops::mcp::serve));
     let api = api.merge(state.store.layer().routes()).layer(authenticate);
     let api = api
         .layer(axum::middleware::from_fn_with_state(hosts, allowed_host))
