@@ -49,6 +49,11 @@ impl ProjectState {
         state
     }
 
+    /// The configured folder, if any.
+    pub fn root(&self) -> Option<&Path> {
+        self.root.as_deref()
+    }
+
     /// The project as it is on disk now.
     pub fn current(&self) -> Result<Project, NoProject> {
         let root = self.root.as_deref().ok_or(NoProject::NotConfigured)?;

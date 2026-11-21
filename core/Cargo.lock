@@ -1709,11 +1709,14 @@ dependencies = [
  "rcgen",
  "reqwest",
  "ring",
+ "schemars",
  "serde",
  "serde_json",
+ "serde_yaml_ng",
  "shaked",
  "shakedown-project",
  "shakedown-schema",
+ "similar",
  "tempfile",
  "thiserror",
  "tokio",
@@ -1777,6 +1780,12 @@ dependencies = [
  "errno",
  "libc",
 ]
+
+[[package]]
+name = "similar"
+version = "2.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bbbb5d9659141646ae647b42fe094daf6c6192d1620870b449d9557f748b2daa"
 
 [[package]]
 name = "siphasher"
