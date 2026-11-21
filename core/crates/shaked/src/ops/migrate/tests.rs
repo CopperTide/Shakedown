@@ -72,43 +72,37 @@ fn benchmarks_become_worlds() {
     }
 }
 
-#[test]
-fn experiment_becomes_files_and_link() {
-    let (_d, p) = empty_project();
-    let plan = plan(
-        &p,
-        &benches(),
-        &[old(
-            "abcdef123",
-            "Solo vs team",
-            vec![team("solo", vec![open_agent("planner")])],
-        )],
-    );
-    assert_eq!(ids(&plan, Kind::Scenario), ["toybench-t1"]);
-    assert_eq!(ids(&plan, Kind::Setup), ["solo"]);
-    assert_eq!(ids(&plan, Kind::Experiment), ["solo-vs-team-abcdef"]);
-    assert_eq!(
-        plan.links,
-        vec![(
-            "abcdef123".to_string(),
-            Id::parse("solo-vs-team-abcdef").unwrap()
-        )]
-    );
+/// The first built-in agent of the plan's setup: its model and key.
+fn first_agent(plan: &super::Plan) -> (String, String) {
     let setup = plan
         .files
         .iter()
         .find(|(k, _, _)| *k == Kind::Setup)
-        .unwrap();
+        .expect("a setup");
     match &setup.2 {
         ItemBody::Setup(s) => match &s.team {
-            FileTeam::Builtin { agents } => assert_eq!(
-                (agents[0].model.as_str(), agents[0].key.as_str()),
-                ("m", "default")
-            ),
+            FileTeam::Builtin { agents } => (agents[0].model.clone(), agents[0].key.clone()),
             other => panic!("{other:?}"),
         },
         other => panic!("{other:?}"),
     }
+}
+
+#[test]
+fn experiment_becomes_files_and_link() {
+    let (_d, p) = empty_project();
+    let solo = team("solo", vec![open_agent("planner")]);
+    let plan = plan(
+        &p,
+        &benches(),
+        &[old("abcdef123", "Solo vs team", vec![solo])],
+    );
+    assert_eq!(ids(&plan, Kind::Scenario), ["toybench-t1"]);
+    assert_eq!(ids(&plan, Kind::Setup), ["solo"]);
+    assert_eq!(ids(&plan, Kind::Experiment), ["solo-vs-team-abcdef"]);
+    let expected = Id::parse("solo-vs-team-abcdef").unwrap();
+    assert_eq!(plan.links, vec![("abcdef123".to_string(), expected)]);
+    assert_eq!(first_agent(&plan), ("m".to_string(), "default".to_string()));
 }
 
 #[test]

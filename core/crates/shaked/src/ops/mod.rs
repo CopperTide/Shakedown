@@ -6,6 +6,7 @@ mod deploy;
 mod deploy_ops;
 mod error;
 pub mod http;
+mod import_ops;
 mod item_ops;
 mod madl_ops;
 pub mod mcp;
@@ -123,6 +124,7 @@ pub fn all() -> &'static [Operation] {
         ops.extend(item_ops::ops());
         ops.extend(deploy_ops::ops());
         ops.extend(madl_ops::ops());
+        ops.extend(import_ops::ops());
         ops
     })
 }

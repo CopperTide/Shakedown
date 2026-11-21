@@ -110,6 +110,21 @@ impl Scoped<'_> {
         Ok((stored.expect("the experiment was just stored"), suites))
     }
 
+    /// The experiments not deployed from, or moved into, a project experiment, oldest first.
+    pub async fn unlinked_experiments(&self) -> Result<Vec<String>> {
+        let sql =
+            "SELECT id FROM experiments WHERE project_experiment IS NULL ORDER BY created_at, id";
+        let rows = self.query(sql, &[]).await?;
+        Ok(rows.iter().map(|r| r.get(0)).collect())
+    }
+
+    /// Links experiment `id` to project experiment `project_experiment`, unless it already has
+    /// one: whether it was linked.
+    pub async fn link_deployment(&self, id: &str, project_experiment: &str) -> Result<bool> {
+        let sql = "UPDATE experiments SET project_experiment = $2 WHERE id = $1 AND project_experiment IS NULL";
+        Ok(self.execute(sql, &[&id, &project_experiment]).await? == 1)
+    }
+
     /// The experiments deployed from project experiment `project_experiment`, newest first.
     pub async fn deployments_of(&self, project_experiment: &str) -> Result<Vec<String>> {
         let sql =

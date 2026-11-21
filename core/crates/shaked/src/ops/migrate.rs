@@ -115,10 +115,8 @@ fn add_experiment(p: &mut Plan, project: &Project, exp: &OldExperiment) {
         .filter_map(|t| add_setup(p, project, t))
         .collect();
     if setups.is_empty() {
-        p.skipped.push(format!(
-            "{}: none of its setups could be carried, so it stays under Earlier experiments.",
-            exp.name
-        ));
+        let why = "none of its setups could be carried, so it stays under Earlier experiments.";
+        p.skipped.push(format!("{}: {why}", exp.name));
         return;
     }
     let world = id_of(&exp.benchmark);
@@ -129,32 +127,8 @@ fn add_experiment(p: &mut Plan, project: &Project, exp: &OldExperiment) {
         scenario.clone(),
         ItemBody::Scenario(scenario_file(exp, &world)),
     );
-    let suffix: String = exp
-        .id
-        .chars()
-        .filter(char::is_ascii_alphanumeric)
-        .take(6)
-        .collect::<String>()
-        .to_lowercase();
-    let id = id_of(&format!("{}-{suffix}", slug(&exp.name, 50)));
-    let file = ExperimentFile {
-        format: "shakedown-experiment/1".into(),
-        label: exp.name.clone(),
-        world: world.to_string(),
-        scenario: scenario.to_string(),
-        setups: setups
-            .iter()
-            .map(|s| s.to_string())
-            .collect::<BTreeSet<_>>()
-            .into_iter()
-            .collect(),
-        repeats: Repeats {
-            per_setup: u32::try_from(exp.runs.max(1)).unwrap_or(1),
-            paired_seeds: true,
-        },
-        budget: Default::default(),
-        parent: None,
-    };
+    let id = experiment_id(exp);
+    let file = experiment_file(exp, &world, &scenario, &setups);
     p.add(
         project,
         Kind::Experiment,
@@ -162,6 +136,40 @@ fn add_experiment(p: &mut Plan, project: &Project, exp: &OldExperiment) {
         ItemBody::Experiment(file),
     );
     p.links.push((exp.id.clone(), id));
+}
+
+/// The experiment's id: its name, made unique with the start of its old id.
+fn experiment_id(exp: &OldExperiment) -> Id {
+    let suffix: String = exp
+        .id
+        .chars()
+        .filter(char::is_ascii_alphanumeric)
+        .take(6)
+        .collect::<String>()
+        .to_lowercase();
+    id_of(&format!("{}-{suffix}", slug(&exp.name, 50)))
+}
+
+fn experiment_file(
+    exp: &OldExperiment,
+    world: &Id,
+    scenario: &Id,
+    setups: &[Id],
+) -> ExperimentFile {
+    let setups: BTreeSet<String> = setups.iter().map(|s| s.to_string()).collect();
+    ExperimentFile {
+        format: "shakedown-experiment/1".into(),
+        label: exp.name.clone(),
+        world: world.to_string(),
+        scenario: scenario.to_string(),
+        setups: setups.into_iter().collect(),
+        repeats: Repeats {
+            per_setup: u32::try_from(exp.runs.max(1)).unwrap_or(1),
+            paired_seeds: true,
+        },
+        budget: Default::default(),
+        parent: None,
+    }
 }
 
 fn scenario_file(exp: &OldExperiment, world: &Id) -> ScenarioFile {
