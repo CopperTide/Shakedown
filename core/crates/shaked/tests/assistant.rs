@@ -201,3 +201,67 @@ fn no_model_is_explained() {
         );
     });
 }
+
+#[test]
+fn apply_diff_card_writes() {
+    run(async {
+        let llm = fake_llm(vec![
+            tool_call("scenarios_put", renamed_scenario()),
+            text("Apply it if it looks right."),
+        ])
+        .await;
+        let dir = project();
+        let fx = app("apply", &llm, dir.path()).await;
+        let (_, out) = ask(&fx, "Rename it").await;
+        let mut args = out["cards"][0]["arguments"].clone();
+        args["confirm"] = json!(true);
+        let id = args["id"].as_str().unwrap().to_string();
+        let res = fx
+            .http
+            .put(format!("{}/api/project/scenarios/{id}", fx.base))
+            .json(&args)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status().as_u16(), 200);
+        let text =
+            std::fs::read_to_string(dir.path().join("scenarios/supplier-slip.yaml")).unwrap();
+        assert!(text.contains("label: Renamed"), "{text}");
+    });
+}
+
+#[test]
+fn read_token_gets_cards_not_writes() {
+    run(async {
+        let llm = fake_llm(vec![
+            tool_call("scenarios_list", json!({})),
+            text("Listed."),
+        ])
+        .await;
+        let dir = project();
+        let fx = app("readtoken", &llm, dir.path()).await;
+        let (_, minted) = fx
+            .post("/api/tokens", json!({"name": "r", "scopes": ["read"]}))
+            .await;
+        let token = minted["token"].as_str().unwrap().to_string();
+        let body = json!({"messages": [{"role": "user", "content": "List"}]});
+        let res = fx
+            .http
+            .post(format!("{}/api/assistant/chat", fx.base))
+            .bearer_auth(&token)
+            .json(&body)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status().as_u16(), 200);
+        let put = fx
+            .http
+            .put(format!("{}/api/project/scenarios/supplier-slip", fx.base))
+            .bearer_auth(&token)
+            .json(&json!({"body": renamed_scenario()["body"], "confirm": true}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(put.status().as_u16(), 403);
+    });
+}
