@@ -1,5 +1,6 @@
 // A file experiment: what it runs, its runs (after it is deployed), and its settings.
-import { ChevronLeft, Play } from 'lucide-react';
+import { ChevronLeft } from 'lucide-react';
+import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ApiError } from '@/api/client';
 import { getItem } from '@/api/project';
@@ -9,6 +10,8 @@ import { EmptyState, ErrorState, LoadingState } from '@/components/ui/state';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useQuery } from '@/hooks/useQuery';
 import type { ExperimentBody, ItemKind } from '@/model/project';
+import DeployDialog from './DeployDialog';
+import Deployments from './Deployments';
 import FileOverview from './FileOverview';
 
 /** The experiment and the labels of everything it names; null when there is no such experiment. */
@@ -39,11 +42,12 @@ function NotFound({ id }: { id: string }) {
 export default function FileExperimentPage() {
   const { id = '' } = useParams();
   const q = useQuery(`experiment-file:${id}`, () => load(id));
+  const [version, setVersion] = useState(0);
   if (q.error) return <PageBody><ErrorState error={q.error} onRetry={q.reload} /></PageBody>;
   if (q.data === null && !q.loading) return <NotFound id={id} />;
   if (!q.data) return <PageBody><LoadingState label="Loading the experiment" /></PageBody>;
   const { item, labels } = q.data;
-  const deploy = <Button variant="primary" disabled title="Deploying comes with the world runtime"><Play />Deploy</Button>;
+  const deploy = <DeployDialog id={id} body={item.body} onDeployed={() => setVersion((v) => v + 1)} />;
   return (
     <>
       <PageHeader title={item.label} actions={deploy} width="wide"
@@ -52,7 +56,7 @@ export default function FileExperimentPage() {
         <Tabs defaultValue="overview">
           <TabsList><TabsTrigger value="overview">Overview</TabsTrigger><TabsTrigger value="runs">Runs</TabsTrigger><TabsTrigger value="settings">Settings</TabsTrigger></TabsList>
           <TabsContent value="overview"><FileOverview body={item.body} labels={labels} problems={item.problems} /></TabsContent>
-          <TabsContent value="runs"><EmptyState title="No runs yet." hint="Deploy runs this experiment." /></TabsContent>
+          <TabsContent value="runs"><Deployments id={id} version={version} /></TabsContent>
           <TabsContent value="settings"><EmptyState title="Editing settings comes with the editors." /></TabsContent>
         </Tabs>
       </PageBody>
