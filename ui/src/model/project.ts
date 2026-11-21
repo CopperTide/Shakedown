@@ -89,6 +89,7 @@ export interface WorldBody {
   flows?: Flow[];
   data?: DataSource[];
   people?: Person[];
+  observability?: Observability;
 }
 
 export interface Change { record: string; value: unknown }
@@ -145,4 +146,15 @@ export interface ProjectSettings {
   defaults?: { world?: string; cost_cap_usd?: number };
   permissions?: { edit?: EditPolicy; spend?: SpendPolicy };
   assistant?: { model: string; provider?: string };
+}
+
+export type OperatorBehavior = { answers_after: { minutes: number } } | 'approves' | 'refuses' | 'never_answers';
+export type HumanMoment = 'paged' | 'approval' | 'gate_needs_person' | 'agent_stuck' | 'message_to_person';
+
+/** A world's monitoring, alerting and on-call. */
+export interface Observability {
+  tools?: { id: string; product: string; mode: 'real' | 'stand-in'; seeded_from?: string; auth?: AuthRef }[];
+  alerts?: { name: string; when: string; routes_to?: string }[];
+  operators?: { id: string; label: string; role?: string; behavior: OperatorBehavior }[];
+  human?: { moment: HumanMoment; then: 'continue' | 'pause' | 'fail' }[];
 }

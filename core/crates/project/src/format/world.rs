@@ -29,6 +29,9 @@ pub struct WorldFile {
     /// Simulated people agents can ask.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub people: Vec<Person>,
+    /// Monitoring, alerting and on-call.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub observability: Option<super::Observability>,
 }
 
 impl Format for WorldFile {

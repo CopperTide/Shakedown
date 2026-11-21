@@ -120,3 +120,47 @@ fn assistant_settings_round_trip() {
     let again: ProjectFile = parse("shakedown.yaml", &to_yaml(&project).unwrap()).unwrap();
     assert_eq!(project, again);
 }
+
+const OBS_WORLD: &str = "format: shakedown-world/3
+label: W
+observability:
+  tools:
+    - {id: datadog, product: datadog, mode: stand-in, seeded_from: monitors.json}
+    - {id: otel, product: otel-collector, mode: real, auth: {key: otel-token}}
+  alerts:
+    - {name: PO approval queue over 3, when: approvals.pending > 3, routes_to: planner}
+  operators:
+    - {id: planner, label: Planner on call, role: planner, behavior: {answers_after: {minutes: 15}}}
+    - {id: it, label: IT on call, behavior: never_answers}
+  human:
+    - {moment: paged, then: continue}
+    - {moment: agent_stuck, then: fail}
+";
+
+#[test]
+fn observability_round_trips() {
+    let world = parse::<WorldFile>("w.yaml", OBS_WORLD).expect("observability parses");
+    let obs = world.observability.as_ref().unwrap();
+    assert_eq!(obs.tools.len(), 2);
+    assert_eq!(obs.operators.len(), 2);
+    let again: WorldFile = parse("w.yaml", &to_yaml(&world).unwrap()).unwrap();
+    assert_eq!(world, again);
+}
+
+#[test]
+fn bad_operator_behavior() {
+    let text = OBS_WORLD.replace("behavior: never_answers", "behavior: sometimes");
+    let err = parse::<WorldFile>("w.yaml", &text).unwrap_err();
+    assert!(
+        err.pointer.starts_with("/observability/operators/1"),
+        "{err}"
+    );
+}
+
+#[test]
+fn spend_cap_round_trips() {
+    let text = "format: shakedown-project/1\nname: P\npermissions:\n  spend:\n    under_cap: {usd_per_day: 10}\n";
+    let project = parse::<ProjectFile>("shakedown.yaml", text).unwrap();
+    let again: ProjectFile = parse("shakedown.yaml", &to_yaml(&project).unwrap()).unwrap();
+    assert_eq!(project, again);
+}

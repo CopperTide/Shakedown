@@ -87,3 +87,30 @@ describe('world editor', () => {
     expect(puts[0].body.package).toBe('toybench');
   });
 });
+
+describe('observability and on-call', () => {
+  it('add_operator_never_answers', async () => {
+    mockFetch();
+    show();
+    await section('Observability');
+    type('Operator id', 'it');
+    type('Operator name', 'IT on call');
+    fireEvent.change(screen.getByLabelText('Behavior'), { target: { value: 'never_answers' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add operator' }));
+    expect((await save()).observability).toEqual({ operators: [{ id: 'it', label: 'IT on call', behavior: 'never_answers' }] });
+  });
+
+  it('human_rule_choices', async () => {
+    mockFetch();
+    show();
+    await section('Observability');
+    fireEvent.change(await screen.findByLabelText('When an agent is stuck'), { target: { value: 'fail' } });
+    expect((await save()).observability).toEqual({ human: [{ moment: 'agent_stuck', then: 'fail' }] });
+  });
+});
+
+async function save() {
+  fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
+  await waitFor(() => expect(puts.length).toBe(1));
+  return puts[0].body;
+}

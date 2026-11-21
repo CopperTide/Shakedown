@@ -2,12 +2,16 @@
 //! `format:` line and inline credentials are refused with a JSON pointer to the value.
 
 mod experiment;
+mod observability;
 mod project;
 mod scenario;
 mod setup;
 mod world;
 
 pub use experiment::{Budget, ExperimentFile, Repeats};
+pub use observability::{
+    Alert, Behavior, HumanRule, Moment, ObsMode, ObsTool, Observability, Operator, Then,
+};
 pub use project::{AssistantSettings, Defaults, EditPolicy, Permissions, ProjectFile, SpendPolicy};
 pub use scenario::{Breach, Change, Check, CheckKind, Event, Gate, ScenarioFile};
 pub use setup::{AgentSpec, SetupFile, Team};
@@ -96,9 +100,11 @@ pub fn parse<T: Format>(file: &str, text: &str) -> Result<T, FormatError> {
     Ok(parsed)
 }
 
-/// Serializes a file as YAML.
+/// Serializes a file as YAML. It goes through JSON first, so enums with data are written as plain
+/// maps (`answers_after: {minutes: 15}`) rather than YAML tags, and read back the same way.
 pub fn to_yaml<T: Serialize>(value: &T) -> Result<String, FormatError> {
-    serde_yaml_ng::to_string(value).map_err(|e| FormatError::new("", "", e.to_string()))
+    let json = serde_json::to_value(value).map_err(|e| FormatError::new("", "", e.to_string()))?;
+    serde_yaml_ng::to_string(&json).map_err(|e| FormatError::new("", "", e.to_string()))
 }
 
 const CREDENTIAL: &str =
