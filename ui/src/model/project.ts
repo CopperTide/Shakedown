@@ -119,3 +119,17 @@ export interface ScenarioBody {
   gates?: Gate[];
   checks?: Check[];
 }
+
+export interface BuiltinAgent { id: string; role: string; model: string; key: string; tools?: string[] }
+
+/** Where a team comes from. A team described in MADL gets the full graph and checks. */
+export type TeamSpec =
+  | { kind: 'builtin'; agents: BuiltinAgent[] }
+  | { kind: 'code'; command: string }
+  | { kind: 'http'; url: string; auth?: AuthRef }
+  | { kind: 'claude-code' }
+  | { kind: 'codex' }
+  | { kind: 'madl'; file: string };
+
+/** An agent setup file's contents (shakedown-setup/1). */
+export interface SetupBody { format: string; label: string; team: TeamSpec }
