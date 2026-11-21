@@ -237,6 +237,23 @@ async fn read_token(fx: &AppFx) -> String {
     minted["token"].as_str().unwrap().to_string()
 }
 
+/// `method path` with `body`, as the token's bearer: the status.
+async fn as_token(fx: &AppFx, token: &str, put: bool, path: &str, body: Value) -> u16 {
+    let url = format!("{}{path}", fx.base);
+    let req = if put {
+        fx.http.put(url)
+    } else {
+        fx.http.post(url)
+    };
+    req.bearer_auth(token)
+        .json(&body)
+        .send()
+        .await
+        .unwrap()
+        .status()
+        .as_u16()
+}
+
 #[test]
 fn read_token_gets_cards_not_writes() {
     run(async {
@@ -247,28 +264,23 @@ fn read_token_gets_cards_not_writes() {
         .await;
         let dir = project();
         let fx = app("readtoken", &llm, dir.path()).await;
-        let (_, minted) = fx
-            .post("/api/tokens", json!({"name": "r", "scopes": ["read"]}))
-            .await;
-        let token = minted["token"].as_str().unwrap().to_string();
-        let body = json!({"messages": [{"role": "user", "content": "List"}]});
-        let res = fx
-            .http
-            .post(format!("{}/api/assistant/chat", fx.base))
-            .bearer_auth(&token)
-            .json(&body)
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(res.status().as_u16(), 200);
-        let put = fx
-            .http
-            .put(format!("{}/api/project/scenarios/supplier-slip", fx.base))
-            .bearer_auth(&token)
-            .json(&json!({"body": renamed_scenario()["body"], "confirm": true}))
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(put.status().as_u16(), 403);
+        let token = read_token(&fx).await;
+        let chat = json!({"messages": [{"role": "user", "content": "List"}]});
+        assert_eq!(
+            as_token(&fx, &token, false, "/api/assistant/chat", chat).await,
+            200
+        );
+        let edit = json!({"body": renamed_scenario()["body"], "confirm": true});
+        assert_eq!(
+            as_token(
+                &fx,
+                &token,
+                true,
+                "/api/project/scenarios/supplier-slip",
+                edit
+            )
+            .await,
+            403
+        );
     });
 }
