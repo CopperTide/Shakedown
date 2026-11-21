@@ -61,6 +61,7 @@ impl Project {
             name: name.into(),
             defaults: Default::default(),
             permissions: Default::default(),
+            assistant: None,
         };
         write_atomic(root, PROJECT_FILE, &to_yaml(&config)?)?;
         if !root.join(".gitignore").exists() {

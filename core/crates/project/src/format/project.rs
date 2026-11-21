@@ -19,6 +19,20 @@ pub struct ProjectFile {
     /// What the assistant and MCP clients may do without asking.
     #[serde(default)]
     pub permissions: Permissions,
+    /// The model the assistant uses; absent, the default provider's default model.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub assistant: Option<AssistantSettings>,
+}
+
+/// The assistant's model, on the user's own keys.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct AssistantSettings {
+    /// The model, e.g. `claude-sonnet`.
+    pub model: String,
+    /// The provider: `anthropic`, `openai`, `openrouter` or `local:<name>`; absent, the default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider: Option<String>,
 }
 
 impl Format for ProjectFile {

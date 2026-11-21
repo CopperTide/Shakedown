@@ -107,3 +107,16 @@ fn scenario_preset_round_trips() {
     let scenario = parse::<ScenarioFile>("s.yaml", text).expect("preset parses");
     assert_eq!(scenario.preset.as_deref(), Some("t1"));
 }
+
+#[test]
+fn assistant_settings_round_trip() {
+    let text = "format: shakedown-project/1\nname: P\nassistant:\n  model: claude-sonnet\n  provider: anthropic\n";
+    let project = parse::<ProjectFile>("shakedown.yaml", text).expect("assistant settings parse");
+    let assistant = project.assistant.as_ref().expect("set");
+    assert_eq!(
+        (assistant.model.as_str(), assistant.provider.as_deref()),
+        ("claude-sonnet", Some("anthropic"))
+    );
+    let again: ProjectFile = parse("shakedown.yaml", &to_yaml(&project).unwrap()).unwrap();
+    assert_eq!(project, again);
+}

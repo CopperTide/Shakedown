@@ -8,7 +8,7 @@ mod setup;
 mod world;
 
 pub use experiment::{Budget, ExperimentFile, Repeats};
-pub use project::{Defaults, EditPolicy, Permissions, ProjectFile, SpendPolicy};
+pub use project::{AssistantSettings, Defaults, EditPolicy, Permissions, ProjectFile, SpendPolicy};
 pub use scenario::{Breach, Change, Check, CheckKind, Event, Gate, ScenarioFile};
 pub use setup::{AgentSpec, SetupFile, Team};
 pub use world::{Auth, Connector, ConnectorMode, DataSource, Flow, Person, WorldFile};
