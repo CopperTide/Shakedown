@@ -1,6 +1,7 @@
 pub mod agents;
 pub mod api;
 pub mod app;
+pub mod assistant;
 pub mod auth;
 pub mod budget;
 pub mod cli;

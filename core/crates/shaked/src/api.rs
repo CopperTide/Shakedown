@@ -27,6 +27,7 @@ use crate::{
     runner,
 };
 
+mod assistant;
 mod compare;
 mod connect;
 mod connections;
@@ -79,6 +80,7 @@ pub fn router() -> Router<Arc<AppState>> {
 /// The routes each `api` module serves.
 fn modules() -> Router<Arc<AppState>> {
     Router::new()
+        .merge(assistant::router())
         .merge(external::router())
         .merge(connect::router())
         .merge(connections::router())

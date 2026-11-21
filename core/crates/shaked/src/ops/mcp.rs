@@ -117,7 +117,7 @@ async fn call(ctx: &OpCtx<'_>, asker: &Asker<'_>, params: &Value) -> Result<Valu
 }
 
 /// Checks an HTTP caller exactly as the operation's HTTP route would be checked.
-async fn allowed(
+pub(crate) async fn allowed(
     ctx: &OpCtx<'_>,
     asker: &Asker<'_>,
     op: &Operation,

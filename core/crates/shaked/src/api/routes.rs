@@ -77,6 +77,7 @@ pub const ROUTES: &[RouteCase] = &[
     public("GET", "/api/{*rest}"),
     public("POST", "/api/{*rest}"),
     r("GET", "/api/providers", Read, Instance),
+    r("POST", "/api/assistant/chat", Read, Instance),
     r("GET", "/api/tasks", Read, Instance),
     r("GET", "/api/team/default", Read, Instance),
     r("GET", "/api/teams", Read, Instance),
