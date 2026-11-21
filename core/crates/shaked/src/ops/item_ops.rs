@@ -11,7 +11,7 @@ use shakedown_project::format::{
 use shakedown_project::{item_file, Id, ItemBody, Project};
 
 use super::project_ops::NoInput;
-use super::{input, schema, view, Access, OpCtx, OpError, OpFn, OpFuture, Operation};
+use super::{input, schema, view, Access, IdInput, OpCtx, OpError, OpFn, OpFuture, Operation};
 
 pub(super) fn ops() -> Vec<Operation> {
     Kind::ALL.iter().flat_map(|kind| for_kind(*kind)).collect()
@@ -92,13 +92,6 @@ fn for_kind(kind: Kind) -> [Operation; 4] {
             run: runs[i],
         }
     })
-}
-
-/// Names one item.
-#[derive(Deserialize, JsonSchema)]
-struct IdInput {
-    /// The item's id: lowercase letters, digits and dashes.
-    id: String,
 }
 
 /// What a put takes; `body` is checked as the item's file format.

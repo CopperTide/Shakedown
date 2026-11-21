@@ -59,8 +59,9 @@ fn schemas_are_objects() {
 fn access_classes_follow_the_verb() {
     for op in ops::all() {
         let want = match op.name.rsplit('.').next().unwrap() {
-            "list" | "get" | "status" => Access::Read,
+            "list" | "get" | "status" | "runs" => Access::Read,
             "delete" => Access::Delete,
+            "deploy" => Access::Spend,
             _ => Access::Edit,
         };
         assert_eq!(op.access, want, "{}", op.name);

@@ -3,6 +3,7 @@
 //! so the buttons, the API, the assistant and any agent can do the same things.
 
 mod deploy;
+mod deploy_ops;
 mod error;
 pub mod http;
 mod item_ops;
@@ -118,6 +119,7 @@ pub fn all() -> &'static [Operation] {
     ALL.get_or_init(|| {
         let mut ops = project_ops::ops();
         ops.extend(item_ops::ops());
+        ops.extend(deploy_ops::ops());
         ops
     })
 }
@@ -125,6 +127,13 @@ pub fn all() -> &'static [Operation] {
 /// The operation named `name`.
 pub fn find(name: &str) -> Option<&'static Operation> {
     all().iter().find(|op| op.name == name)
+}
+
+/// Names one item.
+#[derive(serde::Deserialize, schemars::JsonSchema)]
+struct IdInput {
+    /// The item's id: lowercase letters, digits and dashes.
+    id: String,
 }
 
 /// Reads an operation's input; a malformed input is 400.

@@ -107,6 +107,11 @@ impl ApiError {
         &self.1
     }
 
+    /// The HTTP status it answers with.
+    pub fn status(&self) -> StatusCode {
+        self.0
+    }
+
     fn bad(msg: impl Into<String>) -> ApiError {
         ApiError(StatusCode::BAD_REQUEST, msg.into())
     }

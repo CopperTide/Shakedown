@@ -17,20 +17,8 @@ use crate::model::{AgentKind, AgentSpec, Runner, Team};
 pub(crate) fn request(project: &Project, id: &Id) -> Result<NewExperimentReq, OpError> {
     let exp = experiment_of(project, id)?;
     no_problems(project, id, exp)?;
-    let world = world_of(project, &exp.world)?;
     let scenario = scenario_of(project, &exp.scenario)?;
-    let package = world.package.clone().ok_or_else(|| {
-        unprocessable(format!(
-            "{} has no runtime yet: set package: to an installed benchmark or built world",
-            world.label
-        ))
-    })?;
-    let task = scenario.preset.clone().ok_or_else(|| {
-        unprocessable(format!(
-            "{} names no task of {package} to play: set preset:",
-            scenario.label
-        ))
-    })?;
+    let (package, task) = runtime(world_of(project, &exp.world)?, scenario)?;
     let setups = exp
         .setups
         .iter()
@@ -48,6 +36,21 @@ pub(crate) fn request(project: &Project, id: &Id) -> Result<NewExperimentReq, Op
         world_minutes: None,
         project_experiment: Some(id.to_string()),
     })
+}
+
+/// The package that runs the world and the task of it the scenario plays.
+fn runtime(world: &WorldFile, scenario: &ScenarioFile) -> Result<(String, String), OpError> {
+    let package = world.package.clone().ok_or_else(|| {
+        let why = "has no runtime yet: set package: to an installed benchmark or built world";
+        unprocessable(format!("{} {why}", world.label))
+    })?;
+    let task = scenario.preset.clone().ok_or_else(|| {
+        unprocessable(format!(
+            "{} names no task of {package} to play: set preset:",
+            scenario.label
+        ))
+    })?;
+    Ok((package, task))
 }
 
 fn unprocessable(message: String) -> OpError {

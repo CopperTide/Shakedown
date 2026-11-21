@@ -55,3 +55,9 @@ impl From<ProjectError> for OpError {
         OpError::new(status, e.to_string())
     }
 }
+
+impl From<crate::api::ApiError> for OpError {
+    fn from(e: crate::api::ApiError) -> OpError {
+        OpError::new(e.status(), e.message())
+    }
+}
