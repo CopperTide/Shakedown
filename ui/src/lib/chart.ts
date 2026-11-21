@@ -24,7 +24,7 @@ export function sparkOptions(width: number, height: number, c: ChartColors): uPl
 
 /** A small chart: a time axis in seconds from the start, a value axis, one series. */
 export function lineOptions(width: number, height: number, c: ChartColors, label: string): uPlot.Options {
-  const axis = { stroke: c.axis, grid: { stroke: c.grid, width: 1 }, ticks: { stroke: c.grid, width: 1 }, font: '11px Inter Variable, system-ui' };
+  const axis = { stroke: c.axis, grid: { stroke: c.grid, width: 1 }, ticks: { stroke: c.grid, width: 1 }, font: '11px Instrument Sans Variable, system-ui' };
   return {
     width, height, legend: { show: false }, cursor: { y: false, points: { size: 5 } },
     scales: { x: { time: false } },
