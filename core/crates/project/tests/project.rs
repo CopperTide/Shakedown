@@ -235,3 +235,13 @@ fn scenario_hash_changes_with_content() {
         .unwrap();
     assert_ne!(item.hash, before);
 }
+
+#[test]
+fn set_config_round_trips() {
+    let dir = larkspur();
+    let mut project = Project::open(dir.path()).unwrap();
+    let mut config = project.config.clone();
+    config.name = "Renamed Ops".into();
+    project.set_config(config.clone()).unwrap();
+    assert_eq!(Project::open(dir.path()).unwrap().config, config);
+}

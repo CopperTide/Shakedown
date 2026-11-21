@@ -73,6 +73,23 @@ impl Project {
         Project::open(root)
     }
 
+    /// Replaces `shakedown.yaml` with `config`, checked exactly as it would be read back.
+    pub fn set_config(&mut self, config: ProjectFile) -> Result<(), ProjectError> {
+        let yaml = to_yaml(&config)?;
+        let checked: ProjectFile = parse(PROJECT_FILE, &yaml)?;
+        if checked != config {
+            return Err(crate::FormatError::new(
+                PROJECT_FILE,
+                "",
+                "some values cannot be written faithfully",
+            )
+            .into());
+        }
+        write_atomic(&self.root, PROJECT_FILE, &yaml)?;
+        self.config = config;
+        Ok(())
+    }
+
     /// The items of `kind`, ordered by id.
     pub fn list(&self, kind: Kind) -> Vec<&Item> {
         self.items

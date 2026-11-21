@@ -238,3 +238,54 @@ fn http_errors_keep_their_status() {
         assert_eq!(status, 409);
     });
 }
+
+fn settings(edit: &str) -> Value {
+    json!({"format": "shakedown-project/1", "name": "Larkspur Ops", "permissions": {"edit": edit, "spend": "always_ask"}})
+}
+
+#[test]
+fn update_settings_diff_first() {
+    run(async {
+        let dir = larkspur();
+        let fx = AppFx::idle("ops", "settings")
+            .project(dir.path())
+            .start()
+            .await;
+        let out = call(
+            &fx,
+            "project.update",
+            json!({"body": settings("apply_then_tell")}),
+        )
+        .await
+        .unwrap();
+        assert_eq!(out["proposed"], true, "{out}");
+        assert!(
+            out["diff"]
+                .as_str()
+                .unwrap()
+                .contains("+  edit: apply_then_tell"),
+            "{out}"
+        );
+        let status = call(&fx, "project.status", json!({})).await.unwrap();
+        assert_eq!(status["settings"]["permissions"]["edit"], "diff_first");
+    });
+}
+
+#[test]
+fn apply_then_tell_writes_directly() {
+    run(async {
+        let dir = larkspur();
+        let fx = AppFx::idle("ops", "tell").project(dir.path()).start().await;
+        call(
+            &fx,
+            "project.update",
+            json!({"body": settings("apply_then_tell"), "confirm": true}),
+        )
+        .await
+        .unwrap();
+        let input = json!({"id": "direct", "body": scenario_body("Direct")});
+        let out = call(&fx, "scenarios.put", input).await.unwrap();
+        assert_eq!(out["label"], "Direct", "{out}");
+        assert!(dir.path().join("scenarios/direct.yaml").is_file());
+    });
+}
