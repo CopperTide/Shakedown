@@ -47,3 +47,45 @@ export interface ExperimentBody {
   budget?: { per_run_usd?: number; per_deployment_usd?: number };
   parent?: string;
 }
+
+/** A credential reference: a key-store name or an environment variable, never the value. */
+export interface AuthRef { key?: string; env?: string }
+
+export interface Connector {
+  id: string;
+  label: string;
+  mode: 'stand-in' | 'real' | 'replay';
+  product?: string;
+  mcp?: string;
+  openapi?: string;
+  auth?: AuthRef;
+}
+
+export interface Flow { id: string; trigger: string; steps: string[] }
+
+/** One data source: exactly one of file, database or import. */
+export interface DataSource {
+  file?: string;
+  database?: string;
+  import?: string;
+  seeds?: string;
+  from?: string;
+  engine?: string;
+  version?: string;
+  snapshot?: string;
+  masked?: boolean;
+  default_state?: boolean;
+}
+
+export interface Person { id: string; label: string; role?: string }
+
+/** A world file's contents (shakedown-world/3). */
+export interface WorldBody {
+  format: string;
+  label: string;
+  package?: string;
+  connectors?: Connector[];
+  flows?: Flow[];
+  data?: DataSource[];
+  people?: Person[];
+}
