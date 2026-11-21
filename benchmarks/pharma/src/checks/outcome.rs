@@ -1,7 +1,7 @@
 //! Outcome checks on the quality system, the MES schedule and the customers: the deviation, the
 //! hold, the next batch, the notices and the CRM.
-use arena_part::proto::NamedCheck;
 use serde_json::Value;
+use shakedown_part::proto::NamedCheck;
 
 use super::{check, listed, World};
 use crate::days::day;

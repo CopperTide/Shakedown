@@ -3,10 +3,12 @@
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
-use arena_part::helpers::busy::Busy;
-use arena_part::helpers::mariadb::{check_same_server, restore_error, Manifest, Position, Tracked};
-use arena_part::proto::StartParams;
-use arena_part::PartError;
+use shakedown_part::helpers::busy::Busy;
+use shakedown_part::helpers::mariadb::{
+    check_same_server, restore_error, Manifest, Position, Tracked,
+};
+use shakedown_part::proto::StartParams;
+use shakedown_part::PartError;
 
 use crate::names::Site;
 use crate::ready::Ready;
@@ -38,8 +40,7 @@ pub struct Source {
 
 impl Erpnext {
     pub(crate) fn instance(&self, id: &str) -> Result<Instance, PartError> {
-        let live = self.live.lock().expect("instances lock");
-        let found = live.get(id).cloned();
+        let found = self.live.get(id);
         found.ok_or_else(|| PartError::unknown_instance(id))
     }
 
@@ -60,16 +61,13 @@ impl Erpnext {
             settings,
             prev_files: source.files,
         };
-        self.live
-            .lock()
-            .expect("instances lock")
-            .insert(p.instance, inst);
+        self.live.insert(p.instance, inst);
         Ok(())
     }
 
     /// Marks the site of instance `id` busy; -32602 when the instance runs or is starting.
     fn claim(&self, id: &str, site: &Site) -> Result<Busy<'_>, PartError> {
-        let running = self.live.lock().expect("instances lock").contains_key(id);
+        let running = self.live.contains(id);
         let busy = (!running).then(|| self.busy.try_mark(&site.db)).flatten();
         busy.ok_or_else(|| PartError::invalid(format!("instance {id} is already running")))
     }
@@ -135,7 +133,7 @@ impl Erpnext {
     }
 
     pub(crate) async fn stop_instance(&self, id: &str) -> Result<(), PartError> {
-        let inst = self.live.lock().expect("instances lock").remove(id);
+        let inst = self.live.remove(id);
         let Some(i) = inst else {
             return Ok(());
         };

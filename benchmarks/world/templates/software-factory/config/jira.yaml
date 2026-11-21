@@ -1,0 +1,24 @@
+# The Jira twin (integrations/jira-twin): the company's project, its board and Sprint 14. People are made users the
+# first time they act.
+hosts: [{host: "jira.{company.domain}"}]
+deployment: cloud
+token: "{company.slug}-jira-token"
+default_user: "{company.slug}-admin"
+email_domain: "{company.domain}"
+projects: [{key: "{company.key}", name: "{company.name}", type: software}]
+workflow:
+  statuses:
+    - {name: To Do, category: new}
+    - {name: In Progress, category: indeterminate}
+    - {name: In Review, category: indeterminate}
+    - {name: Done, category: done}
+  transitions:
+    - {id: "11", name: To Do, to: To Do}
+    - {id: "21", name: Start progress, to: In Progress}
+    - {id: "31", name: Send to review, to: In Review}
+    - {id: "41", name: Done, to: Done}
+boards: [{id: 1, name: "{company.key} board", type: scrum, project: "{company.key}"}]
+sprints:
+  - {id: 13, board: 1, name: Sprint 13, state: closed, start: -16d, end: -2d, complete: -2d}
+  - {id: 14, board: 1, name: Sprint 14, state: active, start: -2d, end: 12d, goal: Totals in cents and a safer checkout}
+issues: "@backlog.yaml"

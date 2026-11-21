@@ -1,17 +1,17 @@
-"""Renders the plant on Isaac Sim without arenad, for looking at the showcase scene and for making its video.
+"""Renders the plant on Isaac Sim without shaked, for looking at the showcase scene and for making its video.
 
     /isaac-sim/python.sh remote/render_showcase.py --seconds 95 --out showcase.mp4
     /isaac-sim/python.sh remote/render_showcase.py --seconds 3 --stills wide,press_a --out look.mp4
     /isaac-sim/python.sh remote/render_showcase.py --shift --calm --seconds 40 --at "10:safe_stop_cell:{\\"cell\\":\\"CELL-R1\\"}"
 
-Run it with PYTHONPATH=<arena>/kits/python and ARENA_SAVES set (an MP4 path that is not absolute goes under
-$ARENA_SAVES/isaac-sim/). It drives the same part arenad drives (start, advance, call_tool, stop) with the arena seed,
+Run it with PYTHONPATH=<repo>/kits/python and SHAKEDOWN_SAVES set (an MP4 path that is not absolute goes under
+$SHAKEDOWN_SAVES/isaac-sim/). It drives the same part shaked drives (start, advance, call_tool, stop) with the world seed,
 so the plant runs its own scenario on its own clock. With --stills it renders no video: it steps physics to --seconds,
 then writes one image of each named shot to --stills-dir.
 
 --shift adds the factory benchmark's shift config (robot cell R1, the plant's load: benchmarks/factory/data/shift.json),
 which brings the shift's scene pieces. --at "<seconds>:<tool>:<json args>" (repeatable) calls a plant tool at that
-arena time, as a benchmark's setup or link would (show_status for the boards, safe_stop_cell): the world's own inputs,
+world time, as a benchmark's setup or link would (show_status for the boards, safe_stop_cell): the world's own inputs,
 for looking at the pieces in each state. --path-traced renders with the RTX path tracer (--spp samples per pixel)."""
 import argparse
 import json

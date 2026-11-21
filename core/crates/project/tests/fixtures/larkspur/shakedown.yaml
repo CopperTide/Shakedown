@@ -1,0 +1,8 @@
+format: shakedown-project/1
+name: Larkspur Ops
+defaults:
+  world: larkspur-plant
+  cost_cap_usd: 1.5
+permissions:
+  edit: diff_first
+  spend: always_ask

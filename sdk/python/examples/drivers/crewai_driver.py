@@ -1,10 +1,11 @@
-"""A CrewAI crew in Shakedown: an investigator, then a resolver. ARENA_PROVIDER/ARENA_MODEL pick the model."""
+"""A CrewAI crew in Shakedown: an investigator, then a resolver. SHAKEDOWN_PROVIDER/SHAKEDOWN_MODEL pick the model."""
 import os
 
-from arena.adapters import crewai as sd  # first: it turns CrewAI's own telemetry off
+from shakedown.adapters import crewai as sd  # first: it turns CrewAI's own telemetry off
 from crewai import Agent, Crew, Task
+from shakedown.settings import setting
 
-PROVIDER, MODEL = os.environ.get("ARENA_PROVIDER", "openai"), os.environ.get("ARENA_MODEL", "gpt-4.1-mini")
+PROVIDER, MODEL = setting("SHAKEDOWN_PROVIDER", "openai"), setting("SHAKEDOWN_MODEL", "gpt-4.1-mini")
 
 with sd.run() as run:
     def member(id: str, role: str, goal: str) -> Agent:

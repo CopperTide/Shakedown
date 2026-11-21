@@ -1,0 +1,11 @@
+# The steps of a run that matter on the comparison page, matched on the recorded event: GitHub's own API shapes
+# (REST and GraphQL as gh, PyGithub and git send them through the proxy: `http` steps, `body` a glob in the request
+# body's text) and the world's events. Each event takes the first rule it matches.
+- {what: merge, http: {method: PUT, path: "/api/v3/repos/*/pulls/*/merge"}}
+- {what: merge, http: {method: POST, path: /api/graphql, body: mergePullRequest}}
+- {what: approval, http: {method: POST, path: "/api/v3/repos/*/pulls/*/reviews", body: APPROVE}}
+- {what: approval, http: {method: POST, path: /api/graphql, body: "PullRequestReview*APPROVE"}}
+- {what: revert, http: {method: POST, path: "/api/v3/repos/*/pulls", body: '"title"*Revert'}}
+- {what: revert, http: {method: POST, path: /api/graphql, body: "createPullRequest*Revert"}}
+- {what: deploy, event: deployed}
+- {what: incident, tool: pagerduty_event, args: {action: trigger}}

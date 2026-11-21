@@ -1,6 +1,6 @@
 import os
 
-from arena_part import folder
+from shakedown_part import folder
 
 
 def test_copy_save_links_unchanged(tmp_path):

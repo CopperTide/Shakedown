@@ -1,11 +1,11 @@
 //! A running part program and its JSON-RPC calls.
 use crate::manifest::{Manifest, Run};
+use crate::request::Request;
 use crate::run_override;
 use anyhow::{Context, Result};
 use serde::de::DeserializeOwned;
 use serde_json::{json, Value};
 use std::collections::{HashMap, VecDeque};
-use std::fmt;
 use std::path::Path;
 use std::process::Stdio;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -18,29 +18,22 @@ use tokio::sync::{mpsc, oneshot};
 const STDERR_LINES: usize = 20;
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(600);
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum CallError {
     /// The part answered with a JSON-RPC error.
+    #[error("{message} ({code})")]
     Part {
         code: i64,
         message: String,
+        /// The error's `data`, when it gave one.
+        data: Option<Value>,
     },
     /// The program is gone; carries the last 20 stderr lines.
+    #[error("stopped: {0}")]
     Stopped(String),
+    #[error("timed out")]
     Timeout,
 }
-
-impl fmt::Display for CallError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            CallError::Part { code, message } => write!(f, "{message} ({code})"),
-            CallError::Stopped(tail) => write!(f, "stopped: {tail}"),
-            CallError::Timeout => write!(f, "timed out"),
-        }
-    }
-}
-
-impl std::error::Error for CallError {}
 
 type Reply = Result<Value, CallError>;
 
@@ -81,15 +74,37 @@ fn kill_group(pid: u32) {
     }
 }
 
-fn substitute(arg: &str, bin_dir: &Path) -> String {
-    arg.replace("${ARENA_BIN_DIR}", &bin_dir.to_string_lossy())
+/// The folders a program is started with: `${SHAKEDOWN_BIN_DIR}` and `${SHAKEDOWN_DIR}` in its command,
+/// and its save storage.
+#[derive(Debug, Clone, Copy)]
+pub struct ProgramDirs<'a> {
+    pub bin: &'a Path,
+    /// Left unsubstituted when empty.
+    pub repo: &'a Path,
+    pub saves: &'a Path,
+}
+
+/// A command argument with `${SHAKEDOWN_BIN_DIR}` and `${SHAKEDOWN_DIR}` replaced (`${SHAKEDOWN_DIR}` only
+/// when `repo_dir` is set).
+fn expand_arg(arg: &str, bin_dir: &Path, repo_dir: &Path) -> String {
+    let mut arg = arg.to_string();
+    // `${ARENA_BIN_DIR}` and `${ARENA_DIR}`: the old names, in manifests written before 2026-11-19.
+    for name in ["${SHAKEDOWN_BIN_DIR}", "${ARENA_BIN_DIR}"] {
+        arg = arg.replace(name, &bin_dir.to_string_lossy());
+    }
+    if !repo_dir.as_os_str().is_empty() {
+        for name in ["${SHAKEDOWN_DIR}", "${ARENA_DIR}"] {
+            arg = arg.replace(name, &repo_dir.to_string_lossy());
+        }
+    }
+    arg
 }
 
 /// Env vars a command-mode part inherits; everything else is cleared.
 const PASSED_ENV: [&str; 6] = [
     "PATH",
     "HOME",
-    "ARENA_PG_URL",
+    "SHAKEDOWN_PG_URL",
     "UV_CACHE_DIR",
     "XDG_CACHE_HOME",
     "RUST_LOG",
@@ -97,8 +112,7 @@ const PASSED_ENV: [&str; 6] = [
 
 fn command_for(
     m: &Manifest,
-    bin_dir: &Path,
-    saves_root: &Path,
+    dirs: ProgramDirs,
     env: &[(String, String)],
 ) -> Result<(Command, Option<String>)> {
     if let Some(line) = run_override::from_env(&m.name) {
@@ -108,12 +122,12 @@ fn command_for(
             run_override::var_name(&m.name)
         );
         let argv = run_override::argv(&line);
-        return Ok((program_command(m, &argv, bin_dir, saves_root, env), None));
+        return Ok((program_command(m, &argv, dirs, env), None));
     }
     match &m.run {
-        Run::Command(argv) => Ok((program_command(m, argv, bin_dir, saves_root, env), None)),
+        Run::Command(argv) => Ok((program_command(m, argv, dirs, env), None)),
         Run::Image(image) => {
-            let (c, name) = container_command(m, image, saves_root)?;
+            let (c, name) = container_command(m, image, dirs.saves)?;
             Ok((c, Some(name)))
         }
     }
@@ -123,22 +137,23 @@ fn command_for(
 fn program_command(
     m: &Manifest,
     argv: &[String],
-    bin_dir: &Path,
-    saves_root: &Path,
+    dirs: ProgramDirs,
     env: &[(String, String)],
 ) -> Command {
-    let mut args: Vec<String> = argv.iter().map(|a| substitute(a, bin_dir)).collect();
+    let expand = |a: &String| expand_arg(a, dirs.bin, dirs.repo);
+    let mut args: Vec<String> = argv.iter().map(expand).collect();
     if args[0].contains('/') && Path::new(&args[0]).is_relative() {
         args[0] = m.dir.join(&args[0]).to_string_lossy().into_owned();
     }
     let mut c = Command::new(&args[0]);
     c.args(&args[1..]).current_dir(&m.dir).env_clear();
     for k in PASSED_ENV {
-        if let Some(v) = std::env::var_os(k) {
-            c.env(k, v);
-        }
+        c.envs(shakedown_part::settings::passed(k));
     }
-    c.env("ARENA_SAVES", saves_root);
+    c.envs(shakedown_part::settings::both(
+        "SHAKEDOWN_SAVES",
+        dirs.saves,
+    ));
     for (k, v) in env {
         c.env(k, v);
     }
@@ -152,7 +167,7 @@ fn container_command(m: &Manifest, image: &str, saves_root: &Path) -> Result<(Co
     std::fs::create_dir_all(&mine)?;
     static COUNTER: AtomicU64 = AtomicU64::new(0);
     let name = format!(
-        "arena-part-{}-{}-{}",
+        "shakedown-part-{}-{}-{}",
         m.name,
         std::process::id(),
         COUNTER.fetch_add(1, Ordering::Relaxed)
@@ -219,6 +234,7 @@ fn parse_reply(line: &str) -> Option<(u64, Reply)> {
                 .and_then(Value::as_str)
                 .unwrap_or("")
                 .to_string(),
+            data: e.get("data").cloned(),
         }),
         None => Ok(v.get("result").cloned().unwrap_or(Value::Null)),
     };
@@ -273,15 +289,34 @@ impl Client {
         Client::spawn_with_env(m, bin_dir, saves_root, &[]).await
     }
 
+    /// Like `spawn_with_env`, with `${SHAKEDOWN_DIR}` substituted too.
+    pub async fn spawn_in(
+        m: &Manifest,
+        dirs: ProgramDirs<'_>,
+        env: &[(String, String)],
+    ) -> Result<Client> {
+        let (cmd, container) = command_for(m, dirs, env)?;
+        Client::spawn_command(m, cmd, container)
+    }
+
     /// Like `spawn`, with extra environment variables for command mode (they override the ones
-    /// passed through). Image mode ignores them: a container gets no environment from arenad.
+    /// passed through). Image mode ignores them: a container gets no environment from shaked.
     pub async fn spawn_with_env(
         m: &Manifest,
         bin_dir: &Path,
         saves_root: &Path,
         env: &[(String, String)],
     ) -> Result<Client> {
-        let (mut cmd, container) = command_for(m, bin_dir, saves_root, env)?;
+        let dirs = ProgramDirs {
+            bin: bin_dir,
+            repo: Path::new(""),
+            saves: saves_root,
+        };
+        Client::spawn_in(m, dirs, env).await
+    }
+
+    /// Starts `cmd` with piped stdio in a process group of its own.
+    fn spawn_command(m: &Manifest, mut cmd: Command, container: Option<String>) -> Result<Client> {
         cmd.stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -359,6 +394,19 @@ impl Client {
         self.call_within(method, params, None).await
     }
 
+    /// `request`'s method with its params; the answer read as `T`.
+    pub async fn request<T: DeserializeOwned>(&self, r: &impl Request) -> Result<T, CallError> {
+        self.call(method_of(r), params_of(r)).await
+    }
+
+    /// `request` without a deadline (see [`Client::call_until_done`]).
+    pub async fn request_until_done<T: DeserializeOwned>(
+        &self,
+        r: &impl Request,
+    ) -> Result<T, CallError> {
+        self.call_until_done(method_of(r), params_of(r)).await
+    }
+
     async fn call_within<T: DeserializeOwned>(
         &self,
         method: &str,
@@ -379,6 +427,7 @@ impl Client {
         serde_json::from_value(v).map_err(|e| CallError::Part {
             code: -32603,
             message: format!("bad result: {e}"),
+            data: None,
         })
     }
 
@@ -386,6 +435,15 @@ impl Client {
     pub fn pending_len(&self) -> usize {
         self.state.lock().unwrap().pending.len()
     }
+}
+
+fn method_of<R: Request>(_: &R) -> &'static str {
+    R::METHOD
+}
+
+/// A request's params as JSON: the same object, keys in the same order, as an untyped call sends.
+fn params_of(r: &impl Request) -> Value {
+    serde_json::to_value(r).expect("protocol params are plain data: strings, numbers and JSON")
 }
 
 /// The reply on `rx`, waiting at most `limit` (None: until the program answers or exits).
@@ -417,5 +475,31 @@ impl Drop for Client {
                 });
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn repo_dir_is_substituted_in_commands() {
+        let (bin, repo) = (Path::new("/b"), Path::new("/a"));
+        let got = expand_arg("${SHAKEDOWN_DIR}/benchmarks/world", bin, repo);
+        assert_eq!(got, "/a/benchmarks/world");
+        assert_eq!(expand_arg("${SHAKEDOWN_BIN_DIR}/x", bin, repo), "/b/x");
+    }
+
+    #[test]
+    fn an_error_reply_keeps_its_data() {
+        let line =
+            r#"{"id": 3, "error": {"code": -32602, "message": "no", "data": {"problems": []}}}"#;
+        let (id, reply) = parse_reply(line).unwrap();
+        let Err(CallError::Part { code, data, .. }) = reply else {
+            panic!("an error reply")
+        };
+        assert_eq!((id, code, data), (3, -32602, Some(json!({"problems": []}))));
+        let plain = parse_reply(r#"{"id": 4, "error": {"code": 1, "message": "m"}}"#).unwrap();
+        assert!(matches!(plain.1, Err(CallError::Part { data: None, .. })));
     }
 }

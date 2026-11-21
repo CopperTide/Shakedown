@@ -2,8 +2,9 @@
 samples, each batch's release tests, and the documents. Everything here only reads."""
 from datetime import date
 
-from arena_part import errors
-from arena_part.params import Refusal
+from shakedown_part import errors
+from shakedown_part.jsonstate import Scenarios
+from shakedown_part.params import Refusal
 
 BASE = "base"
 
@@ -22,13 +23,8 @@ def check_config(config) -> None:
         raise errors.invalid("config.today must be a date (YYYY-MM-DD)") from None
 
 
-def scenarios(config) -> list:
-    return [BASE, *sorted(config["lims"].get("scenarios", {}))]
-
-
-def overlay(config, state) -> dict:
-    """What the instance's scenario changes (empty for the base)."""
-    return config["lims"].get("scenarios", {}).get(state["scenario"], {})
+SCENARIOS = Scenarios(("lims",), sort=True, base=BASE)
+overlay = SCENARIOS.overlay  # what the instance's scenario changes (empty for the base)
 
 
 def sample_status(s) -> str:

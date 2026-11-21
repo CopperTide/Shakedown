@@ -3,6 +3,6 @@ contact_links:
   - name: Report a security problem
     url: https://github.com/CopperTide/Shakedown/security/advisories/new
     about: Please report vulnerabilities privately.
-  - name: The arena-part/1 protocol
+  - name: The shakedown-part/1 protocol
     url: https://github.com/CopperTide/Shakedown/blob/main/docs/protocol.md
-    about: Every method, error code and contract between arenad and an integration.
+    about: Every method, error code and contract between shaked and an integration.

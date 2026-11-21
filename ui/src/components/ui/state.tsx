@@ -22,7 +22,7 @@ export function ErrorState({ error, hint, onRetry, className }: { error: string;
       <AlertTriangle aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
       <div className="min-w-0 flex-1">
         <p className="font-medium break-words">{error}</p>
-        <p className="text-xs text-fg/80">{hint ?? 'Check that arenad is running, then try again.'}</p>
+        <p className="text-xs text-fg/80">{hint ?? 'Check that shaked is running, then try again.'}</p>
       </div>
       {onRetry && <Button size="sm" onClick={onRetry}>Try again</Button>}
     </div>

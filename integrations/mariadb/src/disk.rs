@@ -2,11 +2,11 @@
 //! saves and dumps on disk.
 use std::collections::{HashMap, HashSet};
 
-use arena_part::helpers::mariadb::{
+use shakedown_part::helpers::mariadb::{
     needed_positions, Manifest, Position, Server, ServerRef, Standing,
 };
-use arena_part::proto::{GcResult, Usage};
-use arena_part::PartError;
+use shakedown_part::proto::{GcResult, Usage};
+use shakedown_part::PartError;
 
 use crate::views::VIEW_PREFIX;
 use crate::Mariadb;
@@ -55,7 +55,7 @@ impl Mariadb {
     pub(crate) async fn drop_save_files(&self, save: &str) -> Result<(), PartError> {
         self.dirs.remove(save).map_err(PartError::internal_from)?;
         if let Err(e) = self.settle().await {
-            eprintln!("arena-mariadb: dropped save {save}, but tidying up failed: {e}");
+            eprintln!("shakedown-mariadb: dropped save {save}, but tidying up failed: {e}");
         }
         Ok(())
     }
@@ -69,7 +69,7 @@ impl Mariadb {
             out.bytes += idle.bytes;
             if let Err(e) = self.reroot_on(&s, keep).await {
                 let name = &s.config().container;
-                eprintln!("arena-mariadb: not re-rooting the saves on {name}: {e}");
+                eprintln!("shakedown-mariadb: not re-rooting the saves on {name}: {e}");
             }
         }
         out.bytes += self.settle().await?;
@@ -105,7 +105,7 @@ impl Mariadb {
             // One server that misbehaves must not stop the others being purged.
             if let Err(e) = self.purge(&s, &saves).await {
                 let name = &s.config().container;
-                eprintln!("arena-mariadb: not purging {name}: {e}");
+                eprintln!("shakedown-mariadb: not purging {name}: {e}");
             }
         }
         Ok(freed)
@@ -121,7 +121,7 @@ impl Mariadb {
     /// accounts of either.
     fn busy_dbs(&self) -> HashSet<String> {
         let mut busy = self.busy.snapshot();
-        let live = self.live.lock().expect("instances lock");
+        let live = self.live.lock();
         busy.extend(live.values().map(|i| i.tracked.db.clone()));
         busy
     }
@@ -152,7 +152,7 @@ impl Mariadb {
 
     /// The binlog positions on the server `here` that a save or a live instance still needs.
     fn needed(&self, here: &ServerRef, saves: &[(String, Manifest)]) -> Vec<Position> {
-        let live = self.live.lock().expect("instances lock");
+        let live = self.live.lock();
         let on_here = live.values().filter(|i| &i.server_ref == here);
         needed_positions(here, saves, on_here.map(|i| &i.tracked))
     }

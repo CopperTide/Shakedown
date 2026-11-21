@@ -1,8 +1,8 @@
 //! Service tests that need no Docker: config checks, ids and the part's description.
-use arena_part::proto::*;
-use arena_part::Part;
-use arena_service::Service;
 use serde_json::{json, Value};
+use shakedown_part::proto::*;
+use shakedown_part::Part;
+use shakedown_service::Service;
 use std::path::PathBuf;
 
 fn part() -> Service {
@@ -18,6 +18,7 @@ fn start(instance: &str, config: Value) -> StartParams {
         seed: 1,
         clock_ms: 0,
         from: None,
+        world_time: None,
     }
 }
 
@@ -77,4 +78,19 @@ async fn unknown_instance_and_save() {
         .unwrap_err();
     assert_eq!(e.code, -32002);
     assert_eq!(p.usage().await.unwrap().bytes, 0);
+}
+
+#[tokio::test]
+async fn volume_strategies_that_lack_what_they_need_are_refused() {
+    let p = part();
+    let here = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
+    let pg = json!({"compose_file": here, "volumes": [{"name": "pg", "save": "postgres"}]});
+    let e = p.start(start("a", pg)).await.unwrap_err();
+    assert_eq!(e.code, -32602);
+    assert_eq!(
+        e.message,
+        "volume pg saves by postgres, which needs service (the compose service running the database)"
+    );
+    let bad_way = json!({"compose_file": here, "volumes": [{"name": "x", "save": "zip"}]});
+    assert_eq!(p.start(start("a", bad_way)).await.unwrap_err().code, -32602);
 }

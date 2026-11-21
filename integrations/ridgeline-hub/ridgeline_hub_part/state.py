@@ -2,7 +2,7 @@
 import json
 from pathlib import Path
 
-from arena_part import errors
+from shakedown_part import errors
 
 from . import inbound
 from .world import World

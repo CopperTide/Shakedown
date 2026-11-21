@@ -1,0 +1,166 @@
+//! The file formats: every fixture round-trips, and malformed or unsafe files are refused with a
+//! JSON pointer to the offending value.
+
+use std::path::{Path, PathBuf};
+
+use shakedown_project::format::{
+    parse, to_yaml, ExperimentFile, Format, ProjectFile, ScenarioFile, SetupFile, WorldFile,
+};
+
+fn fixture(rel: &str) -> (String, String) {
+    let path: PathBuf = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/larkspur")
+        .join(rel);
+    let text = std::fs::read_to_string(&path).expect("fixture exists");
+    (rel.to_string(), text)
+}
+
+fn round_trip<T: Format + PartialEq + std::fmt::Debug>(rel: &str) {
+    let (file, text) = fixture(rel);
+    let first: T = parse(&file, &text).expect("fixture parses");
+    let again: T = parse(&file, &to_yaml(&first).expect("serializes")).expect("re-parses");
+    assert_eq!(first, again, "{rel} changed in a round trip");
+}
+
+#[test]
+fn round_trip_each_kind() {
+    round_trip::<ProjectFile>("shakedown.yaml");
+    round_trip::<WorldFile>("worlds/larkspur-plant/world.yaml");
+    round_trip::<ScenarioFile>("scenarios/supplier-slip.yaml");
+    round_trip::<SetupFile>("setups/solo-planner.yaml");
+    round_trip::<SetupFile>("setups/planning-team.yaml");
+    round_trip::<SetupFile>("setups/planner-with-rules.yaml");
+    round_trip::<ExperimentFile>("experiments/supplier-slip-solo-vs-team.yaml");
+}
+
+#[test]
+fn unknown_field_rejected() {
+    let text = "format: shakedown-world/3\nlabel: W\ndata:\n  - {database: db, engine: postgres, topology: {kind: single}}\n";
+    let err = parse::<WorldFile>("w.yaml", text).unwrap_err();
+    assert_eq!(err.pointer, "/data/0/topology", "{err}");
+}
+
+#[test]
+fn wrong_format_rejected() {
+    let err = parse::<WorldFile>("w.yaml", "format: shakedown-world/2\nlabel: W\n").unwrap_err();
+    assert_eq!(err.pointer, "/format");
+    assert!(err.message.contains("shakedown-world/3"), "{err}");
+}
+
+#[test]
+fn inline_secret_rejected_without_echo() {
+    let text = "format: shakedown-world/3\nlabel: W\nconnectors:\n  - {id: a, label: A, mode: real, auth: {key: \"sk-ant-abc123\"}}\n";
+    let err = parse::<WorldFile>("w.yaml", text).unwrap_err();
+    assert_eq!(err.pointer, "/connectors/0/auth/key");
+    assert!(
+        !err.to_string().contains("abc123"),
+        "the secret leaked: {err}"
+    );
+}
+
+#[test]
+fn secret_named_field_with_literal_rejected() {
+    let text = "format: shakedown-setup/1\nlabel: S\nteam: {kind: http, url: \"https://x\", password: hunter2}\n";
+    let err = parse::<SetupFile>("s.yaml", text).unwrap_err();
+    assert_eq!(err.pointer, "/team/password");
+    assert!(!err.to_string().contains("hunter2"));
+}
+
+#[test]
+fn key_name_accepted() {
+    let text = "format: shakedown-world/3\nlabel: W\nconnectors:\n  - {id: a, label: A, mode: real, auth: {key: larkspur-mes}}\n";
+    let world = parse::<WorldFile>("w.yaml", text).expect("a key-store name is fine");
+    assert_eq!(
+        world.connectors[0]
+            .auth
+            .as_ref()
+            .and_then(|a| a.key.as_deref()),
+        Some("larkspur-mes")
+    );
+}
+
+#[test]
+fn data_source_needs_exactly_one_kind() {
+    let text = "format: shakedown-world/3\nlabel: W\ndata:\n  - {file: a.csv, database: db}\n";
+    let err = parse::<WorldFile>("w.yaml", text).unwrap_err();
+    assert_eq!(err.pointer, "/data/0");
+}
+
+#[test]
+fn malformed_yaml_reported() {
+    let err = parse::<WorldFile>("w.yaml", "format: [\n").unwrap_err();
+    assert_eq!(err.file, "w.yaml");
+}
+
+#[test]
+fn world_package_round_trips() {
+    let text = "format: shakedown-world/3\nlabel: W\npackage: toybench\n";
+    let world = parse::<WorldFile>("w.yaml", text).expect("package parses");
+    assert_eq!(world.package.as_deref(), Some("toybench"));
+    let again: WorldFile = parse("w.yaml", &to_yaml(&world).unwrap()).unwrap();
+    assert_eq!(world, again);
+}
+
+#[test]
+fn scenario_preset_round_trips() {
+    let text = "format: shakedown-scenario/1\nlabel: S\nworld: w\ntask: T\npreset: t1\n";
+    let scenario = parse::<ScenarioFile>("s.yaml", text).expect("preset parses");
+    assert_eq!(scenario.preset.as_deref(), Some("t1"));
+}
+
+#[test]
+fn assistant_settings_round_trip() {
+    let text = "format: shakedown-project/1\nname: P\nassistant:\n  model: claude-sonnet\n  provider: anthropic\n";
+    let project = parse::<ProjectFile>("shakedown.yaml", text).expect("assistant settings parse");
+    let assistant = project.assistant.as_ref().expect("set");
+    assert_eq!(
+        (assistant.model.as_str(), assistant.provider.as_deref()),
+        ("claude-sonnet", Some("anthropic"))
+    );
+    let again: ProjectFile = parse("shakedown.yaml", &to_yaml(&project).unwrap()).unwrap();
+    assert_eq!(project, again);
+}
+
+const OBS_WORLD: &str = "format: shakedown-world/3
+label: W
+observability:
+  tools:
+    - {id: datadog, product: datadog, mode: stand-in, seeded_from: monitors.json}
+    - {id: otel, product: otel-collector, mode: real, auth: {key: otel-token}}
+  alerts:
+    - {name: PO approval queue over 3, when: approvals.pending > 3, routes_to: planner}
+  operators:
+    - {id: planner, label: Planner on call, role: planner, behavior: {answers_after: {minutes: 15}}}
+    - {id: it, label: IT on call, behavior: never_answers}
+  human:
+    - {moment: paged, then: continue}
+    - {moment: agent_stuck, then: fail}
+";
+
+#[test]
+fn observability_round_trips() {
+    let world = parse::<WorldFile>("w.yaml", OBS_WORLD).expect("observability parses");
+    let obs = world.observability.as_ref().unwrap();
+    assert_eq!(obs.tools.len(), 2);
+    assert_eq!(obs.operators.len(), 2);
+    let again: WorldFile = parse("w.yaml", &to_yaml(&world).unwrap()).unwrap();
+    assert_eq!(world, again);
+}
+
+#[test]
+fn bad_operator_behavior() {
+    let text = OBS_WORLD.replace("behavior: never_answers", "behavior: sometimes");
+    let err = parse::<WorldFile>("w.yaml", &text).unwrap_err();
+    assert!(
+        err.pointer.starts_with("/observability/operators/1"),
+        "{err}"
+    );
+}
+
+#[test]
+fn spend_cap_round_trips() {
+    let text = "format: shakedown-project/1\nname: P\npermissions:\n  spend:\n    under_cap: {usd_per_day: 10}\n";
+    let project = parse::<ProjectFile>("shakedown.yaml", text).unwrap();
+    let again: ProjectFile = parse("shakedown.yaml", &to_yaml(&project).unwrap()).unwrap();
+    assert_eq!(project, again);
+}

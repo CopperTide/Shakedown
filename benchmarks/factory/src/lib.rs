@@ -6,7 +6,6 @@ pub mod checks;
 pub mod company;
 pub mod crm;
 pub mod date;
-pub mod erp;
 pub mod facts;
 pub mod options;
 pub mod scale;
@@ -22,10 +21,11 @@ pub mod world;
 use std::path::PathBuf;
 use std::sync::OnceLock;
 
-use arena_part::proto::*;
-use arena_part::{Benchmark, PartError};
 use async_trait::async_trait;
 use serde_json::{json, Value};
+use shakedown_part::helpers::frappe;
+use shakedown_part::proto::*;
+use shakedown_part::{Benchmark, PartError};
 
 pub use facts::{Facts, DEFAULT_DATA};
 pub use tasks::{SHIFT_TASK, TASK};
@@ -57,7 +57,7 @@ impl Factory {
         }
     }
 
-    /// The team offered as arenad's default (`team::named`: `single`, `incident` or `shift`).
+    /// The team offered as shaked's default (`team::named`: `single`, `incident` or `shift`).
     pub fn with_team(mut self, team: &str) -> Factory {
         self.team = team.into();
         self
@@ -134,7 +134,7 @@ impl Benchmark for Factory {
         })
     }
 
-    /// None: the run's ids (a change's) are made up as it goes, so no list could name them. arenad
+    /// None: the run's ids (a change's) are made up as it goes, so no list could name them. shaked
     /// doesn't ask a scored benchmark for them; `tests/` hold the path that passes.
     async fn gold_actions(&self, _p: GoldParams) -> R<GoldActions> {
         Ok(GoldActions::default())
@@ -159,7 +159,7 @@ impl Benchmark for Factory {
         let mut docs = json!(p.docs);
         let names = twin::unresolved_sales_orders(&docs);
         if let (false, Some(erp)) = (names.is_empty(), p.connections.get("erp")) {
-            if let Ok(erp) = erp::Erp::connect(erp) {
+            if let Ok(erp) = frappe::Erp::connect(erp) {
                 for name in names {
                     if let Ok(so) = erp.get("Sales Order", &name).await {
                         docs["erp"][format!("Sales Order/{name}")] = json!({"po_no": so["po_no"]});

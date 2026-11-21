@@ -1299,5 +1299,13 @@
     "reject_first_reallocation": "Not yet: CVX-2598 at the EU DC also serves EU orders. Check in the ERP how much of it is committed to EU orders, and propose again naming the quantity you take and the orders it serves."
    }
   }
+ },
+ "scenario_options": {
+  "usual_courier": "Tundra Medical Courier",
+  "us_carriers": [
+   "Tundra Medical Courier",
+   "Borealis Cold Chain"
+  ],
+  "retest": "Sterility (USP <71>)"
  }
 }

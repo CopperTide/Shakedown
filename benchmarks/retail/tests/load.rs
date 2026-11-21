@@ -1,12 +1,12 @@
 mod common;
-use arena_retail::load::{dump, with_conn};
 use common::*;
+use shakedown_retail::load::{dump, with_conn};
 
 #[tokio::test]
 async fn base_round_trips() {
     let db = TestDb::seeded("load").await;
     // Seeding again is a no-op.
-    use arena_part::{proto::SeedParams, Benchmark};
+    use shakedown_part::{proto::SeedParams, Benchmark};
     retail()
         .seed(SeedParams {
             connections: conns(&db.url),
@@ -26,7 +26,7 @@ async fn base_round_trips() {
 
 #[tokio::test]
 async fn seed_needs_a_retail_connection() {
-    use arena_part::{proto::SeedParams, Benchmark};
+    use shakedown_part::{proto::SeedParams, Benchmark};
     let e = retail()
         .seed(SeedParams {
             connections: Default::default(),

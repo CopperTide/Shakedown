@@ -1,0 +1,236 @@
+//! Test suites over HTTP: create one (`POST /api/suites`), list them, read one's report, claim
+//! an external suite's next run, and compare two suites.
+
+use crate::auth::{Caller, Who};
+use crate::providers::ProviderConfig;
+use std::{collections::HashMap, sync::Arc};
+
+use axum::{
+    extract::{Path, Query, State},
+    routing::{get, post},
+    Json, Router,
+};
+use serde::Deserialize;
+use serde_json::{json, Value};
+
+use super::{
+    check_disk, detached, providers_of, settle_providers, ApiError, ApiResult, JsonBody,
+    StartPermit,
+};
+use crate::{
+    app::AppState,
+    model::*,
+    scenario::Scenario,
+    store::NewSuite,
+    suite::{self, Comparison, Listed, Suite, SuiteReport, MAX_REPEATS},
+};
+
+pub(super) fn router() -> Router<Arc<AppState>> {
+    Router::new()
+        .route("/api/suites", get(list).post(create))
+        .route("/api/suites/compare", get(compare))
+        .route("/api/suites/{id}", get(get_one))
+        .route("/api/suites/{id}/claim", post(claim))
+}
+
+fn one() -> i32 {
+    1
+}
+
+/// A new suite: the team (a deployment), the benchmark's tasks it runs (all when empty), how many
+/// times each, and the runner (`chain` by default; `external`: an external system claims each run).
+#[derive(Deserialize)]
+struct NewSuiteReq {
+    #[serde(default)]
+    name: Option<String>,
+    team: Team,
+    #[serde(default)]
+    tasks: Vec<String>,
+    #[serde(default = "one")]
+    repeats: i32,
+    #[serde(default)]
+    runner: Runner,
+    /// The disruptions every run adds to its task (`{disruptions: [{id, params}]}`).
+    #[serde(default)]
+    scenario: Option<parts::proto::ScenarioRequest>,
+    /// Several scenarios instead: each task × repeat runs once in each (`scenario` must be absent).
+    #[serde(default)]
+    scenarios: Vec<parts::proto::ScenarioRequest>,
+    /// Each run's model-spend limit in USD (`crate::budget`).
+    #[serde(default)]
+    max_cost_usd: Option<f64>,
+    /// The benchmark it is made on (absent: the current one); 409 when it isn't installed.
+    #[serde(default)]
+    benchmark: Option<String>,
+}
+
+/// The most scenarios a suite may vary its runs over.
+const MAX_VARIANTS: usize = 20;
+
+/// The suite's one scenario and its variants, each expanded with the options of the benchmark
+/// `bench`; 400 for both at once, too many, or one that can't be expanded.
+async fn suite_scenarios(
+    state: &AppState,
+    bench: &str,
+    req: &NewSuiteReq,
+) -> Result<(Scenario, Vec<Scenario>), ApiError> {
+    let one = req.scenario.as_ref().filter(|s| !s.disruptions.is_empty());
+    if one.is_some() && !req.scenarios.is_empty() {
+        return Err(ApiError::bad(
+            "give a suite either scenario or scenarios, not both",
+        ));
+    }
+    if req.scenarios.len() > MAX_VARIANTS {
+        return Err(ApiError::bad(format!("at most {MAX_VARIANTS} scenarios")));
+    }
+    let mut variants = vec![];
+    for asked in &req.scenarios {
+        variants.push(super::twin::scenario_of(state, bench, Some(asked)).await?);
+    }
+    Ok((super::twin::scenario_of(state, bench, one).await?, variants))
+}
+
+/// The tasks a suite runs: the ones asked for (each once, each one of the benchmark `bench`'s), or
+/// all.
+pub(super) async fn suite_tasks(
+    state: &AppState,
+    bench: &str,
+    asked: Vec<String>,
+) -> Result<Vec<String>, ApiError> {
+    let known: Vec<String> = state
+        .bench_named(bench)
+        .await?
+        .tasks
+        .into_iter()
+        .map(|t| t.id)
+        .collect();
+    if asked.is_empty() {
+        return Ok(known);
+    }
+    for (i, t) in asked.iter().enumerate() {
+        if !known.contains(t) {
+            return Err(ApiError::bad(format!("the benchmark has no task {t:?}")));
+        }
+        if asked[..i].contains(t) {
+            return Err(ApiError::bad(format!("task {t:?} is listed twice")));
+        }
+    }
+    Ok(asked)
+}
+
+/// 400 unless the request's repeats and team suit its runner.
+fn validate_suite(providers: &ProviderConfig, req: &NewSuiteReq) -> Result<(), ApiError> {
+    if !(1..=MAX_REPEATS).contains(&req.repeats) {
+        return Err(ApiError::bad(format!(
+            "repeats must be from 1 to {MAX_REPEATS}"
+        )));
+    }
+    let checked = match req.runner {
+        Runner::External => team::validate_agents(providers, &req.team.agents),
+        runner => team::validate_builtin(providers, &req.team, runner),
+    };
+    Ok(checked?)
+}
+
+/// `POST /api/suites`: stores the suite and, for a built-in runner, starts running it. Answers
+/// its report.
+async fn create(
+    State(state): State<Arc<AppState>>,
+    Who(caller): Who,
+    JsonBody(mut req): JsonBody<NewSuiteReq>,
+) -> ApiResult<SuiteReport> {
+    settle_providers(&mut req.team);
+    validate_suite(&providers_of(&state, &caller).await, &req)?;
+    let bench = super::benchmark_asked(&state, req.benchmark.as_deref())?;
+    let (scenario, variants) = suite_scenarios(&state, &bench, &req).await?;
+    let tasks = suite_tasks(&state, &bench, std::mem::take(&mut req.tasks)).await?;
+    if req.runner != Runner::External {
+        check_disk(&state).await?;
+    }
+    let name = (req.name.as_deref().and_then(trimmed)).unwrap_or(req.team.name.clone());
+    let new = NewSuite {
+        name: &name,
+        team: &req.team,
+        tasks: &tasks,
+        repeats: req.repeats,
+        runner: req.runner,
+        benchmark: &bench,
+        scenario: &scenario,
+        variants: &variants,
+        max_cost_usd: super::max_cost(req.max_cost_usd)?,
+        connection: None,
+    };
+    let stored = state.store.at(&caller).create_suite(new).await?;
+    if stored.runner != Runner::External {
+        suite::spawn_builtin(&state, caller.clone(), stored.clone());
+    }
+    Ok(Json(suite::load(state.store.at(&caller), stored).await?))
+}
+
+/// `GET /api/suites`: every suite, newest first, with its status and how many runs ended.
+async fn list(State(state): State<Arc<AppState>>, Who(caller): Who) -> ApiResult<Vec<Listed>> {
+    let mut out = vec![];
+    let records = state.store.at(&caller);
+    for s in records.suites().await? {
+        out.push(suite::listed(records, s).await?);
+    }
+    Ok(Json(out))
+}
+
+async fn find(state: &AppState, caller: &Caller, id: &str) -> Result<Suite, ApiError> {
+    state
+        .store
+        .at(caller)
+        .suite(id)
+        .await?
+        .ok_or_else(|| ApiError::not_found(format!("there is no suite \"{id}\"")))
+}
+
+/// `GET /api/suites/{id}`: the suite's report.
+async fn get_one(
+    State(state): State<Arc<AppState>>,
+    Who(caller): Who,
+    Path(id): Path<String>,
+) -> ApiResult<SuiteReport> {
+    let s = find(&state, &caller, &id).await?;
+    Ok(Json(suite::load(state.store.at(&caller), s).await?))
+}
+
+/// `POST /api/suites/{id}/claim`: an external suite's next run, started: `{done: false, task_id,
+/// repeat, run_id, branch_id, agents}`, which the system drives through the external-run API;
+/// `{done: true}` when every run is claimed.
+async fn claim(
+    State(state): State<Arc<AppState>>,
+    Who(caller): Who,
+    Path(id): Path<String>,
+) -> ApiResult<Value> {
+    let s = find(&state, &caller, &id).await?;
+    if s.runner != Runner::External || s.connection.is_some() {
+        return Err(ApiError::conflict("shaked runs this suite's runs itself"));
+    }
+    let permit = StartPermit::take(&state)?;
+    permit.check_disk(&state).await?;
+    detached(async move {
+        let _permit = permit;
+        let Some(claimed) = suite::claim_external(&state, &caller, &s).await? else {
+            return Ok(Json(json!({"done": true})));
+        };
+        let mut v = serde_json::to_value(claimed)?;
+        v["done"] = json!(false);
+        Ok(Json(v))
+    })
+    .await
+}
+
+/// `GET /api/suites/compare?a=&b=`: suite `b` against suite `a`.
+async fn compare(
+    State(state): State<Arc<AppState>>,
+    Who(caller): Who,
+    Query(q): Query<HashMap<String, String>>,
+) -> ApiResult<Comparison> {
+    let (a, b) = super::pair(&q)?;
+    let records = state.store.at(&caller);
+    let a = suite::load(records, find(&state, &caller, &a).await?).await?;
+    let b = suite::load(records, find(&state, &caller, &b).await?).await?;
+    Ok(Json(suite::compare(&a, &b)))
+}

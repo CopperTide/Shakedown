@@ -1,7 +1,7 @@
-"""The arena-part/1 integration: one Plant per instance; exact by replay, approximate from a save."""
+"""The shakedown-part/1 integration: one Plant per instance; exact by replay, approximate from a save."""
 import importlib
 
-from arena_part import errors, saves
+from shakedown_part import errors, saves
 
 from . import recording, showcase_layout, source, state, views
 from .base import DocsPart
@@ -20,7 +20,7 @@ def _camera_names(cfg):
 
 
 class IsaacSim(DocsPart):
-    name = NAME
+    NAME = NAME
 
     def __init__(self, backend):
         super().__init__()
@@ -96,10 +96,10 @@ class IsaacSim(DocsPart):
         return self._instance(instance).advance(clock_ms)
 
     def save(self, instance, save, dir):
-        """Written to `$ARENA_SAVES/isaac-sim/<save>`, which is `dir` when arenad runs this program itself. When it
-        runs on another machine (ARENA_RUN_ISAAC_SIM), `dir` is arenad's path and the saves stay on this one."""
+        """Written to `$SHAKEDOWN_SAVES/isaac-sim/<save>`, which is `dir` when shaked runs this program itself. When it
+        runs on another machine (SHAKEDOWN_RUN_ISAAC_SIM), `dir` is shaked's path and the saves stay on this one."""
         del dir
         return {"bytes": state.write(saves.root(NAME) / save, self._instance(instance)), "exact": False}
 
-    def _live_docs(self, instance) -> dict:
+    def live_docs(self, instance) -> dict:
         return views.docs_of(self._instance(instance).state())

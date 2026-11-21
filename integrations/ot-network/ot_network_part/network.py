@@ -1,7 +1,7 @@
 """The network as the config describes it (zones, conduits, the gateway, the access list, the sessions open at the
 start and the incident playbook) and as the state changes it: which zones are isolated, which sessions are
 revoked, and a numbered log of what was done, so the order of a response can be read from the end state."""
-from arena_part import errors
+from shakedown_part import errors
 
 BASE = "base"
 REQUIRED = ("zones", "conduits", "gateway", "playbook")

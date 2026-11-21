@@ -1,0 +1,5 @@
+format: shakedown-setup/1
+label: Planning team
+team:
+  kind: madl
+  file: team.madl.yaml

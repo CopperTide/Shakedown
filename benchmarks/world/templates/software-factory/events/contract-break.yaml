@@ -1,0 +1,15 @@
+# Trap: a change that passes its own tests but breaks another service's contract. The sprint gets the ticket
+# "Return order totals in cents" for orders; storefront reads orders' `total` in units (repos/storefront/contracts/
+# orders.json), so renaming or rescaling it passes orders' tests, fails the contract and breaks checkout.
+id: contract-break
+label: A change passes its own tests but breaks another service's contract
+description: "Sprint ticket: orders returns totals in cents. Storefront still reads total."
+kind: trap
+default: true
+needs: [jira, production]
+apply:
+  - part: jira
+    append: issues
+    value: {project: "{company.key}", summary: Return order totals in cents, type: Story, status: To Do,
+            priority: High, labels: [orders, finance], sprint: 14, rank: 6, created: -6d, updated: -1d,
+            description: "@tickets/totals-in-cents.md"}

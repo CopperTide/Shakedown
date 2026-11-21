@@ -1,74 +1,56 @@
 //! Frappe's REST API on the stack's frontend, one site per request (its `Host` header).
 use std::time::Duration;
 
-use anyhow::{bail, Context, Result};
-use reqwest::header::{AUTHORIZATION, HOST};
-use reqwest::{Client, Method, RequestBuilder, Url};
+use anyhow::Result;
+use reqwest::header::HOST;
+use reqwest::{Method, RequestBuilder};
 use serde_json::Value;
+use shakedown_part::helpers::http::{self, Answer, Dialect};
+
+pub use shakedown_part::helpers::http::Reply;
 
 use crate::frappe::{error_text, ApiKey};
 
 /// How long one request may take (a big submit can be slow).
 const TIMEOUT: Duration = Duration::from_secs(300);
 
-/// What a site answered: its result, or an error Frappe reported (a tool error, not a failure
-/// of the integration).
-#[derive(Debug, Clone, PartialEq)]
-pub enum Reply {
-    Ok(Value),
-    /// Frappe's HTTP status and message.
-    Refused {
-        status: u16,
-        message: String,
-    },
+fn refusal(a: &Answer) -> String {
+    error_text(a.status, &a.body)
 }
 
-#[derive(Debug, Clone)]
-pub struct Rest {
-    client: Client,
-    base: Url,
-    auth: Option<String>,
+/// A 2xx answer's `data` (resources) or `message` (methods).
+fn data(body: Value) -> Value {
+    let data = ["data", "message"]
+        .iter()
+        .find_map(|k| body.get(*k).cloned());
+    data.unwrap_or(body)
 }
+
+static FRAPPE: Dialect = Dialect {
+    service: "ERPNext",
+    gateway_is_down: true,
+    refusal,
+    data,
+};
+
+#[derive(Debug, Clone)]
+pub struct Rest(http::Rest);
 
 impl Rest {
     /// The frontend on 127.0.0.1:`port`, without a key.
     pub fn new(port: u16) -> Result<Rest> {
-        let client = Client::builder().timeout(TIMEOUT).build()?;
-        let base = Url::parse(&format!("http://127.0.0.1:{port}/"))?;
-        Ok(Rest {
-            client,
-            base,
-            auth: None,
-        })
+        Ok(Rest(http::Rest::new(&FRAPPE, port, TIMEOUT)?))
     }
 
     /// The same, sending `key` with every request.
     pub fn with_key(&self, key: &ApiKey) -> Rest {
-        Rest {
-            auth: Some(key.header()),
-            ..self.clone()
-        }
+        Rest(self.0.with_auth(key.header()))
     }
 
-    /// `/api/<segments..>`, each segment percent-encoded (names may hold spaces and `/`).
-    fn url(&self, segments: &[&str]) -> Url {
-        let mut url = self.base.clone();
-        url.path_segments_mut()
-            .expect("an http URL has path segments")
-            .push("api")
-            .extend(segments);
-        url
-    }
-
+    /// `method /api/<segments..>` on `site`, each segment percent-encoded.
     fn request(&self, method: Method, site: &str, segments: &[&str]) -> RequestBuilder {
-        let r = self
-            .client
-            .request(method, self.url(segments))
-            .header(HOST, site);
-        match &self.auth {
-            Some(a) => r.header(AUTHORIZATION, a),
-            None => r,
-        }
+        let url = self.0.url(&[&["api"], segments].concat());
+        self.0.request(method, url).header(HOST, site)
     }
 
     /// `GET /api/<segments>?<query>` on `site`.
@@ -78,7 +60,8 @@ impl Rest {
         segments: &[&str],
         query: &[(&str, String)],
     ) -> Result<Reply> {
-        reply(self.request(Method::GET, site, segments).query(query)).await
+        let r = self.request(Method::GET, site, segments).query(query);
+        self.0.reply(r).await
     }
 
     /// `method /api/<segments>` on `site` with a JSON body.
@@ -89,7 +72,8 @@ impl Rest {
         segments: &[&str],
         body: &Value,
     ) -> Result<Reply> {
-        reply(self.request(method, site, segments).json(body)).await
+        let r = self.request(method, site, segments).json(body);
+        self.0.reply(r).await
     }
 
     /// Whether the frontend and the backend behind it answer (any site, any answer but a
@@ -99,30 +83,19 @@ impl Rest {
             .request(Method::GET, "localhost", &["method", "ping"])
             .send()
             .await;
-        r.is_ok_and(|r| !is_gateway_error(r.status().as_u16()))
+        r.is_ok_and(|r| !http::is_gateway_error(r.status().as_u16()))
     }
 }
 
-fn is_gateway_error(status: u16) -> bool {
-    matches!(status, 502..=504)
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
 
-/// Sends `r`: a 2xx answer's `data` (resources) or `message` (methods); a Frappe error as
-/// `Refused`; an error when ERPNext can't be reached.
-async fn reply(r: RequestBuilder) -> Result<Reply> {
-    let resp = r.send().await.context("ERPNext can't be reached")?;
-    let status = resp.status().as_u16();
-    if is_gateway_error(status) {
-        bail!("ERPNext is not answering (HTTP {status})");
+    #[test]
+    fn a_resources_data_or_a_methods_message_else_the_body() {
+        assert_eq!(data(json!({"data": {"name": "x"}})), json!({"name": "x"}));
+        assert_eq!(data(json!({"message": "pong"})), json!("pong"));
+        assert_eq!(data(json!({"other": 1})), json!({"other": 1}));
     }
-    let text = resp.text().await.context("reading ERPNext's answer")?;
-    let body: Value = serde_json::from_str(&text).unwrap_or(Value::Null);
-    if !(200..300).contains(&status) {
-        let message = error_text(status, &body);
-        return Ok(Reply::Refused { status, message });
-    }
-    let data = ["data", "message"]
-        .iter()
-        .find_map(|k| body.get(*k).cloned());
-    Ok(Reply::Ok(data.unwrap_or(body)))
 }

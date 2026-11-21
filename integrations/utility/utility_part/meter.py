@@ -1,11 +1,11 @@
-"""The site meter on the arena clock. The plant's load is the last reading the plant sent (`w`, whole watts) and
+"""The site meter on the world clock. The plant's load is the last reading the plant sent (`w`, whole watts) and
 is integrated in whole watt-milliseconds, so the energy after an advance doesn't depend on how the advances were
 split (docs/protocol.md, "Clock contract"). Each demand-response window is measured against its target the same
 way: the time and energy inside it, and the time over the target."""
 from datetime import datetime, timedelta
 
-from arena_part import errors
-from arena_part.params import config_datetime
+from shakedown_part import errors
+from shakedown_part.params import config_datetime
 
 MINUTE_MS = 60_000
 WMS_PER_KWH = 3_600_000_000  # watt-milliseconds in a kilowatt-hour

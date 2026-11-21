@@ -1,12 +1,12 @@
 import {
   type ColumnDef, type Row, type SortingState, type Table as TableT, flexRender, getCoreRowModel,
-  getFilteredRowModel, getSortedRowModel, useReactTable,
+  getSortedRowModel, useReactTable,
 } from '@tanstack/react-table';
 import { ArrowDown, ArrowUp } from 'lucide-react';
 import { type KeyboardEvent, type ReactNode, useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/cn';
 import { hasModifier, moveIndex, navOf } from '@/lib/keys';
-import { EmptyState, ErrorState, LoadingState } from './state';
+import { ErrorState, LoadingState } from './state';
 import { Table, Td, Th } from './table';
 
 declare module '@tanstack/react-table' {
@@ -24,17 +24,12 @@ export interface DataTableProps<T> {
   getRowId: (row: T) => string;
   /** Enter on the active row, or a click. */
   onOpen?: (row: T) => void;
-  /** Any filter value; `filterFn` decides which rows it keeps. */
-  filter?: unknown;
-  filterFn?: (row: T, filter: unknown) => boolean;
   sorting?: SortingState;
   loadingLabel: string;
   error?: string | null;
   onRetry?: () => void;
   /** Shown when there are no rows at all. */
   empty: ReactNode;
-  /** Shown when rows exist but the filter hides them. */
-  noMatch?: string;
   rowClassName?: (row: T) => string;
   label: string;
 }
@@ -94,15 +89,13 @@ function useActiveRow<T>(rows: Row<T>[], onOpen?: (r: T) => void) {
   return { active, ref, onKeyDown };
 }
 
-/** A sortable, filterable grid with keyboard navigation and its own loading, error and empty states. */
+/** A sortable grid with keyboard navigation and its own loading, error and empty states. */
 export function DataTable<T>(p: DataTableProps<T>) {
   const [sorting, setSorting] = useState<SortingState>(p.sorting ?? []);
   const table = useReactTable({
     data: p.data ?? [], columns: p.columns, getRowId: p.getRowId,
-    state: { sorting, globalFilter: p.filter }, onSortingChange: setSorting,
-    getColumnCanGlobalFilter: () => !!p.filterFn,
-    globalFilterFn: (row, _col, value) => p.filterFn?.(row.original, value) ?? true,
-    getCoreRowModel: getCoreRowModel(), getSortedRowModel: getSortedRowModel(), getFilteredRowModel: getFilteredRowModel(),
+    state: { sorting }, onSortingChange: setSorting,
+    getCoreRowModel: getCoreRowModel(), getSortedRowModel: getSortedRowModel(),
   });
   const rows = table.getRowModel().rows;
   const nav = useActiveRow(rows, p.onOpen);
@@ -115,7 +108,6 @@ export function DataTable<T>(p: DataTableProps<T>) {
         <HeaderRow table={table} />
         <tbody>{rows.map((r, i) => <BodyRow key={r.id} row={r} active={nav.active === i} onOpen={p.onOpen} className={p.rowClassName?.(r.original)} />)}</tbody>
       </Table>
-      {rows.length === 0 && <EmptyState title={p.noMatch ?? 'Nothing matches the filter.'} hint="Clear the filter to see every row." />}
     </div>
   );
 }

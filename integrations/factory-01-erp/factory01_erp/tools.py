@@ -1,21 +1,9 @@
 """The ERP's tools: inventory, schedule and suppliers to read; reserving stock, rescheduling an order and
 placing a purchase order to change things; a flag for a human; and the scenario a task's setup sets."""
-import json
-
-from arena_part.jsonstate import Done, Tool, event, set_scenario
-from arena_part.params import Param, Refusal
+from shakedown_part.jsonstate import Denied, Done, Scenarios, Tool, event
+from shakedown_part.params import Param, Refusal
 
 from . import disrupt, erp
-
-
-class Denied(Refusal):
-    """A call a hard limit refuses: the agent gets `body` (structured, as JSON) as the tool's error, and
-    the world gets a `denial` event with the reason. The part keeps a record of it."""
-
-    def __init__(self, body: dict, text: str):
-        super().__init__(json.dumps(body))
-        self.body = body
-        self.text = text
 
 
 def _inventory(config, state, args):
@@ -143,11 +131,11 @@ def _flag(config, state, args):
                 events=[event("flag", f"Flag for a human on {o['id']}{amount}: {reason}", flag)])
 
 
+SCENARIOS = Scenarios(base=erp.BASE)
+
+
 def _scenario(config, state, args):
-    def overlay(cfg, st):
-        return cfg.get("scenarios", {}).get(st["scenario"], {})
-    known = [erp.BASE, *config.get("scenarios", {})]
-    return set_scenario(config, state, args, known, overlay, disrupt.KINDS, TOOLS)
+    return SCENARIOS.set(config, state, args, disrupt.KINDS, TOOLS)
 
 
 TOOLS = {t.name: t for t in [

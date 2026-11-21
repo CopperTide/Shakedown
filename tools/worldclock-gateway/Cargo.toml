@@ -1,0 +1,20 @@
+[package]
+name = "worldclock-gateway"
+version = "0.1.0"
+edition = "2021"
+description = "Restamps OTLP traces, logs and metrics from wall to world time, and answers store queries in world time"
+
+[dependencies]
+shakedown-part = { path = "../../kits/rust", default-features = false }
+tokio = { workspace = true, features = ["net", "fs"] }
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+axum = { version = "0.8", default-features = false, features = ["http1", "tokio"] }
+prost = "0.13"
+opentelemetry-proto = { version = "0.27", default-features = false, features = ["gen-tonic-messages", "trace", "logs", "metrics", "with-serde"] }
+reqwest = { version = "0.12", default-features = false, features = ["json"] }
+form_urlencoded = "1"
+
+[lints]
+workspace = true

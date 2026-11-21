@@ -3,9 +3,9 @@
 //! records the change and asks a person in Needs you; the person's answer (`decide_change`)
 //! decides it. CopperTide refusing the arguments is the tool's error.
 use anyhow::{Context, Result};
-use arena_part::proto::{ToolOutput, WorldEvent};
 use reqwest::Method;
 use serde_json::Value;
+use shakedown_part::proto::{ToolOutput, WorldEvent};
 
 use super::{wrote, Outcome};
 use crate::api::{Api, Reply};

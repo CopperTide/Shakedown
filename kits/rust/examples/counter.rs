@@ -15,10 +15,10 @@ use std::io::Read;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
-use arena_part::proto::*;
-use arena_part::{serve, Part, PartError};
 use async_trait::async_trait;
 use serde_json::{json, Value};
+use shakedown_part::proto::*;
+use shakedown_part::{serve, Part, PartError};
 
 const KEY: &str = "counter/value";
 
@@ -69,9 +69,9 @@ impl Default for Counter {
     }
 }
 
-/// Saves live at `$ARENA_SAVES/counter/<save>/` by convention.
+/// Saves live at `$SHAKEDOWN_SAVES/counter/<save>/` by convention.
 fn saves_root() -> PathBuf {
-    let root = std::env::var("ARENA_SAVES").unwrap_or_else(|_| "saves".into());
+    let root = shakedown_part::settings::var("SHAKEDOWN_SAVES").unwrap_or_else(|_| "saves".into());
     PathBuf::from(root).join("counter")
 }
 
@@ -208,6 +208,7 @@ impl Part for Counter {
                 tool("get", "Read the counter.", json!({}), Effect::Read),
             ],
             system: None,
+            save_at: SaveAt::Step,
         })
     }
 
@@ -320,7 +321,7 @@ impl Part for Counter {
     }
 
     async fn usage(&self) -> Result<Usage, PartError> {
-        // Every save lives in ARENA_SAVES, which arenad measures itself: nothing else is kept.
+        // Every save lives in SHAKEDOWN_SAVES, which shaked measures itself: nothing else is kept.
         Ok(Usage { bytes: 0 })
     }
 }

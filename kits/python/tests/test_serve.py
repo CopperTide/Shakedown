@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from arena_part import Part, PartError, FixedStep, fingerprint, kept, serve
+from shakedown_part import Part, PartError, FixedStep, fingerprint, kept, serve
 import counter
 from conftest import Client
 
@@ -32,7 +32,7 @@ def add(c, instance, n):
 
 def test_describe_reports_protocol_1():
     r = client().call("describe")
-    assert r["result"]["protocol"] == 1
+    assert r["result"]["protocol"] == "shakedown-part/1"
     assert "inputSchema" in r["result"]["tools"][0]
     assert r["result"]["fingerprint"] == {"example": "counter"}
 
@@ -259,6 +259,23 @@ def test_connect_default_is_method_not_found():
     assert c.call("connect", {"instance": "Bad"})["error"]["code"] == -32602
 
 
+def test_http_routes_default_is_method_not_found():
+    c = Client(Plain())
+    r = c.call("http_routes", {"instance": "i1"})
+    assert r["error"] == {"code": -32601, "message": "method not found: http_routes"}
+    assert c.call("http_routes", {"instance": "Bad"})["error"]["code"] == -32602
+    assert c.call("http_routes", {})["error"]["code"] == -32602
+
+
+def test_a_part_that_serves_http_answers_its_routes():
+    class Served(Plain):
+        def http_routes(self, instance):
+            return {"routes": [{"host": f"{instance}.test", "upstream": "http://127.0.0.1:9"}]}
+
+    r = Client(Served()).call("http_routes", {"instance": "i1"})
+    assert r["result"] == {"routes": [{"host": "i1.test", "upstream": "http://127.0.0.1:9"}]}
+
+
 def test_drop_save_reaches_the_part_and_answers_empty():
     part = Plain()
     c = Client(part)
@@ -282,7 +299,7 @@ def test_a_benchmark_answers_its_own_calls_and_refuses_the_rest():
     import io
     import json as _json
 
-    from arena_part import Benchmark, serve_benchmark
+    from shakedown_part import Benchmark, serve_benchmark
 
     class B(Benchmark):
         def describe(self):
@@ -298,3 +315,13 @@ def test_a_benchmark_answers_its_own_calls_and_refuses_the_rest():
     r = [_json.loads(x) for x in out.getvalue().splitlines()]
     assert [x.get("result") for x in r[:3]] == [{"name": "b"}, {}, {"actions": []}]
     assert r[3]["error"]["code"] == -32601 and r[4]["error"]["code"] == -32601
+
+
+def test_an_error_with_data_is_answered_with_its_data():
+    class Refuses(Part):
+        def describe(self):
+            raise PartError(-32602, "can't", data={"problems": [{"path": "a", "message": "b"}]})
+
+    r = Client(Refuses()).call("describe")
+    assert r["error"] == {"code": -32602, "message": "can't", "data": {"problems": [{"path": "a", "message": "b"}]}}
+    assert "data" not in client().call("nope")["error"]

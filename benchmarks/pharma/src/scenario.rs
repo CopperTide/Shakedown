@@ -1,7 +1,7 @@
 //! The suite's scenarios: the base incident and its variants, each a task whose setup sets the
 //! simulated parts' scenario. The ERP and the CRM are the same base world in every one.
-use arena_part::proto::{SetupCall, TaskInfo};
 use serde_json::json;
+use shakedown_part::proto::{SetupCall, TaskInfo};
 
 use crate::data::Data;
 use crate::team;

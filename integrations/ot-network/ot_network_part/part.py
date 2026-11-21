@@ -1,7 +1,7 @@
-"""The arena-part/1 integration: a config (the network as designed) and a state (isolations, sessions, incidents,
+"""The shakedown-part/1 integration: a config (the network as designed) and a state (isolations, sessions, incidents,
 the log and the schedule) per instance, saved as one JSON file."""
-from arena_part import disruptions
-from arena_part.jsonstate import JsonStatePart
+from shakedown_part import disruptions
+from shakedown_part.jsonstate import JsonStatePart
 
 from . import disrupt, network
 from .tools import TOOLS

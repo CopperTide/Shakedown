@@ -1,9 +1,9 @@
-"""The disruptions a task's setup may schedule in the carriers' world (arena_part.disruptions): a
+"""The disruptions a task's setup may schedule in the carriers' world (shakedown_part.disruptions): a
 lane that loses capacity, a lane that becomes unavailable, a transit delay on a lane, the
 supply chain director rejecting the next decision on an action, and a customer escalating an order
 as urgent (a request on the desk, where any agent that reads the requests sees it)."""
-from arena_part.disruptions import Kind
-from arena_part.params import Refusal
+from shakedown_part.disruptions import Kind
+from shakedown_part.params import Refusal
 
 from . import network
 

@@ -1,8 +1,8 @@
-use arena_part::helpers::pg::Templates;
-use arena_part::proto::*;
-use arena_part::Part;
-use arena_postgres::Postgres;
 use serde_json::{json, Value};
+use shakedown_part::helpers::pg::Templates;
+use shakedown_part::proto::*;
+use shakedown_part::Part;
+use shakedown_postgres::Postgres;
 use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -10,11 +10,10 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::OnceLock;
 
 fn url() -> String {
-    std::env::var("ARENA_PG_URL")
-        .unwrap_or_else(|_| "postgres://arena:arena@127.0.0.1:5544/postgres".into())
+    shakedown_part::helpers::pg::configured_url()
 }
 
-fn arena() -> PathBuf {
+fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .canonicalize()
@@ -61,6 +60,7 @@ fn start(instance: &str, config: Value, from: Option<&str>) -> StartParams {
             save: s.into(),
             mode: Mode::Exact,
         }),
+        world_time: None,
     }
 }
 
@@ -287,15 +287,15 @@ async fn gc_keeps_listed() {
 fn build_all() {
     static ONCE: OnceLock<()> = OnceLock::new();
     ONCE.get_or_init(|| {
-        let a = arena();
+        let a = repo();
         assert!(Command::new("cargo")
-            .args(["build", "-p", "arena-postgres"])
+            .args(["build", "-p", "shakedown-postgres"])
             .current_dir(&a)
             .status()
             .unwrap()
             .success());
         assert!(Command::new("cargo")
-            .args(["build", "-p", "parts", "--bin", "arena-part-check"])
+            .args(["build", "-p", "parts", "--bin", "shakedown-part-check"])
             .current_dir(a.join("core"))
             .status()
             .unwrap()
@@ -303,17 +303,17 @@ fn build_all() {
     });
 }
 
-/// Runs `arena-part-check` against the postgres package in the background and returns its output.
+/// Runs `shakedown-part-check` against the postgres package in the background and returns its output.
 async fn run_part_check(cfgfile: PathBuf, saves: PathBuf, ns: String) -> std::process::Output {
-    let a = arena();
+    let a = repo();
     tokio::task::spawn_blocking(move || {
-        Command::new(a.join("core/target/debug/arena-part-check"))
+        Command::new(a.join("core/target/debug/shakedown-part-check"))
             .arg(a.join("integrations/postgres/check"))
             .arg("--config")
             .arg(&cfgfile)
-            .env("ARENA_BIN_DIR", a.join("core/target/debug"))
-            .env("ARENA_SAVES", &saves)
-            .env("ARENA_PG_URL", format!("{}?arena_ns={}", url(), ns))
+            .env("SHAKEDOWN_BIN_DIR", a.join("core/target/debug"))
+            .env("SHAKEDOWN_SAVES", &saves)
+            .env("SHAKEDOWN_PG_URL", format!("{}?arena_ns={}", url(), ns))
             .output()
             .unwrap()
     })
@@ -461,9 +461,9 @@ async fn save_closes_a_held_connection() {
     with_cleanup(&ns, &[], move || async move {
         let p = Postgres::new(&url(), &n).with_sql_tools();
         p.start(start("a", cfg(), None)).await.unwrap();
-        let (client, conn) = arena_part::helpers::pg::tokio_postgres::connect(
+        let (client, conn) = shakedown_part::helpers::pg::tokio_postgres::connect(
             &Templates::new(&url()).db_url(&format!("pi_{n}a")),
-            arena_part::helpers::pg::tokio_postgres::NoTls,
+            shakedown_part::helpers::pg::tokio_postgres::NoTls,
         )
         .await
         .unwrap();
@@ -530,7 +530,7 @@ async fn legacy_drop_save_drops_snap_and_branch_only() {
         assert!(!t.exists(&todo[0]).await.unwrap(), "snap_ is dropped");
         assert!(!t.exists(&todo[1]).await.unwrap(), "branch_ is dropped");
         assert!(t.exists(&todo[2]).await.unwrap(), "gold_ is kept");
-        // A save that isn't there (any more) is -32002: arenad counts it as already gone.
+        // A save that isn't there (any more) is -32002: shaked counts it as already gone.
         let gone = p
             .drop_save(SaveId {
                 save: todo[0].clone(),

@@ -6,7 +6,7 @@ import importlib
 import importlib.util
 import math
 
-from arena_part import errors, sources
+from shakedown_part import errors, sources
 
 from .log import log
 

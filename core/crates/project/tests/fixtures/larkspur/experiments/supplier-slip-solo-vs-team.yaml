@@ -1,0 +1,7 @@
+format: shakedown-experiment/1
+label: "Supplier slip: solo vs team"
+world: larkspur-plant
+scenario: supplier-slip
+setups: [solo-planner, planning-team, planner-with-rules]
+repeats: {per_setup: 5, paired_seeds: true}
+budget: {per_run_usd: 1.5, per_deployment_usd: 20}

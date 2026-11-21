@@ -6,7 +6,7 @@ false. **The CopperTide program is not published yet**, so outside contributors 
 or its live test; the rest of the repository does not need it. It needs a CopperTide with the
 route for outside proposers (`POST /api/teams/{id}/changes`, CopperTide `platform` from 2026-11-07).
 Verified live on 2026-11-07: `live_sculptured_roundtrip` (propose, save, decide, restore, re-raise, diff)
-and `arena-part-check` (passed) ran against a local build of `sculptured` on the maintainer's machine,
+and `shakedown-part-check` (passed) ran against a local build of `sculptured` on the maintainer's machine,
 by hand (no routine test runs them). The test is skipped, and says so, when no
 CopperTide program is found. A save restores only with the same CopperTide build.
 
@@ -27,7 +27,7 @@ API.
   build (`--version`), the port, the scratch folder (a fresh `/tmp/arena-sc-<16 hex>`) and the processes:
   serve's pid and group, and the runner's pid from `host-local/hostd.pid`. A restarted program still
   reaches, saves and stops the instance from that record. `.live` is a dot folder: `gc` and
-  arenad's sweep leave it alone (a `live` folder would look like a save id).
+  shaked's sweep leave it alone (a `live` folder would look like a save id).
 - **Team:** made on the first start of a fresh server: `POST /api/teams` `{template: "blank", name}` (its id
   is its name; no agents) and `PUT /api/teams/{team}/settings` with `question_timeout_min: 1440`. A
   restored server already has it. The team has no rules, so every change waits for a person's decision.
@@ -58,7 +58,7 @@ API.
     refusing a proposal, an unknown change, a change already decided, a change that can no longer be
     decided, 8 changes already waiting. An unknown tool is -32602. A server that can't be reached fails the
     call.
-- **Save** `$ARENA_SAVES/sculptured/<save>/` (tool calls on the instance wait meanwhile): `data/`,
+- **Save** `$SHAKEDOWN_SAVES/sculptured/<save>/` (tool calls on the instance wait meanwhile): `data/`,
   `changes.json` and `meta.json` (`{build, aliases}`: the `sculptured --version` that wrote the store,
   and the re-raised changes). `data/` holds an SQLite online backup of each store in the data folder (`controld.sqlite`
   and the runner's `host-local/hostd.sqlite`, through rusqlite with bundled SQLite) and the kit's folder copy
@@ -82,13 +82,13 @@ API.
 - **stop:** kills (SIGKILL) the recorded processes: serve's group, then the runner's group (recorded, and
   the one `hostd.pid` names now; serve starts it in a session of its own). Each process is killed only
   while it is still the recorded program (`/proc/<pid>/exe`) with a whole argument that is the data
-  folder or under it (the kit's `arena_part::helpers::process_group`, Linux only). Then the instance's
+  folder or under it (the kit's `shakedown_part::helpers::process_group`, Linux only). Then the instance's
   folder and scratch folder are removed. Stopping an instance that does not run is a no-op. `usage` is 0:
-  everything is under `ARENA_SAVES` except the scratch folders, which `stop` removes.
+  everything is under `SHAKEDOWN_SAVES` except the scratch folders, which `stop` removes.
 - **gc:** stops (as `stop`) every instance under `.live/` that this program did not start (left running
   by a program that ended without stopping it), then drops the saves `keep` does not keep.
 - Not `uses_clock`. Fingerprint `{"integration": "sculptured"}`.
-- Tests: `cargo test -p arena-sculptured` (unit tests, `gc` on a simulated leaked instance, and the restore
-  refusals), `cargo test -p arena-sculptured -- --ignored live_` (runs real servers; skipped with a note when
-  the program is missing, or set `ARENA_SCULPTURED_BINARY`).
-  Conformance: `ARENA_BIN_DIR=core/target/debug core/target/debug/arena-part-check integrations/sculptured`.
+- Tests: `cargo test -p shakedown-sculptured` (unit tests, `gc` on a simulated leaked instance, and the restore
+  refusals), `cargo test -p shakedown-sculptured -- --ignored live_` (runs real servers; skipped with a note when
+  the program is missing, or set `SHAKEDOWN_SCULPTURED_BINARY`).
+  Conformance: `SHAKEDOWN_BIN_DIR=core/target/debug core/target/debug/shakedown-part-check integrations/sculptured`.

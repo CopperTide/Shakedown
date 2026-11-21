@@ -1,0 +1,23 @@
+# Product managers write tickets, ask for status at 09:30 and 16:00 (world time, UTC), and move
+# work that reached review to Done.
+format: shakedown-people/1
+role: pm
+lines:
+  status: ["Morning all, where are we on the sprint?", "Quick status check: anything blocked?"]
+  tickets: ["Show the order count on the summary page", "Log the slowest request each hour"]
+rules:
+  - id: ask-status
+    every: {at: ["09:30", "16:00"]}
+    who: one
+    limit: {per_day: 2}
+    act: {system: slack, action: post, args: {channel: "#eng", text: "{pick:status}"}}
+  - id: write-ticket
+    every: {at: "11:00"}
+    who: one
+    after: {minutes: [0, 30]}
+    act: {system: jira, action: create_issue, args: {project: ACME, summary: "{pick:tickets}", type: Task}}
+  - id: move-done-work
+    notice: {system: jira, kind: issue_transitioned, where: {/to: In Review}}
+    who: one
+    after: {minutes: [20, 90]}
+    act: {system: jira, action: transition, args: {key: /key, to: Done}}

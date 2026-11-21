@@ -1,0 +1,2 @@
+# Sent by gh 2.45.0 (github.com/cli/cli, MIT, LICENSE-cli.txt)
+mutation PullRequestClose($input:ClosePullRequestInput!){closePullRequest(input: $input){pullRequest{id}}}

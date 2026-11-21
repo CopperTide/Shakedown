@@ -14,11 +14,6 @@ export function Th({ className, ...props }: ComponentProps<'th'>) {
   return <th className={cn('h-8 border-b border-line bg-sunken px-3 text-left text-2xs font-medium whitespace-nowrap text-muted', className)} {...props} />;
 }
 
-/** A row header cell: the first column naming the row. */
-export function RowTh({ className, ...props }: ComponentProps<'th'>) {
-  return <th scope="row" className={cn('h-8 border-b border-line px-3 text-left font-normal whitespace-nowrap', className)} {...props} />;
-}
-
 export function Td({ className, ...props }: ComponentProps<'td'>) {
   return <td className={cn('h-8 border-b border-line px-3 whitespace-nowrap', className)} {...props} />;
 }

@@ -1,0 +1,104 @@
+import pytest
+from support import copy_with
+
+from worldbench.template import TemplateError, form, list_templates, load_template
+
+
+def test_a_good_template_loads_and_its_form_lists_what_the_ui_shows(fixtures):
+    t = load_template(fixtures / "shop")
+    f = form(t)
+    assert [s["id"] for s in f["systems"]] == ["alpha", "beta", "gamma"]
+    assert f["systems"][0]["required"] is True and f["systems"][2]["default"] is False
+    assert f["size"] == {"label": "Staff", "default": 10, "min": 2, "max": 40, "presets": [5, 10, 20]}
+
+
+def test_the_form_has_defaults_filled_and_no_parts(fixtures):
+    f = form(load_template(fixtures / "shop"))
+    assert (f["id"], f["version"], f["company"]) == ("shop", "1.0.0", {"name": "Example Co"})
+    gamma = f["systems"][2]
+    assert gamma == {"id": "gamma", "label": "Gamma", "product": "Gamma twin (simulated)", "required": False,
+                     "default": False, "requires": ["beta"], "memory_mb": 200, "hosts": [], "options": []}
+    assert f["systems"][1]["summary"] == "The second system"
+    assert f["roles"][1] == {"id": "lead", "label": "Leads", "count": {"fixed": 1}, "min": 1, "systems": ["beta"]}
+    assert f["events"][0]["default"] is False and f["events"][1]["needs"] == ["beta"]
+
+
+def test_schema_errors_name_their_path(fixtures, tmp_path):
+    broken = copy_with(fixtures / "shop", tmp_path, {"systems.0.id": "Not An Id"})
+    with pytest.raises(TemplateError) as e:
+        load_template(broken)
+    assert e.value.path == "systems[0].id"
+
+
+@pytest.mark.parametrize("change, path, message", [
+    ({"systems.1.id": "alpha"}, "systems[1].id", "alpha is used twice"),
+    ({"systems.2.requires": ["delta"]}, "systems[2].requires[0]", "no system delta"),
+    ({"tasks.0.needs": ["delta"]}, "tasks[0].needs[0]", "no system delta"),
+    ({"roles.0.systems": ["delta"]}, "roles[0].systems[0]", "no system delta"),
+    ({"roles.1.rules": "rules/none.yaml"}, "roles[1].rules", "no file rules/none.yaml"),
+    ({"size.presets": [1, 10]}, "size.presets[0]", "1 is outside 2..40"),
+    ({"size.default": 41}, "size.default", "41 is outside 2..40"),
+    ({"systems.1.parts.0.part": "alpha"}, "systems[1].parts[0].part", "alpha is used twice"),
+])
+def test_cross_checks_name_their_path(fixtures, tmp_path, change, path, message):
+    with pytest.raises(TemplateError) as e:
+        load_template(copy_with(fixtures / "shop", tmp_path, change))
+    assert (e.value.path, e.value.message) == (path, message)
+
+
+def test_a_template_without_template_yaml_is_an_error(tmp_path):
+    with pytest.raises(TemplateError, match="no template.yaml"):
+        load_template(tmp_path)
+
+
+def test_list_templates_sorts_by_id_and_skips_bad_ones(fixtures, tmp_path, capsys):
+    copy_with(fixtures / "shop", tmp_path, {"id": "Bad Id"})
+    ids = [t.id for t in list_templates([fixtures, tmp_path, tmp_path / "missing"])]
+    assert ids == ["bad-include", "bad-placeholder", "shop"]
+    assert "shop" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("check, path", [
+    ({"part": "alpha", "key": "order/1", "op": "~", "value": 1}, "tasks[1].checks[0].check"),
+    ({"part": "alpha", "key": "order/1", "feild": "status"}, "tasks[1].checks[0].check"),
+    ({"all": []}, "tasks[1].checks[0].check"),
+    ({"part": "alpha", "find": "order/*", "where": {"status": {"~": 1}}}, "tasks[1].checks[0].check"),
+    ({"key": "order/1"}, "tasks[1].checks[0].check"),
+])
+def test_a_malformed_inline_check_is_refused_at_load(fixtures, tmp_path, check, path):
+    with pytest.raises(TemplateError) as e:
+        load_template(copy_with(fixtures / "shop", tmp_path, {"tasks.1.checks": [{"name": "c", "check": check}]}))
+    assert e.value.path.startswith(path), e.value
+
+
+def test_a_check_without_a_name_is_refused_at_load(fixtures, tmp_path):
+    with pytest.raises(TemplateError) as e:
+        load_template(copy_with(fixtures / "shop", tmp_path, {"tasks.1.checks": [{"check": {"all": [{"any": [
+            {"part": "alpha", "key": "k"}]}]}}]}))
+    assert e.value.path == "tasks[1].checks[0]"
+
+
+def test_a_malformed_included_check_is_refused_at_load(fixtures, tmp_path):
+    dst = copy_with(fixtures / "shop", tmp_path, {})
+    (dst / "checks" / "alpha.yaml").write_text("- {name: c, check: {any: [{part: alpha, key: k, op: '~'}]}}\n",
+                                               encoding="utf-8")
+    with pytest.raises(TemplateError) as e:
+        load_template(dst)
+    assert e.value.path.startswith("tasks[0].checks@checks/alpha.yaml[0].check"), e.value
+
+
+def test_well_formed_checks_load_in_every_form(fixtures, tmp_path):
+    checks = [{"name": "k", "says": "s", "safety": True, "check": {"part": "alpha", "key": "k", "field": "a.b", "op": "!=",
+                                                                    "ref": {"part": "beta", "key": "k", "field": "c"}}},
+              {"name": "f", "measure": {"label": "n", "unit": "", "better": "lower", "target": 1},
+               "check": {"part": "alpha", "find": "o/*", "where": {"a": None, "b": {">": 1}, "c": {"=": {"d": 1}}},
+                         "count": "<= {size}"}},
+              {"name": "a", "check": {"all": [{"any": [{"part": "alpha", "key": "k", "op": "exists"}]}]}}]
+    load_template(copy_with(fixtures / "shop", tmp_path, {"tasks.1.checks": checks}))
+
+
+def test_a_role_id_may_not_end_in_added(fixtures, tmp_path):
+    """`clerk-added-001` is the first person added to `clerk`; a role `clerk-added` would draw the same id."""
+    with pytest.raises(TemplateError) as e:
+        load_template(copy_with(fixtures / "shop", tmp_path, {"roles.0.id": "clerk-added"}))
+    assert e.value.path == "roles[0].id"

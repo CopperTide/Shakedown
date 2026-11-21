@@ -1,5 +1,5 @@
-use arena_part::proto::{TwinArea, TwinView};
 use serde_json::{json, Value};
+use shakedown_part::proto::{TwinArea, TwinView};
 
 use super::*;
 use crate::shift_checks::Priority;

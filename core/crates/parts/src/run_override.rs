@@ -1,16 +1,16 @@
-//! A package's run command replaced from the environment. `ARENA_RUN_<PACKAGE>` (the package
+//! A package's run command replaced from the environment. `SHAKEDOWN_RUN_<PACKAGE>` (the package
 //! name upper-cased, `-` as `_`) holds a command line that `/bin/sh -c` runs in place of the
 //! manifest's `run`. It is for a part that runs on another machine, for example
 //! `ssh <host> -- <command>`, whose stdin and stdout carry the protocol as they would locally.
 
-/// The variable that overrides `package`'s run command: `isaac-sim` is `ARENA_RUN_ISAAC_SIM`.
+/// The variable that overrides `package`'s run command: `isaac-sim` is `SHAKEDOWN_RUN_ISAAC_SIM`.
 pub fn var_name(package: &str) -> String {
-    format!("ARENA_RUN_{}", package.to_uppercase().replace('-', "_"))
+    format!("SHAKEDOWN_RUN_{}", package.to_uppercase().replace('-', "_"))
 }
 
-/// The override set for `package` in arenad's environment, if it is set and not blank.
+/// The override set for `package` in shaked's environment, if it is set and not blank.
 pub fn from_env(package: &str) -> Option<String> {
-    std::env::var(var_name(package))
+    shakedown_part::settings::var(&var_name(package))
         .ok()
         .filter(|line| !line.trim().is_empty())
 }
@@ -26,8 +26,8 @@ mod tests {
 
     #[test]
     fn the_variable_is_named_after_the_package() {
-        assert_eq!(var_name("isaac-sim"), "ARENA_RUN_ISAAC_SIM");
-        assert_eq!(var_name("factory"), "ARENA_RUN_FACTORY");
+        assert_eq!(var_name("isaac-sim"), "SHAKEDOWN_RUN_ISAAC_SIM");
+        assert_eq!(var_name("factory"), "SHAKEDOWN_RUN_FACTORY");
     }
 
     #[test]

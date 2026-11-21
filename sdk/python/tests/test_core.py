@@ -1,4 +1,4 @@
-"""Integration tests against a real arenad (see conftest.py). They check the API contracts the SDK
+"""Integration tests against a real shaked (see conftest.py). They check the API contracts the SDK
 relies on by driving the API directly; no agent, scripted or otherwise, takes part."""
 
 from __future__ import annotations
@@ -10,9 +10,9 @@ import threading
 import httpx
 import pytest
 
-from arena import BadRequest, NotFound, NotSupported
-from arena.env import END, ArenaParallelEnv
-from arena.export import read_jsonl
+from shakedown import BadRequest, NotFound, NotSupported
+from shakedown.env import END, ShakedownParallelEnv
+from shakedown.export import read_jsonl
 
 pytestmark = pytest.mark.core
 
@@ -65,7 +65,7 @@ def ended(arena):
 def test_external_run_endpoints_and_record(arena, ended):
     branch, agent, live = ended["branch"], ended["agent"], ended["live"]
     assert agent.mcp_url.endswith(f"/mcp/{branch.id}/probe") and "/gateway/" in agent.gateway_url
-    assert agent.mcp_config()["mcpServers"]["arena"]["url"] == agent.mcp_url
+    assert agent.mcp_config()["mcpServers"]["shakedown"]["url"] == agent.mcp_url
     assert {"handoff", "message", "inbox"} <= {t.name for t in agent.tools}
     assert live.status == "running" and live.seed == 7 and live.run_start["runner"] == "external"
     assert [c.tool for c in live.tool_calls("probe")] == [ended["tool"]]
@@ -78,7 +78,7 @@ def test_external_run_endpoints_and_record(arena, ended):
 def test_stream_of_an_ended_branch(ended):
     branch = ended["branch"]
     seen = list(branch.stream())
-    assert [e.seq for e in seen] == [e.seq for e in branch.events()]
+    assert [e.seq for e in seen] == [e.seq for e in branch.record().events]
     assert branch.final["status"] == ended["result"]["status"]
 
 
@@ -101,7 +101,7 @@ def test_export_dataset(ended, tmp_path):
     events = read_jsonl(os.path.join(out, "events.jsonl"))
     assert rows[0]["branch_id"] == branch.id and rows[0]["seed"] == 7
     assert rows[0]["events"] == len(events) and events[0]["kind"] == "run_start"
-    assert "arena-dataset/1" in open(os.path.join(out, "SCHEMA.md")).read()
+    assert "shakedown-dataset/1" in open(os.path.join(out, "SCHEMA.md")).read()
 
 
 def test_live_stream_follows_a_running_branch(arena, cleanup):
@@ -139,7 +139,7 @@ def test_pause_is_feature_detected(arena, cleanup):
 
 def test_cors_origin_is_configurable(arena):
     if not hasattr(arena, "process"):
-        pytest.skip("only for an arenad the tests started")
+        pytest.skip("only for a shaked the tests started")
     ok = httpx.options(f"{arena.url}/api/runs", headers={
         "origin": "http://127.0.0.1:5173", "access-control-request-method": "POST"})
     assert ok.status_code == 204
@@ -149,7 +149,7 @@ def test_cors_origin_is_configurable(arena):
 
 
 def test_step_env_contract(arena, cleanup):
-    env = ArenaParallelEnv(arena, arena.tasks()[0].id, agents=["probe"], max_steps=5)
+    env = ShakedownParallelEnv(arena, arena.tasks()[0].id, agents=["probe"], max_steps=5)
     obs, infos = env.reset(seed=11)
     cleanup.append(env.branch.run_id)
     assert env.agents == ["probe"] and infos["probe"]["seed"] == 11
@@ -186,9 +186,9 @@ def test_external_suite_claim_and_export(arena, cleanup, tmp_path):
 
 
 def _live_model(arena):
-    """A real model to drive an agent with: a provider arenad's gateway can reach, else Claude Code
+    """A real model to drive an agent with: a provider shaked's gateway can reach, else Claude Code
     signed in on this machine. Skips, saying why, with neither."""
-    from arena import claude_code
+    from shakedown import claude_code
 
     models = {"openai": "gpt-4.1-mini", "anthropic": "claude-haiku-4-5",
               "openrouter": "anthropic/claude-haiku-4.5"}
@@ -197,15 +197,15 @@ def _live_model(arena):
             return p["id"], models[p["id"]]
     if claude_code.available():
         return "claude-code", "haiku"
-    pytest.skip("no model: no provider key in arenad's environment and no `claude` on PATH")
+    pytest.skip("no model: no provider key in shaked's environment and no `claude` on PATH")
 
 
 def test_driver_round_trip(arena, monkeypatch):
     """A driver starts a run, a real model works the ticket as one agent, and the run is scored."""
-    from arena import claude_code, driver
+    from shakedown import claude_code, driver
 
     via, model = _live_model(arena)
-    for k in ("ARENA_BRANCH", "ARENA_RUN", "ARENA_TASK", "ARENA_FORK_OF"):
+    for k in ("SHAKEDOWN_BRANCH", "SHAKEDOWN_RUN", "SHAKEDOWN_TASK", "SHAKEDOWN_FORK_OF"):
         monkeypatch.delenv(k, raising=False)
     with driver.run(task=arena.tasks()[0].id, url=arena.url) as run:
         if via == "claude-code":
@@ -231,9 +231,9 @@ def test_driver_round_trip(arena, monkeypatch):
 
 
 def test_driver_that_raises_ends_the_run_failed_and_scored(arena, monkeypatch):
-    from arena import driver
+    from shakedown import driver
 
-    for k in ("ARENA_BRANCH", "ARENA_RUN", "ARENA_TASK", "ARENA_FORK_OF"):
+    for k in ("SHAKEDOWN_BRANCH", "SHAKEDOWN_RUN", "SHAKEDOWN_TASK", "SHAKEDOWN_FORK_OF"):
         monkeypatch.delenv(k, raising=False)
     with pytest.raises(RuntimeError):
         with driver.run(task=arena.tasks()[0].id, url=arena.url) as run:

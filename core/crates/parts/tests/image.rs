@@ -22,7 +22,7 @@ fn setup_fake_docker() -> (PathBuf, PathBuf, PathBuf, PathBuf) {
     std::os::unix::fs::PermissionsExt::set_mode(&mut perm, 0o755);
     std::fs::set_permissions(&fake, perm).unwrap();
     std::fs::write(
-        pkg.join("arena-package.toml"),
+        pkg.join("shakedown-package.toml"),
         "kind = \"integration\"\nname = \"boxed\"\nversion = \"0.1.0\"\nprotocol = 1\nrun = { image = \"img:1\" }\n",
     )
     .unwrap();
@@ -56,7 +56,7 @@ async fn container_is_named_and_removed_on_drop() {
     wait_for_log(&log, "run", 100, 20).await;
     drop(c);
     let text = wait_for_log(&log, "rm -f", 40, 50).await;
-    let name = format!("arena-part-boxed-{}-", std::process::id());
+    let name = format!("shakedown-part-boxed-{}-", std::process::id());
     assert!(text.contains(&format!("--name {name}")), "{text}");
     assert!(text.contains(&format!("rm -f {name}")), "{text}");
     assert!(text.contains("--network none"), "{text}");

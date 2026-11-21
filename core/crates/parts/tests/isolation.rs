@@ -4,7 +4,7 @@ use serde_json::Value;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-fn arena_root() -> PathBuf {
+fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../..")
         .canonicalize()
@@ -63,7 +63,7 @@ fn packages(manifest: &Path) -> Vec<Pkg> {
 
 #[test]
 fn packages_and_core_stay_apart() {
-    let root = arena_root();
+    let root = repo_root();
     let (core, integrations, benchmarks, kits) = (
         root.join("core"),
         root.join("integrations"),
@@ -72,7 +72,7 @@ fn packages_and_core_stay_apart() {
     );
     let mut all = packages(&core.join("Cargo.toml"));
     all.extend(packages(&root.join("Cargo.toml")));
-    assert!(all.iter().any(|p| p.0 == "parts") && all.iter().any(|p| p.0 == "arena-part"));
+    assert!(all.iter().any(|p| p.0 == "parts") && all.iter().any(|p| p.0 == "shakedown-part"));
     for (name, dir, deps) in &all {
         let outside = [&integrations, &benchmarks, &kits]
             .iter()

@@ -8,9 +8,9 @@ use std::sync::Arc;
 
 use tokio::sync::{oneshot, watch};
 
-use arena_part::proto::{DiffParams, Differing, Docs, InspectParams, Target};
-use arena_part::PartError;
 use serde_json::{json, Map, Value};
+use shakedown_part::proto::{DiffParams, Differing, Docs, InspectParams, Target};
+use shakedown_part::PartError;
 
 use crate::instances::close_site;
 use crate::names::{key, parse_key, Site};
@@ -61,7 +61,10 @@ impl Erpnext {
         self.open_site(ready, &source, &site).await?;
         let out = f(&ready.rest, &site.name).await;
         if let Err(e) = close_site(&ready.stack, &site).await {
-            eprintln!("arena-erpnext: removing scratch site {}: {e}", site.name);
+            eprintln!(
+                "shakedown-erpnext: removing scratch site {}: {e}",
+                site.name
+            );
         }
         out
     }
@@ -207,7 +210,7 @@ async fn some_docs(
 }
 
 /// False when Frappe has no such doctype: it answers a read of one with a server error, not 404,
-/// and a key of a doctype that doesn't exist names no document (arenad probes saves with one).
+/// and a key of a doctype that doesn't exist names no document (shaked probes saves with one).
 async fn doctype_exists(rest: &Rest, site: &str, doctype: &str) -> Result<bool, PartError> {
     let path = ["resource", "DocType", doctype];
     let reply = rest.get(site, &path, &[]).await?;

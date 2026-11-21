@@ -1,5 +1,5 @@
-"""pharma-lims: a simulated LIMS and QA head as an arena-part/1 integration."""
-from arena_part import serve
+"""pharma-lims: a simulated LIMS and QA head as an shakedown-part/1 integration."""
+from shakedown_part import serve
 
 from .part import PharmaLims
 

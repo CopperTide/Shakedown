@@ -1,0 +1,6 @@
+# Words of the software-factory world's template data (company, services) that the designs'
+# prompts and code must never name: the world supplies them through the ticket and the env.
+northwind
+storefront
+orders
+inventory

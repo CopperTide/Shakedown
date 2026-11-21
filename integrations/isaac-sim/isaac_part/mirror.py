@@ -5,7 +5,7 @@ import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 
-from arena_part import errors
+from shakedown_part import errors
 
 from . import views
 from .base import DocsPart
@@ -39,7 +39,7 @@ def _plant_url(config) -> str:
 
 
 class Mirror(DocsPart):
-    name = NAME
+    NAME = NAME
 
     def describe(self):
         return {"name": NAME, "version": "0.1.0", "protocol": 1, "restore": {"exact": "none", "approximate": False},
@@ -65,12 +65,12 @@ class Mirror(DocsPart):
                                   f"{error or 'something other than a list of events'}")
         if found:
             link.last_seq = found[-1]["seq"]
-        events = [views.arena_event(e) for e in found]
+        events = [views.shakedown_event(e) for e in found]
         return {"changed": bool(events), "events": events}
 
     def save(self, instance, save, dir):
         """The plant's /state now, kept for display; nothing can start from it."""
-        return {"bytes": views.write_docs(dir, self._live_docs(instance)), "exact": False}
+        return {"bytes": views.write_docs(dir, self.live_docs(instance)), "exact": False}
 
-    def _live_docs(self, instance) -> dict:
+    def live_docs(self, instance) -> dict:
         return views.docs_of(_get(self._instance(instance).url, "/state"))

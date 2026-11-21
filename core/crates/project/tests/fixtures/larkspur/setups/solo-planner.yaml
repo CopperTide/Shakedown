@@ -1,0 +1,6 @@
+format: shakedown-setup/1
+label: Solo planner
+team:
+  kind: builtin
+  agents:
+    - {id: planner, role: You keep orders on schedule., model: claude-sonnet, key: anthropic-main, tools: ["*"]}

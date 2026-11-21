@@ -1,0 +1,5 @@
+# A roster disruption (shift-roster's `callout`): the operator at the robot cell is off shift from the start.
+id: callout
+when: {after_calls: 0}
+do: {kind: callout, operators: [operator-004]}
+text: The operator at the robot cell (CELL-R1) calls out sick at the start of the shift

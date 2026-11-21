@@ -1,6 +1,8 @@
 //! The folder helper: hard-linked saves, copying restores.
-use arena_part::helpers::folder::{copy_save, copy_save_except, digest, discard, restore, size};
-use arena_part::helpers::remove_tree;
+use shakedown_part::helpers::folder::{
+    copy_save, copy_save_except, digest, discard, restore, size,
+};
+use shakedown_part::helpers::remove_tree;
 use std::fs;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
@@ -116,7 +118,7 @@ fn copies_keep_folder_modes() {
 
 #[test]
 fn sweep_removes_only_stale_folders() {
-    use arena_part::helpers::temp_dir::{sweep_stale, TempDir};
+    use shakedown_part::helpers::temp_dir::{sweep_stale, TempDir};
     use std::time::{Duration, SystemTime};
     let t = Tmp::new("sweep");
     let (old, fresh) = (t.0.join("old"), t.0.join("fresh"));
@@ -171,7 +173,7 @@ fn read_only_tree(root: &Path) {
 
 #[test]
 fn read_only_trees_are_removed() {
-    use arena_part::helpers::temp_dir::TempDir;
+    use shakedown_part::helpers::temp_dir::TempDir;
     let t = Tmp::new("readonly");
     let doomed = t.0.join("discarded");
     read_only_tree(&doomed);

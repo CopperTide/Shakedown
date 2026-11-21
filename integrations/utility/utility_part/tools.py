@@ -1,7 +1,7 @@
 """The utility's tools: the site meter and the demand-response events for agents, the reading the plant sends
 (a benchmark's link calls it) and the scenario a task's setup sets."""
-from arena_part.jsonstate import Done, Tool, set_scenario
-from arena_part.params import Param, Refusal
+from shakedown_part.jsonstate import Done, Scenarios, Tool
+from shakedown_part.params import Param, Refusal
 
 from . import disrupt, meter
 
@@ -37,16 +37,11 @@ def _load(config, state, args):
     return Done({"kw": state["meter"]["w"] / 1000}, writes=["meter/site"])
 
 
-def scenarios(config) -> list:
-    return [BASE, *config.get("scenarios", {})]
-
-
-def _overlay(config, state) -> dict:
-    return config.get("scenarios", {}).get(state["scenario"], {})
+SCENARIOS = Scenarios(base=BASE)
 
 
 def _scenario(config, state, args):
-    return set_scenario(config, state, args, scenarios(config), _overlay, disrupt.KINDS, TOOLS)
+    return SCENARIOS.set(config, state, args, disrupt.KINDS, TOOLS)
 
 
 TOOLS = {t.name: t for t in [

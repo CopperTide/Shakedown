@@ -1,5 +1,5 @@
 use anyhow::Context;
-use arena_factory::{Backend, Factory};
+use shakedown_factory::{Backend, Factory};
 
 /// The value after `name` on the command line.
 fn arg(name: &str) -> Option<String> {
@@ -24,14 +24,14 @@ async fn main() -> anyhow::Result<()> {
         Some("isaac") => Backend::Isaac,
         Some(other) => anyhow::bail!("--backend must be standin or isaac, not {other}"),
     };
-    let data = arg("--data").unwrap_or_else(|| arena_factory::DEFAULT_DATA.to_string());
+    let data = arg("--data").unwrap_or_else(|| shakedown_factory::DEFAULT_DATA.to_string());
     let team = arg("--team").unwrap_or_else(|| "single".into());
     anyhow::ensure!(
-        arena_factory::team::named(&team).is_some(),
+        shakedown_factory::team::named(&team).is_some(),
         "--team must be single, incident or shift, not {team}"
     );
     let factory = Factory::new(backend, data.into())
         .with_plant_config(plant_config()?)
         .with_team(&team);
-    arena_part::serve_benchmark(factory).await
+    shakedown_part::serve_benchmark(factory).await
 }

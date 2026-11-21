@@ -1,0 +1,13 @@
+# The traffic-peak event (off by default): three times the usual traffic for 30 world minutes, from world minute
+# `at_minute` of the run. The factor and length are the traffic's data (platform/traffic/journeys.json, `events`);
+# choosing the event sets the traffic service's TRAFFIC_EVENTS through the platform part's env.
+id: traffic-peak
+label: A traffic peak
+description: Production gets three times its usual traffic for 30 minutes from minute {param.at_minute}
+kind: event
+default: false
+needs: [production]
+params:
+  - {name: at_minute, label: Starts at world minute, kind: int, min: 0, max: 600, default: 90}
+apply:
+  - {part: platform, set: env.TRAFFIC_EVENTS, value: "traffic-peak@{param.at_minute}"}

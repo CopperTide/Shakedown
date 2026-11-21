@@ -1,0 +1,53 @@
+# The pod Shakedown runs its custom model on (plan 2026-11-19-models-and-designs, M1-M5).
+name = "shakedown-gpt-oss"
+image = "vllm/vllm-openai:v0.32.0-x86_64-cu129@sha256:be7326dd2f0731b3c49bd7c09975b46323733dcac74757aa5d5ada60acdee217"
+min_cuda = "12.9"
+cloud = "COMMUNITY"
+container_disk_gb = 40
+volume_gb = 100
+volume_mount = "/workspace"
+port = 8000                        # exposed as "8000/http": https://<pod>-8000.proxy.runpod.net
+idle_minutes = 10
+max_session_hours = 8
+budget_usd = 50.0
+# The pod's name as a shaked local provider: `local:runpod`, SHAKEDOWN_LOCAL_*_RUNPOD.
+shaked_provider = "runpod"
+# The hosted-equivalent token rate (OpenRouter's list price of openai/gpt-oss-120b per Mtok,
+# read 2026-11-19), given to shaked as SHAKEDOWN_LOCAL_PRICE_RUNPOD.
+hosted_price_per_mtok = [0.15, 0.60]
+# The arguments after the image's `vllm serve`; {model} and {revision} come from the GPU entry.
+serve_args = ["{model}", "--revision", "{revision}", "--host", "0.0.0.0", "--port", "8000",
+              "--tool-call-parser", "openai", "--enable-auto-tool-choice",
+              "--reasoning-parser", "openai_gptoss", "--max-model-len", "131072",
+              "--gpu-memory-utilization", "0.92", "--enable-prompt-tokens-details"]
+# `start --low-memory` adds these (the vLLM recipe's fix for an out-of-memory load at TP1).
+low_memory_args = ["--max-num-batched-tokens", "1024"]
+
+[env]
+HF_HOME = "/workspace/hf"          # plus VLLM_API_KEY, generated per pod
+
+# GPUs in order of preference: the first is the default; each other is started only when named.
+[[gpu]]
+id = "NVIDIA H100 80GB HBM3"
+model = "openai/gpt-oss-120b"
+revision = "b5c939de8f754692c1647ca79fbf85e8c1e70f8a"
+
+[[gpu]]
+id = "NVIDIA H100 NVL"
+model = "openai/gpt-oss-120b"
+revision = "b5c939de8f754692c1647ca79fbf85e8c1e70f8a"
+
+[[gpu]]
+id = "NVIDIA A100-SXM4-80GB"
+model = "openai/gpt-oss-120b"
+revision = "b5c939de8f754692c1647ca79fbf85e8c1e70f8a"
+
+[[gpu]]
+id = "NVIDIA H200"
+model = "openai/gpt-oss-120b"
+revision = "b5c939de8f754692c1647ca79fbf85e8c1e70f8a"
+
+[[gpu]]
+id = "NVIDIA L40S"
+model = "openai/gpt-oss-20b"
+revision = "6cee5e81ee83917806bbde320786a8fb61efebee"

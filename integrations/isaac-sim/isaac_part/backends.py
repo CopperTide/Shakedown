@@ -4,7 +4,7 @@ the backend changes the fingerprint."""
 from dataclasses import dataclass
 from typing import Callable
 
-from arena_part import sources
+from shakedown_part import sources
 
 from . import isaac_backend, isaac_video
 from .gpu import gpu_host

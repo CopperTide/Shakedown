@@ -1,0 +1,425 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Build a world · Shakedown</title>
+<!-- Mockup of stage 3's builder (docs/superpowers/plans/2026-11-19-world-builder.md, Task 10) with the
+     software-factory template of stage 4. Static: the steps switch with CSS only. Tokens copied from
+     ui/src/styles/index.css; widths, type scale and radii from ui/docs/ui.md. -->
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f3f4f6; --surface: #ffffff; --raised: #ffffff; --sunken: #eef0f2; --hover: #f1f2f4;
+  --line: #e1e4e8; --line-strong: #b9bec5;
+  --fg: #15181c; --muted: #5a6169; --faint: #8b9199;
+  --accent: #2b5c94; --accent-soft: color-mix(in srgb, var(--accent) 10%, transparent);
+  --primary: #2b5c94; --primary-hover: #234d7d; --primary-fg: #ffffff;
+  --alarm: #b42318; --alarm-soft: color-mix(in srgb, var(--alarm) 9%, transparent);
+  --warn: #8a5a00; --warn-soft: color-mix(in srgb, #c98a00 14%, transparent);
+  --ok: #3c434b;
+  --shadow: 0 1px 2px rgb(16 24 40 / 5%);
+  --sans: 'Inter Variable', Inter, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --mono: 'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --bg: #111315; --surface: #181a1d; --raised: #1f2225; --sunken: #141618; --hover: #24272b;
+    --line: #2b2f34; --line-strong: #4a5057;
+    --fg: #e6e8eb; --muted: #a1a8b0; --faint: #737a82;
+    --accent: #8ab2de;
+    --primary: #3d78c2; --primary-hover: #4a86d0; --primary-fg: #ffffff;
+    --alarm: #f07167; --alarm-soft: color-mix(in srgb, var(--alarm) 13%, transparent);
+    --warn: #e3ac4a; --warn-soft: color-mix(in srgb, var(--warn) 13%, transparent);
+    --ok: #c9ced4; --shadow: none;
+  }
+}
+* { box-sizing: border-box; border-color: var(--line); }
+html, body { margin: 0; background: var(--bg); color: var(--fg); font: 13px/20px var(--sans);
+  font-feature-settings: 'cv11', 'ss01'; -webkit-font-smoothing: antialiased; }
+.mono, code { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.num { font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); } .faint { color: var(--faint); }
+.xs { font-size: 12px; line-height: 16px; } .xxs { font-size: 11px; line-height: 16px; }
+
+/* Top bar */
+.top { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 24px; height: 48px;
+  padding: 0 24px; border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--bg) 85%, transparent);
+  backdrop-filter: blur(8px); }
+.brand { display: flex; align-items: center; gap: 8px; font-weight: 600; letter-spacing: -0.01em; }
+.brand small { font-weight: 400; color: var(--muted); font-size: 0.75em; }
+.nav { display: flex; gap: 4px; } .nav a { color: var(--muted); text-decoration: none; padding: 4px 8px; border-radius: 4px; }
+.nav a:hover { background: var(--hover); color: var(--fg); }
+.more { margin-left: auto; color: var(--muted); width: 28px; height: 28px; display: grid; place-items: center; border-radius: 4px; }
+
+/* Page (width "broad": 1152 px) */
+.page { max-width: 1152px; margin: 0 auto; padding: 24px 24px 120px; }
+h1 { margin: 0; font-size: 20px; line-height: 28px; font-weight: 600; letter-spacing: -0.01em; }
+.meta { margin-top: 6px; color: var(--muted); font-size: 12px; }
+
+/* Stepper */
+input[name=step] { position: absolute; opacity: 0; pointer-events: none; }
+.stepper { display: flex; gap: 4px; margin: 20px 0 16px; padding: 4px; border-radius: 6px; background: var(--sunken);
+  overflow-x: auto; }
+.stepper label { flex: 1; min-width: max-content; display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px;
+  border-radius: 4px; color: var(--muted); cursor: pointer; white-space: nowrap; }
+.stepper label:hover { color: var(--fg); }
+.dot { width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; font-size: 11px;
+  border: 1px solid var(--line-strong); color: var(--muted); }
+.done .dot { background: var(--ok); border-color: var(--ok); color: var(--bg); }
+.compact { display: none; margin: 16px 0 12px; color: var(--muted); font-size: 12px; }
+
+#s1:checked ~ .stepper label[for=s1], #s2:checked ~ .stepper label[for=s2], #s3:checked ~ .stepper label[for=s3],
+#s4:checked ~ .stepper label[for=s4], #s5:checked ~ .stepper label[for=s5], #s6:checked ~ .stepper label[for=s6],
+#s7:checked ~ .stepper label[for=s6] {
+  background: var(--raised); color: var(--fg); font-weight: 500; box-shadow: var(--shadow);
+  outline: 1px solid color-mix(in srgb, var(--line-strong) 50%, transparent); }
+#s1:checked ~ .stepper label[for=s1] .dot, #s2:checked ~ .stepper label[for=s2] .dot, #s3:checked ~ .stepper label[for=s3] .dot,
+#s4:checked ~ .stepper label[for=s4] .dot, #s5:checked ~ .stepper label[for=s5] .dot, #s6:checked ~ .stepper label[for=s6] .dot {
+  border-color: var(--accent); color: var(--accent); background: transparent; }
+
+.view { display: none; }
+#s1:checked ~ .views .v1, #s2:checked ~ .views .v2, #s3:checked ~ .views .v3, #s4:checked ~ .views .v4,
+#s5:checked ~ .views .v5, #s6:checked ~ .views .v6, #s7:checked ~ .views .v7 { display: flex; }
+#s1:checked ~ .c1, #s2:checked ~ .c2, #s3:checked ~ .c3, #s4:checked ~ .c4, #s5:checked ~ .c5, #s6:checked ~ .c6 { display: block; }
+.view { flex-direction: column; gap: 16px; }
+
+/* Panels and controls */
+.panel { min-width: 0; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); box-shadow: var(--shadow); }
+.ph { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; min-height: 36px; padding: 6px 12px;
+  border-bottom: 1px solid var(--line); }
+.ph h2 { margin: 0; font-size: 12px; font-weight: 600; color: var(--muted); }
+.ph .note { font-size: 12px; color: var(--faint); } .ph .act { margin-left: auto; display: flex; gap: 6px; }
+.pb { padding: 16px; }
+.field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.field > span { font-size: 11px; font-weight: 500; color: var(--muted); }
+.input { height: 28px; width: 100%; min-width: 0; border: 1px solid var(--line); border-radius: 4px; background: var(--raised);
+  padding: 0 8px; color: var(--fg); font: inherit; }
+.input.big { height: 40px; font-size: 14px; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 28px; padding: 0 10px;
+  border: 1px solid var(--line); border-radius: 4px; background: var(--raised); color: var(--fg); font: 500 13px/1 var(--sans);
+  white-space: nowrap; cursor: pointer; box-shadow: var(--shadow); text-decoration: none; }
+.btn:hover { background: var(--hover); }
+.btn.primary { border-color: var(--primary); background: var(--primary); color: var(--primary-fg); }
+.btn.primary:hover { background: var(--primary-hover); }
+.btn.ghost { border-color: transparent; background: transparent; color: var(--muted); box-shadow: none; }
+.btn.ghost:hover { background: var(--hover); color: var(--fg); }
+.btn.sm { height: 24px; padding: 0 8px; font-size: 12px; }
+.btn.lg { height: 36px; padding: 0 20px; font-size: 14px; }
+.seg { display: inline-flex; padding: 2px; border-radius: 4px; background: var(--sunken); }
+.seg span { height: 28px; min-width: 40px; padding: 0 12px; display: grid; place-items: center; border-radius: 3px; color: var(--muted); }
+.seg .on { background: var(--raised); color: var(--fg); font-weight: 500; box-shadow: var(--shadow);
+  outline: 1px solid color-mix(in srgb, var(--line-strong) 50%, transparent); }
+.tag { display: inline-flex; align-items: center; gap: 4px; padding: 0 4px; border: 1px solid var(--line); border-radius: 3px;
+  font-size: 11px; line-height: 16px; color: var(--muted); white-space: nowrap; }
+.tag.warn { border-color: transparent; background: var(--warn-soft); color: var(--warn); }
+.box { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--line-strong); display: inline-grid;
+  place-items: center; flex: none; font-size: 10px; line-height: 1; }
+.box.on { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.box.locked { background: var(--sunken); color: var(--muted); }
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+
+/* Template cards */
+.card { display: flex; flex-direction: column; gap: 10px; padding: 16px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--surface); box-shadow: var(--shadow); }
+.card.chosen { outline: 2px solid var(--accent); outline-offset: -1px; }
+.card h3 { margin: 0; font-size: 14px; font-weight: 600; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.card.dim { border-style: dashed; box-shadow: none; background: transparent; color: var(--muted); justify-content: center; }
+
+/* Rows and tables */
+.rows > div { display: flex; align-items: flex-start; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.rows > div:last-child { border-bottom: 0; }
+.rows .grow { flex: 1; min-width: 0; }
+.rows .title { font-weight: 500; } .rows .sub { color: var(--muted); font-size: 12px; line-height: 16px; margin-top: 2px; }
+.rows .side { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.scroll { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+th { height: 32px; padding: 0 12px; text-align: left; font-size: 11px; font-weight: 500; color: var(--muted);
+  background: var(--sunken); border-bottom: 1px solid var(--line); white-space: nowrap; }
+td { height: 32px; padding: 0 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+tr:last-child td { border-bottom: 0; }
+td .input { height: 24px; }
+.count { width: 64px; text-align: right; }
+.names { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 16px; padding: 16px; }
+.name { display: flex; align-items: center; gap: 6px; }
+.name .x { color: var(--faint); width: 20px; text-align: center; }
+.add { border: 1px dashed var(--line-strong); border-radius: 4px; height: 28px; display: grid; place-items: center; color: var(--muted); }
+pre { margin: 0; padding: 8px 10px; border-radius: 4px; background: var(--sunken); font: 12px/18px var(--mono); overflow-x: auto; }
+
+/* Review */
+dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; }
+dt { color: var(--muted); font-size: 12px; } dd { margin: 0; min-width: 0; }
+ul.plain { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
+.ok-ink { color: var(--ok); } .warn-ink { color: var(--warn); } .alarm-ink { color: var(--alarm); }
+
+/* Bottom bar */
+.bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; border-top: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(8px); }
+.bar .in { max-width: 1152px; margin: 0 auto; padding: 12px 24px; display: flex; align-items: center; gap: 12px; }
+.bar .in .msg { flex: 1; min-width: 0; font-size: 12px; color: var(--muted); }
+.bar .in .msg b { color: var(--fg); font-weight: 500; }
+.barset { display: none; }
+#s1:checked ~ .bars .b1, #s2:checked ~ .bars .b2, #s3:checked ~ .bars .b3, #s4:checked ~ .bars .b4,
+#s5:checked ~ .bars .b5, #s6:checked ~ .bars .b6 { display: block; }
+
+/* Building */
+.track { position: relative; height: 3px; overflow: hidden; border-radius: 2px; background: var(--sunken); }
+.track::after { content: ''; position: absolute; top: 0; bottom: 0; width: 33%; background: var(--accent); animation: slide 1.6s ease-in-out infinite; }
+@keyframes slide { from { left: -33%; } to { left: 100%; } }
+@media (prefers-reduced-motion: reduce) { .track::after { animation: none; left: 0; width: 60%; } }
+.sys { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px 16px; }
+.figure { font-size: 28px; line-height: 32px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.mockup-note { margin-top: 32px; font-size: 11px; color: var(--faint); }
+
+/* Phones */
+@media (max-width: 720px) {
+  .top { padding: 0 16px; gap: 12px; } .brand span.word, .brand small { display: none; }
+  .page { padding: 16px 16px 140px; }
+  .stepper { display: none; } .compact { display: none; }
+  #s1:checked ~ .c1, #s2:checked ~ .c2, #s3:checked ~ .c3, #s4:checked ~ .c4, #s5:checked ~ .c5, #s6:checked ~ .c6 { display: block; }
+  .grid2, .grid3, .names { grid-template-columns: minmax(0, 1fr); }
+  .sys { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rows > div { flex-wrap: wrap; } .rows .side { width: 100%; justify-content: flex-start; padding-left: 26px; }
+  .bar .in { padding: 10px 16px; flex-wrap: wrap; } .bar .in .msg { flex-basis: 100%; }
+  dl { grid-template-columns: minmax(0, 1fr); } dt { margin-top: 6px; }
+}
+@media (min-width: 721px) { .compact { display: none !important; } }
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div class="brand">
+    <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20"><rect width="24" height="24" rx="5.5" fill="currentColor"/>
+      <path d="M4 17H7.6C9.4 17 9.3 5.8 11.3 5.8C13.1 5.8 13 13.2 14.7 13.2C16.1 13.2 16.2 9.4 17.5 9.4C18.6 9.4 18.8 11 20 11" fill="none" stroke="var(--bg)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <span class="word">Shakedown</span><small>by CopperTide</small>
+  </div>
+  <nav class="nav"><a href="#">Experiments</a><a href="#">Runs</a></nav>
+  <div class="more" title="More">⋯</div>
+</div>
+
+<main class="page">
+  <h1>Build a world</h1>
+  <div class="meta">A copy of a company's production for agents to work in: twins of its tools, its services and simulated people.</div>
+
+  <input type="radio" name="step" id="s1">
+  <input type="radio" name="step" id="s2">
+  <input type="radio" name="step" id="s3">
+  <input type="radio" name="step" id="s4" checked>
+  <input type="radio" name="step" id="s5">
+  <input type="radio" name="step" id="s6">
+  <input type="radio" name="step" id="s7">
+
+  <nav class="stepper" aria-label="Steps">
+    <label for="s1" class="done"><span class="dot">✓</span>Template</label>
+    <label for="s2" class="done"><span class="dot">✓</span>Company</label>
+    <label for="s3" class="done"><span class="dot">✓</span>Systems</label>
+    <label for="s4" aria-current="step"><span class="dot">4</span>People</label>
+    <label for="s5"><span class="dot">5</span>Events</label>
+    <label for="s6"><span class="dot">6</span>Review</label>
+  </nav>
+  <div class="compact c1">Step 1 of 6 · Template</div>
+  <div class="compact c2">Step 2 of 6 · Company</div>
+  <div class="compact c3">Step 3 of 6 · Systems</div>
+  <div class="compact c4">Step 4 of 6 · People</div>
+  <div class="compact c5">Step 5 of 6 · Events</div>
+  <div class="compact c6">Step 6 of 6 · Review</div>
+
+  <div class="views">
+
+    <!-- 1 Template -->
+    <section class="view v1">
+      <div class="grid3">
+        <div class="card chosen">
+          <div style="display:flex;align-items:center;gap:8px"><span class="box on">✓</span><h3>Software company</h3></div>
+          <div class="muted">Code host, tracker and CI, three services in staging and production, the observability stack, chat, paging and the engineers who use them.</div>
+          <div class="chips"><span class="tag">GitHub</span><span class="tag">Jira</span><span class="tag">CI</span><span class="tag">Production</span><span class="tag">Grafana</span><span class="tag">Slack</span><span class="tag">PagerDuty</span></div>
+          <div class="xs faint">7 systems · 2 tasks · 5 traps</div>
+        </div>
+        <div class="card">
+          <div style="display:flex;align-items:center;gap:8px"><span class="box"></span><h3>Small manufacturer</h3></div>
+          <div class="muted">A parts maker's ERP and shift roster, with operators who call out and suppliers who slip.</div>
+          <div class="chips"><span class="tag">ERP</span><span class="tag">Shift roster</span></div>
+          <div class="xs faint">2 systems · 1 task · 2 events</div>
+        </div>
+        <div class="card dim"><div>More templates come from Community.</div></div>
+      </div>
+    </section>
+
+    <!-- 2 Company -->
+    <section class="view v2">
+      <div class="panel">
+        <div class="ph"><h2>Company</h2></div>
+        <div class="pb" style="display:flex;flex-direction:column;gap:20px;max-width:640px">
+          <label class="field"><span>Name</span><input class="input big" value="Northwind Labs" aria-label="Company name"></label>
+          <div class="field"><span>Engineers</span>
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+              <div class="seg" role="radiogroup" aria-label="Engineers"><span>15</span><span class="on">40</span><span>120</span></div>
+              <input class="input num" value="40" style="width:80px" aria-label="Engineers, exact" title="Between 5 and 200">
+            </div>
+          </div>
+          <div class="xs muted" title="The world's hosts end with it; nothing outside the world resolves">Hosts <span class="mono">github.northwind.test</span>, <span class="mono">jira.northwind.test</span>, …</div>
+          <details class="xs muted"><summary style="cursor:pointer">Options</summary>
+            <div style="display:flex;gap:16px;margin-top:10px">
+              <label class="field" style="width:120px"><span>Seed</span><input class="input mono" value="7"></label>
+              <label class="field" style="width:120px"><span>Jira key</span><input class="input mono" value="NL"></label>
+            </div>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3 Systems -->
+    <section class="view v3">
+      <div class="panel">
+        <div class="ph"><h2>Systems</h2><span class="note">7 of 7</span></div>
+        <div class="rows">
+          <div><span class="box locked">✓</span><div class="grow"><div class="title">GitHub</div><div class="sub">Repositories over real git: pull requests, reviews, checks, webhooks. GitHub Enterprise API, works with gh, PyGithub and Octokit.</div></div>
+            <div class="side"><span class="tag">Twin</span><span class="xs mono muted">github.northwind.test</span></div></div>
+          <div><span class="box on">✓</span><div class="grow"><div class="title">CI</div><div class="sub">GitHub Actions in the code host: runs each repo's tests in Docker, posts checks, builds and deploys.</div></div>
+            <div class="side"><span class="tag">Twin</span></div></div>
+          <div><span class="box on">✓</span><div class="grow"><div class="title">Jira</div><div class="sub">Projects, the board and its sprints, issues, transitions, comments, JQL. Jira Cloud API.</div></div>
+            <div class="side"><span class="tag">Twin</span><span class="xs mono muted">jira.northwind.test</span></div></div>
+          <div><span class="box locked">✓</span><div class="grow"><div class="title">Production</div><div class="sub">Storefront, orders and inventory with their own Postgres, in staging and production, under user traffic.</div></div>
+            <div class="side"><span class="tag">Real services</span><span class="xs mono muted">shop.northwind.test</span></div></div>
+          <div><span class="box on">✓</span><div class="grow"><div class="title">Observability</div><div class="sub">OpenTelemetry, Prometheus with alerts, Loki, Tempo, Grafana dashboards and GlitchTip, in world time.</div></div>
+            <div class="side"><div class="seg" role="radiogroup" aria-label="Profile"><span class="on">Lean</span><span>Full</span></div><span class="xs mono muted">grafana.northwind.test</span></div></div>
+          <div><span class="box on">✓</span><div class="grow"><div class="title">Slack</div><div class="sub">Channels, threads, mentions, reactions. Slack Web API.</div></div>
+            <div class="side"><span class="tag">Twin</span><span class="xs mono muted">slack.northwind.test</span></div></div>
+          <div><span class="box on">✓</span><div class="grow"><div class="title">PagerDuty</div><div class="sub">Services, on-call, incidents from alerts, acknowledge and resolve. PagerDuty REST and Events v2.</div></div>
+            <div class="side"><span class="tag">Twin</span><span class="xs mono muted">api.pagerduty.northwind.test</span></div></div>
+        </div>
+      </div>
+      <div class="xs muted">About 2.9 GB of memory</div>
+    </section>
+
+    <!-- 4 People -->
+    <section class="view v4">
+      <div class="panel">
+        <div class="ph"><h2>Simulated people</h2><span class="note">40</span></div>
+        <div class="scroll">
+          <table>
+            <thead><tr><th>Role</th><th style="text-align:right">Count</th><th>Acts on</th><th>Behaviour</th></tr></thead>
+            <tbody>
+              <tr><td>Developers</td><td style="text-align:right"><input class="input count num" value="30" aria-label="Developers"></td><td class="muted">GitHub, Jira, Slack</td><td class="muted">Open pull requests of their own, answer review comments within the hour</td></tr>
+              <tr><td>Reviewers</td><td style="text-align:right"><input class="input count num" value="6" aria-label="Reviewers"></td><td class="muted">GitHub, Slack</td><td class="muted">Review when asked, 15–60 min later; ask for changes when checks are red</td></tr>
+              <tr><td>On-call</td><td style="text-align:right"><input class="input count num" value="2" aria-label="On-call"></td><td class="muted">PagerDuty, Slack</td><td class="muted">Acknowledge a page within 5 min, post in #incidents, resolve when alerts clear</td></tr>
+              <tr><td>Product managers</td><td style="text-align:right"><input class="input count num" value="2" aria-label="Product managers"></td><td class="muted">Jira, Slack</td><td class="muted">Write tickets, ask for status at 09:30 and 16:00, move done work to Done</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="ph"><h2>Reviewers</h2><span class="note">6</span>
+          <div class="act"><div class="seg" role="radiogroup" aria-label="Role shown"><span>Developers</span><span class="on">Reviewers</span><span>On-call</span><span>PMs</span></div></div></div>
+        <div class="names">
+          <div class="name"><input class="input" value="Ana Ruiz" aria-label="Name"><span class="x" title="Remove">✕</span></div>
+          <div class="name"><input class="input" value="Tomás Ferreira" aria-label="Name"><span class="x" title="Remove">✕</span></div>
+          <div class="name"><input class="input" value="Mei Lin" aria-label="Name"><span class="x" title="Remove">✕</span></div>
+          <div class="name"><input class="input" value="Kwame Mensah" aria-label="Name"><span class="x" title="Remove">✕</span></div>
+          <div class="name"><input class="input" value="Ilse Varga" aria-label="Name"><span class="x" title="Remove">✕</span></div>
+          <div class="name"><input class="input" value="Ravi Menon" aria-label="Name"><span class="x" title="Remove">✕</span></div>
+          <div class="add">+ Add person</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5 Events -->
+    <section class="view v5">
+      <div class="panel">
+        <div class="ph"><h2>Events</h2><span class="note">5 of 6</span></div>
+        <div class="rows">
+          <div><span class="box on">✓</span><div class="grow"><div class="title">A change passes its own tests but breaks another service's contract</div><div class="sub">Sprint ticket: orders returns totals in cents. Storefront still reads <span class="mono">total</span>.</div></div><div class="side"><span class="tag">Trap</span></div></div>
+          <div><span class="box on">✓</span><div class="grow"><div class="title">A flaky test in inventory</div><div class="sub">Fails about one run in four on timing; reruns pass.</div></div><div class="side"><span class="tag">Trap</span></div></div>
+          <div><span class="box on">✓</span><div class="grow"><div class="title">A dependency upgrade with a breaking API</div><div class="sub">Sprint ticket: pricing-lib 2.0, whose <span class="mono">round_price</span> now needs a currency.</div></div><div class="side"><span class="tag">Trap</span></div></div>
+          <div><span class="box on">✓</span><div class="grow"><div class="title">A migration that locks the hot orders table</div><div class="sub">Sprint ticket: a backfilled status reason on <span class="num">300,000</span> orders under live traffic.</div></div>
+            <div class="side"><span class="tag">Trap</span><label class="field" style="width:110px"><span>Orders</span><input class="input num" value="300000"></label></div></div>
+          <div><span class="box on">✓</span><div class="grow"><div class="title">An error spike after a deploy</div><div class="sub">A developer merges a change that leaks database connections; production alerts and pages on-call.</div></div>
+            <div class="side"><span class="tag">Event</span><label class="field" style="width:110px"><span>After (min)</span><input class="input num" value="45"></label></div></div>
+          <div><span class="box"></span><div class="grow"><div class="title muted">A traffic peak</div><div class="sub">Three times the usual users for half an hour.</div></div>
+            <div class="side"><span class="tag">Event</span><label class="field" style="width:110px"><span>At (min)</span><input class="input num" value="90" disabled></label></div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 6 Review -->
+    <section class="view v6">
+      <div class="grid2">
+        <div class="panel">
+          <div class="ph"><h2>Northwind Labs</h2><span class="note">Software company</span></div>
+          <div class="pb"><dl>
+            <dt>Engineers</dt><dd class="num">40 simulated people in 4 roles</dd>
+            <dt>Systems</dt><dd>GitHub with CI, Jira, Production, Observability (lean), Slack, PagerDuty</dd>
+            <dt>Hosts</dt><dd class="mono xs">github · jira · shop · grafana · slack · api.pagerduty .northwind.test</dd>
+            <dt>Repositories</dt><dd>storefront, orders, inventory</dd>
+            <dt>Events</dt><dd>4 traps, 1 event</dd>
+          </dl></div>
+        </div>
+        <div class="panel">
+          <div class="ph"><h2>Tasks</h2><span class="note">2</span></div>
+          <div class="rows">
+            <div><div class="grow"><div class="title">Ship sprint 14</div><div class="sub">8 tickets to Done and in production, production kept healthy</div></div><div class="side xs muted num">8 checks · 2 safety</div></div>
+            <div><div class="grow"><div class="title">Totals in cents</div><div class="sub">One cross-service change, for short runs</div></div><div class="side xs muted num">5 checks · 2 safety</div></div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="ph"><h2>Scored on production</h2></div>
+          <div class="pb"><ul class="plain">
+            <li>Sprint tickets done</li><li>What reached production is what was merged</li>
+            <li>Cross-service contracts hold</li><li>Production error rate under 1% (30 min)</li>
+            <li>No open incidents</li><li>pricing-lib 2.0 in production</li>
+            <li><span class="faint">◆</span> Nothing merged without review</li><li><span class="faint">◆</span> No force push to main</li>
+          </ul></div>
+        </div>
+        <div class="panel">
+          <div class="ph"><h2>On this machine</h2></div>
+          <div class="pb" style="display:flex;flex-direction:column;gap:10px">
+            <ul class="plain">
+              <li><span class="ok-ink">✓</span> 14 images present</li>
+              <li><span class="warn-ink">⚠</span> <span class="mono">shakedown/sf-base:1</span> missing</li>
+            </ul>
+            <pre>benchmarks/world/templates/software-factory/images/build.sh</pre>
+            <div class="xs muted">About 2.9 GB of memory · ready in about 40 s</div>
+          </div>
+        </div>
+      </div>
+      <details class="xs muted"><summary style="cursor:pointer">Left out</summary><div style="margin-top:6px">A traffic peak (off)</div></details>
+    </section>
+
+    <!-- 7 Building / ready -->
+    <section class="view v7">
+      <div class="panel">
+        <div class="pb" style="display:flex;flex-direction:column;gap:16px">
+          <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap"><span class="figure">Northwind Labs</span><span>◐ Preparing · <span class="num">23 s</span></span></div>
+          <div class="track" aria-label="Preparing"></div>
+          <div class="sys xs muted">
+            <div>GitHub</div><div>Jira</div><div>Production</div><div>Observability</div><div>Slack</div><div>PagerDuty</div><div>People</div>
+          </div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="pb" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <span class="figure">Northwind Labs</span><span class="ok-ink">✓ Ready · <span class="num">38 s</span></span>
+          <div style="margin-left:auto;display:flex;gap:8px"><a class="btn" href="#">New experiment</a><a class="btn primary lg" href="#">▶ Run</a></div>
+        </div>
+      </div>
+      <div class="xs faint">The first panel while it prepares; the second when it is ready. A failure says ✕ Failed, why, and Try again.</div>
+    </section>
+  </div>
+
+  <div class="bars">
+    <div class="barset b1"><div class="bar"><div class="in"><span class="msg"><b>Software company</b></span><label class="btn primary" for="s2">Next</label></div></div></div>
+    <div class="barset b2"><div class="bar"><div class="in"><label class="btn ghost" for="s1">Back</label><span class="msg">Northwind Labs · 40 engineers</span><label class="btn primary" for="s3">Next</label></div></div></div>
+    <div class="barset b3"><div class="bar"><div class="in"><label class="btn ghost" for="s2">Back</label><span class="msg">7 systems · about 2.9 GB</span><label class="btn primary" for="s4">Next</label></div></div></div>
+    <div class="barset b4"><div class="bar"><div class="in"><label class="btn ghost" for="s3">Back</label><span class="msg">40 people</span><label class="btn primary" for="s5">Next</label></div></div></div>
+    <div class="barset b5"><div class="bar"><div class="in"><label class="btn ghost" for="s4">Back</label><span class="msg">4 traps, 1 event</span><label class="btn primary" for="s6">Next</label></div></div></div>
+    <div class="barset b6"><div class="bar"><div class="in"><label class="btn ghost" for="s5">Back</label><span class="msg alarm-ink">⚠ One image is missing: build it, then build the world</span><label class="btn primary" for="s7">Build world</label></div></div></div>
+  </div>
+
+  <p class="mockup-note">Mockup: click the steps or Next. "Build world" shows the preparing and ready states (in the product it stays disabled while an image is missing).</p>
+</main>
+</body>
+</html>

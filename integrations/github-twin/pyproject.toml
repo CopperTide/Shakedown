@@ -1,0 +1,28 @@
+[project]
+name = "github-twin"
+version = "0.1.0"
+description = "shakedown-part/1 integration: a GitHub-compatible twin (GHES mode) over real git repositories"
+requires-python = ">=3.10"
+dependencies = [
+    "shakedown-part",
+    "graphql-core>=3.3,<3.4",
+    "pyyaml>=6.0,<7",
+]
+
+[dependency-groups]
+dev = [
+    "jsonschema>=4.18",
+    "pygithub>=2.10",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+shakedown-part = { path = "../../kits/python", editable = true }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+norecursedirs = [".*", "fixtures", "schemas", "__pycache__"]
+pythonpath = ["."]
+markers = ["live: needs services or hardware not always present"]

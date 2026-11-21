@@ -1,0 +1,2 @@
+# Sent by gh 2.45.0 (github.com/cli/cli, MIT, LICENSE-cli.txt)
+query RepositoryLabelList($endCursor:String$name:String!$owner:String!){repository(owner: $owner, name: $name){labels(first: 100, orderBy: {field: NAME, direction: ASC}, after: $endCursor){nodes{id,name},pageInfo{hasNextPage,endCursor}}}}

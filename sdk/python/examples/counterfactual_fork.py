@@ -4,23 +4,23 @@ prompt (or model), rerun from there with the world restored, and compare the two
     uv run python examples/counterfactual_fork.py [branch_id] [model]
 
 Without a branch id it first runs the benchmark's team (Claude Code) on the first task. Real model
-calls: it costs credits. With ``ARENA_URL`` unset, the branch id must come from the same run of this
-script (the arenad it starts stops at the end).
+calls: it costs credits. With ``SHAKEDOWN_URL`` unset, the branch id must come from the same run of this
+script (the shaked it starts stops at the end).
 """
 
 import sys
 
-from arena import Change
+from shakedown import Change
 from common import connect, need_claude
 
 need_claude()
 model = sys.argv[2] if len(sys.argv) > 2 else "haiku"
 
-with connect() as arena:
+with connect() as sd:
     if len(sys.argv) > 1 and sys.argv[1] != "-":
-        original = arena.branch(sys.argv[1])
+        original = sd.branch(sys.argv[1])
     else:
-        original = arena.run(arena.tasks()[0].id, team=arena.default_team(model=model), seed=1)
+        original = sd.run(sd.tasks()[0].id, team=sd.default_team(model=model), seed=1)
         print(f"original branch {original.id}: running ...")
     rec = original.wait()
     print(f"original: {rec.status}")
@@ -44,7 +44,7 @@ with connect() as arena:
         if e.seq >= info.start_seq:
             print(e.summary())
 
-    cmp = arena.compare(original, fork)
+    cmp = sd.compare(original, fork)
     print(f"\noriginal {rec.status}, fork {fork.record().status}")
     print(f"first divergent step: {cmp.get('first_divergent_seq')}")
     print(f"state that differs at the end: {cmp.get('differing_rows')}")

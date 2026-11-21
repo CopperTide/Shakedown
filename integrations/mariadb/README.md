@@ -4,19 +4,19 @@ Puts a MariaDB database in the world: one database per instance on a dedicated s
 Restore: exact from a save, where a save is a binary-log position and a restore rebuilds the database from the log;
 approximate: no. `uses_clock`: false. Verified live: the seven `live_mariadb_*` tests ran against real MariaDB 11.8
 servers in Docker (round trip, restore of a restore, dump threshold, neighbours and log rotation, accounts and server
-identity, identity migration, and the `arena-part-check` conformance run).
+identity, identity migration, and the `shakedown-part-check` conformance run).
 
 Each instance is a database `mi_<instance>` (ids of at most 61 characters) on a dedicated MariaDB
 server with row-based binary logging. A save does not copy the database: it records how to rebuild
 it, so saving is a few milliseconds and the user's words hold: save the changes, apply them like a
 database.
 
-- **Server:** container `arena-mariadb` (image `mariadb:11.8`, never pulled), volume
-  `arena_mariadb_data`, on `127.0.0.1:3307`, root password `arena`, started on the first `start` if it
+- **Server:** container `shakedown-mariadb` (image `mariadb:11.8`, never pulled), volume
+  `shakedown_mariadb_data`, on `127.0.0.1:3307`, root password `arena`, started on the first `start` if it
   is not running. Flags: `--log-bin=binlog --binlog-format=ROW --binlog-row-image=FULL --server-id=1
   --binlog_expire_logs_seconds=0 --max_binlog_size=64M`. The config keys `container`, `port`,
-  `volume`, `root_password` (env fallbacks `ARENA_MARIADB_CONTAINER`, `_PORT`, `_VOLUME`, `_PASSWORD`)
-  pick another server. Containers are made with the label `arena.part=mariadb`, and a container of
+  `volume`, `root_password` (env fallbacks `SHAKEDOWN_MARIADB_CONTAINER`, `_PORT`, `_VOLUME`, `_PASSWORD`)
+  pick another server. Containers are made with the label `shakedown.part=mariadb`, and a container of
   the configured name without that label is refused, so no other MariaDB is ever touched.
 - **Server identity:** the first `ensure` writes a random id into `arena_meta.server`. Manifests record
   it, and a restore on a server with another id (a new volume behind the same name) is refused with
@@ -30,7 +30,7 @@ database.
   by that account. Its `start` position (where its own changes begin) is read after the database and
   account are made and before `init_sql`, so `init_sql` is part of its changes. A restored instance's
   `start` is read after the replay (see Restore), so the replayed history is not.
-- **Save:** `$ARENA_SAVES/mariadb/<save>/manifest.json` = `{server, root, segments}`: the manifest the
+- **Save:** `$SHAKEDOWN_SAVES/mariadb/<save>/manifest.json` = `{server, root, segments}`: the manifest the
   instance started from, plus the segment `{db: mi_<instance>, from: start, to: now}`. A restored
   instance's saves are its parent's manifest plus its own segment. Usually no dump is made; see Dumps
   for when one is.
@@ -52,10 +52,10 @@ database.
   TABLE mi_a.x ..`) fails the restore (target dropped) instead of touching the source. The restored
   instance's own changes start at the position after the replay.
 - **Dumps:** when a manifest's segments add up to more than `dump_after_bytes` of binlog (config,
-  env `ARENA_MARIADB_DUMP_AFTER_BYTES`, default 64 MiB), the save writes a `mariadb-dump
+  env `SHAKEDOWN_MARIADB_DUMP_AFTER_BYTES`, default 64 MiB), the save writes a `mariadb-dump
   --single-transaction` of the instance instead (root, no segments) and the instance's changes start
-  over from the position the dump notes (`--master-data=2`), so dump and binlog agree. Dumps are kept once by content hash in `$ARENA_SAVES/mariadb/.blobs/<sha256>.sql.gz`.
-- **Tools:** none by default. `arena-mariadb --sql-tools` serves `sql_query {sql, params?}` (read) and
+  over from the position the dump notes (`--master-data=2`), so dump and binlog agree. Dumps are kept once by content hash in `$SHAKEDOWN_SAVES/mariadb/.blobs/<sha256>.sql.gz`.
+- **Tools:** none by default. `shakedown-mariadb --sql-tools` serves `sql_query {sql, params?}` (read) and
   `sql_execute {sql, params?}` (write), with `?` placeholders and the instance's database as the
   default database. `sql_query` takes one SELECT, WITH, SHOW, DESCRIBE or EXPLAIN and runs it in a
   `START TRANSACTION READ ONLY` that is rolled back. Keys are `<table>/<pk>` for a single-table INSERT,
@@ -66,7 +66,7 @@ database.
 - **inspect / diff:** keys `<table>/<pk>` for tables with a one-column primary key (asking for a key of
   another table is -32602); `diff` compares rows by key and, for tables without one, a hash of the whole
   table (`<table>/*`). A save is read by rebuilding it into a scratch database `mx_<pid>_<n>`.
-- **Re-rooting:** arenad keeps every benchmark's base and gold saves (`base_*`, `gold_*`), which would hold the
+- **Re-rooting:** shaked keeps every benchmark's base and gold saves (`base_*`, `gold_*`), which would hold the
   binlog from their positions for good. So `gc` rewrites the saves `keep` keeps by a pattern as full dumps once
   they alone hold more than 256 MiB of binlog (nothing else on the server needs those bytes; a save that restores
   from a dump needs no binlog). The check is tested without a server, the rewrite by
@@ -75,22 +75,22 @@ database.
   `PURGE BINARY LOGS TO` the file holding the oldest position a remaining save or live instance needs
   (clamped to the files on the server). `gc` first drops the saves not kept, instance databases not
   running, scratch databases nobody reads, and their accounts. A manifest that can't be read stops
-  both with an error rather than purging on a guess. Use one `ARENA_SAVES` per
+  both with an error rather than purging on a guess. Use one `SHAKEDOWN_SAVES` per
   server: saves under another root are not seen and their binlog may be purged.
 - **usage** is the binlog files plus the `mi_*` and `mx_*` databases (saves and dumps live under
-  `ARENA_SAVES`, which arenad counts).
+  `SHAKEDOWN_SAVES`, which shaked counts).
 - **connect** gives `{url}` (`mysql://mi_<instance>:<password, percent-encoded>@127.0.0.1:<port>/mi_<instance>`),
   the instance's own account.
 - **fingerprint** `{server_version}` is the image's version, `11.8`.
-- **Conformance:** `check/arena-package.toml` is the package `mariadb-check`, this program with
-  `--sql-tools`. `cargo test -p arena-mariadb -- --ignored live_` runs it (and the other live tests)
+- **Conformance:** `check/shakedown-package.toml` is the package `mariadb-check`, this program with
+  `--sql-tools`. `cargo test -p shakedown-mariadb -- --ignored live_` runs it (and the other live tests)
   against a server of its own, removed afterwards.
 
-The helper is `arena_part::helpers::mariadb` (feature `mariadb`): `Server` (ensure, identity,
+The helper is `shakedown_part::helpers::mariadb` (feature `mariadb`): `Server` (ensure, identity,
 accounts, position, binlog files, dump, load, apply_log, restore, chain, rebase, purge_unneeded),
 `Tracked` (an instance's base, start and checked position), `Dumps` (the dumps and their gate;
 `save` chains or dumps a tracked database into a save, `remove_unused`), `used_roots`,
 `needed_positions`, `Manifest`, `saves_in`, `Position`, `Blobs`, `Login`, and the -32001 checks
 `check_same_server`, `restore_error`, `chain_error`. The `erpnext` integration uses the same
 helper on a server of its own. The SQL tool schemas, argument parsing and inspect key lookup are
-shared with `postgres` in `arena_part::helpers::sql_tools`.
+shared with `postgres` in `shakedown_part::helpers::sql_tools`.

@@ -1,11 +1,11 @@
 //! What the twin reads: the ERP's lots, open orders, work orders and deviations (at once, with the
-//! reports' readers), and the other parts' docs as arenad passed them.
+//! reports' readers), and the other parts' docs as shaked passed them.
 use anyhow::Result;
 use serde_json::{json, Map, Value};
 
 use crate::data::Data;
-use crate::erp::Erp;
 use crate::reports;
+use shakedown_part::helpers::frappe::Erp;
 
 /// The world at one moment, as the twin needs it.
 pub struct Snapshot {
@@ -16,7 +16,7 @@ pub struct Snapshot {
     pub work_orders: Vec<Value>,
     /// The ERP's non-conformances: `{name, subject, status}`.
     pub deviations: Vec<Value>,
-    /// `{part: {key: doc}}`: the docs arenad passed, and the ERP's batches and orders as the checks
+    /// `{part: {key: doc}}`: the docs shaked passed, and the ERP's batches and orders as the checks
     /// read them (`Batch/<name>` with `qa_status`, `Sales Order/<name>` with `po_no`).
     pub docs: Value,
 }

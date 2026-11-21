@@ -1,0 +1,6 @@
+# Sent by gh 2.45.0 (github.com/cli/cli, MIT, LICENSE-cli.txt)
+query PullRequestByNumber($owner: String!, $repo: String!, $pr_number: Int!) {
+		repository(owner: $owner, name: $repo) {
+			pullRequest(number: $pr_number) {id,url,number}
+		}
+	}

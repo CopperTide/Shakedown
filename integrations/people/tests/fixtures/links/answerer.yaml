@@ -1,0 +1,9 @@
+format: shakedown-people/1
+role: answerer
+lines:
+  answers: ["yes", "no", "later"]
+rules:
+  - id: answer
+    notice: {system: board, kind: asked, to: me}
+    after: {minutes: [1, 10]}
+    act: {system: board, action: answer, args: {topic: /topic, text: "{person:name} says {pick:answers}"}}

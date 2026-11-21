@@ -1,12 +1,13 @@
-"""A LangGraph team in Shakedown: an investigator, then a resolver. ARENA_PROVIDER/ARENA_MODEL pick the model."""
+"""A LangGraph team in Shakedown: an investigator, then a resolver. SHAKEDOWN_PROVIDER/SHAKEDOWN_MODEL pick the model."""
 import os
 
 from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.prebuilt import create_react_agent
 
-from arena.adapters import langgraph as sd
+from shakedown.adapters import langgraph as sd
+from shakedown.settings import setting
 
-PROVIDER, MODEL = os.environ.get("ARENA_PROVIDER", "openai"), os.environ.get("ARENA_MODEL", "gpt-4.1-mini")
+PROVIDER, MODEL = setting("SHAKEDOWN_PROVIDER", "openai"), setting("SHAKEDOWN_MODEL", "gpt-4.1-mini")
 
 with sd.run() as run:
     def member(id: str, prompt: str):

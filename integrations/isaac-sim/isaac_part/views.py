@@ -3,7 +3,7 @@ and the documents file of a save. Shared by the plant and the mirror (GET /state
 import json
 from pathlib import Path
 
-from arena_part import errors
+from shakedown_part import errors
 
 DOCS_FILE = "docs.json"
 # key kind -> the /state collection it comes from; each item has an `id`
@@ -37,7 +37,7 @@ def pick(docs: dict, keys) -> dict:
     return {k: docs.get(k) for k in keys} if keys else docs
 
 
-def arena_event(ev: dict) -> dict:
+def shakedown_event(ev: dict) -> dict:
     """A factory event as a world event: {kind, text, data}. data has the event's source, seq and plant time t,
     and the factory's own data under `detail`, so neither can overwrite the other."""
     data = {"source": ev["source"], "seq": ev["seq"], "t": ev["t"], "detail": ev.get("data") or {}}

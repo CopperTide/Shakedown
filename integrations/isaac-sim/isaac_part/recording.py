@@ -1,10 +1,10 @@
 """Recording the plant to MP4 (config `record`): where the file goes, which camera, and when frames fall.
 
-A frame is rendered every `physics_hz / record_fps` physics steps, so the MP4 runs in arena time whatever the
+A frame is rendered every `physics_hz / record_fps` physics steps, so the MP4 runs in world time whatever the
 render costs. Rendering is the backend's (only `isaac` can); this module is plain Python."""
 from pathlib import Path
 
-from arena_part import errors
+from shakedown_part import errors
 
 CAMERA_MODES = ("auto", "free")
 STILL_SETTLE_FRAMES = 32  # frames a still waits after a cut, for the renderer's history to catch up
@@ -12,7 +12,7 @@ STILL_SETTLE_FRAMES = 32  # frames a still waits after a cut, for the renderer's
 
 def path_for(record: str, root: Path, instance: str) -> Path:
     """The MP4 of one instance: `record` (relative to `root`, the part's save folder), with `-<instance>` before
-    its suffix, since arenad runs a base and then a branch on the same config."""
+    its suffix, since shaked runs a base and then a branch on the same config."""
     p = Path(record)
     p = p if p.is_absolute() else root / p
     return p.with_name(f"{p.stem}-{instance}{p.suffix or '.mp4'}")

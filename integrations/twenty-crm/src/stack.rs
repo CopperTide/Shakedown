@@ -3,9 +3,9 @@ use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
 
 use anyhow::{bail, Context, Result};
-use arena_part::helpers::blocking;
-use arena_part::helpers::compose::Project;
-use arena_part::helpers::pg::Templates;
+use shakedown_part::helpers::blocking;
+use shakedown_part::helpers::compose::Project;
+use shakedown_part::helpers::pg::Templates;
 
 use crate::settings::Settings;
 
@@ -54,23 +54,33 @@ impl Stack {
     pub fn server(&self, spec: &ServerSpec) -> Result<Project> {
         let mut env = settings_env(&self.settings);
         let values = [
-            ("ARENA_TWENTY_INSTANCE", spec.instance.to_string()),
-            ("ARENA_TWENTY_DB", spec.db.to_string()),
-            ("ARENA_TWENTY_PORT", spec.port.to_string()),
-            ("ARENA_TWENTY_NO_MIGRATIONS", (!spec.migrate).to_string()),
-            ("ARENA_TWENTY_IMAGE", self.settings.image.clone()),
+            ("SHAKEDOWN_TWENTY_INSTANCE", spec.instance.to_string()),
+            ("SHAKEDOWN_TWENTY_DB", spec.db.to_string()),
+            ("SHAKEDOWN_TWENTY_PORT", spec.port.to_string()),
+            (
+                "SHAKEDOWN_TWENTY_NO_MIGRATIONS",
+                (!spec.migrate).to_string(),
+            ),
+            ("SHAKEDOWN_TWENTY_IMAGE", self.settings.image.clone()),
         ];
-        env.extend(values.map(|(k, v)| (k.to_string(), v)));
+        env.extend(
+            values
+                .into_iter()
+                .flat_map(|(k, v)| shakedown_part::settings::both(k, v)),
+        );
         let name = format!("{}_{}", self.settings.project, spec.instance);
         Project::new(&name, &self.settings.files.join("instance.yml"), &env)
     }
 }
 
 fn settings_env(s: &Settings) -> BTreeMap<String, String> {
-    BTreeMap::from([
-        ("ARENA_TWENTY_NAME".to_string(), s.docker_name()),
-        ("ARENA_TWENTY_DB_PORT".to_string(), s.db_port.to_string()),
-    ])
+    [
+        ("SHAKEDOWN_TWENTY_NAME", s.docker_name()),
+        ("SHAKEDOWN_TWENTY_DB_PORT", s.db_port.to_string()),
+    ]
+    .into_iter()
+    .flat_map(|(k, v)| shakedown_part::settings::both(k, v))
+    .collect()
 }
 
 /// Removes a server and its Redis.

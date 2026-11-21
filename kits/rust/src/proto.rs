@@ -1,4 +1,4 @@
-//! Wire types of arena-part/1. See docs/protocol.md.
+//! Wire types of shakedown-part/1 (called arena-part/1 until 2026-11-19). See docs/protocol.md.
 use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
@@ -11,6 +11,26 @@ pub use scenario::*;
 pub use view::*;
 
 pub const PROTOCOL: u32 = 1;
+/// The protocol's name, as the kits announce it in `describe`'s `protocol`.
+pub const PROTOCOL_NAME: &str = "shakedown-part/1";
+/// Its name until 2026-11-19, still accepted.
+pub const OLD_PROTOCOL_NAME: &str = "arena-part/1";
+
+/// The protocol version a manifest's or a `describe`'s `protocol` says: the number, or either name
+/// of version 1 (None: neither).
+pub fn protocol_version(v: &Value) -> Option<u32> {
+    match v {
+        Value::Number(n) => n.as_u64().and_then(|n| u32::try_from(n).ok()),
+        Value::String(s) if s == PROTOCOL_NAME || s == OLD_PROTOCOL_NAME => Some(PROTOCOL),
+        _ => None,
+    }
+}
+
+/// `protocol`: a number, or a name of the protocol ([`protocol_version`]).
+fn de_protocol<'de, D: serde::Deserializer<'de>>(d: D) -> Result<u32, D::Error> {
+    let v = Value::deserialize(d)?;
+    protocol_version(&v).ok_or_else(|| serde::de::Error::custom(format!("unknown protocol {v}")))
+}
 
 fn all(s: &str, ok: impl Fn(u8) -> bool, max: usize) -> bool {
     !s.is_empty() && s.len() <= max && s.bytes().all(ok)
@@ -85,6 +105,7 @@ pub struct ToolSchema {
 pub struct Describe {
     pub name: String,
     pub version: String,
+    #[serde(deserialize_with = "de_protocol")]
     pub protocol: u32,
     pub restore: Restore,
     pub uses_clock: bool,
@@ -93,6 +114,73 @@ pub struct Describe {
     /// What kind of system this part is, for monitoring views (absent: not said).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub system: Option<SystemInfo>,
+    /// When shaked saves the part (absent: after every step that wrote to it).
+    #[serde(default, skip_serializing_if = "SaveAt::is_step")]
+    pub save_at: SaveAt,
+}
+
+/// When shaked saves a part: after each step that wrote to it (`step`, the default), or only at
+/// save points (`points`: before a model call when it changed, on request, at run end).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SaveAt {
+    #[default]
+    Step,
+    Points,
+}
+
+impl SaveAt {
+    pub fn is_step(&self) -> bool {
+        *self == SaveAt::Step
+    }
+}
+
+/// The world's time at `start`: the unix ms of clock 0 and how fast the clock runs.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct WorldTimeParams {
+    pub epoch_ms: i64,
+    pub speed: f64,
+}
+
+/// The header an upstream answers a proxied request with to say whether it read or wrote
+/// (`read` or `write`); shaked strips it before the client sees the answer.
+pub const EFFECT_HEADER: &str = "x-shakedown-effect";
+/// Its name until 2026-11-19, still read from an upstream.
+pub const OLD_EFFECT_HEADER: &str = "x-arena-effect";
+
+/// The header shaked's proxy names the agent behind a request with (a client's own copy is
+/// dropped); none for a driver's request no agent's model call came before.
+pub const AGENT_HEADER: &str = "x-shakedown-agent";
+/// Its name until 2026-11-19, sent too, for parts written before.
+pub const OLD_AGENT_HEADER: &str = "x-arena-agent";
+
+/// The header (`1`) shaked's proxy marks a read-only agent's request with, sent only to routes
+/// that say `honours_readonly`: the part must then refuse its writes itself.
+pub const READONLY_HEADER: &str = "x-shakedown-readonly";
+/// Its name until 2026-11-19, sent too, for parts written before.
+pub const OLD_READONLY_HEADER: &str = "x-arena-readonly";
+
+/// A host an instance serves through shaked's proxy: requests to `host` go to `upstream`. `env`
+/// is what drivers and agents are given to find it (`GITHUB_API_URL`); each of `reads` is a
+/// `METHOD glob` pattern of requests that only read (`POST */git-upload-pack`). With
+/// `honours_readonly`, a read-only agent's requests are sent on marked `READONLY_HEADER` (the part
+/// refuses their writes); without it shaked refuses those that write by the method rule.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct HttpRoute {
+    pub host: String,
+    pub upstream: String,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub env: BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reads: Vec<String>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub honours_readonly: bool,
+}
+
+/// `http_routes`: the hosts an instance serves.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct HttpRoutes {
+    pub routes: Vec<HttpRoute>,
 }
 
 /// The kind of system a part is: `kind` is one of "erp", "crm", "database", "api", "mcp",
@@ -152,6 +240,9 @@ pub struct StartParams {
     pub clock_ms: i64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub from: Option<FromSave>,
+    /// The world's time (absent: the part is not told it).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub world_time: Option<WorldTimeParams>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -310,13 +401,13 @@ pub struct TaskInfo {
     pub id: String,
     pub reason: String,
     pub ticket: String,
-    /// Calls arenad makes on a run's world right after it starts, before any agent: the task's
+    /// Calls shaked makes on a run's world right after it starts, before any agent: the task's
     /// scripted setup (a scenario, a disruption). The tools they call are the world's own: agents
     /// don't get them.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub setup: Vec<SetupCall>,
     /// The world's date and time at clock 0 (`YYYY-MM-DDTHH:MM:SS`, the world's local time), for a
-    /// world whose clock is not today's: arenad then tells every agent the world's current date and
+    /// world whose clock is not today's: shaked then tells every agent the world's current date and
     /// time (clock 0 plus the branch clock), so agents read the world's dates against its own clock
     /// rather than the date their environment reports.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -371,7 +462,7 @@ pub struct Gate {
     pub require: Map<String, Value>,
 }
 
-/// A team a benchmark suggests: its agents in the order they run, and the arenad runner its
+/// A team a benchmark suggests: its agents in the order they run, and the shaked runner its
 /// prompts are written for (`chain`, `concurrent` or `dispatch`; absent: any). In a `dispatch`
 /// run the first agent leads.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -387,14 +478,15 @@ pub struct BenchTeam {
 pub struct BenchDescribe {
     pub name: String,
     pub version: String,
+    #[serde(deserialize_with = "de_protocol")]
     pub protocol: u32,
     pub world: Vec<WorldPart>,
     pub tasks: Vec<TaskInfo>,
     pub instructions: String,
-    /// The heading over `instructions` in each agent's input; arenad uses a generic one if absent.
+    /// The heading over `instructions` in each agent's input; shaked uses a generic one if absent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub instructions_title: Option<String>,
-    /// The team the benchmark suggests; arenad suggests a generic one if absent.
+    /// The team the benchmark suggests; shaked suggests a generic one if absent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub team: Option<BenchTeam>,
     /// Other teams it suggests beside `team` (a dispatching team, a chain), offered one click
@@ -537,6 +629,28 @@ pub struct Score {
 }
 
 #[cfg(test)]
+mod protocol_names {
+    use super::*;
+
+    #[test]
+    fn both_names_and_the_number_say_version_1() {
+        for v in [
+            json_n(1),
+            Value::from(PROTOCOL_NAME),
+            Value::from(OLD_PROTOCOL_NAME),
+        ] {
+            assert_eq!(protocol_version(&v), Some(PROTOCOL), "{v}");
+        }
+        assert_eq!(protocol_version(&Value::from("other-part/1")), None);
+        assert_eq!(protocol_version(&json_n(2)), Some(2));
+    }
+
+    fn json_n(n: u64) -> Value {
+        Value::from(n)
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -600,6 +714,63 @@ mod tests {
         let b: BTreeMap<String, i32> = [("y".into(), 3), ("z".into(), 4), ("x".into(), 1)].into();
         assert_eq!(Differing::between(&a, &b).differing, ["y", "z"]);
         assert!(Differing::between(&a, &a).differing.is_empty());
+    }
+
+    #[test]
+    fn describe_without_save_at_reads_as_step_and_writes_none() {
+        let d: Describe = serde_json::from_value(serde_json::json!({"name": "x", "version": "1",
+            "protocol": 1, "restore": {"exact": "save", "approximate": false},
+            "uses_clock": false, "fingerprint": {}, "tools": []}))
+        .unwrap();
+        assert_eq!(d.save_at, SaveAt::Step);
+        assert!(serde_json::to_value(&d).unwrap().get("save_at").is_none());
+        let p: SaveAt = serde_json::from_value(serde_json::json!("points")).unwrap();
+        assert_eq!(p, SaveAt::Points);
+        let d = Describe {
+            save_at: SaveAt::Points,
+            ..d
+        };
+        assert_eq!(serde_json::to_value(&d).unwrap()["save_at"], "points");
+    }
+
+    #[test]
+    fn start_params_carry_world_time_only_when_given() {
+        let mut s = StartParams {
+            instance: "i".into(),
+            config: serde_json::json!({}),
+            seed: 1,
+            clock_ms: 0,
+            from: None,
+            world_time: None,
+        };
+        assert!(serde_json::to_value(&s)
+            .unwrap()
+            .get("world_time")
+            .is_none());
+        s.world_time = Some(WorldTimeParams {
+            epoch_ms: 1_773_122_400_000,
+            speed: 3.0,
+        });
+        assert_eq!(
+            serde_json::to_value(&s).unwrap()["world_time"],
+            serde_json::json!({"epoch_ms": 1_773_122_400_000i64, "speed": 3.0})
+        );
+    }
+
+    #[test]
+    fn an_http_route_needs_only_host_and_upstream() {
+        let r: HttpRoute = serde_json::from_value(
+            serde_json::json!({"host": "a.test", "upstream": "http://127.0.0.1:9"}),
+        )
+        .unwrap();
+        assert!(r.env.is_empty() && r.reads.is_empty() && !r.honours_readonly);
+        let v = serde_json::to_value(&r).unwrap();
+        assert_eq!(
+            v,
+            serde_json::json!({"host": "a.test", "upstream": "http://127.0.0.1:9"})
+        );
+        let none: HttpRoutes = serde_json::from_value(serde_json::json!({"routes": []})).unwrap();
+        assert_eq!(none, HttpRoutes::default());
     }
 
     #[test]

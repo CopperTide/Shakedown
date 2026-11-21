@@ -65,7 +65,7 @@ fn snapshot(status: &[(&str, &str)], logistics: Map<String, Value>) -> Snapshot 
     )
 }
 
-fn area<'a>(v: &'a TwinView, id: &str) -> &'a arena_part::proto::TwinArea {
+fn area<'a>(v: &'a TwinView, id: &str) -> &'a shakedown_part::proto::TwinArea {
     v.areas.iter().find(|a| a.id == id).unwrap()
 }
 

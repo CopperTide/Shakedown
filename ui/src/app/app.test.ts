@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { ListedExperiment } from '../experiments/types';
-import type { Branch, RunSummary } from '../types';
+import type { ListedExperiment } from '@/model/experiment';
+import type { Branch, RunSummary } from '@/model/types';
 import { hereOf, itemsFor, placeholderOf } from './palette';
 import { nextPref, parsePref, resolveTheme } from './themeModel';
 
@@ -16,7 +16,7 @@ const experiments = [experiment('e1', 'Rules or not'), experiment('e2', 'Haiku v
 describe('command palette', () => {
   it('lists pages, actions, every experiment and every branch at the root', () => {
     const items = itemsFor({ kind: 'root' }, runs, experiments);
-    expect(items.filter((i) => i.group === 'Go to').map((i) => i.label)).toEqual(['Experiments', 'Runs', 'Team editor']);
+    expect(items.filter((i) => i.group === 'Go to').map((i) => i.label)).toEqual(['Experiments', 'Runs', 'Team editor', 'Settings: Models', 'Settings: API tokens']);
     expect(items.find((i) => i.id === 'new-experiment')!.action).toEqual({ go: '/experiments/new' });
     expect(items.find((i) => i.id === 'new-run')!.action).toEqual({ go: '/run' });
     expect(items.filter((i) => i.group === 'Runs').map((i) => [i.label, i.action])).toEqual([
@@ -52,5 +52,12 @@ describe('theme', () => {
     expect(resolveTheme('light', true)).toBe('light');
     expect([nextPref('system'), nextPref('light'), nextPref('dark')]).toEqual(['light', 'dark', 'system']);
     expect([parsePref('dark'), parsePref('nonsense'), parsePref(null)]).toEqual(['dark', 'system', 'system']);
+  });
+});
+
+describe('the way in to the builder', () => {
+  it('the palette offers Build a world, opening the builder', () => {
+    const items = itemsFor({ kind: 'root' }, [], []);
+    expect(items.find((i) => i.id === 'build-world')).toMatchObject({ label: 'Build a world', group: 'Actions', action: { go: '/worlds/new' } });
   });
 });

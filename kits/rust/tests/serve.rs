@@ -3,9 +3,9 @@
 #[path = "../examples/counter.rs"]
 mod counter;
 
-use arena_part::proto::*;
-use arena_part::PartError;
 use serde_json::{json, Value};
+use shakedown_part::proto::*;
+use shakedown_part::PartError;
 use tokio::io::{duplex, AsyncBufReadExt, AsyncWriteExt, BufReader, DuplexStream};
 
 struct Client {
@@ -15,11 +15,11 @@ struct Client {
 }
 
 impl Client {
-    fn new<P: arena_part::Part>(flavour_part: P) -> Client {
+    fn new<P: shakedown_part::Part>(flavour_part: P) -> Client {
         let (cw, sr) = duplex(1 << 16);
         let (sw, cr) = duplex(1 << 16);
         tokio::spawn(async move {
-            let _ = arena_part::serve_on(flavour_part, BufReader::new(sr), sw).await;
+            let _ = shakedown_part::serve_on(flavour_part, BufReader::new(sr), sw).await;
         });
         Client {
             w: cw,
@@ -54,7 +54,7 @@ fn flavour_client(f: &str) -> Client {
     Client::new(counter::Counter::new(counter::Flavour::parse(f).unwrap()))
 }
 
-/// The test process's save root (`ARENA_SAVES`, set once), shared by the tests that save while
+/// The test process's save root (`SHAKEDOWN_SAVES`, set once), shared by the tests that save while
 /// they run, and removed when the last of them ends (after a failure too).
 struct Saves;
 
@@ -68,7 +68,7 @@ fn saves_root() -> std::path::PathBuf {
 impl Saves {
     fn take() -> Saves {
         static ENV: std::sync::Once = std::sync::Once::new();
-        ENV.call_once(|| std::env::set_var("ARENA_SAVES", saves_root()));
+        ENV.call_once(|| std::env::set_var("SHAKEDOWN_SAVES", saves_root()));
         *SAVES_USERS.lock().unwrap_or_else(|e| e.into_inner()) += 1;
         Saves
     }
@@ -85,7 +85,7 @@ impl Drop for Saves {
         let mut users = SAVES_USERS.lock().unwrap_or_else(|e| e.into_inner());
         *users -= 1;
         if *users == 0 {
-            let _ = arena_part::helpers::remove_tree(&saves_root());
+            let _ = shakedown_part::helpers::remove_tree(&saves_root());
         }
     }
 }
@@ -95,7 +95,7 @@ impl Drop for Saves {
 struct Odd(std::sync::Arc<tokio::sync::Notify>);
 
 #[async_trait::async_trait]
-impl arena_part::Part for Odd {
+impl shakedown_part::Part for Odd {
     async fn describe(&self) -> Result<Describe, PartError> {
         Err(PartError::internal("n/a"))
     }
@@ -166,7 +166,7 @@ async fn add(c: &mut Client, instance: &str, n: i64) {
 async fn describe_reports_protocol_1() {
     let mut c = client();
     let r = c.call("describe", json!({})).await;
-    assert_eq!(r["result"]["protocol"], 1);
+    assert_eq!(r["result"]["protocol"], "shakedown-part/1");
     assert!(r["result"]["tools"][0].get("inputSchema").is_some());
 }
 
@@ -254,7 +254,7 @@ async fn fresh_process_starts_from_other_processs_save() {
 
 #[tokio::test]
 async fn unknown_save_is_32002() {
-    let _saves = Saves::take(); // sets ARENA_SAVES
+    let _saves = Saves::take(); // sets SHAKEDOWN_SAVES
     let mut c = client();
     let r = c
         .call(
@@ -399,4 +399,48 @@ async fn advance_is_split_independent() {
     }
     assert_eq!(get(&mut one, "i1").await, 2);
     assert_eq!(get(&mut many, "i1").await, 2);
+}
+
+/// A part that keeps every default the kit gives.
+struct Defaults;
+
+#[async_trait::async_trait]
+impl shakedown_part::Part for Defaults {
+    async fn describe(&self) -> Result<Describe, PartError> {
+        Err(PartError::internal("unused"))
+    }
+    async fn start(&self, _p: StartParams) -> Result<(), PartError> {
+        Ok(())
+    }
+    async fn call_tool(&self, _p: CallToolParams) -> Result<ToolOutput, PartError> {
+        Ok(ToolOutput::default())
+    }
+    async fn save(&self, _p: SaveParams) -> Result<Saved, PartError> {
+        Err(PartError::internal("unused"))
+    }
+    async fn inspect(&self, _p: InspectParams) -> Result<Docs, PartError> {
+        Ok(Docs::default())
+    }
+    async fn diff(&self, _p: DiffParams) -> Result<Differing, PartError> {
+        Ok(Differing::default())
+    }
+    async fn drop_save(&self, _p: SaveId) -> Result<(), PartError> {
+        Ok(())
+    }
+    async fn stop(&self, _p: IdParams) -> Result<(), PartError> {
+        Ok(())
+    }
+    async fn usage(&self) -> Result<Usage, PartError> {
+        Ok(Usage::default())
+    }
+}
+
+#[tokio::test]
+async fn a_part_without_http_routes_answers_method_not_found() {
+    let mut c = Client::new(Defaults);
+    let r = c.call("http_routes", json!({"instance": "i1"})).await;
+    assert_eq!(r["error"]["code"], -32601);
+    assert_eq!(r["error"]["message"], "method not found: http_routes");
+    let r = c.call("http_routes", json!({})).await;
+    assert_eq!(r["error"]["code"], -32602, "{r}");
 }

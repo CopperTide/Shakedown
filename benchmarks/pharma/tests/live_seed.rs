@@ -2,8 +2,9 @@
 //! an ERPNext site of the erpnext integration, whose `connect` info is in the file
 //! `PHARMA_ERP_CONNECT` names (it writes the company into that site and leaves it there).
 //! Run: `PHARMA_ERP_CONNECT=erp.json cargo test -p arena-pharma --test live_seed -- --ignored`.
-use arena_pharma::{data::data, erp::Erp, reports, seed};
 use serde_json::{json, Value};
+use shakedown_part::helpers::frappe::Erp;
+use shakedown_pharma::{data::data, reports, seed};
 
 fn connect_info() -> Option<Value> {
     let path = std::env::var("PHARMA_ERP_CONNECT").ok()?;

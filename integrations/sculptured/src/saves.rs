@@ -1,4 +1,4 @@
-//! Saves on disk, `$ARENA_SAVES/sculptured/<save>/`: `data/`, the server's data folder,
+//! Saves on disk, `$SHAKEDOWN_SAVES/sculptured/<save>/`: `data/`, the server's data folder,
 //! `changes.json`, the team's changes as the tools showed them (what `inspect` and `diff` read),
 //! and `meta.json`, the sculptured build that wrote the store and the re-raised changes.
 //!
@@ -9,10 +9,10 @@
 use std::path::Path;
 
 use anyhow::{Context, Result};
-use arena_part::helpers::folder;
 use rusqlite::{Connection, OpenFlags, MAIN_DB};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use shakedown_part::helpers::folder;
 
 use crate::aliases::Aliases;
 
@@ -96,7 +96,7 @@ pub fn restore(dir: &Path, data: &Path) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use arena_part::helpers::temp_dir::TempDir;
+    use shakedown_part::helpers::temp_dir::TempDir;
 
     #[test]
     fn left_out_files() {

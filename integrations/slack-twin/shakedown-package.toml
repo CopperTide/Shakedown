@@ -1,0 +1,11 @@
+kind = "integration"
+name = "slack-twin"
+version = "0.1.0"
+protocol = 1
+run = { command = ["uv", "run", "--project", ".", "python", "-m", "slack_twin"] }
+needs = { gpu_vram_gb = 0, services = [] }
+config_schema = { type = "object", required = ["hosts", "token", "default_user"], properties = { hosts = { type = "array" }, token = { type = "string" }, default_user = { type = "string" }, team = { type = "object" }, users = { type = "array" }, channels = { type = "array" }, messages = { type = "array" } } }
+
+[[example]]
+tool = "slack_act"
+args = { person = "dev", action = "post", args = { channel = "#eng", text = "Deploying now." } }

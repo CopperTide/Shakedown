@@ -1,7 +1,9 @@
-//! An instance's settings: the world config's keys, else env `ARENA_MARIADB_*`, else defaults.
-use arena_part::helpers::mariadb::{valid_docker_name, ServerConfig};
-use arena_part::PartError;
+//! An instance's settings: the world config's keys, else env `SHAKEDOWN_MARIADB_*`, else defaults.
 use serde_json::Value;
+use shakedown_part::helpers::mariadb::{
+    valid_docker_name, ServerConfig, OLD_CONTAINER, OLD_VOLUME,
+};
+use shakedown_part::PartError;
 
 /// Restores read at most this many binlog bytes before a save writes a dump instead.
 pub const DEFAULT_DUMP_AFTER: u64 = 64 << 20;
@@ -14,18 +16,18 @@ pub struct Settings {
 }
 
 /// Config key, env var.
-const CONTAINER: (&str, &str) = ("container", "ARENA_MARIADB_CONTAINER");
-const PORT: (&str, &str) = ("port", "ARENA_MARIADB_PORT");
-const VOLUME: (&str, &str) = ("volume", "ARENA_MARIADB_VOLUME");
-const PASSWORD: (&str, &str) = ("root_password", "ARENA_MARIADB_PASSWORD");
-const DUMP_AFTER: (&str, &str) = ("dump_after_bytes", "ARENA_MARIADB_DUMP_AFTER_BYTES");
+const CONTAINER: (&str, &str) = ("container", "SHAKEDOWN_MARIADB_CONTAINER");
+const PORT: (&str, &str) = ("port", "SHAKEDOWN_MARIADB_PORT");
+const VOLUME: (&str, &str) = ("volume", "SHAKEDOWN_MARIADB_VOLUME");
+const PASSWORD: (&str, &str) = ("root_password", "SHAKEDOWN_MARIADB_PASSWORD");
+const DUMP_AFTER: (&str, &str) = ("dump_after_bytes", "SHAKEDOWN_MARIADB_DUMP_AFTER_BYTES");
 
 /// The value of a setting as text: the config key's, else the env var's.
 fn lookup(config: &Value, (key, var): (&str, &str)) -> Option<String> {
     match config.get(key) {
         Some(Value::String(s)) => Some(s.clone()),
         Some(Value::Number(n)) => Some(n.to_string()),
-        _ => std::env::var(var).ok(),
+        _ => shakedown_part::settings::var(var).ok(),
     }
 }
 
@@ -50,12 +52,13 @@ impl Settings {
     pub fn from_config(config: &Value) -> Result<Settings, PartError> {
         let d = ServerConfig::default();
         let server = ServerConfig {
-            container: text(config, CONTAINER, d.container),
+            container: text(config, CONTAINER, d.container.clone()),
             port: number(config, PORT, d.port)?,
             volume: text(config, VOLUME, d.volume),
             root_password: text(config, PASSWORD, d.root_password),
             flags: d.flags,
         };
+        let server = server.or_existing_old(&d.container, OLD_CONTAINER, OLD_VOLUME);
         if !valid_docker_name(&server.container) || !valid_docker_name(&server.volume) {
             return Err(PartError::invalid(
                 "container and volume must match [A-Za-z0-9][A-Za-z0-9_.-]{0,62}",
@@ -80,11 +83,11 @@ mod tests {
     #[test]
     fn config_keys_win_and_bad_values_are_invalid() {
         let s = Settings::from_config(&json!({
-            "container": "arena-mariadb-x", "port": 3399, "volume": "v1",
+            "container": "shakedown-mariadb-x", "port": 3399, "volume": "v1",
             "dump_after_bytes": 10, "init_sql": "CREATE TABLE a(id int)"
         }))
         .unwrap();
-        assert_eq!(s.server.container, "arena-mariadb-x");
+        assert_eq!(s.server.container, "shakedown-mariadb-x");
         assert_eq!(s.server.port, 3399);
         assert_eq!(s.server.volume, "v1");
         assert_eq!(s.dump_after_bytes, 10);

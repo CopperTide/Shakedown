@@ -3,15 +3,15 @@ the Factory method its api.py route calls, directly."""
 from dataclasses import dataclass
 from typing import Callable
 
-from arena_part import errors
-from arena_part.params import Param, Refusal, input_schema, normalize, refused
+from shakedown_part import errors
+from shakedown_part.params import Param, Refusal, input_schema, normalize, refused
 
 from . import views
 
-NO_ERP = ("{tool} needs the plant's Work Orders, which come from ERPNext; the plant runs without ERPNext in the "
-          "arena")
+NO_ERP = ("{tool} needs the plant's Work Orders, which come from ERPNext; the plant runs without ERPNext in this "
+          "world")
 STATE_KEYS = ("clock", "speed", "scenario", "lines", "machines", "orders", "technicians", "operators", "shipments",
-              "robots", "sim", "cells", "power")  # floor.py's plant_state, and what the arena adds (equipment.py)
+              "robots", "sim", "cells", "power")  # floor.py's plant_state, and what Shakedown adds (equipment.py)
 
 
 @dataclass(frozen=True)
@@ -79,7 +79,7 @@ def _telemetry(f, a):
 
 
 def _wait(f, a):
-    """Returns at once: inside call_tool the arena clock stands still, so waiting would wait forever."""
+    """Returns at once: inside call_tool the world clock stands still, so waiting would wait forever."""
     hits = f.events_since(a["since"], 500, {k for k in a["kinds"].split(",") if k}, a["machine"])
     return {"events": hits, "timed_out": not hits, "seq": f.seq, "source": "isaac-sim"}
 
@@ -107,7 +107,7 @@ TOOLS = {t.name: t for t in [
          lambda f, a: f.events_since(a["since"], a["limit"]), _no_keys),
     Tool("wait_for_event", "Plant events after sequence `since`, of the comma-separated `kinds` (alarm, warning, "
          "operator, technician, lockout, shipment, delivery, repair, production). Returns at once, timed_out when "
-         "there are none yet; timeout_s is accepted and ignored, since the arena clock moves between calls.",
+         "there are none yet; timeout_s is accepted and ignored, since the world clock moves between calls.",
          "read", (Param("kinds", "string", ""), Param("since", "integer", 0), Param("machine", "string", None),
                   Param("timeout_s", "integer", 240)), _wait, _no_keys),
     Tool("predict_move", "What-if, changes nothing: the ETA of this order on to_line, whether it would be late, "

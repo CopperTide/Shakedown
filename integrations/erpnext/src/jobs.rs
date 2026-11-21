@@ -1,9 +1,9 @@
 //! Waiting for a site's background jobs, so a save sees their effects.
 use std::time::{Duration, Instant};
 
-use arena_part::PartError;
 use reqwest::Method;
 use serde_json::{json, Value};
+use shakedown_part::PartError;
 
 use crate::rest::{Reply, Rest};
 

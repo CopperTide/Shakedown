@@ -1,0 +1,15 @@
+kind = "integration"
+name = "pagerduty-twin"
+version = "0.1.0"
+protocol = 1
+run = { command = ["uv", "run", "--project", ".", "python", "-m", "pagerduty_twin"] }
+needs = { gpu_vram_gb = 0, services = [] }
+config_schema = { type = "object", required = ["hosts", "token", "default_user"], properties = { hosts = { type = "array" }, token = { type = "string" }, default_user = { type = "string" }, email_domain = { type = "string" }, users = { type = "array" }, schedules = { type = "array" }, services = { type = "array" } } }
+
+[[example]]
+tool = "pagerduty_act"
+args = { person = "ops", action = "ack", args = { incident = "P1" } }
+
+[[example]]
+tool = "pagerduty_event"
+args = { action = "trigger", dedup_key = "checkout-5xx", summary = "Checkout 5xx above 2%", service = "checkout", severity = "critical" }

@@ -1,1 +1,1 @@
-"""isaac-sim: the Ridgeline factory (the plant Isaac Sim 6.2 runs) as an arena-part/1 integration."""
+"""isaac-sim: the Ridgeline factory (the plant Isaac Sim 6.2 runs) as an shakedown-part/1 integration."""

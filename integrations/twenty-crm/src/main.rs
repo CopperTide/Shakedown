@@ -1,5 +1,5 @@
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let p = arena_twenty_crm::TwentyCrm::from_env()?;
-    arena_part::serve(p).await
+    let p = shakedown_twenty_crm::TwentyCrm::from_env()?;
+    shakedown_part::serve(p).await
 }

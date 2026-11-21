@@ -2,8 +2,9 @@
 qualification for 2-8 C, capacity left this week, customers and dates. Everything here only reads."""
 from datetime import date, timedelta
 
-from arena_part import errors
-from arena_part.params import Refusal
+from shakedown_part import errors
+from shakedown_part.jsonstate import Scenarios
+from shakedown_part.params import Refusal
 
 BASE = "base"
 
@@ -22,12 +23,8 @@ def check_config(config) -> None:
         raise errors.invalid("config.today must be a date (YYYY-MM-DD)") from None
 
 
-def scenarios(config) -> list:
-    return [BASE, *sorted(config["logistics"].get("scenarios", {}))]
-
-
-def overlay(config, state) -> dict:
-    return config["logistics"].get("scenarios", {}).get(state["scenario"], {})
+SCENARIOS = Scenarios(("logistics",), sort=True, base=BASE)
+overlay = SCENARIOS.overlay  # what the instance's scenario changes (empty for the base)
 
 
 def origin_key(config, named: str) -> str:

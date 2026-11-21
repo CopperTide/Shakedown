@@ -3,10 +3,10 @@ endpoint) and a model gateway (OpenAI-compatible), and records everything.
 
     uv run python examples/bring_your_own_agent.py [task_id] [claude-code|openai|openrouter|anthropic] [model]
 
-- ``claude-code`` (default): Claude Code CLI pointed at the agent's MCP URL (``arena.claude_code``).
+- ``claude-code`` (default): Claude Code CLI pointed at the agent's MCP URL (``shakedown.claude_code``).
 - ``openai`` / ``openrouter`` / ``anthropic``: a minimal tool-calling loop written here, speaking
-  OpenAI chat completions to the agent's gateway, which forwards to the provider with arenad's key and
-  records every call. Needs the provider's key in arenad's environment; skips otherwise.
+  OpenAI chat completions to the agent's gateway, which forwards to the provider with shaked's key and
+  records every call. Needs the provider's key in shaked's environment; skips otherwise.
 
 Real model calls: it costs credits.
 """
@@ -19,7 +19,7 @@ import time
 
 import httpx
 
-from arena import Agent, claude_code
+from shakedown import Agent, claude_code
 from common import connect, task_arg
 
 via = sys.argv[2] if len(sys.argv) > 2 else "claude-code"
@@ -52,21 +52,21 @@ def gateway_loop(agent, prompt: str, model: str, max_turns: int = 30) -> None:
     agent.end(ok=True)
 
 
-with connect() as arena:
-    task = arena.task(task_arg(arena))
+with connect() as sd:
+    task = sd.task(task_arg(sd))
     if via == "claude-code":
         if not claude_code.available():
             sys.exit("skipped: `claude` is not on PATH; install Claude Code and sign in")
         spec = Agent.external("agent", model=model)
     else:
-        status = {p["id"]: p for p in arena.providers()}.get(via)
+        status = {p["id"]: p for p in sd.providers()}.get(via)
         if not status or not status.get("available"):
             why = (status or {}).get("why", f"unknown provider {via}")
-            sys.exit(f"skipped: the {via} provider is not available in this arenad ({why}); "
-                     "set its key in arenad's environment")
+            sys.exit(f"skipped: the {via} provider is not available in this shaked ({why}); "
+                     "set its key in shaked's environment")
         spec = Agent.external("agent", model=model, provider=via)
 
-    branch = arena.external_run(task, agents=[spec], seed=1)
+    branch = sd.external_run(task, agents=[spec], seed=1)
     agent = branch.agents["agent"]
     print(f"branch {branch.id}\n  MCP endpoint: {agent.mcp_url}\n  gateway:      {agent.gateway_url}")
     prompt = claude_code.task_prompt(task, "You are a customer-service agent. Resolve the ticket using the tools.")

@@ -14,8 +14,9 @@ import sys
 from enum import Enum
 from pathlib import Path
 
-from arena_part import Part, PartError, cant_restore, serve, unknown
-from arena_part.errors import invalid
+from shakedown_part import Part, PartError, cant_restore, serve, unknown
+from shakedown_part.errors import invalid
+from shakedown_part.settings import setting
 
 KEY = "counter/value"
 
@@ -36,8 +37,8 @@ class Flavour(Enum):
 
 
 def saves_root() -> Path:
-    """Saves live at `$ARENA_SAVES/counter-py/<save>/` by convention (the package name)."""
-    return Path(os.environ.get("ARENA_SAVES", "saves")) / "counter-py"
+    """Saves live at `$SHAKEDOWN_SAVES/counter-py/<save>/` by convention (the package name)."""
+    return Path(setting("SHAKEDOWN_SAVES", "saves")) / "counter-py"
 
 
 def read_save(save: str) -> dict:
@@ -164,7 +165,7 @@ class Counter(Part):
         self.instances.pop(instance, None)
 
     def usage(self):
-        # Every save lives in ARENA_SAVES, which arenad measures itself: nothing else is kept.
+        # Every save lives in SHAKEDOWN_SAVES, which shaked measures itself: nothing else is kept.
         return {"bytes": 0}
 
 

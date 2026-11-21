@@ -1,0 +1,6 @@
+# Sent by gh 2.45.0 (github.com/cli/cli, MIT, LICENSE-cli.txt)
+query PullRequestByNumber($owner: String!, $repo: String!, $pr_number: Int!) {
+		repository(owner: $owner, name: $repo) {
+			pullRequest(number: $pr_number) {id,url,title,body,baseRefName,reviewRequests(first: 100) {nodes {requestedReviewer {__typename,...on User{login},...on Team{organization{login}name,slug}}}},assignees(first:100){nodes{id,login,name},totalCount},labels(first:100){nodes{id,name,description,color},totalCount},projectCards(first:100){nodes{project{name}column{name}},totalCount},milestone{number,title,description,dueOn},number}
+		}
+	}

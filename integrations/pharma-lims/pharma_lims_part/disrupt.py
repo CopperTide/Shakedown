@@ -1,7 +1,7 @@
-"""The disruption a task's setup may schedule in the lab (arena_part.disruptions): a lot's release
+"""The disruption a task's setup may schedule in the lab (shakedown_part.disruptions): a lot's release
 test fails, so the lot can't be released."""
-from arena_part.disruptions import Kind
-from arena_part.params import Refusal
+from shakedown_part.disruptions import Kind
+from shakedown_part.params import Refusal
 
 from . import lab
 

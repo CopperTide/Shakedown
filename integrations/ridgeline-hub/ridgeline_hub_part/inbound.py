@@ -1,13 +1,13 @@
 """Raw-material trucks on their way to the plant, which the factory hub's Market doesn't have: each delivery from
 the config with its arrival on the plant clock and when the line it feeds runs out without it. A task's setup sets
-the scenario (`hub_scenario`) and may schedule a delay (arena_part.disruptions), which fires before the agent's
+the scenario (`hub_scenario`) and may schedule a delay (shakedown_part.disruptions), which fires before the agent's
 call that crosses its count, like the simulated parts' disruptions."""
 from datetime import datetime, timedelta
 
-from arena_part import disruptions
-from arena_part.disruptions import Kind
-from arena_part.jsonstate import Tool
-from arena_part.params import Param, Refusal, normalize, refused
+from shakedown_part import disruptions
+from shakedown_part.disruptions import Kind
+from shakedown_part.jsonstate import Tool
+from shakedown_part.params import Param, Refusal, normalize, refused
 
 BASE = "base"
 WORLD_TOOLS = frozenset({"hub_scenario"})

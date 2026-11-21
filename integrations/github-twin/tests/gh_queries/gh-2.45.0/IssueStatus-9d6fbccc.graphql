@@ -1,0 +1,25 @@
+# Sent by gh 2.45.0 (github.com/cli/cli, MIT, LICENSE-cli.txt)
+fragment issue on Issue{number,title,url,state,updatedAt,labels(first:100){nodes{id,name,description,color},totalCount}}
+	query IssueStatus($owner: String!, $repo: String!, $viewer: String!, $per_page: Int = 10) {
+		repository(owner: $owner, name: $repo) {
+			hasIssuesEnabled
+			assigned: issues(filterBy: {assignee: $viewer, states: OPEN}, first: $per_page, orderBy: {field: UPDATED_AT, direction: DESC}) {
+				totalCount
+				nodes {
+					...issue
+				}
+			}
+			mentioned: issues(filterBy: {mentioned: $viewer, states: OPEN}, first: $per_page, orderBy: {field: UPDATED_AT, direction: DESC}) {
+				totalCount
+				nodes {
+					...issue
+				}
+			}
+			authored: issues(filterBy: {createdBy: $viewer, states: OPEN}, first: $per_page, orderBy: {field: UPDATED_AT, direction: DESC}) {
+				totalCount
+				nodes {
+					...issue
+				}
+			}
+		}
+    }

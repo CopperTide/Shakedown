@@ -18,16 +18,17 @@ mod team;
 mod tool_schemas;
 mod tools;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use arena_part::helpers::blocking;
-use arena_part::helpers::save_dirs::SaveDirs;
-use arena_part::proto::*;
-use arena_part::{Part, PartError};
 use async_trait::async_trait;
 use serde_json::json;
+use shakedown_part::helpers::blocking;
+use shakedown_part::helpers::instances::KeyedLocks;
+use shakedown_part::helpers::save_dirs::SaveDirs;
+use shakedown_part::proto::*;
+use shakedown_part::{Part, PartError};
 
 pub use config::default_binary;
 
@@ -46,7 +47,7 @@ pub struct Sculptured {
     saves: SaveDirs,
     live: Live,
     /// Held by each tool call and save, so an instance does one thing at a time.
-    busy: Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
+    busy: KeyedLocks,
     /// The instances this value started and has not stopped: `gc` leaves them alone.
     mine: Mutex<HashSet<String>>,
 }
@@ -70,12 +71,12 @@ impl Instance {
 }
 
 impl Sculptured {
-    /// Saves under env `ARENA_SAVES`.
+    /// Saves under env `SHAKEDOWN_SAVES`.
     pub fn from_env() -> Sculptured {
         Sculptured::with(SaveDirs::new(PACKAGE))
     }
 
-    /// Saves in `package_folder` (`<ARENA_SAVES>/sculptured`).
+    /// Saves in `package_folder` (`<SHAKEDOWN_SAVES>/sculptured`).
     pub fn new(package_folder: PathBuf) -> Sculptured {
         Sculptured::with(SaveDirs::under(package_folder))
     }
@@ -85,7 +86,7 @@ impl Sculptured {
         Sculptured {
             live: Live::new(std::path::absolute(&live).unwrap_or(live)),
             saves,
-            busy: Mutex::new(HashMap::new()),
+            busy: KeyedLocks::default(),
             mine: Mutex::new(HashSet::new()),
         }
     }
@@ -103,8 +104,7 @@ impl Sculptured {
     }
 
     fn lock(&self, id: &str) -> Arc<tokio::sync::Mutex<()>> {
-        let mut busy = self.busy.lock().expect("busy map lock");
-        busy.entry(id.to_string()).or_default().clone()
+        self.busy.lock_for(id)
     }
 
     /// A target's changes as the tools show them: a live instance's from its server, a save's
@@ -138,6 +138,7 @@ impl Part for Sculptured {
             fingerprint: json!({"integration": PACKAGE}),
             tools: tool_schemas::schemas(),
             system: Some(SystemInfo::real("approvals", "CopperTide approvals", None)),
+            save_at: SaveAt::Step,
         })
     }
 
@@ -186,12 +187,12 @@ impl Part for Sculptured {
         self.saves.remove(&p.save).map_err(PartError::internal_from)
     }
 
-    /// A no-op for an instance that is not running (arenad stops instances it is unsure of).
+    /// A no-op for an instance that is not running (shaked stops instances it is unsure of).
     async fn stop(&self, p: IdParams) -> R<()> {
         self.stop_instance(&p.instance).await
     }
 
-    /// Nothing is kept outside `ARENA_SAVES` but the runners' scratch folders, which `stop`
+    /// Nothing is kept outside `SHAKEDOWN_SAVES` but the runners' scratch folders, which `stop`
     /// and `gc` remove.
     async fn usage(&self) -> R<Usage> {
         Ok(Usage { bytes: 0 })

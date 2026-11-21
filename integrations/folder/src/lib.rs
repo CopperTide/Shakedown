@@ -6,16 +6,15 @@ mod docs;
 mod paths;
 mod tools;
 
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
 
-use arena_part::helpers::save_dirs::SaveDirs;
-use arena_part::helpers::{folder, remove_tree};
-use arena_part::proto::*;
-use arena_part::{Part, PartError};
 use async_trait::async_trait;
 use serde_json::{json, Value};
+use shakedown_part::helpers::instances::Registry;
+use shakedown_part::helpers::save_dirs::SaveDirs;
+use shakedown_part::helpers::{folder, remove_tree};
+use shakedown_part::proto::*;
+use shakedown_part::{Part, PartError};
 
 const PACKAGE: &str = "folder";
 
@@ -28,18 +27,18 @@ struct Instance {
 pub struct Folder {
     saves: SaveDirs,
     live_root: PathBuf,
-    live: Mutex<HashMap<String, Instance>>,
+    live: Registry<Instance>,
 }
 
 impl Folder {
-    /// Saves under env `ARENA_SAVES`.
+    /// Saves under env `SHAKEDOWN_SAVES`.
     pub fn from_env() -> Folder {
         let saves = SaveDirs::new(PACKAGE);
         saves.sweep_scratch();
         Folder::with(saves)
     }
 
-    /// Saves in `package_folder` (`<ARENA_SAVES>/folder`).
+    /// Saves in `package_folder` (`<SHAKEDOWN_SAVES>/folder`).
     pub fn new(package_folder: PathBuf) -> Folder {
         Folder::with(SaveDirs::under(package_folder))
     }
@@ -48,16 +47,12 @@ impl Folder {
         Folder {
             live_root: saves.root().join(".live"),
             saves,
-            live: Mutex::new(HashMap::new()),
+            live: Registry::default(),
         }
     }
 
-    fn instances(&self) -> std::sync::MutexGuard<'_, HashMap<String, Instance>> {
-        self.live.lock().expect("instance map lock")
-    }
-
     fn instance_dir(&self, id: &str) -> Result<PathBuf, PartError> {
-        match self.instances().get(id) {
+        match self.live.lock().get(id) {
             Some(i) => Ok(i.dir.clone()),
             None => Err(PartError::unknown(format!("no instance {id}"))),
         }
@@ -101,6 +96,7 @@ impl Part for Folder {
             fingerprint: json!({"integration": PACKAGE}),
             tools: tools::schemas(),
             system: Some(SystemInfo::real("files", "Folder", None)),
+            save_at: SaveAt::Step,
         })
     }
 
@@ -112,8 +108,7 @@ impl Part for Folder {
             return Err(e);
         }
         let prev_save = p.from.as_ref().and_then(|f| self.saves.find(&f.save));
-        self.instances()
-            .insert(p.instance, Instance { dir, prev_save });
+        self.live.insert(p.instance, Instance { dir, prev_save });
         Ok(())
     }
 
@@ -125,7 +120,8 @@ impl Part for Folder {
     async fn save(&self, p: SaveParams) -> Result<Saved, PartError> {
         let dir = self.instance_dir(&p.instance)?;
         let prev = self
-            .instances()
+            .live
+            .lock()
             .get(&p.instance)
             .and_then(|i| i.prev_save.clone());
         let to = PathBuf::from(&p.dir);
@@ -134,9 +130,7 @@ impl Part for Folder {
             PartError::internal_from(e)
         })?;
         self.saves.note(&p.save, &to);
-        if let Some(i) = self.instances().get_mut(&p.instance) {
-            i.prev_save = Some(to);
-        }
+        self.live.update(&p.instance, |i| i.prev_save = Some(to));
         Ok(Saved { bytes, exact: true })
     }
 
@@ -159,11 +153,11 @@ impl Part for Folder {
         let dir = self.instance_dir(&p.instance)?;
         remove_tree(&dir)
             .map_err(|e| PartError::internal_from(format!("cannot remove {dir:?}: {e}")))?;
-        self.instances().remove(&p.instance);
+        self.live.remove(&p.instance);
         Ok(())
     }
 
-    /// Everything the part keeps is inside `ARENA_SAVES`, which arenad measures.
+    /// Everything the part keeps is inside `SHAKEDOWN_SAVES`, which shaked measures.
     async fn usage(&self) -> Result<Usage, PartError> {
         Ok(Usage { bytes: 0 })
     }

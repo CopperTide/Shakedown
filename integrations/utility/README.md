@@ -7,7 +7,7 @@ stands in for a utility's demand-response program and a revenue meter; `describe
 product: "Simulated electric utility and site meter", simulated: true}`. Restore: exact from a save (one
 `state.json`); approximate: no. `uses_clock`: true.
 
-A Python package on the kit's `arena_part.jsonstate`, with the clock added: `advance` (and every `call_tool`, first)
+A Python package on the kit's `shakedown_part.jsonstate`, with the clock added: `advance` (and every `call_tool`, first)
 integrates the load up to the Shakedown clock. The load is kept in whole watts and the energy in whole watt-milliseconds,
 cut at every window's start and end, so the state after an advance doesn't depend on how the advances were split.
 
@@ -39,13 +39,13 @@ Keys: `scenario/current`, `meter/site`, `dr/<event>`, `_disruption/<id>` (intern
 world events, `demand_response_active` and `demand_response_ended` (from `advance`; one found during a call waits for
 the next `advance`).
 
-**Scheduled disruption** (`arena_part.disruptions`, docs/protocol.md "Scheduled disruptions"): `demand_response {event,
+**Scheduled disruption** (`shakedown_part.disruptions`, docs/protocol.md "Scheduled disruptions"): `demand_response {event,
 target_kw, lead_min, minutes}`. When it fires its notice is there (`notified`); the window opens `lead_min` minutes of
 plant time later and lasts `minutes`. `meter_load` and `utility_scenario` count for no disruption.
 
 ## Tests
 
 `uv run --with pytest pytest -q`: the meter on the clock, split advances, a window measured, a notice after its count,
-responses and refusals, save and restore, and `arena-part-check` (skipped without the built checker; `ARENA_BIN_DIR` names
+responses and refusals, save and restore, and `shakedown-part-check` (skipped without the built checker; `SHAKEDOWN_BIN_DIR` names
 where it is). Verified on Linux, 2026-11-07: all 9 pass, the conformance check included (replay skipped since the part
 restores from saves).

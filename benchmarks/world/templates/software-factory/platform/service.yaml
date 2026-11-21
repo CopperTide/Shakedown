@@ -1,0 +1,97 @@
+# The `platform` part's config for the `live-service` integration: the compose project, how each volume is saved,
+# the images it starts with, the hosts agents reach, and the probes (docs for scoring) and watches (world events).
+# The template includes this file (template.yaml, the production system) and the observability system merges the
+# profile's env into `env` (profiles/<profile>.yaml). It is expanded by the builder: `{{world_s}}` is the part's own
+# placeholder, written with doubled braces.
+compose_file: "{world_dir}/files/platform/compose.yaml"
+live: true
+helper_image: instrumentisto/rsync-ssh:alpine3.23-r3@sha256:6cbad37c2fbdca4ac7ad9d1c1bb8990af9efd4dc76321b349935876cbb1e9e4a
+env:
+  PLATFORM_DIR: "@platform/"     # this folder, copied into the world (compose_file is in it)
+  PROD_ORDERS_ROWS: "20000"      # the hot-table trap sets its `rows` (default 300000)
+  STAGING_ORDERS_ROWS: "1000"
+  GRAFANA_ROOT_URL: "https://grafana.{company.domain}/"
+  GLITCHTIP_URL: "https://glitchtip.{company.domain}"
+  TRAFFIC_EVENTS: ""             # traffic events the builder turns on (events/traffic-peak.yaml)
+  TRAFFIC_SEED: "world-{seed}"   # the world's seed (traffic/config.py takes it as text)
+
+images:
+  prod-storefront: shakedown-sf/storefront:seed
+  prod-orders: shakedown-sf/orders:seed
+  prod-inventory: shakedown-sf/inventory:seed
+  staging-storefront: shakedown-sf/storefront:seed
+  staging-orders: shakedown-sf/orders:seed
+  staging-inventory: shakedown-sf/inventory:seed
+  prod-db: postgres:17.11-alpine@sha256:e5d2edd28b1f8d40a0a6c0c9cdc545b19b56a0d5d88f94bc11a97d970d4700d0
+  staging-db: postgres:17.11-alpine@sha256:e5d2edd28b1f8d40a0a6c0c9cdc545b19b56a0d5d88f94bc11a97d970d4700d0
+  glitchtip-db: postgres:17.11-alpine@sha256:e5d2edd28b1f8d40a0a6c0c9cdc545b19b56a0d5d88f94bc11a97d970d4700d0
+  prod-seed: postgres:17.11-alpine@sha256:e5d2edd28b1f8d40a0a6c0c9cdc545b19b56a0d5d88f94bc11a97d970d4700d0
+  traffic: python:3.12.16-slim@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b
+  staging-seed: postgres:17.11-alpine@sha256:e5d2edd28b1f8d40a0a6c0c9cdc545b19b56a0d5d88f94bc11a97d970d4700d0
+  otel-collector: otel/opentelemetry-collector:0.164.0@sha256:28b6d41ac51bff6b41ba5e8fe503569ffb9d6a1ea90f7a78419e86f34e44f750
+  worldclock-gateway: shakedown/worldclock-gateway:0.1.0
+  prometheus: prom/prometheus:v3.15.1@sha256:fa3302279710be2f21a8301ec17a8b4f2301fd829bd113839b3b6b02b6f191a2
+  alertmanager: prom/alertmanager:v0.34.2@sha256:39d8bb3966c694a124428a3a88fbcffd40bd069129ecd47c059f8a3f17c55f3b
+  loki: grafana/loki:3.7.9@sha256:0db216b630ae1f348a1584c67f3cead8b4c1fc839169a39501db664744158e28
+  tempo: grafana/tempo:2.10.10@sha256:12b0820f13ffa10ce956b6e9acc3b03f3cffded99109be6cc09d106fe56e5d38
+  grafana: grafana/grafana:12.4.14@sha256:ae509d9ae8c1021ca32ec370a9ca975d40165eda9fccd1e1102d317ff8787cd7
+  glitchtip: glitchtip/glitchtip:6.2.6@sha256:a3d8eb1b36c1e1603d55ab32711ea3dd8115874742a781a57391a62a16e0dff6
+  glitchtip-worker: glitchtip/glitchtip:6.2.6@sha256:a3d8eb1b36c1e1603d55ab32711ea3dd8115874742a781a57391a62a16e0dff6
+
+volumes:
+  - {name: prod-db, save: postgres, service: prod-db, database: shop, user: shop}
+  - {name: staging-db, save: postgres, service: staging-db, database: shop, user: shop}
+  - {name: glitchtip-db, save: postgres, service: glitchtip-db, database: glitchtip, user: glitchtip}
+  - {name: prometheus, save: hardlink, live_copy: true}
+  - {name: loki, save: hardlink, live_copy: true}
+  - {name: tempo, save: hardlink, live_copy: true}
+  - {name: grafana, save: skip}
+  - {name: alertmanager, save: skip}
+
+http:
+  - {host: "api.{company.domain}", service: prod-storefront, port: 8000}
+  - {host: "staging-api.{company.domain}", service: staging-storefront, port: 8000}
+  - {host: "grafana.{company.domain}", service: grafana, port: 3000}
+  # The gateway's query face, by host: each answers at the root in world time (Task 7).
+  - {host: "prometheus.{company.domain}", service: worldclock-gateway, port: 4319}
+  - {host: "loki.{company.domain}", service: worldclock-gateway, port: 4319}
+  - {host: "tempo.{company.domain}", service: worldclock-gateway, port: 4319}
+  - {host: "alertmanager.{company.domain}", service: alertmanager, port: 9093}
+  - {host: "glitchtip.{company.domain}", service: glitchtip, port: 8000}
+
+probes:
+  - {key: version/storefront, service: prod-storefront, port: 8000, path: /version}
+  - {key: version/orders, service: prod-orders, port: 8000, path: /version}
+  - {key: version/inventory, service: prod-inventory, port: 8000, path: /version}
+  - {key: alerts, service: alertmanager, port: 9093, path: "/api/v2/alerts?active=true&silenced=false&inhibited=false"}
+  # Paging alerts in world time: Prometheus evaluates rules.yml at the wall clock, where a world's samples (stamped in
+  # world time) are not, so this asks the gateway each `severity: page` rule's expr at the world's time, labelled as
+  # Alertmanager would (alertname, pagerduty_severity, summary). Rules fire at once here (no `for:`). Encoded form of
+  # the rules' exprs; tests/software_factory/test_platform_files.py checks it against rules.yml.
+  - key: alerts/paging
+    service: worldclock-gateway
+    port: 4319
+    path: "/q/prometheus/api/v1/query?time={{world_s}}&query=label_join%28label_join%28label_replace%28label_replace%28label_replace%28%28sum%20by%20%28service_name%29%20%28rate%28http_server_request_duration_seconds_count%7Bdeployment_environment_name%3D%22production%22%2C%20http_route%21%3D%22%2Fhealthz%22%2C%20http_response_status_code%3D~%225..%22%7D%5B5m%5D%29%29%20%2F%20sum%20by%20%28service_name%29%20%28rate%28http_server_request_duration_seconds_count%7Bdeployment_environment_name%3D%22production%22%2C%20http_route%21%3D%22%2Fhealthz%22%7D%5B5m%5D%29%29%20%3E%200.05%29%2C%20%22alertname%22%2C%20%22HighErrorRate%22%2C%20%22%22%2C%20%22%22%29%2C%20%22pagerduty_severity%22%2C%20%22critical%22%2C%20%22%22%2C%20%22%22%29%2C%20%22says%22%2C%20%22answers%20more%20than%205%25%20of%20requests%20with%20a%20server%20error%22%2C%20%22%22%2C%20%22%22%29%2C%20%22summary%22%2C%20%22%20%22%2C%20%22service_name%22%2C%20%22says%22%29%2C%20%22alert_id%22%2C%20%22%3A%22%2C%20%22alertname%22%2C%20%22service_name%22%29%20or%20label_join%28label_join%28label_replace%28label_replace%28label_replace%28%28scalar%28max%28max_over_time%28timestamp%28http_server_request_duration_seconds_count%7Bdeployment_environment_name%3D%22production%22%7D%29%5B1h%3A1m%5D%29%29%29%20-%20max%20by%20%28service_name%29%20%28max_over_time%28timestamp%28http_server_request_duration_seconds_count%7Bdeployment_environment_name%3D%22production%22%7D%29%5B1h%3A1m%5D%29%29%20%3E%20180%29%2C%20%22alertname%22%2C%20%22ServiceDown%22%2C%20%22%22%2C%20%22%22%29%2C%20%22pagerduty_severity%22%2C%20%22critical%22%2C%20%22%22%2C%20%22%22%29%2C%20%22says%22%2C%20%22has%20reported%20nothing%20for%203%20minutes%20while%20the%20others%20have%22%2C%20%22%22%2C%20%22%22%29%2C%20%22summary%22%2C%20%22%20%22%2C%20%22service_name%22%2C%20%22says%22%29%2C%20%22alert_id%22%2C%20%22%3A%22%2C%20%22alertname%22%2C%20%22service_name%22%29"
+  - key: glitchtip/issues
+    service: glitchtip
+    port: 8000
+    path: "/api/0/organizations/shop/issues/?query=is%3Aunresolved"
+    headers: {Authorization: "Bearer 7e1f4b2a9c8d3e6f5a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f"}
+  # Served by the traffic service (port 9100): production's SLO over the last 30 world minutes as its synthetic
+  # users saw it, the traffic it sent, and the contract probe's last results.
+  - {key: slo/production, service: traffic, port: 9100, path: "/slo?time={{world_s}}"}
+  - {key: traffic/stats, service: traffic, port: 9100, path: /stats}
+  - {key: contracts, service: traffic, port: 9100, path: /contracts}
+
+watches:
+  - probe: alerts/paging
+    every_ms: 15000
+    items: /data/result
+    id: /metric/alert_id
+    "on": alert_firing
+    "off": alert_resolved
+    fields:
+      summary: /metric/summary
+      service: /metric/service_name
+      severity: /metric/pagerduty_severity
+      alertname: /metric/alertname

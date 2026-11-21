@@ -1,5 +1,5 @@
 //! The base every instance starts from: a site with ERPNext installed and set up, made once and
-//! kept in `$ARENA_SAVES/erpnext/.base/` as a save (a dump-rooted manifest and the site's
+//! kept in `$SHAKEDOWN_SAVES/erpnext/.base/` as a save (a dump-rooted manifest and the site's
 //! files) plus what every site made from it needs: the shared site config and the
 //! Administrator's API key.
 use std::io;
@@ -7,12 +7,12 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
-use arena_part::helpers::folder;
-use arena_part::helpers::mariadb::{Blobs, Login, Manifest, ServerRef};
-use arena_part::PartError;
 use reqwest::Method;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
+use shakedown_part::helpers::folder;
+use shakedown_part::helpers::mariadb::{Blobs, Login, Manifest, ServerRef};
+use shakedown_part::PartError;
 
 use crate::frappe::{parse_keys, ApiKey};
 use crate::jobs;
@@ -207,7 +207,7 @@ async fn store(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use arena_part::helpers::mariadb::{Position, Tracked};
+    use shakedown_part::helpers::mariadb::{Position, Tracked};
 
     fn server(id: &str) -> ServerRef {
         ServerRef {

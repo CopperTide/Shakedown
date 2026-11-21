@@ -1,7 +1,7 @@
 """The roster's tools: the shift for agents, assigning an operator to a station and calling one in, and the
 scenario a task's setup sets."""
-from arena_part.jsonstate import Done, Tool, set_scenario
-from arena_part.params import Param, Refusal
+from shakedown_part.jsonstate import Done, Scenarios, Tool
+from shakedown_part.params import Param, Refusal
 
 from . import disrupt, roster
 
@@ -46,11 +46,11 @@ def _call_in(config, state, args):
                 writes=[f"operator/{op['id']}", "overtime/shift"])
 
 
+SCENARIOS = Scenarios(base=roster.BASE)
+
+
 def _scenario(config, state, args):
-    def overlay(cfg, st):
-        return cfg.get("scenarios", {}).get(st["scenario"], {})
-    known = [roster.BASE, *config.get("scenarios", {})]
-    return set_scenario(config, state, args, known, overlay, disrupt.KINDS, TOOLS)
+    return SCENARIOS.set(config, state, args, disrupt.KINDS, TOOLS)
 
 
 TOOLS = {t.name: t for t in [

@@ -1,7 +1,7 @@
-"""One instance's world: the hub's Market on the arena clock, with an adapter for its `factory`."""
+"""One instance's world: the hub's Market on the world clock, with an adapter for its `factory`."""
 from datetime import datetime, timedelta
 
-from arena_part import FixedStep
+from shakedown_part import FixedStep
 
 from . import inbound
 from .config import Config, load_market
@@ -57,8 +57,7 @@ class World:
     def __init__(self, cfg: Config, clock_ms: int = 0):
         module, suppliers = load_market(cfg)
         self.module = module
-        self.stepper = FixedStep(TICK_MS)
-        self.stepper.done_ms = clock_ms - clock_ms % TICK_MS
+        self.stepper = FixedStep(TICK_MS, clock_ms)
         self.factory = ArenaFactory(cfg.plant_start, self.elapsed_ms)
         self.market = arena_market_class(module.Market)(self.factory, suppliers, self.elapsed_ms)
         self.cfg = cfg

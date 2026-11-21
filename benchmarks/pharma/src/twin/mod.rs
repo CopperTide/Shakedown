@@ -1,19 +1,19 @@
 //! The digital twin of Larchmont Biologics (`view`): the fill line, the QC lab, the warehouse's
 //! lots, the customers' open orders, the carriers' lanes and the approvals, as live state. The
 //! ERP is read through its connection with the reports' readers; the simulated parts and the
-//! approvals come as their `inspect` docs, which arenad passes (`describe.view.docs`).
+//! approvals come as their `inspect` docs, which shaked passes (`describe.view.docs`).
 mod areas;
 mod orders;
 mod read;
 
 use anyhow::{anyhow, Result};
-use arena_part::proto::{TwinItem, TwinKpi, TwinView, ViewParams};
 use serde_json::Value;
+use shakedown_part::proto::{TwinItem, TwinKpi, TwinView, ViewParams};
 
 use crate::checks;
 use crate::data::Data;
-use crate::erp::Erp;
 use crate::facts::Facts;
+use shakedown_part::helpers::frappe::Erp;
 
 pub use read::Snapshot;
 

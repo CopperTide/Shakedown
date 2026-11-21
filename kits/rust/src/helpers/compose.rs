@@ -85,6 +85,12 @@ impl Project {
         })
     }
 
+    /// A project `name` that only runs helper containers (it has no compose file, so its compose
+    /// commands fail), with `env` added to `docker`'s environment.
+    pub fn helpers_only(name: &str, env: &BTreeMap<String, String>) -> Result<Project> {
+        Project::new(name, Path::new(""), env)
+    }
+
     /// Moves volumes through `image` instead of the default helper.
     pub fn with_helper(mut self, image: &str) -> Result<Project> {
         if !valid_image(image) {
@@ -125,6 +131,126 @@ impl Project {
 
     pub fn start(&self) -> Result<()> {
         run(self.compose(&["start"]), "docker compose start")
+    }
+
+    /// Stops only the compose services `s`.
+    pub fn stop_services(&self, s: &[&str]) -> Result<()> {
+        run(self.compose_on(&["stop"], s)?, "docker compose stop")
+    }
+
+    /// Starts only the compose services `s` (stopped ones).
+    pub fn start_services(&self, s: &[&str]) -> Result<()> {
+        run(self.compose_on(&["start"], s)?, "docker compose start")
+    }
+
+    /// Runs the compose services `s` (every service when empty), detached, without waiting.
+    pub fn up_services(&self, s: &[&str]) -> Result<()> {
+        run(self.compose_on(&["up", "-d"], s)?, "docker compose up")
+    }
+
+    /// Recreates the compose services `s` (with the project's current environment, so a changed
+    /// image variable takes effect), detached, without touching the services they depend on.
+    pub fn up_no_deps(&self, s: &[&str]) -> Result<()> {
+        run(
+            self.compose_on(&["up", "-d", "--no-deps"], s)?,
+            "docker compose up",
+        )
+    }
+
+    /// The state and health of `service`'s container as compose says them (`running healthy`,
+    /// `running starting`, `exited `; health is empty for a service without a health check).
+    pub fn state(&self, service: &str) -> Result<String> {
+        let fmt = "{{.State}} {{.Health}}";
+        let cmd = self.compose_on(&["ps", "-a", "--format", fmt], &[service])?;
+        let out = run_out(cmd, "docker compose ps")?;
+        Ok(out.lines().next().unwrap_or("").trim().to_string())
+    }
+
+    /// Every container of the project as compose says it: `(service, state, health, exit
+    /// code)`, health empty for a service without a health check.
+    pub fn states(&self) -> Result<Vec<[String; 4]>> {
+        let fmt = "{{.Service}}\t{{.State}}\t{{.Health}}\t{{.ExitCode}}";
+        let out = run_out(
+            self.compose(&["ps", "-a", "--format", fmt]),
+            "docker compose ps",
+        )?;
+        let row = |l: &str| {
+            let mut f = l.split('\t').map(|x| x.trim().to_string());
+            [(); 4].map(|()| f.next().unwrap_or_default())
+        };
+        Ok(out
+            .lines()
+            .filter(|l| !l.trim().is_empty())
+            .map(row)
+            .collect())
+    }
+
+    /// A compose command `args` followed by the service names `s`, each checked.
+    fn compose_on(&self, args: &[&str], s: &[&str]) -> Result<Command> {
+        if let Some(bad) = s.iter().find(|n| !name_ok(n, b"-")) {
+            bail!("{bad:?} is not a service name");
+        }
+        let mut cmd = self.compose(args);
+        cmd.args(s);
+        Ok(cmd)
+    }
+
+    /// Where `port` of `service` is published on this machine (`127.0.0.1:49153`): the port
+    /// Docker picked, on 127.0.0.1 whatever address it was published on.
+    pub fn port(&self, service: &str, port: u16) -> Result<String> {
+        let cmd = self.compose_on(&["port"], &[service])?;
+        let mut cmd = cmd;
+        cmd.arg(port.to_string());
+        let out = run_out(cmd, "docker compose port")?;
+        let first = out.lines().next().unwrap_or("").trim();
+        let published = first.rsplit_once(':').map(|(_, p)| p).unwrap_or("");
+        match published.parse::<u16>() {
+            Ok(p) => Ok(format!("127.0.0.1:{p}")),
+            Err(_) => bail!("{service} publishes no port {port} (docker said {first:?})"),
+        }
+    }
+
+    /// Runs `args` in the running container of `service` with the file `stdin` as its input.
+    pub fn exec_in(&self, service: &str, args: &[&str], stdin: &Path) -> Result<()> {
+        let mut cmd = self.compose_on(&["exec", "-T"], &[service])?;
+        cmd.args(args).stdin(File::open(stdin)?);
+        run(cmd, &format!("{service}: {}", args.first().unwrap_or(&"")))
+    }
+
+    /// A throwaway container of the helper image (never pulled) running `args`, with no network
+    /// and each `(source, target, read_only)` mounted (a source is a host path or one of the
+    /// project's volumes); its stdout.
+    pub fn run_helper(&self, mounts: &[(String, String, bool)], args: &[&str]) -> Result<String> {
+        let mut cmd = self.helper_run("", mounts, false);
+        cmd.args(args);
+        run_out(cmd, &format!("helper {}", args.first().unwrap_or(&"")))
+    }
+
+    /// `docker run` of a throwaway helper container (never pulled, no network; stdin open when
+    /// `interactive`) with `entrypoint` and `mounts`, up to its image.
+    fn helper_run(
+        &self,
+        entrypoint: &str,
+        mounts: &[(String, String, bool)],
+        interactive: bool,
+    ) -> Command {
+        let mut cmd = self.docker();
+        cmd.args(["run", "--rm", "--pull", "never", "--network", "none"]);
+        if interactive {
+            cmd.arg("-i");
+        }
+        cmd.args(["--entrypoint", entrypoint]);
+        for (source, target, read_only) in mounts {
+            let mode = if *read_only { ":ro" } else { "" };
+            cmd.args(["-v", &format!("{source}:{target}{mode}")]);
+        }
+        cmd.arg(&self.helper);
+        cmd
+    }
+
+    /// Docker's name for the project's volume `volume`, to mount it in a helper.
+    pub fn volume(&self, volume: &str) -> Result<String> {
+        self.volume_name(volume)
     }
 
     /// Removes the project's containers, networks and volumes.
@@ -180,30 +306,39 @@ impl Project {
         Ok(format!("{}_{volume}", self.name))
     }
 
-    fn helper_tar(&self, volume: &str, flags: &[&str], interactive: bool) -> Result<Command> {
-        let mount = format!("{}:/v", self.volume_name(volume)?);
-        let mut cmd = self.docker();
-        cmd.args(["run", "--rm", "--pull", "never", "--network", "none"]);
-        if interactive {
-            cmd.arg("-i");
-        }
-        cmd.args(["--entrypoint", "tar", "-v", &mount, &self.helper]);
+    /// The helper's `tar -C /v <flags>` with `mount` at `/v`.
+    fn helper_tar(&self, mount: (String, bool), flags: &[&str], interactive: bool) -> Command {
+        let mounts = [(mount.0, "/v".to_string(), mount.1)];
+        let mut cmd = self.helper_run("tar", &mounts, interactive);
         cmd.args(["-C", "/v"]).args(flags);
-        Ok(cmd)
+        cmd
     }
 
-    /// Writes the volume to the tar archive `dest`, as streamed by the helper: owners (numeric),
-    /// modes and mtimes are kept.
-    pub fn export_volume(&self, volume: &str, dest: &Path) -> Result<()> {
-        let mut cmd = self.helper_tar(volume, &["-cpf", "-", "--numeric-owner", "."], false)?;
+    /// `tar` of what is mounted at `/v` (read-only when `read_only`) to the archive `dest`, as
+    /// streamed by the helper: owners (numeric), modes and mtimes are kept.
+    fn export(&self, source: String, read_only: bool, dest: &Path) -> Result<()> {
+        let flags = ["-cpf", "-", "--numeric-owner", "."];
+        let mut cmd = self.helper_tar((source, read_only), &flags, false);
         cmd.stdout(File::create(dest)?);
         run(cmd, "export volume")
+    }
+
+    /// Writes the volume to the tar archive `dest` (see `export`).
+    pub fn export_volume(&self, volume: &str, dest: &Path) -> Result<()> {
+        self.export(self.volume_name(volume)?, false, dest)
+    }
+
+    /// Writes the folder `dir` (a host path, mounted read-only) to the tar archive `dest` with
+    /// the same helper and `tar` as `export_volume`, so a copy of a volume archives as it does.
+    pub fn export_dir(&self, dir: &Path, dest: &Path) -> Result<()> {
+        self.export(dir.to_string_lossy().into_owned(), true, dest)
     }
 
     /// Fills the volume from the tar archive `src` (made by `export_volume`), as root, so files
     /// keep their original owners.
     pub fn import_volume(&self, volume: &str, src: &Path) -> Result<()> {
-        let mut cmd = self.helper_tar(volume, &["-xpf", "-", "--numeric-owner"], true)?;
+        let mount = (self.volume_name(volume)?, false);
+        let mut cmd = self.helper_tar(mount, &["-xpf", "-", "--numeric-owner"], true);
         cmd.stdin(File::open(src)?);
         run(cmd, "import volume")
     }
@@ -220,12 +355,12 @@ mod tests {
         assert!(!valid_image("") && !valid_image("-v") && !valid_image("a b"));
         assert!(!valid_volume("../x") && !valid_volume("a b") && !valid_volume(""));
         let p = |n| Project::new(n, Path::new("c.yml"), &BTreeMap::new());
-        assert!(p("arena_t1").is_ok());
+        assert!(p("shakedown_t1").is_ok());
         assert!(p("Arena").is_err() && p("a;b").is_err() && p("").is_err());
-        assert_eq!(p("arena_t1").unwrap().network(), "arena_t1_default");
-        assert!(valid_docker_name("arena-erpnext-db") && valid_docker_name("db"));
+        assert_eq!(p("shakedown_t1").unwrap().network(), "shakedown_t1_default");
+        assert!(valid_docker_name("shakedown-erpnext-db") && valid_docker_name("db"));
         assert!(!valid_docker_name("-x") && !valid_docker_name("a b") && !valid_docker_name(""));
-        let bad = p("arena_t1").unwrap();
+        let bad = p("shakedown_t1").unwrap();
         assert!(bad.connect("a b", "db").is_err() && bad.exec("Web;x", &["ls"]).is_err());
     }
 }

@@ -7,5 +7,5 @@ CONFIG = {"meter": "Plant 2 main meter", "site": "Plant 2 (Stamping)", "plant_st
 @pytest.fixture(autouse=True)
 def saves_root(monkeypatch, tmp_path):
     root = tmp_path / "saves"
-    monkeypatch.setenv("ARENA_SAVES", str(root))
+    monkeypatch.setenv("SHAKEDOWN_SAVES", str(root))
     return root

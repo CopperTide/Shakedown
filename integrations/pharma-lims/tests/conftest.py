@@ -16,5 +16,5 @@ def lims_config() -> dict:
 @pytest.fixture(autouse=True)
 def saves_root(monkeypatch, tmp_path):
     root = tmp_path / "saves"
-    monkeypatch.setenv("ARENA_SAVES", str(root))
+    monkeypatch.setenv("SHAKEDOWN_SAVES", str(root))
     return root

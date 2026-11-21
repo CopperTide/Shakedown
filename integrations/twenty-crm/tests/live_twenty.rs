@@ -1,17 +1,17 @@
 //! Live test of the twenty-crm integration: a database server and Twenty servers of the test's own
-//! (compose project `arena_twenty_t<pid>`, image `twentycrm/twenty:v2.51.0`, never pulled), and the
+//! (compose project `shakedown_twenty_t<pid>`, image `twentycrm/twenty:v2.51.0`, never pulled), and the
 //! conformance check against them. Everything it makes is removed when it ends, even when it fails.
-//! Run: `cargo test -p arena-twenty-crm -- --ignored live_ --nocapture`.
+//! Run: `cargo test -p shakedown-twenty-crm -- --ignored live_ --nocapture`.
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Instant;
 
-use arena_part::proto::*;
-use arena_part::Part;
-use arena_twenty_crm::{Settings, TwentyCrm};
 use serde_json::{json, Value};
+use shakedown_part::proto::*;
+use shakedown_part::Part;
+use shakedown_twenty_crm::{Settings, TwentyCrm};
 
-fn arena() -> PathBuf {
+fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .canonicalize()
@@ -28,7 +28,7 @@ impl Env {
     fn new() -> Env {
         let pid = std::process::id();
         let settings = Settings {
-            project: format!("arena_twenty_t{pid}"),
+            project: format!("shakedown_twenty_t{pid}"),
             db_port: free_port(),
             ..Settings::default()
         };
@@ -94,6 +94,7 @@ fn start(e: &Env, instance: &str, from: Option<&str>) -> StartParams {
             save: s.into(),
             mode: Mode::Exact,
         }),
+        world_time: None,
     }
 }
 
@@ -301,24 +302,24 @@ fn cargo(dir: PathBuf, args: &[&str]) {
     assert!(status.unwrap().success(), "cargo {args:?}");
 }
 
-/// `arena-part-check` on a program of its own, against the test's server.
+/// `shakedown-part-check` on a program of its own, against the test's server.
 fn conformance(e: &Env) {
-    let a = arena();
-    let program = Path::new(env!("CARGO_BIN_EXE_arena-twenty-crm"));
+    let a = repo();
+    let program = Path::new(env!("CARGO_BIN_EXE_shakedown-twenty-crm"));
     let bin = program.parent().unwrap();
     cargo(
         a.join("core"),
-        &["build", "-p", "parts", "--bin", "arena-part-check"],
+        &["build", "-p", "parts", "--bin", "shakedown-part-check"],
     );
     let config = e.saves.join("check.json");
     std::fs::write(&config, e.config().to_string()).unwrap();
     let t = Instant::now();
-    let out = Command::new(bin.join("arena-part-check"))
+    let out = Command::new(bin.join("shakedown-part-check"))
         .arg(a.join("integrations/twenty-crm/check"))
         .arg("--config")
         .arg(&config)
-        .env("ARENA_BIN_DIR", bin)
-        .env("ARENA_SAVES", &e.saves)
+        .env("SHAKEDOWN_BIN_DIR", bin)
+        .env("SHAKEDOWN_SAVES", &e.saves)
         .output()
         .unwrap();
     let stdout = String::from_utf8_lossy(&out.stdout).to_string();

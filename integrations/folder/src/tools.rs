@@ -2,9 +2,9 @@
 use std::fs;
 use std::path::Path;
 
-use arena_part::helpers::folder;
-use arena_part::proto::{Effect, ToolOutput, ToolSchema};
 use serde_json::{json, Value};
+use shakedown_part::helpers::folder;
+use shakedown_part::proto::{Effect, ToolOutput, ToolSchema};
 
 use crate::paths::resolve;
 

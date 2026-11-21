@@ -1,0 +1,25 @@
+# Developers open pull requests of their own, answer review comments within the hour, and merge their own pull
+# request once a reviewer approves it. (The error-spike event adds one more rule: events/error-spike-rule.yaml.)
+format: shakedown-people/1
+role: developer
+lines:
+  fixing: ["Good catch, fixing it now.", "Thanks, I'll push a fix shortly.", "Fair point, updating it."]
+  titles: ["Say how to run one test file", "Document running a single test file"]
+  patches: ["@patches/storefront-readme.diff"]
+rules:
+  - id: answer-review
+    notice: {system: github, kind: review_submitted, to: /author, where: {/state: CHANGES_REQUESTED}}
+    after: {minutes: [5, 55]}
+    act: {system: github, action: comment, args: {repo: /repo, number: /number, body: "@{/reviewer} {pick:fixing}"}}
+  - id: open-own-pr
+    once: {minute: 30}
+    who: one
+    act:
+      system: github
+      action: open_pr
+      args: {repo: "{company.slug}/storefront", branch: "{person:login}-readme", title: "{pick:titles}", body: "",
+             patch: "{pick:patches}"}
+  - id: merge-when-approved
+    notice: {system: github, kind: review_submitted, to: /author, where: {/state: APPROVED}}
+    after: {minutes: [2, 10]}
+    act: {system: github, action: merge, args: {repo: /repo, number: /number, method: squash}}

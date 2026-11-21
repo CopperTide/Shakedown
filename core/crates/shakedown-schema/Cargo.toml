@@ -1,0 +1,22 @@
+[package]
+name = "shakedown-schema"
+version = "0.1.0"
+edition = "2021"
+description = "Shakedown's database schema (the shakedown migration stream) and a migrator that applies any streams a binary passes, with any Postgres driver."
+
+[features]
+default = ["tokio-postgres"]
+# The migrator's `Conn` for a tokio_postgres::Client (shaked's driver).
+tokio-postgres = ["dep:tokio-postgres"]
+
+[dependencies]
+sha2 = "0.11"
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tokio-postgres = { workspace = true, optional = true }
+
+[dev-dependencies]
+uuid = { workspace = true }
+
+[lints]
+workspace = true

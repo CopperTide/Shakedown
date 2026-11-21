@@ -1,0 +1,2 @@
+{"clientBalance": 30.0, "currentSpendPerHr": 0.0, "email": "owner@acme.test", "id": "user_acme",
+ "notifyLowBalance": true, "notifyPodsGeneral": true, "notifyPodsStale": true, "spendLimit": 80}

@@ -3,12 +3,12 @@
 //! customer on a day, and the production schedule. They only read, through the ERP's REST API, so
 //! each is attributed to the ERP; the raw query tools stay available beside them.
 use anyhow::Result;
-use arena_part::proto::{Effect, ToolSchema};
 use serde_json::{json, Value};
+use shakedown_part::proto::{Effect, ToolSchema};
 
 use crate::data::Data;
 use crate::days::day;
-use crate::erp::Erp;
+use shakedown_part::helpers::frappe::Erp;
 
 fn schema(name: &str, description: &str, props: Value, required: &[&str]) -> ToolSchema {
     ToolSchema {

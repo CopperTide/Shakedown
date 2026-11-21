@@ -1,6 +1,6 @@
 //! The tools' schemas.
-use arena_part::proto::{Effect, ToolSchema};
 use serde_json::{json, Value};
+use shakedown_part::proto::{Effect, ToolSchema};
 
 /// Each tool: name, description, effect and required arguments.
 const TOOLS: [(&str, &str, Effect, &[&str]); 5] = [

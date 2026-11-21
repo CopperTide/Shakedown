@@ -1,0 +1,125 @@
+{
+ "advance": {
+  "changed": true,
+  "events": [
+   {
+    "data": {
+     "event": "DR-1",
+     "status": "active",
+     "target_kw": 1200.0
+    },
+    "kind": "demand_response_active",
+    "text": "Demand-response window DR-1 started: hold the site at or below 1200 kW until 2026-03-10T06:40:00"
+   },
+   {
+    "data": {
+     "event": "DR-1",
+     "status": "ended",
+     "target_kw": 1200.0
+    },
+    "kind": "demand_response_ended",
+    "text": "Demand-response window DR-1 ended"
+   }
+  ]
+ },
+ "after": {
+  "_disruption/dr": {
+   "do": {
+    "event": "DR-1",
+    "kind": "demand_response",
+    "lead_min": 10,
+    "minutes": 30,
+    "target_kw": 1200
+   },
+   "fired": true,
+   "id": "dr",
+   "seen": 0,
+   "text": "The utility calls a demand-response event",
+   "when": {
+    "after_calls": 0,
+    "tool": null
+   }
+  },
+  "dr/DR-1": {
+   "acknowledged": false,
+   "avg_kw_in_window": 1313.3,
+   "ends_at": "2026-03-10T06:40:00",
+   "id": "DR-1",
+   "max_kw_in_window": 1500.0,
+   "minutes": 30,
+   "minutes_in_window": 30.0,
+   "minutes_over_target": 30.0,
+   "notice_at": "2026-03-10T06:00:00",
+   "price_per_kwh": 0.4,
+   "program": "Peak-demand response",
+   "response": null,
+   "starts_at": "2026-03-10T06:10:00",
+   "status": "ended",
+   "target_kw": 1200.0
+  },
+  "meter/site": {
+   "at": "2026-03-10T06:50:00",
+   "energy_cost_usd": 309.33,
+   "kw": 1300.0,
+   "kwh_this_shift": 1123.333,
+   "meter": "Plant 2 main meter",
+   "peak_kw": 1500.0,
+   "price_per_kwh": 0.1,
+   "site": "Plant 2 (Stamping)",
+   "tariff_period": "standard"
+  },
+  "scenario/current": {
+   "name": "base"
+  }
+ },
+ "docs": {
+  "_disruption/dr": {
+   "do": {
+    "event": "DR-1",
+    "kind": "demand_response",
+    "lead_min": 10,
+    "minutes": 30,
+    "target_kw": 1200
+   },
+   "fired": true,
+   "id": "dr",
+   "seen": 0,
+   "text": "The utility calls a demand-response event",
+   "when": {
+    "after_calls": 0,
+    "tool": null
+   }
+  },
+  "dr/DR-1": {
+   "acknowledged": false,
+   "avg_kw_in_window": 1500.0,
+   "ends_at": "2026-03-10T06:40:00",
+   "id": "DR-1",
+   "max_kw_in_window": 1500.0,
+   "minutes": 30,
+   "minutes_in_window": 2.0,
+   "minutes_over_target": 2.0,
+   "notice_at": "2026-03-10T06:00:00",
+   "price_per_kwh": 0.4,
+   "program": "Peak-demand response",
+   "response": null,
+   "starts_at": "2026-03-10T06:10:00",
+   "status": "active",
+   "target_kw": 1200.0
+  },
+  "meter/site": {
+   "at": "2026-03-10T06:12:00",
+   "energy_cost_usd": 45.0,
+   "kw": 1300.0,
+   "kwh_this_shift": 300.0,
+   "meter": "Plant 2 main meter",
+   "peak_kw": 1500.0,
+   "price_per_kwh": 0.4,
+   "site": "Plant 2 (Stamping)",
+   "tariff_period": "peak"
+  },
+  "scenario/current": {
+   "name": "base"
+  }
+ }
+}

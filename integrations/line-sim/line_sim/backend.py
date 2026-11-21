@@ -13,7 +13,7 @@ import hashlib
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-from arena_part import errors
+from shakedown_part import errors
 
 from . import des
 

@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from arena_part import PartError
+from shakedown_part import PartError
 from ridgeline_hub_part.part import RidgelineHub
 
 SHIFT = json.loads((Path(__file__).resolve().parents[3] / "benchmarks" / "factory" / "data" / "shift.json").read_text())

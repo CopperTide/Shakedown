@@ -1,35 +1,34 @@
 //! The generic `postgres` integration: each instance is a database, each save a copy of one.
 //!
-//! Databases are `pi_<ns><instance>` and `ps_<ns><save>`. `ns` is empty unless env `ARENA_PG_NS`
-//! (or `?arena_ns=` on `ARENA_PG_URL`) sets it (tests use it to keep their databases apart from everyone else's). With an empty `ns`,
+//! Databases are `pi_<ns><instance>` and `ps_<ns><save>`. `ns` is empty unless env `SHAKEDOWN_PG_NS`
+//! (or `?arena_ns=` on `SHAKEDOWN_PG_URL`) sets it (tests use it to keep their databases apart from everyone else's). With an empty `ns`,
 //! ids that name an existing legacy database (`snap_*`, `branch_*`, `gold_*`, `world_base`) are
 //! used as they are, so runs recorded before saves were parts still open.
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Mutex;
 
-use arena_part::helpers::pg::{tokio_postgres, Templates};
-use arena_part::helpers::sql_tools::{
-    lookup, schemas, sql_args, tool_error, tool_output, which, KeyLookup, SqlTool,
-};
-use arena_part::proto::*;
-use arena_part::{Part, PartError};
 use async_trait::async_trait;
 use serde_json::{json, Map, Value};
+use shakedown_part::helpers::pg::{tokio_postgres, Templates};
+use shakedown_part::helpers::sql_tools::{
+    lookup, schemas, sql_args, tool_error, tool_output, which, KeyLookup, SqlTool,
+};
+use shakedown_part::proto::*;
+use shakedown_part::{Part, PartError};
 use tokio_postgres::types::{ToSql, Type};
 use tokio_postgres::Client;
-
-const DEFAULT_URL: &str = "postgres://arena:arena@127.0.0.1:5544/postgres";
 
 pub struct Postgres {
     pg: Templates,
     ns: String,
-    /// `arena-postgres --sql-tools`: list and serve `sql_query` and `sql_execute`.
+    /// `shakedown-postgres --sql-tools`: list and serve `sql_query` and `sql_execute`.
     sql_tools: bool,
     /// Instance databases started by this process.
     live: Mutex<HashSet<String>>,
 }
 
-/// Takes `arena_ns=<ns>` out of the URL's query string; other query parameters stay.
+/// Takes `shakedown_ns=<ns>` (or its old name `arena_ns=<ns>`) out of the URL's query string; other
+/// query parameters stay.
 fn split_ns(url: &str) -> (String, String) {
     let Some((base, query)) = url.split_once('?') else {
         return (url.to_string(), String::new());
@@ -37,7 +36,10 @@ fn split_ns(url: &str) -> (String, String) {
     let mut ns = String::new();
     let mut rest = vec![];
     for kv in query.split('&') {
-        match kv.strip_prefix("arena_ns=") {
+        match kv
+            .strip_prefix("shakedown_ns=")
+            .or_else(|| kv.strip_prefix("arena_ns="))
+        {
             Some(n) => ns = n.to_string(),
             None => rest.push(kv),
         }
@@ -78,11 +80,11 @@ impl Postgres {
     }
 
     pub fn from_env() -> Postgres {
-        let url = std::env::var("ARENA_PG_URL").unwrap_or_else(|_| DEFAULT_URL.into());
-        // arenad passes `ARENA_PG_URL` on to programs but not other variables, so the namespace can
-        // also ride on the URL as `?arena_ns=<ns>`.
+        let url = shakedown_part::helpers::pg::configured_url();
+        // shaked passes `SHAKEDOWN_PG_URL` on to programs but not other variables, so the namespace can
+        // also ride on the URL as `?shakedown_ns=<ns>`.
         let (url, from_url) = split_ns(&url);
-        let ns = std::env::var("ARENA_PG_NS").unwrap_or(from_url);
+        let ns = shakedown_part::settings::var("SHAKEDOWN_PG_NS").unwrap_or(from_url);
         Postgres::new(&url, &ns)
     }
 
@@ -533,6 +535,7 @@ impl Part for Postgres {
                 vec![]
             },
             system: Some(SystemInfo::real("database", "PostgreSQL", None)),
+            save_at: SaveAt::Step,
         })
     }
 
@@ -656,7 +659,7 @@ impl Part for Postgres {
 
     async fn stop(&self, p: IdParams) -> Result<(), PartError> {
         self.check_id(&p.instance)?;
-        // arenad saves what it wants to keep before it stops an instance.
+        // shaked saves what it wants to keep before it stops an instance.
         let db = self.pi(&p.instance);
         self.live.lock().unwrap().remove(&db);
         self.pg.drop(&db).await.map_err(PartError::internal_from)
@@ -721,8 +724,13 @@ mod tests {
         let u = "postgres://a:b@h:1/postgres";
         assert_eq!(split_ns(u), (u.into(), String::new()));
         assert_eq!(
-            split_ns(&format!("{u}?arena_ns=x_")),
+            split_ns(&format!("{u}?shakedown_ns=x_")),
             (u.into(), "x_".into())
+        );
+        assert_eq!(
+            split_ns(&format!("{u}?arena_ns=x_")),
+            (u.into(), "x_".into()),
+            "the old name"
         );
         assert_eq!(
             split_ns(&format!("{u}?arena_ns=x_&sslmode=disable")),

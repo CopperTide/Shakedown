@@ -10,24 +10,24 @@ import collections
 import os
 import sys
 
-from arena import NotFound
-from arena.export import export_branches, read_jsonl
+from shakedown import NotFound
+from shakedown.export import export_branches, read_jsonl
 from common import connect
 
 if len(sys.argv) < 2:
     sys.exit(__doc__)
 target = sys.argv[1]
-out = sys.argv[2] if len(sys.argv) > 2 else f"arena-dataset-{target[:8]}"
+out = sys.argv[2] if len(sys.argv) > 2 else f"shakedown-dataset-{target[:8]}"
 
-with connect() as arena:
+with connect() as sd:
     try:
-        suite = arena.get_suite(target)
+        suite = sd.get_suite(target)
         suite.export(out)
     except NotFound:
-        branch = arena.branch(target)
+        branch = sd.branch(target)
         # The run's other branches (its forks) go with it.
-        run = next(r for r in arena.runs() if r.id == branch.run_id)
-        export_branches(arena, [b["id"] for b in run.branches], out)
+        run = next(r for r in sd.runs() if r.id == branch.run_id)
+        export_branches(sd, [b["id"] for b in run.branches], out)
 
 branches = read_jsonl(os.path.join(out, "branches.jsonl"))
 events = read_jsonl(os.path.join(out, "events.jsonl"))

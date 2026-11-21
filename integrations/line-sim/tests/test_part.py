@@ -162,7 +162,7 @@ def test_a_save_restores_the_study_exactly():
     part = started()
     simulate(part, MOVE)
     simulate(part, {"line2.pm_hours": 0})
-    save_dir = Path(os.environ["ARENA_SAVES"]) / "line-sim" / "s1"
+    save_dir = Path(os.environ["SHAKEDOWN_SAVES"]) / "line-sim" / "s1"
     part.save("i1", "s1", str(save_dir))
     other = LineSim()
     other.start("i2", config(), 0, 0, {"save": "s1", "mode": "exact"})

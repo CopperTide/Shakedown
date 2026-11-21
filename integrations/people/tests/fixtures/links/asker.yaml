@@ -1,0 +1,10 @@
+# A neutral pair for the link tests: one asker asks an answerer on a board every 20 world minutes.
+format: shakedown-people/1
+role: asker
+lines:
+  topics: ["alpha", "beta", "gamma"]
+rules:
+  - id: ask
+    every: {minutes: 20}
+    who: one
+    act: {system: board, action: ask, args: {to: ans1, topic: "{pick:topics}"}}

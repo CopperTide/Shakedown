@@ -2,8 +2,8 @@
 //! plant's load to the utility's meter, and the gates: tools taking a change's id act only on what
 //! the approvals part decided, and the shift's interlocks bind the plant, the OT network and the
 //! roster to each other.
-use arena_part::proto::{Gate, Link, WorldPart};
 use serde_json::{json, Value};
+use shakedown_part::proto::{Gate, Link, WorldPart};
 
 use crate::shift;
 

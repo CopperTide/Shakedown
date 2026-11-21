@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from arena_part import PartError
+from shakedown_part import PartError
 from conftest import CONFIG
 from utility_part.part import Utility
 
@@ -133,14 +133,27 @@ def test_a_bad_disruption_is_refused():
 
 
 def test_conformance(tmp_path):
-    """`arena-part-check` (describe, start, the examples, the clock, save and restore, diff, drop_save)."""
-    bin_dir = Path(os.environ.get("ARENA_BIN_DIR", ARENA / "core" / "target" / "debug"))
-    check = bin_dir / "arena-part-check"
+    """`shakedown-part-check` (describe, start, the examples, the clock, save and restore, diff, drop_save)."""
+    bin_dir = Path(os.environ.get("SHAKEDOWN_BIN_DIR", ARENA / "core" / "target" / "debug"))
+    check = bin_dir / "shakedown-part-check"
     if not check.exists() or shutil.which("uv") is None:
-        pytest.skip(f"no {check} (cargo build -p parts --bin arena-part-check) or no uv")
+        pytest.skip(f"no {check} (cargo build -p parts --bin shakedown-part-check) or no uv")
     config = tmp_path / "config.json"
     config.write_text(json.dumps(CONFIG))
-    env = {**os.environ, "ARENA_BIN_DIR": str(bin_dir)}
+    env = {**os.environ, "SHAKEDOWN_BIN_DIR": str(bin_dir)}
     run = subprocess.run([str(check), str(PACKAGE), "--config", str(config)], capture_output=True, text=True,
                          env=env, timeout=300)
     assert run.returncode == 0, run.stdout + run.stderr
+
+
+def test_a_save_written_before_the_kits_clocked_part_still_restores(saves_root):
+    """`fixtures/old-save` was written by the part before it was a ClockedJsonStatePart, with a window event
+    queued for the next advance; restoring it gives the same docs, the queued event and the rest."""
+    fixtures = Path(__file__).parent / "fixtures"
+    shutil.copytree(fixtures / "old-save", saves_root / "utility" / "old-save")
+    expected = json.loads((fixtures / "old-save-expected.json").read_text())
+    part = Utility()
+    part.start("i1", CONFIG, 0, 12 * MIN, {"save": "old-save", "mode": "exact"})
+    assert part.inspect({"instance": "i1"}, [])["docs"] == expected["docs"]
+    assert part.advance("i1", 50 * MIN) == expected["advance"]
+    assert part.inspect({"instance": "i1"}, [])["docs"] == expected["after"]

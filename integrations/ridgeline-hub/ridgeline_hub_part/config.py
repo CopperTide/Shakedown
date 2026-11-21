@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from arena_part import errors, params, sources
+from shakedown_part import errors, params, sources
 
 from . import inbound
 

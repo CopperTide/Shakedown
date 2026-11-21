@@ -19,7 +19,7 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   # The Postgres service below, with the credentials of deploy/compose.yml.
-  ARENA_PG_URL: postgres://arena:arena@127.0.0.1:5544/postgres
+  SHAKEDOWN_PG_URL: postgres://shakedown:shakedown@127.0.0.1:5544/postgres
 
 jobs:
   rust:
@@ -30,12 +30,12 @@ jobs:
       postgres:
         image: postgres:17-alpine
         env:
-          POSTGRES_USER: arena
-          POSTGRES_PASSWORD: arena
+          POSTGRES_USER: shakedown
+          POSTGRES_PASSWORD: shakedown
         ports:
           - 127.0.0.1:5544:5432
         options: >-
-          --health-cmd "pg_isready -U arena"
+          --health-cmd "pg_isready -U shakedown"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 20
@@ -85,7 +85,7 @@ jobs:
         run: |
           (cd integrations/factory-01-erp && uv run --with pytest pytest -q)
           (cd benchmarks/factory-01 && uv run --with pytest pytest -q)
-      # Without an arenad build and Postgres the SDK's integration tests skip; the unit tests run.
+      # Without a shaked build and Postgres the SDK's integration tests skip; the unit tests run.
       - name: Test the Python SDK
         working-directory: sdk/python
         run: uv run pytest -q

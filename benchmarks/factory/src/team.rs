@@ -1,9 +1,9 @@
 //! The tasks' tickets, the rules every agent gets and the teams this benchmark suggests: the
 //! incident team for the press bearing failure and the shift team for the shift. As in the factory
 //! example, each role does its own work with its own tools, and a change is decided by another role
-//! than the one that proposed it. arenad runs a team in order, each agent handing off to the next,
+//! than the one that proposed it. shaked runs a team in order, each agent handing off to the next,
 //! so a change is acted on by the role that decided it or a later one.
-use arena_part::proto::{BenchTeam, TeamRole};
+use shakedown_part::proto::{BenchTeam, TeamRole};
 
 pub const INSTRUCTIONS_TITLE: &str = "Plant rules";
 
@@ -182,7 +182,7 @@ end: once the load holds under its target, it is handled. When every front is ha
 meter, the network, the roster and the trucks once more, record the shift report as a Note in the ERP \
 whose title starts with \"Shift report\", and `finish` with a short summary.";
 
-/// How a shift role works for the lead (arenad's `dispatch` runner wakes it when work arrives).
+/// How a shift role works for the lead (shaked's `dispatch` runner wakes it when work arrives).
 const FOR_THE_LEAD: &str =
     " The Shift lead gives you work. Do it, then `report` what you did with the \
 ids of the changes you proposed and anything the lead must decide or pass on.";
@@ -199,7 +199,7 @@ fn shift_role(id: &str, name: &str, work: &str) -> TeamRole {
     }
 }
 
-/// The shift team, for arenad's `dispatch` runner: the Shift lead (first, so it leads) delegates each
+/// The shift team, for shaked's `dispatch` runner: the Shift lead (first, so it leads) delegates each
 /// front to its role, decides the changes they report, and finishes once every front is handled. A
 /// strict chain (each agent one turn, in order) suits the shift badly: its fronts open and change
 /// while the plant runs.
@@ -225,7 +225,7 @@ pub fn shift_team() -> BenchTeam {
     }
 }
 
-/// The team `name` (`single`, `incident` or `shift`), offered as arenad's default team.
+/// The team `name` (`single`, `incident` or `shift`), offered as shaked's default team.
 pub fn named(name: &str) -> Option<BenchTeam> {
     match name {
         "single" => Some(crate::single::team()),

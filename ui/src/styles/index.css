@@ -1,8 +1,7 @@
 /*
- * Arena design tokens: the only place raw colours, type sizes and radii live (see docs/ui.md).
- * High-performance HMI (ISA-101): a muted grey canvas, greys for everything normal, one accent
- * for interaction, and colour only for abnormal states (alarm, warning), always paired with a
- * glyph and a word.
+ * Shakedown design tokens: the only place raw colours, type sizes and radii live (spec §4, identity
+ * rules). Warm off-white surfaces and ink in light, the CopperTide ink, cream and stone in dark;
+ * copper is the one accent; green, amber and red only for status. No pure white or black.
  */
 @import 'tailwindcss';
 @import '@xyflow/react/dist/base.css';
@@ -12,73 +11,77 @@
 
 :root {
   color-scheme: light;
-  /* Surfaces, back to front: a near-white canvas, white panels, a faint well for inputs at rest. */
-  --bg: #f3f4f6;
-  --surface: #ffffff;
-  --raised: #ffffff;
-  --sunken: #eef0f2;
-  --hover: #f1f2f4;
-  /* Lines. */
-  --line: #e1e4e8;
-  --line-strong: #b9bec5;
+  /* Surfaces, back to front. */
+  --bg: #f6f4f0;
+  --surface: #fdfcfa;
+  --raised: #fdfcfa;
+  --sunken: #f1ede7;
+  --hover: #efebe4;
+  /* Lines: warm grays only. */
+  --line: #e3ddd3;
+  --line-strong: #cdc5b8;
   /* Text. */
-  --fg: #15181c;
-  --muted: #5a6169;
-  --faint: #8b9199;
-  /* The one accent: interaction (focus, selection, links). */
-  --accent: #2b5c94;
-  --accent-fg: #ffffff;
-  --accent-soft: color-mix(in srgb, var(--accent) 10%, transparent);
-  /* The primary action: a solid fill with white text in both themes. */
-  --primary: #2b5c94;
-  --primary-hover: #234d7d;
-  --primary-fg: #ffffff;
-  /* Abnormal states only. */
-  --alarm: #b42318;
+  --fg: #1b1815;
+  --muted: #514a42;
+  --faint: #766e64;
+  /* The one accent: copper, used sparingly (active nav and tabs, focus, highlights). */
+  --copper: #ee7a3a;
+  --accent: #a94f1b;
+  --accent-fg: #fdfcfa;
+  --accent-soft: color-mix(in srgb, var(--copper) 12%, transparent);
+  /* The primary action: ink. */
+  --primary: #1b1815;
+  --primary-hover: #342e28;
+  --primary-fg: #fdfcfa;
+  /* Status only. */
+  --alarm: #a3361f;
   --alarm-soft: color-mix(in srgb, var(--alarm) 9%, transparent);
-  --warn: #8a5a00;
-  --warn-soft: color-mix(in srgb, #c98a00 14%, transparent);
-  /* A passed result: a quiet ink, never a colour (ISA-101). */
-  --ok: #3c434b;
-  /* Equipment and flows in the process view; series in trends. */
-  --equip: #e3e6e9;
-  --equip-line: #8a9097;
-  --flow: #8a9097;
-  --flow-strong: #3d4349;
-  --series: #4a5056;
-  --series-2: #8a9097;
-  --shadow: 0 1px 2px rgb(16 24 40 / 5%);
-  --shadow-pop: 0 12px 32px rgb(16 24 40 / 14%), 0 2px 6px rgb(16 24 40 / 8%);
+  --warn: #8f6210;
+  --warn-soft: color-mix(in srgb, #c98a1b 14%, transparent);
+  --ok: #3d8b5a;
+  --ok-soft: color-mix(in srgb, var(--ok) 12%, transparent);
+  /* Equipment and flows in diagrams; series in trends. */
+  --equip: #ece7df;
+  --equip-line: #a59d92;
+  --flow: #a59d92;
+  --flow-strong: #514a42;
+  --series: #514a42;
+  --series-2: #a59d92;
+  --shadow: 0 1px 0 rgb(27 24 21 / 4%), 0 1px 3px rgb(27 24 21 / 3%);
+  --shadow-pop: 0 12px 40px rgb(16 14 12 / 16%), 0 2px 6px rgb(16 14 12 / 6%);
 }
 
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --bg: #111315;
-  --surface: #181a1d;
-  --raised: #1f2225;
-  --sunken: #141618;
-  --hover: #24272b;
-  --line: #2b2f34;
-  --line-strong: #4a5057;
-  --fg: #e6e8eb;
-  --muted: #a1a8b0;
-  --faint: #737a82;
-  --accent: #8ab2de;
-  --accent-fg: #0d1520;
-  --primary: #3d78c2;
-  --primary-hover: #4a86d0;
-  --primary-fg: #ffffff;
-  --alarm: #f07167;
-  --alarm-soft: color-mix(in srgb, var(--alarm) 13%, transparent);
-  --warn: #e3ac4a;
-  --warn-soft: color-mix(in srgb, var(--warn) 13%, transparent);
-  --ok: #c9ced4;
-  --equip: #2a2e33;
-  --equip-line: #6f767e;
-  --flow: #6b7178;
-  --flow-strong: #c9cdd2;
-  --series: #c2c7cc;
-  --series-2: #737980;
+  --bg: #100e0c;
+  --surface: #171411;
+  --raised: #1c1915;
+  --sunken: #13110e;
+  --hover: #26221d;
+  --line: #2c2722;
+  --line-strong: #3a342d;
+  --fg: #f6f2eb;
+  --muted: #b9b1a6;
+  --faint: #8c857c;
+  --copper: #ee7a3a;
+  --accent: #f28d55;
+  --accent-fg: #100e0c;
+  --accent-soft: color-mix(in srgb, var(--copper) 16%, transparent);
+  --primary: #f6f2eb;
+  --primary-hover: #ffffff;
+  --primary-fg: #100e0c;
+  --alarm: #e6735d;
+  --alarm-soft: color-mix(in srgb, var(--alarm) 14%, transparent);
+  --warn: #e0a84a;
+  --warn-soft: color-mix(in srgb, var(--warn) 14%, transparent);
+  --ok: #6fbf8b;
+  --ok-soft: color-mix(in srgb, var(--ok) 14%, transparent);
+  --equip: #221e1a;
+  --equip-line: #5e5850;
+  --flow: #5e5850;
+  --flow-strong: #e2dcd2;
+  --series: #e2dcd2;
+  --series-2: #8c857c;
   --shadow: none;
   --shadow-pop: 0 12px 32px rgb(0 0 0 / 55%), 0 0 0 1px var(--line);
 }
@@ -105,6 +108,8 @@
   --color-warn: var(--warn);
   --color-warn-soft: var(--warn-soft);
   --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-copper: var(--copper);
   --color-equip: var(--equip);
   --color-equip-line: var(--equip-line);
   --color-flow: var(--flow);
@@ -114,8 +119,9 @@
 }
 
 @theme {
-  --font-sans: 'Inter Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-mono: 'JetBrains Mono Variable', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-sans: 'Instrument Sans Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Instrument Serif', Georgia, serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   /* Type scale: 11 / 12 / 13 (body) / 14 / 16 / 20 px, 28 px and 40 px for a result's headline figure. */
   --text-2xs: 11px;
   --text-2xs--line-height: 16px;
@@ -158,7 +164,7 @@
     font-family: var(--font-sans);
     font-size: var(--text-sm);
     line-height: 20px;
-    font-feature-settings: 'cv11', 'ss01';
+    font-weight: 430;
     -webkit-font-smoothing: antialiased;
   }
   *,

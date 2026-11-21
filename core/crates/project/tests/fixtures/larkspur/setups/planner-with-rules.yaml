@@ -1,0 +1,6 @@
+format: shakedown-setup/1
+label: Planner with rules
+team:
+  kind: http
+  url: "https://agents.larkspur.internal/planner"
+  auth: {key: planner-endpoint}

@@ -13,11 +13,11 @@ mod workspace;
 
 use std::path::PathBuf;
 
-use arena_part::helpers::save_dirs::SaveDirs;
-use arena_part::proto::*;
-use arena_part::{Part, PartError};
 use async_trait::async_trait;
 use serde_json::{json, Value};
+use shakedown_part::helpers::save_dirs::SaveDirs;
+use shakedown_part::proto::*;
+use shakedown_part::{Part, PartError};
 use tokio::sync::OnceCell;
 
 pub use settings::{Settings, DEFAULT_IMAGE};
@@ -42,7 +42,7 @@ pub struct TwentyCrm {
 }
 
 impl TwentyCrm {
-    /// The server of env `ARENA_TWENTY_*`, files under `$ARENA_SAVES/twenty-crm`.
+    /// The server of env `SHAKEDOWN_TWENTY_*`, files under `$SHAKEDOWN_SAVES/twenty-crm`.
     pub fn from_env() -> anyhow::Result<TwentyCrm> {
         let root = SaveDirs::new("twenty-crm").root().to_path_buf();
         Ok(TwentyCrm::new(Settings::from_env()?, root))
@@ -109,6 +109,7 @@ impl Part for TwentyCrm {
             fingerprint: json!({"image": self.settings.image}),
             tools: tool_schemas::schemas(),
             system: Some(SystemInfo::real("crm", "Twenty", Some("Salesforce"))),
+            save_at: SaveAt::Step,
         })
     }
 

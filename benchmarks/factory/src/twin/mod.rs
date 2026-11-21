@@ -1,17 +1,18 @@
 //! The digital twin of Ridgeline's Plant 2 (`view`): the press lines, the robot cell, the AMRs, the
 //! energy meter and the utility's events, the OT network, the shift's stations, the trucks, the
 //! orders at risk and the approvals, as live state. Every part comes as its `inspect` docs, which
-//! arenad passes (`describe.view.docs`); nothing is read from the ERP, so a view is cheap.
+//! shaked passes (`describe.view.docs`); nothing is read from the ERP, so a view is cheap.
 mod orders;
 pub use orders::unresolved_sales_orders;
 mod plant;
 mod systems;
 
-use arena_part::proto::{TwinKpi, TwinView};
 use serde_json::Value;
+use shakedown_part::proto::{TwinKpi, TwinView};
 
 use crate::checks::World;
 use crate::Facts;
+use shakedown_part::helpers::bench::Docs;
 
 /// The parts whose `inspect` docs the view reads.
 pub const DOC_PARTS: [&str; 6] = ["plant", "hub", "approvals", "utility", "network", "roster"];
@@ -19,7 +20,7 @@ pub const DOC_PARTS: [&str; 6] = ["plant", "hub", "approvals", "utility", "netwo
 /// The view of the world's docs, `{part: {key: doc}}`. `facts` and `priority` say which orders the
 /// press outage and a late truck put at risk.
 pub fn draw(docs: &Value, facts: &Facts, priority: &crate::shift_checks::Priority) -> TwinView {
-    let w = World(docs);
+    let w = World(Docs(docs));
     let at_risk = orders::at_risk(&w, facts, priority);
     TwinView {
         title: "Ridgeline Components, Plant 2".into(),

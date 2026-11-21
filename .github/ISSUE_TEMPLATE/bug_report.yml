@@ -20,13 +20,13 @@ body:
       label: Where
       multiple: true
       options:
-        - arenad (runs, forks, restore, compare)
+        - shaked (runs, forks, restore, compare)
         - Web UI
         - An integration
         - A benchmark
         - Rust kit
         - Python kit
-        - arena-part-check
+        - shakedown-part-check
         - Docs
     validations: { required: true }
   - type: input
@@ -55,4 +55,4 @@ body:
     id: evidence
     attributes:
       label: Logs, events or screenshots
-      description: arenad's log, the branch's events (`GET /api/branches/{id}`), or a screenshot. Remove keys, tokens and anything private before pasting.
+      description: shaked's log, the branch's events (`GET /api/branches/{id}`), or a screenshot. Remove keys, tokens and anything private before pasting.

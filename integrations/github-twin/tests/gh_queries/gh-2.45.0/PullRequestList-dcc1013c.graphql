@@ -1,0 +1,31 @@
+# Sent by gh 2.45.0 (github.com/cli/cli, MIT, LICENSE-cli.txt)
+fragment pr on PullRequest{number,title,state,labels(first:100){nodes{id,name,description,color},totalCount},author{login,...on User{id,name}},reviewDecision,statusCheckRollup: commits(last: 1) {nodes {commit {statusCheckRollup {contexts(first:100) {nodes {__typename...on StatusContext {context,state,targetUrl,createdAt,description},...on CheckRun {name,checkSuite{workflowRun{workflow{name}}},status,conclusion,startedAt,completedAt,detailsUrl}},pageInfo{hasNextPage,endCursor}}}}}}}
+		query PullRequestList(
+			$owner: String!,
+			$repo: String!,
+			$limit: Int!,
+			$endCursor: String,
+			$baseBranch: String,
+			$headBranch: String,
+			$state: [PullRequestState!] = OPEN
+		) {
+			repository(owner: $owner, name: $repo) {
+				pullRequests(
+					states: $state,
+					baseRefName: $baseBranch,
+					headRefName: $headBranch,
+					first: $limit,
+					after: $endCursor,
+					orderBy: {field: CREATED_AT, direction: DESC}
+				) {
+					totalCount
+					nodes {
+						...pr
+					}
+					pageInfo {
+						hasNextPage
+						endCursor
+					}
+				}
+			}
+		}

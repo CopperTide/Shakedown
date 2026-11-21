@@ -1,10 +1,12 @@
 import { ChevronUp } from 'lucide-react';
-import { diskFill, diskLine, modesLine, useHealth } from '../components';
-import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover';
-import { ProviderStatusLine } from '../ProviderFields';
-import { bestProviders, checkProviders, providerSummary, useCheckedProviders } from '../providers';
+import { ProviderStatusLine } from '@/components/ProviderFields';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { useHealth } from '@/hooks/useHealth';
+import { bestProviders, checkProviders, useCheckedProviders } from '@/hooks/useProviders';
 import { cn } from '@/lib/cn';
-import type { Health, ProviderStatus } from '../types';
+import { providerSummary } from '@/model/providers';
+import type { Health, ProviderStatus } from '@/model/types';
+import { diskFill, diskLine, modesLine } from './status';
 
 /** API mode in one calm line; the full list (each provider, why, and Check) one click away. */
 function ApiMode({ statuses }: { statuses: ProviderStatus[] }) {

@@ -1,0 +1,20 @@
+//! Fork: go back to step N of a branch, change components, and rerun from there with the
+//! world restored as it was just before step N: exactly (from saves, or by replay), or
+//! approximately when asked.
+
+mod error;
+mod exact;
+mod plan;
+mod rerun;
+mod start;
+#[cfg(test)]
+mod tests;
+
+pub use error::{ForkError, TEAM_AND_CHANGES, TEAM_NOT_EXTERNAL};
+pub use plan::{
+    apply_changes, plan_fork, plan_fork_with, settle_changes, ForkPlan, REASON_AGENT_RESTART,
+    REASON_CLI, REASON_CONCURRENT, REASON_EARLIER, REASON_FINISHED, REASON_KIND,
+    REASON_LAST_MODEL_CALL, REASON_NO_MODEL_CALL, REASON_RUN_START, REASON_TOOL,
+};
+pub use rerun::{part_plans, prepare, ForkRequest, PartPlan, Rerun};
+pub use start::{fork, fork_with, restore_preview, ForkResponse};

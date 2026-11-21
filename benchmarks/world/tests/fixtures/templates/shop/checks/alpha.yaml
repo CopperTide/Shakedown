@@ -1,0 +1,3 @@
+- name: shipped
+  says: Order 1 is shipped
+  check: {part: alpha, key: order/1, field: status, op: "=", value: shipped}

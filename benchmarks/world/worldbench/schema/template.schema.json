@@ -1,0 +1,981 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://coppertide.ai/schemas/shakedown-template-1.json",
+  "title": "Shakedown world template (shakedown-template/1)",
+  "type": "object",
+  "required": [
+    "format",
+    "id",
+    "version",
+    "name",
+    "summary",
+    "company",
+    "size",
+    "systems",
+    "tasks"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "format": {
+      "const": "shakedown-template/1"
+    },
+    "id": {
+      "$ref": "#/$defs/templateId"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "name": {
+      "$ref": "#/$defs/text"
+    },
+    "summary": {
+      "type": "string"
+    },
+    "company": {
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/text"
+        },
+        "clock_start": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}$"
+        }
+      }
+    },
+    "size": {
+      "type": "object",
+      "required": [
+        "label",
+        "default",
+        "min",
+        "max"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "$ref": "#/$defs/text"
+        },
+        "default": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "min": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "presets": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "maxItems": 12
+        }
+      }
+    },
+    "names": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/include"
+        },
+        {
+          "$ref": "#/$defs/namePools"
+        }
+      ]
+    },
+    "systems": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/system"
+      },
+      "maxItems": 50
+    },
+    "roles": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/role"
+      },
+      "maxItems": 20
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/include"
+          },
+          {
+            "$ref": "#/$defs/event"
+          }
+        ]
+      },
+      "maxItems": 100
+    },
+    "tasks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/task"
+      },
+      "maxItems": 100
+    },
+    "links": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/neededLink"
+      }
+    },
+    "gates": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/gate"
+      }
+    },
+    "instructions": {
+      "type": "string"
+    },
+    "instructions_title": {
+      "type": "string"
+    },
+    "teams": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/include"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      ]
+    },
+    "scenario_options": {
+      "type": [
+        "object",
+        "null"
+      ]
+    }
+  },
+  "$defs": {
+    "templateId": {
+      "type": "string",
+      "pattern": "^[a-z0-9-]{1,40}$"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]{0,39}$"
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1
+    },
+    "include": {
+      "type": "string",
+      "pattern": "^@"
+    },
+    "nameList": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/text"
+      },
+      "maxItems": 200
+    },
+    "ids": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/id"
+      }
+    },
+    "system": {
+      "type": "object",
+      "required": [
+        "id",
+        "label",
+        "product",
+        "parts"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "label": {
+          "$ref": "#/$defs/text"
+        },
+        "product": {
+          "$ref": "#/$defs/text"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "default": {
+          "type": "boolean"
+        },
+        "requires": {
+          "$ref": "#/$defs/ids"
+        },
+        "memory_mb": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "images": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "image",
+              "hint"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "image": {
+                "$ref": "#/$defs/text"
+              },
+              "hint": {
+                "$ref": "#/$defs/text"
+              }
+            }
+          }
+        },
+        "hosts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/text"
+          }
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/option"
+          }
+        },
+        "parts": {
+          "type": "array",
+          "minItems": 0,
+          "items": {
+            "$ref": "#/$defs/part"
+          }
+        },
+        "apply": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/apply"
+          },
+          "$comment": "applied to the world's parts when the system is chosen, before the events' apply"
+        }
+      }
+    },
+    "option": {
+      "type": "object",
+      "required": [
+        "name",
+        "label",
+        "choices",
+        "default"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/id"
+        },
+        "label": {
+          "$ref": "#/$defs/text"
+        },
+        "choices": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        },
+        "default": {
+          "type": "string"
+        }
+      }
+    },
+    "part": {
+      "type": "object",
+      "required": [
+        "part",
+        "integration"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "part": {
+          "$ref": "#/$defs/id"
+        },
+        "integration": {
+          "$ref": "#/$defs/templateId"
+        },
+        "config": true
+      }
+    },
+    "role": {
+      "type": "object",
+      "required": [
+        "id",
+        "label",
+        "count",
+        "systems"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/roleId"
+        },
+        "label": {
+          "$ref": "#/$defs/text"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "count": {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": [
+                "share"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "share": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "fixed"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "fixed": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000
+                }
+              }
+            }
+          ]
+        },
+        "min": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "systems": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/id"
+          }
+        },
+        "rules": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fields": {
+          "type": "object",
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "type": "object",
+                "required": [
+                  "cycle"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "cycle": {
+                    "type": "array",
+                    "minItems": 1
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "pick"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "pick": {
+                    "type": "array",
+                    "minItems": 1
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    "param": {
+      "type": "object",
+      "required": [
+        "name",
+        "label",
+        "kind",
+        "default"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/id"
+        },
+        "label": {
+          "$ref": "#/$defs/text"
+        },
+        "kind": {
+          "enum": [
+            "int",
+            "choice"
+          ]
+        },
+        "min": {
+          "type": "integer"
+        },
+        "max": {
+          "type": "integer"
+        },
+        "choices": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": [
+              "string",
+              "integer"
+            ]
+          }
+        },
+        "default": {
+          "type": [
+            "string",
+            "integer"
+          ]
+        }
+      }
+    },
+    "event": {
+      "type": "object",
+      "required": [
+        "id",
+        "label",
+        "description",
+        "kind",
+        "apply"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "label": {
+          "$ref": "#/$defs/text"
+        },
+        "description": {
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "trap",
+            "event"
+          ]
+        },
+        "default": {
+          "type": "boolean"
+        },
+        "needs": {
+          "$ref": "#/$defs/ids"
+        },
+        "params": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/param"
+          }
+        },
+        "apply": {
+          "type": "array",
+          "minItems": 0,
+          "items": {
+            "$ref": "#/$defs/apply"
+          }
+        },
+        "fixed": {
+          "type": "boolean",
+          "$comment": "always on: a fact of the template's data (its repositories, say), not something a world can leave out"
+        }
+      }
+    },
+    "apply": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "part",
+            "append",
+            "value"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "part": {
+              "$ref": "#/$defs/id"
+            },
+            "append": {
+              "$ref": "#/$defs/text"
+            },
+            "value": true
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "part",
+            "set",
+            "value"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "part": {
+              "$ref": "#/$defs/id"
+            },
+            "set": {
+              "$ref": "#/$defs/text"
+            },
+            "value": true
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "part",
+            "merge",
+            "value"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "part": {
+              "$ref": "#/$defs/id"
+            },
+            "merge": {
+              "$ref": "#/$defs/text"
+            },
+            "value": true
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "setup"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "setup": {
+              "$ref": "#/$defs/setupCall"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "link"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "link": {
+              "$ref": "#/$defs/link",
+              "unevaluatedProperties": false
+            }
+          }
+        }
+      ]
+    },
+    "setupCall": {
+      "type": "object",
+      "required": [
+        "part",
+        "tool"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "part": {
+          "$ref": "#/$defs/id"
+        },
+        "tool": {
+          "$ref": "#/$defs/text"
+        },
+        "args": {
+          "type": "object"
+        }
+      }
+    },
+    "link": {
+      "type": "object",
+      "required": [
+        "from",
+        "event",
+        "to",
+        "tool"
+      ],
+      "properties": {
+        "from": {
+          "$ref": "#/$defs/id"
+        },
+        "event": {
+          "$ref": "#/$defs/text"
+        },
+        "to": {
+          "$ref": "#/$defs/id"
+        },
+        "tool": {
+          "$ref": "#/$defs/text"
+        },
+        "args": {
+          "type": "object"
+        }
+      }
+    },
+    "neededLink": {
+      "$ref": "#/$defs/link",
+      "properties": {
+        "needs": {
+          "$ref": "#/$defs/ids"
+        }
+      },
+      "unevaluatedProperties": false,
+      "$comment": "a link of the world, kept only when every system it needs is chosen"
+    },
+    "gate": {
+      "type": "object",
+      "required": [
+        "tool",
+        "part",
+        "key"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "tool": {
+          "$ref": "#/$defs/text"
+        },
+        "part": {
+          "$ref": "#/$defs/id"
+        },
+        "key": {
+          "$ref": "#/$defs/text"
+        },
+        "require": {
+          "type": "object"
+        },
+        "needs": {
+          "$ref": "#/$defs/ids"
+        }
+      }
+    },
+    "task": {
+      "type": "object",
+      "required": [
+        "id",
+        "needs",
+        "reason",
+        "ticket",
+        "checks"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "needs": {
+          "$ref": "#/$defs/ids"
+        },
+        "reason": {
+          "$ref": "#/$defs/text"
+        },
+        "ticket": {
+          "type": "string"
+        },
+        "setup": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/setupCall"
+          }
+        },
+        "clock_start": {
+          "type": "string"
+        },
+        "checks": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/include"
+            },
+            {
+              "$ref": "#/$defs/checks"
+            }
+          ]
+        }
+      }
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/namedCheck"
+      },
+      "$comment": "the expected end state format (docs/protocol.md, Scoring by named checks)",
+      "maxItems": 500
+    },
+    "namedCheck": {
+      "type": "object",
+      "required": [
+        "name",
+        "check"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/text"
+        },
+        "says": {
+          "type": "string"
+        },
+        "safety": {
+          "type": "boolean"
+        },
+        "measure": {
+          "type": "object",
+          "required": [
+            "label"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "label": {
+              "$ref": "#/$defs/text"
+            },
+            "unit": {
+              "type": "string"
+            },
+            "better": {
+              "enum": [
+                "higher",
+                "lower"
+              ]
+            },
+            "target": {
+              "type": [
+                "number",
+                "string"
+              ]
+            }
+          }
+        },
+        "check": {
+          "$ref": "#/$defs/check"
+        },
+        "needs": {
+          "$ref": "#/$defs/ids"
+        },
+        "events": {
+          "$ref": "#/$defs/ids",
+          "$comment": "kept only while these events are on"
+        }
+      }
+    },
+    "check": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/keyCheck"
+        },
+        {
+          "$ref": "#/$defs/findCheck"
+        },
+        {
+          "$ref": "#/$defs/allCheck"
+        },
+        {
+          "$ref": "#/$defs/anyCheck"
+        }
+      ]
+    },
+    "op": {
+      "enum": [
+        "=",
+        "!=",
+        "<",
+        "<=",
+        ">",
+        ">=",
+        "in",
+        "contains",
+        "exists",
+        "absent"
+      ]
+    },
+    "keyCheck": {
+      "type": "object",
+      "required": [
+        "part",
+        "key"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "part": {
+          "$ref": "#/$defs/text"
+        },
+        "key": {
+          "$ref": "#/$defs/text"
+        },
+        "field": {
+          "$ref": "#/$defs/text"
+        },
+        "op": {
+          "$ref": "#/$defs/op"
+        },
+        "value": true,
+        "ref": {
+          "type": "object",
+          "required": [
+            "part",
+            "key"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "part": {
+              "$ref": "#/$defs/text"
+            },
+            "key": {
+              "$ref": "#/$defs/text"
+            },
+            "field": {
+              "$ref": "#/$defs/text"
+            }
+          }
+        }
+      },
+      "not": {
+        "required": [
+          "value",
+          "ref"
+        ]
+      }
+    },
+    "findCheck": {
+      "type": "object",
+      "required": [
+        "part",
+        "find"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "part": {
+          "$ref": "#/$defs/text"
+        },
+        "find": {
+          "$ref": "#/$defs/text"
+        },
+        "where": {
+          "type": "object",
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "not": {
+                  "type": "object"
+                }
+              },
+              {
+                "type": "object",
+                "minProperties": 1,
+                "maxProperties": 1,
+                "propertyNames": {
+                  "$ref": "#/$defs/op"
+                }
+              }
+            ]
+          }
+        },
+        "count": {
+          "type": [
+            "integer",
+            "string"
+          ]
+        }
+      }
+    },
+    "allCheck": {
+      "type": "object",
+      "required": [
+        "all"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "all": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/check"
+          }
+        }
+      }
+    },
+    "anyCheck": {
+      "type": "object",
+      "required": [
+        "any"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "any": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/check"
+          }
+        }
+      }
+    },
+    "roleId": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/id"
+        },
+        {
+          "not": {
+            "pattern": "-added$"
+          }
+        }
+      ],
+      "$comment": "people the user adds are <role>-added-001\u2026, so no role may end in -added"
+    },
+    "namePools": {
+      "type": "object",
+      "required": [
+        "first",
+        "last"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "first": {
+          "$ref": "#/$defs/nameList"
+        },
+        "last": {
+          "$ref": "#/$defs/nameList"
+        }
+      }
+    }
+  },
+  "$comment": "Sizes and list lengths are bounded so that no template can stall the builder (worldbench/limits.py bounds its files and what they expand to)"
+}

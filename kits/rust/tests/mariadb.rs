@@ -4,13 +4,13 @@ use std::collections::HashSet;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
-use arena_part::helpers::mariadb::{
+use shakedown_part::helpers::mariadb::{
     chain_error, check_same_server, dump_position, names_db, needed_positions, percent_encode,
     purge_target, query_misplaced, restore_error, saves_in, span, span_bytes, to_reroot,
     used_roots, BinlogFile, Blobs, Dumped, Manifest, Misplaced, Position, Purged, Segment,
     ServerRef, Standing, Tracked, TrackedChange,
 };
-use arena_part::helpers::temp_dir::TempDir;
+use shakedown_part::helpers::temp_dir::TempDir;
 
 fn pos(file: &str, pos: u64) -> Position {
     Position::new(file, pos)
@@ -29,7 +29,7 @@ fn files() -> Vec<BinlogFile> {
 
 fn server() -> ServerRef {
     ServerRef {
-        container: "arena-mariadb".into(),
+        container: "shakedown-mariadb".into(),
         port: 3307,
         id: "5f0c7a52-0000-4000-8000-000000000001".into(),
     }

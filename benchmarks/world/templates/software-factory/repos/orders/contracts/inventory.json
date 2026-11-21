@@ -1,0 +1,8 @@
+{
+  "consumer": "orders",
+  "provider": "inventory",
+  "calls": [
+    {"method": "GET", "path": "/reservations/r-0000000001",
+     "fields": {"id": "string", "status": "string", "total": "number", "lines": "array"}}
+  ]
+}

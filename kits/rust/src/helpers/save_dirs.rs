@@ -1,4 +1,4 @@
-//! Where a part's save folders are: `$ARENA_SAVES/<package>/<save>/`.
+//! Where a part's save folders are: `$SHAKEDOWN_SAVES/<package>/<save>/`.
 use std::collections::HashMap;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -21,9 +21,10 @@ pub struct SaveDirs {
 }
 
 impl SaveDirs {
-    /// Saves of `package` under env `ARENA_SAVES` (default `saves`).
+    /// Saves of `package` under env `SHAKEDOWN_SAVES` (default `saves`).
     pub fn new(package: &str) -> SaveDirs {
-        let root = std::env::var_os("ARENA_SAVES").map_or_else(|| "saves".into(), PathBuf::from);
+        let root = crate::settings::var_os("SHAKEDOWN_SAVES")
+            .map_or_else(|| "saves".into(), PathBuf::from);
         SaveDirs::under(root.join(package))
     }
 

@@ -2,18 +2,22 @@
 //!
 //! Postgres refuses `CREATE DATABASE .. TEMPLATE x` while anyone is connected to `x`, so there is one
 //! lock per database, and [`Templates::with_db`] closes its connection before it lets go of the lock.
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use anyhow::{anyhow, Context, Result};
 pub use tokio_postgres;
 use tokio_postgres::{Client, NoTls};
 
+use super::instances::KeyedLocks;
+
+mod server;
+pub use server::{configured_url, DEFAULT_URL, OLD_DEFAULT_URL};
+
 /// Copies, drops and lists databases on a Postgres server.
 pub struct Templates {
     base_url: String,
     admin: tokio::sync::Mutex<Option<Client>>,
-    locks: Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
+    locks: KeyedLocks,
 }
 
 fn check_name(name: &str) -> Result<()> {
@@ -73,13 +77,13 @@ fn strip_db(url: &str) -> String {
 }
 
 impl Templates {
-    /// `admin_url` is a server URL such as `postgres://arena:arena@127.0.0.1:5544/postgres`; a
+    /// `admin_url` is a server URL such as `postgres://shakedown:shakedown@127.0.0.1:5544/postgres`; a
     /// trailing `/dbname` is ignored. Connects on first use.
     pub fn new(admin_url: &str) -> Templates {
         Templates {
             base_url: strip_db(admin_url),
             admin: tokio::sync::Mutex::new(None),
-            locks: Mutex::new(HashMap::new()),
+            locks: KeyedLocks::default(),
         }
     }
 
@@ -89,12 +93,7 @@ impl Templates {
     }
 
     fn lock_for(&self, db: &str) -> Arc<tokio::sync::Mutex<()>> {
-        self.locks
-            .lock()
-            .unwrap()
-            .entry(db.to_string())
-            .or_default()
-            .clone()
+        self.locks.lock_for(db)
     }
 
     /// Runs `f` on the admin connection (reconnecting if it dropped).

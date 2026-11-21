@@ -6,8 +6,8 @@ use anyhow::{Context, Result};
 use serde_json::{json, Value};
 
 use crate::data::Data;
-use crate::erp::{name_of, Erp};
 use crate::erp_docs as docs;
+use shakedown_part::helpers::frappe::{name_of, Erp};
 
 /// How many sales orders are written at once.
 const PARALLEL: usize = 5;

@@ -1,8 +1,8 @@
-"""The disruption a task's setup may schedule at the utility (arena_part.disruptions): a demand-response event,
+"""The disruption a task's setup may schedule at the utility (shakedown_part.disruptions): a demand-response event,
 a window of peak prices in which the site is asked to hold its load at or below a target. Its notice arrives when
 it fires; the window opens `lead_min` minutes later and lasts `minutes`."""
-from arena_part.disruptions import Kind
-from arena_part.params import Refusal
+from shakedown_part.disruptions import Kind
+from shakedown_part.params import Refusal
 
 from . import meter
 

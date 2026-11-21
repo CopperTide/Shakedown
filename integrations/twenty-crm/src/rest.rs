@@ -1,27 +1,15 @@
 //! One Twenty server's REST API and health, with the workspace's API key.
 use std::time::Duration;
 
-use anyhow::{Context, Result};
-use reqwest::{Client, Method, RequestBuilder};
+use anyhow::Result;
+use reqwest::{Method, RequestBuilder};
 use serde_json::Value;
+use shakedown_part::helpers::http::{self, Answer, Dialect};
+
+pub use shakedown_part::helpers::http::Reply;
 
 /// How long one request may take.
 const TIMEOUT: Duration = Duration::from_secs(60);
-
-/// What the server answered: its `data`, or why it refused (a tool error, not a failure of the
-/// integration).
-#[derive(Debug, Clone, PartialEq)]
-pub enum Reply {
-    Ok(Value),
-    Refused(String),
-}
-
-#[derive(Debug, Clone)]
-pub struct Rest {
-    client: Client,
-    base: String,
-    key: String,
-}
 
 /// The message in a refusal: Twenty's `messages`, else the status.
 fn refusal(status: u16, body: &Value) -> String {
@@ -34,50 +22,54 @@ fn refusal(status: u16, body: &Value) -> String {
     }
 }
 
-fn is_gateway_error(status: u16) -> bool {
-    matches!(status, 502..=504)
+fn refused(a: &Answer) -> String {
+    refusal(a.status, &a.body)
 }
+
+fn data(body: Value) -> Value {
+    data_of(&body)
+}
+
+static TWENTY: Dialect = Dialect {
+    service: "Twenty",
+    gateway_is_down: true,
+    refusal: refused,
+    data,
+};
+
+#[derive(Debug, Clone)]
+pub struct Rest(http::Rest);
 
 impl Rest {
     pub fn new(port: u16, key: &str) -> Result<Rest> {
-        Ok(Rest {
-            client: Client::builder().timeout(TIMEOUT).build()?,
-            base: format!("http://127.0.0.1:{port}"),
-            key: key.into(),
-        })
+        let rest = http::Rest::new(&TWENTY, port, TIMEOUT)?;
+        Ok(Rest(rest.with_auth(format!("Bearer {key}"))))
     }
 
     fn request(&self, method: Method, path: &str) -> RequestBuilder {
-        self.client
-            .request(method, format!("{}/rest/{path}", self.base))
-            .bearer_auth(&self.key)
+        self.0.request(method, self.0.at(&format!("rest/{path}")))
+    }
+
+    /// Sends `r`: a 2xx answer's `data`, a refusal as `Refused`, an error when Twenty can't be
+    /// reached.
+    async fn reply(&self, r: RequestBuilder) -> Result<Reply> {
+        self.0.reply(r).await
     }
 
     pub async fn get(&self, path: &str, query: &[(&str, String)]) -> Result<Reply> {
-        reply(self.request(Method::GET, path).query(query)).await
+        self.reply(self.request(Method::GET, path).query(query))
+            .await
     }
 
     pub async fn post(&self, path: &str, body: &Value) -> Result<Reply> {
-        reply(self.request(Method::POST, path).json(body)).await
+        self.reply(self.request(Method::POST, path).json(body))
+            .await
     }
 
     pub async fn patch(&self, path: &str, body: &Value) -> Result<Reply> {
-        reply(self.request(Method::PATCH, path).json(body)).await
+        self.reply(self.request(Method::PATCH, path).json(body))
+            .await
     }
-}
-
-/// Sends `r`: a 2xx answer's `data`; a refusal as `Refused`; an error when Twenty can't be reached.
-async fn reply(r: RequestBuilder) -> Result<Reply> {
-    let resp = r.send().await.context("Twenty can't be reached")?;
-    let status = resp.status().as_u16();
-    if is_gateway_error(status) {
-        anyhow::bail!("Twenty is not answering (HTTP {status})");
-    }
-    let body: Value = resp.json().await.unwrap_or(Value::Null);
-    if !(200..300).contains(&status) {
-        return Ok(Reply::Refused(refusal(status, &body)));
-    }
-    Ok(Reply::Ok(data_of(&body)))
 }
 
 /// A 2xx answer's `data`, with a list's `pageInfo` and `totalCount` (which Twenty sends beside

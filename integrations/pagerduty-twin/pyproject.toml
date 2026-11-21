@@ -1,0 +1,21 @@
+[project]
+name = "pagerduty-twin"
+version = "0.1.0"
+description = "shakedown-part/1 integration: a PagerDuty-compatible twin (incidents, notes, on-call, Events API v2)"
+requires-python = ">=3.10"
+dependencies = ["shakedown-part"]
+
+[dependency-groups]
+dev = ["jsonschema>=4.18", "pagerduty>=7.0"]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+shakedown-part = { path = "../../kits/python", editable = true }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+norecursedirs = [".*", "fixtures", "schemas", "__pycache__"]
+pythonpath = ["."]
+markers = ["live: needs services or hardware not always present"]

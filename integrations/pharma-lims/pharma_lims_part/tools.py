@@ -1,7 +1,7 @@
 """The LIMS's tools: reads of the lab's records for agents, the scenario a task's setup sets, and the QA
 head's review that a benchmark's link calls."""
-from arena_part.jsonstate import Done, Tool, set_scenario
-from arena_part.params import Param
+from shakedown_part.jsonstate import Done, Tool
+from shakedown_part.params import Param
 
 from . import disrupt, lab, qa
 
@@ -26,7 +26,7 @@ def _get_document(config, state, args):
 
 
 def _scenario(config, state, args):
-    return set_scenario(config, state, args, lab.scenarios(config), lab.overlay, disrupt.KINDS, TOOLS)
+    return lab.SCENARIOS.set(config, state, args, disrupt.KINDS, TOOLS)
 
 
 TOOLS = {t.name: t for t in [

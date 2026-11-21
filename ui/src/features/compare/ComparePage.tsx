@@ -1,0 +1,185 @@
+import { ChevronDown, ChevronUp } from 'lucide-react';
+import { useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
+import { branch as fetchBranch, views as fetchViews } from '@/api/branches';
+import { compare } from '@/api/compare';
+import { ApproximateMark, StatusChip } from '@/components/marks';
+import { Button } from '@/components/ui/button';
+import { CodeBlock } from '@/components/ui/code-block';
+import { PageBody, PageHeader } from '@/components/ui/page';
+import { Panel, PanelHeader } from '@/components/ui/panel';
+import { ErrorState, LoadingState, Notice } from '@/components/ui/state';
+import { Tag } from '@/components/ui/status';
+import { StepLabel } from '@/components/ui/step-label';
+import { stepHref } from '@/features/review/present';
+import WhatMatters from '@/features/review/WhatMatters';
+import { diffCounts, formatCost, jsonDiff } from '@/features/run/timeline';
+import { normalizeViews } from '@/features/world/twin';
+import { useQuery } from '@/hooks/useQuery';
+import { cn } from '@/lib/cn';
+import { pretty } from '@/lib/format';
+import { asRecord } from '@/lib/record';
+import { agentModelLine, costIsUnknown, teamProviders } from '@/model/providers';
+import { APPROXIMATE_NOTE, isApproximate, notComparedLine } from '@/model/restore';
+import type { BranchView, TwinView } from '@/model/twin';
+import type { BranchDetail, CompareResponse, CompareSide, Event, RowDiff, Team } from '@/model/types';
+import { divergenceStrip } from './divergence';
+import OutcomePanel, { DivergenceStrip } from './OutcomePanel';
+
+function StepView({ label, id, run, ev }: { label: string; id: string; run?: string; ev: Event | undefined }) {
+  const p = asRecord(ev?.payload);
+  return (
+    <Panel>
+      <PanelHeader title={`${label} at this step`} meta={<span className="font-mono">{id.slice(0, 8)}</span>}>
+        {ev && run && <Link className="text-xs text-accent hover:underline" to={`/runs/${run}/${id}?step=${ev.seq}`}>Open step</Link>}
+      </PanelHeader>
+      {!ev ? <p className="p-3 text-sm text-muted">No step: this branch had ended.</p> : (
+        <div className="flex flex-col gap-2 p-3">
+          <div className="flex flex-wrap items-center gap-1.5 text-xs">
+            <StepLabel seq={ev.seq} kind={ev.kind}><span className="text-muted">{ev.agent ?? 'run'}</span></StepLabel>
+            {typeof p.name === 'string' && <span className="font-mono">{p.name}</span>}
+          </div>
+          <CodeBlock className="max-h-64 whitespace-pre-wrap break-all">{pretty(ev.kind === 'tool_call' ? p.args : p)}</CodeBlock>
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+/** One branch's outcome, numbers and agents (each with its model and where it runs). */
+export function Side({ id, s, team, label = '' }: { id: string; s: CompareSide; team?: Team; label?: string }) {
+  const unknown = teamProviders(team).some(costIsUnknown);
+  const row = (k: string, v: React.ReactNode) => <><dt className="text-2xs font-medium text-muted">{k}</dt><dd>{v}</dd></>;
+  return (
+    <Panel>
+      <PanelHeader title={label || 'Branch'} meta={<span className="font-mono">{id.slice(0, 8)}</span>}><StatusChip status={s.status} /><ApproximateMark of={s} /></PanelHeader>
+      <dl className="grid grid-cols-[max-content_1fr] items-baseline gap-x-4 gap-y-1.5 p-3 text-sm">
+        {row('Seconds', <span className="font-mono">{s.seconds != null ? s.seconds.toFixed(1) : '–'}</span>)}
+        {row('Tokens', <span className="font-mono">{s.tokens?.toLocaleString() ?? '–'}</span>)}
+        {row('Cost', formatCost(s.cost_usd, s.cost_source, unknown))}
+        {team && row('Agents', <ul className="flex flex-col gap-0.5 text-xs">{team.agents.map((a) => <li key={a.id}>{a.name}: <span className="text-2xs text-muted">{agentModelLine(a)}</span></li>)}</ul>)}
+      </dl>
+    </Panel>
+  );
+}
+
+function RowDoc({ r, open }: { r: RowDiff; open: boolean }) {
+  const d = jsonDiff(r.a ?? undefined, r.b ?? undefined);
+  const n = diffCounts(d);
+  return (
+    <details open={open} className="group border-t border-line px-3 py-1.5">
+      <summary className="flex cursor-pointer items-center gap-2 py-0.5 font-mono text-xs marker:text-faint">
+        <span className="min-w-0 truncate">{r.key}</span>{!r.a && <Tag>only in B</Tag>}{!r.b && <Tag>only in A</Tag>}
+        <span className="ml-auto shrink-0 text-2xs text-muted">−{n.removed} +{n.added}</span>
+      </summary>
+      <CodeBlock className="mt-1 mb-1 max-h-72 p-0 py-1 leading-4">
+        {d.map((l, i) => (
+          <div key={i} className={cn('px-2 whitespace-pre-wrap break-all', l.op === '+' && 'bg-accent-soft font-semibold', l.op === '-' && 'text-muted line-through decoration-faint')}>
+            <span aria-hidden="true" className="inline-block w-3 text-faint">{l.op === '-' ? '−' : l.op}</span>{l.text}
+          </div>
+        ))}
+      </CodeBlock>
+    </details>
+  );
+}
+
+/** How many differing rows start open; the rest open on a click. */
+const OPEN_ROWS = 3;
+
+/** The final states' differing rows, and the parts left out (never read as "identical"). */
+export function Rows({ data }: { data: CompareResponse }) {
+  const skipped = notComparedLine(data.not_compared, 'compare');
+  return (
+    <Panel>
+      <PanelHeader title="Differing rows" meta={`${data.differing_rows.length} in the final worlds · − A, + B`} />
+      {skipped && <p className="px-3 pt-2 text-xs">{skipped}</p>}
+      {data.differing_rows.length === 0 && <p className="p-3 text-sm text-muted">{skipped ? 'No differences in the parts compared.' : 'The final worlds are identical.'}</p>}
+      {data.differing_rows.map((r, i) => <RowDoc key={r.key} r={r} open={i < OPEN_ROWS} />)}
+    </Panel>
+  );
+}
+
+interface Loaded {
+  data: CompareResponse;
+  a: BranchDetail;
+  b: BranchDetail;
+  /** Each branch's twin at the end, from the views endpoint; undefined when it can't be read (the events' own views are used). */
+  va?: TwinView | null;
+  vb?: TwinView | null;
+}
+
+/** The branch's last view from `GET /api/branches/{id}/views`; undefined when the endpoint fails. */
+const endView = (id: string) => fetchViews(id).then((v) => v, () => undefined);
+
+const lastOf = (raw: BranchView[] | undefined): TwinView | null | undefined =>
+  raw === undefined ? undefined : normalizeViews(raw).at(-1)?.view ?? null;
+
+async function loadCompare(a: string, b: string): Promise<Loaded> {
+  const [data, x, y, rx, ry] = await Promise.all([compare(a, b), fetchBranch(a), fetchBranch(b), endView(a), endView(b)]);
+  return { data, a: x, b: y, va: lastOf(rx), vb: lastOf(ry) };
+}
+
+function useCompare(a: string, b: string) {
+  const { data: got, error, retry } = useQuery(`${a}|${b}`, () => loadCompare(a, b));
+  return { got, error, retry };
+}
+
+function Divergence({ got, a, b }: { got: Loaded; a: string; b: string }) {
+  const seq = got.data.first_divergent_seq;
+  return (
+    <>
+      <Panel className="px-3 py-2 text-sm">
+        {seq != null ? <><span className="font-semibold">First divergence at step {seq}.</span> <span className="text-muted">Everything before it is the same in both branches.</span></>
+          : <span className="font-semibold">The branches never diverge.</span>}
+      </Panel>
+      {seq != null && (
+        <div className="grid gap-3 lg:grid-cols-2">
+          <StepView label="A" id={a} run={got.a.run_id} ev={got.a.events.find((e) => e.seq === seq)} />
+          <StepView label="B" id={b} run={got.b.run_id} ev={got.b.events.find((e) => e.seq === seq)} />
+        </div>
+      )}
+    </>
+  );
+}
+
+/** Everything under the outcomes: the divergence strip, each side's figures, the first differing step and the differing rows. */
+function Details({ got, a, b }: { got: Loaded; a: string; b: string }) {
+  return (
+    <>
+      <Panel><DivergenceStrip s={divergenceStrip(got.a, got.b, got.data.first_divergent_seq)} /></Panel>
+      <div className="grid gap-3 lg:grid-cols-2"><Side label="A" id={a} s={got.data.a} team={got.a.team} /><Side label="B" id={b} s={got.data.b} team={got.b.team} /></div>
+      {(isApproximate(got.data.a) || isApproximate(got.data.b)) && <Notice>{APPROXIMATE_NOTE}</Notice>}
+      <Divergence got={got} a={a} b={b} />
+      <Rows data={got.data} />
+    </>
+  );
+}
+
+/** What matters and the outcomes; the rest behind Details. */
+function Comparison({ got, a, b }: { got: Loaded; a: string; b: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <WhatMatters target={{ kind: 'compare', a, b }} what="both runs and their comparison"
+        hrefOf={(side, seq) => (typeof seq === 'number' ? stepHref(side === 'a' ? got.a.run_id : got.b.run_id, side === 'a' ? a : b, seq) : null)} />
+      <OutcomePanel a={{ detail: got.a, side: got.data.a, view: got.va }} b={{ detail: got.b, side: got.data.b, view: got.vb }} />
+      <Button variant="ghost" className="self-center text-muted" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? <><ChevronUp />Hide details</> : <><ChevronDown />Details</>}</Button>
+      {open && <Details got={got} a={a} b={b} />}
+    </>
+  );
+}
+
+export default function Compare() {
+  const { a = '', b = '' } = useParams();
+  const { got, error, retry } = useCompare(a, b);
+  return (
+    <>
+      <PageHeader title={<span title={`Branch ${a.slice(0, 8)} (A) against ${b.slice(0, 8)} (B)`}>Compare</span>} width="broad" />
+      <PageBody width="broad">
+        {error && <ErrorState error={error} onRetry={retry} hint="Both branches must have finished and kept their final saves." />}
+        {!got && !error && <LoadingState label="Comparing the two final worlds…" rows={4} />}
+        {got && <Comparison got={got} a={a} b={b} />}
+      </PageBody>
+    </>
+  );
+}

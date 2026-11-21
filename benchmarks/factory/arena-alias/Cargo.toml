@@ -1,0 +1,22 @@
+# `arena-factory`, this package's name until 2026-11-19: it builds the same program under its old name, so
+# `cargo build -p arena-factory` and the program `arena-factory` keep working for scripts written before (the
+# Shakedown-Examples stacks build and run it). Use shakedown-factory in anything new.
+[package]
+name = "arena-factory"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "arena-factory"
+path = "../src/main.rs"
+
+[dependencies]
+shakedown-factory = { path = ".." }
+shakedown-part = { path = "../../../kits/rust" }
+anyhow = { workspace = true }
+tokio = { workspace = true }
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

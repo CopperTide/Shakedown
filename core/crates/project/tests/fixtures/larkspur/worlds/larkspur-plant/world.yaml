@@ -1,0 +1,13 @@
+format: shakedown-world/3
+label: Larkspur Valve Works
+connectors:
+  - {id: erp, label: SAP S/4HANA, mode: stand-in, product: sap-s4hana}
+  - {id: mes, label: Larkspur MES, mode: real, mcp: "https://mcp.larkspur.internal/mes", auth: {key: larkspur-mes}}
+  - {id: rates, label: Carrier rates, mode: replay, openapi: carrier-rates.openapi.yaml, auth: {env: CARRIER_TOKEN}}
+flows:
+  - {id: order-to-job, trigger: crm.order.created, steps: [erp.create_sales_order, mes.create_job]}
+data:
+  - {database: larkspur-prod, engine: postgres, version: "15.6", snapshot: snap_0412-7f3a, masked: true, default_state: true}
+  - {file: suppliers.csv, seeds: erp}
+people:
+  - {id: planner, label: Planner on call, role: planner}

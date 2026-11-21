@@ -1,9 +1,9 @@
 //! Runs real Docker Compose projects: `cargo test -p arena-service -- --ignored live_`.
 //! Every project, volume and folder the test makes is removed afterwards, even on failure.
-use arena_part::proto::*;
-use arena_part::Part;
-use arena_service::Service;
 use serde_json::{json, Value};
+use shakedown_part::proto::*;
+use shakedown_part::Part;
+use shakedown_service::Service;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
@@ -39,7 +39,7 @@ impl World {
     /// Runs `args` in the instance's container and returns its trimmed output.
     fn exec(&self, instance: &str, args: &[&str]) -> String {
         let out = Command::new("docker")
-            .args(["exec", &format!("arena_{instance}-redis-1")])
+            .args(["exec", &format!("shakedown_{instance}-redis-1")])
             .args(args)
             .output()
             .unwrap();
@@ -58,7 +58,7 @@ impl World {
 
     /// Starts instance `id` (tracked for removal) from `from`.
     async fn start(&mut self, p: &Service, id: &str, from: Option<&str>) {
-        self.projects.push(format!("arena_{id}"));
+        self.projects.push(format!("shakedown_{id}"));
         p.start(start(id, self.config(), from)).await.unwrap();
     }
 }
@@ -85,6 +85,7 @@ fn start(instance: &str, config: Value, from: Option<&str>) -> StartParams {
             save: s.into(),
             mode: Mode::Exact,
         }),
+        world_time: None,
     }
 }
 
@@ -177,4 +178,157 @@ async fn live_service_roundtrip() {
     }
     p.drop_save(SaveId { save: "s1".into() }).await.unwrap();
     assert!(!dir.exists());
+}
+
+/// A project with a Postgres database (`postgres` volume `pg`), a file holder (`hardlink`
+/// volume `files`) and a cache (`skip`): the database image from `SHAKEDOWN_TEST_POSTGRES_IMAGE`
+/// (default `postgres:17-alpine`); the helper is the default `redis:6.2-alpine`.
+fn strategies_compose(pg_image: &str) -> String {
+    format!(
+        "services:\n  db:\n    image: {pg_image}\n    environment: {{POSTGRES_PASSWORD: pw}}\n    volumes: [pg:/var/lib/postgresql/data]\n  \
+         files:\n    image: redis:6.2-alpine\n    entrypoint: [sleep, infinity]\n    volumes: [files:/files, cache:/cache]\n\
+         volumes:\n  pg: {{}}\n  files: {{}}\n  cache: {{}}\n"
+    )
+}
+
+fn sql(w: &World, instance: &str, query: &str) -> String {
+    let out = Command::new("docker")
+        .args([
+            "exec",
+            &format!("shakedown_{instance}-db-1"),
+            "psql",
+            "-U",
+            "postgres",
+            "-Atc",
+            query,
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let _ = w;
+    String::from_utf8_lossy(&out.stdout).trim().to_string()
+}
+
+fn files(instance: &str, script: &str) -> String {
+    let out = Command::new("docker")
+        .args([
+            "exec",
+            &format!("shakedown_{instance}-files-1"),
+            "sh",
+            "-c",
+            script,
+        ])
+        .output()
+        .unwrap();
+    String::from_utf8_lossy(&out.stdout).trim().to_string()
+}
+
+/// The strategies' world and config.
+fn strategies_world() -> (World, Value) {
+    let pg = shakedown_part::settings::var("SHAKEDOWN_TEST_POSTGRES_IMAGE")
+        .unwrap_or("postgres:17-alpine".into());
+    let w = World::new();
+    fs::write(w.dir.join("compose.yml"), strategies_compose(&pg)).unwrap();
+    let volumes = json!([{"name": "pg", "save": "postgres", "service": "db"},
+        {"name": "files", "save": "hardlink", "services": ["files"]},
+        {"name": "cache", "save": "skip"}]);
+    let file = w.dir.join("compose.yml");
+    (w, json!({"compose_file": file, "volumes": volumes}))
+}
+
+/// The volumes that differ between the live instance `a` and the save `save`.
+async fn live_vs_save(p: &Service, a: &str, save: &str) -> Vec<String> {
+    let d = DiffParams {
+        a: Target::Instance { instance: a.into() },
+        b: Target::Save { save: save.into() },
+    };
+    p.diff(d).await.unwrap().differing
+}
+
+/// Waits (at most 60 s) until the database of `instance` takes connections over TCP.
+fn wait_db(instance: &str) {
+    let ready = || {
+        let c = format!("shakedown_{instance}-db-1");
+        let args = [
+            "exec",
+            &c,
+            "pg_isready",
+            "-h",
+            "127.0.0.1",
+            "-U",
+            "postgres",
+        ];
+        Command::new("docker")
+            .args(args)
+            .output()
+            .is_ok_and(|o| o.status.success())
+    };
+    let since = std::time::Instant::now();
+    while !ready() {
+        assert!(
+            since.elapsed().as_secs() < 60,
+            "the database of {instance} never came up"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    }
+}
+
+/// Saves `a` twice (a row and a file changed between): the two saves' paths.
+async fn two_saves(w: &World, p: &Service, a: &str) -> (PathBuf, PathBuf) {
+    wait_db(a);
+    sql(w, a, "create table t (n int); insert into t values (1)");
+    files(
+        a,
+        "echo one > /files/f; echo same > /files/keep; echo c > /cache/c",
+    );
+    let s1 = save_to(w, p, a, "s1").await;
+    sql(w, a, "update t set n = 2");
+    files(a, "echo two > /files/f");
+    (s1, save_to(w, p, a, "s2").await)
+}
+
+/// An unchanged file is one inode in both saves, and the live `a` matches its last save only.
+async fn check_saves(p: &Service, a: &str, (s1, s2): (&PathBuf, &PathBuf)) {
+    let inode = |d: &PathBuf| {
+        std::os::unix::fs::MetadataExt::ino(&fs::metadata(d.join("files/keep")).unwrap())
+    };
+    assert_eq!(inode(s1), inode(s2), "an unchanged file is one inode");
+    let none: Vec<String> = vec![];
+    let last = live_vs_save(p, a, "s2").await;
+    assert_eq!(last, none, "the live world is its last save");
+    assert_eq!(
+        live_vs_save(p, a, "s1").await,
+        ["volume/files", "volume/pg"]
+    );
+}
+
+#[tokio::test]
+#[ignore]
+async fn live_service_strategies() {
+    let (mut w, config) = strategies_world();
+    let id = std::process::id();
+    let (a, b) = (format!("t11_{id}_a"), format!("t11_{id}_b"));
+    let p = w.part();
+    w.projects
+        .extend([format!("shakedown_{a}"), format!("shakedown_{b}")]);
+    p.start(start(&a, config.clone(), None)).await.unwrap();
+    let (s1, s2) = two_saves(&w, &p, &a).await;
+    check_saves(&p, &a, (&s1, &s2)).await;
+    p.start(start(&b, config, Some("s1"))).await.unwrap();
+    assert_eq!(sql(&w, &b, "select n from t"), "1");
+    assert_eq!(files(&b, "cat /files/f; ls /cache | wc -l"), "one\n0");
+    for i in [&a, &b] {
+        p.stop(IdParams {
+            instance: i.clone(),
+        })
+        .await
+        .unwrap();
+    }
+    for s in ["s1", "s2"] {
+        p.drop_save(SaveId { save: s.into() }).await.unwrap();
+    }
 }

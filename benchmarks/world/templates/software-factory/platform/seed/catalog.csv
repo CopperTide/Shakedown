@@ -1,0 +1,13 @@
+sku,name,list_price,discount_pct,currency,on_hand
+LAMP-01,Desk lamp,39.00,0,USD,4200
+MUG-02,Enamel mug,12.50,0,USD,18000
+KETL-03,Stovetop kettle,54.00,15,USD,4000
+TOWL-04,Linen towel,18.00,0,USD,12600
+CLCK-05,Wall clock,46.00,0,USD,4000
+PLNT-06,Ceramic planter,24.00,10,USD,6300
+BOWL-07,Serving bowl,31.00,0,USD,5400
+RUG-08,Wool rug,129.00,20,USD,4000
+CNDL-09,Beeswax candle,9.50,0,USD,27000
+SHLF-10,Floating shelf,42.00,0,USD,4000
+CHR-11,Folding chair,68.00,0,USD,4000
+BSKT-12,Storage basket,27.00,25,USD,4800

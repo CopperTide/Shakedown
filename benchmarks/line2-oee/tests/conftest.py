@@ -9,4 +9,4 @@ sys.path.insert(0, str(SIM))
 
 @pytest.fixture(autouse=True)
 def saves_root(monkeypatch, tmp_path):
-    monkeypatch.setenv("ARENA_SAVES", str(tmp_path / "saves"))
+    monkeypatch.setenv("SHAKEDOWN_SAVES", str(tmp_path / "saves"))

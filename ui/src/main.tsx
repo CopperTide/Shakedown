@@ -1,5 +1,8 @@
-import '@fontsource-variable/inter';
-import '@fontsource-variable/jetbrains-mono';
+import './app/storageNames';
+import '@fontsource-variable/instrument-sans';
+import '@fontsource/instrument-serif';
+import '@fontsource/ibm-plex-mono/400.css';
+import '@fontsource/ibm-plex-mono/500.css';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
@@ -19,7 +22,7 @@ function render() {
   );
 }
 
-// A build with VITE_ARENA_FIXTURES=1 answers /api from the pharma fixtures (screenshots, design
+// A build with VITE_SHAKEDOWN_FIXTURES=1 (or its old name VITE_ARENA_FIXTURES=1) answers /api from the pharma fixtures (screenshots, design
 // review); any other build leaves this branch out entirely.
-if (import.meta.env.VITE_ARENA_FIXTURES === '1') import('./dev/fixtureApi').then((m) => { m.install(); render(); });
+if ((import.meta.env.VITE_SHAKEDOWN_FIXTURES ?? import.meta.env.VITE_ARENA_FIXTURES) === '1') import('./dev/fixtureApi').then((m) => { m.install(); render(); });
 else render();

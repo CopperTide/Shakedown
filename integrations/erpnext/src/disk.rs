@@ -2,16 +2,16 @@
 //! dumps on disk.
 use std::collections::HashSet;
 
-use arena_part::helpers::mariadb::{needed_positions, replay_user, Position, Server, Standing};
-use arena_part::proto::{valid_id, GcResult, Usage};
-use arena_part::PartError;
+use shakedown_part::helpers::mariadb::{needed_positions, replay_user, Position, Server, Standing};
+use shakedown_part::proto::{valid_id, GcResult, Usage};
+use shakedown_part::PartError;
 
 use crate::names::{Site, INSTANCE_PREFIX, VIEW_PREFIX};
 use crate::Erpnext;
 
 impl Erpnext {
-    /// What this part keeps outside `ARENA_SAVES`: its server's binlog and the sites'
-    /// databases. (The sites' folders are under `ARENA_SAVES/erpnext/.sites`, which arenad
+    /// What this part keeps outside `SHAKEDOWN_SAVES`: its server's binlog and the sites'
+    /// databases. (The sites' folders are under `SHAKEDOWN_SAVES/erpnext/.sites`, which shaked
     /// counts.) Nothing when the server is not running.
     pub(crate) async fn bytes_used(&self) -> Result<Usage, PartError> {
         let server = self.server();
@@ -36,7 +36,7 @@ impl Erpnext {
         self.dirs.remove(save).map_err(PartError::internal_from)?;
         self.docs.drop_save(save);
         if let Err(e) = self.settle_on(self.server()).await {
-            eprintln!("arena-erpnext: dropped save {save}, but tidying up failed: {e}");
+            eprintln!("shakedown-erpnext: dropped save {save}, but tidying up failed: {e}");
         }
         Ok(())
     }
@@ -51,7 +51,7 @@ impl Erpnext {
             out.dropped += idle.dropped;
             out.bytes += idle.bytes;
             if let Err(e) = self.reroot(keep).await {
-                eprintln!("arena-erpnext: not re-rooting the kept saves: {e}");
+                eprintln!("shakedown-erpnext: not re-rooting the kept saves: {e}");
             }
         }
         out.bytes += self.settle_on(self.server()).await?;
@@ -69,7 +69,7 @@ impl Erpnext {
         let saves = self.manifests()?;
         let here = server.reference().await?;
         let live = {
-            let live = self.live.lock().expect("instances lock");
+            let live = self.live.lock();
             needed_positions(&here, &[], live.values().map(|i| &i.tracked))
         };
         let standing = Standing {
@@ -109,7 +109,7 @@ impl Erpnext {
     async fn needed(&self, server: &Server) -> Result<Vec<Position>, PartError> {
         let here = server.reference().await?;
         let saves = self.manifests()?;
-        let live = self.live.lock().expect("instances lock");
+        let live = self.live.lock();
         Ok(needed_positions(
             &here,
             &saves,
@@ -120,7 +120,7 @@ impl Erpnext {
     /// The databases in use: live instances', starting ones' and scratch sites being read.
     fn busy_dbs(&self) -> HashSet<String> {
         let mut dbs = self.busy.snapshot();
-        let live = self.live.lock().expect("instances lock");
+        let live = self.live.lock();
         dbs.extend(live.values().map(|i| i.site.db.clone()));
         dbs
     }

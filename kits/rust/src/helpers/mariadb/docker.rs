@@ -12,7 +12,9 @@ use super::login::Login;
 use super::server::{ServerConfig, IMAGE};
 
 /// The label on containers this helper made; any other container is never used.
-const LABEL_KEY: &str = "arena.part";
+const LABEL_KEY: &str = "shakedown.part";
+/// The label's name until 2026-11-19: a container made then still counts as this helper's.
+const OLD_LABEL_KEY: &str = "arena.part";
 const LABEL_VALUE: &str = "mariadb";
 const DATADIR: &str = "/var/lib/mysql";
 /// The server's flags: row-based binlog with full row images, kept until purged.
@@ -55,7 +57,9 @@ fn output(mut cmd: Command, what: &str) -> Result<String> {
 
 fn inspect(cfg: &ServerConfig) -> Result<Found> {
     let mut cmd = docker();
-    let format = format!("{{{{index .Config.Labels \"{LABEL_KEY}\"}}}} {{{{.State.Running}}}}");
+    let format = format!(
+        "{{{{index .Config.Labels \"{LABEL_KEY}\"}}}}{{{{index .Config.Labels \"{OLD_LABEL_KEY}\"}}}} {{{{.State.Running}}}}"
+    );
     cmd.args(["container", "inspect", "-f", &format, &cfg.container]);
     let out = cmd.output().context("docker inspect: cannot run docker")?;
     if !out.status.success() {
@@ -82,7 +86,7 @@ pub fn ensure_container(cfg: &ServerConfig) -> Result<()> {
         }
         Found::Missing => run_container(cfg),
         Found::Foreign => bail!(
-            "container {} exists but was not made by arena (no label {LABEL_KEY}={LABEL_VALUE}); \
+            "container {} exists but was not made by Shakedown (no label {LABEL_KEY}={LABEL_VALUE}); \
              configure another container name",
             cfg.container
         ),
@@ -255,7 +259,7 @@ mod tests {
             args.last().unwrap(),
             "--collation-server=utf8mb4_unicode_ci"
         );
-        assert!(args.contains(&"arena.part=mariadb".to_string()));
+        assert!(args.contains(&"shakedown.part=mariadb".to_string()));
         assert!(
             !args.iter().any(|a| a.contains(&cfg.root_password)),
             "password by env only"

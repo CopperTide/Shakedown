@@ -1,8 +1,8 @@
 //! What the benchmark can do without the factory example, which is not public yet.
-use arena_factory::{Backend, Factory, SHIFT_TASK, TASK};
-use arena_part::proto::*;
-use arena_part::Benchmark;
 use serde_json::{json, Map};
+use shakedown_factory::{Backend, Factory, SHIFT_TASK, TASK};
+use shakedown_part::proto::*;
+use shakedown_part::Benchmark;
 
 fn factory(data: &str) -> Factory {
     Factory::new(Backend::Standin, data.into())

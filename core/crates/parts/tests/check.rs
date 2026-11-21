@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::OnceLock;
 
-fn arena() -> PathBuf {
+fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../..")
         .canonicalize()
@@ -15,8 +15,8 @@ fn build_counter() {
     static ONCE: OnceLock<()> = OnceLock::new();
     ONCE.get_or_init(|| {
         let st = Command::new("cargo")
-            .args(["build", "--example", "counter", "-p", "arena-part"])
-            .current_dir(arena())
+            .args(["build", "--example", "counter", "-p", "shakedown-part"])
+            .current_dir(repo())
             .status()
             .unwrap();
         assert!(st.success());
@@ -39,7 +39,7 @@ async fn run_in(pkg_dir: &Path, saves: &Path) -> (Report, u64) {
     build_counter();
     let reg = Registry::from_dir(pkg_dir).unwrap();
     let name = reg.integrations().next().unwrap().name.clone();
-    let hub = Hub::new(reg, arena().join("core/target/debug"), saves.to_path_buf());
+    let hub = Hub::new(reg, repo().join("core/target/debug"), saves.to_path_buf());
     let r = check(&hub, &name, json!({})).await;
     let c = hub.client(&name).await.unwrap();
     let u: serde_json::Value = c.call("usage", json!({})).await.unwrap();
@@ -98,7 +98,7 @@ fn fake_pkg(mode: &str, examples: bool) -> PathBuf {
         ""
     };
     std::fs::write(
-        d.join("arena-package.toml"),
+        d.join("shakedown-package.toml"),
         format!(
             "kind = \"integration\"\nname = \"counter\"\nversion = \"0\"\nprotocol = 1\n\
              run = {{ command = [\"python3\", \"fake.py\", \"{mode}\"] }}\n{ex}"
@@ -112,10 +112,10 @@ fn fake_pkg(mode: &str, examples: bool) -> PathBuf {
 fn flavour_pkg(flavour: &str) -> PathBuf {
     let d = temp(&format!("pkg-{flavour}"));
     std::fs::write(
-        d.join("arena-package.toml"),
+        d.join("shakedown-package.toml"),
         format!(
             "kind = \"integration\"\nname = \"counter\"\nversion = \"0.1.0\"\nprotocol = 1\n\
-             run = {{ command = [\"${{ARENA_BIN_DIR}}/examples/counter\", \"--flavour\", \"{flavour}\"] }}\n\n\
+             run = {{ command = [\"${{SHAKEDOWN_BIN_DIR}}/examples/counter\", \"--flavour\", \"{flavour}\"] }}\n\n\
              [[example]]\ntool = \"add\"\nargs = {{ n = 1 }}\n\n[[example]]\ntool = \"get\"\nargs = {{}}\n"
         ),
     )
@@ -129,7 +129,7 @@ fn names(r: &Report) -> Vec<&str> {
 
 #[tokio::test]
 async fn counter_passes() {
-    let r = run(&arena().join("kits/rust/examples/counter"), "rust").await;
+    let r = run(&repo().join("kits/rust/examples/counter"), "rust").await;
     assert!(r.passed, "{}", serde_json::to_string_pretty(&r).unwrap());
     assert_eq!(r.steps.len(), 10); // all but replay
     assert_eq!(r.skipped.len(), 1, "{:?}", r.skipped); // replay does not apply
@@ -137,7 +137,7 @@ async fn counter_passes() {
 
 #[tokio::test]
 async fn python_counter_passes() {
-    let r = run(&arena().join("kits/python/examples"), "py").await;
+    let r = run(&repo().join("kits/python/examples"), "py").await;
     assert!(r.passed, "{}", serde_json::to_string_pretty(&r).unwrap());
     // The Python counter has no write example, so the write and second save are skipped.
     assert!(r.skipped.iter().any(|s| s.starts_with("write_example")));

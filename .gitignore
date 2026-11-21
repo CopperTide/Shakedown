@@ -3,8 +3,13 @@ ui/node_modules/
 ui/dist/
 .superpowers/
 core/saves/
+# The vault key your model keys are sealed with (made on first use)
+core/vault.key
 __pycache__/
 ui/lint/node_modules/
 
 # Local git worktrees
 /.worktrees/
+
+# Built worlds (SHAKEDOWN_WORLDS default)
+core/worlds/

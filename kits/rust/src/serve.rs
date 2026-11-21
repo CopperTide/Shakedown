@@ -35,6 +35,10 @@ pub trait Part: Send + Sync + 'static {
     async fn connect(&self, _p: IdParams) -> R<Value> {
         Err(PartError::method_not_found("connect"))
     }
+    /// The hosts the instance serves through shaked's proxy (default: none, method not found).
+    async fn http_routes(&self, _p: IdParams) -> R<HttpRoutes> {
+        Err(PartError::method_not_found("http_routes"))
+    }
 }
 
 /// A benchmark: tasks, tools and a loader for the parts of its world.
@@ -140,7 +144,7 @@ where
     let out = answer(req, handler).await;
     if let Some(id) = id {
         if let Err(e) = write_line(w, response(id, out)).await {
-            eprintln!("arena-part: write failed: {e}");
+            eprintln!("shakedown-part: write failed: {e}");
         }
     }
 }
@@ -243,6 +247,15 @@ fn parse<T: DeserializeOwned>(params: Value) -> R<T> {
     serde_json::from_value(params).map_err(|e| PartError::invalid(format!("invalid params: {e}")))
 }
 
+/// A `describe` answer announcing the protocol by its name (`"protocol": "shakedown-part/1"`).
+fn announced(v: R<Value>) -> R<Value> {
+    let mut v = v?;
+    if let Some(p) = v.get_mut("protocol") {
+        *p = json!(crate::proto::PROTOCOL_NAME);
+    }
+    Ok(v)
+}
+
 fn out<T: Serialize>(v: R<T>) -> R<Value> {
     let v = v?;
     serde_json::to_value(v).map_err(|e| PartError::internal(e.to_string()))
@@ -250,7 +263,7 @@ fn out<T: Serialize>(v: R<T>) -> R<Value> {
 
 async fn part_dispatch<P: Part>(p: &P, method: &str, params: Value) -> R<Value> {
     match method {
-        "describe" => out(p.describe().await),
+        "describe" => announced(out(p.describe().await)),
         "start" => out(p.start(parse(params)?).await.map(|_| json!({}))),
         "call_tool" => out(p.call_tool(parse(params)?).await),
         "advance" => out(p.advance(parse(params)?).await),
@@ -262,13 +275,14 @@ async fn part_dispatch<P: Part>(p: &P, method: &str, params: Value) -> R<Value> 
         "usage" => out(p.usage().await),
         "gc" => out(p.gc(parse(params)?).await),
         "connect" => out(p.connect(parse(params)?).await),
+        "http_routes" => out(p.http_routes(parse(params)?).await),
         m => Err(PartError::method_not_found(m)),
     }
 }
 
 async fn bench_dispatch<B: Benchmark>(b: &B, method: &str, params: Value) -> R<Value> {
     match method {
-        "describe" => out(b.describe().await),
+        "describe" => announced(out(b.describe().await)),
         "seed" => out(b.seed(parse(params)?).await.map(|_| json!({}))),
         "call_tool" => out(b.call_tool(parse(params)?).await),
         "gold_actions" => out(b.gold_actions(parse(params)?).await),

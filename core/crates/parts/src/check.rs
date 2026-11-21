@@ -1,9 +1,13 @@
-//! The conformance check behind `arena-part-check` (docs/protocol.md, "Determinism contract").
+//! The conformance check behind `shakedown-part-check` (docs/protocol.md, "Determinism contract").
 use crate::client::{CallError, Client};
 use crate::hub::Hub;
-use arena_part::proto::{Describe, Effect, ExactKind, PROTOCOL};
+use crate::request::{GetUsage, Request, Stop};
 use serde::Serialize;
 use serde_json::{json, Value};
+use shakedown_part::proto::{
+    AdvanceParams, CallToolParams, Describe, DiffParams, Effect, ExactKind, FromSave,
+    InspectParams, Mode, SaveId, SaveParams, StartParams, Target, PROTOCOL,
+};
 use std::collections::{BTreeSet, HashSet};
 use std::sync::Arc;
 
@@ -98,22 +102,42 @@ fn touched_keys(out: &Value) -> impl Iterator<Item = &str> {
     })
 }
 
+/// The live instance `instance`, as `inspect` and `diff` name it.
+fn live(instance: &str) -> Target {
+    Target::Instance {
+        instance: instance.to_string(),
+    }
+}
+
+/// The save `save`, as `inspect` and `diff` name it.
+fn saved(save: &str) -> Target {
+    Target::Save {
+        save: save.to_string(),
+    }
+}
+
 impl Run<'_> {
-    async fn call(&self, method: &str, params: Value) -> Result<Value, CallError> {
-        self.client.call(method, params).await
+    /// A request whose answer the check reads itself (so a malformed one is reported as such).
+    async fn request(&self, r: &impl Request) -> Result<Value, CallError> {
+        self.client.request(r).await
     }
 
     async fn call_tool(&self, inst: &str, name: &str, args: &Value) -> Result<Value, CallError> {
-        self.call(
-            "call_tool",
-            json!({"instance": inst, "name": name, "args": args, "clock_ms": 0}),
-        )
-        .await
+        let params = CallToolParams {
+            instance: inst.to_string(),
+            name: name.to_string(),
+            args: args.clone(),
+            clock_ms: 0,
+        };
+        self.request(&params).await
     }
 
     async fn advance(&self, inst: &str, clock_ms: i64) -> Result<Value, CallError> {
-        self.call("advance", json!({"instance": inst, "clock_ms": clock_ms}))
-            .await
+        let params = AdvanceParams {
+            instance: inst.to_string(),
+            clock_ms,
+        };
+        self.request(&params).await
     }
 
     async fn start(
@@ -122,11 +146,23 @@ impl Run<'_> {
         config: &Value,
         from: Option<(&str, &str)>,
     ) -> Res<()> {
-        let mut p = json!({"instance": inst, "config": config, "seed": SEED, "clock_ms": 0});
-        if let Some((save, mode)) = from {
-            p["from"] = json!({"save": save, "mode": mode});
-        }
-        self.call("start", p).await.map_err(show)?;
+        let from = from.map(|(save, mode)| FromSave {
+            save: save.to_string(),
+            mode: if mode == "exact" {
+                Mode::Exact
+            } else {
+                Mode::Approximate
+            },
+        });
+        let p = StartParams {
+            instance: inst.to_string(),
+            config: config.clone(),
+            seed: SEED,
+            clock_ms: 0,
+            from,
+            world_time: None,
+        };
+        self.request(&p).await.map_err(show)?;
         if !self.live.contains(&inst) {
             self.live.push(inst);
         }
@@ -134,9 +170,7 @@ impl Run<'_> {
     }
 
     async fn stop(&mut self, inst: &'static str) -> Res<()> {
-        self.call("stop", json!({"instance": inst}))
-            .await
-            .map_err(show)?;
+        self.request(&Stop::instance(inst)).await.map_err(show)?;
         self.live.retain(|i| *i != inst);
         Ok(())
     }
@@ -159,11 +193,8 @@ impl Run<'_> {
         Ok(())
     }
 
-    async fn differing(&self, a: Value, b: Value) -> Res<Vec<String>> {
-        let out = self
-            .call("diff", json!({"a": a, "b": b}))
-            .await
-            .map_err(show)?;
+    async fn differing(&self, a: Target, b: Target) -> Res<Vec<String>> {
+        let out = self.request(&DiffParams { a, b }).await.map_err(show)?;
         let bad = || format!("diff gave no `differing` list of keys: {out}");
         out["differing"]
             .as_array()
@@ -176,12 +207,12 @@ impl Run<'_> {
     /// Saves `chk_a`; `Ok(false)` when the part can't save and says so with -32001.
     async fn save(&mut self, id: &'static str, d: &Describe) -> Res<bool> {
         let dir = self.hub.save_dir(&self.package, id);
-        let r = self
-            .call(
-                "save",
-                json!({"instance": "chk_a", "save": id, "dir": dir.to_string_lossy()}),
-            )
-            .await;
+        let params = SaveParams {
+            instance: "chk_a".into(),
+            save: id.into(),
+            dir: dir.to_string_lossy().into_owned(),
+        };
+        let r = self.request(&params).await;
         match r {
             Ok(v) => {
                 self.saves.push(id);
@@ -351,9 +382,7 @@ impl Run<'_> {
     }
 
     async fn diff_self_step(&self) -> Res<String> {
-        let v = self
-            .differing(json!({"save": "chk_s1"}), json!({"save": "chk_s1"}))
-            .await?;
+        let v = self.differing(saved("chk_s1"), saved("chk_s1")).await?;
         if v.is_empty() {
             Ok("empty".to_string())
         } else {
@@ -383,7 +412,7 @@ impl Run<'_> {
     /// 11. drop saves; with every instance stopped, usage must be back to where it started.
     async fn drop_saves_step(&mut self, usage_before: u64) -> Res<String> {
         while let Some(s) = self.saves.first().copied() {
-            self.call("drop_save", json!({"save": s}))
+            self.request(&SaveId { save: s.into() })
                 .await
                 .map_err(|e| format!("drop_save {s}: {e}"))?;
             self.saves.remove(0);
@@ -400,7 +429,7 @@ impl Run<'_> {
     /// What the part keeps: its `usage` (outside the save storage) plus its save folders.
     async fn usage(&self) -> Res<u64> {
         let v = self
-            .call("usage", json!({}))
+            .request(&GetUsage {})
             .await
             .map_err(|e| format!("usage: {e}"))?;
         let own = v["bytes"]
@@ -433,8 +462,7 @@ impl Run<'_> {
     /// Start `chk_b` from `chk_s1` in `mode`; the keys in which it differs from the save.
     async fn restore_diff(&mut self, config: &Value, mode: &str) -> Res<Vec<String>> {
         self.start("chk_b", config, Some(("chk_s1", mode))).await?;
-        self.differing(json!({"instance": "chk_b"}), json!({"save": "chk_s1"}))
-            .await
+        self.differing(live("chk_b"), saved("chk_s1")).await
     }
 
     async fn replay_step(&mut self, config: &Value, have_s2: bool) -> Res<String> {
@@ -477,9 +505,7 @@ impl Run<'_> {
     }
 
     async fn compare_replay_with_save(&self) -> Res<&'static str> {
-        let v = self
-            .differing(json!({"instance": "chk_r"}), json!({"save": "chk_s2"}))
-            .await?;
+        let v = self.differing(live("chk_r"), saved("chk_s2")).await?;
         if !v.is_empty() {
             return Err(format!("replay differs from chk_s2 in {v:?}"));
         }
@@ -506,11 +532,12 @@ impl Run<'_> {
     }
 
     async fn inspect_docs(&self, inst: &str, keys: &[&String]) -> Res<Value> {
+        let params = InspectParams {
+            target: live(inst),
+            keys: keys.iter().map(|k| k.to_string()).collect(),
+        };
         let v = self
-            .call(
-                "inspect",
-                json!({"target": {"instance": inst}, "keys": keys}),
-            )
+            .request(&params)
             .await
             .map_err(|e| format!("inspect {inst}: {e}"))?;
         match v["docs"].as_object() {
@@ -589,7 +616,7 @@ impl Run<'_> {
             }
         }
         for s in self.saves.clone() {
-            if let Err(e) = self.call("drop_save", json!({"save": s})).await {
+            if let Err(e) = self.request(&SaveId { save: s.into() }).await {
                 leftovers.push(format!("drop_save {s}: {e}"));
             }
         }

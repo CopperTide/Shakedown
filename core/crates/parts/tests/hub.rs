@@ -4,8 +4,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::OnceLock;
 
-/// The arena folder (this crate is core/crates/parts).
-fn arena() -> PathBuf {
+/// The repository folder (this crate is core/crates/parts).
+fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../..")
         .canonicalize()
@@ -13,15 +13,15 @@ fn arena() -> PathBuf {
 }
 
 fn bin_dir() -> PathBuf {
-    arena().join("core/target/debug")
+    repo().join("core/target/debug")
 }
 
 fn build_counter() {
     static ONCE: OnceLock<()> = OnceLock::new();
     ONCE.get_or_init(|| {
         let st = Command::new("cargo")
-            .args(["build", "--example", "counter", "-p", "arena-part"])
-            .current_dir(arena())
+            .args(["build", "--example", "counter", "-p", "shakedown-part"])
+            .current_dir(repo())
             .status()
             .unwrap();
         assert!(st.success());
@@ -39,7 +39,7 @@ fn write_pkg(root: &Path, name: &str, command: &str) {
     let d = root.join(name);
     std::fs::create_dir_all(&d).unwrap();
     std::fs::write(
-        d.join("arena-package.toml"),
+        d.join("shakedown-package.toml"),
         format!(
             "kind = \"integration\"\nname = \"{name}\"\nversion = \"0.1.0\"\nprotocol = 1\nrun = {{ command = {command} }}\n"
         ),
@@ -88,7 +88,7 @@ async fn exercise(hub: &Hub, name: &str) {
 fn manifest_rejects_bad_name() {
     let root = temp("badname");
     write_pkg(&root, "bad", r#"["x"]"#);
-    let f = root.join("bad/arena-package.toml");
+    let f = root.join("bad/shakedown-package.toml");
     let t = std::fs::read_to_string(&f)
         .unwrap()
         .replace("name = \"bad\"", "name = \"Bad_Name\"");
@@ -128,14 +128,34 @@ async fn run_override_replaces_the_manifest_command() {
     write_pkg(&root, "relay-counter", r#"["/nonexistent/relay-counter"]"#);
     // Only this test uses the package, so no other test sees the variable.
     std::env::set_var(
-        "ARENA_RUN_RELAY_COUNTER",
-        "exec \"${ARENA_BIN_DIR}/examples/counter\"",
+        "SHAKEDOWN_RUN_RELAY_COUNTER",
+        "exec \"${SHAKEDOWN_BIN_DIR}/examples/counter\"",
     );
     let hub = hub_for(std::slice::from_ref(&root), &saves);
     let d = hub.describe("relay-counter").await.unwrap();
-    std::env::remove_var("ARENA_RUN_RELAY_COUNTER");
+    std::env::remove_var("SHAKEDOWN_RUN_RELAY_COUNTER");
     assert_eq!(d.protocol, 1);
     drop(hub);
+    std::fs::remove_dir_all(&root).unwrap();
+    std::fs::remove_dir_all(&saves).unwrap();
+}
+
+/// A package written before 2026-11-19, under every old name: `arena-package.toml`,
+/// `protocol = "arena-part/1"` and `${ARENA_BIN_DIR}` in its command. It is found and runs.
+#[tokio::test]
+async fn a_package_under_the_old_names_still_runs() {
+    build_counter();
+    let (root, saves) = (temp("oldnames"), temp("oldnames-saves"));
+    let d = root.join("counter");
+    std::fs::create_dir_all(&d).unwrap();
+    std::fs::write(
+        d.join("arena-package.toml"),
+        "kind = \"integration\"\nname = \"counter\"\nversion = \"0.1.0\"\nprotocol = \"arena-part/1\"\n\
+         run = { command = [\"${ARENA_BIN_DIR}/examples/counter\"] }\n",
+    )
+    .unwrap();
+    let hub = hub_for(std::slice::from_ref(&root), &saves);
+    exercise(&hub, "counter").await;
     std::fs::remove_dir_all(&root).unwrap();
     std::fs::remove_dir_all(&saves).unwrap();
 }
@@ -144,7 +164,11 @@ async fn run_override_replaces_the_manifest_command() {
 async fn hub_spawns_rust_counter_and_saves() {
     build_counter();
     let (root, saves) = (temp("rust"), temp("rust-saves"));
-    write_pkg(&root, "counter", r#"["${ARENA_BIN_DIR}/examples/counter"]"#);
+    write_pkg(
+        &root,
+        "counter",
+        r#"["${SHAKEDOWN_BIN_DIR}/examples/counter"]"#,
+    );
     let hub = hub_for(std::slice::from_ref(&root), &saves);
     exercise(&hub, "counter").await;
     assert!(hub.saves_bytes() > 0);
@@ -166,7 +190,7 @@ async fn hub_spawns_rust_counter_and_saves() {
 async fn hub_spawns_python_counter() {
     let saves = temp("py-saves");
     // kits/python/examples holds the manifest, so kits/python is the package root
-    let hub = hub_for(&[arena().join("kits/python")], &saves);
+    let hub = hub_for(&[repo().join("kits/python")], &saves);
     exercise(&hub, "counter-py").await;
     drop(hub);
     std::fs::remove_dir_all(&saves).unwrap();
@@ -176,7 +200,11 @@ async fn hub_spawns_python_counter() {
 async fn hub_respawns_after_crash() {
     build_counter();
     let (root, saves) = (temp("crash"), temp("crash-saves"));
-    write_pkg(&root, "counter", r#"["${ARENA_BIN_DIR}/examples/counter"]"#);
+    write_pkg(
+        &root,
+        "counter",
+        r#"["${SHAKEDOWN_BIN_DIR}/examples/counter"]"#,
+    );
     let hub = hub_for(std::slice::from_ref(&root), &saves);
     let c = hub.client("counter").await.unwrap();
     let _: Value = c.call("usage", json!({})).await.unwrap();
@@ -219,7 +247,7 @@ async fn command_mode_clears_environment() {
     write_pkg(
         &root,
         "envy",
-        r#"["sh", "-c", "echo ARENA_SAVES=$ARENA_SAVES FOO=$FOO >&2; exit 1"]"#,
+        r#"["sh", "-c", "echo SHAKEDOWN_SAVES=$SHAKEDOWN_SAVES FOO=$FOO >&2; exit 1"]"#,
     );
     std::env::set_var("FOO", "leaked");
     let hub = hub_for(std::slice::from_ref(&root), &saves);
@@ -227,7 +255,7 @@ async fn command_mode_clears_environment() {
     match c.call::<Value>("describe", json!({})).await {
         Err(CallError::Stopped(m)) => {
             assert!(
-                m.contains(&format!("ARENA_SAVES={}", saves.display())),
+                m.contains(&format!("SHAKEDOWN_SAVES={}", saves.display())),
                 "{m}"
             );
             assert!(!m.contains("leaked"), "{m}");
@@ -244,17 +272,20 @@ async fn hub_env_overrides_reach_command_programs() {
     write_pkg(
         &root,
         "envo",
-        r#"["sh", "-c", "echo ARENA_PG_URL=$ARENA_PG_URL EXTRA=$EXTRA >&2; exit 1"]"#,
+        r#"["sh", "-c", "echo SHAKEDOWN_PG_URL=$SHAKEDOWN_PG_URL EXTRA=$EXTRA >&2; exit 1"]"#,
     );
     let hub = hub_for(std::slice::from_ref(&root), &saves).with_env(vec![
-        ("ARENA_PG_URL".into(), "postgres://x/y?arena_ns=t_".into()),
+        (
+            "SHAKEDOWN_PG_URL".into(),
+            "postgres://x/y?shakedown_ns=t_".into(),
+        ),
         ("EXTRA".into(), "yes".into()),
     ]);
     let c = hub.client("envo").await.unwrap();
     match c.call::<Value>("describe", json!({})).await {
         Err(CallError::Stopped(m)) => {
             assert!(
-                m.contains("ARENA_PG_URL=postgres://x/y?arena_ns=t_ EXTRA=yes"),
+                m.contains("SHAKEDOWN_PG_URL=postgres://x/y?shakedown_ns=t_ EXTRA=yes"),
                 "{m}"
             );
         }
@@ -323,7 +354,7 @@ fn group_alive(pgid: u32) -> bool {
 #[tokio::test]
 async fn killed_uv_python_respawns_and_leaves_no_process() {
     let saves = temp("uvkill-saves");
-    let hub = hub_for(&[arena().join("kits/python")], &saves);
+    let hub = hub_for(&[repo().join("kits/python")], &saves);
     let c = hub.client("counter-py").await.unwrap();
     let _: Value = c.call("usage", json!({})).await.unwrap();
     Command::new("kill")
@@ -352,7 +383,11 @@ async fn killed_uv_python_respawns_and_leaves_no_process() {
 #[test]
 fn save_dirs_skips_dot_folders() {
     let (root, saves) = (temp("dots"), temp("dots-saves"));
-    write_pkg(&root, "counter", r#"["${ARENA_BIN_DIR}/examples/counter"]"#);
+    write_pkg(
+        &root,
+        "counter",
+        r#"["${SHAKEDOWN_BIN_DIR}/examples/counter"]"#,
+    );
     let hub = hub_for(std::slice::from_ref(&root), &saves);
     for dir in ["s1", ".live/a", ".tmp"] {
         std::fs::create_dir_all(saves.join("counter").join(dir)).unwrap();
@@ -367,7 +402,11 @@ fn save_dirs_skips_dot_folders() {
 fn remove_save_dir_removes_read_only_folders() {
     use std::os::unix::fs::PermissionsExt;
     let (root, saves) = (temp("ro"), temp("ro-saves"));
-    write_pkg(&root, "counter", r#"["${ARENA_BIN_DIR}/examples/counter"]"#);
+    write_pkg(
+        &root,
+        "counter",
+        r#"["${SHAKEDOWN_BIN_DIR}/examples/counter"]"#,
+    );
     let hub = hub_for(std::slice::from_ref(&root), &saves);
     let dir = hub.save_dir("counter", "s1");
     std::fs::create_dir_all(dir.join("a/b")).unwrap();
@@ -378,7 +417,7 @@ fn remove_save_dir_removes_read_only_folders() {
     hub.remove_save_dir("counter", "s1");
     let gone = !dir.exists();
     for d in [&root, &saves] {
-        arena_part::helpers::remove_tree(d).unwrap();
+        shakedown_part::helpers::remove_tree(d).unwrap();
     }
     assert!(gone);
 }

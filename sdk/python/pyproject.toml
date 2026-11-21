@@ -1,6 +1,6 @@
 [project]
-name = "arena-sdk"
-version = "0.1.0"
+name = "shakedown-sdk"
+version = "0.2.0"
 description = "Build, drive, observe and export Shakedown environments from Python"
 readme = "README.md"
 license = "Apache-2.0"
@@ -29,8 +29,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/arena"]
+# `arena`: the old import name, an alias of shakedown (src/arena/__init__.py).
+packages = ["src/shakedown", "src/arena"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-markers = ["core: needs a running or startable arenad (skipped when there is none)"]
+markers = ["core: needs a running or startable shaked (skipped when there is none)"]

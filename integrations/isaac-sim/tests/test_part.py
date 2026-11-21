@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from arena_part import PartError
+from shakedown_part import PartError
 from isaac_part.backends import BACKENDS
 from isaac_part.config import DEFAULT_ISAAC
 from isaac_part.mirror import Mirror
@@ -55,7 +55,7 @@ def save_dir(saves_root, save):
 
 def test_scenario_alarm_on_arena_clock():
     """test_scenario.py trips PR-A1 55 to 66 s after the start, after zone C and then D; check_physics.py has
-    zone C near 33 s for seed 7 (measured here: 33.7 s of arena time, the scenario starting at arena 0)."""
+    zone C near 33 s for seed 7 (measured here: 33.7 s of world time, the scenario starting at arena 0)."""
     part = started()
     first = part.advance("i1", 30_000)
     assert [e["kind"] for e in first["events"][:2]] == ["plant", "scenario"] and first["changed"]
@@ -98,7 +98,7 @@ def test_advance_split_does_not_matter():
 
 
 def same_inputs(part, instance):
-    """The same tool calls and advances on the arena clock (the part's inputs, no agent); every
+    """The same tool calls and advances on the world clock (the part's inputs, no agent); every
     result and event, in order."""
     out = [part.call_tool(instance, "set_line_status", {"line": "LINE-B", "status": "running", "rate": 1.2}, 2_000),
            part.advance(instance, 4_000),
@@ -111,7 +111,7 @@ def same_inputs(part, instance):
 
 def test_replay_equals():
     a = started("a")
-    b = started("b", part=a)  # two instances in one process, as arenad runs them
+    b = started("b", part=a)  # two instances in one process, as shaked runs them
     assert same_inputs(a, "a") == same_inputs(a, "b")
     assert docs(a, "a") == docs(a, "b")
     assert docs(a, "a")["technician/T-1"]["machine"] == "PR-C1"
@@ -144,11 +144,11 @@ def test_approximate_restore_continues(saves_root):
 
 
 def over_stdio(requests, saves_root):
-    """The part's replies to `requests`, from a fresh process speaking arena-part/1 over stdio."""
+    """The part's replies to `requests`, from a fresh process speaking shakedown-part/1 over stdio."""
     lines = "".join(json.dumps({"jsonrpc": "2.0", "id": i, "method": m, "params": p}) + "\n"
                     for i, (m, p) in enumerate(requests, 1))
     r = subprocess.run([sys.executable, "-m", "isaac_part", "--backend", "standin"], input=lines, cwd=PACKAGE,
-                       capture_output=True, text=True, env={**os.environ, "ARENA_SAVES": str(saves_root)}, timeout=120)
+                       capture_output=True, text=True, env={**os.environ, "SHAKEDOWN_SAVES": str(saves_root)}, timeout=120)
     replies = [json.loads(line) for line in r.stdout.splitlines()]
     assert len(replies) == len(requests), r.stderr[-2000:]
     return replies
@@ -273,7 +273,7 @@ REFUSALS = [  # (tool, args, text in the error): each changes nothing
      "task is 'inspect' or 'repair'"),
     ("set_line_status", {"line": "LINE-A", "status": "sideways"}, "status is running, stopped or down"),
     ("set_line_status", {"line": "LINE-Q", "status": "stopped"}, "unknown line LINE-Q"),
-    ("predict_move", {"order": "A-1", "to_line": "LINE-F"}, "without ERPNext in the arena"),
+    ("predict_move", {"order": "A-1", "to_line": "LINE-F"}, "without ERPNext in this world"),
     ("vibration_spectrum", {"machine": "PR-A1", "seconds": "lots"}, "seconds"),
 ]
 
@@ -379,10 +379,10 @@ def test_mirror_mode_has_no_tools_and_relays_events(stub_plant, saves_root):
 
 
 def checker():
-    dirs = [Path(os.environ["ARENA_BIN_DIR"])] if os.environ.get("ARENA_BIN_DIR") else []
+    dirs = [Path(os.environ["SHAKEDOWN_BIN_DIR"])] if os.environ.get("SHAKEDOWN_BIN_DIR") else []
     for d in dirs + [ARENA / "core" / "target" / profile for profile in ("debug", "release")]:
-        if (d / "arena-part-check").is_file():
-            return d / "arena-part-check"
+        if (d / "shakedown-part-check").is_file():
+            return d / "shakedown-part-check"
     return None
 
 
@@ -391,19 +391,19 @@ SHIFT_PLANT = ARENA / "benchmarks" / "factory" / "data" / "shift.json"
 
 @pytest.mark.parametrize("config", [None, "shift"])
 def test_conformance(tmp_path, config):
-    """arena-part-check on a copy of the manifest that runs the stand-in backend: as it is, and with the factory
+    """shakedown-part-check on a copy of the manifest that runs the stand-in backend: as it is, and with the factory
     benchmark's robot cell and load model (its shift task's config)."""
     binary = checker()
     if binary is None or shutil.which("uv") is None:
-        pytest.skip("arena-part-check is not built (cargo build -p parts --bin arena-part-check) or uv missing")
-    manifest = (PACKAGE / "arena-package.toml").read_text()
+        pytest.skip("shakedown-part-check is not built (cargo build -p parts --bin shakedown-part-check) or uv missing")
+    manifest = (PACKAGE / "shakedown-package.toml").read_text()
     run = f'run = {{ command = ["uv", "run", "--directory", "{PACKAGE}", "python", "-m", "isaac_part", ' \
           f'"--backend", "standin"] }}'
     (tmp_path / "pkg").mkdir()
-    (tmp_path / "pkg" / "arena-package.toml").write_text(re.sub(r"^run = .*$", run, manifest, flags=re.M))
+    (tmp_path / "pkg" / "shakedown-package.toml").write_text(re.sub(r"^run = .*$", run, manifest, flags=re.M))
     saves = tmp_path / "check-saves"
     saves.mkdir()
-    env = {**os.environ, "ARENA_SAVES": str(saves)}
+    env = {**os.environ, "SHAKEDOWN_SAVES": str(saves)}
     args = [str(binary), str(tmp_path / "pkg")]
     if config:
         (tmp_path / "config.json").write_text(json.dumps(json.loads(SHIFT_PLANT.read_text())["plant"]))
@@ -504,11 +504,11 @@ def test_recording_paths_and_frame_spacing(tmp_path):
 
 
 def test_save_goes_to_the_save_folder_by_convention(saves_root, tmp_path):
-    """arenad's `dir` is its own path; the program, which may run elsewhere, keeps saves under its ARENA_SAVES."""
+    """shaked's `dir` is its own path; the program, which may run elsewhere, keeps saves under its SHAKEDOWN_SAVES."""
     part = started()
-    part.save("i1", "s1", str(tmp_path / "arenad-side" / "s1"))
+    part.save("i1", "s1", str(tmp_path / "shaked-side" / "s1"))
     assert (saves_root / "isaac-sim" / "s1" / "plant.pkl.gz").exists()
-    assert not (tmp_path / "arenad-side").exists()
+    assert not (tmp_path / "shaked-side").exists()
 
 
 def test_steps_that_never_reach_the_plant_are_an_error():

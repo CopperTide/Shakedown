@@ -1,4 +1,4 @@
-"""Reads `openshell logs <sandbox> --source sandbox` on stdin and posts its policy denials to arenad as world
+"""Reads `openshell logs <sandbox> --source sandbox` on stdin and posts its policy denials to shaked as world
 events of the branch and agent the MCP URL (argv[1]) names. One event per denied destination, with how many
 times and why. Prints what it posted to stderr; posts nothing when the log has no denial."""
 import json

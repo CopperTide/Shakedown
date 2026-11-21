@@ -74,5 +74,5 @@ def main(n: int) -> None:
 
 if __name__ == "__main__":
     import os
-    os.environ.setdefault("ARENA_SAVES", tempfile.mkdtemp())
+    os.environ.setdefault("SHAKEDOWN_SAVES", tempfile.mkdtemp())
     main(int(sys.argv[1]) if len(sys.argv) > 1 else 10)

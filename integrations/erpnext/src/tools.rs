@@ -1,10 +1,10 @@
 //! The tools: documents read and written through Frappe's REST API. Keys are
 //! `<Doctype>/<name>`. Frappe refusing a call (a missing document, a failed validation) is the
 //! tool's error, not the integration's.
-use arena_part::proto::ToolOutput;
-use arena_part::PartError;
 use reqwest::Method;
 use serde_json::{json, Map, Value};
+use shakedown_part::proto::ToolOutput;
+use shakedown_part::PartError;
 
 use crate::names::key;
 use crate::rest::{Reply, Rest};

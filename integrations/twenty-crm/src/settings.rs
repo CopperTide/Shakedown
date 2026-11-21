@@ -1,4 +1,4 @@
-//! Which server this program runs: from env, then the config of the first start. arenad runs
+//! Which server this program runs: from env, then the config of the first start. shaked runs
 //! programs with a cleared environment, so the config is how a test names a server of its own.
 use std::path::PathBuf;
 
@@ -6,7 +6,9 @@ use anyhow::{bail, Context, Result};
 use serde_json::Value;
 
 pub const DEFAULT_IMAGE: &str = "twentycrm/twenty:v2.51.0";
-const DEFAULT_PROJECT: &str = "arena_twenty";
+const DEFAULT_PROJECT: &str = "shakedown_twenty";
+/// The default project until 2026-11-19, still used while its database server is the only one.
+const OLD_PROJECT: &str = "arena_twenty";
 const DEFAULT_DB_PORT: u16 = 5546;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -37,17 +39,28 @@ impl Default for Settings {
 }
 
 impl Settings {
-    /// `ARENA_TWENTY_PROJECT`, `_DB_PORT`, `_IMAGE`, else the defaults.
+    /// `SHAKEDOWN_TWENTY_PROJECT`, `_DB_PORT`, `_IMAGE`, else the defaults.
     pub fn from_env() -> Result<Settings> {
         let mut s = Settings::default();
-        if let Ok(project) = std::env::var("ARENA_TWENTY_PROJECT") {
+        if let Ok(project) = shakedown_part::settings::var("SHAKEDOWN_TWENTY_PROJECT") {
             s.project = project;
         }
-        if let Ok(port) = std::env::var("ARENA_TWENTY_DB_PORT") {
-            s.db_port = port.parse().context("ARENA_TWENTY_DB_PORT")?;
+        if let Ok(port) = shakedown_part::settings::var("SHAKEDOWN_TWENTY_DB_PORT") {
+            s.db_port = port.parse().context("SHAKEDOWN_TWENTY_DB_PORT")?;
         }
-        if let Ok(image) = std::env::var("ARENA_TWENTY_IMAGE") {
+        if let Ok(image) = shakedown_part::settings::var("SHAKEDOWN_TWENTY_IMAGE") {
             s.image = image;
+        }
+        if s.project == DEFAULT_PROJECT {
+            let db = |project: &str| format!("{}-db", project.replace('_', "-"));
+            let exists = shakedown_part::helpers::docker_name::container_exists;
+            if shakedown_part::helpers::docker_name::keep_old(
+                &db(DEFAULT_PROJECT),
+                &db(OLD_PROJECT),
+                exists,
+            ) {
+                s.project = OLD_PROJECT.into();
+            }
         }
         s.check()?;
         Ok(s)
@@ -101,11 +114,11 @@ mod tests {
 
     #[test]
     fn the_config_overrides_and_bad_names_are_refused() {
-        let s =
-            Settings::default().with_config(&json!({"project": "arena_twenty_t1", "db_port": 7}));
+        let s = Settings::default()
+            .with_config(&json!({"project": "shakedown_twenty_t1", "db_port": 7}));
         let s = s.unwrap();
-        assert_eq!((s.project.as_str(), s.db_port), ("arena_twenty_t1", 7));
-        assert_eq!(s.docker_name(), "arena-twenty-t1");
+        assert_eq!((s.project.as_str(), s.db_port), ("shakedown_twenty_t1", 7));
+        assert_eq!(s.docker_name(), "shakedown-twenty-t1");
         assert!(s.admin_url().contains("127.0.0.1:7/"));
         assert!(Settings::default()
             .with_config(&json!({"project": "A b"}))

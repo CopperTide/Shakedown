@@ -1,0 +1,9 @@
+# Invented first and last names the simulated people are drawn from. Every role shuffles all first-last pairs
+# (40 × 30 = 1200) and keeps those it holds earliest, so each of the four roles has about 300 to draw from: the
+# largest world (200 engineers, 150 developers) fits with room to spare (test_template.py builds it).
+first: [Ada, Bram, Cleo, Dara, Eli, Fern, Gus, Hana, Ivo, Juno, Kai, Lena, Milo, Nia, Otto, Pia, Quin, Rhea, Sol,
+        Tara, Uma, Vik, Wren, Xan, Yara, Zeb, Anya, Bo, Cyra, Dev, Esme, Finn, Gia, Hugo, Iris, Jem, Kira, Leo, Mae,
+        Nico]
+last: [Abbott, Barlow, Calder, Dorsey, Ellery, Fairley, Gable, Hartwell, Iverson, Jarrow, Kestrel, Lindqvist,
+       Marlowe, Northam, Oakes, Penrose, Quarry, Redfern, Sallow, Thorne, Underhill, Vance, Whitlock, Yardley,
+       Zeller, Ashdown, Brightwater, Coldwell, Dunmore, Everly]

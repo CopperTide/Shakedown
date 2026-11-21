@@ -1,7 +1,7 @@
 //! What the tools take, as `describe` shows them. The arguments of `propose_change` are those of
 //! CopperTide's own `propose_change` agent tool.
-use arena_part::proto::{Effect, ToolSchema};
 use serde_json::{json, Value};
+use shakedown_part::proto::{Effect, ToolSchema};
 
 fn tool(name: &str, description: &str, effect: Effect, input: Value) -> ToolSchema {
     ToolSchema {

@@ -1,10 +1,10 @@
 //! Running the `sql_query` and `sql_execute` tools, and turning rows into JSON.
-use arena_part::helpers::mariadb::mysql_async::consts::ColumnType;
-use arena_part::helpers::mariadb::mysql_async::prelude::Queryable;
-use arena_part::helpers::mariadb::mysql_async::{self as my, Conn, Params, Row};
-use arena_part::helpers::sql_tools::schemas;
-use arena_part::proto::ToolSchema;
 use serde_json::{json, Map, Value};
+use shakedown_part::helpers::mariadb::mysql_async::consts::ColumnType;
+use shakedown_part::helpers::mariadb::mysql_async::prelude::Queryable;
+use shakedown_part::helpers::mariadb::mysql_async::{self as my, Conn, Params, Row};
+use shakedown_part::helpers::sql_tools::schemas;
+use shakedown_part::proto::ToolSchema;
 
 use crate::keys::{changes_default_db, read_only};
 

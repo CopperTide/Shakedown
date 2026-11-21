@@ -1,0 +1,2 @@
+# Sent by gh 2.45.0 (github.com/cli/cli, MIT, LICENSE-cli.txt)
+mutation LabelRemove($input:RemoveLabelsFromLabelableInput!){removeLabelsFromLabelable(input: $input){__typename}}

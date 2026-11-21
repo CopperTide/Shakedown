@@ -1,13 +1,13 @@
 # Shakedown — instructions for agents working in this repo
 
 Shakedown records multi-agent runs against a world made of integrations, saves the world at every
-step, and reruns from any step. The protocol between arenad and an integration or benchmark is
+step, and reruns from any step. The protocol between shaked and an integration or benchmark is
 `docs/protocol.md`; the concepts (restore modes, teams, forking) are in `docs/concepts.md`.
 Setup, the checks to run before a pull request, and how to write an integration or a benchmark are
 in `CONTRIBUTING.md`. The rules below are the same as its "Code rules".
 
 ## Layout and boundaries
-- `core/` is arenad and the primitives. It contains no code for a particular system.
+- `core/` is shaked and the primitives. It contains no code for a particular system.
 - `integrations/<name>/` and `benchmarks/<name>/` are isolated packages, like drivers. They use only
   the kits (`kits/rust`, `kits/python`) and never a `core/` crate; `core/` never depends on them.
   `core/crates/parts/tests/isolation.rs` checks this.
@@ -34,6 +34,6 @@ in `CONTRIBUTING.md`. The rules below are the same as its "Code rules".
   are `#[ignore]`d with the prefix `live_` (Rust) or marked `live` (Python).
 - Tests drop every database, container and folder they create, even when an assertion fails.
   `core/scripts/leakcheck.sh` checks this for the core's tests.
-- Never start arenad while tests run: its startup cleanup drops databases the tests make.
-- Both Cargo workspaces share `core/target` (set in `.cargo/config.toml`), where arenad finds the
+- Never start shaked while tests run: its startup cleanup drops databases the tests make.
+- Both Cargo workspaces share `core/target` (set in `.cargo/config.toml`), where shaked finds the
   package programs; never add another target directory.

@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install and run the tests
+        run: |
+          pip install --user --no-cache-dir --no-index --find-links /opt/wheels --quiet -r requirements-dev.txt
+          python -m pytest -q -p no:cacheprovider
+
+  deploy:
+    name: deploy
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the image
+        uses: shakedown/build@v1
+        with:
+          image: orders
+      - name: Deploy to staging
+        uses: shakedown/deploy@v1
+        with:
+          service: staging-orders
+          image: orders
+      - name: Deploy to production
+        uses: shakedown/deploy@v1
+        with:
+          service: prod-orders
+          image: orders

@@ -1,8 +1,8 @@
 """The roster as the config gives it (stations, each needing one certification, and operators with theirs, on
 shift at a station, floating or on call) and as the state changes it. A station is staffed when its operator is on
 shift and certified for it."""
-from arena_part import errors
-from arena_part.params import Refusal
+from shakedown_part import errors
+from shakedown_part.params import Refusal
 
 BASE = "base"
 
