@@ -60,6 +60,9 @@ pub struct Config {
     /// plus the public URL's host). Empty, or a layer that does not serve others, means this
     /// machine's loopback names only.
     pub allowed_hosts: Vec<String>,
+    /// The project folder whose worlds, scenarios, setups and experiments shaked serves
+    /// (`SHAKEDOWN_PROJECT`, set by shaked's main). None: the project operations answer 409.
+    pub project_dir: Option<std::path::PathBuf>,
 }
 
 pub const DEFAULT_DRIVER_GRACE: Duration = Duration::from_secs(30);
@@ -107,6 +110,7 @@ impl Config {
                 .filter(|b| !b.is_empty()),
             public_url: String::new(),
             allowed_hosts: Vec::new(),
+            project_dir: None,
         }
     }
 
@@ -164,6 +168,8 @@ pub struct AppState {
     pub drivers: OnceLock<Drivers>,
     /// Set to true when shutdown starts; SSE streams end on it.
     pub shutdown: tokio::sync::watch::Sender<bool>,
+    /// The project folder (`Config::project_dir`), re-read when its files change.
+    pub project: crate::project_state::ProjectState,
     /// Held for writing by a cleanup (`POST /api/gc`) and for reading while a run or fork
     /// starts, so a cleanup never drops saves a starting branch is about to name.
     pub cleanup: Arc<tokio::sync::RwLock<()>>,
@@ -186,6 +192,21 @@ fn shared_client(policy: &crate::layer::Policy) -> reqwest::Client {
         .expect("http client")
 }
 
+/// The benchmark chosen at start and the one new runs use: env `SHAKEDOWN_BENCHMARK`, else the
+/// one remembered in `worlds_dir`, else the only one installed.
+fn start_benchmarks(hub: &Hub, config: &Config) -> (String, String) {
+    let named = config.start_benchmark.clone();
+    let benchmark = named.clone().unwrap_or_else(|| only_benchmark(hub));
+    let remembered = || crate::worlds::remembered(hub, config.worlds_dir.as_deref());
+    let current = named
+        .or_else(remembered)
+        .unwrap_or_else(|| benchmark.clone());
+    if current != benchmark {
+        eprintln!("shaked: using the remembered benchmark {current}");
+    }
+    (benchmark, current)
+}
+
 impl AppState {
     pub fn new(store: Arc<Store>, hub: Arc<Hub>, mut config: Config) -> AppState {
         let policy = store.layer().policy();
@@ -193,16 +214,9 @@ impl AppState {
         if !policy.environment_keys {
             config.providers = ProviderConfig::without_environment();
         }
-        let named = config.start_benchmark.clone();
-        let benchmark = named.clone().unwrap_or_else(|| only_benchmark(&hub));
-        let remembered = || crate::worlds::remembered(&hub, config.worlds_dir.as_deref());
-        let current = named
-            .or_else(remembered)
-            .unwrap_or_else(|| benchmark.clone());
-        if current != benchmark {
-            eprintln!("shaked: using the remembered benchmark {current}");
-        }
+        let (benchmark, current) = start_benchmarks(&hub, &config);
         AppState {
+            project: crate::project_state::ProjectState::new(config.project_dir.clone()),
             current: current.into(),
             builds: Default::default(),
             store,

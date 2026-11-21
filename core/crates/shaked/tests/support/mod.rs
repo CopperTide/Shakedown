@@ -174,6 +174,12 @@ impl AppSetup {
         self
     }
 
+    /// Opens the project folder `dir` (as `SHAKEDOWN_PROJECT` would).
+    pub fn project(self, dir: &std::path::Path) -> AppSetup {
+        let dir = dir.to_path_buf();
+        self.config(move |c| c.project_dir = Some(dir))
+    }
+
     /// Like [`config`](Self::config), setting the providers.
     pub fn providers(self, providers: ProviderConfig) -> AppSetup {
         self.config(|c| c.providers = providers)
@@ -209,4 +215,23 @@ pub fn local() -> &'static shaked::auth::Caller {
 /// `store`'s records as the person at this machine.
 pub fn records(store: &shaked::store::Store) -> shaked::store::Scoped<'_> {
     store.at(local())
+}
+
+/// The example project folder the project crate's tests use.
+pub fn project_fixture() -> std::path::PathBuf {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../project/tests/fixtures/larkspur")
+}
+
+/// Copies the folder `from` into `to`, recursively.
+pub fn copy_dir(from: &std::path::Path, to: &std::path::Path) {
+    std::fs::create_dir_all(to).unwrap();
+    for entry in std::fs::read_dir(from).unwrap() {
+        let entry = entry.unwrap();
+        let target = to.join(entry.file_name());
+        if entry.file_type().unwrap().is_dir() {
+            copy_dir(&entry.path(), &target);
+        } else {
+            std::fs::copy(entry.path(), target).unwrap();
+        }
+    }
 }

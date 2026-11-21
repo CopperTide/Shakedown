@@ -22,6 +22,8 @@
 //!   (default `<repo>/core/target/release`; build with `cargo build --release` in `<repo>`);
 //!   `${SHAKEDOWN_DIR}` stands for `<repo>`;
 //! - `SHAKEDOWN_SAVES`: save storage (default `<repo>/core/saves`).
+//! - `SHAKEDOWN_PROJECT`: the project folder whose worlds, scenarios, setups and experiments shaked
+//!   serves (`shaked mcp` reads it too). Unset: the project operations answer 409.
 //! - `SHAKEDOWN_WORLDS`: where built worlds are written, installed from at start like a package
 //!   root, and where the current benchmark is remembered (default `<repo>/core/worlds`).
 //! - `SHAKEDOWN_TEMPLATES`: more template folders for the world builder (passed on to it).

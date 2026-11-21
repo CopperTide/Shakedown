@@ -147,6 +147,9 @@ fn app_state(
     config.public_url = bind.public_url.to_string();
     config.allowed_hosts = bind.allowed_hosts.clone();
     config.worlds_dir = Some(worlds);
+    config.project_dir = parts::settings::var_os("SHAKEDOWN_PROJECT")
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from);
     let mut state = AppState::new(store, hub, config);
     state.objects = objects;
     Ok(Arc::new(state))

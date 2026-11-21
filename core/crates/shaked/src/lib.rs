@@ -29,6 +29,7 @@ pub mod objects;
 pub mod overhead;
 pub mod pg;
 pub mod prices;
+pub mod project_state;
 pub mod prompts;
 pub mod providers;
 pub mod proxy;
