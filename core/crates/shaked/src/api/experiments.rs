@@ -35,7 +35,7 @@ fn default_runs() -> i32 {
 
 /// One agent setup: its name (`Setup A`, … when absent), team and runner (`chain` by default),
 /// or a Code connection whose driver runs the team (its runner is then `external`).
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 pub(crate) struct SetupReq {
     #[serde(default)]
     pub(crate) name: Option<String>,
@@ -58,7 +58,7 @@ fn code_team() -> Team {
 
 /// A new experiment: the task, the disruptions every run adds to it, the runs per setup, and
 /// the setups.
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 pub(crate) struct NewExperimentReq {
     #[serde(default)]
     pub(crate) name: Option<String>,

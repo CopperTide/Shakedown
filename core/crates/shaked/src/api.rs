@@ -30,7 +30,7 @@ use crate::{
 mod compare;
 mod connect;
 mod connections;
-mod experiments;
+pub(crate) mod experiments;
 mod external;
 mod extract;
 mod flow;

@@ -2,6 +2,7 @@
 //! class and input schema. The HTTP routes and the control MCP server are both generated from it,
 //! so the buttons, the API, the assistant and any agent can do the same things.
 
+mod deploy;
 mod error;
 pub mod http;
 mod item_ops;
