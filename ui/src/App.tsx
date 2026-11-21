@@ -15,6 +15,7 @@ const ExperimentPage = lazy(() => import('@/features/experiments/ExperimentPage'
 const ExperimentsCompare = lazy(() => import('@/features/experiments/ExperimentPage').then((m) => ({ default: m.ComparePage })));
 const NewExperimentPage = lazy(() => import('@/features/experiments/NewExperimentPage'));
 const Home = lazy(() => import('@/features/start/StartPage'));
+const HomePage = lazy(() => import('@/features/home/HomePage'));
 const ProcessPage = lazy(() => import('@/features/process/ProcessPage'));
 const Compare = lazy(() => import('@/features/compare/ComparePage'));
 const ConnectPage = lazy(() => import('@/features/connect/ConnectPage'));
@@ -44,7 +45,7 @@ function AppRoutes() {
   return (
     <Suspense fallback={null}>
       <Routes>
-        <Route path="/" element={<ExperimentsPage />} />
+        <Route path="/" element={<HomePage />} />
         <Route path="/experiments" element={<ExperimentsPage />} />
         <Route path="/worlds" element={<Soon title="Worlds" />} />
         <Route path="/scenarios" element={<Soon title="Scenarios" />} />
