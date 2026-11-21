@@ -10,6 +10,7 @@ import { EmptyState, ErrorState, LoadingState } from '@/components/ui/state';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useQuery } from '@/hooks/useQuery';
 import type { ExperimentBody, ItemKind } from '@/model/project';
+import ExperimentSettings from '@/features/editors/experiment/ExperimentSettings';
 import DeployDialog from './DeployDialog';
 import Deployments from './Deployments';
 import FileOverview from './FileOverview';
@@ -57,7 +58,7 @@ export default function FileExperimentPage() {
           <TabsList><TabsTrigger value="overview">Overview</TabsTrigger><TabsTrigger value="runs">Runs</TabsTrigger><TabsTrigger value="settings">Settings</TabsTrigger></TabsList>
           <TabsContent value="overview"><FileOverview body={item.body} labels={labels} problems={item.problems} /></TabsContent>
           <TabsContent value="runs"><Deployments id={id} version={version} /></TabsContent>
-          <TabsContent value="settings"><EmptyState title="Editing settings comes with the editors." /></TabsContent>
+          <TabsContent value="settings"><ExperimentSettings id={id} body={item.body} onSaved={q.reload} /></TabsContent>
         </Tabs>
       </PageBody>
     </>

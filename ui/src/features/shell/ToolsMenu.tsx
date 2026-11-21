@@ -22,6 +22,7 @@ export function ToolsMenu({ onPalette }: { onPalette: (start?: Mode) => void }) 
       <DropdownMenuContent className="w-64">
         <DropdownMenuLabel>Tools</DropdownMenuLabel>
         <DropdownMenuItem onSelect={() => nav('/run')}>Run once</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => nav('/experiments/new/direct')}>Experiment on a benchmark…</DropdownMenuItem>
         <DropdownMenuItem onSelect={() => nav('/worlds/new')}>Build a world…</DropdownMenuItem>
         <DropdownMenuItem onSelect={() => onPalette({ kind: 'compare-runs', first: null })}>Compare two runs…</DropdownMenuItem>
         <DropdownMenuItem onSelect={() => onPalette({ kind: 'world' })}>World view of a run…</DropdownMenuItem>
