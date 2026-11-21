@@ -17,6 +17,7 @@ const Home = lazy(() => import('@/features/start/StartPage'));
 const HomePage = lazy(() => import('@/features/home/HomePage'));
 const ExperimentsListPage = lazy(() => import('@/features/experiments/ExperimentsListPage'));
 const FileExperimentPage = lazy(() => import('@/features/experiments/FileExperimentPage'));
+const ItemListPage = lazy(() => import('@/features/editors/ItemListPage'));
 const ProcessPage = lazy(() => import('@/features/process/ProcessPage'));
 const Compare = lazy(() => import('@/features/compare/ComparePage'));
 const ConnectPage = lazy(() => import('@/features/connect/ConnectPage'));
@@ -48,9 +49,12 @@ function AppRoutes() {
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/experiments" element={<ExperimentsListPage />} />
-        <Route path="/worlds" element={<Soon title="Worlds" />} />
-        <Route path="/scenarios" element={<Soon title="Scenarios" />} />
-        <Route path="/setups" element={<Soon title="Agent setups" />} />
+        <Route path="/worlds" element={<ItemListPage kind="worlds" />} />
+        <Route path="/worlds/:id" element={<Soon title="World" />} />
+        <Route path="/scenarios" element={<ItemListPage kind="scenarios" />} />
+        <Route path="/scenarios/:id" element={<Soon title="Scenario" />} />
+        <Route path="/setups" element={<ItemListPage kind="setups" />} />
+        <Route path="/setups/:id" element={<Soon title="Agent setup" />} />
         <Route path="/settings/project" element={<Soon title="Project settings" />} />
         <Route path="/get-started" element={<Soon title="Get started" />} />
         <Route path="/experiments/new" element={<NewExperimentPage />} />
