@@ -9,6 +9,7 @@ pub mod http;
 mod item_ops;
 mod madl_ops;
 pub mod mcp;
+mod migrate;
 mod project_ops;
 pub mod stdio;
 mod view;
