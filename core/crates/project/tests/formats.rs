@@ -91,3 +91,19 @@ fn malformed_yaml_reported() {
     let err = parse::<WorldFile>("w.yaml", "format: [\n").unwrap_err();
     assert_eq!(err.file, "w.yaml");
 }
+
+#[test]
+fn world_package_round_trips() {
+    let text = "format: shakedown-world/3\nlabel: W\npackage: toybench\n";
+    let world = parse::<WorldFile>("w.yaml", text).expect("package parses");
+    assert_eq!(world.package.as_deref(), Some("toybench"));
+    let again: WorldFile = parse("w.yaml", &to_yaml(&world).unwrap()).unwrap();
+    assert_eq!(world, again);
+}
+
+#[test]
+fn scenario_preset_round_trips() {
+    let text = "format: shakedown-scenario/1\nlabel: S\nworld: w\ntask: T\npreset: t1\n";
+    let scenario = parse::<ScenarioFile>("s.yaml", text).expect("preset parses");
+    assert_eq!(scenario.preset.as_deref(), Some("t1"));
+}

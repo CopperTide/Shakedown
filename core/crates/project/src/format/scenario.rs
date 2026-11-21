@@ -18,6 +18,9 @@ pub struct ScenarioFile {
     pub world: String,
     /// The ticket every setup gets.
     pub task: String,
+    /// The task of the world's package this scenario plays, e.g. `t1`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preset: Option<String>,
     /// Records changed for this scenario only.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub changes: Vec<Change>,

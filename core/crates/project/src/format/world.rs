@@ -13,6 +13,10 @@ pub struct WorldFile {
     pub format: String,
     /// The world's display name.
     pub label: String,
+    /// The installed package (a benchmark or a built world) whose runtime runs this world until
+    /// worlds run from their files alone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub package: Option<String>,
     /// The systems agents work against.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub connectors: Vec<Connector>,
