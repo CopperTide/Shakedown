@@ -2,6 +2,7 @@
 import type { ReactNode } from 'react';
 import type { Mode } from '@/app/palette';
 import StatusBar from '@/app/StatusBar';
+import AskDrawer from '@/features/assistant/AskDrawer';
 import Sidebar from './Sidebar';
 import TopBar from './TopBar';
 
@@ -14,6 +15,7 @@ export default function AppShell({ onPalette, children }: { onPalette: (start?: 
         <div className="min-w-0 flex-1">{children}</div>
         <StatusBar />
       </div>
+      <AskDrawer />
     </div>
   );
 }
