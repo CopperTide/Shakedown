@@ -1,9 +1,9 @@
 import { Suspense, lazy, useCallback, useEffect, useState } from 'react';
-import { Navigate, Route, Routes, useParams } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import CommandPalette, { usePaletteShortcut } from './app/CommandPalette';
 import { type Mode, PALETTE_EVENT } from './app/palette';
+import AskDrawer from './features/assistant/AskDrawer';
 import AppShell from './features/shell/AppShell';
-import Soon from './features/shell/Soon';
 import { PageBody, PageHeader } from './components/ui/page';
 import { EmptyState } from './components/ui/state';
 import { Toaster } from './components/ui/toaster';
@@ -23,6 +23,7 @@ const ScenarioEditor = lazy(() => import('@/features/editors/scenario/ScenarioEd
 const SetupEditor = lazy(() => import('@/features/editors/setup/SetupEditor'));
 const NewFileExperiment = lazy(() => import('@/features/editors/experiment/NewExperimentPage'));
 const ProjectSettingsPage = lazy(() => import('@/features/settings/ProjectSettingsPage'));
+const GetStartedPage = lazy(() => import('@/features/onboarding/GetStartedPage'));
 const ProcessPage = lazy(() => import('@/features/process/ProcessPage'));
 const Compare = lazy(() => import('@/features/compare/ComparePage'));
 const ConnectPage = lazy(() => import('@/features/connect/ConnectPage'));
@@ -61,7 +62,6 @@ function AppRoutes() {
         <Route path="/setups" element={<ItemListPage kind="setups" />} />
         <Route path="/setups/:id" element={<SetupEditor />} />
         <Route path="/settings/project" element={<ProjectSettingsPage />} />
-        <Route path="/get-started" element={<Soon title="Get started" />} />
         <Route path="/experiments/new" element={<NewFileExperiment />} />
         <Route path="/experiments/new/direct" element={<NewExperimentPage />} />
         <Route path="/experiments/compare" element={<ExperimentsCompare />} />
@@ -90,6 +90,7 @@ function AppRoutes() {
 }
 
 export default function App() {
+  const bare = useLocation().pathname.startsWith('/get-started');
   const [palette, setPalette] = useState(false);
   const [start, setStart] = useState<Mode | undefined>(undefined);
   const toggle = useCallback(() => { setStart(undefined); setPalette((o) => !o); }, []);
@@ -101,9 +102,13 @@ export default function App() {
   }, []);
   return (
     <TooltipProvider delayDuration={300}>
-      <AppShell onPalette={(m) => { setStart(m); setPalette(true); }}>
-        <AppRoutes />
-      </AppShell>
+      {bare ? (
+        <><Suspense fallback={null}><GetStartedPage /></Suspense><AskDrawer /></>
+      ) : (
+        <AppShell onPalette={(m) => { setStart(m); setPalette(true); }}>
+          <AppRoutes />
+        </AppShell>
+      )}
       <CommandPalette open={palette} onOpenChange={setPalette} start={start} />
       <Toaster />
     </TooltipProvider>
