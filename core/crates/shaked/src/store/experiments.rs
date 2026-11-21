@@ -42,6 +42,8 @@ pub struct NewExperiment<'a> {
     pub seed: u64,
     /// Each run's world time window in minutes.
     pub world_minutes: Option<f64>,
+    /// The project experiment file it is deployed from, if any.
+    pub project_experiment: Option<&'a str>,
 }
 
 fn experiment_from(r: &Row) -> Experiment {
@@ -81,10 +83,16 @@ impl Scoped<'_> {
         new: NewExperiment<'_>,
     ) -> Result<(Experiment, Vec<Suite>)> {
         let id = new_id();
-        let sql = "INSERT INTO experiments (id, name, task_id, benchmark, runs)
-                   VALUES ($1, $2, $3, $4, $5)";
-        let params: [&(dyn tokio_postgres::types::ToSql + Sync); 5] =
-            [&id, &new.name, &new.task, &new.benchmark, &new.runs];
+        let sql = "INSERT INTO experiments (id, name, task_id, benchmark, runs, project_experiment)
+                   VALUES ($1, $2, $3, $4, $5, $6)";
+        let params: [&(dyn tokio_postgres::types::ToSql + Sync); 6] = [
+            &id,
+            &new.name,
+            &new.task,
+            &new.benchmark,
+            &new.runs,
+            &new.project_experiment,
+        ];
         self.execute(sql, &params).await?;
         let tasks = [new.task.to_string()];
         let mut suites = vec![];
@@ -100,6 +108,14 @@ impl Scoped<'_> {
         }
         let stored = self.experiment(&id).await?;
         Ok((stored.expect("the experiment was just stored"), suites))
+    }
+
+    /// The experiments deployed from project experiment `project_experiment`, newest first.
+    pub async fn deployments_of(&self, project_experiment: &str) -> Result<Vec<String>> {
+        let sql =
+            "SELECT id FROM experiments WHERE project_experiment = $1 ORDER BY created_at DESC, id";
+        let rows = self.query(sql, &[&project_experiment]).await?;
+        Ok(rows.iter().map(|r| r.get(0)).collect())
     }
 
     /// Every experiment, newest first.

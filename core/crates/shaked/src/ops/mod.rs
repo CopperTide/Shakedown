@@ -10,7 +10,7 @@ mod project_ops;
 pub mod stdio;
 mod view;
 
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 
 use futures_util::future::BoxFuture;
 use serde::de::DeserializeOwned;
@@ -18,6 +18,7 @@ use serde_json::Value;
 use shakedown_project::format::Kind;
 
 use crate::app::AppState;
+use crate::auth::Caller;
 use crate::project_state::ProjectState;
 
 pub use error::OpError;
@@ -48,21 +49,44 @@ pub struct OpCtx<'a> {
     /// The project folder.
     pub project: &'a ProjectState,
     /// The running shaked, if any.
-    pub app: Option<&'a AppState>,
+    pub app: Option<&'a Arc<AppState>>,
+    /// Who is calling: the person at this machine unless an API token says otherwise.
+    pub caller: Arc<Caller>,
 }
 
 impl<'a> OpCtx<'a> {
-    /// The context of a running shaked.
-    pub fn of(app: &'a AppState) -> OpCtx<'a> {
+    /// The context of a running shaked, for the person at this machine.
+    pub fn of(app: &'a Arc<AppState>) -> OpCtx<'a> {
+        OpCtx::as_caller(app, Arc::new(Caller::person()))
+    }
+
+    /// The context of a running shaked for `caller`.
+    pub fn as_caller(app: &'a Arc<AppState>, caller: Arc<Caller>) -> OpCtx<'a> {
         OpCtx {
             project: &app.project,
             app: Some(app),
+            caller,
         }
     }
 
     /// The context of a project alone, with no shaked.
     pub fn project_only(project: &'a ProjectState) -> OpCtx<'a> {
-        OpCtx { project, app: None }
+        OpCtx {
+            project,
+            app: None,
+            caller: Arc::new(Caller::person()),
+        }
+    }
+
+    /// The running shaked, or 409 for an operation that needs one (over stdio there is none).
+    pub fn app(&self, what: &str) -> Result<&'a Arc<AppState>, OpError> {
+        let needs = || {
+            OpError::new(
+                axum::http::StatusCode::CONFLICT,
+                format!("{what} needs a running shaked"),
+            )
+        };
+        self.app.ok_or_else(needs)
     }
 }
 

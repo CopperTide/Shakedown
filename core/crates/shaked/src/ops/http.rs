@@ -20,7 +20,7 @@ use crate::{
         ApiError,
     },
     app::AppState,
-    auth::{Action, ResourceKind, Target},
+    auth::{Action, ResourceKind, Target, Who},
 };
 
 /// A router with every operation at its method and path.
@@ -31,8 +31,8 @@ pub fn router() -> Router<Arc<AppState>> {
                 .unwrap_or(MethodFilter::GET);
         router.route(
             op.path,
-            on(filter, move |state, path, query, body| {
-                serve(op, state, path, query, body)
+            on(filter, move |state, who, path, query, body| {
+                serve(op, state, who, path, query, body)
             }),
         )
     })
@@ -41,6 +41,7 @@ pub fn router() -> Router<Arc<AppState>> {
 async fn serve(
     op: &'static Operation,
     State(state): State<Arc<AppState>>,
+    Who(caller): Who,
     path: RawPathParams,
     Query(query): Query<Map<String, Value>>,
     body: Bytes,
@@ -53,7 +54,7 @@ async fn serve(
         input.insert(key.to_string(), Value::String(value.to_string()));
     }
     Ok(Json(
-        (op.run)(&OpCtx::of(&state), op, Value::Object(input)).await?,
+        (op.run)(&OpCtx::as_caller(&state, caller), op, Value::Object(input)).await?,
     ))
 }
 

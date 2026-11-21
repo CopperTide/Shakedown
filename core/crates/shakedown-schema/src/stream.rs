@@ -100,6 +100,10 @@ pub const BASE_FILES: Files = Files {
             "0002_keys_worlds_saves_tokens.sql",
             include_str!("../migrations/shakedown/0002_keys_worlds_saves_tokens.sql"),
         ),
+        (
+            "0003_project_experiments.sql",
+            include_str!("../migrations/shakedown/0003_project_experiments.sql"),
+        ),
     ],
     also_accept: &[],
 };

@@ -36,15 +36,15 @@ fn default_runs() -> i32 {
 /// One agent setup: its name (`Setup A`, … when absent), team and runner (`chain` by default),
 /// or a Code connection whose driver runs the team (its runner is then `external`).
 #[derive(Deserialize)]
-struct SetupReq {
+pub(crate) struct SetupReq {
     #[serde(default)]
-    name: Option<String>,
+    pub(crate) name: Option<String>,
     #[serde(default = "code_team")]
-    team: Team,
+    pub(crate) team: Team,
     #[serde(default)]
-    runner: Runner,
+    pub(crate) runner: Runner,
     #[serde(default)]
-    connection: Option<String>,
+    pub(crate) connection: Option<String>,
 }
 
 /// The team of a Code setup that names none: its driver registers the agents.
@@ -59,27 +59,31 @@ fn code_team() -> Team {
 /// A new experiment: the task, the disruptions every run adds to it, the runs per setup, and
 /// the setups.
 #[derive(Deserialize)]
-struct NewExperimentReq {
+pub(crate) struct NewExperimentReq {
     #[serde(default)]
-    name: Option<String>,
-    task: String,
+    pub(crate) name: Option<String>,
+    pub(crate) task: String,
     #[serde(default)]
-    scenario: Option<ScenarioRequest>,
+    pub(crate) scenario: Option<ScenarioRequest>,
     #[serde(default = "default_runs")]
-    runs: i32,
-    setups: Vec<SetupReq>,
+    pub(crate) runs: i32,
+    pub(crate) setups: Vec<SetupReq>,
     /// Each run's model-spend limit in USD (`crate::budget`).
     #[serde(default)]
-    max_cost_usd: Option<f64>,
+    pub(crate) max_cost_usd: Option<f64>,
     /// The benchmark it is made on (absent: the current one); 409 when it isn't installed.
     #[serde(default)]
-    benchmark: Option<String>,
+    pub(crate) benchmark: Option<String>,
     /// The base of the runs' paired seeds (at most 2^53 - 1; drawn when absent).
     #[serde(default)]
-    seed: Option<u64>,
+    pub(crate) seed: Option<u64>,
     /// Each run's world time window in minutes (`crate::window`).
     #[serde(default)]
-    world_minutes: Option<f64>,
+    pub(crate) world_minutes: Option<f64>,
+    /// The project experiment file it is deployed from (set by the deploy operation, never by a
+    /// request body).
+    #[serde(skip)]
+    pub(crate) project_experiment: Option<String>,
 }
 
 /// The experiment's base seed: the one asked for (400 past 2^53 - 1), else a random one.
@@ -180,22 +184,57 @@ async fn create(
     State(state): State<Arc<AppState>>,
     Who(caller): Who,
     headers: axum::http::HeaderMap,
-    JsonBody(mut req): JsonBody<NewExperimentReq>,
+    JsonBody(req): JsonBody<NewExperimentReq>,
 ) -> ApiResult<Detail> {
-    let names = validate(&providers_of(&state, &caller).await, &mut req)?;
-    check_connections(&state, &caller, &headers, &names, &req.setups).await?;
+    Ok(Json(
+        create_experiment(&state, &caller, Some(&headers), req).await?,
+    ))
+}
+
+/// Checks `req`, stores the experiment and starts running it: its detail. `headers` are the
+/// request's, needed only to start Code connections' drivers (refused without them).
+pub(crate) async fn create_experiment(
+    state: &Arc<AppState>,
+    caller: &Arc<Caller>,
+    headers: Option<&axum::http::HeaderMap>,
+    mut req: NewExperimentReq,
+) -> Result<Detail, ApiError> {
+    let names = validate(&providers_of(state, caller).await, &mut req)?;
+    match headers {
+        Some(h) => check_connections(state, caller, h, &names, &req.setups).await?,
+        None if req.setups.iter().any(|s| s.connection.is_some()) => {
+            return Err(ApiError::bad(
+                "a Code connection's setup is started from the API",
+            ));
+        }
+        None => {}
+    }
+    let (stored, suites) = store_experiment(state, caller, &names, &req).await?;
+    experiment::spawn(state, caller.clone(), stored.id.clone(), suites);
+    experiment::detail(state.store.at(caller), &stored)
+        .await
+        .map_err(Into::into)
+}
+
+/// Stores the checked experiment and its suites.
+async fn store_experiment(
+    state: &AppState,
+    caller: &Caller,
+    names: &[String],
+    req: &NewExperimentReq,
+) -> Result<(experiment::Experiment, Vec<crate::suite::Suite>), ApiError> {
     let max_cost_usd = super::max_cost(req.max_cost_usd)?;
     let (seed, world_minutes) = (
         base_seed(req.seed)?,
         super::world_minutes(req.world_minutes)?,
     );
-    let bench = super::benchmark_asked(&state, req.benchmark.as_deref())?;
-    super::suites::suite_tasks(&state, &bench, vec![req.task.clone()]).await?;
-    let scenario = super::twin::scenario_of(&state, &bench, req.scenario.as_ref()).await?;
-    check_disk(&state).await?;
-    let setups = new_setups(&names, &req.setups);
+    let bench = super::benchmark_asked(state, req.benchmark.as_deref())?;
+    super::suites::suite_tasks(state, &bench, vec![req.task.clone()]).await?;
+    let scenario = super::twin::scenario_of(state, &bench, req.scenario.as_ref()).await?;
+    check_disk(state).await?;
+    let setups = new_setups(names, &req.setups);
     let new = NewExperiment {
-        name: &experiment::name_of(req.name.as_deref(), &names),
+        name: &experiment::name_of(req.name.as_deref(), names),
         task: &req.task,
         runs: req.runs,
         benchmark: &bench,
@@ -204,12 +243,9 @@ async fn create(
         max_cost_usd,
         seed,
         world_minutes,
+        project_experiment: req.project_experiment.as_deref(),
     };
-    let (stored, suites) = state.store.at(&caller).create_experiment(new).await?;
-    experiment::spawn(&state, caller.clone(), stored.id.clone(), suites);
-    Ok(Json(
-        experiment::detail(state.store.at(&caller), &stored).await?,
-    ))
+    Ok(state.store.at(caller).create_experiment(new).await?)
 }
 
 /// `GET /api/experiments`: every experiment and suite made on its own, newest first.

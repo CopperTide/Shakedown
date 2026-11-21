@@ -44,7 +44,7 @@ pub async fn serve(
     Who(caller): Who,
     Json(req): Json<Value>,
 ) -> Response {
-    let ctx = OpCtx::of(&state);
+    let ctx = OpCtx::as_caller(&state, caller.clone());
     match handle(&ctx, &Asker::Caller(&caller), &req).await {
         Some(reply) => Json(reply).into_response(),
         None => StatusCode::ACCEPTED.into_response(),

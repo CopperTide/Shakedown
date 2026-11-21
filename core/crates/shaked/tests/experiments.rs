@@ -269,6 +269,7 @@ async fn stored(store: &Store) -> (String, String) {
         max_cost_usd: None,
         seed: 7,
         world_minutes: None,
+        project_experiment: None,
     };
     let (e, suites) = records(store).create_experiment(new).await.unwrap();
     assert_eq!(suites.len(), 2);
