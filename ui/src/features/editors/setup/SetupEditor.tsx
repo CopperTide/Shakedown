@@ -6,6 +6,7 @@ import type { SetupBody } from '@/model/project';
 import EditorFrame from '../EditorFrame';
 import { useItemEditor } from '../useItemEditor';
 import AgentsSection from './AgentsSection';
+import MadlSection from './MadlSection';
 import TeamKindSection from './TeamKindSection';
 
 const SECTIONS = [{ id: 'kind', label: 'How it runs' }, { id: 'agents', label: 'Agents' }];
@@ -15,10 +16,11 @@ export default function SetupEditor() {
   const ed = useItemEditor<SetupBody>('setups', id);
   const [active, setActive] = useState('kind');
   if (!ed.draft) return ed.error ? <p role="alert" className="p-7 text-alarm">{ed.error.message}</p> : <LoadingState label="Loading the setup" />;
+  const sections = ed.draft.team.kind === 'madl' ? [...SECTIONS, { id: 'graph', label: 'Team graph' }] : SECTIONS;
   return (
-    <EditorFrame title={ed.draft.label} meta="An agent team to test, built any way." sections={SECTIONS} active={active} onSelect={setActive}
+    <EditorFrame title={ed.draft.label} meta="An agent team to test, built any way." sections={sections} active={active} onSelect={setActive}
       dirty={ed.dirty} onSave={() => { void ed.save(); }} onDiscard={ed.discard} saving={ed.saving} error={ed.error}>
-      {active === 'agents' ? <AgentsSection setup={ed.draft} onChange={ed.setDraft} /> : <TeamKindSection setup={ed.draft} onChange={ed.setDraft} />}
+      {active === 'graph' ? <MadlSection id={id} /> : active === 'agents' ? <AgentsSection setup={ed.draft} onChange={ed.setDraft} /> : <TeamKindSection setup={ed.draft} onChange={ed.setDraft} />}
     </EditorFrame>
   );
 }

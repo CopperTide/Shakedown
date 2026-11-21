@@ -32,3 +32,17 @@ export const experimentRuns = (id: string) => get<{ deployments: Experiment[] }>
 /** Writes the project's settings (confirmed: the person saving is the confirmation). */
 export const updateSettings = (body: ProjectSettings) =>
   request<ProjectStatus | Proposed>('/api/project', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ body, confirm: true }) });
+
+export interface MadlGraph {
+  agents: { id: string; label: string; runtime?: string | null }[];
+  edges: { from: string; to: string; kind: string }[];
+}
+
+export interface MadlReport {
+  valid: boolean;
+  diagnostics: { code: string; severity: string; pointer: string; message: string }[];
+  graph: MadlGraph;
+}
+
+/** A MADL setup's checks and graph. */
+export const madlOf = (id: string) => get<MadlReport>(path`/api/project/setups/${id}/madl`);

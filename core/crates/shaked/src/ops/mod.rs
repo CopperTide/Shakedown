@@ -7,6 +7,7 @@ mod deploy_ops;
 mod error;
 pub mod http;
 mod item_ops;
+mod madl_ops;
 pub mod mcp;
 mod project_ops;
 pub mod stdio;
@@ -120,6 +121,7 @@ pub fn all() -> &'static [Operation] {
         let mut ops = project_ops::ops();
         ops.extend(item_ops::ops());
         ops.extend(deploy_ops::ops());
+        ops.extend(madl_ops::ops());
         ops
     })
 }
