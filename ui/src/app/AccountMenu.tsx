@@ -4,6 +4,7 @@
 import { ChevronDown } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api } from '@/api/core';
+import { withCsrf } from '@/api/csrf';
 import { type AccountItem, fetchMe, type Me } from '@/api/me';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -15,9 +16,9 @@ const browser: Deps = { fetch: (url, init) => window.fetch(url, init), reload: (
 /** Does what choosing `item` means: POSTs its body where it says, then reloads; nothing for the current one. */
 export async function choose(item: AccountItem, deps: Deps = browser): Promise<void> {
   if (!item.post) return;
-  await deps.fetch(api(item.post), {
+  await deps.fetch(api(item.post), withCsrf({
     method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' }, body: JSON.stringify(item.body ?? {}),
-  });
+  })!);
   deps.reload();
 }
 

@@ -20,14 +20,20 @@ export function normalizeCore(raw: string | null | undefined): string | null {
   }
 }
 
-/** The core to use and what to remember: `?core=` wins (and is remembered), then the remembered one, then the build's. */
-export function resolveCore(search: string, stored: string | null, built: string | undefined): { base: string; remember: string | null } {
+/** The path a build is served under (Vite's `BASE_URL`) without its trailing slash: '' for `/`, `/sd` for `/sd/`. */
+export const basePath = (base: string | undefined) => (base ?? '/').replace(/\/+$/, '');
+
+/**
+ * The core to use and what to remember: `?core=` wins (and is remembered), then the remembered one, then the build's,
+ * else the path this page is served under (`own`: a UI built for `/sd/` talks to the core behind `/sd`).
+ */
+export function resolveCore(search: string, stored: string | null, built: string | undefined, own = ''): { base: string; remember: string | null } {
   const q = new URLSearchParams(search);
   if (q.has('core')) {
     const asked = normalizeCore(q.get('core'));
     if (asked != null) return { base: asked, remember: asked };
   }
-  return { base: normalizeCore(stored) || normalizeCore(built) || '', remember: null };
+  return { base: normalizeCore(stored) || normalizeCore(built) || own, remember: null };
 }
 
 /** `path` (`/api/…`, `/mcp/…`) on the core at `base`. */
@@ -42,11 +48,11 @@ function storage(): Storage | null {
 }
 
 function initial(): string {
-  if (typeof window === 'undefined') return normalizeCore(BUILT_CORE) ?? '';
+  if (typeof window === 'undefined') return normalizeCore(BUILT_CORE) || basePath(import.meta.env.BASE_URL);
   const s = storage();
   let stored: string | null = null;
   try { stored = s?.getItem(CORE_KEY) ?? null; } catch { /* storage blocked */ }
-  const { base, remember } = resolveCore(window.location.search, stored, BUILT_CORE);
+  const { base, remember } = resolveCore(window.location.search, stored, BUILT_CORE, basePath(import.meta.env.BASE_URL));
   try {
     if (remember === '') s?.removeItem(CORE_KEY);
     else if (remember) s?.setItem(CORE_KEY, remember);

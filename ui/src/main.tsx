@@ -7,6 +7,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App';
+import { basePath } from './api/core';
 import { initTheme } from './app/theme';
 import './styles/index.css';
 
@@ -15,7 +16,7 @@ initTheme();
 function render() {
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
-      <BrowserRouter>
+      <BrowserRouter basename={basePath(import.meta.env.BASE_URL) || undefined}>
         <App />
       </BrowserRouter>
     </StrictMode>,

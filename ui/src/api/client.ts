@@ -1,5 +1,6 @@
 // The one way the UI talks to shaked: typed requests, on paths built with `path` and `qs` (lib/url).
 import { api } from './core';
+import { remember, withCsrf } from './csrf';
 
 export { path, qs } from '@/lib/url';
 
@@ -15,7 +16,8 @@ export class ApiError extends Error {
 
 /** `path` (`/api/…`) on this page's core; the JSON answer, or null for an empty one. */
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(api(path), init);
+  const res = await fetch(api(path), withCsrf(init));
+  remember(res);
   const text = await res.text();
   let body: unknown = null;
   try {
