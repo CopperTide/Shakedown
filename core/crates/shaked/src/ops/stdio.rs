@@ -11,7 +11,7 @@ use super::{
 use crate::{jsonrpc::rpc_error, project_state::ProjectState};
 
 /// Serves stdin until it closes.
-pub async fn run(project: &ProjectState) -> anyhow::Result<()> {
+pub async fn run(project: std::sync::Arc<ProjectState>) -> anyhow::Result<()> {
     let ctx = OpCtx::project_only(project);
     let mut lines = BufReader::new(tokio::io::stdin()).lines();
     let mut stdout = tokio::io::stdout();

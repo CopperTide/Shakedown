@@ -78,7 +78,10 @@ fn a_fresh_database_has_only_shakedown_s_schemas() {
         assert_eq!(rows(&name, schemas).await, ["public,schema_meta,shakedown"]);
         let history = "SELECT string_agg(stream || ' ' || version, ',' ORDER BY stream, version)
                          FROM schema_meta.migrations";
-        assert_eq!(rows(&name, history).await, ["shakedown 1,shakedown 2,shakedown 3"]);
+        assert_eq!(
+            rows(&name, history).await,
+            ["shakedown 1,shakedown 2,shakedown 3"]
+        );
     })
 }
 

@@ -11,7 +11,7 @@ use support::run;
 
 async fn mcp_tool_names() -> Vec<String> {
     let project = ProjectState::new(None);
-    let ctx = OpCtx::project_only(&project);
+    let ctx = OpCtx::project_only(std::sync::Arc::new(project));
     let req = json!({"jsonrpc": "2.0", "id": 1, "method": "tools/list"});
     let reply = mcp::handle(&ctx, &mcp::Asker::Local, &req)
         .await

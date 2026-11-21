@@ -51,6 +51,7 @@ struct Spy {
     headers: Mutex<Vec<String>>,
     digests: Mutex<Vec<Option<BodySha256>>>,
     shares_keys: std::sync::atomic::AtomicBool,
+    projects: Mutex<Option<std::path::PathBuf>>,
 }
 
 /// A layer that records every hook call; it allows everything unless told otherwise.
@@ -112,6 +113,13 @@ impl SpyLayer {
     /// `own_keys` answers none: every key is someone else's, shared with the caller.
     pub fn sharing_keys(self) -> SpyLayer {
         (self.0.shares_keys).store(true, std::sync::atomic::Ordering::Relaxed);
+        self
+    }
+
+    /// `project_dir` files each caller's project under `root`: `person` for the person, the token
+    /// id for an API token.
+    pub fn projects_under(self, root: std::path::PathBuf) -> SpyLayer {
+        *self.0.projects.lock().unwrap() = Some(root);
         self
     }
 
@@ -252,6 +260,20 @@ impl Layer for SpyLayer {
             .shares_keys
             .load(std::sync::atomic::Ordering::Relaxed);
         async move { Ok(if shared { vec![] } else { keys.to_vec() }) }.boxed()
+    }
+
+    fn project_dir(
+        &self,
+        c: &Caller,
+        configured: Option<&std::path::Path>,
+    ) -> Option<std::path::PathBuf> {
+        let Some(root) = self.0.projects.lock().unwrap().clone() else {
+            return configured.map(std::path::Path::to_path_buf);
+        };
+        Some(root.join(match &c.kind {
+            crate::auth::CallerKind::ApiToken { id, .. } => id.to_string(),
+            _ => "person".to_string(),
+        }))
     }
 }
 

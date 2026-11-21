@@ -35,7 +35,8 @@ async fn chat(
 /// The assistant's provider and model: the project's settings, else the default provider's
 /// default model. 409 when there is none to call.
 async fn model_for(state: &AppState, caller: &Caller) -> Result<(Provider, String), ApiError> {
-    let settings = state.project().ok().and_then(|p| p.config.assistant);
+    let project = state.project_for(caller).current();
+    let settings = project.ok().and_then(|p| p.config.assistant);
     let config = super::providers_of(state, caller).await;
     let no_model = || ApiError(StatusCode::CONFLICT, NO_MODEL.into());
     let provider = config

@@ -51,8 +51,8 @@ pub type OpFn = for<'a> fn(&'a OpCtx<'a>, &'static Operation, Value) -> OpFuture
 /// `shaked mcp` (stdio) runs project operations with no shaked, so no database is needed to
 /// edit files; operations that start runs need `app`.
 pub struct OpCtx<'a> {
-    /// The project folder.
-    pub project: &'a ProjectState,
+    /// The caller's project folder.
+    pub project: Arc<ProjectState>,
     /// The running shaked, if any.
     pub app: Option<&'a Arc<AppState>>,
     /// Who is calling: the person at this machine unless an API token says otherwise.
@@ -68,14 +68,14 @@ impl<'a> OpCtx<'a> {
     /// The context of a running shaked for `caller`.
     pub fn as_caller(app: &'a Arc<AppState>, caller: Arc<Caller>) -> OpCtx<'a> {
         OpCtx {
-            project: &app.project,
+            project: app.project_for(&caller),
             app: Some(app),
             caller,
         }
     }
 
     /// The context of a project alone, with no shaked.
-    pub fn project_only(project: &'a ProjectState) -> OpCtx<'a> {
+    pub fn project_only(project: Arc<ProjectState>) -> OpCtx<'a> {
         OpCtx {
             project,
             app: None,

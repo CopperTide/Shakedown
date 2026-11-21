@@ -2,8 +2,9 @@
 //! the folder is re-read whenever its files change, so a hand edit or a `git pull` shows up on the
 //! next request.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
 use shakedown_project::format::Kind;
@@ -78,15 +79,65 @@ impl ProjectState {
     }
 }
 
-impl AppState {
-    /// The open project, as it is on disk now.
-    pub fn project(&self) -> Result<Project, NoProject> {
-        self.project.current()
+/// Every project folder this shaked serves, one [`ProjectState`] per folder, opened on first use.
+#[derive(Debug)]
+pub struct Projects {
+    /// `SHAKEDOWN_PROJECT`, the folder the layer is offered.
+    configured: Option<PathBuf>,
+    open: Mutex<HashMap<PathBuf, Arc<ProjectState>>>,
+    none: Arc<ProjectState>,
+}
+
+impl Projects {
+    /// The projects of a shaked started with `configured` (`SHAKEDOWN_PROJECT`).
+    pub fn new(configured: Option<PathBuf>) -> Projects {
+        let projects = Projects {
+            configured,
+            open: Mutex::default(),
+            none: Arc::new(ProjectState::new(None)),
+        };
+        if let Some(dir) = projects.configured.clone() {
+            projects.get(Some(dir));
+        }
+        projects
     }
 
-    /// Changes the open project with `f`; the next read sees the result.
+    /// The configured folder, if any.
+    pub fn configured(&self) -> Option<&Path> {
+        self.configured.as_deref()
+    }
+
+    /// The project at `dir`, shared by every caller of that folder; `None` is no project.
+    pub fn get(&self, dir: Option<PathBuf>) -> Arc<ProjectState> {
+        let Some(dir) = dir else {
+            return self.none.clone();
+        };
+        let mut open = self.open.lock().unwrap_or_else(|e| e.into_inner());
+        let state = open.entry(dir.clone());
+        state
+            .or_insert_with(|| Arc::new(ProjectState::new(Some(dir))))
+            .clone()
+    }
+}
+
+impl AppState {
+    /// The project `c` works in, as the layer files it.
+    pub fn project_for(&self, c: &crate::auth::Caller) -> Arc<ProjectState> {
+        let dir = self
+            .store
+            .layer()
+            .project_dir(c, self.projects.configured());
+        self.projects.get(dir)
+    }
+
+    /// The person's project, as it is on disk now.
+    pub fn project(&self) -> Result<Project, NoProject> {
+        self.project_for(&crate::auth::Caller::person()).current()
+    }
+
+    /// Changes the person's project with `f`; the next read sees the result.
     pub fn with_project_mut<R>(&self, f: impl FnOnce(&mut Project) -> R) -> Result<R, NoProject> {
-        self.project.change(f)
+        self.project_for(&crate::auth::Caller::person()).change(f)
     }
 }
 

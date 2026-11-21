@@ -3,6 +3,7 @@
 //! keys). The open-source binary passes [`LocalLayer`], every hook a personal-use default; a hosting
 //! layer (CopperTide Cloud's) implements the same trait.
 
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use axum::{http::request::Parts, Router};
@@ -62,6 +63,11 @@ pub trait Layer: Send + Sync + 'static {
         c: &'a Caller,
         keys: &'a [uuid::Uuid],
     ) -> BoxFuture<'a, anyhow::Result<Vec<uuid::Uuid>>>;
+    /// The project folder `c` works in; `configured` is `SHAKEDOWN_PROJECT`. Personal use has the
+    /// one folder; a hosting layer may give callers folders of their own.
+    fn project_dir(&self, _c: &Caller, configured: Option<&Path>) -> Option<PathBuf> {
+        configured.map(Path::to_path_buf)
+    }
 }
 
 /// Personal use: this machine only, everything allowed, nothing metered.

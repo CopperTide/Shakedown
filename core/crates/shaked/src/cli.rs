@@ -31,7 +31,8 @@ async fn mcp(args: &[String]) -> Result<()> {
     let Some(dir) = dir else {
         bail!("shaked mcp needs a project: pass --project <folder> or set SHAKEDOWN_PROJECT");
     };
-    crate::ops::stdio::run(&crate::project_state::ProjectState::new(Some(dir))).await
+    let project = crate::project_state::ProjectState::new(Some(dir));
+    crate::ops::stdio::run(std::sync::Arc::new(project)).await
 }
 
 /// `token create --name <n> [--scope read|run|admin ...] [--expires-days N]`: prints a token of

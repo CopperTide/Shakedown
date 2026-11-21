@@ -187,7 +187,7 @@ fn deploy_over_stdio_needs_shaked() {
     run(async {
         let dir = runnable_project();
         let project = ProjectState::new(Some(dir.path().to_path_buf()));
-        let ctx = OpCtx::project_only(&project);
+        let ctx = OpCtx::project_only(std::sync::Arc::new(project));
         let req = json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
                          "params": {"name": "experiments_deploy", "arguments": {"id": "supplier-slip-solo-vs-team"}}});
         let reply: Value = mcp::handle(&ctx, &mcp::Asker::Local, &req).await.unwrap();

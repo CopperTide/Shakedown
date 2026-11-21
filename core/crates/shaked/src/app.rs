@@ -168,8 +168,9 @@ pub struct AppState {
     pub drivers: OnceLock<Drivers>,
     /// Set to true when shutdown starts; SSE streams end on it.
     pub shutdown: tokio::sync::watch::Sender<bool>,
-    /// The project folder (`Config::project_dir`), re-read when its files change.
-    pub project: crate::project_state::ProjectState,
+    /// The project folders callers work in (`Config::project_dir` locally), each re-read when its
+    /// files change.
+    pub projects: crate::project_state::Projects,
     /// Held for writing by a cleanup (`POST /api/gc`) and for reading while a run or fork
     /// starts, so a cleanup never drops saves a starting branch is about to name.
     pub cleanup: Arc<tokio::sync::RwLock<()>>,
@@ -216,7 +217,7 @@ impl AppState {
         }
         let (benchmark, current) = start_benchmarks(&hub, &config);
         AppState {
-            project: crate::project_state::ProjectState::new(config.project_dir.clone()),
+            projects: crate::project_state::Projects::new(config.project_dir.clone()),
             current: current.into(),
             builds: Default::default(),
             store,

@@ -99,3 +99,49 @@ fn writes_go_through_the_project() {
         assert!(fx.state.project().unwrap().list(Kind::Scenario).is_empty());
     });
 }
+
+/// A caller's project as a test layer files it: `<root>/person` for the person, `<root>/<token
+/// id>` for a token.
+fn caller_project(root: &std::path::Path, who: &str) -> std::path::PathBuf {
+    let dir = root.join(who);
+    support::copy_dir(&support::project_fixture(), &dir);
+    dir
+}
+
+#[test]
+fn layer_picks_the_callers_folder() {
+    run(async {
+        let root = tempfile::tempdir().unwrap();
+        let token = uuid::Uuid::new_v4();
+        let mine = caller_project(root.path(), "person");
+        caller_project(root.path(), &token.to_string());
+        std::fs::remove_dir_all(mine.join("worlds/larkspur-plant")).unwrap();
+        let spy = shaked::harness::SpyLayer::new().projects_under(root.path().to_path_buf());
+        let fx = AppFx::idle("project", "per-caller")
+            .layer(std::sync::Arc::new(spy))
+            .start()
+            .await;
+        let person = fx.state.project_for(&shaked::auth::Caller::person());
+        let theirs = shaked::auth::Caller::api_token(token, vec![]);
+        let other = fx.state.project_for(&theirs);
+        assert_eq!(other.current().unwrap().list(Kind::World).len(), 1);
+        assert_eq!(person.current().unwrap().list(Kind::World).len(), 0);
+    });
+}
+
+#[test]
+fn same_folder_shares_state() {
+    run(async {
+        let dir = larkspur();
+        let fx = AppFx::idle("project", "shared")
+            .project(dir.path())
+            .start()
+            .await;
+        let a = fx.state.project_for(&shaked::auth::Caller::person());
+        let b = fx.state.project_for(&shaked::auth::Caller::api_token(
+            uuid::Uuid::new_v4(),
+            vec![],
+        ));
+        assert!(std::sync::Arc::ptr_eq(&a, &b));
+    });
+}
