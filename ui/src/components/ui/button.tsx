@@ -9,14 +9,14 @@ export const buttonVariants = cva(
     variants: {
       variant: {
         default: 'border-line bg-raised text-fg shadow-panel hover:bg-hover',
-        primary: 'border-primary bg-primary text-primary-fg hover:bg-primary-hover',
+        primary: 'border-primary bg-primary text-primary-fg shadow-[inset_0_1px_0_rgb(255_255_255/14%),0_1px_2px_rgb(27_24_21/28%)] hover:bg-primary-hover',
         ghost: 'border-transparent bg-transparent text-muted hover:bg-hover hover:text-fg',
         danger: 'border-alarm bg-raised text-alarm hover:bg-alarm-soft',
       },
       size: {
-        sm: 'h-6 px-2 text-xs',
-        md: 'h-7 px-2.5 text-sm',
-        icon: 'size-7',
+        sm: 'h-7 px-2.5 text-xs',
+        md: 'h-8 px-3 text-sm',
+        icon: 'size-8',
       },
     },
     defaultVariants: { variant: 'default', size: 'md' },
