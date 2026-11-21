@@ -1,26 +1,19 @@
+// Everything that isn't a section of its own: tools, settings, the theme and the core address.
 import { MoreHorizontal } from 'lucide-react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { CORE } from '@/api/core';
+import type { Mode } from '@/app/palette';
+import { setThemePref, useTheme } from '@/app/theme';
+import { nextPref } from '@/app/themeModel';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Kbd } from '@/components/ui/kbd';
 import ReviewToggle from '@/features/review/ReviewToggle';
-import { cn } from '@/lib/cn';
-import { AccountMenu, useMe } from './AccountMenu';
-import type { Mode } from './palette';
-import { setThemePref, useTheme } from './theme';
-import { nextPref } from './themeModel';
-
-/** Each section of the app and the addresses that belong to it. */
-const NAV = [
-  { to: '/', label: 'Experiments', match: /^\/($|experiments)/ },
-  { to: '/runs', label: 'Runs', match: /^\/(run|runs|control|world|compare)(\/|$)/ },
-];
 
 const THEME_WORD = { system: 'System', light: 'Light', dark: 'Dark' } as const;
 
 /** "⋯": everything that isn't on the first screen. */
-function MoreMenu({ onPalette }: { onPalette: (start?: Mode) => void }) {
+export function ToolsMenu({ onPalette }: { onPalette: (start?: Mode) => void }) {
   const nav = useNavigate();
   const { pref } = useTheme();
   return (
@@ -50,34 +43,3 @@ function MoreMenu({ onPalette }: { onPalette: (start?: Mode) => void }) {
   );
 }
 
-/** The wordmark, Experiments and Runs, and "⋯" for everything else. */
-export default function TopBar({ onPalette }: { onPalette: (start?: Mode) => void }) {
-  const { pathname } = useLocation();
-  const me = useMe();
-  return (
-    <div className="sticky top-0 z-40 flex h-12 shrink-0 items-center gap-2 border-b border-line bg-bg/85 px-4 backdrop-blur sm:gap-6 sm:px-6">
-      <Link to="/" className="flex items-center gap-2 text-sm font-semibold tracking-tight">
-        <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5 shrink-0 text-fg">
-          <rect width="24" height="24" rx="5.5" fill="currentColor" />
-          <path d="M4 17H7.6C9.4 17 9.3 5.8 11.3 5.8C13.1 5.8 13 13.2 14.7 13.2C16.1 13.2 16.2 9.4 17.5 9.4C18.6 9.4 18.8 11 20 11" fill="none" stroke="var(--bg)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-        <span className="hidden sm:inline">Shakedown</span>
-        <span className="hidden text-[0.75em] font-normal text-muted sm:inline">by CopperTide</span>
-      </Link>
-      <nav className="flex items-center gap-1" aria-label="Main">
-        {NAV.map((n) => {
-          const on = n.match.test(pathname);
-          return (
-            <Link key={n.to} to={n.to} aria-current={on ? 'page' : undefined}
-              className={cn('rounded-md px-2.5 py-1 text-sm transition-colors', on ? 'bg-sunken font-medium text-fg' : 'text-muted hover:text-fg')}>
-              {n.label}
-            </Link>
-          );
-        })}
-      </nav>
-      <span className="flex-1" />
-      <AccountMenu me={me} />
-      <MoreMenu onPalette={onPalette} />
-    </div>
-  );
-}

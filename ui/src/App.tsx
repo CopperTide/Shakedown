@@ -3,8 +3,8 @@ import { Navigate, Route, Routes, useParams } from 'react-router-dom';
 import ExperimentsPage from '@/features/experiments/ExperimentsPage';
 import CommandPalette, { usePaletteShortcut } from './app/CommandPalette';
 import { type Mode, PALETTE_EVENT } from './app/palette';
-import StatusBar from './app/StatusBar';
-import TopBar from './app/TopBar';
+import AppShell from './features/shell/AppShell';
+import Soon from './features/shell/Soon';
 import { PageBody, PageHeader } from './components/ui/page';
 import { EmptyState } from './components/ui/state';
 import { Toaster } from './components/ui/toaster';
@@ -45,6 +45,12 @@ function AppRoutes() {
     <Suspense fallback={null}>
       <Routes>
         <Route path="/" element={<ExperimentsPage />} />
+        <Route path="/experiments" element={<ExperimentsPage />} />
+        <Route path="/worlds" element={<Soon title="Worlds" />} />
+        <Route path="/scenarios" element={<Soon title="Scenarios" />} />
+        <Route path="/setups" element={<Soon title="Agent setups" />} />
+        <Route path="/settings/project" element={<Soon title="Project settings" />} />
+        <Route path="/get-started" element={<Soon title="Get started" />} />
         <Route path="/experiments/new" element={<NewExperimentPage />} />
         <Route path="/experiments/compare" element={<ExperimentsCompare />} />
         <Route path="/experiments/:id" element={<ExperimentPage />} />
@@ -82,13 +88,9 @@ export default function App() {
   }, []);
   return (
     <TooltipProvider delayDuration={300}>
-      <div className="flex min-h-full flex-col">
-        <TopBar onPalette={(m) => { setStart(m); setPalette(true); }} />
-        <div className="min-w-0 flex-1">
-          <AppRoutes />
-        </div>
-        <StatusBar />
-      </div>
+      <AppShell onPalette={(m) => { setStart(m); setPalette(true); }}>
+        <AppRoutes />
+      </AppShell>
       <CommandPalette open={palette} onOpenChange={setPalette} start={start} />
       <Toaster />
     </TooltipProvider>

@@ -1,4 +1,5 @@
 // The design tokens follow the v7 identity rules in both themes (spec §4).
+/// <reference types="node" />
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
