@@ -230,6 +230,13 @@ fn apply_diff_card_writes() {
     });
 }
 
+async fn read_token(fx: &AppFx) -> String {
+    let (_, minted) = fx
+        .post("/api/tokens", json!({"name": "r", "scopes": ["read"]}))
+        .await;
+    minted["token"].as_str().unwrap().to_string()
+}
+
 #[test]
 fn read_token_gets_cards_not_writes() {
     run(async {
