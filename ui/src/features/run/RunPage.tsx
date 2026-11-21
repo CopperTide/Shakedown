@@ -7,6 +7,8 @@ import { Split } from '@/components/ui/split';
 import { Notice } from '@/components/ui/state';
 import { StatusMark } from '@/components/ui/status';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import Coordination from './derived/Coordination';
+import NeedsAHuman from './derived/NeedsAHuman';
 import { RunReview } from '@/features/review/RunReview';
 import { recordedLine } from '@/features/scenario/scenario';
 import { drivenLine } from '@/features/world/page';
@@ -125,13 +127,15 @@ function Main({ detail, timeline: { lanes, span }, selected, onSelect, models, s
   return (
     <div className="flex min-w-0 flex-col gap-3">
       {study && <BestSoFar s={study} selected={selected} onSelect={onSelect} />}
+      <NeedsAHuman events={detail.events} onSelect={onSelect} />
       <Panel>
         <Tabs defaultValue="timeline">
           <div className="flex items-center gap-3 border-b border-line pl-3">
-            <TabsList className="border-b-0"><TabsTrigger value="timeline">Timeline</TabsTrigger><TabsTrigger value="log">Event log</TabsTrigger></TabsList>
+            <TabsList className="border-b-0"><TabsTrigger value="timeline">Timeline</TabsTrigger><TabsTrigger value="log">Event log</TabsTrigger><TabsTrigger value="coordination">Coordination</TabsTrigger></TabsList>
           </div>
           <TabsContent value="timeline"><ActionTimeline lanes={lanes} team={detail.team} span={span} selected={selected} onSelect={onSelect} models={models} onModels={setModels} live={live} pauses={pauses} /></TabsContent>
           <TabsContent value="log"><EventLog lanes={lanes} span={span} selected={selected} onSelect={onSelect} models={models} /></TabsContent>
+          <TabsContent value="coordination"><Coordination events={detail.events} /></TabsContent>
         </Tabs>
       </Panel>
       {selected != null && <Panel><PanelHeader title="Trace" /><Waterfall events={detail.events} selected={selected} onSelect={onSelect} /></Panel>}
