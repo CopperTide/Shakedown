@@ -1,6 +1,6 @@
 // The project folder: its status and its worlds, scenarios, setups and experiments (plan 1).
 import type { Experiment } from '@/model/experiment';
-import type { Item, ItemKind, ItemSummary, ProjectStatus, Proposed } from '@/model/project';
+import type { Item, ItemKind, ItemSummary, ProjectSettings, ProjectStatus, Proposed } from '@/model/project';
 import { del, get, path, post, request } from './client';
 
 export const projectStatus = () => get<ProjectStatus>('/api/project');
@@ -28,3 +28,7 @@ export const deployExperiment = (id: string) => post<Experiment>(path`/api/proje
 
 /** A file experiment's deployments, newest first. */
 export const experimentRuns = (id: string) => get<{ deployments: Experiment[] }>(path`/api/project/experiments/${id}/runs`);
+
+/** Writes the project's settings (confirmed: the person saving is the confirmation). */
+export const updateSettings = (body: ProjectSettings) =>
+  request<ProjectStatus | Proposed>('/api/project', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ body, confirm: true }) });

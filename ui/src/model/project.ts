@@ -14,6 +14,7 @@ export interface ProjectStatus {
   name: string;
   counts: Record<ItemKind, number>;
   problems: Problem[];
+  settings?: ProjectSettings;
 }
 
 export interface ItemSummary {
@@ -133,3 +134,15 @@ export type TeamSpec =
 
 /** An agent setup file's contents (shakedown-setup/1). */
 export interface SetupBody { format: string; label: string; team: TeamSpec }
+
+export type EditPolicy = 'diff_first' | 'apply_then_tell';
+export type SpendPolicy = 'always_ask' | { under_cap: { usd_per_day: number } };
+
+/** `shakedown.yaml`: the project's name, the assistant's model and what agents may do without asking. */
+export interface ProjectSettings {
+  format: string;
+  name: string;
+  defaults?: { world?: string; cost_cap_usd?: number };
+  permissions?: { edit?: EditPolicy; spend?: SpendPolicy };
+  assistant?: { model: string; provider?: string };
+}

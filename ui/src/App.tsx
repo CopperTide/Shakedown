@@ -22,6 +22,7 @@ const WorldEditor = lazy(() => import('@/features/editors/world/WorldEditor'));
 const ScenarioEditor = lazy(() => import('@/features/editors/scenario/ScenarioEditor'));
 const SetupEditor = lazy(() => import('@/features/editors/setup/SetupEditor'));
 const NewFileExperiment = lazy(() => import('@/features/editors/experiment/NewExperimentPage'));
+const ProjectSettingsPage = lazy(() => import('@/features/settings/ProjectSettingsPage'));
 const ProcessPage = lazy(() => import('@/features/process/ProcessPage'));
 const Compare = lazy(() => import('@/features/compare/ComparePage'));
 const ConnectPage = lazy(() => import('@/features/connect/ConnectPage'));
@@ -59,7 +60,7 @@ function AppRoutes() {
         <Route path="/scenarios/:id" element={<ScenarioEditor />} />
         <Route path="/setups" element={<ItemListPage kind="setups" />} />
         <Route path="/setups/:id" element={<SetupEditor />} />
-        <Route path="/settings/project" element={<Soon title="Project settings" />} />
+        <Route path="/settings/project" element={<ProjectSettingsPage />} />
         <Route path="/get-started" element={<Soon title="Get started" />} />
         <Route path="/experiments/new" element={<NewFileExperiment />} />
         <Route path="/experiments/new/direct" element={<NewExperimentPage />} />
