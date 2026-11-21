@@ -442,7 +442,7 @@ async fn allowed_host(
 
 /// The origins of `SHAKEDOWN_CORS_ORIGIN` (comma-separated, each `http(s)://host[:port]` without a
 /// path); anything else, `*` included, is skipped with a warning, since a wildcard would let any
-/// web page drive this machine's arena.
+/// web page drive this machine's shakedown.
 pub fn cors_origins_from(value: &str) -> Vec<String> {
     let mut out = vec![];
     for o in value.split(',').map(|o| o.trim().trim_end_matches('/')) {

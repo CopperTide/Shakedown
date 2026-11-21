@@ -11,7 +11,7 @@ from conftest import config, front
 from shift_roster_part.part import ShiftRoster
 
 PACKAGE = Path(__file__).resolve().parents[1]
-ARENA = PACKAGE.parents[1]
+SHAKEDOWN = PACKAGE.parents[1]
 
 
 def callout(after=0, tool=None):
@@ -93,7 +93,7 @@ def test_a_save_restores_everything(tmp_path):
 
 def test_conformance(tmp_path):
     """`shakedown-part-check` (describe, start, the examples, save and restore, diff, drop_save)."""
-    bin_dir = Path(os.environ.get("SHAKEDOWN_BIN_DIR", ARENA / "core" / "target" / "debug"))
+    bin_dir = Path(os.environ.get("SHAKEDOWN_BIN_DIR", SHAKEDOWN / "core" / "target" / "debug"))
     check = bin_dir / "shakedown-part-check"
     if not check.exists() or shutil.which("uv") is None:
         pytest.skip(f"no {check} (cargo build -p parts --bin shakedown-part-check) or no uv")

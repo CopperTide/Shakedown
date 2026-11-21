@@ -1,8 +1,8 @@
-# The ERPNext install the erpnext integration runs (project `arena_erpnext`), adapted from
+# The ERPNext install the erpnext integration runs (project `shakedown_erpnext`), adapted from
 # CopperTide-Examples/factory/erp/compose.yml (not public yet). Differences:
 # - no `db` service: the database is the integration's own MariaDB server (made by the kit's
 #   mariadb helper, with binary logging), connected to this project's network with alias `db`;
-# - no `scheduler` service and no `configurator`: arena sites change only through tool calls, and
+# - no `scheduler` service and no `configurator`: shakedown sites change only through tool calls, and
 #   the integration writes `common_site_config.json` itself;
 # - `sites` is a folder the integration owns (env SHAKEDOWN_ERPNEXT_SITES), so a site's files are
 #   copied into saves and back with the folder helper;

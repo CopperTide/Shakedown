@@ -16,7 +16,7 @@ struct Tmp(PathBuf);
 
 impl Tmp {
     fn new(tag: &str) -> Tmp {
-        let dir = std::env::temp_dir().join(format!("arena_inst_{}_{tag}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("shakedown_inst_{}_{tag}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         Tmp(dir)
     }

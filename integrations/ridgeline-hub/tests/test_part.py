@@ -9,7 +9,7 @@ from shakedown_part import PartError
 from ridgeline_hub_part.part import RidgelineHub
 
 PACKAGE = Path(__file__).resolve().parents[1]
-ARENA = PACKAGE.parents[1]
+SHAKEDOWN = PACKAGE.parents[1]
 HARTWELL = "Hartwell Industrial Supply"
 ALL_KEYS = []  # inspect with no keys returns every key
 
@@ -32,7 +32,7 @@ def quoted(events, supplier=HARTWELL):
     return [e for e in events if f"{supplier} quoted" in e["text"]]
 
 
-def test_quotes_arrive_on_arena_clock():
+def test_quotes_arrive_on_shakedown_clock():
     part = started()
     rfq = call(part, "request_quotes", {"part": "SP-SPN-800", "qty": 1}, 0)
     assert rfq["result"]["rfq"] == "RFQ-001"
@@ -299,7 +299,7 @@ def test_describe_declares_clock_restore_and_seed():
 
 def checker():
     dirs = [Path(os.environ["SHAKEDOWN_BIN_DIR"])] if os.environ.get("SHAKEDOWN_BIN_DIR") else []
-    for d in dirs + [ARENA / "core" / "target" / profile for profile in ("debug", "release")]:
+    for d in dirs + [SHAKEDOWN / "core" / "target" / profile for profile in ("debug", "release")]:
         if (d / "shakedown-part-check").is_file():
             return d / "shakedown-part-check"
     return None

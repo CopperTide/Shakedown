@@ -8,18 +8,14 @@ use std::future::Future;
 use tokio::sync::OnceCell;
 use tokio_postgres::{Client, NoTls};
 
-/// The server URL (no database): `SHAKEDOWN_PG_URL`, else the compose server's user `shakedown`,
-/// else its old user `arena`.
+/// The server URL (no database): `SHAKEDOWN_PG_URL`, else the compose server's user `shakedown`.
 pub async fn server() -> String {
     static URL: OnceCell<String> = OnceCell::const_new();
     URL.get_or_init(|| async {
         if let Ok(u) = std::env::var("SHAKEDOWN_PG_URL") {
             return strip_db(&u);
         }
-        for u in [
-            "postgres://shakedown:shakedown@127.0.0.1:5544",
-            "postgres://arena:arena@127.0.0.1:5544",
-        ] {
+        for u in ["postgres://shakedown:shakedown@127.0.0.1:5544"] {
             if tokio_postgres::connect(&format!("{u}/postgres"), NoTls)
                 .await
                 .is_ok()

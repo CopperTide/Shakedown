@@ -2,7 +2,7 @@
 //! recorded as a step of the actor `link` and repeated from the record by a replay. Gates: a tool
 //! is held back unless a document of another part allows it. A task's setup. And named checks
 //! over the end state. Without a model: worlds that are refused, a setup that fails, and the
-//! gate and a link set off by a call, checked by calling the world's tools through Arena's MCP
+//! gate and a link set off by a call, checked by calling the world's tools through Shakedown's MCP
 //! endpoint on a live branch. `live_`: runs on a real model (see `support/live.rs`), while the
 //! clock, the setup and the links do what they do on their own.
 mod support;
@@ -55,7 +55,7 @@ impl AppFx {
     }
 
     /// A branch of `t1` whose world is started and live, as a run's is before its agents: its
-    /// id and context. Nothing runs on it: the test calls its tools through Arena's MCP endpoint.
+    /// id and context. Nothing runs on it: the test calls its tools through Shakedown's MCP endpoint.
     async fn live_branch(&self) -> (String, Arc<BranchCtx>) {
         let team = idle_team();
         let run_id = records(&self.state.store)
@@ -72,7 +72,7 @@ impl AppFx {
         (branch, ctx)
     }
 
-    /// Calls `name` through Arena's MCP endpoint for agent `solo` on `branch`: the tool's result.
+    /// Calls `name` through Shakedown's MCP endpoint for agent `solo` on `branch`: the tool's result.
     async fn mcp(&self, branch: &str, name: &str) -> Value {
         let body = json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
                           "params": {"name": name, "arguments": {}}});

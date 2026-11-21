@@ -68,7 +68,7 @@ picks it (default `des`, the model above, in process). Any other name is refused
 
 ### A remote simulator (not built)
 
-A commercial discrete-event simulator (Rockwell Arena Simulation or Emulate3D) runs on a licensed Windows
+A commercial discrete-event simulator (Rockwell Shakedown Simulation or Emulate3D) runs on a licensed Windows
 machine. It is meant to plug in as a worker over HTTP, behind a `SimulationBackend` named for it. The
 adapter is not written; this is the contract it and the worker must meet:
 

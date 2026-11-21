@@ -91,30 +91,30 @@ fn worlds_dir() -> anyhow::Result<PathBuf> {
 /// What every command-mode program gets: `SHAKEDOWN_PG_URL`, and `SHAKEDOWN_TEMPLATES` when it is set.
 fn program_env(pg_url: &str) -> Vec<(String, String)> {
     let mut env: Vec<(String, String)> =
-        parts::settings::both("SHAKEDOWN_PG_URL", pg_url.to_string()).into();
+        parts::settings::pair("SHAKEDOWN_PG_URL", pg_url.to_string()).into();
     if let Some(t) = parts::settings::var("SHAKEDOWN_TEMPLATES")
         .ok()
         .filter(|t| !t.is_empty())
     {
-        env.extend(parts::settings::both("SHAKEDOWN_TEMPLATES", t));
+        env.extend(parts::settings::pair("SHAKEDOWN_TEMPLATES", t));
     }
     env
 }
 
 /// The hub over `SHAKEDOWN_PACKAGES` and the built worlds, `SHAKEDOWN_BIN_DIR` and `SHAKEDOWN_SAVES`.
 fn hub(pg_url: &str, worlds: &std::path::Path) -> anyhow::Result<Hub> {
-    let arena = repo_dir();
+    let shakedown = repo_dir();
     let mut roots: Vec<PathBuf> = match parts::settings::var("SHAKEDOWN_PACKAGES") {
         Ok(p) if !p.is_empty() => std::env::split_paths(&p).collect(),
-        _ => vec![arena.join("integrations"), arena.join("benchmarks")],
+        _ => vec![shakedown.join("integrations"), shakedown.join("benchmarks")],
     };
     roots.push(worlds.to_path_buf());
-    let bin_dir = env_path("SHAKEDOWN_BIN_DIR", arena.join("core/target/release"));
-    let saves = env_path("SHAKEDOWN_SAVES", arena.join("core/saves"));
+    let bin_dir = env_path("SHAKEDOWN_BIN_DIR", shakedown.join("core/target/release"));
+    let saves = env_path("SHAKEDOWN_SAVES", shakedown.join("core/saves"));
     std::fs::create_dir_all(&saves)?;
     let registry = Registry::scan(&roots)?;
     Ok(Hub::new(registry, bin_dir, saves)
-        .with_repo_dir(arena)
+        .with_repo_dir(shakedown)
         .with_env(program_env(pg_url)))
 }
 

@@ -8,15 +8,15 @@ production by the pipeline, the full observability stack stamped in world time, 
 simulated people acting on the world clock, synthetic user traffic, and a `software-factory` template whose traps
 and checks are data, so customer agents work unchanged and are scored on production's end state.
 
-**Architecture:** Each SaaS twin is a Python integration on a new kit module (`arena_part.twin`): one HTTP server per
+**Architecture:** Each SaaS twin is a Python integration on a new kit module (`shakedown_part.twin`): one HTTP server per
 instance on 127.0.0.1, its hosts declared with stage 2's `http_routes`, URLs minted with `public_base`, state in SQLite
 plus hard-linked file trees, saved at points. Agents reach twins only through the stage 2 recording proxy; the proxy
-now also tells the twin which agent is calling (`X-Arena-Agent`), so each agent is its own user. Everything that runs
+now also tells the twin which agent is calling (`X-Shakedown-Agent`), so each agent is its own user. Everything that runs
 as containers (app, databases, observability, GlitchTip, traffic, the world-time gateway) is one `service` compose
 project, `platform`, which gains a world clock file, a `deploy` world tool, probes (docs read from HTTP endpoints) and
 watches (events from probe lists). Cross-system effects (deploys, alerts, people's actions, twins' notices) are world
 events carried by benchmark links, never part-to-part calls. A small Rust gateway restamps every OTLP item from wall to
-world time. The template is stage 3's format; its checks are scored by `arena_part.expect`.
+world time. The template is stage 3's format; its checks are scored by `shakedown_part.expect`.
 
 **Tech Stack:** Python 3.11 (kit, twins, people, traffic, sample app: FastAPI, psycopg, OpenTelemetry SDK, sentry-sdk;
 GitHub twin: graphql-core; tests: PyGithub, jira, slack_sdk, pagerduty, jsonschema), `git` ≥ 2.38 (`http-backend`,
@@ -37,7 +37,7 @@ GlitchTip, Postgres 16, Python 3.12-slim.
 | F2 | **GitHub twin in GHES mode** on 443 (research D1): REST `/api/v3`, GraphQL `/api/graphql`, git `/{o}/{r}.git`; `/meta.installed_version = "3.20.0"`; no optional GraphQL fields advertised (D2); GraphQL errors in graphql-ruby wording (D3). REST checked against `ghes-3.20` `2022-11-28` description. | Fewest gh code paths; PyGithub and Octokit need only `base_url`. | Agents hard-coded to `github.com` need the later spoof mode. |
 | F3 | **CI is the GitHub twin's own Actions** (workflow subset), not a separate part. Jobs run in Docker (`--network none`, memory-capped), checks and statuses are posted by the twin, logs serve `gh run view --log`. Build and deploy are steps `shakedown/build@v1` and `shakedown/deploy@v1`. | Real GitHub runs Actions itself, `gh run`/check endpoints are GitHub's, and no part needs to call another to fetch code. | Customers on Jenkins or CircleCI are not modelled (a later twin). |
 | F4 | **Cross-system effects are links** (recorded world events): GitHub `deploy` → platform `service_deploy`; platform `deployed` → GitHub `github_act deploy_result`; platform alert watch → PagerDuty `pagerduty_event`; people `<system>_act` → each twin's `<system>_act`; each twin's `notice` → people `people_notice`. | Parts never call each other (protocol); links make every such effect visible, ordered and forkable. | A link call holds the world while it runs: deploy returns at once and reports later. |
-| F5 | **One user per agent**: the proxy adds `X-Arena-Agent: <agent id>` to forwarded requests (a client-sent one is dropped); twins act as user `<agent id>` (created on first sight), else the config's default user. | A coder must not approve its own PR; "nothing merged without review" needs distinct identities. | Single-process drivers fall back to stage 2's "latest model caller" attribution (C9). |
+| F5 | **One user per agent**: the proxy adds `X-Shakedown-Agent: <agent id>` to forwarded requests (a client-sent one is dropped); twins act as user `<agent id>` (created on first sight), else the config's default user. | A coder must not approve its own PR; "nothing merged without review" needs distinct identities. | Single-process drivers fall back to stage 2's "latest model caller" attribution (C9). |
 | F6 | **Platform = one `service` compose project** (staging and production app, their Postgres, observability, GlitchTip, traffic, gateway). `service` gains `live` (writes `clock.json` each advance and answers `changed: true`), `images` + world tool `service_deploy`, `probes`, `watches`, and `live_copy` volumes. | Container-to-container traffic stays inside one Docker network; the world clock reaches containers as a file; scoring reads production through probes. | A bigger single part: its saves carry every volume. |
 | F7 | **World time for telemetry**: apps export OTLP with wall stamps; the gateway restamps to world time from `clock.json` and forwards OTLP to Tempo, Loki and Prometheus (all OTLP receivers, out-of-order windows on). The template has no `clock_start` (epoch = run start, stage 2 C12), so world ≈ wall in a fresh run. Grafana's datasources go through the gateway's query face, which shifts the asked window by world − wall and the answer back, so dashboards show "now" in forks run later; agents' API queries default `time`/`end` to world now. | Spec (stage 2 call: telemetry pushed with world time); TSDBs accept forward-consistent stamps; Grafana has no fake "now". | In a late fork Grafana's axis labels show wall time while the APIs answer world time. |
 | F8 | Platform volumes: Postgres by `postgres` dump; Prometheus, Loki, Tempo by `hardlink` with `live_copy` (no stop; their WAL recovers a crash-consistent copy); Grafana and Alertmanager `skip` (provisioned from files). | Stopping the stack at each save point restarts production and fakes incidents. | A restore may lose the last seconds of telemetry; Task 8's live test proves it starts. Dashboards an agent edits in Grafana are not kept. |
@@ -50,8 +50,8 @@ GlitchTip, Postgres 16, Python 3.12-slim.
 
 ## What stage 4 needs from any-agent part 4
 
-Part 4 (expected end state in arenad) is **not built**. Stage 4 does not wait: built worlds score with
-`arena_part.expect` in the world benchmark's `score` (stage 3 Task 3/4). When part 4 lands it must, to take these
+Part 4 (expected end state in shaked) is **not built**. Stage 4 does not wait: built worlds score with
+`shakedown_part.expect` in the world benchmark's `score` (stage 3 Task 3/4). When part 4 lands it must, to take these
 checks over unchanged: read the same YAML (`name`, `says`, `safety`, `check`, `measure`); support the key form with
 `op`/`value` and **`ref`** (another part's doc field), the find form with `where` and `count`, and `all`/`any`;
 pass **`measure`** into `NamedCheck.measure`; evaluate over the same live `inspect` docs at run end (twin docs and
@@ -70,7 +70,7 @@ versioned checks. `unchanged`/`change` (start vs end) are not used by this templ
   with its fetch/build hint (stage 3 W9). Versions at least: Prometheus 3.0, Loki 3.0, Tempo 2.6.
 - No hardcoded domain data: company, repos, backlog, people, traps, dashboards and checks are files under
   `benchmarks/world/templates/software-factory/`; twin tests use neutral fixtures (`acme` org, `*.test` hosts).
-- Twins: every absolute URL from `public_base` (stage 2 C3); GraphQL queries answer `X-Arena-Effect: read`; a handler
+- Twins: every absolute URL from `public_base` (stage 2 C3); GraphQL queries answer `X-Shakedown-Effect: read`; a handler
   that fails changes nothing (one SQLite transaction per request, rolled back before the 5xx). Exact strings clients
   match are copied from the research doc (§2.3, §3.1, §4.3, §4.9).
 - Functions ≤ 30 lines (clippy), Python functions short, one responsibility per module; packages use only the kits.
@@ -147,16 +147,16 @@ requests_30m}`, `version/<svc>` `{sha, deps}`, `contracts/<consumer>-<provider>`
 ### Task 1: The agent behind each request, and the Python twin kit
 
 **Files:**
-- Modify: `core/crates/arenad/src/proxy/forward.rs` (add/drop `x-arena-agent`), `kits/rust/src/proto.rs`
-  (`AGENT_HEADER`), `kits/python/arena_part/forwarded.py` (`AGENT_HEADER`, `agent_of`), `docs/protocol.md` ("Serving HTTP")
-- Create: `kits/python/arena_part/twin/{__init__.py,router.py,server.py,store.py,trees.py,part.py}`,
+- Modify: `core/crates/shaked/src/proxy/forward.rs` (add/drop `x-shakedown-agent`), `kits/rust/src/proto.rs`
+  (`AGENT_HEADER`), `kits/python/shakedown_part/forwarded.py` (`AGENT_HEADER`, `agent_of`), `docs/protocol.md` ("Serving HTTP")
+- Create: `kits/python/shakedown_part/twin/{__init__.py,router.py,server.py,store.py,trees.py,part.py}`,
   `kits/python/tests/{test_twin.py,test_trees.py}`, `kits/python/examples/notes_twin.py` (a 40-line example twin)
-- Test: `core/crates/arenad/tests/proxy.rs` (two tests)
+- Test: `core/crates/shaked/tests/proxy.rs` (two tests)
 
 **Interfaces:**
 - Consumes: stage 2 `HttpCall`/forwarding, `public_base`, `Part.http_routes`, `WorldTime`, `Part.world_time(instance)`.
 - Produces:
-  - `pub const AGENT_HEADER: &str = "x-arena-agent";` (Rust kit); Python `AGENT_HEADER`, `agent_of(headers) -> str | None`.
+  - `pub const AGENT_HEADER: &str = "x-shakedown-agent";` (Rust kit); Python `AGENT_HEADER`, `agent_of(headers) -> str | None`.
   - `twin.Request` (dataclass): `method, path, query: dict[str, list[str]], headers: Mapping[str, str]` (case-insensitive),
     `body: bytes, agent: str | None, base: str` (the public base), `params: dict[str, str]` (path params), `json()`.
   - `twin.Response(status=200, body=None, headers=None, effect: str | None = None, stream: Iterable[bytes] | None = None)`;
@@ -177,16 +177,16 @@ requests_30m}`, `version/<svc>` `{sha, deps}`, `contracts/<consumer>-<provider>`
 - [ ] **Step 1: Write the failing tests**
 
 ```rust
-// tests/proxy.rs (stage 2's ProxyFx; /echo-host now also echoes x-arena-agent)
+// tests/proxy.rs (stage 2's ProxyFx; /echo-host now also echoes x-shakedown-agent)
 #[test]
 fn the_upstream_is_told_the_agent() {   // Review Focus 5
     let v = get_json_as("planner", "http://toy.test/echo-host").await;
-    assert_eq!(v["x-arena-agent"], "planner");
+    assert_eq!(v["x-shakedown-agent"], "planner");
 }
 #[test]
 fn a_client_cannot_name_the_agent() {
-    let v = get_json_with_header("planner", "http://toy.test/echo-host", ("x-arena-agent", "boss")).await;
-    assert_eq!(v["x-arena-agent"], "planner");
+    let v = get_json_with_header("planner", "http://toy.test/echo-host", ("x-shakedown-agent", "boss")).await;
+    assert_eq!(v["x-shakedown-agent"], "planner");
 }
 ```
 
@@ -195,7 +195,7 @@ def test_twin_serves_its_hosts_and_answers_through_the_router(notes):   # exampl
     routes = notes.http_routes("i")["routes"]
     assert routes[0]["host"] == "notes.acme.test" and routes[0]["upstream"].startswith("http://127.0.0.1:")
     r = http(routes[0]["upstream"], "POST", "/notes", {"text": "hi"}, headers={"X-Forwarded-Proto": "https",
-             "X-Forwarded-Host": "notes.acme.test", "X-Arena-Agent": "coder"})
+             "X-Forwarded-Host": "notes.acme.test", "X-Shakedown-Agent": "coder"})
     assert r.json() == {"id": 1, "text": "hi", "by": "coder", "url": "https://notes.acme.test/notes/1"}
 
 def test_a_failed_handler_changes_nothing(notes):   # Review Focus 4
@@ -204,7 +204,7 @@ def test_a_failed_handler_changes_nothing(notes):   # Review Focus 4
 
 def test_a_write_is_saved_and_restored_exactly(notes, tmp_path): ...   # save, write again, start from save: one note
 def test_events_wait_for_the_next_advance(notes): ...                   # call_tool queues; advance → {changed: True, events: [notice]}
-def test_effect_header_is_sent_when_set(notes): ...                     # GET /notes?as=write → x-arena-effect: write
+def test_effect_header_is_sent_when_set(notes): ...                     # GET /notes?as=write → x-shakedown-effect: write
 
 def test_immutable_files_are_hard_linked_between_saves(tmp_path):
     c = link_copy(src, dst, immutable=lambda p: "objects" in p.parts)
@@ -213,7 +213,7 @@ def test_immutable_files_are_hard_linked_between_saves(tmp_path):
     assert (c.linked, c.copied) == (1, 1)
 ```
 
-- [ ] **Step 2: Run to verify they fail** — core `cargo test -p arenad --test proxy agent`; `cd kits/python && uv run pytest -q tests/test_twin.py tests/test_trees.py`.
+- [ ] **Step 2: Run to verify they fail** — core `cargo test -p shaked --test proxy agent`; `cd kits/python && uv run pytest -q tests/test_twin.py tests/test_trees.py`.
 - [ ] **Step 3: Implement** the header (set from `HttpCall`'s attributed agent; strip any client copy), and the kit
   module (stdlib only: `http.server`, `sqlite3`, `threading`).
 - [ ] **Step 4: Run** the core gate and the kit tests — Expected: all pass.
@@ -224,7 +224,7 @@ def test_immutable_files_are_hard_linked_between_saves(tmp_path):
 ### Task 2: GitHub twin I — real git over smart HTTP and the core REST
 
 **Files:**
-- Create: `integrations/github-twin/{arena-package.toml,pyproject.toml,README.md}`,
+- Create: `integrations/github-twin/{shakedown-package.toml,pyproject.toml,README.md}`,
   `integrations/github-twin/github_twin/{__main__.py,part.py,schema.sql,users.py,urls.py,pagination.py,headers.py,git_http.py,repos.py,docs.py}`,
   `integrations/github-twin/github_twin/rest/{__init__.py,meta.py,repos.py,contents.py,git.py,commits.py,covered.py}`,
   `integrations/github-twin/scripts/schema_subset.py`, `integrations/github-twin/tests/schemas/ghes-3.20-subset.json`
@@ -390,14 +390,14 @@ Plus the schema test grows with `COVERED`.
   `integrations/github-twin/scripts/prune_sdl.py`, `tests/schemas/ghes-3.20.graphql.gz` (+ `SOURCE.md`),
   `tests/gh_queries/*.graphql` (the ~27 operations of research §2.4, copied from cli/cli at the commit the research
   read, with its path and license note), `tests/test_graphql.py`
-- Create: `core/crates/arenad/tests/live_twins.rs`, `core/crates/arenad/tests/fixtures/clients/{gh_flow.sh,pygithub_flow.py}`,
+- Create: `core/crates/shaked/tests/live_twins.rs`, `core/crates/shaked/tests/fixtures/clients/{gh_flow.sh,pygithub_flow.py}`,
   a fixture benchmark mode in `tests/fixtures/toy.py` (`bench --part github=github-twin --config github=@file`)
 
 **Interfaces:**
-- Consumes: Tasks 2–3 models; `X-Arena-Effect`.
+- Consumes: Tasks 2–3 models; `X-Shakedown-Effect`.
 - Produces:
   - `POST /api/graphql` → `executor.run(query: str, variables: dict | None, operation: str | None, ctx) -> tuple[dict, str]`
-    (result, `"read"`|`"write"`), sent as `X-Arena-Effect`. Roots: `viewer`, `repository` (+ `pullRequest`,
+    (result, `"read"`|`"write"`), sent as `X-Shakedown-Effect`. Roots: `viewer`, `repository` (+ `pullRequest`,
     `pullRequests`, `issueOrPullRequest`, `issues`, `labels`, `assignableUsers`, `milestones`), `node`, `search`,
     `organization.teams`, `__type`. Mutations: the 12 of research §5.1 plus `addLabelsToLabelable`,
     `removeLabelsFromLabelable`. `projectItems` answers an empty connection.
@@ -423,8 +423,8 @@ def test_an_unknown_field_uses_graphql_ruby_wording(twin):
     assert r["errors"][0]["message"] == "Field 'bogus' doesn't exist on type 'User'"
 
 def test_queries_are_reads_and_mutations_writes(twin):
-    assert gql_raw(twin, "{ viewer { login } }").headers["x-arena-effect"] == "read"
-    assert gql_raw(twin, CREATE_PR, VARS).headers["x-arena-effect"] == "write"
+    assert gql_raw(twin, "{ viewer { login } }").headers["x-shakedown-effect"] == "read"
+    assert gql_raw(twin, CREATE_PR, VARS).headers["x-shakedown-effect"] == "write"
 
 def test_introspection_advertises_no_optional_field(twin):
     names = {f["name"] for f in gql(twin, '{ __type(name: "PullRequest") { fields(includeDeprecated: true) { name } } }')["data"]["__type"]["fields"]}
@@ -435,7 +435,7 @@ def test_create_pull_request_returns_its_url(twin_on_branch): ...      # data.cr
 ```
 
 ```rust
-// live_twins.rs (#[ignore]): an in-process arenad with the proxy, a world of one github-twin part, the agent env of stage 2
+// live_twins.rs (#[ignore]): an in-process shaked with the proxy, a world of one github-twin part, the agent env of stage 2
 #[tokio::test] #[ignore]
 async fn live_gh_drives_a_pull_request_through_the_proxy() {
     // gh_flow.sh as agent "coder": gh auth status; gh repo clone acme/app; commit; git push -u origin f;
@@ -456,7 +456,7 @@ async fn live_pygithub_works_unchanged_through_the_proxy() {
 - [ ] **Step 3: Implement** the pruning script (commit its output and the gz source), the executor (graphql-core
   `build_schema` + resolvers over the store) and the live fixtures; `gh` from `PATH`, its `--version` printed in the
   test output; `~/.cache/gh` pointed at a temp dir (research §2.1 caching).
-- [ ] **Step 4: Run** — `uv run pytest -q`; then once: `(cd core && cargo test -p arenad --test live_twins -- --ignored live_gh live_pygithub > target/f4.log 2>&1); tail -30 core/target/f4.log`.
+- [ ] **Step 4: Run** — `uv run pytest -q`; then once: `(cd core && cargo test -p shaked --test live_twins -- --ignored live_gh live_pygithub > target/f4.log 2>&1); tail -30 core/target/f4.log`.
   Expected: all pass; record the gh version in the README's "Verified" line.
 - [ ] **Step 5: Commit** — "The GitHub twin answers gh's GraphQL over a pruned GHES schema with graphql-ruby error wording; gh and PyGithub drive a pull request end to end through Shakedown's proxy as two agents"
 
@@ -538,7 +538,7 @@ def test_gh_run_list_shape(twin_fake_docker): ...                 # keys {"total
   `pricing-lib` 1.4 and 2.0), `…/images/build.sh`, `…/platform/compose.yaml` (app + Postgres part; obs in Task 8)
 - Modify (Rust): `integrations/service/src/{config.rs,lib.rs,view.rs}`; Create `integrations/service/src/{clock.rs,deploy.rs,probes.rs,watches.rs}`;
   `integrations/service/src/volumes/{tar.rs,hardlink.rs}` (`live_copy`); `integrations/service/README.md`,
-  `arena-package.toml` (`config_schema`)
+  `shakedown-package.toml` (`config_schema`)
 - Test: `integrations/service/tests/{fake_docker.rs,part.rs,live_service.rs}`, each repo's `tests/` (run in the base image)
 
 **Interfaces:**
@@ -547,7 +547,7 @@ def test_gh_run_list_shape(twin_fake_docker): ...                 # keys {"total
 - Produces (service config additions; all optional, old configs unchanged):
   - `live: bool` → `uses_clock: true`; each `advance` writes `<instance clock dir>/clock.json`
     `{"epoch_ms", "clock_ms", "world_ms", "speed", "wall_ms"}` and answers `changed: true`; compose gets
-    `ARENA_CLOCK_DIR` in its environment (services mount it read-only at `/shakedown`).
+    `SHAKEDOWN_CLOCK_DIR` in its environment (services mount it read-only at `/shakedown`).
   - `images: {<compose service>: "<image>"}` → compose env `IMAGE_<SERVICE>` (upper, `-` → `_`); current images kept in
     `.live/<instance>.json` and in `save.json.images`, restored with the save.
   - World tool `service_deploy {service, image, sha, ref}` → `{accepted: true}` at once; in the background `compose
@@ -600,7 +600,7 @@ a rebuilt `orders`, `/version.sha` changes and `deployed.ok` is true. Measure th
 in the base image, failure rate between 15% and 45% (adjust its timing constant in data until so; record the rate in
 the template README).
 
-- [ ] **Step 2: Run to verify they fail** — root `cargo test -p arena-service > target/f6.log 2>&1; tail -30 target/f6.log`.
+- [ ] **Step 2: Run to verify they fail** — root `cargo test -p shakedown-service > target/f6.log 2>&1; tail -30 target/f6.log`.
 - [ ] **Step 3: Implement** the service additions (one module each) and write the app repos, base image and compose.
 - [ ] **Step 4: Run** the root gate; once the live test and the app tests in Docker. Expected: all pass.
 - [ ] **Step 5: Commit** — "The service part can run a live platform: a world clock file for its containers, deploys as a world tool with the images kept in saves, probes as docs and watches as events; a three-service sample app with its own Postgres, tests, contracts and pipeline"
@@ -617,7 +617,7 @@ the template README).
   `reqwest`), `core/crates/parts/tests/isolation.rs` only if it must list `tools/*` (it uses only the kit)
 
 **Interfaces:**
-- Consumes: `arena_part::helpers::world_time::{WorldTime, unix_nanos}` (stage 2), `clock.json` (Task 6).
+- Consumes: `shakedown_part::helpers::world_time::{WorldTime, unix_nanos}` (stage 2), `clock.json` (Task 6).
 - Produces:
   - `clock::Clock` — re-reads `/shakedown/clock.json` when its mtime changes (poll 100 ms); `fn world_ns(&self, wall_ns: u64) -> u64`
     (= `epoch + clock_at_last + (wall − wall_at_last) × speed`, at most `MAX_LEAD_MS` past the last clock, never below
@@ -775,12 +775,12 @@ def test_a_contract_reports_a_missing_field():
 ### Task 10: Jira twin
 
 **Files:**
-- Create: `integrations/jira-twin/{arena-package.toml,pyproject.toml,README.md}`,
+- Create: `integrations/jira-twin/{shakedown-package.toml,pyproject.toml,README.md}`,
   `integrations/jira-twin/jira_twin/{__main__.py,part.py,schema.sql,urls.py,users.py,adf.py,workflow.py,act.py,docs.py}`,
   `jira_twin/rest/{platform.py,issues.py,search.py,agile.py,covered.py}`, `jira_twin/jql/{lexer.py,parser.py,evaluate.py}`,
   `scripts/schema_subset.py`, `tests/schemas/jira-cloud-subset.json` (+ `SOURCE.md`),
   `tests/{test_rest.py,test_jql.py,test_adf.py,test_client.py,test_schema.py}`;
-  `core/crates/arenad/tests/live_twins.rs` (one more test), `tests/fixtures/clients/jira_flow.py`
+  `core/crates/shaked/tests/live_twins.rs` (one more test), `tests/fixtures/clients/jira_flow.py`
 
 **Interfaces:**
 - Consumes: Task 1 kit.
@@ -898,12 +898,12 @@ def test_covered_operation_matches_pagerduty(pd, op): ...
 ### Task 12: The simulated-people engine
 
 **Files:**
-- Create: `integrations/people/{arena-package.toml,pyproject.toml,README.md}`,
+- Create: `integrations/people/{shakedown-package.toml,pyproject.toml,README.md}`,
   `integrations/people/people_part/{__main__.py,part.py,rules.py,rules.schema.json,schedule.py,docs.py}`,
   `integrations/people/tests/{test_rules.py,test_engine.py}`
 
 **Interfaces:**
-- Consumes: `arena_part.jsonstate` (exact saves), `WorldTime`; the people list and role rules from the template
+- Consumes: `shakedown_part.jsonstate` (exact saves), `WorldTime`; the people list and role rules from the template
   (`{people}` and each role's `rules` file, included by stage 3).
 - Config: `{seed, people: [{id, name, login, role}], rules: {<role>: <rules doc>}, systems: [..]}`; `uses_clock: true`.
 - Produces:
@@ -965,7 +965,7 @@ def test_every_template_rules_file_validates(): ...                # benchmarks/
 - Create: `benchmarks/world/tests/software_factory/{test_template.py,test_live_world.py}`
 
 **Interfaces:**
-- Consumes: every task above; stage 3's format, generator, `WorldBenchmark` and `arena_part.expect`.
+- Consumes: every task above; stage 3's format, generator, `WorldBenchmark` and `shakedown_part.expect`.
 - Template content (decided here; all data):
   - Company default `Northwind Labs`; size label `Engineers`, default 40, presets 15 / 40 / 120; no `clock_start` (F7).
   - Systems: `github` (required: parts `github` with `actions.enabled` = `{options.github.ci}`), `ci` (default on;
@@ -1016,9 +1016,9 @@ def test_no_trap_is_in_code():
 
 ```python
 @pytest.mark.live
-def test_live_the_software_factory_is_ready_in_under_a_minute(arenad_api):
-    r = arenad_api.post("/api/worlds", {"template": "software-factory", "choices": {}})
-    assert wait_ready(arenad_api, r["name"])["elapsed_ms"] < 60_000
+def test_live_the_software_factory_is_ready_in_under_a_minute(shaked_api):
+    r = shaked_api.post("/api/worlds", {"template": "software-factory", "choices": {}})
+    assert wait_ready(shaked_api, r["name"])["elapsed_ms"] < 60_000
 
 @pytest.mark.live
 def test_live_an_untouched_world_fails_the_sprint_and_stays_safe(built_world):
@@ -1060,7 +1060,7 @@ Stage 2 Tasks 1–8 must have landed before Task 1 here.
 
 - The two agent designs and the RunPod model (stage 5) run against this template; their prompts are not here.
 - A `github.com`-spoofing mode; Jenkins/CircleCI twins; Slack Events API and Socket Mode; PagerDuty webhooks v3.
-- Part 4 in arenad taking over the checks (see "What stage 4 needs from any-agent part 4").
+- Part 4 in shaked taking over the checks (see "What stage 4 needs from any-agent part 4").
 
 ## Owner rulings (2026-11-19)
 
@@ -1070,7 +1070,7 @@ Stage 2 Tasks 1–8 must have landed before Task 1 here.
   - GitHub's `rest-api-description` (MIT) and its public GraphQL schema extract are committed with their licence.
   - Atlassian and PagerDuty schemas are not committed. Tests download them on first use into a git-ignored cache, pinned by sha256, and skip with a clear message when offline.
 - **Read-only agents and POST reads (owner, after stage 2).** Stage 2 refuses a read-only agent's non-GET requests before forwarding. That breaks `gh`, whose pull-request and issue reads are GraphQL POSTs. Task 1's Rust half changes this.
-  - The proxy forwards a read-only agent's request with `x-arena-agent` and `x-arena-readonly: 1` to parts that declare `honours_readonly: true` in `http_routes`. Other parts keep stage 2's refusal.
+  - The proxy forwards a read-only agent's request with `x-shakedown-agent` and `x-shakedown-readonly: 1` to parts that declare `honours_readonly: true` in `http_routes`. Other parts keep stage 2's refusal.
   - The part refuses writes itself; the GitHub twin refuses GraphQL mutations and REST writes.
-  - If such a request comes back with `X-Arena-Effect: write`, the proxy records a violation step and the branch fails, as a refused tool write does today.
+  - If such a request comes back with `X-Shakedown-Effect: write`, the proxy records a violation step and the branch fails, as a refused tool write does today.
   - Tests: a read-only agent's `gh pr list` (GraphQL query) succeeds; its `gh pr merge` is refused and recorded.

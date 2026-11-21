@@ -39,10 +39,10 @@ fn parse_args(
 
 /// Where the binaries are (`SHAKEDOWN_BIN_DIR`, else the release build).
 fn bin_dir() -> PathBuf {
-    let arena = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let shakedown = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
     shakedown_part::settings::var_os("SHAKEDOWN_BIN_DIR")
         .map(PathBuf::from)
-        .unwrap_or_else(|| arena.join("core/target/release"))
+        .unwrap_or_else(|| shakedown.join("core/target/release"))
 }
 
 /// Where saves go (`SHAKEDOWN_SAVES`, else a fresh temp folder) and whether to remove it afterwards.

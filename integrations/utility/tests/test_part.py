@@ -11,7 +11,7 @@ from conftest import CONFIG
 from utility_part.part import Utility
 
 PACKAGE = Path(__file__).resolve().parents[1]
-ARENA = PACKAGE.parents[1]
+SHAKEDOWN = PACKAGE.parents[1]
 MIN = 60_000
 
 
@@ -134,7 +134,7 @@ def test_a_bad_disruption_is_refused():
 
 def test_conformance(tmp_path):
     """`shakedown-part-check` (describe, start, the examples, the clock, save and restore, diff, drop_save)."""
-    bin_dir = Path(os.environ.get("SHAKEDOWN_BIN_DIR", ARENA / "core" / "target" / "debug"))
+    bin_dir = Path(os.environ.get("SHAKEDOWN_BIN_DIR", SHAKEDOWN / "core" / "target" / "debug"))
     check = bin_dir / "shakedown-part-check"
     if not check.exists() or shutil.which("uv") is None:
         pytest.skip(f"no {check} (cargo build -p parts --bin shakedown-part-check) or no uv")

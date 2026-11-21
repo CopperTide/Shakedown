@@ -1,12 +1,12 @@
 // Import a team from a file: a CopperTide design (`TeamDraft`: groups, agents with a job and a
-// place on the board, "hands work to" connections), or an Arena team. Every agent stays a real
-// model: Claude agents become Claude Code, Codex agents Codex; a kind Arena can't run is refused
+// place on the board, "hands work to" connections), or an Shakedown team. Every agent stays a real
+// model: Claude agents become Claude Code, Codex agents Codex; a kind Shakedown can't run is refused
 // by name, never swapped for something else.
 import { type JsonObject, asRecord } from '@/lib/record';
 import type { AgentKind, AgentSpec, Team } from '@/model/types';
 import type { Board, BoardLink } from './board';
 
-export type Imported = { team: Team; from: 'Sculptured' | 'Arena' } | { error: string };
+export type Imported = { team: Team; from: 'Sculptured' | 'Shakedown' } | { error: string };
 
 type Json = JsonObject;
 /** A file's object fields; an array where an object belongs reads as empty. */
@@ -19,7 +19,7 @@ const KIND: Record<string, AgentKind> = { claude: 'claude_code', codex: 'codex' 
 const SCULPTURED_KIND_NAME: Record<string, string> = { opencode: 'OpenCode' };
 const SHAKEDOWN_KINDS: AgentKind[] = ['claude_code', 'codex', 'open', 'external'];
 
-/** A CopperTide agent id as an Arena one (`^[a-z0-9_-]+$`), unique in `taken`. */
+/** A CopperTide agent id as an Shakedown one (`^[a-z0-9_-]+$`), unique in `taken`. */
 function shakedownId(id: string, taken: Set<string>): string {
   const base = id.toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || 'agent';
   let out = base;
@@ -94,7 +94,7 @@ const isTeam = (d: Json): d is Json & Team =>
   typeof d.id === 'string' && typeof d.name === 'string' && list(d.agents).every((a) => isAgent(obj(a)));
 
 function fromShakedown(d: Json): Imported {
-  if (isTeam(d)) return { team: d, from: 'Arena' };
+  if (isTeam(d)) return { team: d, from: 'Shakedown' };
   const bad = list(d.agents).map(obj).find((a) => !isAgent(a));
   return { error: `The agent ${str(bad?.name) ?? str(bad?.id) ?? '(unnamed)'} needs an id, a name, a kind (claude_code, codex or open) and a prompt.` };
 }

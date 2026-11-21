@@ -47,7 +47,7 @@ mod tests {
 
     #[test]
     fn removes_read_only_folders_and_missing_paths() {
-        let root = std::env::temp_dir().join(format!("arena-tree-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("shakedown-tree-{}", std::process::id()));
         let inner = root.join("a/b");
         fs::create_dir_all(&inner).unwrap();
         fs::write(inner.join("f"), "x").unwrap();

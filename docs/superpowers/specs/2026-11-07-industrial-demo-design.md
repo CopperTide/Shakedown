@@ -16,7 +16,7 @@ when used; don't invent figures.
 - **The plant is NVIDIA Isaac Sim** for every demo run (the stand-in double exists for tests only and is never
   presented as the twin). Anything else simulated (utility, OT network, suppliers) is a world part, labelled
   "simulated" via `describe.system`, as today.
-- `Sculptured-Examples` stays read-only. New scene pieces live in Arena.
+- `Sculptured-Examples` stays read-only. New scene pieces live in Shakedown.
 - RunPod is allowed for Isaac Sim (≥24 GB VRAM, e.g. L40S / RTX 6000 Ada / 4090). Stop or terminate pods when
   idle; never touch pods or volumes you didn't create; no keys in code or logs.
 
@@ -40,25 +40,25 @@ Same plant, one shift, several fronts opening, each a scheduled disruption the a
 Conflicts are the point: shedding load slows catching up a late order; a robot cell can't run without a
 certified operator; a compromised cell must reach a safe state before its zone is isolated.
 
-**Interlocks Arena enforces** (gates, refusals recorded): no zone isolation without the cell's safe stop; no
+**Interlocks Shakedown enforces** (gates, refusals recorded): no zone isolation without the cell's safe stop; no
 cell start without a certified operator on shift; no restart after isolation without approval (Sculptured
 approvals). **Checks**: demand-response target met during the window; priority orders still shipped or
 customers notified; the session contained per a written playbook (IEC 62443-style zones/conduits, kept plain);
 no safety violations (counted apart from the score); records in ERP/CRM.
 
 **The batch: the disruption matrix.** Every combination of the four fronts (16) × repeats, per architecture,
-as a heat map of which combinations break a team: Arena's suites with a `scenarios` list. Real models, so
+as a heat map of which combinations break a team: Shakedown's suites with a `scenarios` list. Real models, so
 budget it (haiku for the matrix unless the user asks otherwise; report cost).
 
 ## The twin, in high quality
 - **Isaac Sim scene**: the Ridgeline plant from `Sculptured-Examples/factory/isaac` (read only, wrapped as
-  today) plus, for Scenario B, scene pieces added from Arena: a robot cell (e.g. a UR10 or Franka from NVIDIA's
+  today) plus, for Scenario B, scene pieces added from Shakedown: a robot cell (e.g. a UR10 or Franka from NVIDIA's
   asset library), AMRs (Nova Carter) moving material, an energy meter display, a network gateway cabinet with a
   status light. Use NVIDIA's stock assets (Isaac Sim asset library) for quality.
 - **Rendering**: RTX real-time (or path-traced for hero shots) at 1080p minimum, 4K for the video; the camera
   director cuts to events (existing `visuals`/`record` reuse) plus new rigs for the new pieces.
-- **In Arena's UI**: the World view gets a "Plant (Isaac Sim)" panel: the recorded Isaac video for the branch,
-  synced to the scrubber/timeline by arena time (the recorder already writes frames on arena time and a JSON
+- **In Shakedown's UI**: the World view gets a "Plant (Isaac Sim)" panel: the recorded Isaac video for the branch,
+  synced to the scrubber/timeline by shakedown time (the recorder already writes frames on shakedown time and a JSON
   sidecar), beside the schematic twin. A live run shows the newest frames when the pod streams them; otherwise
   the recording after each segment.
 - **TwinView** for the factory benchmark (contract C): areas for press lines, robot cell, AMRs, energy,
@@ -66,17 +66,17 @@ budget it (haiku for the matrix unless the user asks otherwise; report cost).
   cost.
 
 ## Infrastructure
-- Isaac Sim on a RunPod pod with `nvcr.io/nvidia/isaac-sim:6.2.0`, started by arenad over ssh
-  (`ARENA_RUN_ISAAC_SIM`, `remote/sshd.py`, as in the verified 2026-11 run). ERPNext, Twenty, Sculptured
-  approvals and arenad stay local. Document start/stop and cost.
+- Isaac Sim on a RunPod pod with `nvcr.io/nvidia/isaac-sim:6.2.0`, started by shaked over ssh
+  (`SHAKEDOWN_RUN_ISAAC_SIM`, `remote/sshd.py`, as in the verified 2026-11 run). ERPNext, Twenty, Sculptured
+  approvals and shaked stay local. Document start/stop and cost.
 
 ## Phases (each usable on its own)
-1. **Local, no GPU**: the `utility` and `ot-network` parts (Python kit, tests, `arena-part-check`), roster,
+1. **Local, no GPU**: the `utility` and `ot-network` parts (Python kit, tests, `shakedown-part-check`), roster,
    Scenario B task(s) and disruptions in the factory benchmark, gates and checks, the factory TwinView,
    scenario options for the builder UI. Verify with real-model runs on the stand-in plant (tests only).
 2. **RunPod + Isaac**: the new scene pieces, high-quality rendering and camera rigs, recording at 1080p/4K;
    the hero runs of A and B with real models.
-3. **UI**: the Isaac video panel in the World view, synced to arena time.
+3. **UI**: the Isaac video panel in the World view, synced to shakedown time.
 4. **Demo**: the flows for A and B (disrupt, refusal/violation, rewind, swap architecture, compare), the
    disruption-matrix batch, a runbook, and a narrated video recorded from real runs.
 

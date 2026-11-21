@@ -87,15 +87,9 @@ pub struct ProgramDirs<'a> {
 /// A command argument with `${SHAKEDOWN_BIN_DIR}` and `${SHAKEDOWN_DIR}` replaced (`${SHAKEDOWN_DIR}` only
 /// when `repo_dir` is set).
 fn expand_arg(arg: &str, bin_dir: &Path, repo_dir: &Path) -> String {
-    let mut arg = arg.to_string();
-    // `${ARENA_BIN_DIR}` and `${ARENA_DIR}`: the old names, in manifests written before 2026-11-19.
-    for name in ["${SHAKEDOWN_BIN_DIR}", "${ARENA_BIN_DIR}"] {
-        arg = arg.replace(name, &bin_dir.to_string_lossy());
-    }
+    let mut arg = arg.replace("${SHAKEDOWN_BIN_DIR}", &bin_dir.to_string_lossy());
     if !repo_dir.as_os_str().is_empty() {
-        for name in ["${SHAKEDOWN_DIR}", "${ARENA_DIR}"] {
-            arg = arg.replace(name, &repo_dir.to_string_lossy());
-        }
+        arg = arg.replace("${SHAKEDOWN_DIR}", &repo_dir.to_string_lossy());
     }
     arg
 }
@@ -150,7 +144,7 @@ fn program_command(
     for k in PASSED_ENV {
         c.envs(shakedown_part::settings::passed(k));
     }
-    c.envs(shakedown_part::settings::both(
+    c.envs(shakedown_part::settings::pair(
         "SHAKEDOWN_SAVES",
         dirs.saves,
     ));

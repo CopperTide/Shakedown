@@ -15,7 +15,7 @@ pub const VIEW_PREFIX: &str = "ev_";
 /// The base site's database, while the base is being made (no instance or view prefix).
 pub const BASE_DB: &str = "erpnext_base";
 /// The base site, while it is being made (with `-`, so no instance's site).
-pub const BASE_SITE: &str = "arena-base.localhost";
+pub const BASE_SITE: &str = "shakedown-base.localhost";
 
 impl Site {
     /// The site of instance `id` (an id is `[a-z0-9_]{1,63}`): `<id>.localhost` on `eb_<id>`.

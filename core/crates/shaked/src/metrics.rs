@@ -66,7 +66,7 @@ pub struct AgentUse {
     pub peak_prompt_tokens: Option<i64>,
     /// How many times its client compacted its context (reported).
     pub compactions: i64,
-    /// Arena's overhead recorded on this agent's own events, in seconds.
+    /// Shakedown's overhead recorded on this agent's own events, in seconds.
     pub overhead_s: f64,
 }
 
@@ -74,7 +74,7 @@ pub struct AgentUse {
 pub struct Metrics {
     /// Wall time from the branch's creation to its end (or to now while it runs).
     pub measured_s: f64,
-    /// Arena's own time in it, per kind, in milliseconds.
+    /// Shakedown's own time in it, per kind, in milliseconds.
     pub overhead_ms: Overhead,
     pub overhead_s: f64,
     /// False for runs recorded before overhead was measured: then there is no estimate.

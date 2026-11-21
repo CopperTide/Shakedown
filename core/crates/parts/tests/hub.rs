@@ -140,26 +140,6 @@ async fn run_override_replaces_the_manifest_command() {
     std::fs::remove_dir_all(&saves).unwrap();
 }
 
-/// A package written before 2026-11-19, under every old name: `arena-package.toml`,
-/// `protocol = "arena-part/1"` and `${ARENA_BIN_DIR}` in its command. It is found and runs.
-#[tokio::test]
-async fn a_package_under_the_old_names_still_runs() {
-    build_counter();
-    let (root, saves) = (temp("oldnames"), temp("oldnames-saves"));
-    let d = root.join("counter");
-    std::fs::create_dir_all(&d).unwrap();
-    std::fs::write(
-        d.join("arena-package.toml"),
-        "kind = \"integration\"\nname = \"counter\"\nversion = \"0.1.0\"\nprotocol = \"arena-part/1\"\n\
-         run = { command = [\"${ARENA_BIN_DIR}/examples/counter\"] }\n",
-    )
-    .unwrap();
-    let hub = hub_for(std::slice::from_ref(&root), &saves);
-    exercise(&hub, "counter").await;
-    std::fs::remove_dir_all(&root).unwrap();
-    std::fs::remove_dir_all(&saves).unwrap();
-}
-
 #[tokio::test]
 async fn hub_spawns_rust_counter_and_saves() {
     build_counter();

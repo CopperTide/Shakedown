@@ -9,7 +9,7 @@ import { cn } from '@/lib/cn';
 import type { Team } from '@/model/types';
 import { importTeam } from './importTeam';
 
-/** Import a team: a CopperTide design or an Arena team, picked, dropped or pasted. */
+/** Import a team: a CopperTide design or an Shakedown team, picked, dropped or pasted. */
 export default function ImportDialog({ open, onOpenChange, onImported }: { open: boolean; onOpenChange: (o: boolean) => void; onImported: (t: Team) => void }) {
   const [error, setError] = useState<string | null>(null);
   const [text, setText] = useState('');

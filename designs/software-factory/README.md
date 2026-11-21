@@ -31,7 +31,7 @@ are the same set.
 
 Every tool command runs in a fresh container (`factory_designs/workbench.py`): `--network none`, read-only
 root, a 256 MB `/tmp`, 1 GB of memory, 256 processes, user 1000, the agent's workspace at `/work`, and the
-command bounded by `command_timeout_s`. Its one way out is a unix socket mounted at `/run/arena-proxy.sock`:
+command bounded by `command_timeout_s`. Its one way out is a unix socket mounted at `/run/shakedown-proxy.sock`:
 `factory_designs/bridge.py` pipes each connection on it to Shakedown's recording proxy, and the image's
 `bridge-then` relays `127.0.0.1:3128` to it. The agent's proxy variables point at `127.0.0.1:3128` and keep the
 agent's ticket, so each request is recorded as that agent's. Env values naming a file (the proxy's CA

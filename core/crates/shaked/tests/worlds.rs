@@ -400,7 +400,7 @@ impl Start {
 }
 
 #[test]
-fn arena_benchmark_wins_over_the_remembered_world() {
+fn shakedown_benchmark_wins_over_the_remembered_world() {
     run(async {
         let start = Start::new("wenv", "acme");
         let (_clean, state) = start.state(Some("toybench")).await;

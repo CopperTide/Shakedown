@@ -420,7 +420,7 @@ async fn a_providers_models_are_listed_with_its_key(live: Live) {
     assert_eq!(models, &sorted);
 }
 
-const BAD_KEY: &str = "sk-arena-test-not-a-key";
+const BAD_KEY: &str = "sk-shakedown-test-not-a-key";
 
 /// OpenAI and the Claude API turn a key down (no charge: no model answers): the providers list
 /// says so, and an agent's call on it is recorded with the answer's status but not its message,

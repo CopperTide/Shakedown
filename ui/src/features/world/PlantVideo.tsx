@@ -5,7 +5,7 @@ import { useQuery } from '@/hooks/useQuery';
 import type { Event } from '@/model/types';
 import { worldSecondAt, clockText } from './recording';
 
-/** "Plant (Isaac Sim)": the branch's recorded plant, held at the arena second of the step on screen. Nothing when the
+/** "Plant (Isaac Sim)": the branch's recorded plant, held at the shakedown second of the step on screen. Nothing when the
  *  branch has no recording. Its own controls play on from there. */
 export default function PlantVideo({ branchId, events, step }: { branchId: string; events: Event[]; step: number | null }) {
   const { data: rec } = useQuery(branchId, () => recording(branchId), { keepPrevious: true });

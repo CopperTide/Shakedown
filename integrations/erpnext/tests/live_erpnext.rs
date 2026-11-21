@@ -119,11 +119,11 @@ async fn call(p: &Erpnext, inst: &str, name: &str, args: Value) -> ToolOutput {
     .unwrap()
 }
 
-/// A write tool on `i1` that must succeed and write `Item/ARENA-1`.
+/// A write tool on `i1` that must succeed and write `Item/SHAKEDOWN-1`.
 async fn write_item(p: &Erpnext, tool: &str, args: Value) {
     let out = call(p, "i1", tool, args).await;
     assert_eq!(out.error, None);
-    assert_eq!(out.writes, ["Item/ARENA-1"]);
+    assert_eq!(out.writes, ["Item/SHAKEDOWN-1"]);
 }
 
 async fn item_name(p: &Erpnext, inst: &str, code: &str) -> String {
@@ -183,16 +183,16 @@ async fn live_erpnext_roundtrip() {
     let e = Env::new();
     let p = e.part();
     timed_start(&p, "i1", None).await; // the first start sets up the stack and the base site
-    let item = json!({"doctype": "Item", "item_code": "ARENA-1", "item_name": "Original",
+    let item = json!({"doctype": "Item", "item_code": "SHAKEDOWN-1", "item_name": "Original",
                       "item_group": "Products", "stock_uom": "Nos"});
     write_item(&p, "insert_doc", json!({ "doc": item })).await;
     save(&p, &e, "i1", "s1").await;
     let change = json!({"item_name": "Changed"});
-    let args = json!({"doctype": "Item", "name": "ARENA-1", "fields": change});
+    let args = json!({"doctype": "Item", "name": "SHAKEDOWN-1", "fields": change});
     write_item(&p, "update_doc", args).await;
     timed_start(&p, "i2", Some("s1")).await;
-    assert_eq!(item_name(&p, "i2", "ARENA-1").await, "Original");
-    assert_eq!(item_name(&p, "i1", "ARENA-1").await, "Changed");
+    assert_eq!(item_name(&p, "i2", "SHAKEDOWN-1").await, "Original");
+    assert_eq!(item_name(&p, "i1", "SHAKEDOWN-1").await, "Changed");
     check_reads_and_errors(&p).await;
     check_diff_and_inspect(&p).await;
     save(&p, &e, "i1", "s2").await;
@@ -222,8 +222,8 @@ fn assert_nothing_left() {
             [
                 "shakedown_erpnext",
                 "shakedown-erpnext",
-                "arena_erpnext",
-                "arena-erpnext",
+                "shakedown_erpnext",
+                "shakedown-erpnext",
             ]
             .iter()
             .any(|p| n.starts_with(p))
@@ -234,13 +234,13 @@ fn assert_nothing_left() {
 
 async fn check_reads_and_errors(p: &Erpnext) {
     let out = call(p, "i2", "list_docs",
-        json!({"doctype": "Item", "filters": {"item_code": "ARENA-1"}, "fields": ["name", "item_name"]})).await;
+        json!({"doctype": "Item", "filters": {"item_code": "SHAKEDOWN-1"}, "fields": ["name", "item_name"]})).await;
     assert_eq!(out.error, None);
     assert_eq!(
         out.result.unwrap(),
-        json!([{"name": "ARENA-1", "item_name": "Original"}])
+        json!([{"name": "SHAKEDOWN-1", "item_name": "Original"}])
     );
-    assert_eq!(out.reads, ["Item/ARENA-1"]);
+    assert_eq!(out.reads, ["Item/SHAKEDOWN-1"]);
     let out = call(
         p,
         "i2",
@@ -263,17 +263,17 @@ async fn check_diff_and_inspect(p: &Erpnext) {
     );
     assert_eq!(
         differing(p, inst_t("i1"), save_t("s1")).await,
-        ["Item/ARENA-1"]
+        ["Item/SHAKEDOWN-1"]
     );
     let docs = p
         .inspect(InspectParams {
             target: save_t("s1"),
-            keys: vec!["Item/ARENA-1".into(), "Item/NOPE".into()],
+            keys: vec!["Item/SHAKEDOWN-1".into(), "Item/NOPE".into()],
         })
         .await
         .unwrap()
         .docs;
-    assert_eq!(docs["Item/ARENA-1"]["item_name"], "Original");
+    assert_eq!(docs["Item/SHAKEDOWN-1"]["item_name"], "Original");
     assert_eq!(docs["Item/NOPE"], Value::Null);
 }
 
@@ -281,7 +281,7 @@ async fn check_diff_and_inspect(p: &Erpnext) {
 async fn respawned_restore(e: &Env) {
     let p = e.part();
     timed_start(&p, "i3", Some("s2")).await;
-    assert_eq!(item_name(&p, "i3", "ARENA-1").await, "Changed");
+    assert_eq!(item_name(&p, "i3", "SHAKEDOWN-1").await, "Changed");
     p.stop(IdParams {
         instance: "i3".into(),
     })

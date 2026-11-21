@@ -13,8 +13,6 @@ use super::server::{ServerConfig, IMAGE};
 
 /// The label on containers this helper made; any other container is never used.
 const LABEL_KEY: &str = "shakedown.part";
-/// The label's name until 2026-11-19: a container made then still counts as this helper's.
-const OLD_LABEL_KEY: &str = "arena.part";
 const LABEL_VALUE: &str = "mariadb";
 const DATADIR: &str = "/var/lib/mysql";
 /// The server's flags: row-based binlog with full row images, kept until purged.
@@ -57,9 +55,7 @@ fn output(mut cmd: Command, what: &str) -> Result<String> {
 
 fn inspect(cfg: &ServerConfig) -> Result<Found> {
     let mut cmd = docker();
-    let format = format!(
-        "{{{{index .Config.Labels \"{LABEL_KEY}\"}}}}{{{{index .Config.Labels \"{OLD_LABEL_KEY}\"}}}} {{{{.State.Running}}}}"
-    );
+    let format = format!("{{{{index .Config.Labels \"{LABEL_KEY}\"}}}} {{{{.State.Running}}}}");
     cmd.args(["container", "inspect", "-f", &format, &cfg.container]);
     let out = cmd.output().context("docker inspect: cannot run docker")?;
     if !out.status.success() {

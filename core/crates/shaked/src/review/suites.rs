@@ -18,7 +18,7 @@ const PROMPT_BYTES: usize = 400;
 pub struct SuiteDigest {
     pub a: SuiteSide,
     pub b: SuiteSide,
-    /// Arena's own verdict on B against A.
+    /// Shakedown's own verdict on B against A.
     pub verdict: Verdict,
     pub figures: Figures,
     pub checks_moved: Vec<MovedCheck>,

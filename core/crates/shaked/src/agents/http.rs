@@ -25,9 +25,6 @@ use crate::{
 };
 
 pub const PROTOCOL: &str = "shakedown-agent/1";
-/// Its name until 2026-11-19: an agent that refuses [`PROTOCOL`] (a 4xx answer) is asked again
-/// under it.
-pub const OLD_PROTOCOL: &str = "arena-agent/1";
 /// The longest a hello may take.
 pub const HELLO_TIMEOUT: Duration = Duration::from_secs(10);
 /// How an agent's own cost is labelled.
@@ -159,23 +156,6 @@ fn answered(host: &str, status: u16, body: &str) -> AgentResult {
     )
 }
 
-/// POSTs `body` to the agent; when it refuses it (a 4xx answer), POSTs it again with the old
-/// protocol name, for agents written before 2026-11-19 that check the name. The last answer.
-async fn post_speaking(
-    http: &reqwest::Client,
-    policy: &Policy,
-    spec: &AgentSpec,
-    body: &Value,
-) -> Result<(u16, String), String> {
-    let first = post(http, policy, spec, body).await?;
-    if !(400..500).contains(&first.0) {
-        return Ok(first);
-    }
-    let mut old = body.clone();
-    old["protocol"] = json!(OLD_PROTOCOL);
-    post(http, policy, spec, &old).await
-}
-
 /// What the reach checks call an agent.
 const AN_AGENT: &str = "an agent";
 
@@ -217,7 +197,7 @@ pub async fn hello(
 ) -> Result<Option<String>, String> {
     let host = host_of(spec.url.as_deref().unwrap_or_default());
     let body = json!({"protocol": PROTOCOL, "type": "hello"});
-    let said = post_speaking(http, policy, spec, &body);
+    let said = post(http, policy, spec, &body);
     let (status, text) = tokio::time::timeout(HELLO_TIMEOUT, said)
         .await
         .map_err(|_| {
@@ -299,7 +279,7 @@ impl HttpDriver {
             .flow
             .timeout(
                 self.timeout,
-                post_speaking(&self.http, self.store.layer().policy(), &run.spec, &body),
+                post(&self.http, self.store.layer().policy(), &run.spec, &body),
             )
             .await;
         let mut r = match waited {

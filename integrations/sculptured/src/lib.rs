@@ -1,5 +1,5 @@
 //! The `sculptured` integration: CopperTide's approvals (proposed changes and their decisions) in
-//! the arena world. Each instance is a `sculptured serve` of its own on a loopback port, with its
+//! the shakedown world. Each instance is a `sculptured serve` of its own on a loopback port, with its
 //! data folder under `.live/<instance>/`; the tools propose changes to its team as an outside
 //! system and decide them, all through CopperTide's HTTP API. A save is an online backup of the
 //! server's SQLite stores plus a copy of the rest of its data folder; a restore starts a server on

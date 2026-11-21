@@ -1,4 +1,4 @@
-//! `shakedown-package.toml` (or its old name `arena-package.toml`) and the registry of installed
+//! `shakedown-package.toml` and the registry of installed
 //! packages.
 use anyhow::{anyhow, bail, Context, Result};
 use serde_json::Value;
@@ -63,15 +63,10 @@ fn str_of(v: &Value, key: &str) -> Result<String> {
 
 /// A package's manifest file.
 pub const MANIFEST: &str = "shakedown-package.toml";
-/// Its name until 2026-11-19, still read when a folder has no [`MANIFEST`].
-pub const OLD_MANIFEST: &str = "arena-package.toml";
 
-/// The manifest file of the package in `dir`: [`MANIFEST`], else [`OLD_MANIFEST`] (None: neither).
+/// The manifest file of the package in `dir` (None: there is none).
 pub fn manifest_file(dir: &Path) -> Option<PathBuf> {
-    [MANIFEST, OLD_MANIFEST]
-        .into_iter()
-        .map(|name| dir.join(name))
-        .find(|f| f.is_file())
+    Some(dir.join(MANIFEST)).filter(|f| f.is_file())
 }
 
 impl Manifest {
@@ -175,7 +170,7 @@ pub struct Registry {
 }
 
 impl Registry {
-    /// Loads every `<root>/<folder>/shakedown-package.toml` (or `arena-package.toml`). A missing root is skipped; a duplicate name is an error.
+    /// Loads every `<root>/<folder>/shakedown-package.toml`. A missing root is skipped; a duplicate name is an error.
     pub fn scan(roots: &[PathBuf]) -> Result<Registry> {
         let mut by_name = BTreeMap::new();
         for root in roots {

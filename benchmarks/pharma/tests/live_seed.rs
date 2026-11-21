@@ -1,7 +1,7 @@
 //! Seeds the ERP of a site that is already running and reads the reports back. `live_`: it needs
 //! an ERPNext site of the erpnext integration, whose `connect` info is in the file
 //! `PHARMA_ERP_CONNECT` names (it writes the company into that site and leaves it there).
-//! Run: `PHARMA_ERP_CONNECT=erp.json cargo test -p arena-pharma --test live_seed -- --ignored`.
+//! Run: `PHARMA_ERP_CONNECT=erp.json cargo test -p shakedown-pharma --test live_seed -- --ignored`.
 use serde_json::{json, Value};
 use shakedown_part::helpers::frappe::Erp;
 use shakedown_pharma::{data::data, reports, seed};

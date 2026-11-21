@@ -24,13 +24,11 @@ if TYPE_CHECKING:
     from .client import Shakedown
 
 FORMAT = "shakedown-dataset/1"
-#: The format's name until 2026-11-19; an export made then has the same layout.
-OLD_FORMAT = "arena-dataset/1"
 
 
 def is_dataset_format(name: str) -> bool:
-    """True for a ``format`` this SDK writes or wrote: the layout is the same under both names."""
-    return name in (FORMAT, OLD_FORMAT)
+    """True for the ``format`` this SDK writes."""
+    return name == FORMAT
 
 
 def branch_row(rec: BranchRecord) -> dict[str, Any]:

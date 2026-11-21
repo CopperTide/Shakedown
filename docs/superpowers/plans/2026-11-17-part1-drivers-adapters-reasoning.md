@@ -4,20 +4,20 @@
 
 **Goal:** A team's existing LangGraph, CrewAI or OpenAI Agents SDK code runs in Shakedown through a 10–20 line driver. Shakedown can start the driver itself from a saved "Code" connection in single runs, experiments and forks. Every agent's reasoning is recorded in the run.
 
-**Architecture:** Reasoning becomes a new event kind, `reasoning`. Drivers report it explicitly, and arenad also pulls it out of the model responses it already records (from the gateway and from Claude Code's stream). Drivers are ordinary external-runner programs. A thin Python `arena.driver` module joins or starts the run, and per-framework adapters turn an agent's MCP tools and gateway into native framework objects. arenad stores Code connections, spawns the driver per run with the run's ids in its environment, and ends the run `failed` (scored) if the driver exits without finishing.
+**Architecture:** Reasoning becomes a new event kind, `reasoning`. Drivers report it explicitly, and shaked also pulls it out of the model responses it already records (from the gateway and from Claude Code's stream). Drivers are ordinary external-runner programs. A thin Python `shakedown.driver` module joins or starts the run, and per-framework adapters turn an agent's MCP tools and gateway into native framework objects. shaked stores Code connections, spawns the driver per run with the run's ids in its environment, and ends the run `failed` (scored) if the driver exits without finishing.
 
-**Tech Stack:** Rust (arenad: axum, tokio, tokio-postgres), Python ≥3.10 SDK (httpx; optional extras for langchain-core/langchain-openai/langgraph, crewai, openai-agents), React/TypeScript UI (vitest).
+**Tech Stack:** Rust (shaked: axum, tokio, tokio-postgres), Python ≥3.10 SDK (httpx; optional extras for langchain-core/langchain-openai/langgraph, crewai, openai-agents), React/TypeScript UI (vitest).
 
 **Spec:** `docs/superpowers/specs/2026-11-17-any-agent-sandboxes-expected-state-design.md`, section 1. Parts 2–5 get their own plans.
 
 ## Global Constraints
 
 - Shared machine: `CARGO_BUILD_JOBS=2`, `CARGO_PROFILE_DEV_DEBUG=0`, vitest with `--maxWorkers=1`. Clean only your own build output.
-- Code identifiers stay `arena*` (`arenad`, the Python package `arena`, `ARENA_*` env vars). Every user-facing string says **Shakedown**.
+- Code identifiers stay `shakedown*` (`shaked`, the Python package `shakedown`, `SHAKEDOWN_*` env vars). Every user-facing string says **Shakedown**.
 - No scripted or demo agents in any test, example or doc. A live test uses a real model and skips, saying why, when no key is set.
 - No domain data (part numbers, hosts, task ids) hard-coded in code or tests. Live tests take the task from the benchmark (`GET /api/tasks`).
 - A driver for one framework fits in about 20 lines and never edits the team's agent code.
-- arenad launches drivers only because it binds `127.0.0.1` alone (`core/crates/arenad/src/main.rs:147`). The launcher must not be reachable any other way.
+- shaked launches drivers only because it binds `127.0.0.1` alone (`core/crates/shaked/src/main.rs:147`). The launcher must not be reachable any other way.
 - Docs: update `docs/agents.md` and `docs/sdk.md` in the task that adds the behaviour, in the existing plain style.
 
 ## Review Focus
@@ -33,13 +33,13 @@
 ### Task 1: The `reasoning` event and its endpoint
 
 **Files:**
-- Modify: `core/crates/arenad/src/model.rs:247-320` (add `EventKind::Reasoning`, `"reasoning"`)
-- Create: `core/crates/arenad/src/reasoning.rs` (types and payload; extraction functions come in Task 2)
-- Modify: `core/crates/arenad/src/lib.rs` (`pub mod reasoning;`)
-- Modify: `core/crates/arenad/src/api/external.rs` (route `POST {agent}/reasoning`)
-- Modify: `ui/src/types.ts:42-68` (add `'reasoning'` with its doc comment), `sdk/python/src/arena/models.py` (its event-kind literal, if it lists kinds), `sdk/python/src/arena/SCHEMA.md`
+- Modify: `core/crates/shaked/src/model.rs:247-320` (add `EventKind::Reasoning`, `"reasoning"`)
+- Create: `core/crates/shaked/src/reasoning.rs` (types and payload; extraction functions come in Task 2)
+- Modify: `core/crates/shaked/src/lib.rs` (`pub mod reasoning;`)
+- Modify: `core/crates/shaked/src/api/external.rs` (route `POST {agent}/reasoning`)
+- Modify: `ui/src/types.ts:42-68` (add `'reasoning'` with its doc comment), `sdk/python/src/shakedown/models.py` (its event-kind literal, if it lists kinds), `sdk/python/src/shakedown/SCHEMA.md`
 - Modify: `docs/protocol.md` / `docs/concepts.md` (External designs: step 3 gains the reasoning call)
-- Test: `core/crates/arenad/tests/external.rs`
+- Test: `core/crates/shaked/tests/external.rs`
 
 **Interfaces:**
 - Produces:
@@ -49,7 +49,7 @@
   - `pub const MAX_ITEMS: usize = 100; pub const MAX_TEXT: usize = 32_768;`
   - `pub fn payload(item: &ReasoningItem, source: &str) -> Option<Value>`: `None` for blank text. Otherwise `{text, kind, source, model_call_seq?, truncated?}`, where text is cut to `MAX_TEXT` chars on a char boundary and `truncated: true` is set when cut.
   - Sources: `pub const SOURCE_AGENT: &str = "agent"; SOURCE_GATEWAY = "gateway"; SOURCE_CLAUDE_CODE = "claude_code";`
-  - HTTP: `POST /api/branches/{id}/agents/{agent}/reasoning` body `ReasoningReport`. Answers `{seqs: [i64]}` (one per recorded item, blanks skipped). 400 for 0 items, more than `MAX_ITEMS`, or an unknown `kind`. 404 for an unknown agent. 409 for a branch arenad runs itself (same rule as `usage`).
+  - HTTP: `POST /api/branches/{id}/agents/{agent}/reasoning` body `ReasoningReport`. Answers `{seqs: [i64]}` (one per recorded item, blanks skipped). 400 for 0 items, more than `MAX_ITEMS`, or an unknown `kind`. 404 for an unknown agent. 409 for a branch shaked runs itself (same rule as `usage`).
 
 - [ ] **Step 1: Write the failing tests** in `tests/external.rs` (non-live, next to `only_external_runs_take_registrations`):
 
@@ -73,12 +73,12 @@ fn reasoning_reports_are_checked() {
 
 - [ ] **Step 2: Run them and see them fail**
 
-Run: `cd core && CARGO_BUILD_JOBS=2 CARGO_PROFILE_DEV_DEBUG=0 cargo test -p arenad --test external reasoning`
+Run: `cd core && CARGO_BUILD_JOBS=2 CARGO_PROFILE_DEV_DEBUG=0 cargo test -p shaked --test external reasoning`
 Expected: FAIL (404 on the route, or `EventKind::Reasoning` not found).
 
 - [ ] **Step 3: Implement** the enum variant (`as_str`/`parse`), `reasoning.rs` as specified, and the route handler `report_reasoning`. The handler follows `report_usage`: validate, then `ctx.append(..., EventKind::Reasoning, payload)` once per item, in order.
 
-- [ ] **Step 4: Run them and see them pass.** Also run `cargo test -p arenad --lib` to check nothing that matches on `EventKind` broke. Fork/replay/digest code that matches exhaustively must treat `Reasoning` as a non-world step, like `Message`.
+- [ ] **Step 4: Run them and see them pass.** Also run `cargo test -p shaked --lib` to check nothing that matches on `EventKind` broke. Fork/replay/digest code that matches exhaustively must treat `Reasoning` as a non-world step, like `Message`.
 
 Expected: PASS.
 
@@ -87,9 +87,9 @@ Expected: PASS.
 ### Task 2: Reasoning pulled from recorded model calls
 
 **Files:**
-- Modify: `core/crates/arenad/src/reasoning.rs` (extraction)
-- Modify: `core/crates/arenad/src/gateway.rs:160-170` (`record`: after appending the `ModelCall`, append its reasoning)
-- Modify: `core/crates/arenad/src/agents/claude_session.rs:201-213` (`on_line`: an `assistant` message's blocks)
+- Modify: `core/crates/shaked/src/reasoning.rs` (extraction)
+- Modify: `core/crates/shaked/src/gateway.rs:160-170` (`record`: after appending the `ModelCall`, append its reasoning)
+- Modify: `core/crates/shaked/src/agents/claude_session.rs:201-213` (`on_line`: an `assistant` message's blocks)
 - Test: unit tests in `reasoning.rs`, plus one assertion added to the existing live Claude Code test in `tests/cli.rs`
 
 **Interfaces:**
@@ -115,22 +115,22 @@ Expected: PASS.
 #[test] fn claude_code_thinking_and_text_blocks() { /* [{type:"thinking",thinking:"plan"},{type:"tool_use",…},{type:"text",text:"Reserving now."}] -> [Thinking "plan", Step "Reserving now."] */ }
 ```
 
-- [ ] **Step 2: Run them and see them fail:** `cargo test -p arenad --lib reasoning::`. Expected: FAIL (functions missing).
+- [ ] **Step 2: Run them and see them fail:** `cargo test -p shaked --lib reasoning::`. Expected: FAIL (functions missing).
 
 - [ ] **Step 3: Implement** both functions and wire them in. In the gateway, a failure to append reasoning is logged with `eprintln!`, like `record`, and never fails the model call. In `on_line`, reasoning is recorded after the message's `ModelCall`.
 
-- [ ] **Step 4: Run them and see them pass.** Then run the live Claude Code test with the new assertion (at least one `reasoning` event with `source == "claude_code"` and `kind == "step"`): `cargo test -p arenad --test cli -- --ignored live_`. It skips without a signed-in `claude`.
+- [ ] **Step 4: Run them and see them pass.** Then run the live Claude Code test with the new assertion (at least one `reasoning` event with `source == "claude_code"` and `kind == "step"`): `cargo test -p shaked --test cli -- --ignored live_`. It skips without a signed-in `claude`.
 
 - [ ] **Step 5: Commit** `git commit -m "Reasoning from model responses: gateway (reasoning_content, reasoning, details, thinking blocks) and Claude Code's stream"`
 
-### Task 3: `arena.driver`, the few-lines entry point
+### Task 3: `shakedown.driver`, the few-lines entry point
 
 **Files:**
-- Create: `sdk/python/src/arena/driver.py`
-- Modify: `sdk/python/src/arena/client.py:599-670` (`AgentEndpoint.report_reasoning`), `sdk/python/src/arena/__init__.py` (export `driver`)
-- Modify: `core/crates/arenad/src/api/external.rs` (`finish` accepts an optional body `{"error": "…"}`), `core/crates/arenad/src/runner.rs` (new `finish_failed`)
+- Create: `sdk/python/src/shakedown/driver.py`
+- Modify: `sdk/python/src/shakedown/client.py:599-670` (`AgentEndpoint.report_reasoning`), `sdk/python/src/shakedown/__init__.py` (export `driver`)
+- Modify: `core/crates/shaked/src/api/external.rs` (`finish` accepts an optional body `{"error": "…"}`), `core/crates/shaked/src/runner.rs` (new `finish_failed`)
 - Modify: `docs/sdk.md` (section "Drivers")
-- Test: `sdk/python/tests/test_units.py`, `sdk/python/tests/test_core.py`, `core/crates/arenad/tests/external.rs`
+- Test: `sdk/python/tests/test_units.py`, `sdk/python/tests/test_core.py`, `core/crates/shaked/tests/external.rs`
 
 **Interfaces:**
 - Produces (Rust):
@@ -139,38 +139,38 @@ Expected: PASS.
 - Produces (Python):
   - `AgentEndpoint.report_reasoning(text: str | None = None, kind: str = "thinking", model_call_seq: int | None = None, items: list[dict] | None = None) -> list[int]`
   - `class DriverRun` with:
-    - `.arena: Arena`, `.branch: Branch`, `.task: Task`
+    - `.shakedown: Shakedown`, `.branch: Branch`, `.task: Task`
     - `.ticket: str` (`task.ticket`, plus `"\n\n" + task.instructions` when there are instructions)
     - `.agent(id: str, *, provider: str | None = None, model: str | None = None, name: str | None = None) -> AgentEndpoint`: registers once, then returns the cached endpoint
     - `.history(agent_id: str) -> list[Event]`: the branch's events by that agent with `seq < record.start_seq`; empty when the branch is not a fork
     - `.is_fork: bool`
   - `driver.run(task: str | None = None, url: str | None = None) -> ContextManager[DriverRun]`:
-    - With `ARENA_BRANCH` set (arenad launched the driver), it joins that branch. `ARENA_URL` and `ARENA_TASK` come from the environment.
-    - Otherwise it starts `arena.external_run(task or env ARENA_TASK or the benchmark's first task)`.
+    - With `SHAKEDOWN_BRANCH` set (shaked launched the driver), it joins that branch. `SHAKEDOWN_URL` and `SHAKEDOWN_TASK` come from the environment.
+    - Otherwise it starts `shakedown.external_run(task or env SHAKEDOWN_TASK or the benchmark's first task)`.
     - On a clean exit it ends every registered agent (`end(ok=True)`) that the driver hasn't ended, then calls `branch.finish()`.
     - On an exception it ends them with `ok=False, error=repr(exc)`, calls `finish` with `{"error": f"driver raised {type(exc).__name__}: {exc}"}`, and re-raises.
-- Env contract arenad sets (Task 6 relies on it): `ARENA_URL`, `ARENA_RUN`, `ARENA_BRANCH`, `ARENA_TASK`, and on forks `ARENA_FORK_OF`.
+- Env contract shaked sets (Task 6 relies on it): `SHAKEDOWN_URL`, `SHAKEDOWN_RUN`, `SHAKEDOWN_BRANCH`, `SHAKEDOWN_TASK`, and on forks `SHAKEDOWN_FORK_OF`.
 
 - [ ] **Step 1: Write the failing tests.**
   - Rust (`tests/external.rs`, non-live): `finish_with_an_error_ends_failed_and_scored`. Register an agent, `POST /finish {"error":"driver raised X"}`, then assert the branch status is `failed`, its error is `"driver raised X"`, and its events contain a `Check`.
   - Python unit (`test_units.py`, with `httpx.MockTransport`):
-    - `test_driver_joins_the_branch_arenad_launched`: with env `ARENA_URL`/`ARENA_BRANCH`/`ARENA_TASK`, `run()` makes no `POST /api/runs`, `.agent("a")` POSTs `/api/branches/<b>/agents` once even when called twice, and exiting POSTs `…/agents/a/end` and then `…/finish`;
+    - `test_driver_joins_the_branch_shaked_launched`: with env `SHAKEDOWN_URL`/`SHAKEDOWN_BRANCH`/`SHAKEDOWN_TASK`, `run()` makes no `POST /api/runs`, `.agent("a")` POSTs `/api/branches/<b>/agents` once even when called twice, and exiting POSTs `…/agents/a/end` and then `…/finish`;
     - `test_driver_failure_finishes_with_the_error`: raising `ValueError("boom")` inside the block POSTs `/finish` with `{"error": "driver raised ValueError: boom"}` and re-raises;
     - `test_report_reasoning_posts_items`.
-  - Python core (`test_core.py`, `@pytest.mark.core`): `test_driver_round_trip` against a real arenad with a real model through the gateway. It uses the `bring_your_own_agent.py` gateway loop, reads `run.ticket`, and asserts the branch ends with a `check` event. It skips without a provider key.
+  - Python core (`test_core.py`, `@pytest.mark.core`): `test_driver_round_trip` against a real shaked with a real model through the gateway. It uses the `bring_your_own_agent.py` gateway loop, reads `run.ticket`, and asserts the branch ends with a `check` event. It skips without a provider key.
 
-- [ ] **Step 2: Run them and see them fail:** `cargo test -p arenad --test external finish_with_an_error`; `cd sdk/python && uv run --with pytest pytest -q tests/test_units.py -k "driver or reasoning"`. Expected: FAIL.
+- [ ] **Step 2: Run them and see them fail:** `cargo test -p shaked --test external finish_with_an_error`; `cd sdk/python && uv run --with pytest pytest -q tests/test_units.py -k "driver or reasoning"`. Expected: FAIL.
 
 - [ ] **Step 3: Implement** `finish_failed`, the finish body, `report_reasoning`, and `driver.py` per the interfaces.
 
-- [ ] **Step 4: Run them and see them pass** (including `pytest -q -m core tests/test_core.py -k driver` with arenad up).
+- [ ] **Step 4: Run them and see them pass** (including `pytest -q -m core tests/test_core.py -k driver` with shaked up).
 
-- [ ] **Step 5: Commit** `git commit -m "arena.driver: join or start a run in a few lines; finish with an error ends failed, scored"`
+- [ ] **Step 5: Commit** `git commit -m "shakedown.driver: join or start a run in a few lines; finish with an error ends failed, scored"`
 
 ### Task 4: Framework adapters, with an example driver each
 
 **Files:**
-- Create: `sdk/python/src/arena/adapters/__init__.py`, `_schema.py`, `langgraph.py`, `crewai.py`, `openai_agents.py`
+- Create: `sdk/python/src/shakedown/adapters/__init__.py`, `_schema.py`, `langgraph.py`, `crewai.py`, `openai_agents.py`
 - Create: `sdk/python/examples/drivers/langgraph_driver.py`, `crewai_driver.py`, `openai_agents_driver.py` (each about 20 lines or fewer, building a small team in that framework's usual style)
 - Modify: `sdk/python/pyproject.toml` with `[project.optional-dependencies]`:
   - `langgraph = ["langgraph>=0.2", "langchain-core>=0.3", "langchain-openai>=0.2"]`
@@ -188,7 +188,7 @@ Expected: PASS.
   - `langgraph.chat_model(agent, model: str, **kw) -> langchain_openai.ChatOpenAI`, with `base_url=agent.gateway_url` and `api_key="shakedown"` (the gateway holds the real key).
   - `crewai.tools(agent) -> list[crewai.tools.BaseTool]`, `crewai.llm(agent, model: str, **kw) -> crewai.LLM` (`model=f"openai/{model}"`, `base_url`, `api_key="shakedown"`), and `crewai.step_callback(agent) -> Callable[[Any], None]`. The callback records an `AgentAction`'s `.thought` (and `.text` when there's no thought) as `kind="step"`.
   - `openai_agents.tools(agent) -> list[agents.FunctionTool]` (`params_json_schema` = the MCP schema, `strict_json_schema=False`, async `on_invoke_tool` running `agent.call` in a thread), and `openai_agents.model(agent, model: str) -> agents.OpenAIChatCompletionsModel` over `openai.AsyncOpenAI(base_url=agent.gateway_url, api_key="shakedown")`.
-  - Each module re-exports `run = arena.driver.run`, so a driver needs one import.
+  - Each module re-exports `run = shakedown.driver.run`, so a driver needs one import.
   - A framework's sub-agents each call `run.agent("<id>")`, one Shakedown agent each. The examples show it.
 
 - [ ] **Step 1: Write the failing unit tests** in `test_adapters.py`. Each framework block starts with `pytest.importorskip`, and uses a `FakeEndpoint` with two tools: `get_stock {sku: string}` and `reserve {order: string, qty: integer, note?: string}`, where `reserve` returns `is_error=True, text="refused: exceeds the limit"`. Tests:
@@ -204,7 +204,7 @@ Expected: PASS.
 
 - [ ] **Step 3: Implement** the modules and the three example drivers. Check that each driver is ≤ 25 lines including imports: `wc -l examples/drivers/*.py`.
 
-- [ ] **Step 4: Run the unit tests and see them pass.** Then run `test_adapters_live.py` (`-m core`, arenad up, `OPENAI_API_KEY` in arenad's environment). For each framework, it runs the example driver as a subprocess against the benchmark's first task and asserts:
+- [ ] **Step 4: Run the unit tests and see them pass.** Then run `test_adapters_live.py` (`-m core`, shaked up, `OPENAI_API_KEY` in shaked's environment). For each framework, it runs the example driver as a subprocess against the benchmark's first task and asserts:
   - the branch has `tool_call` events from every agent the driver registered;
   - it has a `check` event;
   - it has at least one `reasoning` event (gateway or step);
@@ -238,19 +238,19 @@ Expected: PASS.
 
 - [ ] **Step 5: Commit** `git commit -m "Run page shows agents' reasoning"`
 
-### Task 6: Code connections, launched by arenad
+### Task 6: Code connections, launched by shaked
 
 **Files:**
-- Create: `core/crates/arenad/src/store/connections.rs` (table and CRUD, following `store/reviews.rs`), `core/crates/arenad/src/driver.rs` (launch and watch), `core/crates/arenad/src/api/connections.rs` (routes)
+- Create: `core/crates/shaked/src/store/connections.rs` (table and CRUD, following `store/reviews.rs`), `core/crates/shaked/src/driver.rs` (launch and watch), `core/crates/shaked/src/api/connections.rs` (routes)
 - Modify:
-  - `core/crates/arenad/src/model.rs:133` (`Rules` gains `#[serde(default, skip_serializing_if = "Option::is_none")] pub connection: Option<String>`);
-  - `core/crates/arenad/src/external.rs:47` (`start` takes `rules: Rules`; callers pass `Rules::new(Runner::External)` with `connection` set when there is one);
-  - `core/crates/arenad/src/api/runs` (wherever `create_run` is reached: `POST /api/runs` accepts `connection`);
-  - `core/crates/arenad/src/api/experiments.rs:38-70` (`SetupReq.connection: Option<String>`; an `External` setup is allowed only with a connection);
-  - `core/crates/arenad/src/suite/mod.rs:38` (`Suite.connection: Option<String>` and `ALTER TABLE suites ADD COLUMN IF NOT EXISTS connection text`);
-  - `core/crates/arenad/src/experiment/drive.rs:52` (`next_run`: when `suite.connection` is set, call `driver::start_slot` instead of `suite::start_builtin`).
+  - `core/crates/shaked/src/model.rs:133` (`Rules` gains `#[serde(default, skip_serializing_if = "Option::is_none")] pub connection: Option<String>`);
+  - `core/crates/shaked/src/external.rs:47` (`start` takes `rules: Rules`; callers pass `Rules::new(Runner::External)` with `connection` set when there is one);
+  - `core/crates/shaked/src/api/runs` (wherever `create_run` is reached: `POST /api/runs` accepts `connection`);
+  - `core/crates/shaked/src/api/experiments.rs:38-70` (`SetupReq.connection: Option<String>`; an `External` setup is allowed only with a connection);
+  - `core/crates/shaked/src/suite/mod.rs:38` (`Suite.connection: Option<String>` and `ALTER TABLE suites ADD COLUMN IF NOT EXISTS connection text`);
+  - `core/crates/shaked/src/experiment/drive.rs:52` (`next_run`: when `suite.connection` is set, call `driver::start_slot` instead of `suite::start_builtin`).
 - Modify: `docs/reference.md` (routes), `docs/agents.md` (Code connections)
-- Test: `core/crates/arenad/tests/connections.rs` (new; fixture drivers are tiny Python scripts in `tests/fixtures/drivers/` run with `uv run` or `python3`; the live one uses a real model)
+- Test: `core/crates/shaked/tests/connections.rs` (new; fixture drivers are tiny Python scripts in `tests/fixtures/drivers/` run with `uv run` or `python3`; the live one uses a real model)
 
 **Interfaces:**
 - Consumes: Task 3's env contract and `finish_failed`. Also `external::start`, `store.claim_slot`, `store.fill_slot`, `suite::wait_ended`.
@@ -262,7 +262,7 @@ Expected: PASS.
     - `DELETE /api/connections/{id}`;
     - `POST /api/connections/{id}/test` starts a run of the benchmark's first task named `Connection test · <name>` with `max_cost_usd: 0.50`, waits up to 5 min, and answers `{ok, branch_id, status, agents: [id], tool_calls: n, error?, stderr_tail}`.
   - `pub async fn launch(state: &Arc<AppState>, conn: &Connection, run_id: &str, branch_id: &str, task_id: &str, fork_of: Option<&str>) -> Result<()>` in `driver.rs`:
-    - spawns `command` in `workdir` with the conn env plus `ARENA_URL=self_base`, `ARENA_RUN`, `ARENA_BRANCH`, `ARENA_TASK` and `ARENA_FORK_OF`;
+    - spawns `command` in `workdir` with the conn env plus `SHAKEDOWN_URL=self_base`, `SHAKEDOWN_RUN`, `SHAKEDOWN_BRANCH`, `SHAKEDOWN_TASK` and `SHAKEDOWN_FORK_OF`;
     - keeps the last 8 KiB of stdout and stderr;
     - watches the process: an exit while the branch is still live calls `runner::finish_failed` with `"the driver exited with code N before finishing: <stderr tail>"`;
     - a process still alive 30 s after the branch ends is killed;
@@ -276,20 +276,20 @@ Expected: PASS.
   - `a_driver_that_outlives_its_run_is_killed`: the fixture finishes, then sleeps 120 s. The process is gone within about 35 s;
   - `live_an_experiment_setup_runs_a_code_connection`: the connection runs `examples/drivers/openai_agents_driver.py` in an experiment of 1 setup × 2 runs. Both runs end with a `check`, and each records `rules.connection`. It skips without the key or the package.
 
-- [ ] **Step 2: Run them and see them fail:** `cargo test -p arenad --test connections`. Expected: FAIL (routes missing).
+- [ ] **Step 2: Run them and see them fail:** `cargo test -p shaked --test connections`. Expected: FAIL (routes missing).
 
 - [ ] **Step 3: Implement** the store, routes, `Rules.connection`, `launch`/`start_slot`, the run and experiment wiring, and the docs.
 
-- [ ] **Step 4: Run them and see them pass:** `cargo test -p arenad --test connections` (and `-- --ignored live_` for the live one). Then `cargo test -p arenad --test experiments --test suites --test external` to check nothing regressed.
+- [ ] **Step 4: Run them and see them pass:** `cargo test -p shaked --test connections` (and `-- --ignored live_` for the live one). Then `cargo test -p shaked --test experiments --test suites --test external` to check nothing regressed.
 
-- [ ] **Step 5: Commit** `git commit -m "Code connections: arenad launches a team's driver per run, in single runs and experiments"`
+- [ ] **Step 5: Commit** `git commit -m "Code connections: shaked launches a team's driver per run, in single runs and experiments"`
 
 ### Task 7: Forks relaunch the driver
 
 **Files:**
-- Modify: `core/crates/arenad/src/fork.rs:~605` (the external fork path)
+- Modify: `core/crates/shaked/src/fork.rs:~605` (the external fork path)
 - Modify: `ui/src/run/ForkPanel.tsx` (the fork answer's note), `docs/concepts.md` (Forking: Code runs)
-- Test: `core/crates/arenad/tests/connections.rs`
+- Test: `core/crates/shaked/tests/connections.rs`
 
 **Interfaces:**
 - Consumes: `Rules.connection` (Task 6), `driver::launch` with `fork_of`, and `DriverRun.history` / `.is_fork` (Task 3).
@@ -333,7 +333,7 @@ Expected: PASS.
 
 - [ ] **Step 3: Implement** the code. All copy says Shakedown, and the page explains in one line that the command runs on this computer.
 
-- [ ] **Step 4: Run them and see them pass,** plus `npx tsc --noEmit`. Then check by hand with arenad running: save the LangGraph example as a connection, Test it, and run it in an experiment of 1 × 1 from the UI.
+- [ ] **Step 4: Run them and see them pass,** plus `npx tsc --noEmit`. Then check by hand with shaked running: save the LangGraph example as a connection, Test it, and run it in an experiment of 1 × 1 from the UI.
 
 - [ ] **Step 5: Commit** `git commit -m "UI: Code connections — save, test, and pick a driver as an experiment setup"`
 
@@ -341,7 +341,7 @@ Expected: PASS.
 
 ## Deferred to later plans (spec items not in Part 1)
 
-- Reasoning from `http` agents: needs a reasoning URL and token in the `arena-agent/1` run request. → Part 2, with the OpenTelemetry intake, which gives every HTTP agent a reasoning path at once.
+- Reasoning from `http` agents: needs a reasoning URL and token in the `shakedown-agent/1` run request. → Part 2, with the OpenTelemetry intake, which gives every HTTP agent a reasoning path at once.
 - Turning on thinking for API-mode agents (provider-specific request flags). → Part 2.
-- Running the launched driver inside a sandbox whose network reaches only arenad. → Part 3 (sandboxes). Until then the launch is gated by the loopback-only bind.
+- Running the launched driver inside a sandbox whose network reaches only shaked. → Part 3 (sandboxes). Until then the launch is gated by the loopback-only bind.
 - Per-agent limits set in a Code connection, keyed by agent id. → Part 3.

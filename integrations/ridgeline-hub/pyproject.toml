@@ -1,7 +1,7 @@
 [project]
 name = "ridgeline-hub"
 version = "0.1.0"
-description = "shakedown-part/1 integration: Ridgeline's simulated outside companies on the arena clock"
+description = "shakedown-part/1 integration: Ridgeline's simulated outside companies on the shakedown clock"
 requires-python = ">=3.10"
 dependencies = ["shakedown-part"]
 

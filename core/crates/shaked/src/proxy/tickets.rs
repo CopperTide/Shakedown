@@ -126,11 +126,9 @@ impl Tickets {
 }
 
 pub const PROXY_USER: &str = "shakedown";
-/// The user name until 2026-11-19, still taken (a client may hold a URL from before).
-pub const OLD_PROXY_USER: &str = "arena";
 
-/// The ticket in a `Proxy-Authorization` header (`Basic base64("shakedown:<ticket>")`, or the old
-/// user `arena`); None for another scheme or user.
+/// The ticket in a `Proxy-Authorization` header (`Basic base64("shakedown:<ticket>")`); None for
+/// another scheme or user.
 pub fn ticket_of(proxy_authorization: Option<&str>) -> Option<String> {
     let (scheme, encoded) = proxy_authorization?.trim().split_once(' ')?;
     if !scheme.eq_ignore_ascii_case("basic") {
@@ -139,7 +137,7 @@ pub fn ticket_of(proxy_authorization: Option<&str>) -> Option<String> {
     let engine = base64::engine::general_purpose::STANDARD;
     let decoded = String::from_utf8(engine.decode(encoded.trim()).ok()?).ok()?;
     let (user, ticket) = decoded.split_once(':')?;
-    let ours = user == PROXY_USER || user == OLD_PROXY_USER;
+    let ours = user == PROXY_USER;
     (ours && !ticket.is_empty()).then(|| ticket.to_string())
 }
 
@@ -148,17 +146,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_ticket_is_read_from_basic_auth_of_the_shakedown_user_or_the_old_arena_one() {
-        // `shakedown:t1`, and the old user `arena:t1`.
+    fn the_ticket_is_read_from_basic_auth_of_the_shakedown_user() {
+        // `shakedown:t1`
         assert_eq!(
             ticket_of(Some("Basic c2hha2Vkb3duOnQx")).as_deref(),
             Some("t1")
         );
-        assert_eq!(ticket_of(Some("Basic YXJlbmE6dDE=")).as_deref(), Some("t1"));
-        assert_eq!(ticket_of(Some("basic YXJlbmE6dDE=")).as_deref(), Some("t1"));
+        assert_eq!(
+            ticket_of(Some("basic c2hha2Vkb3duOnQx")).as_deref(),
+            Some("t1")
+        );
         // "other:t1"
         assert_eq!(ticket_of(Some("Basic b3RoZXI6dDE=")), None);
-        assert_eq!(ticket_of(Some("Bearer YXJlbmE6dDE=")), None);
+        assert_eq!(ticket_of(Some("Bearer c2hha2Vkb3duOnQx")), None);
         assert_eq!(ticket_of(Some("Basic !!")), None);
         assert_eq!(ticket_of(None), None);
     }

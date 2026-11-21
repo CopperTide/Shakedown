@@ -1,5 +1,4 @@
-//! shaked, the Shakedown service (`cargo run -p shaked` from `core`). `core/crates/arenad-alias` builds
-//! this same file as `arenad`, its name until 2026-11-19.
+//! shaked, the Shakedown service (`cargo run -p shaked` from `core`).
 //!
 //! Environment: `SHAKEDOWN_PG_URL`, `SHAKEDOWN_BIND` (`127.0.0.1:4510`; the old `SHAKEDOWN_PORT`
 //! still binds `127.0.0.1:<port>`), `SHAKEDOWN_PUBLIC_URL` (the base of every URL handed out;
@@ -31,7 +30,7 @@
 //!   e.g. `ssh <host> -- <command>` for a part on another machine (`docs/protocol.md`).
 //!
 //! `<repo>` is the folder above `core`, fixed when shaked is built (from `CARGO_MANIFEST_DIR`,
-//! which is `<repo>/core/crates/shaked`, or `<repo>/core/crates/arenad-alias` for `arenad`), so
+//! which is `<repo>/core/crates/shaked`), so
 //! the defaults hold wherever shaked is started from.
 
 use std::sync::Arc;

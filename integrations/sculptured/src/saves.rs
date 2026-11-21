@@ -116,7 +116,7 @@ mod tests {
 
     #[test]
     fn a_save_backs_up_stores_and_restores() {
-        let tmp = TempDir::new_in(&std::env::temp_dir(), "arena_sc_saves").unwrap();
+        let tmp = TempDir::new_in(&std::env::temp_dir(), "shakedown_sc_saves").unwrap();
         let root = tmp.path();
         let (data, dir, back) = (root.join("data"), root.join("s1"), root.join("back"));
         std::fs::create_dir_all(data.join("host-local")).unwrap();

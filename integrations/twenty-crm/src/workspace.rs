@@ -16,9 +16,9 @@ pub struct Creds {
 
 /// An API key needs an end date; this one outlives any save.
 const KEY_EXPIRES: &str = "2099-01-01T00:00:00Z";
-const ADMIN_EMAIL: &str = "admin@arena-twenty.example";
-const ADMIN_PASSWORD: &str = "arena-twenty-local";
-const NAME: &str = "Arena";
+const ADMIN_EMAIL: &str = "admin@shakedown-twenty.example";
+const ADMIN_PASSWORD: &str = "shakedown-twenty-local";
+const NAME: &str = "Shakedown";
 
 const SIGN_UP: &str = "mutation($e:String!,$p:String!){signUp(email:$e,password:$p){\
     tokens{accessOrWorkspaceAgnosticToken{token}}}}";
@@ -109,7 +109,7 @@ pub async fn make(port: u16) -> Result<Creds> {
 
 async fn api_key(gql: &Graphql) -> Result<String> {
     let role = admin_role(&gql.call(ROLES, json!({})).await?)?;
-    let input = json!({"i": {"name": "arena", "expiresAt": KEY_EXPIRES, "roleId": role}});
+    let input = json!({"i": {"name": "shakedown", "expiresAt": KEY_EXPIRES, "roleId": role}});
     let key = gql.call(NEW_KEY, input).await?;
     let id = text(&key, "/createApiKey/id")?;
     let token = gql

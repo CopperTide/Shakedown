@@ -7,7 +7,7 @@ use std::path::PathBuf;
 
 fn part() -> Service {
     Service::new(
-        std::env::temp_dir().join(format!("arena_service_nodocker_{}", std::process::id())),
+        std::env::temp_dir().join(format!("shakedown_service_nodocker_{}", std::process::id())),
     )
 }
 

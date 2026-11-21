@@ -1,5 +1,5 @@
 // Which system each step touched and how: read from the run's own record (`run_start.systems`,
-// `run_start.tools`, each tool call's `part`), never guessed. Runs recorded before Arena kept this
+// `run_start.tools`, each tool call's `part`), never guessed. Runs recorded before Shakedown kept this
 // say "unknown".
 import { asRecord } from '@/lib/record';
 import { runStartOf } from './events';
@@ -13,7 +13,7 @@ export interface WorldInfo {
   tools: Record<string, ToolInfo>;
   /** The parts of the world, in order (from `run_start.world`). */
   parts: string[];
-  /** False for a run recorded before Arena kept tool effects. */
+  /** False for a run recorded before Shakedown kept tool effects. */
   known: boolean;
 }
 
@@ -62,7 +62,7 @@ function partOf(p: Record<string, unknown>, known: ToolInfo | undefined): string
   return known?.part ?? null;
 }
 
-/** Arena's own talk tool for reading messages (`exec/talk.rs`): not part of the world. */
+/** Shakedown's own talk tool for reading messages (`exec/talk.rs`): not part of the world. */
 const INBOX = 'inbox';
 const MESSAGES: SystemInfo = { kind: 'messages', product: "Shakedown's messages between agents" };
 

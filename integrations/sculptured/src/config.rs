@@ -6,7 +6,7 @@ use serde_json::Value;
 use shakedown_part::PartError;
 
 /// The team the tools use unless the config names another.
-pub const DEFAULT_TEAM: &str = "arena";
+pub const DEFAULT_TEAM: &str = "shakedown";
 /// The program looked up on `PATH` when the config names none.
 const DEFAULT_BINARY: &str = "coppertide";
 /// The name before the rename; an older install may still have only this one.
@@ -89,7 +89,7 @@ mod tests {
     fn team_names() {
         assert_eq!(
             Config::parse(&json!({"binary": "/bin/sh"})).unwrap().team,
-            "arena"
+            "shakedown"
         );
         assert_eq!(
             Config::parse(&with_binary(json!("buying-2"))).unwrap().team,
@@ -97,7 +97,7 @@ mod tests {
         );
         for bad in [
             "",
-            "Arena",
+            "Shakedown",
             "a b",
             "-a",
             "a-",

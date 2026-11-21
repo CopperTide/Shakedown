@@ -328,12 +328,12 @@ shaked replaces a package's run command with the command line in `SHAKEDOWN_RUN_
 runs on a GPU machine with the protocol on the ssh session's stdio:
 
 ```bash
-export SHAKEDOWN_RUN_ISAAC_SIM="exec ssh -p <port> -i <key> -o BatchMode=yes isaac@<host> -- 'cd /isaac-sim/work/arena/integrations/isaac-sim && \
-  SHAKEDOWN_SAVES=/isaac-sim/work/saves PYTHONPATH=/isaac-sim/work/arena/kits/python exec /isaac-sim/python.sh -m isaac_part --backend isaac'"
+export SHAKEDOWN_RUN_ISAAC_SIM="exec ssh -p <port> -i <key> -o BatchMode=yes isaac@<host> -- 'cd /isaac-sim/work/shakedown/integrations/isaac-sim && \
+  SHAKEDOWN_SAVES=/isaac-sim/work/saves PYTHONPATH=/isaac-sim/work/shakedown/kits/python exec /isaac-sim/python.sh -m isaac_part --backend isaac'"
 ```
 
 - The remote machine needs this folder, `kits/python` and the factory's `isaac/` and `data/` in the same layout
-  (`arena/` next to `CopperTide-Examples/`), since the default paths and the fingerprint are relative to it.
+  (`shakedown/` next to `CopperTide-Examples/`), since the default paths and the fingerprint are relative to it.
 - Saves and recordings stay on the remote machine, under its `SHAKEDOWN_SAVES`: `save` writes to
   `$SHAKEDOWN_SAVES/isaac-sim/<save>` (the protocol's convention) rather than shaked's `dir`, which is a local path.
   shaked's own count of save bytes doesn't see them.
@@ -352,7 +352,7 @@ export SHAKEDOWN_RUN_ISAAC_SIM="exec ssh -p <port> -i <key> -o BatchMode=yes isa
 - shaked started the part over `ssh` (`SHAKEDOWN_RUN_ISAAC_SIM`, `remote/sshd.py` on the pod), with
   `SHAKEDOWN_CLOCK_SPEED=0.1` and `{"record": "factory-gold.mp4", "camera": "auto", "record_fps": 10}`.
 - The team was the scripted, no-model team, on the gold path. Shakedown no longer has that team: the factory's live
-  test (now `live_factory_team_runs_the_incident_and_arena_scores_it`) runs the benchmark's team on a real model,
+  test (now `live_factory_team_runs_the_incident_and_shakedown_scores_it`) runs the benchmark's team on a real model,
   and has not run on Isaac Sim.
 
 **Result.**

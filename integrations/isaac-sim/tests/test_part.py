@@ -20,7 +20,7 @@ from isaac_part.part import IsaacSim
 from isaac_part.state import FACTORY_EXCLUDED, FACTORY_SAVED
 
 PACKAGE = Path(__file__).resolve().parents[1]
-ARENA = PACKAGE.parents[1]
+SHAKEDOWN = PACKAGE.parents[1]
 SEED = 7  # the factory's own default seed: check_physics.py's numbers are for it
 SAVE_BYTES_MAX = 100_000  # measured 39 kB at 20 s; after the trip its frozen 60 s window adds about 180 kB
 ALL_KEYS = []  # inspect with no keys returns every key
@@ -53,9 +53,9 @@ def save_dir(saves_root, save):
     return str(saves_root / "isaac-sim" / save)
 
 
-def test_scenario_alarm_on_arena_clock():
+def test_scenario_alarm_on_shakedown_clock():
     """test_scenario.py trips PR-A1 55 to 66 s after the start, after zone C and then D; check_physics.py has
-    zone C near 33 s for seed 7 (measured here: 33.7 s of world time, the scenario starting at arena 0)."""
+    zone C near 33 s for seed 7 (measured here: 33.7 s of world time, the scenario starting at shakedown 0)."""
     part = started()
     first = part.advance("i1", 30_000)
     assert [e["kind"] for e in first["events"][:2]] == ["plant", "scenario"] and first["changed"]
@@ -380,13 +380,13 @@ def test_mirror_mode_has_no_tools_and_relays_events(stub_plant, saves_root):
 
 def checker():
     dirs = [Path(os.environ["SHAKEDOWN_BIN_DIR"])] if os.environ.get("SHAKEDOWN_BIN_DIR") else []
-    for d in dirs + [ARENA / "core" / "target" / profile for profile in ("debug", "release")]:
+    for d in dirs + [SHAKEDOWN / "core" / "target" / profile for profile in ("debug", "release")]:
         if (d / "shakedown-part-check").is_file():
             return d / "shakedown-part-check"
     return None
 
 
-SHIFT_PLANT = ARENA / "benchmarks" / "factory" / "data" / "shift.json"
+SHIFT_PLANT = SHAKEDOWN / "benchmarks" / "factory" / "data" / "shift.json"
 
 
 @pytest.mark.parametrize("config", [None, "shift"])
@@ -482,7 +482,7 @@ class FakeVideo:
         self.closed = True
 
 
-def test_recording_frames_fall_on_arena_time_and_change_nothing(saves_root):
+def test_recording_frames_fall_on_shakedown_time_and_change_nothing(saves_root):
     FakeVideo.made.clear()
     part = started(part=IsaacSim(dataclasses.replace(BACKENDS["standin"], video=FakeVideo)), record="run.mp4",
                    camera="auto", record_fps=30)

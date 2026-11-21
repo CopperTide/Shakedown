@@ -8,7 +8,7 @@ import type { AgentSpec, Health, Team } from '@/model/types';
 import { CONNECTED_KEY, checkBody, connectedAgent, connectedLabel, connectedTeam, connectedTeams, emptyForm, formProblem, parseHeaders, readConnected, saveConnected } from './connect';
 
 const http = (more: Partial<AgentSpec> = {}): AgentSpec => ({
-  id: 'planner', name: 'Plant planner', kind: 'http', model: null, prompt: '', url: 'https://agent.example.com/arena',
+  id: 'planner', name: 'Plant planner', kind: 'http', model: null, prompt: '', url: 'https://agent.example.com/shakedown',
   headers: { Authorization: { secret: '3f9a' } }, ...more,
 });
 const bedrock = (more: Partial<AgentSpec> = {}): AgentSpec => ({
@@ -67,7 +67,7 @@ describe('the team made of a check answer', () => {
   });
   it('goes to shaked as it came back: the URL and the secret references', () => {
     const run = teamForRun(connectedTeam(http()), 'chain');
-    expect(run.agents[0]).toMatchObject({ kind: 'http', url: 'https://agent.example.com/arena', headers: { Authorization: { secret: '3f9a' } } });
+    expect(run.agents[0]).toMatchObject({ kind: 'http', url: 'https://agent.example.com/shakedown', headers: { Authorization: { secret: '3f9a' } } });
     expect(run).not.toHaveProperty('runner');
   });
 });
@@ -117,7 +117,7 @@ describe('connected agents elsewhere in the UI', () => {
   it('are labelled by where they run', () => {
     expect(agentModelLine(http())).toBe('HTTP agent · agent.example.com');
     expect(agentModelLine({ kind: 'http', model: null, provider: null })).toBe('HTTP agent · Its own model');
-    expect(agentModelTip(http())).toBe('https://agent.example.com/arena');
+    expect(agentModelTip(http())).toBe('https://agent.example.com/shakedown');
     expect(agentModelLine(bedrock())).toBe('Bedrock · anthropic.claude-3-5-haiku-20241022-v1:0');
     expect(agentModelTip(bedrock({ provider: 'bedrock:eu-west-1' }))).toBe('Bedrock in eu-west-1');
     expect(runLine(team(http()))).toBe('1 agent · HTTP agent · agent.example.com');

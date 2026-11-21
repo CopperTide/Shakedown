@@ -44,8 +44,6 @@ pub type BranchId = String;
 
 /// The database shaked keeps its records in.
 pub const DEFAULT_DB: &str = "shakedown";
-/// Its name until 2026-11-19, still used while the server has no [`DEFAULT_DB`].
-pub const OLD_DEFAULT_DB: &str = "arena";
 
 /// `SHAKEDOWN_DB` (`get` reads a setting), else None (the default database). Under
 /// `SHAKEDOWN_TEST_GUARD`, without `SHAKEDOWN_ALLOW_DEFAULT_DB`, a default database is refused,
@@ -54,24 +52,13 @@ pub fn db_setting(get: impl Fn(&str) -> Option<String>) -> Result<Option<String>
     let named = get("SHAKEDOWN_DB");
     let guarded =
         get("SHAKEDOWN_TEST_GUARD").is_some() && get("SHAKEDOWN_ALLOW_DEFAULT_DB").is_none();
-    let default = named
-        .as_deref()
-        .is_none_or(|n| n == DEFAULT_DB || n == OLD_DEFAULT_DB);
+    let default = named.as_deref().is_none_or(|n| n == DEFAULT_DB);
     if guarded && default {
         anyhow::bail!(
             "SHAKEDOWN_TEST_GUARD is set: refusing the shared default database; set SHAKEDOWN_DB to a scratch database (or SHAKEDOWN_ALLOW_DEFAULT_DB=1)"
         );
     }
     Ok(named)
-}
-
-/// The database to keep the records in: `name` when it exists, else `old` when that exists (an
-/// install from before the rename keeps its records), else `name` (to be made).
-pub async fn pick_db(admin: &Admin, name: &str, old: &str) -> Result<String> {
-    if !admin.exists(name).await? && admin.exists(old).await? {
-        return Ok(old.to_string());
-    }
-    Ok(name.to_string())
 }
 
 const BRANCH_COLS: &str = "id, run_id, parent_id, start_seq, team, changes, fork_note, status, \
@@ -105,21 +92,14 @@ pub struct Store {
 }
 
 impl Store {
-    /// Opens (creating if needed) the metadata database [`DEFAULT_DB`], or the old `arena` one
-    /// while there is no `shakedown` ([`pick_db`]).
+    /// Opens (creating if needed) the metadata database [`DEFAULT_DB`].
     ///
     /// `SHAKEDOWN_DB` names another database. Under `SHAKEDOWN_TEST_GUARD` (set by tests that start
     /// shaked) the shared default databases are refused unless `SHAKEDOWN_ALLOW_DEFAULT_DB` is set,
     /// so a test never migrates someone's records ([`db_setting`]).
     pub async fn open(admin: &Admin) -> Result<Store> {
         let set = db_setting(|k| parts::settings::var(k).ok().filter(|v| !v.is_empty()))?;
-        let db = match set {
-            Some(name) => name,
-            None => pick_db(admin, DEFAULT_DB, OLD_DEFAULT_DB).await?,
-        };
-        if db == OLD_DEFAULT_DB {
-            eprintln!("shaked: records in the database arena (its name until 2026-11-19); see README.md, Old names");
-        }
+        let db = set.unwrap_or_else(|| DEFAULT_DB.to_string());
         Store::open_named(admin, &db).await
     }
 
@@ -616,7 +596,6 @@ mod tests {
         );
         let guard = ("SHAKEDOWN_TEST_GUARD", "1");
         assert!(db_setting(with(&[guard])).is_err());
-        assert!(db_setting(with(&[guard, ("SHAKEDOWN_DB", "arena")])).is_err());
         assert!(db_setting(with(&[guard, ("SHAKEDOWN_DB", "shakedown")])).is_err());
         let scratch = db_setting(with(&[guard, ("SHAKEDOWN_DB", "shakedown_test_x")]));
         assert_eq!(scratch.unwrap().as_deref(), Some("shakedown_test_x"));

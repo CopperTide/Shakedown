@@ -1,4 +1,4 @@
-//! The real packages (`arena-postgres`, `arena-retail`, built once per test binary) behind a hub
+//! The real packages (`shakedown-postgres`, `shakedown-retail`, built once per test binary) behind a hub
 //! of the test's own: its own Postgres namespace (`?shakedown_ns=` on `SHAKEDOWN_PG_URL`) and its own save
 //! folder, both removed when the `TestHub` drops, so tests never touch each other's databases or
 //! the live shaked's.
@@ -38,7 +38,7 @@ pub fn package_roots() -> Vec<PathBuf> {
     vec![repo().join("integrations"), repo().join("benchmarks")]
 }
 
-/// `cargo build -p arena-postgres -p arena-retail` and the kit's `counter` example (debug),
+/// `cargo build -p shakedown-postgres -p shakedown-retail` and the kit's `counter` example (debug),
 /// once per test binary.
 pub fn build() {
     static ONCE: OnceLock<()> = OnceLock::new();

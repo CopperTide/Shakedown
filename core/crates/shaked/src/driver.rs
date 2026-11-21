@@ -44,7 +44,7 @@ const ERROR_TAIL_CHARS: usize = 2_000;
 const POLL: Duration = Duration::from_millis(250);
 
 /// The environment a driver inherits from shaked; everything else (provider keys included) is
-/// cleared. The connection's own `env` and the run's `ARENA_*` ids come on top.
+/// cleared. The connection's own `env` and the run's `SHAKEDOWN_*` ids come on top.
 const PASSED_ENV: [&str; 9] = [
     "PATH",
     "HOME",
@@ -134,10 +134,10 @@ fn command_for(
         ("SHAKEDOWN_TASK", ids.task_id),
         ("SHAKEDOWN_CONNECTION", &conn.id),
     ] {
-        cmd.envs(settings::both(k, v));
+        cmd.envs(settings::pair(k, v));
     }
     if let Some(parent) = ids.fork_of {
-        cmd.envs(settings::both("SHAKEDOWN_FORK_OF", parent));
+        cmd.envs(settings::pair("SHAKEDOWN_FORK_OF", parent));
     }
     if let Some(dir) = &conn.workdir {
         cmd.current_dir(dir);
@@ -167,10 +167,10 @@ async fn time_env(
     ];
     let mut env: BTreeMap<String, String> = pairs
         .into_iter()
-        .flat_map(|(k, v)| settings::both(k, v))
+        .flat_map(|(k, v)| settings::pair(k, v))
         .collect();
     if let Some(m) = ctx.and_then(|c| c.rules.world_minutes) {
-        env.extend(settings::both("SHAKEDOWN_WORLD_MINUTES", m.to_string()));
+        env.extend(settings::pair("SHAKEDOWN_WORLD_MINUTES", m.to_string()));
     }
     env
 }

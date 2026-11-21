@@ -1,4 +1,4 @@
-//! Disk hygiene: the bytes the arena keeps, deleting a run's saves, and the startup cleanup of
+//! Disk hygiene: the bytes the shakedown keeps, deleting a run's saves, and the startup cleanup of
 //! saves no event names.
 
 use crate::store::Scoped;
@@ -19,7 +19,7 @@ use crate::{
     world::instance_id,
 };
 
-/// Bytes the arena keeps: the `usage` of each integration `benchmark`'s world uses, plus the
+/// Bytes the shakedown keeps: the `usage` of each integration `benchmark`'s world uses, plus the
 /// save folders. An integration that is not installed keeps nothing and is skipped; so does a
 /// benchmark that is not (a hosted shaked has none: its packages run in sandboxes).
 pub async fn usage(hub: &Hub, benchmark: &str) -> Result<u64> {
@@ -194,7 +194,8 @@ mod usage_tests {
     /// folders alone, instead of failing `/api/health`.
     #[tokio::test]
     async fn usage_without_a_benchmark_is_the_saves_alone() {
-        let root = std::env::temp_dir().join(format!("shaked-gc-{}", uuid::Uuid::new_v4().simple()));
+        let root =
+            std::env::temp_dir().join(format!("shaked-gc-{}", uuid::Uuid::new_v4().simple()));
         let (packages, saves) = (root.join("packages"), root.join("saves"));
         std::fs::create_dir_all(&packages).unwrap();
         std::fs::create_dir_all(saves.join("s1")).unwrap();

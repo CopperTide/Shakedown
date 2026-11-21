@@ -18,7 +18,7 @@ about 0.1 s and 20 MB of database, on the database server's Docker volume. A ser
   on an empty database runs the image's migrations, the app's sign-up makes the workspace and an Admin API key, the server
   is removed, and the demo records a new workspace comes with are emptied. A base without its sign-in file is made again.
 - **Instance** `<id>` (at most 60 characters) is the database `ti_<id>` copied from the base or a save, and compose project
-  `arena_twenty_<id>` from `instance.yml`: the server, on a free port on 127.0.0.1, without migrations, and a Redis with no
+  `shakedown_twenty_<id>` from `instance.yml`: the server, on a free port on 127.0.0.1, without migrations, and a Redis with no
   persistence. Every copy of a database has the same workspace and API key. `.live/<id>.json` records its port and server, so
   a restarted program can still use, save and stop it. `stop` removes the project and the database.
 - **State changes only through tool calls:** there is no worker service and no cron registration, so nothing writes in the
@@ -40,7 +40,7 @@ about 0.1 s and 20 MB of database, on the database server's Docker volume. A ser
 - **connect** gives `{url, api_key, admin_email, admin_password}`, for a benchmark's seed and for signing in to the app.
 - **workspace_name** (config): every instance the part starts gets that display name for its workspace (the app shows it
   top left), set in its database before its server starts; one started from a save that has it is unchanged. Without
-  it the workspace keeps the base's name, "Arena". The factory benchmark names it Ridgeline Components.
+  it the workspace keeps the base's name, "Shakedown". The factory benchmark names it Ridgeline Components.
 - **usage** is the size of the `ti_*` and `ts_*` databases; 0 before this program has needed the server. **gc {keep}** drops the
   saves `keep` doesn't name (an entry ending in `*` is a prefix) and the databases of instances not running; never the base.
 - **Conformance:** `check/shakedown-package.toml` (`twenty-crm-check`, the same program). `cargo test -p shakedown-twenty-crm --

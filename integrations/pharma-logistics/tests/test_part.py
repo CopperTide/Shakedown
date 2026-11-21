@@ -11,7 +11,7 @@ from conftest import logistics_config
 from pharma_logistics_part.part import PharmaLogistics
 
 PACKAGE = Path(__file__).resolve().parents[1]
-ARENA = PACKAGE.parents[1]
+SHAKEDOWN = PACKAGE.parents[1]
 SBMC = "St. Brennan Medical Center"
 MSD = "Meridian Specialty Distribution"
 
@@ -139,7 +139,7 @@ def test_a_save_restores_everything(tmp_path):
 
 def test_conformance(tmp_path):
     """`shakedown-part-check` (describe, start, the examples, save and restore, diff, replay, drop_save)."""
-    bin_dir = Path(os.environ.get("SHAKEDOWN_BIN_DIR", ARENA / "core" / "target" / "debug"))
+    bin_dir = Path(os.environ.get("SHAKEDOWN_BIN_DIR", SHAKEDOWN / "core" / "target" / "debug"))
     check = bin_dir / "shakedown-part-check"
     if not check.exists() or shutil.which("uv") is None:
         pytest.skip(f"no {check} (cargo build -p parts --bin shakedown-part-check) or no uv")

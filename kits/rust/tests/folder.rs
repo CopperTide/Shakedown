@@ -12,7 +12,7 @@ struct Tmp(PathBuf);
 
 impl Tmp {
     fn new(tag: &str) -> Tmp {
-        let p = std::env::temp_dir().join(format!("arena_kit_{}_{tag}", std::process::id()));
+        let p = std::env::temp_dir().join(format!("shakedown_kit_{}_{tag}", std::process::id()));
         let _ = fs::remove_dir_all(&p);
         fs::create_dir_all(&p).unwrap();
         Tmp(p)
@@ -92,7 +92,7 @@ fn digest_sees_content_and_names() {
 
 #[test]
 fn size_of_missing_is_zero() {
-    assert_eq!(size(Path::new("/nonexistent/arena_kit")), 0);
+    assert_eq!(size(Path::new("/nonexistent/shakedown_kit")), 0);
 }
 
 #[test]

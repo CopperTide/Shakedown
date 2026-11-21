@@ -1,4 +1,4 @@
-# Arena UI: dumb simple to start, depth one click away (2026-11-07)
+# Shakedown UI: dumb simple to start, depth one click away (2026-11-07)
 
 Approved by the user in chat on 2026-11-07 ("go with the UI"). Their words: "make it dumb simple to start",
 "way way way less crowded", "as simple as possible for any dummy to use", "things should be capitalized",
@@ -11,7 +11,7 @@ No scripted, demo, stub or fake agents anywhere: not as a default, a fallback, a
 double. Every agent run uses an actual LLM: Claude Code or Codex through their logged-in CLIs (both available
 on this machine), or an API provider when its key is set. If no model is available, the UI says exactly what
 is missing (for example "Claude Code isn't installed" or "Set OPENROUTER_API_KEY") and offers no stand-in.
-Model variance between runs is expected and is what Arena measures.
+Model variance between runs is expected and is what Shakedown measures.
 
 ## 1. One main screen: Run (the home page, `/`)
 Before a run:
@@ -37,10 +37,10 @@ After **Run**, the same screen becomes the live view (no navigation, no dialog):
   refused or not and why). Raw arguments, permits, reads/writes, timings: behind a "Details" disclosure.
 
 Pause needs the backend (it doesn't exist yet): `POST /api/branches/{id}/pause` and `/resume`. While paused,
-arenad holds new tool calls and gateway model calls for that branch (they wait, they don't fail) and the world
+shaked holds new tool calls and gateway model calls for that branch (they wait, they don't fail) and the world
 clock stops; Resume releases them. `GET /api/branches/{id}` reports `paused: true`. Record pause and resume as
-events so the timeline shows the gap. Works for arenad's own runners (CLI and API mode) and external runs. Put
-its tests in a new test file (another branch is rewriting the existing arenad test files).
+events so the timeline shows the gap. Works for shaked's own runners (CLI and API mode) and external runs. Put
+its tests in a new test file (another branch is rewriting the existing shaked test files).
 
 ## 2. Timeline: mouse-based zoom and scroll
 Keep everything it does now (lanes, marks, buttons, keys). Add: wheel scrolls; Ctrl/⌘ + wheel and trackpad
@@ -56,7 +56,7 @@ the user scrolls or zooms away; a "Follow" button brings it back.
 - **Import**: a Sculptured design file (the JSON in `sculptured-control-plane/examples/teams/*.json`: `{id,
   name, groups, agents[{id, group_id, name, kind, job, folder, x, y, advanced{model, permission, resume}}],
   connections, revision}`; map `kind` claude → Claude Code, codex → Codex; use x/y and connections for the
-  board), an Arena team JSON, or paste/drag the file. Optionally from a running Sculptured by URL if its API
+  board), an Shakedown team JSON, or paste/drag the file. Optionally from a running Sculptured by URL if its API
   makes that simple; otherwise file only.
 - **Edit** opens the existing editor (moved off the main screen).
 

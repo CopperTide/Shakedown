@@ -9,11 +9,11 @@ services:
     restart: on-failure
     depends_on: [redis]
     environment:
-      PG_DATABASE_URL: postgres://arena:arena@db:5432/${SHAKEDOWN_TWENTY_DB:?set SHAKEDOWN_TWENTY_DB}
+      PG_DATABASE_URL: postgres://shakedown:shakedown@db:5432/${SHAKEDOWN_TWENTY_DB:?set SHAKEDOWN_TWENTY_DB}
       REDIS_URL: redis://redis:6379
       SERVER_URL: http://127.0.0.1:${SHAKEDOWN_TWENTY_PORT:?set SHAKEDOWN_TWENTY_PORT}
       # Only signs local sessions; every key that matters is in the database.
-      APP_SECRET: arena-twenty-local-only
+      APP_SECRET: shakedown-twenty-local-only
       DISABLE_DB_MIGRATIONS: ${SHAKEDOWN_TWENTY_NO_MIGRATIONS:-true}
       DISABLE_CRON_JOBS_REGISTRATION: "true"
       TELEMETRY_ENABLED: "false"

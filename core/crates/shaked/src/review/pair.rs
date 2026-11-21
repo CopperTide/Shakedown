@@ -1,5 +1,5 @@
 //! The digest of two branches compared: each branch's digest (smaller than a lone run's), and
-//! what Arena's comparison found, summarised: the checks whose outcome differs, the first step
+//! what Shakedown's comparison found, summarised: the checks whose outcome differs, the first step
 //! where they diverge, the metrics side by side and the final worlds' differences by kind.
 
 use std::collections::BTreeMap;

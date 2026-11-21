@@ -8,7 +8,7 @@
 # stores `shakedown_test%`.
 # MariaDB (the `mariadb` integration, integrations/mariadb/src): instances `mi_%`, scratch views
 # `mx_%`; counted too when LEAKCHECK_MARIADB names a server container of the integration (its root
-# password in SHAKEDOWN_MARIADB_PASSWORD, or its old name ARENA_MARIADB_PASSWORD, default `arena`). Never point it at a server you didn't start
+# password in SHAKEDOWN_MARIADB_PASSWORD, default `shakedown`). Never point it at a server you didn't start
 # for this.
 set -u
 PG_KINDS=(pi ps branch snap)
@@ -28,20 +28,19 @@ counts() {
 name_column() { [ "$1" = pg ] && echo datname || echo schema_name; }
 db_table() { [ "$1" = pg ] && echo pg_database || echo information_schema.schemata; }
 
-# The compose server's user: `shakedown`, or `arena` on a server made before 2026-11-19.
+# The compose server's user: `shakedown`.
 pg() {
-  docker exec deploy-pg-1 psql -U shakedown -d postgres -Atc "$1" 2>/dev/null \
-    || docker exec deploy-pg-1 psql -U arena -d postgres -Atc "$1"
+  docker exec deploy-pg-1 psql -U shakedown -d postgres -Atc "$1"
 }
 
 mariadb() {
-  docker exec -e MYSQL_PWD="${SHAKEDOWN_MARIADB_PASSWORD:-${ARENA_MARIADB_PASSWORD:-arena}}" "$LEAKCHECK_MARIADB" \
+  docker exec -e MYSQL_PWD="${SHAKEDOWN_MARIADB_PASSWORD:-shakedown}" "$LEAKCHECK_MARIADB" \
     mariadb -uroot -N -B -e "$1"
 }
 
 count() {
   local out
-  out="$(counts pg "${PG_KINDS[@]}")/$(pg "select count(*) from pg_database where datname like 'arena\_test%'")"
+  out="$(counts pg "${PG_KINDS[@]}")/$(pg "select count(*) from pg_database where datname like 'shakedown\_test%'")"
   if [ -n "${LEAKCHECK_MARIADB:-}" ]; then
     out+=" $(counts mariadb "${MARIADB_KINDS[@]}" | tr -d ' ')"
   fi

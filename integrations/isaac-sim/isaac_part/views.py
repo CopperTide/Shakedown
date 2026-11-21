@@ -1,4 +1,4 @@
-"""The factory's /state and events as the arena sees them: keyed documents, world events, how documents compare,
+"""The factory's /state and events as the shakedown sees them: keyed documents, world events, how documents compare,
 and the documents file of a save. Shared by the plant and the mirror (GET /state has Factory.state()'s shape)."""
 import json
 from pathlib import Path

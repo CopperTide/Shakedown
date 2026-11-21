@@ -216,7 +216,7 @@ mod tests {
 
     #[test]
     fn hard_links_are_counted_once() {
-        let dir = std::env::temp_dir().join(format!("arena_hub_links_{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("shakedown_hub_links_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("s1")).unwrap();
         std::fs::create_dir_all(dir.join("s2")).unwrap();
@@ -229,7 +229,7 @@ mod tests {
     }
 
     fn temp(tag: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("arena_hub_{tag}_{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("shakedown_hub_{tag}_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir

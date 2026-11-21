@@ -1,12 +1,12 @@
-# Shakedown (was Arena): environments, scenarios, experiments + the Automation Fair demo
+# Shakedown (was Shakedown): environments, scenarios, experiments + the Automation Fair demo
 
-> Name note (2026-11-08): the product is now **Shakedown**; "Arena" below is the old name, kept as written. Internal names (`arenad`, `arena-part/1`, `ARENA_*`) are unchanged for now.
+> Name note (2026-11-08): the product is now **Shakedown**; "Shakedown" below is the old name, kept as written. Internal names (`shaked`, `shakedown-part/1`, `SHAKEDOWN_*`) are unchanged for now.
 
 Approved in chat 2026-11-08. Deadline for the demo: Monday 2026-11-16 (Automation Fair). Target: done 2026-11-08 end of day.
 
 ## Why
 
-Arena is for high-quality testing of agents in their actual deployed environment, simulated. You measure accuracy, quality, cost and safety, then reuse the same environments and scenarios to compare agent structures, rules, restrictions and designs. That gives confidence before deploying or changing an agent system.
+Shakedown is for high-quality testing of agents in their actual deployed environment, simulated. You measure accuracy, quality, cost and safety, then reuse the same environments and scenarios to compare agent structures, rules, restrictions and designs. That gives confidence before deploying or changing an agent system.
 
 ## The product: three nouns, one verb
 
@@ -23,7 +23,7 @@ Rewind and fork are **not core**. They come off the main screens, the docs' firs
 2. **Every screen is cut to its core and made high quality.** Visual over text, no word on screen that doesn't earn its place. Strict spacing grid (4/8 px), one type scale, design tokens only, consistent capitalisation, real empty and loading states, no layout shift. Primary action loud, everything else quiet. Light and dark both polished.
 3. **Clean code.** DRY, modular, compact; delete dead code (including anything left from removed features); one way to do each thing. UI and Rust core both.
 4. **Deterministic safety is first-class.** Limits live outside the agent (environment APIs and sandbox policy) and are enforced deterministically. Every denial is a timeline event with a reason. Scoring is by deterministic checks, never an LLM. (The optional AI review stays optional.)
-5. **OpenShell.** Agents can run inside an NVIDIA OpenShell sandbox (open-source, Apache 2.0, YAML policy → OPA, logs denials). Arena captures OpenShell denials as events. If OpenShell can't run on this machine today, ship the integration point and the policy file with a clear note. Never fake denials.
+5. **OpenShell.** Agents can run inside an NVIDIA OpenShell sandbox (open-source, Apache 2.0, YAML policy → OPA, logs denials). Shakedown captures OpenShell denials as events. If OpenShell can't run on this machine today, ship the integration point and the policy file with a clear note. Never fake denials.
 
 ## The demo (Automation Fair, 3 minutes)
 
@@ -37,7 +37,7 @@ Shape for this and every future demo: **what we test, how we test it, how it hel
 - **Compare:** two agent setups on the same model (e.g. "Basic planner" vs "Planner with rules": verify reservations, escalate spend over limit), plus optionally a second model. About 5–10 runs each. The results page shows the difference in pass rate, gaming attempts, cost.
 - **How it helps:** you see failure rates and gaming before anything touches a real plant.
 
-Deliverables: the environment as an Arena benchmark (small, deterministic, no Docker stack needed), real runs, a runbook, a narrated ~90 s–3 min video in 4K + 1080p, in `Arena-Examples/automation-fair/`.
+Deliverables: the environment as an Shakedown benchmark (small, deterministic, no Docker stack needed), real runs, a runbook, a narrated ~90 s–3 min video in 4K + 1080p, in `Shakedown-Examples/automation-fair/`.
 
 ## Non-goals
 

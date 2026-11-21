@@ -215,7 +215,7 @@ fn assert_reasoning_from_the_stream(evs: &[Event]) {
 }
 
 /// Each delegation woke its agent with it, and each agent that was given work reported to the
-/// lead (itself, or arena passing on its turn's last words).
+/// lead (itself, or shakedown passing on its turn's last words).
 fn assert_dispatched(evs: &[Event]) {
     let delegations = of_kind(evs, EventKind::Delegation);
     assert!(!delegations.is_empty(), "the lead delegated");

@@ -393,7 +393,7 @@ export interface Branch {
   restored?: RestoredPart[];
 }
 
-/** Arena's own time per kind, in ms (`overhead.rs`); a kind with none is absent. */
+/** Shakedown's own time per kind, in ms (`overhead.rs`); a kind with none is absent. */
 export type Overhead = Partial<Record<'save' | 'restore' | 'record' | 'gateway' | 'gate' | 'link' | 'mcp' | 'wait' | 'score' | 'pause', number>>;
 
 /** A cost and where it comes from (`metrics.rs`). */
@@ -462,7 +462,7 @@ export interface Health {
   benchmark?: BenchmarkInfo;
 }
 
-/** Space used by every save the arena keeps (the hub's and each integration's), and the limit. */
+/** Space used by every save the shakedown keeps (the hub's and each integration's), and the limit. */
 export interface DiskUsage {
   bytes: number;
   limit_bytes: number;

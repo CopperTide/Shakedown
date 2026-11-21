@@ -1,4 +1,4 @@
-# Pharma production showcase: one batch failure, several deployments, compared in Arena
+# Pharma production showcase: one batch failure, several deployments, compared in Shakedown
 
 Status: draft for the user's approval (2026-11-05). Replaces the clinical-trial concept the user shared
 ("I dont understand Phase III trials, maybe focus on production systems?").
@@ -8,11 +8,11 @@ Status: draft for the user's approval (2026-11-05). Replaces the clinical-trial 
 A recorded, narrated video for one person in pharmaceutical supply chain who cares about how their
 information systems fit together. They should come away seeing that:
 
-1. Arena can hold working copies of the common tools of their industry (open-source alternatives,
+1. Shakedown can hold working copies of the common tools of their industry (open-source alternatives,
    clearly named as such) and an incident running across them;
 2. a team of agents designed in **Sculptured's visual board** works the incident through those tools,
    step by step, within its approval limits;
-3. Arena **tests agent systems deterministically** before they reach production: the same seeded
+3. Shakedown **tests agent systems deterministically** before they reach production: the same seeded
    world and the same scripted disruptions every time, scored by the same checks, so a deployment's
    performance and behaviour can be measured, tuned and re-tested, and different deployments compared.
 
@@ -21,7 +21,7 @@ and mission-critical work for organisations: test, tune, re-test, then deploy. F
 feature, not the story.
 
 What is deterministic, said plainly in the video: the world, the scenarios, the disruptions and the
-scoring. The models are not, so Arena measures the agents' reliability across repeats (how often a
+scoring. The models are not, so Shakedown measures the agents' reliability across repeats (how often a
 deployment passes, how often it does something unsafe, how much its runs vary).
 
 The user: "a big selling point of our system should be running determinsitic tests on agent systems
@@ -38,10 +38,10 @@ and make it clear what those alternatives are".
   systems wherever one exists.
 - Every deployment shown on screen as its actual Sculptured board (the org chart the user designs).
 - A small **test suite**: the incident and a few variants, each a deterministic scenario with named
-  checks and hard safety checks. Each deployment runs the suite with repeats; Arena reports pass
+  checks and hard safety checks. Each deployment runs the suite with repeats; Shakedown reports pass
   rate, safety violations, consistency across repeats, time and cost.
 - A **tuning loop** on screen: change one thing in a deployment (an instruction, a decision right, the
-  model), re-run the suite, and Arena shows what improved and what regressed.
+  model), re-run the suite, and Shakedown shows what improved and what regressed.
 - Two or three deployments compared on the same suite. Whatever the numbers say is what the video says.
 - A 5–8 minute narrated video built with the factory showcase's tools (`make_video.sh`, `story.py`).
 
@@ -53,7 +53,7 @@ and make it clear what those alternatives are".
 
 ## Anti-goals (a failure even if it works)
 
-- A staged or edited result; any number not from Arena's records.
+- A staged or edited result; any number not from Shakedown's records.
 - Agents releasing a batch, overriding a quality hold or shipping an ineligible lot on their own.
 - Unlabelled simulation: every simulated piece is named as simulated on screen.
 
@@ -87,7 +87,7 @@ short-dated lot; a release without a person's approval.
 | ERP: orders, lots, expiry, warehouses | ERPNext | real (existing integration) |
 | MES: batch records, work orders | ERPNext manufacturing | real |
 | QMS: deviations, holds, release | ERPNext quality module | real |
-| LIMS: environmental-monitoring and lab results | SENAITE | real if a one-day spike proves it practical; otherwise a simulated LIMS in Arena, labelled simulated |
+| LIMS: environmental-monitoring and lab results | SENAITE | real if a one-day spike proves it practical; otherwise a simulated LIMS in Shakedown, labelled simulated |
 | Documents: SOPs, certificates of analysis | Paperless-ngx | real if time allows, else dropped |
 | CRM (like Salesforce) | Twenty | real (existing integration) |
 | Cold-chain carriers | simulated carriers | simulated (like the factory's hub) |
@@ -96,7 +96,7 @@ short-dated lot; a release without a person's approval.
 
 ## Deployments compared
 
-Built as Sculptured boards, run through Arena, same model and same world:
+Built as Sculptured boards, run through Shakedown, same model and same world:
 
 - **Single agent:** one agent with every tool.
 - **Coordinated team:** a coordinator with quality, supply planning, production and logistics/customer
@@ -106,14 +106,14 @@ Built as Sculptured boards, run through Arena, same model and same world:
 
 Each runs the whole suite with repeats (see below); a fork may appear briefly, as a debugging aid.
 
-## The test suite (new in Arena)
+## The test suite (new in Shakedown)
 
 - **Scenarios:** the base incident plus three or four variants, for example: the alternate stock is
   short-dated for one customer; the qualified carrier has no capacity; the person rejects the first
   reallocation; a document in the system carries a misleading instruction. Each is seeded and
   scripted, so every deployment meets exactly the same world.
 - **Checks:** per scenario, the named outcome checks and the hard safety checks above.
-- **Running a suite:** one request runs a deployment over every scenario, N repeats each, and Arena
+- **Running a suite:** one request runs a deployment over every scenario, N repeats each, and Shakedown
   aggregates: pass rate per check, safety violations, spread across repeats, time to each milestone,
   tokens and cost, production estimates.
 - **Comparing suites:** two suite results side by side (two deployments, or before and after a change),
@@ -123,18 +123,18 @@ Each runs the whole suite with repeats (see below); a fork may appear briefly, a
 Runs cost credits: 4–5 scenarios × 2 deployments × 2 repeats is 16–20 runs, plus a tuning re-run.
 A cheaper model for the suite (one of the "deployments") keeps that down.
 
-## Sculptured board → Arena (new)
+## Sculptured board → Shakedown (new)
 
-Today Sculptured's Arena page runs a plain agent list, not a board. New: from a board, "Run in Arena"
-starts an Arena external run (`runner: "external"`), registers each board agent, and Sculptured's own
-runtime drives the agents as it would in production; Arena only records, scores and measures. The
-board's roles, tools, permissions and links are what runs. Arena gains nothing design-specific.
+Today Sculptured's Shakedown page runs a plain agent list, not a board. New: from a board, "Run in Shakedown"
+starts an Shakedown external run (`runner: "external"`), registers each board agent, and Sculptured's own
+runtime drives the agents as it would in production; Shakedown only records, scores and measures. The
+board's roles, tools, permissions and links are what runs. Shakedown gains nothing design-specific.
 
 ## Video outline
 
 1. The plant and the failure (Isaac render, real time).
 2. The systems, each labelled with what it stands in for, showing the seeded data.
-3. Each deployment: its Sculptured board, then the run in Arena (steps, messages, tool calls).
+3. Each deployment: its Sculptured board, then the run in Shakedown (steps, messages, tool calls).
 4. The test suite: every deployment over every scenario, pass rates, safety violations, spread.
 5. Tuning: one change, the suite re-run, what improved and what regressed.
 6. Comparison of deployments: checks, time, context, tokens and cost, production estimates.
@@ -146,7 +146,7 @@ board's roles, tools, permissions and links are what runs. Arena gains nothing d
 - Agent runs only when the user says credits are available; everything else is built first.
 - RunPod: about $6.30 left; the re-dressed render capped at $2.50.
 - Shared machine rules (nice, `CARGO_BUILD_JOBS=2`), never the external SSD, Docker objects named
-  `arena-*` only.
+  `shakedown-*` only.
 
 ## Left to the builder
 
@@ -164,15 +164,15 @@ check thresholds, the board layouts, and the scene's dressing.
 ## The control plane (user, 2026-11-05)
 
 User: "Do it so it looks like a control plane for monitoring agent deployments in production in
-Sculptured and integrate that form into Arena as well. So a live timeline and stuff like that to see
+Sculptured and integrate that form into Shakedown as well. So a live timeline and stuff like that to see
 what actions its taking to interact with databases, ERP systems, retrieve data from APIs, MCPs, etc.
 Make it modeled off of like a control system for industrial applications but for your agent
 deployments and org. Then integrate the ideas above." This settles the board question: the board team
 is what runs (Sculptured drives it), and Sculptured Control is where it is watched.
 
 **One form, two places.** Sculptured Control is the control plane for agent deployments in production.
-An Arena run (staging) is shown in the same form, both inside Sculptured Control (it already reads Arena
-runs through `control/source.ts`) and in Arena's own UI, so staging and production read the same.
+An Shakedown run (staging) is shown in the same form, both inside Sculptured Control (it already reads Shakedown
+runs through `control/source.ts`) and in Shakedown's own UI, so staging and production read the same.
 
 **Modelled on industrial control systems** (high-performance HMI, ISA-101; alarm management, ISA-18.2):
 
@@ -203,12 +203,12 @@ repeats, each cell a run that opens in the process view.
 
 ## Build order (all without agent runs; scripted stand-in agents in tests)
 
-1. Arena core: system metadata in describe; test suites (run, aggregate, compare); the control form in
-   Arena's UI (process view, live action timeline, trends, suite overview).
+1. Shakedown core: system metadata in describe; test suites (run, aggregate, compare); the control form in
+   Shakedown's UI (process view, live action timeline, trends, suite overview).
 2. The pharma world: `benchmarks/pharma`, Larchmont's seeded data in ERPNext and Twenty, a simulated
    LIMS and carriers part, the scenario variants, named checks and safety checks, a scripted gold path.
 3. Sculptured: Control as the control plane (the hierarchy, process view, live action timeline, trends,
-   alarms and interlocks) for deployments and Arena runs; "Run in Arena" from a board (Sculptured
-   drives its own agents through Arena's external-run API).
+   alarms and interlocks) for deployments and Shakedown runs; "Run in Shakedown" from a board (Sculptured
+   drives its own agents through Shakedown's external-run API).
 4. When credits allow: the runs (suite × deployments × repeats, a tuning re-run), the Isaac render of
    the filling line, and the video.

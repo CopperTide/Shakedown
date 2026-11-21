@@ -5,7 +5,7 @@ use std::path::Path;
 use anyhow::{anyhow, Context, Result};
 use serde_json::Value;
 
-/// Next to the arena checkout, from the package folder the hub runs the program in.
+/// Next to the shakedown checkout, from the package folder the hub runs the program in.
 pub const DEFAULT_DATA: &str = "../../../Sculptured-Examples/factory/data/ridgeline.json";
 
 /// The press that fails.

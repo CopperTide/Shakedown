@@ -7,7 +7,7 @@ use std::{future::Future, sync::Mutex};
 use shaked::pg::Admin;
 
 /// The server the tests use: as shaked finds it (`SHAKEDOWN_PG_URL`, else the default user
-/// `shakedown`, else the old `arena`), once per test binary.
+/// `shakedown`, else the old `shakedown`), once per test binary.
 pub fn pg_url() -> String {
     static URL: std::sync::OnceLock<String> = std::sync::OnceLock::new();
     URL.get_or_init(|| on_own_runtime(shaked::pg::configured_url))

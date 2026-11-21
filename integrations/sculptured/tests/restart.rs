@@ -66,7 +66,7 @@ fn record(saves: &Path, id: &str, pid: u32, port: u16, tmp: &Path) {
     let folder = saves.join(".live").join(id);
     fs::create_dir_all(folder.join("data")).unwrap();
     fs::create_dir_all(tmp).unwrap();
-    let run = json!({"config": {"binary": "/bin/sh", "team": "arena"}, "binary": "/bin/sh",
+    let run = json!({"config": {"binary": "/bin/sh", "team": "shakedown"}, "binary": "/bin/sh",
                      "build": "b1", "port": port, "tmp": tmp,
                      "pids": {"serve": pid, "pgid": pid, "hostd": null}});
     fs::write(folder.join("run.json"), run.to_string()).unwrap();
@@ -96,7 +96,7 @@ async fn saved(part: &Sculptured, dir: &Path) -> shakedown_part::proto::Saved {
 
 #[tokio::test]
 async fn a_restarted_program_still_inspects_saves_and_stops_a_running_instance() {
-    let root = std::env::temp_dir().join(format!("arena_sc_restart_{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("shakedown_sc_restart_{}", std::process::id()));
     let mut t = Tmp(root.clone(), None);
     let saves = root.join("saves/sculptured");
     let live = saves.join(".live");

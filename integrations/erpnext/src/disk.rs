@@ -207,7 +207,7 @@ mod tests {
         assert_eq!(site_db("i1.localhost").as_deref(), Some("eb_i1"));
         assert_eq!(site_db(&v.name), Some(v.db));
         assert_eq!(
-            site_db("arena-base.localhost"),
+            site_db("shakedown-base.localhost"),
             None,
             "the base site is never swept"
         );

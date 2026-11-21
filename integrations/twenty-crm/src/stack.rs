@@ -66,7 +66,7 @@ impl Stack {
         env.extend(
             values
                 .into_iter()
-                .flat_map(|(k, v)| shakedown_part::settings::both(k, v)),
+                .flat_map(|(k, v)| shakedown_part::settings::pair(k, v)),
         );
         let name = format!("{}_{}", self.settings.project, spec.instance);
         Project::new(&name, &self.settings.files.join("instance.yml"), &env)
@@ -79,7 +79,7 @@ fn settings_env(s: &Settings) -> BTreeMap<String, String> {
         ("SHAKEDOWN_TWENTY_DB_PORT", s.db_port.to_string()),
     ]
     .into_iter()
-    .flat_map(|(k, v)| shakedown_part::settings::both(k, v))
+    .flat_map(|(k, v)| shakedown_part::settings::pair(k, v))
     .collect()
 }
 

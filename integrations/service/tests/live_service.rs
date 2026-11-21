@@ -1,4 +1,4 @@
-//! Runs real Docker Compose projects: `cargo test -p arena-service -- --ignored live_`.
+//! Runs real Docker Compose projects: `cargo test -p shakedown-service -- --ignored live_`.
 //! Every project, volume and folder the test makes is removed afterwards, even on failure.
 use serde_json::{json, Value};
 use shakedown_part::proto::*;
@@ -18,7 +18,8 @@ struct World {
 
 impl World {
     fn new() -> World {
-        let dir = std::env::temp_dir().join(format!("arena_live_service_{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("shakedown_live_service_{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         fs::write(dir.join("compose.yml"), COMPOSE).unwrap();

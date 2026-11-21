@@ -36,8 +36,7 @@ environment, not in the agent's prompt, and are enforced deterministically; scor
 never by a model. shaked, the Shakedown service, records every step of every run, so any run can be opened and read
 step by step.
 
-The service is `shaked`, the Python SDK `shakedown` and the settings `SHAKEDOWN_*`; the old `arena` names still
-work ([Old names](#old-names)).
+The service is `shaked`, the Python SDK `shakedown` and the settings `SHAKEDOWN_*`.
 
 ## Use Shakedown from code
 
@@ -198,7 +197,7 @@ cargo build --release                          # the Rust integrations and bench
 (cd ui && npm install && npm run dev)          # UI on http://127.0.0.1:4520 (proxies /api to 4510)
 ```
 
-shaked keeps its records in the database `shakedown` on that Postgres (`arena` on a server made before 2026-11-19). It starts the integration and benchmark
+shaked keeps its records in the database `shakedown` on that Postgres. It starts the integration and benchmark
 programs itself, from `SHAKEDOWN_BIN_DIR` (default `core/target/release`), and refuses to start if the benchmark
 can't be described (package missing or not built). It listens on 127.0.0.1 only. `GET /api/health` shows the
 benchmark, which CLIs were found, each model provider and whether API mode is available, and the disk use;
@@ -316,31 +315,15 @@ other integration is checked on its own, and API mode has not been measured.
 
 ## Old names
 
-These were renamed on 2026-11-19. The old names still work, so code, packages and scripts written before keep running:
+These settings were renamed. The old names still work for now:
 
 | Old name | New name | What still works under the old name |
 |---|---|---|
-| `arenad`, the service (`core/crates/arenad`) | `shaked` (`core/crates/shaked`) | `cargo run -p arenad`, `cargo build -p arenad` and the program `core/target/<profile>/arenad`: the package `core/crates/arenad-alias` builds the same program under the old name |
-| the Python SDK `arena` (distribution `arena-sdk`, class `Arena`) | `shakedown` (distribution `shakedown-sdk`, class `Shakedown`) | `import arena` and `from arena.<module> import ...` give the same objects and warn once; `Arena`, `LocalArena`, `ArenaError`, `ArenaParallelEnv`; `sdk/python/compat/arena-sdk` installs `shakedown-sdk` under the old distribution name; `Shakedown.local(arenad=...)`, and a build named `arenad` is found; `branch.arena` (and a suite's, a driver run's, an env's) is `.shakedown` |
-| settings `ARENA_<NAME>` (environment variables, `VITE_ARENA_*` for the UI build) | `SHAKEDOWN_<NAME>`, `VITE_SHAKEDOWN_*` | every old name is read when the new one is not set, with one warning per name; every program shaked or a part starts (part programs, drivers, docker compose projects) gets both names |
-| the protocols `arena-part/1` and `arena-agent/1` | `shakedown-part/1` and `shakedown-agent/1` | a part's `protocol` may be `1`, `"shakedown-part/1"` or `"arena-part/1"` (the kits now announce the new name); an HTTP agent that refuses `shakedown-agent/1` (a 4xx answer) is asked again under `arena-agent/1` |
-| `arena-package.toml`, `${ARENA_BIN_DIR}`, `${ARENA_DIR}` | `shakedown-package.toml`, `${SHAKEDOWN_BIN_DIR}`, `${SHAKEDOWN_DIR}` | a folder with only `arena-package.toml` is read (the new file wins when both are there), and both placeholders expand |
-| the programs `arena-<package>` (`arena-retail`, `arena-postgres`, ..., `arena-part-check`) | `shakedown-<package>`, `shakedown-part-check` | the old programs are built too |
-| the Cargo packages `arena-<package>` (crates `arena_<package>`) and the Rust kit `arena-part` (`arena_part`) | `shakedown-<package>` (`shakedown_<package>`), `shakedown-part` (`shakedown_part`) | `cargo build -p arena-factory`, `-p arena-erpnext` and `-p arena-twenty-crm`, which the example stacks run: the alias packages `<package>/arena-alias` build the same programs; an outside Rust package depends on `shakedown-part` |
-| the Python kit `arena_part` (distribution `arena-part`) | `shakedown_part` (distribution `shakedown-part`) | `import arena_part` and its modules give the same objects and warn once; `kits/python/compat/arena-part` installs `shakedown-part` under the old name |
-| the proxy's request headers `X-Arena-Agent`, `X-Arena-Readonly`, `X-Arena-Effect`, and its user `arena` | `X-Shakedown-*`, user `shakedown` | the proxy sends the agent and read-only headers under both names, takes a part's effect under either, drops both from what a client sends, and takes proxy URLs with the user `arena` |
-| the MCP server name `arena` (tools `mcp__arena__*`, for the SDK's Claude Code and an empty benchmark) | `shakedown` (`mcp__shakedown__*`) | nothing: prompts that name `mcp__arena__` tools must say `mcp__shakedown__` |
-| the dataset format `arena-dataset/1` | `shakedown-dataset/1` | the same layout; `shakedown.export.is_dataset_format` takes both |
-| docker resources: `arena-mariadb` / `arena_mariadb_data`, `arena-erpnext-db` / `arena_erpnext_db` / `arena_erpnext`, `arena_twenty`, label `arena.part`, `arena_<instance>` | `shakedown-…`, `shakedown_…`, label `shakedown.part` | a long-lived server (MariaDB, ERPNext's, Twenty's) keeps its old name while it is the only one, so its saves stay; a container labelled `arena.part` still counts as the helper's; new servers and instances get the new names |
-| browser storage `arena.*` | `shakedown.*` | the UI moves each old key once, on load |
-| Postgres user and password `arena`, and the database `arena` of shaked's records | `shakedown` (new deployments: `deploy/compose.yml`) | with no URL set, shaked and the packages connect as `shakedown`, else as `arena`; a server `deploy/compose.yml` makes has both logins; it keeps using a database `arena` while there is no `shakedown`; the postgres integration reads `?arena_ns=` on the URL as `?shakedown_ns=`. To rename by hand (shaked stopped): `docker exec deploy-pg-1 psql -U arena -d postgres -c "CREATE ROLE shakedown LOGIN SUPERUSER PASSWORD 'shakedown'" && docker exec deploy-pg-1 psql -U shakedown -d postgres -c "ALTER DATABASE arena RENAME TO shakedown"` |
 | `SHAKEDOWN_PORT` (2026-11-20) | `SHAKEDOWN_BIND` (`127.0.0.1:4510`) | `SHAKEDOWN_PORT=<port>` still binds `127.0.0.1:<port>` |
 | `SHAKEDOWN_AGENT_BASE` (2026-11-20) | `SHAKEDOWN_PUBLIC_URL` (the base of every URL shaked hands out) | still read, and it wins for HTTP agents |
 | `SHAKEDOWN_LOCAL_MODELS` for your own model servers (2026-11-20) | custom servers in Settings → Models (`custom:<name>`, kept in the database with their keys sealed) | still read; a custom server with the same name takes over from it |
 | shaked's tables in schema `public` (2026-11-20) | schema `shakedown` | moved there on the first start, runs and saves kept |
-| `deploy/runpod`: `arenad_provider` in `pod.toml`, `gpupod --arenad`, `--through-arenad` | `shaked_provider`, `--shaked`, `--through-shaked` | the old key and flags are read |
 
-Kept as they are, because they are data inside existing servers and saves: the MariaDB helper's database `arena_meta`, ERPNext's base site `arena-base.localhost`, the database servers' root password `arena` and Twenty's own user `arena`, and the Sculptured team and proposer `arena`.
 
 ## Contributing
 

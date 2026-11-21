@@ -41,7 +41,7 @@ pub struct Fake(pub PathBuf);
 
 impl Fake {
     pub fn new(tag: &str) -> Fake {
-        let dir = std::env::temp_dir().join(format!("arena_fake_{}_{tag}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("shakedown_fake_{}_{tag}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(dir.join("bin")).unwrap();
         let docker = dir.join("bin/docker");

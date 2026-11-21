@@ -13,7 +13,7 @@ A benchmark of a fictional stamping plant with two tasks:
 Its world has eight parts (version 0.4.1; 0.3.0 had the first five). 0.4.1 changed three things on 0.4.0: both
 tasks give `clock_start` (2026-03-10 06:00, the plant clock), so every agent is told the world's date and time rather
 than reading the plant's March dates against its own; the CRM's workspace is named Ridgeline Components (the
-`twenty-crm` part's `workspace_name`), not the integration's "Arena"; and the twin counts a notice that names the
+`twenty-crm` part's `workspace_name`), not the integration's "Shakedown"; and the twin counts a notice that names the
 sales order (`SAL-ORD-...`) as covering its order, as the checks do (it looks the few such names up in the ERP).
 
 | Part | Integration | What it holds |
@@ -266,7 +266,7 @@ verifications below are of version 0.2.0 (three customers, eight orders).
 **Verified with the company and the CRM (2026-11-04):** `live_factory_right_path_passes_and_wrong_path_fails` passed on
 Linux, in about 290 s, with the seed above, `frappe/erpnext:v16.53.0`, `twentycrm/twenty:v2.51.0`, a debug build of CopperTide,
 the stand-in plant and the scripted team, including its new CRM step: the right path passed all eleven checks. Counted once in
-the ERP after seeding, without a run: 2 companies (`Arena Co`, from the integration's base, stays), 4 workstations, 5 BOMs, 8
+the ERP after seeding, without a run: 2 companies (`Shakedown Co`, from the integration's base, stays), 4 workstations, 5 BOMs, 8
 sales orders, 8 work orders, 8 job cards, 4 assets, 15 item prices, and no stock row for `SP-SPN-800`. `shaked base` took
 170 s the first time, including the integrations' own bases, and 23 s when the base existed. **Not run:** this world on
 Isaac Sim or with real agents; the Isaac Sim result below predates the CRM.

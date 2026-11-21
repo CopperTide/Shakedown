@@ -7,11 +7,11 @@ services:
     container_name: ${SHAKEDOWN_TWENTY_NAME:?set SHAKEDOWN_TWENTY_NAME}-db
     restart: on-failure
     environment:
-      POSTGRES_USER: arena
-      POSTGRES_PASSWORD: arena
+      POSTGRES_USER: shakedown
+      POSTGRES_PASSWORD: shakedown
       POSTGRES_DB: postgres
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "arena", "-d", "postgres"]
+      test: ["CMD", "pg_isready", "-U", "shakedown", "-d", "postgres"]
       interval: 1s
       timeout: 3s
       retries: 60

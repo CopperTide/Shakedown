@@ -13,7 +13,7 @@ describe('Connect your agent', () => {
     const html = draw(emptyForm());
     expect(html).toContain('Connect your agent');
     expect(html).toMatch(/aria-checked="true"[^>]*>HTTP</);
-    expect(html).toContain('placeholder="https://agent.example.com/arena"');
+    expect(html).toContain('placeholder="https://agent.example.com/shakedown"');
     expect(html).toMatch(/type="submit" disabled=""><svg.*?<\/svg>Test connection<\/button>/);
     expect(html).not.toContain('⚠');
   });

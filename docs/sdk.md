@@ -4,7 +4,7 @@ Shakedown's core is **shaked** (the service), the **`shakedown-part/1` protocol*
 fully usable without a UI: everything the web UI does goes through shaked's public HTTP API
 ([reference.md](reference.md#http-api)), and so can your code. Three ways in:
 
-- **Python:** the `shakedown` package (in [`sdk/python`](../sdk/python); its old name `arena` still works, see [Old names](../README.md#old-names)): connect to or start a core,
+- **Python:** the `shakedown` package (in [`sdk/python`](../sdk/python)): connect to or start a core,
   build environments, run teams, observe, control, export, and a step-loop environment for RL research.
 - **Any language:** the HTTP API and the event stream (Server-Sent Events); the agents' endpoints are MCP and
   OpenAI chat completions, so any MCP client and any OpenAI-compatible client work.

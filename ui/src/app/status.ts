@@ -6,7 +6,7 @@ const gb = (n: number) => {
   return v >= 10 ? Math.round(v).toString() : (Math.round(v * 10) / 10).toString();
 };
 
-/** "Saves 0.4 / 5 GB" (every save the arena keeps; GB = 2^30 bytes); empty when the server doesn't report disk use. */
+/** "Saves 0.4 / 5 GB" (every save the shakedown keeps; GB = 2^30 bytes); empty when the server doesn't report disk use. */
 export function diskLine(h: Health | null): string {
   if (!h?.disk) return '';
   return `Saves ${gb(h.disk.bytes)} / ${gb(h.disk.limit_bytes)} GB`;

@@ -1,7 +1,7 @@
 [project]
 name = "isaac-sim"
 version = "0.1.0"
-description = "shakedown-part/1 integration: the Ridgeline factory (Isaac Sim 6.2 plant) on the arena clock"
+description = "shakedown-part/1 integration: the Ridgeline factory (Isaac Sim 6.2 plant) on the shakedown clock"
 requires-python = ">=3.10"
 dependencies = ["shakedown-part", "numpy"]
 

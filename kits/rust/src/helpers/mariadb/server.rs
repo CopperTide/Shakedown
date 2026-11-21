@@ -27,36 +27,13 @@ pub struct ServerConfig {
     pub flags: Vec<String>,
 }
 
-/// The default server's container and volume until 2026-11-19, still used while they are the only
-/// ones there ([`ServerConfig::or_existing_old`]).
-pub const OLD_CONTAINER: &str = "arena-mariadb";
-pub const OLD_VOLUME: &str = "arena_mariadb_data";
-
-impl ServerConfig {
-    /// This config, or, when its container is `new` and only `old_container` exists, that one with
-    /// `old_volume` (a server made before 2026-11-19 keeps serving its saves).
-    pub fn or_existing_old(self, new: &str, old_container: &str, old_volume: &str) -> ServerConfig {
-        let exists = crate::helpers::docker_name::container_exists;
-        if self.container != new
-            || !crate::helpers::docker_name::keep_old(new, old_container, exists)
-        {
-            return self;
-        }
-        ServerConfig {
-            container: old_container.into(),
-            volume: old_volume.into(),
-            ..self
-        }
-    }
-}
-
 impl Default for ServerConfig {
     fn default() -> Self {
         ServerConfig {
             container: "shakedown-mariadb".into(),
             port: 3307,
             volume: "shakedown_mariadb_data".into(),
-            root_password: "arena".into(),
+            root_password: "shakedown".into(),
             flags: vec![],
         }
     }

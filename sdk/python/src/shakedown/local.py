@@ -26,13 +26,12 @@ def free_port() -> int:
         return s.getsockname()[1]
 
 
-#: The program's names, newest first: ``arenad`` is what shaked was called until 2026-11-19, so an
-#: older build is found too.
-NAMES = ("shaked", "arenad")
+#: The program's name.
+NAMES = ("shaked",)
 
 
 def find_shaked(shaked: Optional[str], bin_dir: Optional[str]) -> str:
-    """``shaked`` as given, else ``shaked`` (or ``arenad``) in ``bin_dir``, else in ``$SHAKEDOWN_BIN_DIR``,
+    """``shaked`` as given, else ``shaked`` (or ``shaked``) in ``bin_dir``, else in ``$SHAKEDOWN_BIN_DIR``,
     else on PATH."""
     dirs = [d for d in (bin_dir, setting("SHAKEDOWN_BIN_DIR")) if d]
     cands = [shaked] + [os.path.join(d, n) for d in dirs for n in NAMES] + [shutil.which(n) for n in NAMES]
@@ -54,12 +53,10 @@ class LocalShakedown(Shakedown):
         packages: folders whose subfolders hold ``shakedown-package.toml`` (``SHAKEDOWN_PACKAGES``); default:
             shaked's own (``integrations`` and ``benchmarks`` of its checkout).
         pg_url: the Postgres server for shaked's records (``SHAKEDOWN_PG_URL``); default shaked's
-            (``SHAKEDOWN_PG_URL``, else ``deploy/compose.yml``'s, ``postgres://shakedown:shakedown@127.0.0.1:5544/postgres``,
-            else the same server's old user ``arena``).
+            (``SHAKEDOWN_PG_URL``, else ``deploy/compose.yml``'s, ``postgres://shakedown:shakedown@127.0.0.1:5544/postgres``).
         saves: where saves go (``SHAKEDOWN_SAVES``); default a temporary folder removed on close.
         bin_dir: what ``${SHAKEDOWN_BIN_DIR}`` means in package manifests, and where to find shaked.
         shaked: the shaked binary (default: found in ``bin_dir``, ``$SHAKEDOWN_BIN_DIR`` or PATH).
-            ``arenad=`` is its old name.
         port: the port (default: a free one).
         max_db_bytes: the saves' disk limit (``SHAKEDOWN_MAX_DB_BYTES``).
         cors_origin: web origins allowed to call the API from a browser (``SHAKEDOWN_CORS_ORIGIN``).
@@ -84,14 +81,13 @@ class LocalShakedown(Shakedown):
         env: Optional[Mapping[str, str]] = None,
         log: Optional[str] = None,
         startup_timeout: float = 120.0,
-        arenad: Optional[str] = None,
         **client: Any,
     ):
-        binary = find_shaked(shaked or arenad, bin_dir)
+        binary = find_shaked(shaked, bin_dir)
         self.port = port or free_port()
         self._tmp_saves = None
         if saves is None:
-            self._tmp_saves = tempfile.mkdtemp(prefix="arena-saves-")
+            self._tmp_saves = tempfile.mkdtemp(prefix="shakedown-saves-")
             saves = self._tmp_saves
         settings = {
             "SHAKEDOWN_PORT": str(self.port),
@@ -165,9 +161,5 @@ class LocalShakedown(Shakedown):
     def __repr__(self) -> str:
         return f"LocalShakedown({self.url!r}, pid={self.process.pid})"
 
-
-#: The old names (the SDK was ``arena`` and shaked ``arenad`` until 2026-11-19).
-LocalArena = LocalShakedown
-find_arenad = find_shaked
 
 __all__ = ["LocalShakedown", "StartFailed", "ConnectionFailed", "free_port", "find_shaked"]

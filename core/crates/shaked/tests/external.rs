@@ -278,20 +278,20 @@ async fn assert_reported(fx: &AppFx, branch: &str, ran: &live::ExternalRun) {
     assert_eq!(a["peak_prompt_tokens"], json!(peak.unwrap()));
 }
 
-/// An external system drives a run with Claude Code as its agent: Arena records the run's start,
+/// An external system drives a run with Claude Code as its agent: Shakedown records the run's start,
 /// the agent's start, each tool call it made through its endpoint (with its fields), each model
 /// call its client reported, its end, and the check when the run is finished. A read-only agent
 /// that joins later is offered no write tool.
 #[test]
 #[ignore = "live: runs Claude Code (support/live.rs)"]
-fn live_an_external_system_drives_a_run_and_arena_records_it() {
+fn live_an_external_system_drives_a_run_and_shakedown_records_it() {
     run_live(
-        Live::claude("live_an_external_system_drives_a_run_and_arena_records_it"),
-        an_external_system_drives_a_run_and_arena_records_it,
+        Live::claude("live_an_external_system_drives_a_run_and_shakedown_records_it"),
+        an_external_system_drives_a_run_and_shakedown_records_it,
     );
 }
 
-async fn an_external_system_drives_a_run_and_arena_records_it(live: Live) {
+async fn an_external_system_drives_a_run_and_shakedown_records_it(live: Live) {
     let fx = setup("drive").await;
     let branch = start(&fx).await;
     let task = ticket(&fx).await;

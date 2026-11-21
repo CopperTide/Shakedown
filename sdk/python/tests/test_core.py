@@ -25,33 +25,33 @@ def _read_tool(branch, agent) -> str:
     return names[0]
 
 
-def test_core_describes_itself(arena):
-    h = arena.health()
+def test_core_describes_itself(shakedown):
+    h = shakedown.health()
     assert "benchmark" in h and "providers" in h
-    b = arena.benchmark()
+    b = shakedown.benchmark()
     assert b.name and b.tasks
-    tasks = arena.tasks()
+    tasks = shakedown.tasks()
     assert tasks[0].ticket and tasks[0].instructions
-    assert arena.task(tasks[0].id).id == tasks[0].id
-    assert arena.default_team(model="haiku").agents
-    assert all(a.model == "haiku" for a in arena.default_team(model="haiku").agents)
-    assert arena.world()
-    assert isinstance(arena.supports_pause(), bool)
+    assert shakedown.task(tasks[0].id).id == tasks[0].id
+    assert shakedown.default_team(model="haiku").agents
+    assert all(a.model == "haiku" for a in shakedown.default_team(model="haiku").agents)
+    assert shakedown.world()
+    assert isinstance(shakedown.supports_pause(), bool)
 
 
-def test_bad_requests_are_typed(arena):
+def test_bad_requests_are_typed(shakedown):
     with pytest.raises((NotFound, BadRequest)):
-        arena.external_run("no-such-task")
+        shakedown.external_run("no-such-task")
     with pytest.raises(BadRequest):
-        arena.external_run(arena.tasks()[0].id, seed=2**60)
+        shakedown.external_run(shakedown.tasks()[0].id, seed=2**60)
     with pytest.raises(NotFound):
-        arena.branch("no-such-branch")
+        shakedown.branch("no-such-branch")
 
 
 @pytest.fixture(scope="module")
-def ended(arena):
+def ended(shakedown):
     """An external run with one agent that made one read call, finished; deleted afterwards."""
-    branch = arena.external_run(arena.tasks()[0], agents=["probe"], seed=7, name="sdk test")
+    branch = shakedown.external_run(shakedown.tasks()[0], agents=["probe"], seed=7, name="sdk test")
     agent = branch.agents["probe"]
     tool = _read_tool(branch, agent)
     agent.call(tool, {})
@@ -59,17 +59,17 @@ def ended(arena):
     live = branch.record()
     result = branch.finish()
     yield {"branch": branch, "agent": agent, "tool": tool, "live": live, "result": result}
-    arena.delete_run(branch.run_id)
+    shakedown.delete_run(branch.run_id)
 
 
-def test_external_run_endpoints_and_record(arena, ended):
+def test_external_run_endpoints_and_record(shakedown, ended):
     branch, agent, live = ended["branch"], ended["agent"], ended["live"]
     assert agent.mcp_url.endswith(f"/mcp/{branch.id}/probe") and "/gateway/" in agent.gateway_url
     assert agent.mcp_config()["mcpServers"]["shakedown"]["url"] == agent.mcp_url
     assert {"handoff", "message", "inbox"} <= {t.name for t in agent.tools}
     assert live.status == "running" and live.seed == 7 and live.run_start["runner"] == "external"
     assert [c.tool for c in live.tool_calls("probe")] == [ended["tool"]]
-    assert any(r.id == branch.run_id and r.name == "sdk test" for r in arena.runs())
+    assert any(r.id == branch.run_id and r.name == "sdk test" for r in shakedown.runs())
     assert ended["result"]["status"] in ("passed", "failed")
     check = branch.check()
     assert check is not None and check.checks
@@ -82,7 +82,7 @@ def test_stream_of_an_ended_branch(ended):
     assert branch.final["status"] == ended["result"]["status"]
 
 
-def test_fork_restore_plan_and_compare(arena, ended):
+def test_fork_restore_plan_and_compare(shakedown, ended):
     branch = ended["branch"]
     at = branch.record().tool_calls("probe")[0].seq
     assert branch.restore_plan(at)["parts"]
@@ -91,7 +91,7 @@ def test_fork_restore_plan_and_compare(arena, ended):
     assert all(e.seq < at for e in fork.agents["probe"].history)
     assert fork.record().status == "running"
     fork.finish()
-    assert "first_divergent_seq" in arena.compare(branch, fork)
+    assert "first_divergent_seq" in shakedown.compare(branch, fork)
 
 
 def test_export_dataset(ended, tmp_path):
@@ -104,8 +104,8 @@ def test_export_dataset(ended, tmp_path):
     assert "shakedown-dataset/1" in open(os.path.join(out, "SCHEMA.md")).read()
 
 
-def test_live_stream_follows_a_running_branch(arena, cleanup):
-    branch = arena.external_run(arena.tasks()[0], agents=["probe"])
+def test_live_stream_follows_a_running_branch(shakedown, cleanup):
+    branch = shakedown.external_run(shakedown.tasks()[0], agents=["probe"])
     cleanup.append(branch.run_id)
     got: list = []
     t = threading.Thread(target=lambda: got.extend(branch.stream()))
@@ -122,11 +122,11 @@ def test_live_stream_follows_a_running_branch(arena, cleanup):
     assert branch.final["status"] in ("passed", "failed")
 
 
-def test_pause_is_feature_detected(arena, cleanup):
-    branch = arena.external_run(arena.tasks()[0], agents=["probe"])
+def test_pause_is_feature_detected(shakedown, cleanup):
+    branch = shakedown.external_run(shakedown.tasks()[0], agents=["probe"])
     cleanup.append(branch.run_id)
     try:
-        if arena.supports_pause():
+        if shakedown.supports_pause():
             assert branch.pause().get("paused") is True
             assert branch.record().paused is True
             assert branch.resume().get("paused") is False
@@ -137,19 +137,19 @@ def test_pause_is_feature_detected(arena, cleanup):
         branch.finish()
 
 
-def test_cors_origin_is_configurable(arena):
-    if not hasattr(arena, "process"):
+def test_cors_origin_is_configurable(shakedown):
+    if not hasattr(shakedown, "process"):
         pytest.skip("only for a shaked the tests started")
-    ok = httpx.options(f"{arena.url}/api/runs", headers={
+    ok = httpx.options(f"{shakedown.url}/api/runs", headers={
         "origin": "http://127.0.0.1:5173", "access-control-request-method": "POST"})
     assert ok.status_code == 204
     assert ok.headers["access-control-allow-origin"] == "http://127.0.0.1:5173"
-    other = httpx.get(f"{arena.url}/api/health", headers={"origin": "http://evil.example"})
+    other = httpx.get(f"{shakedown.url}/api/health", headers={"origin": "http://evil.example"})
     assert "access-control-allow-origin" not in other.headers
 
 
-def test_step_env_contract(arena, cleanup):
-    env = ShakedownParallelEnv(arena, arena.tasks()[0].id, agents=["probe"], max_steps=5)
+def test_step_env_contract(shakedown, cleanup):
+    env = ShakedownParallelEnv(shakedown, shakedown.tasks()[0].id, agents=["probe"], max_steps=5)
     obs, infos = env.reset(seed=11)
     cleanup.append(env.branch.run_id)
     assert env.agents == ["probe"] and infos["probe"]["seed"] == 11
@@ -168,9 +168,9 @@ def test_step_env_contract(arena, cleanup):
     assert env2.branch.record().status in ("passed", "failed")
 
 
-def test_external_suite_claim_and_export(arena, cleanup, tmp_path):
-    task = arena.tasks()[0].id
-    suite = arena.suite(team=[], tasks=[task], repeats=1, runner="external", name="sdk suite")
+def test_external_suite_claim_and_export(shakedown, cleanup, tmp_path):
+    task = shakedown.tasks()[0].id
+    suite = shakedown.suite(team=[], tasks=[task], repeats=1, runner="external", name="sdk suite")
     branch = suite.claim()
     assert branch is not None and branch.task_id == task
     cleanup.append(branch.run_id)
@@ -185,14 +185,14 @@ def test_external_suite_claim_and_export(arena, cleanup, tmp_path):
     assert len(read_jsonl(os.path.join(out, "branches.jsonl"))) == 1
 
 
-def _live_model(arena):
+def _live_model(shakedown):
     """A real model to drive an agent with: a provider shaked's gateway can reach, else Claude Code
     signed in on this machine. Skips, saying why, with neither."""
     from shakedown import claude_code
 
     models = {"openai": "gpt-4.1-mini", "anthropic": "claude-haiku-4-5",
               "openrouter": "anthropic/claude-haiku-4.5"}
-    for p in arena.providers():
+    for p in shakedown.providers():
         if p.get("available") and p["id"] in models:
             return p["id"], models[p["id"]]
     if claude_code.available():
@@ -200,14 +200,14 @@ def _live_model(arena):
     pytest.skip("no model: no provider key in shaked's environment and no `claude` on PATH")
 
 
-def test_driver_round_trip(arena, monkeypatch):
+def test_driver_round_trip(shakedown, monkeypatch):
     """A driver starts a run, a real model works the ticket as one agent, and the run is scored."""
     from shakedown import claude_code, driver
 
-    via, model = _live_model(arena)
+    via, model = _live_model(shakedown)
     for k in ("SHAKEDOWN_BRANCH", "SHAKEDOWN_RUN", "SHAKEDOWN_TASK", "SHAKEDOWN_FORK_OF"):
         monkeypatch.delenv(k, raising=False)
-    with driver.run(task=arena.tasks()[0].id, url=arena.url) as run:
+    with driver.run(task=shakedown.tasks()[0].id, url=shakedown.url) as run:
         if via == "claude-code":
             agent = run.agent("agent", model=model)
             res = claude_code.run(agent, run.ticket, model=model, max_turns=8)
@@ -220,29 +220,29 @@ def test_driver_round_trip(arena, monkeypatch):
                 r.raise_for_status()
         branch = run.branch
     try:
-        rec = arena.branch(branch.id).record()
+        rec = shakedown.branch(branch.id).record()
         assert rec.status in ("passed", "failed"), rec.status
         assert any(e.kind == "check" for e in rec.events)
         assert any(e.kind == "agent_end" and e.agent == "agent" for e in rec.events)
         calls = [e for e in rec.events if e.kind == "model_call" and e.agent == "agent"]
         assert calls, [e.summary() for e in rec.events]
     finally:
-        arena.delete_run(branch.run_id)
+        shakedown.delete_run(branch.run_id)
 
 
-def test_driver_that_raises_ends_the_run_failed_and_scored(arena, monkeypatch):
+def test_driver_that_raises_ends_the_run_failed_and_scored(shakedown, monkeypatch):
     from shakedown import driver
 
     for k in ("SHAKEDOWN_BRANCH", "SHAKEDOWN_RUN", "SHAKEDOWN_TASK", "SHAKEDOWN_FORK_OF"):
         monkeypatch.delenv(k, raising=False)
     with pytest.raises(RuntimeError):
-        with driver.run(task=arena.tasks()[0].id, url=arena.url) as run:
+        with driver.run(task=shakedown.tasks()[0].id, url=shakedown.url) as run:
             run.agent("agent")
             branch = run.branch
             raise RuntimeError("the graph broke")
     try:
-        rec = arena.branch(branch.id).record()
+        rec = shakedown.branch(branch.id).record()
         assert (rec.status, rec.error) == ("failed", "driver raised RuntimeError: the graph broke")
         assert any(e.kind == "check" for e in rec.events)
     finally:
-        arena.delete_run(branch.run_id)
+        shakedown.delete_run(branch.run_id)

@@ -9,7 +9,7 @@ import type { Event } from '@/model/types';
 export type SpanKind = 'turn' | 'step' | 'overhead';
 
 export interface TraceSpan {
-  /** The step a row selects; null for arena overhead rows. */
+  /** The step a row selects; null for shakedown overhead rows. */
   seq: number | null;
   kind: SpanKind;
   label: string;
@@ -69,7 +69,7 @@ function turnTitle(turns: Event[][], index: number): string {
   return `turn ${index + (pre ? 0 : 1)} of ${turns.length - (pre ? 1 : 0)}`;
 }
 
-/** A step's bar and, under it, one row per kind of arena overhead it recorded. */
+/** A step's bar and, under it, one row per kind of shakedown overhead it recorded. */
 function stepSpans(e: Event, t0: number, info: WorldInfo): TraceSpan[] {
   const p = asRecord(e.payload);
   const end = Date.parse(e.at) - t0;

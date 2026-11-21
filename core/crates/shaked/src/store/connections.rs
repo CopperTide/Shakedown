@@ -17,7 +17,7 @@ const COLS: &str = "id, name, kind, command, workdir, env, created_at";
 pub const REDACTED: &str = "••••";
 
 /// A Code connection: the command (its program and arguments), the folder it runs in and the
-/// environment it gets, besides the run's `ARENA_*` ids.
+/// environment it gets, besides the run's `SHAKEDOWN_*` ids.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Connection {
     pub id: String,

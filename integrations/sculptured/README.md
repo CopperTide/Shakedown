@@ -17,14 +17,14 @@ API.
 
 - **Config:** `{binary?, team?}`. `binary` is the sculptured program (default: the
   first `sculptured` on `PATH`; it is run as it is, never built). `team`
-  (default `arena`; `a-z`, `0-9` and `-`) is the team whose changes the tools propose, list and decide.
+  (default `shakedown`; `a-z`, `0-9` and `-`) is the team whose changes the tools propose, list and decide.
 - **Instance** `<instance>`: `binary serve --port 0 --data-dir <saves>/sculptured/.live/<instance>/data`,
   in a process group of its own, with a cleared environment (`HOME` is the instance's `home/`, `TMPDIR` a
-  short scratch folder `/tmp/arena-sc-<pid>-<n>` for the runner's socket, `RUST_LOG=warn`, `PATH`). The
+  short scratch folder `/tmp/shakedown-sc-<pid>-<n>` for the runner's socket, `RUST_LOG=warn`, `PATH`). The
   system picks the loopback port (never 4410); it is read from `data/host-local/controld.url`. The start
   waits until serve's runner (`sculptured hostd`) is connected (`GET /api/hosts`), then makes sure the team
   exists. `.live/<instance>/run.json` records the config, the absolute program path, its
-  build (`--version`), the port, the scratch folder (a fresh `/tmp/arena-sc-<16 hex>`) and the processes:
+  build (`--version`), the port, the scratch folder (a fresh `/tmp/shakedown-sc-<16 hex>`) and the processes:
   serve's pid and group, and the runner's pid from `host-local/hostd.pid`. A restarted program still
   reaches, saves and stops the instance from that record. `.live` is a dot folder: `gc` and
   shaked's sweep leave it alone (a `live` folder would look like a save id).
@@ -35,11 +35,11 @@ API.
   No agent runs in the team: the tools propose as an outside system.
 - **Where changes come from:** CopperTide's route for outside proposers, `POST /api/teams/{team}/changes`
   (`crates/controld/src/changes.rs`, `seat_tools/propose.rs::propose_external`). It records
-  `ChangeProposed` (proposer `external.arena@<team>`) and `ChangeChecked` on the team, then asks a person
+  `ChangeProposed` (proposer `external.shakedown@<team>`) and `ChangeChecked` on the team, then asks a person
   (an `approval` question in Needs you), and records `ChangeDecided` when the answer comes, exactly as for
   an agent's `propose_change`. So:
   - `propose_change {action, summary, payload, system?, reason?}` (write): `POST /api/teams/{team}/changes`
-    with the arguments and `proposer: "arena"`. CopperTide refusing the arguments (400) is the tool's
+    with the arguments and `proposer: "shakedown"`. CopperTide refusing the arguments (400) is the tool's
     error. It gives the change and writes `change/<id>`, and gives a world event `change_proposed` whose
     `data` is the change, so a benchmark's link can hand it to whoever decides it (a simulated person,
     say). While 8 changes wait, it refuses.

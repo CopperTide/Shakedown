@@ -1,5 +1,5 @@
 //! What a branch's events say about its world: the run's benchmark, seed, world, fingerprints
-//! and base saves (from `RunStart`), per part the save holding its state at a step, the arena
+//! and base saves (from `RunStart`), per part the save holding its state at a step, the shakedown
 //! clock at a step, its final saves, and every save the events name. Runs recorded before integrations have a `snapshot` per write and no
 //! `saves`: they read as part `retail`, with `world_base` as the base and the database
 //! `branch_<id>` as the final state.

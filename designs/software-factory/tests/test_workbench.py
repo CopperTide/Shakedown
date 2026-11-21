@@ -25,7 +25,7 @@ def test_the_container_command_line(tmp_path: Path, settings):
     assert docker.argvs == [[
         "docker", "run", "--rm", "--pull", "never", "--network", "none", "--read-only",
         "--tmpfs", "/tmp:size=256m", "--memory", "1g", "--pids-limit", "256", "--user", "1000:1000",
-        "-v", f"{ws}:/work", "-v", f"{tmp_path / 'p.sock'}:/run/arena-proxy.sock", "-w", "/work/app",
+        "-v", f"{ws}:/work", "-v", f"{tmp_path / 'p.sock'}:/run/shakedown-proxy.sock", "-w", "/work/app",
         "-v", f"{ca}:{ca}:ro",
         "-e", "HTTPS_PROXY=http://shakedown:t1@127.0.0.1:3128", "-e", f"SSL_CERT_FILE={ca}",
         "shakedown-workbench:1", "timeout", "600", "sh", "-euc", "git status"]]

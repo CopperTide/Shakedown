@@ -183,7 +183,7 @@ async fn assert_fork_errors_before_limit(fx: &AppFx) {
     assert_over_limit(st, &v);
 }
 
-/// The response is the 507 the arena gives when its saves use more than the limit.
+/// The response is the 507 the shakedown gives when its saves use more than the limit.
 fn assert_over_limit(status: u16, body: &Value) {
     assert_eq!(
         (status, body["error"].as_str()),

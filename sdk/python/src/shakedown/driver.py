@@ -22,13 +22,13 @@ import sys
 from contextlib import contextmanager
 from typing import Iterator, Optional
 
-from .client import DEFAULT_URL, AgentEndpoint, Branch, OldConnectionName, Shakedown
+from .client import DEFAULT_URL, AgentEndpoint, Branch, Shakedown
 from .errors import Conflict
 from .models import Event, Task
 from .settings import setting
 
 
-class DriverRun(OldConnectionName):
+class DriverRun:
     """The run a driver drives: its branch, its task and the agents it registered."""
 
     def __init__(self, shakedown: Shakedown, branch: Branch, task: Task, fork_of: Optional[str] = None):

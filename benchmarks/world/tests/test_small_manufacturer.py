@@ -13,10 +13,10 @@ from shakedown_part.expect import evaluate
 from worldbench.generate import generate
 from worldbench.template import load_template
 
-ARENA = Path(__file__).resolve().parents[3]
+SHAKEDOWN = Path(__file__).resolve().parents[3]
 TEMPLATE = Path(__file__).resolve().parents[1] / "library" / "small-manufacturer"
-ERP_DIR = ARENA / "integrations" / "factory-01-erp"
-FACTORY01_DIR = ARENA / "benchmarks" / "factory-01"
+ERP_DIR = SHAKEDOWN / "integrations" / "factory-01-erp"
+FACTORY01_DIR = SHAKEDOWN / "benchmarks" / "factory-01"
 
 
 class Program:

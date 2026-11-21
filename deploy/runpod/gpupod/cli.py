@@ -34,8 +34,7 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("--ledger", default=str(LEDGER))
     p.add_argument("--env-file", default=str(ENV_FILE))
     p.add_argument("--state-dir", default=str(STATE_DIR))
-    # --arenad and --through-arenad: the old names (shaked was arenad until 2026-11-19).
-    p.add_argument("--shaked", "--arenad", dest="shaked",
+    p.add_argument("--shaked", dest="shaked",
                    default=setting("SHAKEDOWN_URL") or "http://127.0.0.1:4510")
     sub = p.add_subparsers(dest="cmd", required=True)
     q = sub.add_parser("quote", help="the GPU's hourly rate now, and the spend so far")
@@ -49,7 +48,7 @@ def parser() -> argparse.ArgumentParser:
     for name in ("status", "stop", "reconcile"):
         sub.add_parser(name)
     sub.add_parser("delete").add_argument("--force", action="store_true")
-    sub.add_parser("smoke").add_argument("--through-shaked", "--through-arenad", dest="through_shaked")
+    sub.add_parser("smoke").add_argument("--through-shaked", dest="through_shaked")
     sub.add_parser("watch", help="the watchdog (start runs it)").add_argument("pod_id")
     return p
 

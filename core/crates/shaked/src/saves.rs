@@ -95,7 +95,7 @@ pub async fn diff(hub: &Hub, integration: &str, a: &str, b: &str) -> Result<Vec<
 pub async fn save_exists(hub: &Hub, integration: &str, save: &str) -> Result<bool> {
     let params = InspectParams {
         target: saved(save),
-        keys: vec!["arena/probe".into()],
+        keys: vec!["shakedown/probe".into()],
     };
     match request::<Value, _>(hub, integration, &params).await {
         Ok(_) => Ok(true),

@@ -12,13 +12,13 @@ it, so saving is a few milliseconds and the user's words hold: save the changes,
 database.
 
 - **Server:** container `shakedown-mariadb` (image `mariadb:11.8`, never pulled), volume
-  `shakedown_mariadb_data`, on `127.0.0.1:3307`, root password `arena`, started on the first `start` if it
+  `shakedown_mariadb_data`, on `127.0.0.1:3307`, root password `shakedown`, started on the first `start` if it
   is not running. Flags: `--log-bin=binlog --binlog-format=ROW --binlog-row-image=FULL --server-id=1
   --binlog_expire_logs_seconds=0 --max_binlog_size=64M`. The config keys `container`, `port`,
   `volume`, `root_password` (env fallbacks `SHAKEDOWN_MARIADB_CONTAINER`, `_PORT`, `_VOLUME`, `_PASSWORD`)
   pick another server. Containers are made with the label `shakedown.part=mariadb`, and a container of
   the configured name without that label is refused, so no other MariaDB is ever touched.
-- **Server identity:** the first `ensure` writes a random id into `arena_meta.server`. Manifests record
+- **Server identity:** the first `ensure` writes a random id into `shakedown_meta.server`. Manifests record
   it, and a restore on a server with another id (a new volume behind the same name) is refused with
   -32001 "the MariaDB server was replaced since this save".
 - **Accounts:** each instance has its own account `mi_<instance>` (random password), allowed only on its

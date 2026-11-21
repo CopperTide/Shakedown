@@ -7,8 +7,6 @@ use serde_json::Value;
 
 pub const DEFAULT_IMAGE: &str = "twentycrm/twenty:v2.51.0";
 const DEFAULT_PROJECT: &str = "shakedown_twenty";
-/// The default project until 2026-11-19, still used while its database server is the only one.
-const OLD_PROJECT: &str = "arena_twenty";
 const DEFAULT_DB_PORT: u16 = 5546;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -51,17 +49,6 @@ impl Settings {
         if let Ok(image) = shakedown_part::settings::var("SHAKEDOWN_TWENTY_IMAGE") {
             s.image = image;
         }
-        if s.project == DEFAULT_PROJECT {
-            let db = |project: &str| format!("{}-db", project.replace('_', "-"));
-            let exists = shakedown_part::helpers::docker_name::container_exists;
-            if shakedown_part::helpers::docker_name::keep_old(
-                &db(DEFAULT_PROJECT),
-                &db(OLD_PROJECT),
-                exists,
-            ) {
-                s.project = OLD_PROJECT.into();
-            }
-        }
         s.check()?;
         Ok(s)
     }
@@ -103,7 +90,10 @@ impl Settings {
     }
 
     pub fn admin_url(&self) -> String {
-        format!("postgres://arena:arena@127.0.0.1:{}/postgres", self.db_port)
+        format!(
+            "postgres://shakedown:shakedown@127.0.0.1:{}/postgres",
+            self.db_port
+        )
     }
 }
 

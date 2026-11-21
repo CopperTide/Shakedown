@@ -119,7 +119,7 @@ Tailwind names and never raw colours.
   are spaced 16 px apart. Table rows are 32 px tall.
 - **Radii.** `sm` 3 px for chips, `md` 4 px for controls, `lg` 6 px for panels and dialogs.
 - **Theme.** System, light or dark, chosen with the top bar button or the palette and kept in
-  `localStorage` (`shakedown.theme`; keys stored as `arena.*` before 2026-11-19 move to `shakedown.*` once, on load).
+  `localStorage` (`shakedown.theme`).
 
 ## Components (`src/components/ui`)
 

@@ -41,6 +41,6 @@ def test_the_cli_quotes_without_starting(tmp_path, runner, clock):
     assert runner.commands() == [("gpu", "list"), ("user",)]
 
 
-def test_the_cli_takes_the_old_arenad_flags():
-    args = cli.parser().parse_args(["--arenad", "http://127.0.0.1:9", "smoke", "--through-arenad", "http://x"])
+def test_the_cli_takes_the_old_shaked_flags():
+    args = cli.parser().parse_args(["--shaked", "http://127.0.0.1:9", "smoke", "--through-shaked", "http://x"])
     assert (args.shaked, args.through_shaked) == ("http://127.0.0.1:9", "http://x")

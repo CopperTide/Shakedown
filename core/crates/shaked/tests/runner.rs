@@ -140,7 +140,7 @@ async fn live_branch(fx: &AppFx, team: Team, bench: &str, task: &str) -> (String
 
 const USER: &str = "isabella_johansson_2152";
 
-/// Arena's MCP endpoint for `agent` on `branch`: calls `name` with `args`, the tool's result.
+/// Shakedown's MCP endpoint for `agent` on `branch`: calls `name` with `args`, the tool's result.
 async fn mcp(fx: &AppFx, branch: &str, agent: &str, name: &str, args: Value) -> Value {
     let body = json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
                       "params": {"name": name, "arguments": args}});
@@ -164,7 +164,7 @@ async fn line_in(fx: &AppFx, save: &str) -> Value {
     fx.hub.inspect_save(save, &[&key]).await[&key]["doc"]["address"]["address1"].clone()
 }
 
-/// Writes `USER`'s address line `line` on `branch` through Arena's MCP endpoint.
+/// Writes `USER`'s address line `line` on `branch` through Shakedown's MCP endpoint.
 async fn write_line(fx: &AppFx, branch: &str, line: &str) -> Value {
     let args = json!({"user_id": USER, "address1": line, "address2": "",
                       "city": "Austin", "state": "TX", "country": "USA", "zip": "73301"});
@@ -273,7 +273,7 @@ async fn assert_scored(fx: &AppFx, b: &Branch, check: &CheckPayload) {
     }
 }
 
-/// The step's arena overhead of kind `cat` (0 when it has none).
+/// The step's shakedown overhead of kind `cat` (0 when it has none).
 fn overhead(e: &Event, cat: &str) -> f64 {
     e.payload["overhead_ms"][cat].as_f64().unwrap_or(0.0)
 }
@@ -334,14 +334,14 @@ fn assert_resolver_input(evs: &[Event]) {
 /// gold world, and the branch is no longer live.
 #[test]
 #[ignore = "live: runs a real model (support/live.rs)"]
-fn live_a_team_runs_task_27_and_arena_records_and_scores_it() {
+fn live_a_team_runs_task_27_and_shakedown_records_and_scores_it() {
     run_live(
-        Live::any("live_a_team_runs_task_27_and_arena_records_and_scores_it"),
-        a_team_runs_task_27_and_arena_records_and_scores_it,
+        Live::any("live_a_team_runs_task_27_and_shakedown_records_and_scores_it"),
+        a_team_runs_task_27_and_shakedown_records_and_scores_it,
     );
 }
 
-async fn a_team_runs_task_27_and_arena_records_and_scores_it(live: Live) {
+async fn a_team_runs_task_27_and_shakedown_records_and_scores_it(live: Live) {
     let fx = setup("live27", &[], "retail", None).await;
     let bench = fx.state.hub.bench_describe("retail").await.unwrap();
     let team = live.bench_team(bench.team.unwrap());

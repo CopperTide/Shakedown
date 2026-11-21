@@ -51,16 +51,8 @@ class PodSpec:
         return list(self.gpus[self.gpus.index(gpu) + 1:])
 
 
-#: The keys a ``pod.toml`` may still use under their old name: ``arenad_provider`` (shaked was
-#: called arenad until 2026-11-19).
-OLD_KEYS = {"arenad_provider": "shaked_provider"}
-
-
 def load_spec(path: Path = POD_TOML) -> PodSpec:
     d = tomllib.loads(path.read_text())
-    for old, new in OLD_KEYS.items():
-        if old in d:
-            d.setdefault(new, d.pop(old))
     gpus = tuple(Gpu(**g) for g in d.pop("gpu"))
     return PodSpec(**{**d, "gpus": gpus, "hosted_price_per_mtok": tuple(d["hosted_price_per_mtok"]),
                       "serve_args": tuple(d["serve_args"]),

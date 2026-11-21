@@ -18,7 +18,7 @@ helper this integration uses: `shakedown_part::helpers::mariadb`).
   first call that needs it).
 - **Database server:** a MariaDB server made by the mariadb helper (labelled `shakedown.part=mariadb`, a
   foreign container of that name is refused), separate from the mariadb integration's:
-  container `shakedown-erpnext-db`, volume `shakedown_erpnext_db`, `127.0.0.1:3308`, root password `arena`,
+  container `shakedown-erpnext-db`, volume `shakedown_erpnext_db`, `127.0.0.1:3308`, root password `shakedown`,
   with Frappe's flags (`--character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
   --skip-character-set-client-handshake`) after the binlog flags. It is connected to the project's
   network with alias `db` (`docker network connect --alias db`). A server of its own means the
@@ -37,8 +37,8 @@ helper this integration uses: `shakedown_part::helpers::mariadb`).
   `start` fails saying so).
 - **Base** (made once, on the first start, and kept in `$SHAKEDOWN_SAVES/erpnext/.base/`): the helper
   makes a database `erpnext_base` and its least-privilege account, `bench new-site
-  arena-base.localhost --no-setup-db --install-app erpnext` installs into them, `generate_keys` makes an
-  Administrator API key, and the setup wizard runs (company `Arena Co`, abbreviation `AC`, USD,
+  shakedown-base.localhost --no-setup-db --install-app erpnext` installs into them, `generate_keys` makes an
+  Administrator API key, and the setup wizard runs (company `Shakedown Co`, abbreviation `AC`, USD,
   United States, UTC, standard chart of accounts, fiscal year 2026), so items, orders and entries
   can be made. After its background jobs, the base is saved: a dump of the database (a dump-rooted
   manifest, so it restores on any server), the site's files (`files/`), its config without the

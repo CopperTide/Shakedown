@@ -1,7 +1,7 @@
 //! `inspect` and `diff` through REST: an instance's site is read in place; a save is read
 //! through a scratch site made from it and removed after. Building a scratch site takes tens of
 //! seconds, so `diff` reads both sides at once and keeps the differing documents of saves for the
-//! `inspect` of them that follows (Arena's compare asks for exactly those).
+//! `inspect` of them that follows (Shakedown's compare asks for exactly those).
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;

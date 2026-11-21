@@ -212,7 +212,7 @@ pub fn server_name(benchmark: &str) -> String {
 }
 
 pub(crate) fn fresh_workdir() -> std::io::Result<std::path::PathBuf> {
-    let d = std::env::temp_dir().join(format!("arena-cli-{}", uuid::Uuid::new_v4().simple()));
+    let d = std::env::temp_dir().join(format!("shakedown-cli-{}", uuid::Uuid::new_v4().simple()));
     std::fs::create_dir_all(&d)?;
     Ok(d)
 }
@@ -233,12 +233,16 @@ const SECRET_ENV: [&str; 7] = [
     LOCAL_MODELS_ENV,
 ];
 
-/// True for the name of an env var a CLI child must not see.
+/// True for the name of an env var a CLI child must not see: the secrets above, and any database
+/// URL, local model key or provider key under another prefix (a stale variable from an older
+/// setup is removed too).
 fn is_secret_env(name: &str) -> bool {
-    let name = parts::settings::new_name(name);
     name.starts_with("PG")
         || name.starts_with(LOCAL_KEY_PREFIX)
-        || SECRET_ENV.contains(&name.as_str())
+        || name.contains("LOCAL_KEY_")
+        || name.ends_with("_PG_URL")
+        || name.ends_with("_API_KEY")
+        || SECRET_ENV.contains(&name)
 }
 
 /// The env vars to remove from a CLI child, of those named in `present`: every secret but
@@ -246,11 +250,7 @@ fn is_secret_env(name: &str) -> bool {
 /// Codex with `OPENAI_API_KEY`).
 fn scrubbed(present: impl Iterator<Item = String>, keep: &str) -> Vec<String> {
     let mut out: Vec<String> = present.filter(|k| is_secret_env(k)).collect();
-    out.extend(
-        SECRET_ENV
-            .iter()
-            .flat_map(|k| [k.to_string(), parts::settings::old_name(k)]),
-    );
+    out.extend(SECRET_ENV.iter().map(|k| k.to_string()));
     out.retain(|k| k != keep);
     out.sort();
     out.dedup();
@@ -280,17 +280,28 @@ mod tests {
     }
 
     #[test]
-    fn secrets_under_their_old_names_are_removed_too() {
-        let present = ["ARENA_LOCAL_KEY_OLLAMA", "ARENA_PORT"].map(String::from);
+    fn secrets_under_any_prefix_are_removed() {
+        let present = [
+            "OLD_LOCAL_KEY_OLLAMA",
+            "OLD_PG_URL",
+            "MISTRAL_API_KEY",
+            "OLD_PORT",
+        ]
+        .map(String::from);
         let gone = scrubbed(present.into_iter(), "ANTHROPIC_API_KEY");
         for k in [
-            "ARENA_LOCAL_KEY_OLLAMA",
-            "ARENA_PG_URL",
-            "ARENA_LOCAL_MODELS",
+            "OLD_LOCAL_KEY_OLLAMA",
+            "OLD_PG_URL",
+            "MISTRAL_API_KEY",
+            "SHAKEDOWN_PG_URL",
         ] {
             assert!(gone.iter().any(|g| g == k), "{k} kept");
         }
-        assert!(!gone.iter().any(|g| g == "ARENA_PORT"));
+        assert!(!gone.iter().any(|g| g == "OLD_PORT"));
+        assert!(
+            !gone.iter().any(|g| g == "ANTHROPIC_API_KEY"),
+            "the CLI's own key stays"
+        );
     }
 
     #[test]

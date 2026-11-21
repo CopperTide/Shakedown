@@ -90,11 +90,10 @@ API-mode gateway (`/gateway/{branch}/{agent}/v1/chat/completions`) are for shake
 
 ## Configuration
 
-Environment variables, read once at startup by shaked (each also under its old name `ARENA_*`, see
-[Old names](../README.md#old-names)):
+Environment variables, read once at startup by shaked:
 
 - `SHAKEDOWN_PG_URL`: the Postgres server for shaked's records, passed on to integration programs (default
-  `postgres://shakedown:shakedown@127.0.0.1:5544/postgres`, else the same server's old user `arena`).
+  `postgres://shakedown:shakedown@127.0.0.1:5544/postgres`, else the same server's old user `shakedown`).
 - `SHAKEDOWN_PROJECT`: the project folder whose worlds, scenarios, setups and experiments shaked serves (each a
   YAML file: `worlds/<id>/world.yaml`, `scenarios/<id>.yaml`, `setups/<id>.yaml`, `experiments/<id>.yaml`,
   with `shakedown.yaml` at the root). Edits made outside the app are seen on the next request. Unset: the
@@ -109,7 +108,7 @@ Environment variables, read once at startup by shaked (each also under its old n
 - `SHAKEDOWN_ALLOWED_HOSTS`: more `Host` names `/api` answers, comma-separated, for a shaked that serves
   others (default: loopback only). An open-source shaked refuses to start with it set.
 - `SHAKEDOWN_DB`: the database of shaked's records on that server (default `shakedown`, else an existing
-  `arena`).
+  `shakedown`).
 - `SHAKEDOWN_VAULT_KEY` (64 hex characters) or `SHAKEDOWN_VAULT_KEY_FILE`: the key your model keys are sealed
   with (AES-256-GCM, each bound to its row). Without either, `core/vault.key` is made (mode 0600, ignored by
   git) the first time a key is saved; a shaked whose layer serves others refuses to start without one of the
@@ -339,7 +338,7 @@ delete the run. The Rust build directory `core/target` also grows; `cd core && c
   only when no test is running, since tests make unreferenced saves.
 - The tests drop what they create, even when an assertion fails. `core/scripts/leakcheck.sh` (run from `core`)
   runs each of the core's test binaries and fails if one leaves databases behind: Postgres `pi_`, `ps_`,
-  `branch_`, `snap_` and `arena_test` databases, and MariaDB `mi_` and `mx_` ones when `LEAKCHECK_MARIADB` names
+  `branch_`, `snap_` and `shakedown_test` databases, and MariaDB `mi_` and `mx_` ones when `LEAKCHECK_MARIADB` names
   the server container.
 
 ## Tests

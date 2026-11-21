@@ -120,7 +120,7 @@ function Fields({ form, set, busy }: { form: ConnectForm; set: (p: Partial<Conne
     <>
       <Field label={<span title="Shakedown sends it an shakedown-agent/1 hello, then the agent's turns">URL</span>}>
         <Input type="url" inputMode="url" value={form.url} onChange={(e) => set({ url: e.target.value })} disabled={busy} spellCheck={false} autoComplete="off"
-          placeholder="https://agent.example.com/arena" className="h-8 font-mono text-xs" />
+          placeholder="https://agent.example.com/shakedown" className="h-8 font-mono text-xs" />
       </Field>
       <HeadersField value={form.headers} onChange={(headers) => set({ headers })} disabled={busy} />
     </>

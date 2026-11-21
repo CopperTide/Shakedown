@@ -1,7 +1,5 @@
 # Shakedown dataset (`shakedown-dataset/1`)
 
-Exports made before 2026-11-19 say `shakedown-dataset/1`: the layout is the same.
-
 A folder exported by the Shakedown SDK (`Branch.export`, `Suite.export`, `shakedown.export.export_branches`). Every
 line of a `.jsonl` file is one JSON object. Times are ISO 8601 in UTC. Fields a core did not record are `null`
 or absent, never guessed.

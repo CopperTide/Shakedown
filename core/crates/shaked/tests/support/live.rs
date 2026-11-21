@@ -1,6 +1,6 @@
-//! A real model for the tests that run agents. Arena tests agent behaviour on real models only,
+//! A real model for the tests that run agents. Shakedown tests agent behaviour on real models only,
 //! never on a fake model server or a scripted agent: a model's answers vary from run to run, so
-//! these tests assert what Arena records and enforces (the run starts and ends, every step is
+//! these tests assert what Shakedown records and enforces (the run starts and ends, every step is
 //! recorded with its fields, a gate refuses what it must when such a call happens, the checks are
 //! computed, a fork restores exactly), never a model's wording or one path through a task.
 //!
@@ -408,7 +408,7 @@ pub struct ExternalRun {
 }
 
 /// One `usage` report per assistant message of a Claude Code `stream-json` output (the stream
-/// repeats a message once per content block), in Arena's `POST .../usage` shape.
+/// repeats a message once per content block), in Shakedown's `POST .../usage` shape.
 fn usage_reports(stdout: &str) -> (Vec<Value>, Value) {
     let (mut reports, mut seen, mut result) = (vec![], vec![], Value::Null);
     for line in stdout.lines() {
@@ -469,7 +469,7 @@ fn claude_command(
 /// What `c` printed, run in a fresh work folder (removed after), ten minutes at most.
 async fn output_in_a_fresh_folder(mut c: tokio::process::Command) -> std::process::Output {
     let workdir =
-        std::env::temp_dir().join(format!("arena-live-{}", uuid::Uuid::new_v4().simple()));
+        std::env::temp_dir().join(format!("shakedown-live-{}", uuid::Uuid::new_v4().simple()));
     std::fs::create_dir_all(&workdir).unwrap();
     c.current_dir(&workdir);
     let out = tokio::time::timeout(Duration::from_secs(600), c.output()).await;

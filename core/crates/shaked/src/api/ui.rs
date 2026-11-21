@@ -90,7 +90,8 @@ mod tests {
 
     /// A scratch folder with a built UI (`dist/`) and a secret beside it; returns the folder.
     fn ui_folder() -> std::path::PathBuf {
-        let root = std::env::temp_dir().join(format!("arena_ui_{}", uuid::Uuid::new_v4().simple()));
+        let root =
+            std::env::temp_dir().join(format!("shakedown_ui_{}", uuid::Uuid::new_v4().simple()));
         let dist = root.join("dist");
         std::fs::create_dir_all(dist.join("assets")).unwrap();
         std::fs::write(dist.join("index.html"), "INDEX").unwrap();

@@ -32,4 +32,4 @@ with Shakedown.local(benchmark="retail", bin_dir="core/target/release") as sd:  
   the tool calls.
 
 Full guide: [docs/sdk.md](../../docs/sdk.md). Examples: [examples/](examples/). Python 3.10 or newer; one
-dependency (`httpx`). The old import name `arena` still works ([Old names](../../README.md#old-names)).
+dependency (`httpx`).

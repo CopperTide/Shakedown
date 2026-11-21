@@ -33,37 +33,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "arena-erpnext"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "shakedown-erpnext",
- "shakedown-part",
- "tokio",
-]
-
-[[package]]
-name = "arena-factory"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "serde_json",
- "shakedown-factory",
- "shakedown-part",
- "tokio",
-]
-
-[[package]]
-name = "arena-twenty-crm"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "shakedown-part",
- "shakedown-twenty-crm",
- "tokio",
-]
-
-[[package]]
 name = "async-trait"
 version = "0.1.92"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -375,26 +375,11 @@ def _poll(
     return value
 
 
-class OldConnectionName:
-    """``.arena``: the old name of ``.shakedown``, the connection (the SDK was ``arena`` until
-    2026-11-19)."""
-
-    shakedown: Shakedown
-
-    @property
-    def arena(self) -> Shakedown:
-        return self.shakedown
-
-    @arena.setter
-    def arena(self, value: Shakedown) -> None:
-        self.shakedown = value
-
-
 def _bid(b: Union[str, "Branch"]) -> str:
     return b.id if isinstance(b, Branch) else b
 
 
-class Branch(OldConnectionName):
+class Branch:
     """A branch of a run: the original run, or a fork. Cheap to make; reads go to shaked each time."""
 
     def __init__(
@@ -819,7 +804,7 @@ class AgentEndpoint:
         return {"mcpServers": {name: server}}
 
 
-class Suite(OldConnectionName):
+class Suite:
     """A test suite. ``report`` is the last report read; :meth:`refresh` reads it again."""
 
     def __init__(self, shakedown: Shakedown, report: dict[str, Any]):
@@ -878,8 +863,5 @@ class Suite(OldConnectionName):
 
         return export_branches(self.shakedown, [b.id for b in self.branches()], path, suite=self.report)
 
-
-#: The old name (the SDK was ``arena`` until 2026-11-19).
-Arena = Shakedown
 
 __all__ = ["Shakedown", "Branch", "Rewind", "AgentEndpoint", "Suite", "ENDED", "DEFAULT_URL"]

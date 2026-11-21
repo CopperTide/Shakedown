@@ -204,7 +204,7 @@ async fn diff_reports_changed_row() {
     .await;
 }
 
-/// Creates a save database named `name` holding one row, as an older arena would have.
+/// Creates a save database named `name` holding one row, as an older shakedown would have.
 async fn seed_legacy_save(name: &str) {
     let t = Templates::new(&url());
     t.drop(name).await.unwrap();
@@ -313,7 +313,7 @@ async fn run_part_check(cfgfile: PathBuf, saves: PathBuf, ns: String) -> std::pr
             .arg(&cfgfile)
             .env("SHAKEDOWN_BIN_DIR", a.join("core/target/debug"))
             .env("SHAKEDOWN_SAVES", &saves)
-            .env("SHAKEDOWN_PG_URL", format!("{}?arena_ns={}", url(), ns))
+            .env("SHAKEDOWN_PG_URL", format!("{}?shakedown_ns={}", url(), ns))
             .output()
             .unwrap()
     })

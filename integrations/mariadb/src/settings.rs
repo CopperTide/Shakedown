@@ -1,8 +1,6 @@
 //! An instance's settings: the world config's keys, else env `SHAKEDOWN_MARIADB_*`, else defaults.
 use serde_json::Value;
-use shakedown_part::helpers::mariadb::{
-    valid_docker_name, ServerConfig, OLD_CONTAINER, OLD_VOLUME,
-};
+use shakedown_part::helpers::mariadb::{valid_docker_name, ServerConfig};
 use shakedown_part::PartError;
 
 /// Restores read at most this many binlog bytes before a save writes a dump instead.
@@ -58,7 +56,6 @@ impl Settings {
             root_password: text(config, PASSWORD, d.root_password),
             flags: d.flags,
         };
-        let server = server.or_existing_old(&d.container, OLD_CONTAINER, OLD_VOLUME);
         if !valid_docker_name(&server.container) || !valid_docker_name(&server.volume) {
             return Err(PartError::invalid(
                 "container and volume must match [A-Za-z0-9][A-Za-z0-9_.-]{0,62}",

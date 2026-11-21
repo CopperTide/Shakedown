@@ -1,4 +1,4 @@
-"""The raw-material trucks the arena adds to the hub (ridgeline_hub_part/inbound.py) and their scheduled delay."""
+"""The raw-material trucks the shakedown adds to the hub (ridgeline_hub_part/inbound.py) and their scheduled delay."""
 import json
 from pathlib import Path
 

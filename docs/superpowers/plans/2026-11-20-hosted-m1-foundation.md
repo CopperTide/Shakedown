@@ -77,7 +77,7 @@ show a217411:<path>`):
   --no-fail-fast`; UI `npx tsc -b && npx vitest run --maxWorkers=1`; SDK `uv run --all-extras pytest -q` in
   `sdk/python`. Gate, Part B: in `crates/`, the same two cargo commands. Postgres for tests is container
   `deploy-pg-1` on 127.0.0.1:5544 (`docker start deploy-pg-1`); root-workspace and Cloud tests use
-  `SHAKEDOWN_PG_URL=postgres://arena:arena@127.0.0.1:5544/postgres` (ledger baseline ruling).
+  `SHAKEDOWN_PG_URL=postgres://shakedown:shakedown@127.0.0.1:5544/postgres` (ledger baseline ruling).
 - Shared machine: `CARGO_BUILD_JOBS=2`, `CARGO_PROFILE_DEV_DEBUG=0`, one cargo build at a time, output to a file and
   read its tail. Never start `shaked` while tests run. When Part B ends, `rm -rf crates/target` in the Cloud worktree.
 - clippy `too_many_lines` = 30, enforced by `-D warnings`. Never `#[allow]` it. Cloud's crates copy Shakedown's
@@ -104,7 +104,7 @@ show a217411:<path>`):
 
 ## Review Focus
 
-1. **Old local databases.** Records in `public`, in a database named `arena` or `shakedown`, made by any released
+1. **Old local databases.** Records in `public`, in a database named `shakedown` or `shakedown`, made by any released
    `shaked`, move into schema `shakedown` on the first start; every run still lists, loads and forks, and a second
    start changes nothing. Test: A3, `an_old_public_database_moves_to_shakedown_and_keeps_its_runs` (kept).
 2. **A database migrated by the retired `factory` build.** It is refused before anything is written, with a message
@@ -124,7 +124,7 @@ Before A3's gate. Agents never touch these databases.
 - `shakedown_tpl_*` (test templates): stale once checksums change; the test harness builds a new one and drops stale
   ones itself (Task 2 ruling). Nothing to do.
 - `shakedown_sdk_live` (the SDK's live-test database): drop it; the next SDK run recreates it.
-- `arena` on deploy-pg-1 (shared dev database, 14 runs, backup `work-local/db-backups/arena-20261120T0638Z.dump`):
+- `shakedown` on deploy-pg-1 (shared dev database, 14 runs, backup `work-local/db-backups/shakedown-20261120T0638Z.dump`):
   take a fresh dump; then drop schemas `identity` and `authz`, drop the policies and RLS flags on schema `shakedown`,
   drop the tables the retired `shakedown` 2 created (`provider_keys`, `worlds`, `org_settings`, `saves`,
   `sandboxes`, `api_tokens`, `run_tokens`, `grants`, `quotas`, `usage`, `usage_monthly`), drop the columns it added

@@ -1,6 +1,4 @@
-//! Both names of the service start and answer: `shaked`, and `arenad`, its name until 2026-11-19
-//! (`core/crates/arenad-alias` builds the same `main.rs` under it, for scripts and programs that
-//! still run `arenad`).
+//! The service program starts and answers, and a test-started one refuses the shared database.
 //!
 //! Each runs as a real process on a toy world of its own (its own packages, saves and worlds
 //! folders), so its startup cleanup touches nothing but those. Like any shaked it opens the
@@ -18,21 +16,6 @@ use support::{
     pg::{self, pg_url},
     run,
 };
-
-/// The `arenad` program next to `shaked`, built (`cargo build -p arenad`) in the same profile.
-fn arenad_binary() -> PathBuf {
-    let shaked = Path::new(env!("CARGO_BIN_EXE_shaked"));
-    let release = shaked.parent().and_then(|d| d.file_name()) == Some("release".as_ref());
-    let mut build = Command::new("cargo");
-    build.args(["build", "-q", "-p", "arenad"]);
-    if release {
-        build.arg("--release");
-    }
-    let core = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let st = build.current_dir(core).status().unwrap();
-    assert!(st.success(), "building arenad failed");
-    shaked.with_file_name("arenad")
-}
 
 fn free_port() -> u16 {
     let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
@@ -111,23 +94,20 @@ async fn health_benchmark(service: &mut Service, port: u16) -> String {
 }
 
 #[test]
-fn shaked_and_its_old_name_arenad_both_start_and_answer() {
-    let arenad = arenad_binary();
+fn shaked_starts_and_answers() {
     let shaked = PathBuf::from(env!("CARGO_BIN_EXE_shaked"));
     let root = toy_world("names", &[], &[]);
     let clean = pg::Cleanup::new();
-    for (tag, binary) in [("shaked", &shaked), ("arenad", &arenad)] {
-        let port = free_port();
-        let db = pg::db_name(&format!("names_{tag}"));
-        clean.add(&db);
-        let mut service = start(binary, tag, port, &root.0, &db);
-        let bench = run(health_benchmark(&mut service, port));
-        assert_eq!(bench, "toybench", "{tag}");
-    }
+    let port = free_port();
+    let db = pg::db_name("names_shaked");
+    clean.add(&db);
+    let mut service = start(&shaked, "shaked", port, &root.0, &db);
+    let bench = run(health_benchmark(&mut service, port));
+    assert_eq!(bench, "toybench");
 }
 
-/// A test-started shaked with no database of its own refuses the shared default one (`shakedown`,
-/// or `arena` on an older server) before it connects. The server URL points nowhere, so a guard
+/// A test-started shaked with no database of its own refuses the shared default one (`shakedown`)
+/// before it connects. The server URL points nowhere, so a guard
 /// that failed could not reach anyone's records either.
 #[test]
 fn a_test_started_shaked_refuses_the_shared_default_database() {

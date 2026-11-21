@@ -4,7 +4,7 @@ import { basePath, coreUrl, normalizeCore, resolveCore } from './core';
 describe('core URL', () => {
   it('keeps only an http(s) base without a trailing slash', () => {
     expect(normalizeCore(' http://127.0.0.1:4513/ ')).toBe('http://127.0.0.1:4513');
-    expect(normalizeCore('https://arena.example.com/core/')).toBe('https://arena.example.com/core');
+    expect(normalizeCore('https://shakedown.example.com/core/')).toBe('https://shakedown.example.com/core');
     expect(normalizeCore('')).toBe('');
     expect(normalizeCore(undefined)).toBe('');
     expect(normalizeCore('javascript:alert(1)')).toBeNull();

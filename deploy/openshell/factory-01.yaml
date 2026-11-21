@@ -6,7 +6,7 @@ process:
   run_as_user: "1000"      # the image's USER is root; the agent runs unprivileged
   run_as_group: "1000"
 network_policies:
-  arena_mcp:               # Shakedown's MCP endpoint for this branch and agent (shaked on 4533)
+  shakedown_mcp:               # Shakedown's MCP endpoint for this branch and agent (shaked on 4533)
     endpoints:
       - host: host.openshell.internal   # OpenShell's name for the host; a policy can't allow loopback
         port: 4533
