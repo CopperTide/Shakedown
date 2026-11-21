@@ -46,3 +46,8 @@ export interface MadlReport {
 
 /** A MADL setup's checks and graph. */
 export const madlOf = (id: string) => get<MadlReport>(path`/api/project/setups/${id}/madl`);
+
+export interface ImportPlan { proposed?: true; files?: { kind: string; id: string; label: string }[]; written?: { kind: string; id: string; label: string }[]; linked?: number; skipped: string[] }
+
+/** Moves earlier work into the project; without `confirm`, only what it would write. */
+export const importProject = (confirm: boolean) => post<ImportPlan>('/api/project/import', { confirm });

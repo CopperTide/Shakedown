@@ -44,7 +44,7 @@ export default function ExperimentsListPage() {
           </div>
           {rows.data && rows.data.length === 0 ? <EmptyState title="No experiments yet." action={newButton} /> : <ExperimentRows rows={shown} />}
         </Card>
-        <EarlierExperiments list={earlier.data ?? []} />
+        <EarlierExperiments list={earlier.data ?? []} onMoved={() => { rows.reload(); earlier.reload(); }} />
       </PageBody>
     </>
   );

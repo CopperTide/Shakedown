@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // The experiments list: file experiments with sub-experiments under their parent, problems shown,
 // search, and the earlier (database) experiments below.
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import ExperimentsListPage from './ExperimentsListPage';
@@ -56,5 +56,30 @@ describe('experiments list', () => {
     render(<MemoryRouter><ExperimentsListPage /></MemoryRouter>);
     const link = await screen.findByRole('link', { name: 'Old run set' });
     expect(link.getAttribute('href')).toBe('/experiments/db1');
+  });
+});
+
+describe('moving earlier experiments', () => {
+  it('move_into_project_confirms', async () => {
+    const posts: unknown[] = [];
+    const db = [{ id: 'db1', name: 'Old run set', tasks: [], benchmark: 'toybench', runs: 3, created_at: '2026-11-01T00:00:00Z', status: 'finished', legacy: false, setups: [] }];
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      const u = String(url);
+      if (u.endsWith('/api/project/import')) {
+        const body = JSON.parse(String(init?.body));
+        posts.push(body);
+        return new Response(JSON.stringify(body.confirm ? { written: [], linked: 1, skipped: [] } : { proposed: true, files: [{ kind: 'world', id: 'toybench', label: 'Toy bench' }], skipped: ['Crew: Your code setups need their command'] }));
+      }
+      if (u.endsWith('/api/project/experiments')) return new Response(JSON.stringify({ items: [] }));
+      if (u.endsWith('/api/experiments')) return new Response(JSON.stringify(db));
+      return new Response(JSON.stringify({ error: 'not found' }), { status: 404 });
+    }));
+    render(<MemoryRouter><ExperimentsListPage /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole('button', { name: 'Move into the project' }));
+    expect(await screen.findByText(/Toy bench/)).toBeTruthy();
+    expect(screen.getByText(/Your code setups need their command/)).toBeTruthy();
+    expect(posts).toEqual([{ confirm: false }]);
+    fireEvent.click(screen.getByRole('button', { name: 'Move them' }));
+    await waitFor(() => expect(posts).toEqual([{ confirm: false }, { confirm: true }]));
   });
 });
