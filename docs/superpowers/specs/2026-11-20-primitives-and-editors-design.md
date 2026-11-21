@@ -305,6 +305,7 @@ limits, refused communication and escalations.
 
 - **Credentials without pasting:** use an existing sign-in (Anthropic console, AWS SSO or profile, gcloud ADC, Azure CLI), environment variables, or a secrets provider (1Password, Vault, AWS Secrets Manager, Google Secret Manager, Azure Key Vault, Doppler, Bitwarden). Shakedown stores only a reference, fetches the value at run start and keeps it in memory. Pasting a key is one option, not the default.
 - **What we promise about keys:** they stay on this machine. They are never written to project files, logs, traces or recordings, and never sent to CopperTide. Shakedown can use a key but nobody can view it again (only the last 4 characters show).
+- **Where data lives (2026-11-21):** replaces the "Keep a copy only on this machine" toggle. Each world database or data source has a storage location the customer chooses: this machine, their own bucket (S3, GCS or Azure Blob, in their account, through a key-store reference), or CopperTide Cloud. Runs can only go where the data may go: a world kept on this machine runs locally or on their own runner, never on CopperTide Cloud.
 - **Blank by default:** pages open clean, with no panel open, no unsaved state, empty fields and nothing preselected. Results such as a key test, a detected version or an assistant draft appear only after the user acts. (Some mockups opened mid-flow only as a demo; the product never does.)
 - **No paths:** don't show file or folder paths in the UI. Name things instead. File viewers show content.
 
