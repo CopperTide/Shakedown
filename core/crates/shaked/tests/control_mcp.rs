@@ -142,6 +142,7 @@ struct Stdio {
 impl Stdio {
     fn start(dir: &std::path::Path) -> Stdio {
         let mut child = Command::new(env!("CARGO_BIN_EXE_shaked"))
+            .env("SHAKEDOWN_TEST_GUARD", "1")
             .args(["mcp", "--project"])
             .arg(dir)
             .stdin(std::process::Stdio::piped())

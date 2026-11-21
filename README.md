@@ -57,6 +57,11 @@ Bring your own agents instead (`sd.external_run(...)`: each agent gets an MCP en
 and an OpenAI-compatible gateway), run experiments (`POST /api/experiments`), or drive a world step by step as a multi-agent RL environment
 (`shakedown.env.ShakedownParallelEnv`). Any other language uses the [HTTP API](docs/reference.md#http-api).
 
+**Project folder.** Worlds, scenarios, agent setups and experiments are YAML files in a project folder
+(`SHAKEDOWN_PROJECT`), so they can be diffed, reviewed and committed like code. **From an agent:** every
+operation is also a tool of the control MCP server, e.g. `claude mcp add shakedown -- shaked mcp --project
+~/work/my-project`; see [Use Shakedown from an agent](docs/reference.md#use-shakedown-from-an-agent-mcp).
+
 ## Bring your own agent
 
 Test the agent system you already run. Add it to a team as an `http` agent, `{kind: "http", url, headers?}`:

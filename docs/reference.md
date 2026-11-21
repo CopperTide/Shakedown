@@ -12,6 +12,13 @@ All JSON on `http://127.0.0.1:4510`, except the event stream. Errors are `{error
 | `GET /api/health` | `{open_available, providers, claude, codex, benchmark, disk: {bytes, limit_bytes}}`. `providers` is each model provider as the configuration alone tells it, in the shape of `/api/providers` without `models`; a local server is not asked, so it is `available: false, checked: false` with why `not checked (GET /api/providers asks the server)`. `open_available` is true when some provider can take calls, judged from the configuration (a configured local server counts, up or not) |
 | `GET /api/providers` | `[{id, kind, label, available, checked, why?, models?}]`, one per model provider, your own keys applied; see [Model providers](#model-providers) |
 | `GET /api/me` | `{mode, user: {name}, features}`: `mode` is `local` and `user.name` `You` for an open-source shaked; a deployment's layer may add `account` (the UI's account menu) |
+| `GET /api/project` | `project.status`: `{name, counts: {worlds, scenarios, setups, experiments}, problems, root}` for the project folder `SHAKEDOWN_PROJECT` names; 409 when none is open. `problems` lists unreadable files and broken references (`{kind, id, pointer, message}`); a problem never stops the rest of the project from loading |
+| `POST /api/project` | `project.init`: `{name, git?}` creates a project in the configured folder; 409 when one is already there |
+| `GET /api/project/{worlds\|scenarios\|setups\|experiments}` | `{items: [{kind, id, label, hash, problems}]}` |
+| `GET /api/project/{kind}/{id}` | one item with its `body` (the file's contents as JSON) |
+| `PUT /api/project/{kind}/{id}` | `{body, confirm?}` creates or replaces the item's file. `body` is checked exactly like the file: unknown fields, a wrong `format:` and credentials written inline are 422 with a JSON pointer (a credential's value is never echoed). Unless `confirm` is true and while the project's `permissions.edit` is `diff_first` (the default), nothing is written and the answer is `{proposed: true, diff}`. Writes are atomic: a file is never left half-written. Needs the `admin` token scope |
+| `DELETE /api/project/{kind}/{id}` | deletes the item's file (a world keeps its data folder) |
+| `POST /mcp` | the control MCP server (JSON-RPC, protocol `2025-06-18`): every operation above as a tool (`worlds_list`, `scenarios_put`, …), each checked against the caller's token like its route. See [Use Shakedown from an agent](#use-shakedown-from-an-agent-mcp) |
 | `GET /api/tokens` | the live API tokens, `[{id, name, prefix, scopes, created_at, last_used_at, expires_at}]`: never a token or its hash |
 | `POST /api/tokens` | `{name, scopes: ["read"\|"run"\|"admin"], expires_days?}`: `{id, token, prefix}`, the token (`sd_…`) shown this once. `read` views; `run` also starts, forks, stops and records; `admin` does everything, model keys and tokens included |
 | `DELETE /api/tokens/{id}` | revokes a token; calls with it then get 401 |
@@ -88,6 +95,10 @@ Environment variables, read once at startup by shaked (each also under its old n
 
 - `SHAKEDOWN_PG_URL`: the Postgres server for shaked's records, passed on to integration programs (default
   `postgres://shakedown:shakedown@127.0.0.1:5544/postgres`, else the same server's old user `arena`).
+- `SHAKEDOWN_PROJECT`: the project folder whose worlds, scenarios, setups and experiments shaked serves (each a
+  YAML file: `worlds/<id>/world.yaml`, `scenarios/<id>.yaml`, `setups/<id>.yaml`, `experiments/<id>.yaml`,
+  with `shakedown.yaml` at the root). Edits made outside the app are seen on the next request. Unset: the
+  project routes answer 409.
 - `SHAKEDOWN_BIND`: where shaked listens (default `127.0.0.1:4510`). An open-source shaked serves only the person
   at this machine and refuses a bind beyond loopback. The old `SHAKEDOWN_PORT=<port>` still binds
   `127.0.0.1:<port>`.
@@ -177,6 +188,9 @@ from. The retail example reads its data from `data/retail` (relative to its pack
 
 ## Commands
 
+- `shaked mcp [--project <folder>]`: the control MCP server over stdio for a project folder (default
+  `SHAKEDOWN_PROJECT`), one JSON-RPC message per line. It runs as the person at this machine on the folder
+  alone: no database, no server.
 - `shaked token create --name <name> [--scope read|run|admin ...] [--expires-days N]`: prints a new API token
   (default scope `read`) and nothing else.
 - `shaked store copy --from <store> --to <store> [--prefix <p>/] [--repoint]`: copies every object (under
@@ -184,6 +198,22 @@ from. The retail example reads its data from `data/retail` (relative to its pack
   object already there with the right checksum is skipped, so it reruns safely. `--repoint` points the saves
   whose objects all verified at the destination; a save whose object no longer matches its recorded checksum
   stays where it is. Exits 1 when any object failed.
+
+## Use Shakedown from an agent (MCP)
+
+Every operation shaked offers is defined once in its operation registry and served two ways: as an HTTP route
+and as a tool of the control MCP server, so the UI, the assistant, scripts and any agent can do the same things.
+A test (`core/crates/shaked/tests/parity.rs`) fails if an operation is missing from either.
+
+- On this machine, over stdio: `claude mcp add shakedown -- shaked mcp --project ~/work/my-project` (Codex:
+  `[mcp_servers.shakedown] command = "shaked"`, `args = ["mcp", "--project", "…"]`).
+- Over HTTP: `POST /mcp` with `Authorization: Bearer <token>`. A `read` token lists and reads; editing or
+  deleting project files needs `admin`; starting runs needs `run`.
+- Edits follow the project's `permissions` in `shakedown.yaml`: with `edit: diff_first` a put returns a diff and
+  writes only when sent again with `confirm: true`.
+
+This is separate from the MCP endpoint an agent under test gets in a run (`/mcp/{branch}/{agent}`, the world's
+tools).
 
 ## Model providers
 
