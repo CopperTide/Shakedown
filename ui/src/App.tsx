@@ -16,6 +16,7 @@ const NewExperimentPage = lazy(() => import('@/features/experiments/NewExperimen
 const Home = lazy(() => import('@/features/start/StartPage'));
 const HomePage = lazy(() => import('@/features/home/HomePage'));
 const ExperimentsListPage = lazy(() => import('@/features/experiments/ExperimentsListPage'));
+const FileExperimentPage = lazy(() => import('@/features/experiments/FileExperimentPage'));
 const ProcessPage = lazy(() => import('@/features/process/ProcessPage'));
 const Compare = lazy(() => import('@/features/compare/ComparePage'));
 const ConnectPage = lazy(() => import('@/features/connect/ConnectPage'));
@@ -54,6 +55,7 @@ function AppRoutes() {
         <Route path="/get-started" element={<Soon title="Get started" />} />
         <Route path="/experiments/new" element={<NewExperimentPage />} />
         <Route path="/experiments/compare" element={<ExperimentsCompare />} />
+        <Route path="/experiments/file/:id" element={<FileExperimentPage />} />
         <Route path="/experiments/:id" element={<ExperimentPage />} />
         <Route path="/run" element={<Home />} />
         <Route path="/runs" element={<Runs />} />
