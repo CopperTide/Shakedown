@@ -89,3 +89,33 @@ export interface WorldBody {
   data?: DataSource[];
   people?: Person[];
 }
+
+export interface Change { record: string; value: unknown }
+
+/** A failure or disruption injected during the run: at a world time or after N agent calls. */
+export interface ScenarioEvent {
+  name: string;
+  at?: string;
+  after_calls?: number;
+  effects?: unknown[];
+  db?: string;
+  fault?: string;
+  params?: Record<string, unknown>;
+}
+
+export interface Gate { rule: string; scope: string; on_breach: 'block' | 'flag' }
+
+export interface Check { text: string; kind: 'goal' | 'safety'; query?: string; ends_run?: boolean }
+
+/** A scenario file's contents (shakedown-scenario/1). */
+export interface ScenarioBody {
+  format: string;
+  label: string;
+  world: string;
+  task: string;
+  preset?: string;
+  changes?: Change[];
+  events?: ScenarioEvent[];
+  gates?: Gate[];
+  checks?: Check[];
+}
