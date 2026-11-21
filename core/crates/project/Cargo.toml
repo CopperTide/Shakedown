@@ -1,0 +1,20 @@
+[package]
+name = "shakedown-project"
+version = "0.1.0"
+edition = "2021"
+description = "Shakedown project folders: the file formats for worlds, scenarios, setups and experiments, and safe reads and writes."
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml_ng = { workspace = true }
+serde_path_to_error = { workspace = true }
+schemars = { workspace = true }
+thiserror = { workspace = true }
+sha2 = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[lints]
+workspace = true
