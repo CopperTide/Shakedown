@@ -6,7 +6,7 @@ use std::{collections::BTreeSet, sync::Arc};
 use serde_json::json;
 use shaked::{
     auth::Decision,
-    harness::{SpyLayer, ROUTES},
+    harness::{all_routes, SpyLayer, ROUTES},
 };
 use support::{run, AppFx};
 
@@ -113,11 +113,12 @@ fn every_api_route_asks_the_layer() {
             .layer(Arc::new(spy.clone()))
             .start()
             .await;
-        for r in ROUTES.iter().filter(|r| !r.public) {
+        for r in all_routes().filter(|r| !r.public) {
             let url = format!("{}{}", fx.base, fill(r.path));
             let req = match r.method {
                 "GET" => fx.http.get(&url),
                 "POST" => fx.http.post(&url).json(&json!({})),
+                "PUT" => fx.http.put(&url).json(&json!({})),
                 "DELETE" => fx.http.delete(&url),
                 m => panic!("method {m}"),
             };
@@ -145,4 +146,18 @@ fn health_needs_no_caller() {
         assert_eq!(fx.get("/api/health").await.0, 200);
         assert_eq!(fx.get("/api/runs").await.0, 401);
     })
+}
+
+#[test]
+fn every_op_has_a_route_row() {
+    for op in shaked::ops::all() {
+        let row = all_routes().find(|r| r.method == op.method && r.path == op.path);
+        assert!(
+            row.is_some(),
+            "{} ({} {}) has no route row",
+            op.name,
+            op.method,
+            op.path
+        );
+    }
 }

@@ -10,7 +10,7 @@ use axum::{http::request::Parts, Router};
 use futures_util::FutureExt;
 use shakedown_schema::{migrate, Migration, Plan, Stream};
 
-pub use crate::api::routes::{On, RouteCase, ROUTES};
+pub use crate::api::routes::{all_routes, On, RouteCase, ROUTES};
 use crate::{
     app::{AppState, Config},
     auth::{Action, Caller, Decision, SystemJob, Target},

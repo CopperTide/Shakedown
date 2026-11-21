@@ -210,3 +210,30 @@ fn init_creates_a_project() {
         assert_eq!(again.unwrap_err().status.as_u16(), 409);
     });
 }
+
+#[test]
+fn http_put_then_get_round_trips() {
+    run(async {
+        let dir = larkspur();
+        let fx = AppFx::idle("ops", "http").project(dir.path()).start().await;
+        let url = format!("{}/api/project/scenarios/from-http", fx.base);
+        let body = json!({"body": scenario_body("Over HTTP"), "confirm": true});
+        let put = fx.http.put(&url).json(&body).send().await.unwrap();
+        assert_eq!(put.status().as_u16(), 200);
+        let (status, got) = fx.get("/api/project/scenarios/from-http").await;
+        assert_eq!(status, 200, "{got}");
+        assert_eq!(got["label"], "Over HTTP");
+        let (status, listed) = fx.get("/api/project/scenarios").await;
+        assert_eq!(status, 200);
+        assert_eq!(listed["items"].as_array().unwrap().len(), 2);
+    });
+}
+
+#[test]
+fn http_errors_keep_their_status() {
+    run(async {
+        let fx = AppFx::idle("ops", "http409").start().await;
+        let (status, _) = fx.get("/api/project").await;
+        assert_eq!(status, 409);
+    });
+}

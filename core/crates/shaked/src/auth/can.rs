@@ -43,6 +43,8 @@ pub enum ResourceKind {
     Connection,
     Review,
     ApiToken,
+    /// A world, scenario, setup or experiment file in the project folder.
+    ProjectFile,
 }
 
 /// What an action is on.
@@ -86,13 +88,16 @@ pub fn engine_check(c: &Caller, a: &Action, t: &Target<'_>) -> Decision {
 /// models or links a sandbox.
 fn by_scope(scopes: &[TokenScope], a: &Action, t: &Target<'_>) -> Decision {
     use Action::*;
-    let key = |t: &Target<'_>| match t {
-        Target::Kind(k) | Target::Resource { kind: k, .. } => *k == ResourceKind::ProviderKey,
+    let admin_only = |t: &Target<'_>| match t {
+        Target::Kind(k) | Target::Resource { kind: k, .. } => {
+            matches!(k, ResourceKind::ProviderKey | ResourceKind::ProjectFile)
+        }
         _ => false,
     };
     let needs = match a {
-        // Model keys are secrets that steer every model call: only admin tokens change them.
-        Create | ChangeSetup if key(t) => TokenScope::Admin,
+        // Model keys steer every model call, and project files are what every run is built
+        // from: only admin tokens change them.
+        Create | ChangeSetup if admin_only(t) => TokenScope::Admin,
         Read => TokenScope::Read,
         Create | Start | Fork | Stop | Record | UseInRun | Rename | ChangeSetup | DeleteFork
         | RegisterAgent | Report | Finish => TokenScope::Run,

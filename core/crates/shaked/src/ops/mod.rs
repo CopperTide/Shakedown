@@ -3,6 +3,7 @@
 //! so the buttons, the API, the assistant and any agent can do the same things.
 
 mod error;
+pub mod http;
 mod item_ops;
 mod project_ops;
 mod view;

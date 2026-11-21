@@ -93,6 +93,7 @@ fn modules() -> Router<Arc<AppState>> {
         .merge(twin::router())
         .merge(recording::router())
         .merge(worlds::router())
+        .merge(crate::ops::http::router())
 }
 
 // ---------------------------------------------------------------- errors
@@ -112,6 +113,12 @@ impl ApiError {
     }
     fn conflict(msg: impl Into<String>) -> ApiError {
         ApiError(StatusCode::CONFLICT, msg.into())
+    }
+}
+
+impl From<crate::ops::OpError> for ApiError {
+    fn from(e: crate::ops::OpError) -> ApiError {
+        ApiError(e.status, e.message)
     }
 }
 

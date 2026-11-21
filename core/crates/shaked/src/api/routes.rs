@@ -204,7 +204,12 @@ pub const ROUTES: &[RouteCase] = &[
 
 /// The row of `method` on the route pattern `path`.
 pub fn case(method: &str, path: &str) -> Option<&'static RouteCase> {
-    ROUTES.iter().find(|r| r.method == method && r.path == path)
+    all_routes().find(|r| r.method == method && r.path == path)
+}
+
+/// The hand-written routes of [`ROUTES`] and the registry operations' routes.
+pub fn all_routes() -> impl Iterator<Item = &'static RouteCase> {
+    ROUTES.iter().chain(crate::ops::http::route_rows())
 }
 
 /// The segment of `uri` at the position of the first `{…}` segment of `pattern`.
