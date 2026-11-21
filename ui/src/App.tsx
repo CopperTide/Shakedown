@@ -1,6 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useState } from 'react';
 import { Navigate, Route, Routes, useParams } from 'react-router-dom';
-import ExperimentsPage from '@/features/experiments/ExperimentsPage';
 import CommandPalette, { usePaletteShortcut } from './app/CommandPalette';
 import { type Mode, PALETTE_EVENT } from './app/palette';
 import AppShell from './features/shell/AppShell';
@@ -16,6 +15,7 @@ const ExperimentsCompare = lazy(() => import('@/features/experiments/ExperimentP
 const NewExperimentPage = lazy(() => import('@/features/experiments/NewExperimentPage'));
 const Home = lazy(() => import('@/features/start/StartPage'));
 const HomePage = lazy(() => import('@/features/home/HomePage'));
+const ExperimentsListPage = lazy(() => import('@/features/experiments/ExperimentsListPage'));
 const ProcessPage = lazy(() => import('@/features/process/ProcessPage'));
 const Compare = lazy(() => import('@/features/compare/ComparePage'));
 const ConnectPage = lazy(() => import('@/features/connect/ConnectPage'));
@@ -46,7 +46,7 @@ function AppRoutes() {
     <Suspense fallback={null}>
       <Routes>
         <Route path="/" element={<HomePage />} />
-        <Route path="/experiments" element={<ExperimentsPage />} />
+        <Route path="/experiments" element={<ExperimentsListPage />} />
         <Route path="/worlds" element={<Soon title="Worlds" />} />
         <Route path="/scenarios" element={<Soon title="Scenarios" />} />
         <Route path="/setups" element={<Soon title="Agent setups" />} />
