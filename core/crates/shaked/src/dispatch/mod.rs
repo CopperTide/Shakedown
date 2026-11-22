@@ -91,12 +91,12 @@ pub(crate) async fn run(
     Ok(match end {
         End::Finished | End::Horizon => None,
         End::Failed(why) => {
-            runner::freeze(ctx).await;
+            runner::freeze(state, ctx).await;
             runner::check(state, ctx).await?;
             Some(Ending::failed(why))
         }
         End::OverBudget(why) => {
-            runner::freeze(ctx).await;
+            runner::freeze(state, ctx).await;
             runner::check(state, ctx).await?;
             Some(Ending::because(BranchStatus::BudgetExceeded, why))
         }

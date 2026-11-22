@@ -126,7 +126,10 @@ An agent already deployed elsewhere joins a team as an `http` agent (shaked POST
 endpoint, and it answers when done) or a Bedrock agent (API mode on provider `bedrock:<region>`); see
 [agents.md](agents.md).
 
-In every runner the world freezes (no tick, no clock) once the agents are done, and is then scored.
+In every runner the world freezes (no tick, no clock) once the agents are done, and is then scored. Freezing first
+moves the clock parts on to the frozen clock, recorded as the world event `clock/advance` with the reason `end`: on
+a wall clock the last tick can be minutes of world time behind the end at a high speed, and the world is scored as
+it stands at the end.
 
 ### Dispatch runs
 
@@ -363,8 +366,8 @@ waiting), shaked moves the world on at once, to the earliest of:
 - the lead's next look: `epoch` after the lead was last woken (none with `epoch: none`);
 - the run's `horizon`.
 
-Each move is recorded as the world event `clock/advance` (`{from_ms, reason}`, `reason` `wake`, `look` or
-`horizon`), at the clock it moved to, followed by what the parts reported. A world event of kind `alert` becomes
+Each move is recorded as the world event `clock/advance` (`{from_ms, reason}`, `reason` `wake`, `look`,
+`horizon`, or `end` for the move to the frozen clock before scoring), at the clock it moved to, followed by what the parts reported. A world event of kind `alert` becomes
 mail for the lead (`Alert from <part>`), which wakes it; other events wake no one, and a move that brings no alert
 wakes no one either: the world moves on again. A look wakes the lead with no mail. At the horizon the run ends and is
 scored as if the lead had finished. When the lead finishes earlier, the world runs on with no agent through each

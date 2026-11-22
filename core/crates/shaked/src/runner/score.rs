@@ -7,11 +7,17 @@ use anyhow::Result;
 use super::lifecycle::Ending;
 use crate::{app::AppState, exec::BranchCtx, model::*, overhead::Cat, world};
 
-/// Once the agents are done the world stands still: no tick and no clock while it is scored.
-/// Freezing twice is freezing once.
-pub(crate) async fn freeze(ctx: &BranchCtx) {
+/// Once the agents are done the world stands still: no tick and no clock while it is scored. The
+/// clock parts are first moved on to the frozen clock (a wall clock's last tick came up to a tick
+/// before it), and the move recorded, so they are scored at the end. Freezing twice is freezing
+/// once.
+pub(crate) async fn freeze(state: &AppState, ctx: &BranchCtx) {
     ctx.stop_ticker().await;
     ctx.clock.freeze();
+    let exec = crate::exec::ToolExec::new(state.store.clone());
+    if let Err(e) = exec.settle(ctx).await {
+        eprintln!("branch {}: moving the world to its end: {e}", ctx.branch_id);
+    }
 }
 
 /// Scores the world and records the Check. A branch on which an agent broke a rule fails with it,

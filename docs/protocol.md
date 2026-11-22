@@ -88,7 +88,9 @@ real product. Each tool's `effect` already says whether it reads or writes.
   been restarted can still start from, inspect or diff an older save that is not in its memory; it answers
   `-32002` only when the folder is missing.
 - `advance` moves the part's clock to `clock_ms`. Parts with `uses_clock: false` never get it. Events the
-  part reports (an alarm, a shipment arriving) are recorded as world events.
+  part reports (an alarm, a shipment arriving) are recorded as world events. When a branch ends, its clock
+  freezes and every clock part gets one last `advance` to the frozen clock before the world is saved and scored
+  (recorded as the world event `clock/advance`, reason `end`).
 - `events` in a `call_tool` result are recorded as world events right after the call, for a part that has
   something to report at once (`advance` is the other way; parts without the clock have only this one).
 - `wake_at_ms` (optional, additive) in an `advance` or `call_tool` result is the earliest branch clock at which the

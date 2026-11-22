@@ -171,6 +171,33 @@ fn the_clock_route_tells_world_time() {
     })
 }
 
+/// Finishing a run on a wall clock first moves its clock parts on to the frozen clock, and records
+/// the move: the world is scored as it stands at the end, not at the last tick before it.
+#[test]
+fn a_finished_runs_clock_parts_are_scored_at_the_frozen_clock() {
+    run(async {
+        let fx = TimeFx::new("frozen", &[]).await;
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        assert_eq!(fx.on(&fx.branch, "finish").await.0, 200);
+        let evs = records(&fx.fx.state.store)
+            .events(&fx.branch)
+            .await
+            .unwrap();
+        let is_end = |e: &&Event| {
+            e.kind == EventKind::WorldEvent
+                && e.payload["part"] == "clock"
+                && e.payload["data"]["reason"] == "end"
+        };
+        let end = evs.iter().find(is_end).expect("the move to the end");
+        let frozen = end.payload["clock_ms"].as_i64().unwrap();
+        let lines = fx.lines();
+        let last = lines.iter().rev().find(|l| l[0] == "advance").unwrap();
+        assert_eq!(last[2].parse::<i64>().unwrap(), frozen);
+        let check = evs.iter().find(|e| e.kind == EventKind::Check).unwrap();
+        assert!(end.seq < check.seq, "moved before it was scored");
+    })
+}
+
 /// A branch of the toy world `toybench` (a clock part `box` started with `part_args`) on a
 /// stepped clock whose writes cost two world minutes, made by hand: no runner moves it.
 struct SteppedFx {

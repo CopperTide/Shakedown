@@ -56,7 +56,7 @@ pub async fn finish(state: &AppState, ctx: &BranchCtx) -> Option<Ending> {
     if !ctx.lifecycle.claim_end() {
         return None;
     }
-    freeze(ctx).await;
+    freeze(state, ctx).await;
     let outcome = check(state, ctx).await;
     Some(conclude(state, ctx, outcome).await)
 }
@@ -69,7 +69,7 @@ pub async fn finish_failed(state: &AppState, ctx: &BranchCtx, why: String) -> Op
     if !ctx.lifecycle.claim_end() {
         return None;
     }
-    freeze(ctx).await;
+    freeze(state, ctx).await;
     let outcome = check(state, ctx).await.map(|ending| match ending.status {
         BranchStatus::InfraError => ending,
         _ => Ending::failed(why),

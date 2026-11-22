@@ -53,12 +53,12 @@ pub(super) async fn drive(
     if let Some(end) = ended {
         // Over its spend limit, a run is scored as it stands (a failure).
         if end.status == BranchStatus::BudgetExceeded {
-            freeze(ctx).await;
+            freeze(state, ctx).await;
             check(state, ctx).await?;
         }
         return Ok(end);
     }
-    freeze(ctx).await;
+    freeze(state, ctx).await;
     check(state, ctx).await
 }
 
@@ -227,7 +227,7 @@ async fn record_end(
     result: &AgentResult,
 ) -> Result<()> {
     if ctx.rules.handoff_required && ctx.roster.is_last(agent) {
-        freeze(ctx).await;
+        freeze(state, ctx).await;
     }
     let end = serde_json::to_value(agent_end(result))?;
     ctx.append(&state.store, Some(agent), EventKind::AgentEnd, end)

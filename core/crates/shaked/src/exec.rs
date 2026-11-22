@@ -495,6 +495,37 @@ impl ToolExec {
         }
         let from_ms = branch.clock.now_ms();
         branch.clock.step_to(clock_ms);
+        self.move_world(branch, from_ms, reason).await
+    }
+
+    /// Moves the clock parts of a frozen branch on to its clock, when they are behind it (a wall
+    /// clock's last tick came before the freeze), behind the gate: recorded as `move_world` does,
+    /// with the reason `end`. Once they are there it does nothing.
+    pub async fn settle(&self, branch: &BranchCtx) -> Result<(), String> {
+        let _gate = branch.gate().await;
+        let world = &branch.world;
+        let now = branch.clock.now_ms();
+        if branch.lifecycle.fatal().is_some() || !world.uses_clock() {
+            return Ok(());
+        }
+        let from_ms = world.advanced_to();
+        if from_ms.is_some_and(|t| t >= now) {
+            return Ok(());
+        }
+        self.move_world(branch, from_ms.unwrap_or(now), "end")
+            .await
+            .map(drop)
+    }
+
+    /// Advances the clock parts to the branch clock, which moved on from `from_ms`, and records
+    /// the move as the world event `clock/advance` (`{from_ms, reason}`), then what the world
+    /// reports. How many of the reported events were alerts.
+    async fn move_world(
+        &self,
+        branch: &BranchCtx,
+        from_ms: i64,
+        reason: &str,
+    ) -> Result<usize, String> {
         let to = branch.clock.now_ms();
         let (events, _) = (branch.world.advance_all(to).await).map_err(|e| failure(branch, e))?;
         let minutes = (to - from_ms) as f64 / 60_000.0;
