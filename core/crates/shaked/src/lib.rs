@@ -17,6 +17,7 @@ pub mod flow;
 pub mod fork;
 pub mod gateway;
 pub mod gc;
+pub mod git_import;
 #[cfg(feature = "harness")]
 pub mod harness;
 pub mod jobs;

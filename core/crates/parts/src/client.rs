@@ -154,7 +154,7 @@ fn program_command(
         "SHAKEDOWN_SAVES",
         dirs.saves,
     ));
-    for (k, v) in env {
+    for (k, v) in env.iter().chain(&m.env) {
         c.env(k, v);
     }
     c

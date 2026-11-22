@@ -76,8 +76,9 @@ or written into the project. With `confirm`, it installs, registers and writes.
 ## 5. Re-import on a new commit
 
 The same id fetched at another commit gets a new checkout and a new environment beside the old ones. Only
-when both are ready are the packages swapped in the registry: a run already going keeps its program. The old
-checkout and environment are then removed. A part's `describe` fingerprints the code and the world folder it
+when both are ready are the packages swapped in the registry: a run already going keeps its program. The
+checkout and environment of the commit before are kept, so a run going on them finishes; older ones are
+removed. A part's `describe` fingerprints the code and the world folder it
 serves, so the fingerprint changes with the commit. Old runs keep the fingerprint they recorded, and a restore
 of an old save into the new code is refused by the fingerprint check, as for any package that changed.
 

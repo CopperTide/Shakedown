@@ -38,6 +38,10 @@ fn deploy_one<'a>(ctx: &'a OpCtx<'a>, _: &'static Operation, value: Value) -> Op
         let id = Id::parse(&input::<IdInput>(value)?.id)?;
         let app = ctx.app("deploying")?;
         let project = ctx.project.current()?;
+        // An import made by `shaked import` while shaked runs is registered before its first run.
+        for e in crate::git_import::register(&app.hub, &project.root).await {
+            eprintln!("shaked: {e}");
+        }
         let (package, task) = deploy::runtime_of(&project, &id)?;
         let clock_start = match app.bench_named(&package).await {
             Ok(bench) => {

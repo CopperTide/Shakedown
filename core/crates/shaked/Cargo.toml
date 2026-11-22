@@ -23,6 +23,7 @@ chrono = { workspace = true }
 axum = "0.8"
 futures-util = { version = "0.3", default-features = false, features = ["alloc"] }
 toml = "0.8"
+sha2 = { workspace = true }
 ring = "0.17"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 libc = "0.2"

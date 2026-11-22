@@ -121,5 +121,6 @@ fn status_of(project: &Project) -> Value {
         "problems": problems,
         "settings": project.config,
         "root": project.root.display().to_string(),
+        "imports": crate::git_import::listed(&project.root),
     })
 }

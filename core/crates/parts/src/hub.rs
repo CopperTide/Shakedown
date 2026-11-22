@@ -16,9 +16,17 @@ struct Slot {
     bench: Option<BenchDescribe>,
 }
 
+/// The packages one import registered, and the commit it registered them at.
+struct Source {
+    version: String,
+    names: Vec<String>,
+}
+
 pub struct Hub {
-    /// Written only to add a package installed while shaked runs.
+    /// Written only to add a package installed while shaked runs, or an import's packages.
     registry: RwLock<Registry>,
+    /// The imports whose packages are registered, by import id.
+    sources: RwLock<HashMap<String, Source>>,
     bin_dir: PathBuf,
     /// Substituted for `${SHAKEDOWN_DIR}` in commands (left as it is when empty).
     repo_dir: PathBuf,
@@ -32,6 +40,7 @@ impl Hub {
     pub fn new(registry: Registry, bin_dir: PathBuf, saves_root: PathBuf) -> Hub {
         Hub {
             registry: RwLock::new(registry),
+            sources: RwLock::default(),
             bin_dir,
             repo_dir: PathBuf::new(),
             saves_root,
@@ -63,6 +72,74 @@ impl Hub {
         let m = Manifest::load(dir)?;
         self.registry.write().unwrap().add(m.clone())?;
         Ok(m)
+    }
+
+    /// The version (an import's commit) the packages of `source` were registered at, if any.
+    pub fn source_version(&self, source: &str) -> Option<String> {
+        let sources = self.sources.read().unwrap();
+        sources.get(source).map(|s| s.version.clone())
+    }
+
+    /// The folder of the installed package `name` when it is not `source`'s own (None: free, or
+    /// registered by `source`).
+    pub fn taken(&self, source: &str, name: &str) -> Option<PathBuf> {
+        let own = self
+            .sources
+            .read()
+            .unwrap()
+            .get(source)
+            .is_some_and(|s| s.names.iter().any(|n| n == name));
+        let registry = self.registry();
+        registry.get(name).filter(|_| !own).map(|m| m.dir.clone())
+    }
+
+    /// Registers `packages` as everything `source` (an import) offers at `version`: its packages
+    /// from before are removed, and their programs are no longer handed out (a world already
+    /// holding one keeps it until it stops). Refuses, changing nothing, a name another package
+    /// has.
+    pub async fn replace_source(
+        &self,
+        source: &str,
+        version: &str,
+        packages: Vec<Manifest>,
+    ) -> Result<()> {
+        let old = self.swap_source(source, version, packages)?;
+        let mut slots = self.slots.lock().await;
+        for name in old {
+            slots.remove(&name);
+        }
+        Ok(())
+    }
+
+    /// The registry half of [`Hub::replace_source`]: answers the names `source` had before.
+    fn swap_source(
+        &self,
+        source: &str,
+        version: &str,
+        packages: Vec<Manifest>,
+    ) -> Result<Vec<String>> {
+        let mut registry = self.registry.write().unwrap();
+        let mut sources = self.sources.write().unwrap();
+        let old = (sources.get(source))
+            .map(|s| s.names.clone())
+            .unwrap_or_default();
+        let mut seen = std::collections::HashSet::new();
+        for m in &packages {
+            let theirs = registry.get(&m.name).is_some() && !old.contains(&m.name);
+            if theirs || !seen.insert(m.name.clone()) {
+                anyhow::bail!("a package named {} is installed already", m.name);
+            }
+        }
+        for name in &old {
+            registry.remove(name);
+        }
+        let names = packages.iter().map(|m| m.name.clone()).collect();
+        for m in packages {
+            registry.add(m)?;
+        }
+        let version = version.to_string();
+        sources.insert(source.to_string(), Source { version, names });
+        Ok(old)
     }
 
     fn dirs(&self) -> ProgramDirs<'_> {
@@ -261,5 +338,40 @@ mod tests {
         for d in [first, second] {
             let _ = std::fs::remove_dir_all(d.parent().unwrap()); // the package's own temp folder
         }
+    }
+
+    #[tokio::test]
+    async fn a_source_replaces_its_own_packages_and_never_anothers() {
+        let empty = temp("src-empty");
+        let installed = pkg_dir("src-installed", "mine");
+        let registry = Registry::scan(&[installed.parent().unwrap().to_path_buf()]).unwrap();
+        let hub = Hub::new(registry, empty.clone(), empty.clone());
+        let load = |tag: &str, name: &str| {
+            let mut m = Manifest::load(&pkg_dir(tag, name)).unwrap();
+            m.env = vec![("UV_FROZEN".into(), "1".into())];
+            m
+        };
+        let first = vec![load("src-a1", "alpha"), load("src-b1", "beta")];
+        hub.replace_source("repo", "c1", first).await.unwrap();
+        assert_eq!(hub.source_version("repo").as_deref(), Some("c1"));
+        assert_eq!(hub.registry().get("alpha").unwrap().env[0].0, "UV_FROZEN");
+        // A new commit drops beta and moves alpha.
+        let moved = load("src-a2", "alpha");
+        let dir = moved.dir.clone();
+        hub.replace_source("repo", "c2", vec![moved]).await.unwrap();
+        assert_eq!(hub.registry().get("alpha").unwrap().dir, dir);
+        assert!(hub.registry().get("beta").is_none());
+        assert_eq!(hub.source_version("repo").as_deref(), Some("c2"));
+        // Another source can't take an installed name, nor one of this source's.
+        assert_eq!(hub.taken("other", "mine"), Some(installed.clone()));
+        assert_eq!(hub.taken("other", "alpha"), Some(dir.clone()));
+        assert_eq!(hub.taken("repo", "alpha"), None);
+        let e = hub
+            .replace_source("other", "x", vec![load("src-m", "mine")])
+            .await
+            .unwrap_err();
+        assert!(e.to_string().contains("mine is installed already"), "{e}");
+        assert!(hub.source_version("other").is_none());
+        let _ = std::fs::remove_dir_all(&empty);
     }
 }

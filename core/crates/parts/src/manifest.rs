@@ -52,6 +52,9 @@ pub struct Manifest {
     pub opt_in: bool,
     /// Set for a world the builder made.
     pub world: Option<WorldMeta>,
+    /// Environment its program gets on top of the passed-through one (command mode): set by an
+    /// import (e.g. the uv environment it installed), never read from the file.
+    pub env: Vec<(String, String)>,
 }
 
 fn str_of(v: &Value, key: &str) -> Result<String> {
@@ -111,6 +114,7 @@ impl Manifest {
                 .unwrap_or_default(),
             config_schema: v.get("config_schema").cloned().unwrap_or(Value::Null),
             world: parse_world(v.get("world"))?,
+            env: Vec::new(),
         })
     }
 }
@@ -227,6 +231,11 @@ impl Registry {
 
     pub fn builders(&self) -> impl Iterator<Item = &Manifest> {
         self.of_kind(Kind::Builder)
+    }
+
+    /// Removes the package `name`, answering it.
+    pub fn remove(&mut self, name: &str) -> Option<Manifest> {
+        self.by_name.remove(name)
     }
 
     /// Adds `m`; refuses a name another package has.

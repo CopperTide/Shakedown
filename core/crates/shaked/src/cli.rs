@@ -1,4 +1,5 @@
-//! shaked's commands besides serving: `shaked token create`, `shaked store copy` and `shaked mcp`.
+//! shaked's commands besides serving: `shaked token create`, `shaked store copy`, `shaked mcp`
+//! and `shaked import`.
 
 use anyhow::{bail, Context, Result};
 
@@ -14,6 +15,7 @@ pub async fn run(args: &[String]) -> Option<Result<()>> {
         Some("token") => Some(token(&args[1..]).await),
         Some("store") => Some(store_copy(&args[1..]).await),
         Some("mcp") => Some(mcp(&args[1..]).await),
+        Some("import") => Some(import(&args[1..]).await),
         _ => None,
     }
 }
@@ -33,6 +35,124 @@ async fn mcp(args: &[String]) -> Result<()> {
     };
     let project = crate::project_state::ProjectState::new(Some(dir));
     crate::ops::stdio::run(std::sync::Arc::new(project)).await
+}
+
+const IMPORT_USAGE: &str =
+    "usage: shaked import <git-url-or-path> [--ref <ref>] [--id <id>] [--project <folder>] [--dry-run]";
+
+/// What `shaked import` was asked.
+#[derive(Debug, PartialEq)]
+struct ImportArgs {
+    url: String,
+    git_ref: Option<String>,
+    id: Option<String>,
+    project: Option<std::path::PathBuf>,
+    dry_run: bool,
+}
+
+impl ImportArgs {
+    fn parse(args: &[&str]) -> Result<ImportArgs> {
+        let (mut url, mut git_ref, mut id, mut project, mut dry_run) =
+            (None, None, None, None, false);
+        let mut it = args.iter();
+        while let Some(&a) = it.next() {
+            let mut value = || it.next().map(|v| v.to_string()).context(IMPORT_USAGE);
+            match a {
+                "--ref" => git_ref = Some(value()?),
+                "--id" => id = Some(value()?),
+                "--project" => project = Some(value()?.into()),
+                "--dry-run" => dry_run = true,
+                _ if a.starts_with('-') || url.is_some() => bail!(IMPORT_USAGE),
+                _ => url = Some(a.to_string()),
+            }
+        }
+        let url = url.context(IMPORT_USAGE)?;
+        Ok(ImportArgs {
+            url,
+            git_ref,
+            id,
+            project,
+            dry_run,
+        })
+    }
+}
+
+/// A local path given relative to the working folder, made absolute; URLs stay as they are.
+fn absolute_source(source: &str) -> String {
+    if crate::git_import::git_url(source).is_ok() {
+        return source.to_string();
+    }
+    match std::fs::canonicalize(source) {
+        Ok(p) => p.to_string_lossy().into_owned(),
+        Err(_) => source.to_string(),
+    }
+}
+
+/// `import <git-url-or-path> [--ref R] [--id I] [--project F] [--dry-run]`: `project.import_git`
+/// on the project folder (default `SHAKEDOWN_PROJECT`), as the person at this machine.
+async fn import(args: &[String]) -> Result<()> {
+    let words: Vec<&str> = args.iter().map(String::as_str).collect();
+    let asked = ImportArgs::parse(&words)?;
+    let dir = asked.project.clone().or_else(|| {
+        parts::settings::var_os("SHAKEDOWN_PROJECT")
+            .filter(|v| !v.is_empty())
+            .map(Into::into)
+    });
+    let Some(dir) = dir else {
+        bail!("shaked import needs a project folder: pass --project <folder> or set SHAKEDOWN_PROJECT");
+    };
+    std::fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
+    let project = std::sync::Arc::new(crate::project_state::ProjectState::new(Some(dir)));
+    let ctx = crate::ops::OpCtx::project_only(project);
+    let op = crate::ops::find("project.import_git").context("no import operation")?;
+    let input = serde_json::json!({
+        "url": absolute_source(&asked.url), "ref": asked.git_ref, "id": asked.id, "confirm": !asked.dry_run,
+    });
+    let out = (op.run)(&ctx, op, input)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.message))?;
+    print!("{}", import_summary(&out));
+    Ok(())
+}
+
+/// The lists an import answers, how each entry is labelled on the terminal and the fields it
+/// shows (none: the entry is text).
+const SUMMARY_ROWS: [(&str, &str, &[&str]); 7] = [
+    ("packages", "package", &["kind", "name", "dir"]),
+    ("items", "item", &["action", "kind", "id"]),
+    ("views", "view", &["world", "file"]),
+    (
+        "compose",
+        "compose file (a service part candidate)",
+        &["file"],
+    ),
+    ("notes", "note", &[]),
+    ("problems", "problem", &[]),
+    ("conflicts", "conflict", &[]),
+];
+
+/// What an import found and did, for the terminal.
+fn import_summary(out: &serde_json::Value) -> String {
+    let fields = |v: &serde_json::Value, keys: &[&str]| -> String {
+        let words: Vec<&str> = match keys {
+            [] => vec![v.as_str().unwrap_or("")],
+            keys => keys.iter().map(|k| v[*k].as_str().unwrap_or("")).collect(),
+        };
+        words.join(" ")
+    };
+    let commit = out["commit"].as_str().unwrap_or("");
+    let short = &commit[..commit.len().min(12)];
+    let mut lines = vec![format!("{} ({short})", fields(out, &["url", "ref"]))];
+    for (key, label, keys) in SUMMARY_ROWS {
+        let entries = out[key].as_array().into_iter().flatten();
+        lines.extend(entries.map(|v| format!("{label}: {}", fields(v, keys))));
+    }
+    lines.push(match out["proposed"].as_bool() {
+        Some(true) => "dry run: nothing was installed or written".into(),
+        _ => "installed and written; shaked registers the packages at its next start or deploy"
+            .into(),
+    });
+    lines.join("\n") + "\n"
 }
 
 /// `token create --name <n> [--scope read|run|admin ...] [--expires-days N]`: prints a token of
@@ -166,6 +286,17 @@ async fn store_copy(args: &[String]) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn import_reads_its_flags() {
+        let asked = ImportArgs::parse(&["../repo", "--ref", "main", "--dry-run"]).unwrap();
+        assert_eq!(asked.url, "../repo");
+        assert_eq!(asked.git_ref.as_deref(), Some("main"));
+        assert!(asked.dry_run && asked.id.is_none() && asked.project.is_none());
+        assert!(ImportArgs::parse(&[]).is_err());
+        assert!(ImportArgs::parse(&["a", "b"]).is_err());
+        assert!(ImportArgs::parse(&["a", "--ref"]).is_err());
+    }
 
     #[test]
     fn store_copy_reads_its_flags() {

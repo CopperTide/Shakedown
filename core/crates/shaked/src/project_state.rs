@@ -70,6 +70,12 @@ impl ProjectState {
         Ok(project)
     }
 
+    /// Forgets the cached copy, so the next read opens the folder again (after files were
+    /// written behind the project's back, e.g. by an import).
+    pub fn forget(&self) {
+        *self.cached.lock().unwrap_or_else(|e| e.into_inner()) = None;
+    }
+
     /// Runs `change` on the project as it is on disk now, then forgets the cached copy.
     pub fn change<R>(&self, change: impl FnOnce(&mut Project) -> R) -> Result<R, NoProject> {
         let mut project = self.current()?;

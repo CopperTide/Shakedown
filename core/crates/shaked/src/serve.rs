@@ -68,7 +68,18 @@ pub async fn run(store: Store, opts: ServeOptions) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn repo_dir() -> PathBuf {
+/// Registers the configured project's git imports; done before the benchmark is chosen, which
+/// may be one of theirs.
+async fn register_imports(state: &AppState) {
+    let Some(root) = state.projects.configured() else {
+        return;
+    };
+    for e in crate::git_import::register(&state.hub, root).await {
+        eprintln!("shaked: {e}");
+    }
+}
+
+pub(crate) fn repo_dir() -> PathBuf {
     let here = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
     here.canonicalize().unwrap_or(here)
 }
@@ -247,9 +258,11 @@ fn listening_line(
     )
 }
 
-/// The start where packages run here: its benchmark, and before any run can save, dropping the
-/// saves no event names (left by crashes and aborted tests).
+/// The start where packages run here: the project's git imports registered, its benchmark, and
+/// before any run can save, dropping the saves no event names (left by crashes and aborted
+/// tests).
 async fn local_start(state: &AppState) -> anyhow::Result<BenchDescribe> {
+    register_imports(state).await;
     let bench = state.startup_bench().await?;
     crate::gc::run_startup_gc(&state.store, &state.hub, &state.benchmark()).await?;
     Ok(bench)
