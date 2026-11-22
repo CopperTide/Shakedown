@@ -26,7 +26,7 @@ pub struct Tx {
     committed: bool,
 }
 
-type Params<'a> = &'a [&'a (dyn ToSql + Sync)];
+pub(super) type Params<'a> = &'a [&'a (dyn ToSql + Sync)];
 
 impl Tx {
     fn conn(&self) -> &Object {

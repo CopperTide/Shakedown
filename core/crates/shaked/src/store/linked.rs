@@ -4,7 +4,10 @@
 use anyhow::Result;
 use serde_json::Value;
 
-use super::{event_from, Scoped, EVENT_COLS};
+use super::{
+    events::{event_from, with_overhead, EVENT_COLS},
+    Scoped,
+};
 use crate::{model::*, overhead::Overhead};
 
 /// An event a worker sent as its `n`.
@@ -38,11 +41,10 @@ impl Scoped<'_> {
     /// None when the branch no longer runs (checked under the branch's lock): an ended branch
     /// takes no more events.
     pub async fn append_linked(&self, branch_id: &str, ev: Linked) -> Result<Option<Event>> {
-        let payload = super::with_overhead(ev.payload, ev.overhead)?;
+        let payload = with_overhead(ev.payload, ev.overhead)?;
         let n = i64::try_from(ev.n)?;
         let sql = append_linked_sql();
-        let lock = self.store.lock_for(branch_id);
-        let _g = lock.lock().await;
+        let _g = self.store.lock_for(branch_id).lock_owned().await;
         let params: [&(dyn tokio_postgres::types::ToSql + Sync); 5] = [
             &branch_id,
             &ev.agent.as_deref(),
