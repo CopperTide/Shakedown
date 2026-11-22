@@ -161,7 +161,7 @@ async fn bench_with_task(
 
 /// Everything a worker needs to stand a branch up and drive it. Serialisable: it travels in the
 /// `start` frame.
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct BranchPlan {
     pub run_id: RunId,
     pub branch_id: BranchId,

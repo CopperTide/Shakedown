@@ -54,6 +54,7 @@ pub mod text;
 pub mod ticker;
 pub mod vault;
 pub mod window;
+pub mod worker;
 pub mod world;
 pub mod world_clock;
 pub mod worlds;
