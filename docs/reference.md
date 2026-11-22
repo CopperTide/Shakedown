@@ -93,6 +93,10 @@ All JSON on `http://127.0.0.1:4510`, except the event stream. Errors are `{error
 New runs and forks answer 507 once the saves reach the disk limit. The `/api` routes answer only
 requests whose `Host` is a loopback address. The agents' MCP endpoints (`/mcp/{branch}/{agent}`) and the
 API-mode gateway (`/gateway/{branch}/{agent}/v1/chat/completions`) are for shaked's own agents.
+`GET /worker` is the WebSocket a `shaked worker` running a branch in a sandbox links to: it says hello with
+a one-use ticket (good for ten minutes, bound to its branch and sandbox) and gets the branch's plan and a
+worker token, which it reconnects with. The token only links its own branch and calls the gateway for its
+agents, and dies when the branch ends. Pause, resume and stop on such a branch are relayed to its worker.
 
 ## Configuration
 

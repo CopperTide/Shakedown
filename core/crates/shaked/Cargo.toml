@@ -20,7 +20,7 @@ anyhow = { workspace = true }
 thiserror = { workspace = true }
 uuid = { workspace = true, features = ["serde"] }
 chrono = { workspace = true }
-axum = "0.8"
+axum = { version = "0.8", features = ["ws"] }
 futures-util = { version = "0.3", default-features = false, features = ["alloc"] }
 toml = "0.8"
 ring = "0.17"
@@ -45,6 +45,9 @@ tempfile = { workspace = true }
 tower = { version = "0.5", features = ["util"] }
 shaked = { path = ".", features = ["harness"] }
 uuid = { workspace = true, features = ["serde"] }
+# The worker link tests' client.
+tokio-tungstenite = "0.29"
+futures-util = { version = "0.3", default-features = false, features = ["sink"] }
 
 [lints]
 workspace = true

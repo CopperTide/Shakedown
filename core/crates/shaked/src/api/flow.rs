@@ -1,5 +1,6 @@
 //! Pausing, resuming and stopping a live branch (`POST /api/branches/{id}/pause`, `/resume`,
-//! `/stop`), whatever drives its agents, and asking for a save point (`/save`).
+//! `/stop`), whatever drives its agents, and asking for a save point (`/save`). A branch a worker
+//! in a sandbox runs is not live here: the three are relayed to its worker.
 
 use crate::auth::{Caller, Who};
 use std::sync::Arc;
@@ -17,6 +18,7 @@ use crate::{
     exec::{BranchCtx, ToolExec},
     model::{SavePointPayload, SAVE_ASKED},
     runner,
+    worker::frames::ToWorker,
 };
 
 pub(super) fn router() -> Router<Arc<AppState>> {
@@ -39,6 +41,23 @@ async fn live(state: &AppState, caller: &Caller, id: &str) -> Result<Arc<BranchC
     }
 }
 
+/// Relays `f` to the worker running branch `id`, when the branch is not live here and a worker
+/// is connected: false when there is none; 404 when the caller can't see the branch.
+async fn relayed(
+    state: &AppState,
+    caller: &Caller,
+    id: &str,
+    f: ToWorker,
+) -> Result<bool, ApiError> {
+    if state.live.contains(id) || !state.links.connected(id) {
+        return Ok(false);
+    }
+    if state.store.at(caller).find_branch(id).await?.is_none() {
+        return Err(super::no_branch(id));
+    }
+    Ok(state.links.send(id, f))
+}
+
 /// Whether the branch is paused now, and whether the request changed that.
 fn paused(ctx: &BranchCtx, changed: bool) -> ApiResult<Value> {
     Ok(Json(
@@ -52,6 +71,9 @@ async fn pause(
     Who(caller): Who,
     Path(id): Path<String>,
 ) -> ApiResult<Value> {
+    if relayed(&state, &caller, &id, ToWorker::Pause).await? {
+        return Ok(Json(json!({"paused": true, "changed": true})));
+    }
     let ctx = live(&state, &caller, &id).await?;
     paused(&ctx, ctx.pause().await?)
 }
@@ -62,6 +84,9 @@ async fn resume(
     Who(caller): Who,
     Path(id): Path<String>,
 ) -> ApiResult<Value> {
+    if relayed(&state, &caller, &id, ToWorker::Resume).await? {
+        return Ok(Json(json!({"paused": false, "changed": true})));
+    }
     let ctx = live(&state, &caller, &id).await?;
     let lasted = ctx.resume_lasting().await?;
     if let Some(by) = lasted {
@@ -79,6 +104,9 @@ async fn stop(
     Who(caller): Who,
     Path(id): Path<String>,
 ) -> ApiResult<Value> {
+    if relayed(&state, &caller, &id, ToWorker::Stop).await? {
+        return Ok(Json(json!({"stopping": true})));
+    }
     let ctx = live(&state, &caller, &id).await?;
     let stopped = super::detached(async move { Ok(runner::stop(&state, &ctx).await) }).await?;
     Ok(Json(json!({"stopping": stopped})))

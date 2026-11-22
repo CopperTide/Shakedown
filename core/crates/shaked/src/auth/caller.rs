@@ -96,7 +96,7 @@ pub enum RunTokenKind {
     Run,
     /// One agent's MCP and model gateway calls.
     Agent,
-    /// A sandbox's link for one branch.
+    /// A sandbox's link for one branch, and its agents' model calls.
     Worker,
     /// One-time, traded for a worker token.
     Ticket,

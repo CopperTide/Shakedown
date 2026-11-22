@@ -181,6 +181,8 @@ pub struct AppState {
     pub vault: OnceLock<Arc<crate::vault::Vault>>,
     /// The object stores `SHAKEDOWN_OBJECT_STORE` names (None: unset).
     pub objects: Option<Arc<crate::objects::ObjectStores>>,
+    /// The branches workers in sandboxes run for this control box, and their tickets.
+    pub links: crate::worker::Links,
 }
 
 /// The shared HTTP client, guarded by `policy` ([`crate::providers::reach::guard`]).
@@ -232,6 +234,7 @@ impl AppState {
             proxy: crate::proxy::Proxy::default(),
             vault: OnceLock::new(),
             objects: None,
+            links: Default::default(),
         }
     }
 
@@ -531,8 +534,11 @@ pub fn router(state: Arc<AppState>) -> Router {
     let api = api
         .layer(axum::middleware::from_fn_with_state(hosts, allowed_host))
         .layer(axum::middleware::from_fn_with_state(origins, cors));
+    // A worker says who it is in its link's first frame, not in a header: `/worker` is outside
+    // `/api`'s auth.
     let all = crate::mcp::router()
         .merge(crate::gateway::router())
+        .merge(crate::worker::router())
         .merge(api);
     let all = match state.store.layer().policy().serves_others {
         true => all.layer(axum::middleware::from_fn(hide_internal_errors)),
