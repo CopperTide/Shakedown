@@ -1,5 +1,5 @@
 import { AlertTriangle, CornerDownRight } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Table, Td, Th } from '@/components/ui/table';
 import type { OrderedRow } from './list';
 
@@ -13,18 +13,19 @@ function ProblemBadge({ row }: { row: OrderedRow }) {
   );
 }
 
-/** The file experiments, sub-experiments indented under their parent. */
+/** The file experiments, sub-experiments indented under their parent. A click anywhere on a row opens it. */
 export default function ExperimentRows({ rows }: { rows: OrderedRow[] }) {
+  const navigate = useNavigate();
   return (
     <Table>
       <thead><tr><Th>Experiment</Th><Th>Scenario</Th><Th className="text-right">Setups</Th></tr></thead>
       <tbody>
         {rows.map((r) => (
-          <tr key={r.id}>
+          <tr key={r.id} onClick={() => navigate(`/experiments/file/${r.id}`)} className="cursor-pointer transition-colors hover:bg-hover">
             <Td>
               <span className="inline-flex items-center" style={{ paddingLeft: r.depth * 20 }}>
                 {r.depth > 0 && <CornerDownRight className="mr-1.5 size-3.5 text-faint" aria-hidden="true" />}
-                <Link to={`/experiments/file/${r.id}`} className="font-medium hover:text-accent">{r.label}</Link>
+                <Link to={`/experiments/file/${r.id}`} className="font-medium" onClick={(e) => e.stopPropagation()}>{r.label}</Link>
                 <ProblemBadge row={r} />
               </span>
             </Td>

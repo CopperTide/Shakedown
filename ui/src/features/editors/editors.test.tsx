@@ -59,12 +59,13 @@ describe('editing layer', () => {
     expect(puts[0]).toEqual({ body: { label: 'Saved' }, confirm: true });
   });
 
-  it('list_links_to_editor', async () => {
+  it('list_row_is_one_link_to_editor_and_highlights_on_hover', async () => {
     mockFetch({ items: [{ ...WORLD, problems: [{ pointer: '', message: 'broken' }] }] });
     render(<MemoryRouter><ItemListPage kind="worlds" /></MemoryRouter>);
-    const link = await screen.findByRole('link', { name: 'Plant' });
+    const link = await screen.findByRole('link', { name: /^Plant/ });
     expect(link.getAttribute('href')).toBe('/worlds/plant');
-    expect(screen.getByText('1 problem')).toBeTruthy();
+    expect(link.textContent).toContain('1 problem');
+    expect(link.className).toContain('hover:bg-hover');
   });
 
   it('new_item_bad_id', async () => {

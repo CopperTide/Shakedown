@@ -10,9 +10,11 @@ export default function EarlierExperiments({ list, onMoved }: { list: ListedExpe
     <Card title="Earlier experiments" description="Made before the project folder. They stay readable here." actions={<MoveIntoProject onMoved={onMoved} />}>
       <ul className="divide-y divide-line">
         {list.map((e) => (
-          <li key={e.id} className="flex items-center gap-3 px-[18px] py-2.5 text-sm">
-            <Link to={`/experiments/${e.id}`} className="flex-1 font-medium hover:text-accent">{e.name}</Link>
-            <span className="text-xs text-faint">{e.benchmark} · {e.runs} runs per setup</span>
+          <li key={e.id}>
+            <Link to={`/experiments/${e.id}`} className="flex items-center gap-3 px-[18px] py-2.5 text-sm transition-colors hover:bg-hover focus-visible:bg-hover focus-visible:outline-none">
+              <span className="flex-1 font-medium">{e.name}</span>
+              <span className="text-xs text-faint">{e.benchmark} · {e.runs} runs per setup</span>
+            </Link>
           </li>
         ))}
       </ul>

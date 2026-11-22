@@ -54,8 +54,10 @@ describe('experiments list', () => {
   it('earlier_experiments_listed', async () => {
     mockFetch([], [{ id: 'db1', name: 'Old run set', tasks: [], benchmark: 'factory', runs: 3, created_at: '2026-11-01T00:00:00Z', status: 'finished', legacy: false, setups: [] }]);
     render(<MemoryRouter><ExperimentsListPage /></MemoryRouter>);
-    const link = await screen.findByRole('link', { name: 'Old run set' });
+    const link = await screen.findByRole('link', { name: /^Old run set/ });
     expect(link.getAttribute('href')).toBe('/experiments/db1');
+    expect(link.textContent).toContain('3 runs per setup');
+    expect(link.className).toContain('hover:bg-hover');
   });
 });
 

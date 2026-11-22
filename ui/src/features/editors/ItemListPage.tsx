@@ -1,4 +1,4 @@
-// A kind's list: every item with its problems, each a link to its editor, and New.
+// A kind's list: every item with its problems, each row one link to its editor, and New.
 import { AlertTriangle } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { listItems } from '@/api/project';
@@ -13,14 +13,16 @@ import NewItemDialog from './NewItemDialog';
 function Row({ item, route }: { item: ItemSummary; route: string }) {
   const n = item.problems.length;
   return (
-    <li className="flex items-center gap-3 px-[18px] py-3 text-sm">
-      <Link to={`${route}/${item.id}`} className="font-medium hover:text-accent">{item.label}</Link>
-      <span className="font-mono text-2xs text-faint">{item.id}</span>
-      {n > 0 && (
-        <span title={item.problems[0].message} className="inline-flex items-center gap-1 rounded-full bg-warn-soft px-2 py-0.5 text-2xs font-medium text-warn">
-          <AlertTriangle className="size-3" aria-hidden="true" />{n} problem{n > 1 ? 's' : ''}
-        </span>
-      )}
+    <li>
+      <Link to={`${route}/${item.id}`} className="flex items-center gap-3 px-[18px] py-3 text-sm transition-colors hover:bg-hover focus-visible:bg-hover focus-visible:outline-none">
+        <span className="font-medium">{item.label}</span>
+        <span className="font-mono text-2xs text-faint">{item.id}</span>
+        {n > 0 && (
+          <span title={item.problems[0].message} className="inline-flex items-center gap-1 rounded-full bg-warn-soft px-2 py-0.5 text-2xs font-medium text-warn">
+            <AlertTriangle className="size-3" aria-hidden="true" />{n} problem{n > 1 ? 's' : ''}
+          </span>
+        )}
+      </Link>
     </li>
   );
 }
