@@ -123,6 +123,28 @@ pub fn approximate_on_the_way(
     Ok(())
 }
 
+/// A fork whose world comes through the steps of an earlier fork that left its world as its
+/// parent ended (restore none): that fork's world at its start isn't what its saves before it
+/// say, so it can't be restored from them. Its steps are on the way when `until` is past its
+/// start.
+pub fn unrestored_on_the_way(forks: &[EarlierFork], until: i64) -> Result<(), Refused> {
+    let mut until = until;
+    for f in forks {
+        let unrestored = f
+            .restored
+            .iter()
+            .find(|r| r.how == RestoredHow::NotRestored);
+        if let Some(r) = unrestored.filter(|_| until > f.start_seq) {
+            return Err(refused(&r.part, format!(
+                "the branch forked at step {} with restore none (evaluation only) left its world as its parent ended, so it can't be restored from its steps; fork its parent instead",
+                f.start_seq
+            )));
+        }
+        until = until.min(f.start_seq);
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -201,5 +223,22 @@ mod tests {
         let d = [fork(15, "c", RestoredHow::Replay), b[0].clone()];
         assert_eq!(approximate_on_the_way(&d, &c, 12).unwrap_err().part, "c");
         assert_eq!(approximate_on_the_way(&d, &c, 9), Ok(()));
+    }
+
+    #[test]
+    fn a_fork_that_left_the_world_unrestored_is_refused_past_its_start() {
+        // B forked from A at 10 with restore none: its world at its start isn't recorded.
+        let b = [fork(10, "retail", RestoredHow::NotRestored)];
+        let e = unrestored_on_the_way(&b, 12).unwrap_err();
+        assert_eq!(e.part, "retail");
+        assert!(e.reason.contains("restore none"), "{e}");
+        // At or before B's start the steps are A's, whose world was recorded.
+        assert_eq!(unrestored_on_the_way(&b, 10), Ok(()));
+        let saved = [fork(10, "retail", RestoredHow::Save)];
+        assert_eq!(unrestored_on_the_way(&saved, 12), Ok(()));
+        // C forked from B at 15; a fork of C at 12 goes through B's own steps.
+        let d = [fork(15, "retail", RestoredHow::Save), b[0].clone()];
+        assert!(unrestored_on_the_way(&d, 12).is_err());
+        assert_eq!(unrestored_on_the_way(&d, 9), Ok(()));
     }
 }

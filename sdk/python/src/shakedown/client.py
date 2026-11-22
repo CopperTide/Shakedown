@@ -561,6 +561,7 @@ class Branch:
         """A new branch from just before step ``at_seq``, with ``changes`` to agents
         (``{agent id: Change(...)}``) or, for an external run, another ``team``. The world is
         restored ``exact`` or ``approximate``; a part that can't be is refused (:class:`Conflict`).
+        ``restore="none"`` (evaluation only) leaves the world as this branch ended.
         The fork may start earlier than asked (``fork_info.moved_from``/``reason``). A fork of an
         external run stays live: its ``agents`` hold each agent's endpoints and ``history``."""
         body: dict[str, Any] = {"at_seq": at_seq, "restore": restore}

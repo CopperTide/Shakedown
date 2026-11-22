@@ -77,7 +77,7 @@ fn assert_child_of(c: &Branch, b: &Branch, parent: &str, at: i64) {
     assert_eq!(c.start_seq, Some(at));
     assert_eq!(c.run_id, b.run_id);
     assert_eq!((b.restore_mode, b.restored.len()), (None, 0));
-    assert_eq!(c.restore_mode, Some(parts::proto::Mode::Exact));
+    assert_eq!(c.restore_mode, Some(RestoreMode::Exact));
     let retail = RestoredPart {
         part: "retail".into(),
         how: RestoredHow::Save,

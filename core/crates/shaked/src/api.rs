@@ -10,7 +10,6 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use parts::proto::Mode;
 use serde::Deserialize;
 use serde_json::{json, Value};
 
@@ -645,8 +644,8 @@ fn budget_of(state: &AppState, id: &str, events: &[crate::model::Event]) -> Valu
     json!({"max_cost_usd": max, "estimate_usd": live})
 }
 
-fn exact() -> Mode {
-    Mode::Exact
+fn exact() -> RestoreMode {
+    RestoreMode::Exact
 }
 
 #[derive(Deserialize)]
@@ -654,9 +653,10 @@ struct ForkReq {
     at_seq: i64,
     #[serde(default)]
     changes: HashMap<String, Change>,
-    /// `"exact"` (default) or `"approximate"`.
+    /// `"exact"` (default), `"approximate"`, or `"none"` (evaluation only: the world as the
+    /// parent ended).
     #[serde(default = "exact")]
-    restore: Mode,
+    restore: RestoreMode,
     /// Another team, for a run an external system drives (in place of `changes`).
     #[serde(default)]
     team: Option<Team>,
@@ -739,12 +739,15 @@ async fn fork_admitted(
     Ok(Json(resp))
 }
 
-/// `restore=exact|approximate` (default exact).
-fn parse_restore(q: &HashMap<String, String>) -> Result<Mode, ApiError> {
+/// `restore=exact|approximate|none` (default exact).
+fn parse_restore(q: &HashMap<String, String>) -> Result<RestoreMode, ApiError> {
     match q.get("restore").filter(|r| !r.is_empty()) {
         None => Ok(exact()),
-        Some(r) => serde_json::from_value(json!(r))
-            .map_err(|_| ApiError::bad(format!("restore must be exact or approximate, not {r:?}"))),
+        Some(r) => serde_json::from_value(json!(r)).map_err(|_| {
+            ApiError::bad(format!(
+                "restore must be exact, approximate or none, not {r:?}"
+            ))
+        }),
     }
 }
 

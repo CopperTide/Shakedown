@@ -67,7 +67,8 @@ experiments into the project as files.
 - **Fork**: a new branch of a run that starts at step N of an existing branch with a change (an agent's prompt,
   model or kind). The world is restored to how it was just before the fork point, and the branch reruns from
   there.
-- **Restore**: a fork restores the world exactly or approximately (see [Restore modes](#restore-modes)).
+- **Restore**: a fork restores the world exactly or approximately, or for evaluation leaves it as the parent
+  ended (see [Restore modes](#restore-modes)).
 - **Scoring**: when a branch ends, shaked saves every part and diffs the world with the task's gold world (the
   base world plus the task's gold actions, made once and kept). The branch passes when no key differs and at
   least one part could be checked.
@@ -109,6 +110,14 @@ A fork asks for one restore mode for the whole world. Each integration declares 
 
 The table is implemented in `core/crates/shaked/src/restore.rs`. `GET /api/branches/{id}/restore-plan` and the
 rerun panel show, per part, how it will be restored and, for a replay, an estimate of the time.
+
+**none** is for evaluation only (the snapshots-off ablation): the agents get their context up to the fork point,
+as in any fork, but the world is left as the parent branch ended, the way forks that keep no world state work.
+Each part starts from the save of its end state (the check's final saves, else its last save; a part with only
+replay repeats every recorded input) and the clock from the parent's last step. Only a fork request that says
+`restore: "none"` gets it, never a default. The branch records `restore_mode: "none"` and each part's `how` as
+`none`, so results can be filtered. Such a branch's own steps can't be forked (its world at its start isn't what
+the saves before it say; fork its parent instead), and the UI doesn't offer it.
 
 ## When the world is saved
 

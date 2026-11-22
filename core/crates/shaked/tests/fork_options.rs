@@ -150,3 +150,63 @@ fn a_fork_may_give_an_agent_exactly_the_tools_it_lists() {
         assert!(v["error"].as_str().unwrap().contains("get_order"), "{v}");
     })
 }
+
+fn address(street: &str) -> Value {
+    json!({"user_id": USER, "address1": street, "address2": "", "city": "New York",
+           "state": "NY", "country": "USA", "zip": "10001"})
+}
+
+const USER: &str = "ethan_garcia_1261";
+
+/// The street of `USER`'s address as `agent` reads it.
+async fn street(agent: &Agent) -> Value {
+    let u = agent
+        .call("get_user_details", json!({"user_id": USER}))
+        .await;
+    assert_eq!(u["isError"], false, "{u}");
+    u["structuredContent"]["address"]["address1"].clone()
+}
+
+/// A finished run whose agent moved `USER`: the branch, the seq of the write and the street the
+/// user had before it.
+async fn moved_user(fx: &AppFx) -> (String, i64, Value) {
+    let (branch, solo) = start(fx).await;
+    let before = street(&solo).await;
+    let w = solo
+        .call("modify_user_address", address("7 Fork Road"))
+        .await;
+    assert_eq!(w["isError"], false, "{w}");
+    fx.finish(&branch).await;
+    let evs = fx.events(&branch).await;
+    let write = evs.iter().rev().find(|e| e.kind == EventKind::ToolCall);
+    (branch, write.unwrap().seq, before)
+}
+
+#[test]
+fn restore_none_leaves_the_world_as_the_parent_ended() {
+    run(async {
+        let fx = setup("none").await;
+        let (branch, at, before) = moved_user(&fx).await;
+        assert_ne!(before, "7 Fork Road");
+        // The default restores the world as it was just before the write.
+        let (exact, agent) = fx.fork(&branch, json!({"at_seq": at})).await;
+        assert_eq!(street(&agent).await, before);
+        fx.finish(&exact).await;
+        // `none` keeps the agents' context up to the write but the world as the run ended.
+        let (child, agent) = fx
+            .fork(&branch, json!({"at_seq": at, "restore": "none"}))
+            .await;
+        assert_eq!(street(&agent).await, "7 Fork Road");
+        let b = records(&fx.state.store).branch(&child).await.unwrap();
+        assert_eq!(json!(b.restore_mode), "none");
+        assert_eq!(
+            json!(b.restored),
+            json!([{"part": "retail", "how": "none"}])
+        );
+        fx.finish(&child).await;
+        // Its own steps can't be forked: its world at its start isn't recorded.
+        let last = fx.events(&child).await.last().unwrap().seq;
+        let (status, v) = fx.on(&child, "fork", json!({"at_seq": last})).await;
+        assert_eq!(status, 409, "{v}");
+    })
+}

@@ -18,7 +18,6 @@ use crate::{
     model::*,
     overhead::{self, Cat},
     recorded,
-    restore::restored,
     runner::{self, StartPoint},
 };
 
@@ -47,7 +46,7 @@ pub async fn fork(
     at_seq: i64,
     changes: HashMap<String, Change>,
 ) -> Result<ForkResponse, ForkError> {
-    let restore = parts::proto::Mode::Exact;
+    let restore = RestoreMode::Exact;
     let req = ForkRequest {
         at_seq,
         changes,
@@ -168,7 +167,7 @@ pub async fn restore_preview(
     scope: &Caller,
     branch_id: &str,
     at_seq: i64,
-    restore: parts::proto::Mode,
+    restore: RestoreMode,
 ) -> Result<Vec<PartPlan>, ForkError> {
     let records = state.store.at(scope);
     let branch = records
@@ -244,7 +243,7 @@ async fn create_child(
         .create_branch(&parent.run_id, from, team, &changes_json, note)
         .await?;
     store
-        .set_restore(&id, req.restore, &restored(&rerun.hows()))
+        .set_restore(&id, req.restore, &rerun.restored())
         .await?;
     Ok(id)
 }

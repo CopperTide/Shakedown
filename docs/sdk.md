@@ -247,7 +247,9 @@ a step is reproducible given the world. `examples/step_env.py` uses a Claude mod
 - **Exact and approximate restores.** A fork puts each part back as it was before the fork step: exactly (a save,
   or a deterministic replay checked against the record) or approximately (a save that may miss something). A
   fork that can't restore a part in the mode asked is refused, naming it; an approximate fork is labelled
-  (`restore_mode`, `restored`). See [concepts.md](concepts.md#restore-modes).
+  (`restore_mode`, `restored`). See [concepts.md](concepts.md#restore-modes). For evaluation only,
+  `restore="none"` keeps the agents' context but leaves the world as the parent branch ended (the snapshots-off
+  ablation); the branch records `restore_mode: "none"` and nothing defaults to it.
 - **Pinned parts.** A replay is refused when a part's fingerprint (versions, source hashes) changed since the
   run; each part's fingerprint is in `RunStart.fingerprints`.
 - **Time.** Shakedown times its own overhead on every event; `estimated_s` is the run's time without it.

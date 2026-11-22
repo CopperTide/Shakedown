@@ -113,7 +113,7 @@ fn only_an_external_run_takes_another_team_and_not_with_changes() {
     let mut req = ForkRequest {
         at_seq: 1,
         changes: HashMap::new(),
-        restore: parts::proto::Mode::Exact,
+        restore: RestoreMode::Exact,
         team: Some(Team {
             id,
             ..team(AgentKind::Open)

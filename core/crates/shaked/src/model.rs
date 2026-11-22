@@ -546,6 +546,33 @@ pub struct CheckPayload {
     pub unchecked: Vec<String>,
 }
 
+/// The restore a fork asks for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum RestoreMode {
+    /// The world as it was just before the fork point, exactly.
+    Exact,
+    /// The world as it was just before the fork point, approximately where a part can't be
+    /// exact.
+    Approximate,
+    /// For evaluation only (the snapshots-off ablation): the agents' context up to the fork
+    /// point, but the world as the parent ended, as forks that keep no world state do. Never a
+    /// default: only a request that names it gets it.
+    #[serde(rename = "none")]
+    NotRestored,
+}
+
+impl RestoreMode {
+    /// The mode each part's restore is planned in: a fork that leaves the world as it ended
+    /// starts each part from its end save, exact or approximate as the part keeps it.
+    pub fn parts_mode(self) -> Mode {
+        match self {
+            RestoreMode::Exact => Mode::Exact,
+            RestoreMode::Approximate | RestoreMode::NotRestored => Mode::Approximate,
+        }
+    }
+}
+
 /// How a part of a rerun's world was restored.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -556,6 +583,9 @@ pub enum RestoredHow {
     Replay,
     /// From its save, approximately.
     Approximate,
+    /// Not put back: left as the parent branch ended (a fork with [`RestoreMode::NotRestored`]).
+    #[serde(rename = "none")]
+    NotRestored,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -578,7 +608,7 @@ pub struct Branch {
     pub created_at: DateTime<Utc>,
     pub ended_at: Option<DateTime<Utc>>,
     /// The restore a fork asked for (None for a run's first branch).
-    pub restore_mode: Option<Mode>,
+    pub restore_mode: Option<RestoreMode>,
     /// How each part of a fork's world was restored (empty for a run's first branch).
     pub restored: Vec<RestoredPart>,
 }

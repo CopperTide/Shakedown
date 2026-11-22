@@ -9,15 +9,15 @@ use parts::proto::{BenchDescribe, ExactKind, FromSave, Mode};
 use serde::Serialize;
 
 use super::{
-    exact::{ancestry, approximate_on_the_way, world_changed},
+    exact::{ancestry, approximate_on_the_way, unrestored_on_the_way, world_changed},
     plan_fork_with, ForkError, ForkPlan,
 };
 use crate::{
     app::AppState,
-    model::{Branch, Change, Event, RestoredHow, Team},
-    recorded::{clock_at, run_info, RunInfo},
+    model::{Branch, Change, Event, RestoreMode, RestoredHow, RestoredPart, Team},
+    recorded::{clock_at, final_saves, run_info, saves_at_except, RunInfo},
     replay::{self, ReplayError},
-    restore::{restore_plan, How},
+    restore::{restore_plan, restored, How},
     world::{self, PartStart, Plan, Saves, StartSaves, StartingPart, World, WorldError, WorldFrom},
 };
 
@@ -26,7 +26,7 @@ use crate::{
 pub struct ForkRequest {
     pub at_seq: i64,
     pub changes: HashMap<String, Change>,
-    pub restore: Mode,
+    pub restore: RestoreMode,
     /// Another team for the new branch, in place of `changes` (only for a run an external
     /// system drives: how its agents resume is that system's choice).
     pub team: Option<Team>,
@@ -43,7 +43,8 @@ pub struct PartRestore {
 }
 
 /// Everything a rerun needs before it starts: the run, its benchmark and world as they are now,
-/// the fork plan, each part's restore (in world order) and the clock to start at.
+/// the fork plan, each part's restore (in world order), the step the world is restored before
+/// and the clock to start at.
 pub struct Rerun {
     pub run: RunInfo,
     pub bench: BenchDescribe,
@@ -51,7 +52,12 @@ pub struct Rerun {
     world: Option<Plan>,
     pub plan: ForkPlan,
     pub parts: Vec<PartRestore>,
+    /// The world is as it was just before this seq: the fork's start, or past the parent's last
+    /// step when the fork leaves the world as the parent ended.
+    pub world_until: i64,
     pub clock_ms: i64,
+    /// The restore asked for.
+    pub mode: RestoreMode,
 }
 
 /// The parts restored by replay.
@@ -74,20 +80,28 @@ impl Rerun {
         self.parts.iter().map(|p| (p.part.clone(), p.how)).collect()
     }
 
+    /// The new branch's `restored` record: each part and how it was restored (not at all, when
+    /// the fork leaves the world as the parent ended).
+    pub fn restored(&self) -> Vec<RestoredPart> {
+        let mut out = restored(&self.hows());
+        if self.mode == RestoreMode::NotRestored {
+            out.iter_mut()
+                .for_each(|r| r.how = RestoredHow::NotRestored);
+        }
+        out
+    }
+
     /// Refuses a rerun that can't be what it claims: in an exact one, a part whose world changed
-    /// since the run or that was restored approximately on the way; in any, a replayed part
-    /// whose integration's fingerprint changed.
-    async fn check(
-        &self,
-        records: Scoped<'_>,
-        branch: &Branch,
-        mode: Mode,
-    ) -> Result<(), ForkError> {
+    /// since the run or that was restored approximately on the way; in any, a world that would
+    /// come through the steps of a fork that left its world unrestored, or a replayed part whose
+    /// integration's fingerprint changed.
+    async fn check(&self, records: Scoped<'_>, branch: &Branch) -> Result<(), ForkError> {
         let replayed = replayed_names(&self.parts);
-        if mode == Mode::Exact {
+        let forks = ancestry(records, branch).await?;
+        unrestored_on_the_way(&forks, self.world_until).map_err(ForkError::Refused)?;
+        if self.mode == RestoreMode::Exact {
             world_changed(&self.run.world, &self.bench.world, &self.hows())
                 .map_err(ForkError::Refused)?;
-            let forks = ancestry(records, branch).await?;
             approximate_on_the_way(&forks, &replayed, self.plan.start_seq)
                 .map_err(ForkError::Refused)?;
         }
@@ -154,20 +168,61 @@ pub async fn prepare(
     let bench = state.hub.bench_describe(&run.benchmark).await?;
     let world = world::plan(&state.hub, &bench).await?;
     known_tools(&world, &req.changes)?;
-    let mut parts = part_restores(&world, req.restore)?;
-    let skip = replayed_names(&parts);
-    let plan = plan_fork_with(events, &branch.team, req.at_seq, &req.changes, &skip)?;
+    let mut parts = part_restores(&world, req.restore.parts_mode())?;
+    let (plan, world_until) = fork_plan(branch, events, req, &run, &parts)?;
     replay_unsaved(&mut parts, &plan.restore);
     let rerun = Rerun {
-        clock_ms: clock_at(events, plan.start_seq),
+        clock_ms: clock_at(events, world_until),
         run,
         bench,
         world: Some(world),
         plan,
         parts,
+        world_until,
+        mode: req.restore,
     };
-    rerun.check(records, branch, req.restore).await?;
+    rerun.check(records, branch).await?;
     Ok(rerun)
+}
+
+/// The fork plan, and the seq the world is restored before: the fork's start, or past the
+/// parent's last step, from the saves it ended with, when the fork leaves the world unrestored.
+fn fork_plan(
+    branch: &Branch,
+    events: &[Event],
+    req: &ForkRequest,
+    run: &RunInfo,
+    parts: &[PartRestore],
+) -> Result<(ForkPlan, i64), ForkError> {
+    let (team, replayed) = (&branch.team, replayed_names(parts));
+    if req.restore != RestoreMode::NotRestored {
+        let plan = plan_fork_with(events, team, req.at_seq, &req.changes, &replayed)?;
+        let until = plan.start_seq;
+        return Ok((plan, until));
+    }
+    // No part is put back to the fork point, so none needs a save there.
+    let every = parts.iter().map(|p| p.part.clone()).collect();
+    let mut plan = plan_fork_with(events, team, req.at_seq, &req.changes, &every)?;
+    plan.restore = end_saves(&branch.id, events, &run.base, &replayed)?;
+    Ok((plan, i64::MAX))
+}
+
+/// Per part but the `replayed`, the save of the branch's state as it ended: its check's final
+/// saves, else its last saves.
+fn end_saves(
+    branch: &str,
+    events: &[Event],
+    base: &Saves,
+    replayed: &BTreeSet<String>,
+) -> Result<Saves, ForkError> {
+    if let Some(saves) = final_saves(branch, events) {
+        return Ok(saves
+            .into_iter()
+            .filter(|(p, _)| !replayed.contains(p))
+            .collect());
+    }
+    let last = saves_at_except(events, i64::MAX, base, replayed);
+    last.map_err(|n| ForkError::NoRestorePoint { seq: n.seq })
 }
 
 /// A replayed part whose integration's fingerprint differs from the one the run recorded is
@@ -286,7 +341,7 @@ async fn catch_up_saved(world: &World, rerun: &Rerun) -> Result<(), ForkError> {
 /// Replays every replayed part of a started world up to the fork point.
 async fn replay_parts(world: &World, events: &[Event], rerun: &Rerun) -> Result<(), ForkError> {
     for p in rerun.replayed() {
-        let inputs = replay::inputs(events, &p.part, &p.tools, rerun.plan.start_seq);
+        let inputs = replay::inputs(events, &p.part, &p.tools, rerun.world_until);
         replay::replay(world, &p.part, &inputs, rerun.clock_ms)
             .await
             .map_err(|e| replay_error(&p.part, e))?;
@@ -306,13 +361,17 @@ pub struct PartPlan {
 
 /// Each part of a planned rerun and how it is restored, with an estimate for replays.
 pub fn part_plans(rerun: &Rerun, events: &[Event]) -> Vec<PartPlan> {
-    let start = rerun.plan.start_seq;
+    let start = rerun.world_until;
+    let unrestored = rerun.mode == RestoreMode::NotRestored;
     rerun
         .parts
         .iter()
         .map(|p| PartPlan {
             part: p.part.clone(),
-            how: p.how.label(),
+            how: match unrestored {
+                true => RestoredHow::NotRestored,
+                false => p.how.label(),
+            },
             estimate_seconds: (p.how == How::Replay)
                 .then(|| replay::estimate_seconds(events, &p.part, &p.tools, start)),
         })

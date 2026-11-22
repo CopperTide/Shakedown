@@ -16,7 +16,6 @@ use crate::{
     overhead::Overhead,
     pg::Admin,
 };
-use parts::proto::Mode;
 
 mod api_tokens;
 mod connections;
@@ -285,7 +284,7 @@ impl Scoped<'_> {
     pub async fn set_restore(
         &self,
         branch_id: &str,
-        mode: Mode,
+        mode: RestoreMode,
         restored: &[RestoredPart],
     ) -> Result<()> {
         self.execute(
@@ -563,7 +562,7 @@ fn branch_from(r: &Row) -> Result<Branch> {
         created_at: r.get("created_at"),
         ended_at: r.get("ended_at"),
         restore_mode: mode
-            .map(|m| serde_json::from_value::<Mode>(Value::String(m)))
+            .map(|m| serde_json::from_value::<RestoreMode>(Value::String(m)))
             .transpose()?,
         restored: serde_json::from_value(restored)?,
     })
