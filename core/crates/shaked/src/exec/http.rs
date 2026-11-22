@@ -284,7 +284,8 @@ fn admit(
 
 /// The upstream's answer as a step: a read or a write of the host (the upstream's effect header
 /// has the last word), the part saved when it wrote; a violation when a request marked read-only
-/// wrote.
+/// wrote. A request that reached its part then moves a stepped clock on by what its effect costs,
+/// as a tool call does (a tool cost named `http` prices every request).
 async fn answered(
     branch: &BranchCtx,
     admitted: &Admitted,
@@ -293,14 +294,7 @@ async fn answered(
     mut facts: CallFacts,
 ) -> Exchanged {
     let route = &admitted.route;
-    let write = f
-        .effect
-        .map_or(admitted.write_by_rule, |e| e == Effect::Write);
-    let key = vec![format!("http/{}", route.host)];
-    match write {
-        true => facts.writes = key,
-        false => facts.reads = key,
-    }
+    let write = take_effect(branch, admitted, &f, &mut facts) == Effect::Write;
     save_step(branch, write.then_some(route.part.as_str()), &mut facts).await;
     let result = json!({"status": f.status, "headers": kept_headers(&f.headers),
                         "body": body_record(&f.body)});
@@ -318,6 +312,27 @@ async fn answered(
         outcome,
         facts,
     }
+}
+
+/// An answered request's effect (the upstream's effect header has the last word over the method
+/// rule): noted as a read or a write of its host in `facts`, and charged to a stepped clock.
+fn take_effect(
+    branch: &BranchCtx,
+    admitted: &Admitted,
+    f: &Forwarded,
+    facts: &mut CallFacts,
+) -> Effect {
+    let effect = f.effect.unwrap_or(match admitted.write_by_rule {
+        true => Effect::Write,
+        false => Effect::Read,
+    });
+    let key = vec![format!("http/{}", admitted.route.host)];
+    match effect {
+        Effect::Write => facts.writes = key,
+        Effect::Read => facts.reads = key,
+    }
+    branch.clock.charge(effect, HTTP_TOOL);
+    effect
 }
 
 /// A request marked read-only that the part says wrote (it should have refused it): why, noted

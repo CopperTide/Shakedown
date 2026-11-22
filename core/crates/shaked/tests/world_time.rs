@@ -261,11 +261,16 @@ struct SteppedFx {
 
 impl SteppedFx {
     async fn new(tag: &str, part_args: &[&str]) -> SteppedFx {
+        SteppedFx::costing(tag, part_args, step_cost(0, 120_000)).await
+    }
+
+    /// `new` with calls costing `cost`.
+    async fn costing(tag: &str, part_args: &[&str], cost: shaked::clock::StepCost) -> SteppedFx {
         let root = packages::toy_world(tag, part_args, &[]);
         let saves =
             std::env::temp_dir().join(format!("shaked-stepped-{tag}-{}", std::process::id()));
         let (store, clean) = support::app::meta_store("stepped", tag).await;
-        let ctx = stepped_branch(&root, &saves, &store).await;
+        let ctx = stepped_branch(&root, &saves, &store, cost).await;
         SteppedFx {
             ctx: std::sync::Arc::new(ctx),
             exec: shaked::exec::ToolExec::new(store.clone()),
@@ -295,12 +300,22 @@ impl SteppedFx {
     }
 }
 
-/// A branch of `toybench` from `root` (saves in `saves`) on a stepped clock whose writes cost two
-/// world minutes, recorded in `store`.
+/// What reads and writes cost a stepped clock.
+fn step_cost(read_ms: i64, write_ms: i64) -> shaked::clock::StepCost {
+    shaked::clock::StepCost {
+        read_ms,
+        write_ms,
+        tools: Default::default(),
+    }
+}
+
+/// A branch of `toybench` from `root` (saves in `saves`) on a stepped clock whose calls cost
+/// `cost`, recorded in `store`.
 async fn stepped_branch(
     root: &packages::ToyRoot,
     saves: &std::path::Path,
     store: &shaked::store::Store,
+    cost: shaked::clock::StepCost,
 ) -> shaked::exec::BranchCtx {
     std::fs::create_dir_all(saves).unwrap();
     let registry = parts::Registry::scan(std::slice::from_ref(&root.0)).unwrap();
@@ -318,11 +333,6 @@ async fn stepped_branch(
     let bench = hub.bench_describe("toybench").await.unwrap();
     let from = shaked::world::WorldFrom::Base;
     let world = shaked::world::World::start(hub.clone(), &bench, &branch, 1, from).await;
-    let cost = shaked::clock::StepCost {
-        read_ms: 0,
-        write_ms: 120_000,
-        tools: Default::default(),
-    };
     let world = std::sync::Arc::new(world.unwrap());
     shaked::exec::BranchCtx::new(branch, world, team, "t1".into())
         .with_clock(shaked::clock::BranchClock::stepped(0, cost))
@@ -357,6 +367,55 @@ fn tool_call_charges_world_minutes() {
         fx.call("poke").await;
         assert_eq!(fx.call_clocks().await, [0, 120_000, 120_000]);
         assert_eq!(fx.ctx.clock.now_ms(), 240_000);
+        fx.ctx.world.stop().await;
+    })
+}
+
+/// An upstream for `toy.test`: `GET /hello`, `POST /items` and `POST /graphql`, which says it only
+/// read.
+async fn http_upstream() -> String {
+    let graphql = || async { ([("x-shakedown-effect", "read")], "{}") };
+    let app = axum::Router::new()
+        .route("/hello", axum::routing::get(|| async { "hi" }))
+        .route("/items", axum::routing::post(|| async { "made" }))
+        .route("/graphql", axum::routing::post(graphql));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    base
+}
+
+/// A `method` request for `http://toy.test<path>` as an agent's client sends it.
+fn request_to(method: &str, path: &str) -> shaked::exec::HttpCall {
+    shaked::exec::HttpCall {
+        scheme: "http",
+        method: method.to_string(),
+        host: "toy.test".to_string(),
+        port: 80,
+        path_and_query: path.to_string(),
+        headers: vec![],
+        body: bytes::Bytes::new(),
+    }
+}
+
+/// On a stepped clock a request through the proxy costs world time as a tool call does, by its
+/// effect: a GET reads, a POST writes, and the part's `X-Shakedown-Effect` has the last word.
+#[test]
+fn proxy_requests_charge_the_stepped_clock_by_effect() {
+    run(async {
+        let route = format!("toy.test={}", http_upstream().await);
+        let part = ["--uses-clock", "--http-route", route.as_str()];
+        let fx = SteppedFx::costing("http", &part, step_cost(30_000, 120_000)).await;
+        let mut clocks = vec![];
+        for (method, path) in [("GET", "/hello"), ("POST", "/items"), ("POST", "/graphql")] {
+            let answer = (fx.exec)
+                .http(&fx.ctx, Some("planner"), request_to(method, path))
+                .await;
+            assert_eq!(answer.status, 200, "{method} {path}");
+            clocks.push(fx.ctx.clock.now_ms());
+        }
+        assert_eq!(clocks, [30_000, 150_000, 180_000]);
+        assert_eq!(fx.call_clocks().await, [0, 30_000, 150_000]);
         fx.ctx.world.stop().await;
     })
 }

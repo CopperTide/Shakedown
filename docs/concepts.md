@@ -356,7 +356,10 @@ structured query such as `{part: driver, key: kpis, field: cost_vs_baseline, op:
 On a stepped clock, world time stands still while agents think. Each tool call an agent makes on the world costs
 world time by its effect (`action_cost`: a read `0m` and a write `2m` unless set, or the tool's own entry in
 `tools`): the call runs at the clock before the charge, and the clock moves on by the charge after it, whether the
-part answered or refused (a call the world's gates refused costs it too). No ticker runs for a stepped branch. The
+part answered or refused (a call the world's gates refused costs it too). An agent's own HTTP request through
+shaked's proxy costs the same once the part serving its host answered, by the request's effect (GET, HEAD and
+OPTIONS read, other methods write unless the route's `reads` patterns match, and the part's `X-Shakedown-Effect`
+header has the last word); a `tools` entry named `http` prices every request. No ticker runs for a stepped branch. The
 World clock section of an agent's first input says the clock "moves when the team acts or waits" instead of "runs
 while you work", and every agent's first input explains world time.
 

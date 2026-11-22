@@ -470,6 +470,10 @@ The branch clock then stands still while agents think and moves only when the te
 
 - Each agent tool call costs world time by its `effect` (`action_cost: {read, write}`, with per-tool overrides):
   the call runs at the clock before the charge, and the clock moves by the charge after it.
+- A request through shaked's proxy ([Serving HTTP](#serving-http)) that reached the part serving its host costs
+  world time the same way, by its effect as the proxy records it (the method, the route's `reads` patterns, the
+  `X-Shakedown-Effect` header); a per-tool override named `http` prices every request. A request shaked refuses
+  itself (an unknown host, a read-only agent's write) or that gets no answer costs nothing.
 - When the team is quiet, shaked advances the world to the next wake point: the earliest `wake_at_ms` any part
   reported, the lead's next look (`epoch`), or the run's `horizon`. Parts get `advance` as on a wall clock, and the
   clock contract is the same, so how the advances are split never changes the state.
