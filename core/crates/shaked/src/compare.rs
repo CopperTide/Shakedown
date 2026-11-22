@@ -10,7 +10,7 @@ use parts::{
 use serde_json::{json, Map, Value};
 
 use crate::{
-    metrics::metrics,
+    metrics::{metrics, MIXED},
     model::*,
     prices,
     restore::keeps_saves,
@@ -56,7 +56,7 @@ fn combined_source(ends: &[AgentEndPayload]) -> Value {
     match sources.len() {
         0 => Value::Null,
         1 => json!(sources[0]),
-        _ => json!("mixed"),
+        _ => json!(MIXED),
     }
 }
 

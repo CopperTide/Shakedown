@@ -524,7 +524,10 @@ fn agent_line(id: &str, events: &[Event], tools: &Tools, caps: Caps) -> AgentLin
             .as_ref()
             .and_then(|p| p.error.as_deref())
             .map(|e| one_line(e, caps.long)),
-        seconds: end_p.as_ref().and_then(|p| p.seconds).map(round1),
+        seconds: end_p
+            .as_ref()
+            .and_then(|p| p.seconds)
+            .map(|s| round_to(s, 1)),
         reads: calls.reads,
         writes: calls.writes,
         problems: calls.problems,
@@ -557,10 +560,6 @@ impl Calls {
         }
         c
     }
-}
-
-fn round1(x: f64) -> f64 {
-    (x * 10.0).round() / 10.0
 }
 
 fn notes(events: &[Event], caps: Caps) -> Vec<Note> {
@@ -660,20 +659,22 @@ fn metrics_line(b: &Branch, events: &[Event]) -> MetricsLine {
         agent: a.agent.clone(),
         model: a.model.clone(),
         tokens: a.tokens,
-        cost_usd: a.cost.usd.map(round4),
+        cost_usd: a.cost.usd.map(|c| round_to(c, 4)),
     };
     MetricsLine {
-        seconds: round1(m.measured_s),
-        estimated_s: m.estimated_s.map(round1),
+        seconds: round_to(m.measured_s, 1),
+        estimated_s: m.estimated_s.map(|s| round_to(s, 1)),
         tokens: m.tokens,
-        cost_usd: m.cost.usd.map(round4),
+        cost_usd: m.cost.usd.map(|c| round_to(c, 4)),
         cost_label: m.cost.label.clone(),
         agents: m.agents.iter().map(agent).collect(),
     }
 }
 
-fn round4(x: f64) -> f64 {
-    (x * 10_000.0).round() / 10_000.0
+/// `x` rounded to `places` decimal places.
+fn round_to(x: f64, places: i32) -> f64 {
+    let scale = 10f64.powi(places);
+    (x * scale).round() / scale
 }
 
 /// Every step of the branch: the only seqs a review may cite.

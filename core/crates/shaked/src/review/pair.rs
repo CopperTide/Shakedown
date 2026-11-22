@@ -17,12 +17,13 @@ const ROW_SAMPLE: usize = 12;
 const FIELDS: usize = 8;
 const VALUE_BYTES: usize = 120;
 
-/// What `GET /api/compare` found for the pair.
-pub struct CompareFacts<'a> {
+/// What `GET /api/compare` finds for the pair: where they diverged, the rows their final states
+/// differ in, and the parts not compared (they keep no saves).
+pub struct CompareFacts {
     pub first_divergent_seq: Option<i64>,
     /// `[{key, a, b}]`.
-    pub differing_rows: &'a [Value],
-    pub not_compared: &'a [String],
+    pub differing_rows: Vec<Value>,
+    pub not_compared: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -160,7 +161,7 @@ fn kind_of(key: &str) -> &str {
 fn world_diff(facts: &CompareFacts) -> WorldDiff {
     let mut kinds: BTreeMap<String, KindCount> = BTreeMap::new();
     let mut changed = vec![];
-    for r in facts.differing_rows {
+    for r in &facts.differing_rows {
         let key = r["key"].as_str().unwrap_or("");
         let k = kinds.entry(kind_of(key).to_string()).or_default();
         match (r["a"].is_null(), r["b"].is_null()) {
@@ -180,7 +181,7 @@ fn world_diff(facts: &CompareFacts) -> WorldDiff {
         differing_rows: facts.differing_rows.len(),
         by_kind,
         changed: Capped::first(changed, ROW_SAMPLE),
-        not_compared: facts.not_compared.to_vec(),
+        not_compared: facts.not_compared.clone(),
     }
 }
 
@@ -280,8 +281,8 @@ mod tests {
         };
         let facts = CompareFacts {
             first_divergent_seq: cmp["first_divergent_seq"].as_i64(),
-            differing_rows: rows,
-            not_compared: &[],
+            differing_rows: rows.clone(),
+            not_compared: vec![],
         };
         let d = pair_digest(&ra, &rb, &facts);
         assert!(size_of(&d) <= 2 * SIDE_BYTES + 12_000, "{}", size_of(&d));

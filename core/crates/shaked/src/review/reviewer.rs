@@ -8,7 +8,7 @@ use serde_json::{json, Value};
 use tokio::io::AsyncWriteExt;
 
 use super::{output::json_in, prompt::Prompt, settings::ReviewerModel};
-use crate::{prices, providers::ProviderConfig};
+use crate::{metrics, prices, providers::ProviderConfig};
 
 /// How long a review may take.
 pub const TIMEOUT_SECS: u64 = 600;
@@ -178,7 +178,7 @@ fn list_price(
     match prices::table().find_flat(provider, model) {
         Some(p) => (
             Some(p.cost(prompt, completion)),
-            Some("list-price estimate".into()),
+            Some(metrics::ESTIMATE.into()),
         ),
         None => (None, None),
     }

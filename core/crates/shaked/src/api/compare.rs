@@ -16,6 +16,7 @@ use crate::{
     compare::{self, FinalState},
     model::*,
     recorded::final_saves,
+    review::pair::CompareFacts,
     saves::{part_code, world_of},
 };
 
@@ -77,20 +78,34 @@ pub(super) async fn compare_branches(
 ) -> ApiResult<Value> {
     let (a, b) = pair(&q)?;
     let [a, b] = sides(&state, &caller, [&a, &b]).await?;
-    let skipped = compare::not_compared(&state.hub, &a.end, &b.end).await?;
-    let rows = compared_rows(&state, &a.end, &b.end, &skipped).await?;
+    let c = compare_facts(&state, &a, &b).await?;
     Ok(Json(json!({
         "a": compare::summary(&a.branch, &a.events),
         "b": compare::summary(&b.branch, &b.events),
-        "first_divergent_seq": compare::first_divergent_seq(&a.events, &b.events),
-        "differing_rows": rows,
-        "not_compared": skipped,
+        "first_divergent_seq": c.first_divergent_seq,
+        "differing_rows": c.differing_rows,
+        "not_compared": c.not_compared,
     })))
+}
+
+/// Two sides compared, as `GET /api/compare` answers and the reviewer reads them.
+pub(super) async fn compare_facts(
+    state: &AppState,
+    a: &Side,
+    b: &Side,
+) -> Result<CompareFacts, ApiError> {
+    let not_compared = compare::not_compared(&state.hub, &a.end, &b.end).await?;
+    let differing_rows = compared_rows(state, &a.end, &b.end, &not_compared).await?;
+    Ok(CompareFacts {
+        first_divergent_seq: compare::first_divergent_seq(&a.events, &b.events),
+        differing_rows,
+        not_compared,
+    })
 }
 
 /// The differing rows of two final states, but the parts in `skip`: 409 when a branch lacks a
 /// final save of a compared part, or a save is gone.
-pub(super) async fn compared_rows(
+async fn compared_rows(
     state: &AppState,
     a: &FinalState,
     b: &FinalState,

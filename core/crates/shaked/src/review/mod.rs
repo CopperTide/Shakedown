@@ -3,12 +3,14 @@
 //! off means nothing is sent to a model ([`settings`]). Reviews are stored and not recomputed
 //! unless asked.
 //!
+//! - [`jobs`]: what a review is of ([`jobs::Subject`]), and the job each subject makes.
 //! - [`digest`], [`pair`], [`suites`]: what the reviewer reads, built from the record, bounded.
 //! - [`prompt`]: what it is told, and the schema of its answer.
 //! - [`reviewer`]: the call to the model (Claude Code headless, or one of shaked's providers).
 //! - [`output`]: the answer checked: fields validated, citations checked against the record.
 
 pub mod digest;
+pub mod jobs;
 pub mod output;
 pub mod pair;
 pub mod prompt;
