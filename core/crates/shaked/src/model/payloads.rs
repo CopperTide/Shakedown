@@ -195,6 +195,21 @@ pub struct IdlePayload {
         skip_serializing_if = "Option::is_none"
     )]
     pub error: Option<String>,
+    /// How the turn ended when that is worth a note (`turn ended at the model-call limit`).
+    #[serde(
+        default,
+        deserialize_with = "lenient",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub note: Option<String>,
+    /// How many old tool results were trimmed from the agent's context before this turn began
+    /// (`SHAKEDOWN_CONTEXT_TURNS`); absent for none.
+    #[serde(
+        default,
+        deserialize_with = "lenient",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub trimmed: Option<u32>,
 }
 
 impl EventPayload for IdlePayload {

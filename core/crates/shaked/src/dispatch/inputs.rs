@@ -108,7 +108,29 @@ pub fn history_text(history: &str) -> String {
 /// How world time moves on a stepped clock, for every agent's first turn.
 pub const STEPPED: &str = "\n# World time\n\nThe world's clock moves when the team acts or waits: each \
      action in the world takes world time, thinking takes none. When the whole team waits, the world \
-     moves on to the next thing that happens, and the lead is woken with the alerts it raises.\n";
+     moves on to the next thing that happens, and the lead is woken with the alerts it raises.\n\n\
+     **To let time pass, end your turn.** Nothing you are waiting for (a report, a change taking \
+     effect, a flight leaving) happens while you keep working; reading the same thing again only \
+     costs time and money. End your turn and you are woken when it arrives.\n";
+
+/// What opens the next turn of an agent whose last turn ended at the model-call limit. On a
+/// stepped clock it says plainly that the world waits for the team: waiting means ending the turn.
+pub fn turn_cut(stepped: bool) -> String {
+    let max = crate::agents::open::MAX_MODEL_CALLS;
+    let mut s = format!(
+        "\n# Your last turn was ended\n\nYour last turn made {max} model calls without ending, so \
+         Shakedown ended it. Keep turns short: act, then end your turn."
+    );
+    if stepped {
+        s.push_str(
+            " The world's clock does not move while you work: what you are waiting for (a report, \
+             a change taking effect, a flight leaving) can only happen after you end your turn. To \
+             wait, end your turn; you are woken when mail, an alert or your next look arrives.",
+        );
+    }
+    s.push('\n');
+    s
+}
 
 /// What the lead is told when its epoch passed with no alert.
 pub const LOOK: &str =
@@ -117,3 +139,16 @@ pub const LOOK: &str =
 
 /// What an agent that was working at the fork point is told.
 pub const CARRY_ON: &str = "\n# Carry on\n\nCarry on with your work from where it stood.\n";
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_cut_turn_tells_the_agent_that_waiting_means_ending_its_turn() {
+        let stepped = turn_cut(true);
+        assert!(stepped.contains("40 model calls") && stepped.contains("To wait, end your turn"));
+        assert!(!turn_cut(false).contains("clock"), "no world-time advice without a stepped clock");
+        assert!(STEPPED.contains("To let time pass, end your turn"));
+    }
+}

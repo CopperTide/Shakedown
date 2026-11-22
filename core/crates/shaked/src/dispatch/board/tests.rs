@@ -34,6 +34,8 @@ fn ended(agent: &str, text: &str) -> Input {
         error: None,
         failure: None,
         text: text.into(),
+        note: None,
+        trimmed: 0,
     }
 }
 
@@ -44,6 +46,8 @@ fn failed(agent: &str, failure: Option<FailureKind>) -> Input {
         error: Some("boom".into()),
         failure,
         text: String::new(),
+        note: None,
+        trimmed: 0,
     }
 }
 

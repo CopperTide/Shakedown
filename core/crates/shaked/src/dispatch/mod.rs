@@ -134,6 +134,8 @@ struct Crew {
     advance: bool,
     /// The branch clock when the lead was last woken: its next look is an epoch later.
     last_look_ms: i64,
+    /// Agents whose last turn ended at the model-call limit: their next input says how to wait.
+    cut: HashSet<String>,
 }
 
 impl Drop for Crew {
@@ -173,6 +175,7 @@ impl Crew {
             began: Instant::now(),
             advance: false,
             last_look_ms: ctx.clock.now_ms(),
+            cut: HashSet::new(),
         }
     }
 
@@ -279,16 +282,23 @@ impl Crew {
             ok,
             error,
             text,
+            note,
+            trimmed,
             ..
         } = turn
         else {
             return Ok(());
         };
         self.working.remove(agent);
+        if note.is_some() {
+            self.cut.insert(agent.clone());
+        }
         let idle = IdlePayload {
             ok: Some(*ok),
             text: text.clone(),
             error: error.clone(),
+            note: note.clone(),
+            trimmed: (*trimmed > 0).then_some(*trimmed),
         };
         self.record(agent, &idle).await.map(drop)
     }
@@ -387,7 +397,10 @@ impl Crew {
         if agent == self.board.lead_id() {
             self.last_look_ms = self.ctx.clock.now_ms();
         }
-        let input = self.input_for(agent, reason, mail);
+        let mut input = self.input_for(agent, reason, mail);
+        if self.cut.remove(agent) {
+            input = format!("{}{input}", inputs::turn_cut(self.ctx.rules.stepped.is_some()));
+        }
         self.record(agent, &wake_payload(reason, mail, &input))
             .await?;
         self.working.insert(agent.to_string());
@@ -399,6 +412,8 @@ impl Crew {
                     error: Some(e),
                     failure: None,
                     text: String::new(),
+                    note: None,
+                    trimmed: 0,
                 };
                 let _ = self.turns.0.send(failed);
                 return Ok(());
@@ -572,6 +587,8 @@ async fn serve(
             error: t.error,
             failure: t.failure,
             text: t.text,
+            note: t.note,
+            trimmed: t.trimmed,
         };
         let _ = turns.send(ended);
     }

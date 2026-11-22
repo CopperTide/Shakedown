@@ -18,6 +18,10 @@ pub struct Turn {
     pub failure: Option<FailureKind>,
     /// What the agent said at the end of the turn.
     pub text: String,
+    /// How the turn ended when that is worth a note: cut at the per-turn model-call limit.
+    pub note: Option<String>,
+    /// How many old tool results were trimmed from the agent's context before the turn began.
+    pub trimmed: u32,
 }
 
 impl Turn {
@@ -27,6 +31,8 @@ impl Turn {
             error: None,
             failure: None,
             text,
+            note: None,
+            trimmed: 0,
         }
     }
 
@@ -36,6 +42,8 @@ impl Turn {
             error: Some(error),
             failure,
             text: String::new(),
+            note: None,
+            trimmed: 0,
         }
     }
 }

@@ -195,8 +195,9 @@ fn wake_line(wake: WakePayload) -> String {
 
 /// An idle in a history: the turn failed (with why), or what the agent ended it saying.
 fn idle_line(idle: IdlePayload) -> String {
-    match idle.ok {
-        Some(false) => format!("- Your turn failed: {}", idle.error.unwrap_or_default()),
+    match (idle.ok, idle.note) {
+        (Some(false), _) => format!("- Your turn failed: {}", idle.error.unwrap_or_default()),
+        (_, Some(note)) => format!("- Your turn ended ({note}); you had said: {}", idle.text),
         _ => format!("- You ended your turn saying: {}", idle.text),
     }
 }

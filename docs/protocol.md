@@ -471,6 +471,14 @@ request is recorded as a step named `http` owned by the part. A part that answer
 - Recorded HTTP requests are never sent again: a part that serves HTTP must restore from saves. A world with a part
   that serves HTTP and restores by replay is refused.
 
+## What a model saw
+
+Each model call through shaked's gateway is recorded with its request as sent (`model_call.request`) and the
+reasoning its answer carried (`reasoning` events). An API-mode agent in a dispatch run keeps one conversation across
+its turns; before each turn shaked replaces bulky tool results of older turns with a placeholder
+(`SHAKEDOWN_CONTEXT_TURNS`, [concepts](concepts.md#dispatch-runs)), and the turn's `idle` says how many
+(`trimmed`). The recorded requests are the context the model saw, call by call.
+
 ## When shaked saves
 
 `describe.save_at` says when shaked saves a part. `step` (the default, and what a part that leaves it out gets)

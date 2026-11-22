@@ -171,12 +171,27 @@ short note on how the run works; every other agent starts idle. The talk tools a
 An agent wakes whenever work, a report or a message arrives for it while it is idle: shaked records a `wake`
 (`{reason, mail, idle_wake?, input}`: `mail` the steps whose mail the turn takes, `input` what the agent was
 given) and starts a turn with that mail. Mail for an agent that is working waits and comes, all of it, in its next
-turn. When a turn ends shaked records an `idle` (`{ok, error?, text}`): the agent waits, it isn't done. An agent
+turn. When a turn ends shaked records an `idle` (`{ok, error?, text, note?, trimmed?}`): the agent waits, it isn't
+done. An agent
 that ends a turn without reporting has what it said last passed on to the lead as its report (a `report` with
 `turn_end: true`). Agents keep their context across turns: Claude Code runs as one long-lived headless process
 (`-p` with `stream-json` in and out, with the same isolation as in the other runners; each model call its stream
 shows is recorded as a `model_call` reported by the client), and an API-mode agent keeps its conversation in
-shaked's loop (at most 40 model calls a turn). Codex can't keep a session yet, so a dispatch team refuses it.
+shaked's loop. Codex can't keep a session yet, so a dispatch team refuses it.
+
+An API-mode agent's turn makes at most 40 model calls. A turn that reaches the limit ends like any other turn,
+with `note: "turn ended at the model-call limit"` on its `idle`, instead of failing the agent (a chain or concurrent
+run, one turn per agent, still fails it). The agent's next input begins by saying so and, on a stepped clock, that
+the world only moves when the team waits: to wait for something, end the turn. Every agent's first input on a
+stepped clock says the same ("To let time pass, end your turn").
+
+An API-mode agent's conversation would otherwise grow with every tool result it reads, and so would the price of
+each call. Before each turn shaked trims it: every tool result longer than 400 characters in a turn older than the
+latest `SHAKEDOWN_CONTEXT_TURNS` (default 4; 0 keeps everything) becomes a one-line placeholder that says how long
+it was and to call the tool again if needed. The agent's own messages, its tool calls and its reasoning stay
+whole. The turn's `idle` records how many results were trimmed (`trimmed`), and each model call's request is
+recorded exactly as sent, so the context the model saw is in the record; the same conversation and window always
+give the same trimmed context. A fork rebuilds an agent's history from the record, as before.
 Agents work at the same time; their world steps go through the branch's step lock as in every runner, so the
 record is one ordered sequence.
 

@@ -19,6 +19,12 @@ use crate::{
 };
 
 pub const MAX_MODEL_CALLS: usize = 40;
+/// The idle note of a dispatch turn cut at [`MAX_MODEL_CALLS`].
+pub const CALL_LIMIT_NOTE: &str = "turn ended at the model-call limit";
+/// How many of a session's latest turns keep their tool results whole (`SHAKEDOWN_CONTEXT_TURNS`).
+pub const CONTEXT_TURNS: usize = 4;
+/// A tool result at most this long is never trimmed: a placeholder would be as long.
+const TRIM_MIN_CHARS: usize = 400;
 /// How many times a model call is tried again when its provider is overloaded or
 /// rate-limiting (statuses 429, 503 and 529); every try is recorded.
 pub const MAX_RETRIES: u32 = 3;
@@ -32,6 +38,8 @@ enum Fault {
     Infra(String),
     /// The run's spend estimate passed its limit (`crate::budget`).
     Budget(String),
+    /// The turn made [`MAX_MODEL_CALLS`] calls without ending; what the agent said last.
+    CallLimit(String),
 }
 
 impl Fault {
@@ -40,6 +48,10 @@ impl Fault {
         match self {
             Fault::Model(e) => (e, Some(FailureKind::Model)),
             Fault::Budget(e) => (e, Some(FailureKind::Budget)),
+            Fault::CallLimit(_) => (
+                format!("agent exceeded {MAX_MODEL_CALLS} model calls"),
+                Some(FailureKind::Model),
+            ),
             Fault::Infra(e) => (e, None),
         }
     }
@@ -105,6 +117,7 @@ impl Driver for OpenDriver {
         Ok(Box::new(OpenSession {
             lp,
             messages: vec![system],
+            context_turns: context_turns(),
             totals: Totals::new(),
             busy: Duration::ZERO,
             error: None,
@@ -117,6 +130,8 @@ impl Driver for OpenDriver {
 struct OpenSession {
     lp: Loop,
     messages: Vec<Value>,
+    /// Turns whose tool results stay whole; older ones are trimmed (0: never).
+    context_turns: usize,
     totals: Totals,
     busy: Duration,
     error: Option<String>,
@@ -127,15 +142,14 @@ impl OpenSession {
         let since = Instant::now();
         self.messages
             .push(json!({"role": "user", "content": input}));
+        let trimmed = trim_context(&mut self.messages, self.context_turns);
         let done = self
             .lp
             .until_done(&mut self.messages, &mut self.totals)
             .await;
         self.busy += since.elapsed();
-        let turn = match done.map_err(Fault::split) {
-            Ok(text) => Turn::done(text),
-            Err((e, failure)) => Turn::failed(e, failure),
-        };
+        let mut turn = session_turn(done);
+        turn.trimmed = trimmed;
         if !turn.ok {
             self.error = turn.error.clone();
         }
@@ -305,6 +319,61 @@ fn gateway_url(state: &AppState, branch: &str, agent: &str) -> String {
     )
 }
 
+/// How a session's turn ended. A turn that reached [`MAX_MODEL_CALLS`] ends like any other, with a
+/// note (the agent waits for its next wake), where a one-shot run fails.
+fn session_turn(done: Result<String, Fault>) -> Turn {
+    match done {
+        Ok(text) => Turn::done(text),
+        Err(Fault::CallLimit(text)) => Turn {
+            note: Some(CALL_LIMIT_NOTE.to_string()),
+            ..Turn::done(text)
+        },
+        Err(f) => {
+            let (e, failure) = f.split();
+            Turn::failed(e, failure)
+        }
+    }
+}
+
+/// `SHAKEDOWN_CONTEXT_TURNS`, read when a session starts: a whole number, else [`CONTEXT_TURNS`].
+fn context_turns() -> usize {
+    std::env::var("SHAKEDOWN_CONTEXT_TURNS")
+        .ok()
+        .and_then(|v| v.trim().parse().ok())
+        .unwrap_or(CONTEXT_TURNS)
+}
+
+/// Trims a long-lived session's context before a turn: each tool result longer than
+/// [`TRIM_MIN_CHARS`] in a turn older than the latest `keep` (a turn starts at a user message)
+/// becomes a short placeholder saying how long it was. The agent's own messages, its tool calls
+/// and its reasoning stay. The same messages and `keep` always give the same context, and each
+/// model call's request is recorded as sent, so the record shows what the model saw. Gives how
+/// many results it trimmed; `keep` 0 trims nothing.
+pub(crate) fn trim_context(messages: &mut [Value], keep: usize) -> u32 {
+    let turns: Vec<usize> = (messages.iter().enumerate())
+        .filter(|(_, m)| m["role"] == "user")
+        .map(|(i, _)| i)
+        .collect();
+    if keep == 0 || turns.len() <= keep {
+        return 0;
+    }
+    let cutoff = turns[turns.len() - keep];
+    let mut trimmed = 0;
+    for m in &mut messages[..cutoff] {
+        let long = (m["content"].as_str())
+            .map(|c| c.chars().count())
+            .filter(|n| *n > TRIM_MIN_CHARS && m["role"] == "tool");
+        if let Some(n) = long {
+            m["content"] = json!(format!(
+                "[older tool result trimmed by Shakedown: {n} characters; call the tool again if you \
+                 still need it]"
+            ));
+            trimmed += 1;
+        }
+    }
+    trimmed
+}
+
 /// One model call's request: the conversation, the tools and the model, with the agent's
 /// `reasoning` and `max_tokens` when it has them.
 fn call_body(
@@ -368,6 +437,7 @@ impl Loop {
         totals.source = self.provider.cost_source();
         let exec = ToolExec::new(self.state.store.clone());
         let base = self.state.config.retry_base;
+        let mut said = String::new();
         for _ in 0..MAX_MODEL_CALLS {
             let body = call_body(messages, &self.tools, &self.model, self.reasoning.as_ref(), self.max_tokens);
             let v = model_call(&self.state.http, &self.url, &body, base).await?;
@@ -382,6 +452,9 @@ impl Loop {
             }
             messages.push(msg.clone());
             let text = msg["content"].as_str().unwrap_or("").to_string();
+            if !text.trim().is_empty() {
+                said = text.clone();
+            }
             let calls = msg["tool_calls"].as_array().cloned().unwrap_or_default();
             if calls.is_empty() {
                 return end_without_calls(&v).map(|()| text);
@@ -390,9 +463,7 @@ impl Loop {
                 return Ok(text);
             }
         }
-        Err(Fault::Model(format!(
-            "agent exceeded {MAX_MODEL_CALLS} model calls"
-        )))
+        Err(Fault::CallLimit(said))
     }
 }
 
@@ -509,6 +580,61 @@ async fn run_calls(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn convo(turns: usize, result_len: usize) -> Vec<Value> {
+        let mut m = vec![json!({"role": "system", "content": "brief"})];
+        for t in 0..turns {
+            m.push(json!({"role": "user", "content": format!("turn {t}")}));
+            m.push(json!({"role": "assistant", "content": format!("thinking {t}"), "reasoning": "r",
+                          "tool_calls": [{"id": format!("c{t}"), "type": "function",
+                                          "function": {"name": "ops_flights", "arguments": "{}"}}]}));
+            m.push(json!({"role": "tool", "tool_call_id": format!("c{t}"), "content": "x".repeat(result_len)}));
+        }
+        m
+    }
+
+    #[test]
+    fn a_session_turn_at_the_call_limit_ends_with_a_note_not_a_failure() {
+        let t = session_turn(Err(Fault::CallLimit("still checking".into())));
+        assert!(t.ok && t.error.is_none());
+        assert_eq!((t.text.as_str(), t.note.as_deref()), ("still checking", Some(CALL_LIMIT_NOTE)));
+        let (e, failure) = Fault::CallLimit(String::new()).split();
+        assert!(e.contains("exceeded") && failure == Some(FailureKind::Model), "a one-shot run still fails");
+        let t = session_turn(Err(Fault::Model("bad".into())));
+        assert!(!t.ok && t.note.is_none());
+    }
+
+    #[test]
+    fn old_bulky_tool_results_are_trimmed_and_everything_else_kept() {
+        let mut m = convo(6, 5_000);
+        let before = m.clone();
+        assert_eq!(trim_context(&mut m, 4), 2, "turns 0 and 1 are older than the latest four");
+        for (i, (a, b)) in m.iter().zip(&before).enumerate() {
+            let old_tool = b["role"] == "tool" && i < 7;
+            match old_tool {
+                true => {
+                    let c = a["content"].as_str().unwrap();
+                    assert!(c.starts_with("[older tool result trimmed by Shakedown: 5000 characters"), "{c}");
+                    assert_eq!(a["tool_call_id"], b["tool_call_id"], "the call keeps its result's id");
+                }
+                false => assert_eq!(a, b, "message {i} is kept as it was"),
+            }
+        }
+        // The same context again trims nothing more, and the result is the same.
+        let again = m.clone();
+        assert_eq!(trim_context(&mut m, 4), 0);
+        assert_eq!(m, again);
+    }
+
+    #[test]
+    fn short_results_recent_turns_and_a_zero_window_are_left_alone() {
+        let mut short = convo(6, 100);
+        assert_eq!(trim_context(&mut short, 4), 0);
+        let mut recent = convo(4, 5_000);
+        assert_eq!(trim_context(&mut recent, 4), 0);
+        let mut off = convo(9, 5_000);
+        assert_eq!(trim_context(&mut off, 0), 0);
+    }
 
     #[test]
     fn a_call_carries_the_agents_reasoning_and_max_tokens_only_when_set() {

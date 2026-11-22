@@ -103,6 +103,10 @@ pub enum Input {
         error: Option<String>,
         failure: Option<FailureKind>,
         text: String,
+        /// The turn's note and how many old tool results were trimmed before it (recorded on
+        /// its `idle`; the board does not use them).
+        note: Option<String>,
+        trimmed: u32,
     },
     /// Time passed (the board is told the time with every input).
     Tick,
@@ -290,6 +294,7 @@ impl Board {
                 error,
                 failure,
                 text,
+                ..
             } => match ok {
                 true => self.turn_done(&agent, text),
                 false => self.turn_failed(&agent, error.unwrap_or_default(), failure),

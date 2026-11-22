@@ -30,10 +30,18 @@ fn optional_keys_are_left_out() {
     let idle = IdlePayload {
         ok: Some(true),
         text: "done".into(),
-        error: None,
+        ..IdlePayload::default()
     };
     let want = json!({"ok": true, "text": "done"});
     assert_eq!(serde_json::to_value(&idle).unwrap(), want);
+    let cut = IdlePayload {
+        ok: Some(true),
+        note: Some("turn ended at the model-call limit".into()),
+        trimmed: Some(3),
+        ..IdlePayload::default()
+    };
+    let want = json!({"ok": true, "text": "", "note": "turn ended at the model-call limit", "trimmed": 3});
+    assert_eq!(serde_json::to_value(&cut).unwrap(), want);
     let rs = serde_json::to_value(RunStartPayload::default()).unwrap();
     for key in ["scenario", "max_cost_usd", "connection"] {
         assert!(rs.get(key).is_none(), "{key}: {rs}");

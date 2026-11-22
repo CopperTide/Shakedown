@@ -146,6 +146,9 @@ Environment variables, read once at startup by shaked (each also under its old n
   rails (defaults 60 minutes, 20 seconds, 3): the longest a run may go on (time paused left out), how long the
   whole team may wait with nothing to do before the lead is woken, and how many such wakes before the run ends
   as failed. Read each time a dispatch branch starts. A value that isn't a whole number counts as unset.
+- `SHAKEDOWN_CONTEXT_TURNS`: how many of an API-mode dispatch agent's latest turns keep their tool results whole
+  (default 4; `0` never trims); older results longer than 400 characters become a placeholder before each turn
+  ([concepts](concepts.md#dispatch-runs)). Read when an agent's session starts.
 - `SHAKEDOWN_CLOCK_SPEED`: speed of the world clock (default 1, real time; 0 stops it; anything that isn't a number
   of at least 0 counts as 1). Unlike the others, it is read each time a run or fork starts a branch, not once at
   startup.
