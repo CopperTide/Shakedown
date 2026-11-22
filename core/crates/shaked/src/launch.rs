@@ -88,7 +88,7 @@ async fn run_token_of(
         return Ok(None);
     }
     let expires = chrono::Utc::now() + ctx.token_ttl();
-    let records = ctx.records(&state.store);
+    let records = ctx.scoped(&state.store);
     let kind = crate::auth::RunTokenKind::Run;
     Ok(Some(
         records

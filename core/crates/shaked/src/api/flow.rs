@@ -53,7 +53,7 @@ async fn pause(
     Path(id): Path<String>,
 ) -> ApiResult<Value> {
     let ctx = live(&state, &caller, &id).await?;
-    paused(&ctx, ctx.pause(&state.store).await?)
+    paused(&ctx, ctx.pause().await?)
 }
 
 /// `POST /api/branches/{id}/resume`: the calls that wait go on, the world clock runs again.
@@ -63,11 +63,11 @@ async fn resume(
     Path(id): Path<String>,
 ) -> ApiResult<Value> {
     let ctx = live(&state, &caller, &id).await?;
-    let lasted = ctx.resume_lasting(&state.store).await?;
+    let lasted = ctx.resume_lasting().await?;
     if let Some(by) = lasted {
         // Expiry counts only unpaused time: the branch's proxy tickets and run tokens move too.
         state.proxy.tickets.extend(&id, by);
-        ctx.records(&state.store).extend_run_tokens(&id, by).await?;
+        ctx.scoped(&state.store).extend_run_tokens(&id, by).await?;
     }
     paused(&ctx, lasted.is_some())
 }
@@ -113,7 +113,7 @@ async fn clock(
     Path(id): Path<String>,
 ) -> ApiResult<Value> {
     let ctx = live(&state, &caller, &id).await?;
-    let epoch = crate::recorded::world_epoch_ms(&ctx.records(&state.store).events(&id).await?);
+    let epoch = crate::recorded::world_epoch_ms(&ctx.records().events().await?);
     let clock_ms = ctx.clock.now_ms();
     Ok(Json(json!({
         "clock_ms": clock_ms, "speed": ctx.clock.speed(), "paused": ctx.clock.is_paused(),

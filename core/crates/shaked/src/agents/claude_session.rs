@@ -27,7 +27,6 @@ use crate::{
     exec::BranchCtx,
     external::UsageReport,
     model::{EventKind, TokenUsage},
-    store::Store,
 };
 
 pub struct ClaudeSession {
@@ -44,7 +43,6 @@ pub struct ClaudeSession {
     workdir: PathBuf,
     branch: Arc<BranchCtx>,
     agent: String,
-    store: Arc<Store>,
     /// The agent's prompt, sent before the first turn's input.
     prompt: Option<String>,
     meter: UsageMeter,
@@ -147,7 +145,6 @@ impl ClaudeSession {
             workdir,
             branch: s.branch,
             agent: s.spec.id,
-            store: s.store,
             prompt: Some(s.spec.prompt),
             meter: UsageMeter::default(),
             cost: None,
@@ -200,7 +197,7 @@ impl ClaudeSession {
         }
         let p = report.payload();
         let at = Some(self.agent.as_str());
-        let appended = self.branch.append(&self.store, at, EventKind::ModelCall, p);
+        let appended = self.branch.append(at, EventKind::ModelCall, p);
         match appended.await {
             Ok(ev) => Some(ev.seq),
             Err(e) => {
@@ -228,7 +225,7 @@ impl ClaudeSession {
         let items = crate::reasoning::from_claude_message(message);
         let source = crate::reasoning::SOURCE_CLAUDE_CODE;
         let ctx = &self.branch;
-        crate::reasoning::record(ctx, &self.store, &self.agent, items, source, seq).await;
+        crate::reasoning::record(ctx, &self.agent, items, source, seq).await;
     }
 
     /// Records the model call an assistant message shows, or a compaction of the context.

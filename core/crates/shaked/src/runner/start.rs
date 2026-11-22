@@ -10,7 +10,7 @@ use serde_json::json;
 
 use crate::{
     app::AppState,
-    exec::{BranchCtx, ToolExec},
+    exec::{BranchCtx, StoreRecords, ToolExec},
     model::*,
     overhead::{self, Cat, Overhead},
     scenario::{self, Scenario},
@@ -142,6 +142,22 @@ impl<'a> RunOptions<'a> {
     }
 }
 
+/// The benchmark `benchmark` names (else the current one), when it has the task `task_id`.
+async fn bench_with_task(
+    state: &AppState,
+    benchmark: Option<&str>,
+    task_id: &str,
+) -> Result<BenchDescribe, RunError> {
+    let bench = match benchmark {
+        Some(name) => state.bench_named(name).await?,
+        None => state.bench().await?,
+    };
+    if !bench.tasks.iter().any(|t| t.id == task_id) {
+        return Err(RunError::UnknownTask(task_id.to_string()));
+    }
+    Ok(bench)
+}
+
 /// Creates a run and its first branch, starts its world from the base save, records `RunStart`
 /// with `rules` and `scenario`, and makes the task's setup (with the scenario's disruptions): the
 /// branch, ready to be driven.
@@ -154,13 +170,7 @@ pub async fn begin_run(
     rules: Rules,
     scenario: &Scenario,
 ) -> Result<(RunId, BranchCtx), RunError> {
-    let bench = match benchmark {
-        Some(name) => state.bench_named(name).await?,
-        None => state.bench().await?,
-    };
-    if !bench.tasks.iter().any(|t| t.id == task_id) {
-        return Err(RunError::UnknownTask(task_id.to_string()));
-    }
+    let bench = bench_with_task(state, benchmark, task_id).await?;
     let planned = world::plan(&state.hub, &bench).await?;
     let records = state.store.at(scope);
     let run_id = records.create_run(task_id, &team).await?;
@@ -176,8 +186,10 @@ pub async fn begin_run(
     };
     let started = start_world(state, records, &bench, planned, start).await;
     let (world, start_seq, record_ms) = setup_or_infra_error(records, &branch_id, started).await?;
+    let store = StoreRecords::new(state.store.clone(), scope.clone(), branch_id.clone());
     let ctx = BranchCtx::new(branch_id, Arc::new(world), team, task_id.to_string());
     let ctx = ctx.with_rules(rules).with_caller(scope.clone());
+    let ctx = ctx.with_records(Arc::new(store));
     ctx.overhead.add(Cat::Record, record_ms);
     set_up_task(state, &bench, &ctx, scenario, start_seq).await?;
     Ok((run_id, ctx))
@@ -210,7 +222,7 @@ async fn set_up_task(
         Err(e) => e,
     };
     ctx.world.stop().await;
-    setup_failed(ctx.records(&state.store), &ctx.branch_id, e.clone()).await;
+    ctx_setup_failed(ctx, e.clone()).await;
     Err(anyhow!(e))
 }
 
@@ -246,7 +258,19 @@ pub async fn setup_or_infra_error<T>(
 /// Ends a branch whose setup failed `infra_error` with `error`; a store failure is logged.
 pub async fn setup_failed(records: Scoped<'_>, branch_id: &str, error: String) {
     let set = records.set_status(branch_id, BranchStatus::InfraError, Some(error));
-    if let Err(e) = set.await {
+    log_setup_failure(branch_id, set.await);
+}
+
+/// `setup_failed` for a branch that has its context: its own records end it.
+async fn ctx_setup_failed(ctx: &BranchCtx, error: String) {
+    let set = ctx
+        .records()
+        .set_status(BranchStatus::InfraError, Some(error));
+    log_setup_failure(&ctx.branch_id, set.await);
+}
+
+fn log_setup_failure(branch_id: &str, set: Result<()>) {
+    if let Err(e) = set {
         eprintln!("branch {branch_id}: could not record its failed setup: {e:#}");
     }
 }

@@ -5,7 +5,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{exec::BranchCtx, model::ReasoningPayload, store::Store};
+use crate::{exec::BranchCtx, model::ReasoningPayload};
 
 /// Most items one report may carry.
 pub const MAX_ITEMS: usize = 100;
@@ -148,7 +148,6 @@ pub fn from_claude_message(message: &Value) -> Vec<ReasoningItem> {
 /// already happened.
 pub async fn record(
     ctx: &BranchCtx,
-    store: &Store,
     agent: &str,
     items: Vec<ReasoningItem>,
     source: &str,
@@ -159,7 +158,7 @@ pub async fn record(
         let Some(p) = payload(&item, source) else {
             continue;
         };
-        if let Err(e) = ctx.record(store, Some(agent), &p).await {
+        if let Err(e) = ctx.record(Some(agent), &p).await {
             eprintln!("branch {}: recording reasoning: {e:#}", ctx.branch_id);
         }
     }

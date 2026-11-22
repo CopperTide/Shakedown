@@ -60,22 +60,18 @@ async fn claude_branch(hub: &TestHub, store: &Arc<Store>) -> (Team, Arc<BranchCt
     let world = hub.start_world("retail", &branch).await;
     let rules = Rules::new(Runner::Dispatch).with_max_cost(Some(1.0));
     let ctx = BranchCtx::new(branch, world, team.clone(), "task".into()).with_rules(rules);
+    let ctx = support::in_store(ctx, store);
     (team, Arc::new(ctx))
 }
 
 /// One turn of the fake `claude` on `ctx`: how it ended, the session's end, and how long it took.
-async fn one_turn(
-    ctx: &Arc<BranchCtx>,
-    spec: AgentSpec,
-    store: &Arc<Store>,
-) -> (Turn, AgentResult, Duration) {
+async fn one_turn(ctx: &Arc<BranchCtx>, spec: AgentSpec) -> (Turn, AgentResult, Duration) {
     let dir = tempfile_dir("claude");
     let mut driver = ClaudeDriver::new("http://127.0.0.1:9");
     driver.binary = fake_claude(&dir);
     let start = SessionStart {
         branch: ctx.clone(),
         spec,
-        store: store.clone(),
     };
     let mut session = driver.session(start).unwrap();
     let since = Instant::now();
@@ -92,7 +88,7 @@ fn a_claude_turn_over_the_limit_is_stopped_at_once_and_its_estimate_is_its_cost(
         let hub = TestHub::new(&[]);
         let (store, _clean) = app::meta_store("budget", "claude").await;
         let (team, ctx) = claude_branch(&hub, &store).await;
-        let (turn, end, took) = one_turn(&ctx, team.agents[0].clone(), &store).await;
+        let (turn, end, took) = one_turn(&ctx, team.agents[0].clone()).await;
         assert!(took < Duration::from_secs(20), "the turn was waited out");
         assert_eq!(turn.failure, Some(FailureKind::Budget), "{turn:?}");
         let why = turn.error.unwrap();

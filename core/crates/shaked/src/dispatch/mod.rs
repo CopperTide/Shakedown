@@ -73,7 +73,7 @@ pub(crate) async fn run(
     ctx: &Arc<BranchCtx>,
     brief: &Brief,
 ) -> Result<Option<Ending>> {
-    let events = ctx.records(&state.store).events(&ctx.branch_id).await?;
+    let events = ctx.records().events().await?;
     let mut crew = Crew::new(state, ctx, brief);
     let first = crew.begin(&events).await?;
     let end = crew.drive(first.into()).await?;
@@ -160,9 +160,7 @@ impl Crew {
     }
 
     async fn record<P: EventPayload>(&self, agent: &str, payload: &P) -> Result<Event> {
-        self.ctx
-            .record(&self.state.store, Some(agent), payload)
-            .await
+        self.ctx.record(Some(agent), payload).await
     }
 
     /// A new run starts the lead; a fork (its inherited record has agent starts) restarts every
@@ -352,7 +350,6 @@ impl Crew {
         let start = SessionStart {
             branch: self.ctx.clone(),
             spec,
-            store: self.state.store.clone(),
         };
         let session = driver.session(start)?;
         let (inputs, rx) = mpsc::unbounded_channel();

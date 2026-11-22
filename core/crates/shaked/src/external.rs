@@ -96,8 +96,7 @@ pub(crate) async fn go(state: &AppState, ctx: &Arc<BranchCtx>) -> anyhow::Result
     runner::go_live(state, ctx.clone()).await;
     let mut agents = vec![];
     for spec in &ctx.roster.team.agents {
-        ctx.record(&state.store, Some(&spec.id), &start_payload(spec))
-            .await?;
+        ctx.record(Some(&spec.id), &start_payload(spec)).await?;
         let env = env_for(state, ctx, Some(&spec.id));
         let ends = endpoints(state.config.public_base(), &ctx.branch_id, &spec.id, env);
         agents.push(ends.with_token(ctx.agent_token(&spec.id)));
@@ -153,15 +152,14 @@ pub async fn register(store: &Store, ctx: &BranchCtx, join: &Join) -> anyhow::Re
         None => {
             let spec = join.spec();
             if ctx.roster.join(spec.clone()) {
-                ctx.records(store)
+                ctx.scoped(store)
                     .set_team(&ctx.branch_id, &team_with(ctx))
                     .await?;
             }
             spec
         }
     };
-    ctx.record(store, Some(&spec.id), &start_payload(&spec))
-        .await?;
+    ctx.record(Some(&spec.id), &start_payload(&spec)).await?;
     Ok(spec)
 }
 

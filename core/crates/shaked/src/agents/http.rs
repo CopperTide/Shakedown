@@ -262,7 +262,7 @@ impl HttpDriver {
     async fn run_body(&self, run: &AgentRun, token: &str) -> anyhow::Result<Value> {
         let branch = &run.branch;
         let run_id = branch
-            .records(&self.store)
+            .scoped(&self.store)
             .branch(&branch.branch_id)
             .await?
             .run_id;

@@ -209,7 +209,7 @@ impl ToolExec {
         args: Value,
         tool_call_id: Option<String>,
     ) -> Result<Value, String> {
-        let events = branch.records(&self.store).events(&branch.branch_id).await;
+        let events = branch.records().events().await;
         let events = events.map_err(|e| format!("internal error: reading the record: {e:#}"))?;
         let outcome = Ok(json!({"messages": mail_for(&events, agent)}));
         let payload = tool_call_payload(INBOX, args, &outcome, tool_call_id, CallFacts::default());

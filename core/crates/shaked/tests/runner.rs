@@ -133,7 +133,8 @@ async fn live_branch(fx: &AppFx, team: Team, bench: &str, task: &str) -> (String
         .await
         .unwrap();
     let world = fx.hub.start_world(bench, &branch).await;
-    let ctx = Arc::new(BranchCtx::new(branch.clone(), world, team, task.into()));
+    let ctx = BranchCtx::new(branch.clone(), world, team, task.into());
+    let ctx = Arc::new(support::in_store(ctx, &fx.state.store));
     fx.state.live.insert(ctx.clone());
     (branch, ctx)
 }

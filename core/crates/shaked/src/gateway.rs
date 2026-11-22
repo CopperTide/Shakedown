@@ -17,7 +17,6 @@ use crate::{
     overhead::{ms_since, Cat},
     providers::{Provider, Upstream},
     reasoning,
-    store::Store,
 };
 
 pub fn router() -> Router<Arc<AppState>> {
@@ -159,28 +158,15 @@ fn call_cost(provider: &Result<Provider, String>, p: &ModelCallPayload) -> Optio
     crate::budget::price(id, p.request["model"].as_str(), &t)
 }
 
-async fn record(
-    ctx: &BranchCtx,
-    store: &Store,
-    agent: &str,
-    payload: &ModelCallPayload,
-) -> Result<i64, String> {
+async fn record(ctx: &BranchCtx, agent: &str, payload: &ModelCallPayload) -> Result<i64, String> {
     let v = serde_json::to_value(payload).map_err(|e| e.to_string())?;
     let ev = ctx
-        .append(store, Some(agent), EventKind::ModelCall, v)
+        .append(Some(agent), EventKind::ModelCall, v)
         .await
         .map_err(|e| format!("{e:#}"))?;
     let items =
         reasoning::from_chat_response(&payload.response, payload.provider_response.as_ref());
-    reasoning::record(
-        ctx,
-        store,
-        agent,
-        items,
-        reasoning::SOURCE_GATEWAY,
-        Some(ev.seq),
-    )
-    .await;
+    reasoning::record(ctx, agent, items, reasoning::SOURCE_GATEWAY, Some(ev.seq)).await;
     Ok(ev.seq)
 }
 
@@ -219,18 +205,18 @@ async fn save_before_model_call(state: &AppState, ctx: &BranchCtx) {
 /// Why the call can't go on once the branch lets it: 409 when the branch stopped (a paused one
 /// holds the call until it resumes, a wait that is no part of the gateway's), 402 past the spend
 /// limit of a run an external system drives.
-async fn held_back(state: &AppState, ctx: &BranchCtx) -> Option<Response> {
+async fn held_back(ctx: &BranchCtx) -> Option<Response> {
     if ctx.flow.go().await.is_err() {
         return Some(error_response(StatusCode::CONFLICT, crate::flow::STOPPED));
     }
-    let why = over_the_limit(state, ctx).await?;
+    let why = over_the_limit(ctx).await?;
     Some(error_response(StatusCode::PAYMENT_REQUIRED, why))
 }
 
 /// Why a run an external system drives may make no more model calls: its spend estimate passed
 /// its limit (shaked's own runners end such a run themselves). The first refusal is recorded as
 /// `budget/limit_reached`; nothing is sent upstream.
-async fn over_the_limit(state: &AppState, ctx: &BranchCtx) -> Option<String> {
+async fn over_the_limit(ctx: &BranchCtx) -> Option<String> {
     if ctx.rules.runner != Runner::External {
         return None;
     }
@@ -238,7 +224,7 @@ async fn over_the_limit(state: &AppState, ctx: &BranchCtx) -> Option<String> {
     if ctx.budget.first_refusal() {
         let ev = json!({"part": "budget", "kind": "limit_reached", "text": why, "data": null,
                         "clock_ms": ctx.clock.now_ms()});
-        let recorded = ctx.append_now(&state.store, None, EventKind::WorldEvent, ev);
+        let recorded = ctx.append_now(None, EventKind::WorldEvent, ev);
         if let Err(e) = recorded.await {
             eprintln!(
                 "gateway: recording the spend limit on {}: {e:#}",
@@ -284,7 +270,7 @@ async fn handle(
         Ok(found) => found,
         Err((status, why)) => return error_response(status, why),
     };
-    if let Some(refused) = held_back(&state, &ctx).await {
+    if let Some(refused) = held_back(&ctx).await {
         return refused;
     }
     save_before_model_call(&state, &ctx).await;
@@ -328,7 +314,7 @@ async fn call(
     // The gateway's own handling: all but the provider's answer and the time recording takes.
     ctx.overhead.add_besides(Cat::Gateway, since, upstream_ms);
     charge(ctx, agent, &provider, &payload);
-    let seq = match record(ctx, &state.store, agent, &payload).await {
+    let seq = match record(ctx, agent, &payload).await {
         Ok(seq) => seq,
         Err(e) => {
             let why = format!("recording model call: {e}");

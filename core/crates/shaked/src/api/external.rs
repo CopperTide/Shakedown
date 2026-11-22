@@ -162,9 +162,7 @@ async fn end_agent(
     OptionalJson(done): OptionalJson<AgentDone>,
 ) -> ApiResult<Recorded> {
     let ctx = external_agent(&state, &caller, &id, &agent)?;
-    let ev = ctx
-        .record(&state.store, Some(&agent), &done.payload())
-        .await?;
+    let ev = ctx.record(Some(&agent), &done.payload()).await?;
     Ok(Json(Recorded { seq: ev.seq }))
 }
 
@@ -177,12 +175,7 @@ async fn report_usage(
     JsonBody(report): JsonBody<UsageReport>,
 ) -> ApiResult<Recorded> {
     let ctx = external_agent(&state, &caller, &id, &agent)?;
-    let ev = ctx.append(
-        &state.store,
-        Some(&agent),
-        EventKind::ModelCall,
-        report.payload(),
-    );
+    let ev = ctx.append(Some(&agent), EventKind::ModelCall, report.payload());
     Ok(Json(Recorded { seq: ev.await?.seq }))
 }
 
@@ -206,7 +199,7 @@ async fn report_reasoning(
         let Some(p) = reasoning::payload(item, reasoning::SOURCE_AGENT) else {
             continue;
         };
-        let ev = ctx.record(&state.store, Some(&agent), &p);
+        let ev = ctx.record(Some(&agent), &p);
         seqs.push(ev.await?.seq);
     }
     Ok(Json(RecordedAll { seqs }))

@@ -366,7 +366,7 @@ async fn record_exit(state: &AppState, branch: &str, words: &str, l: &Launched) 
     });
     let kind = EventKind::WorldEvent;
     let recorded = match state.live.get(branch) {
-        Some(ctx) => ctx.append_now(&state.store, None, kind, ev).await,
+        Some(ctx) => ctx.append_now(None, kind, ev).await,
         None => {
             state
                 .store

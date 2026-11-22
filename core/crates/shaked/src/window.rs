@@ -72,7 +72,7 @@ async fn time_up(state: &AppState, ctx: &BranchCtx) {
     let minutes = ctx.rules.world_minutes.unwrap_or_default();
     let ev = json!({"part": "window", "kind": "time_up", "data": null, "clock_ms": ctx.clock.now_ms(),
                     "text": format!("the run's world time window ({minutes} min) ended")});
-    let recorded = ctx.append_now(&state.store, None, EventKind::WorldEvent, ev);
+    let recorded = ctx.append_now(None, EventKind::WorldEvent, ev);
     if let Err(e) = recorded.await {
         eprintln!(
             "branch {}: recording the window's end: {e:#}",

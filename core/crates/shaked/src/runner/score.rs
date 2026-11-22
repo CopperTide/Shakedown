@@ -25,8 +25,7 @@ pub(crate) async fn check(state: &AppState, ctx: &BranchCtx) -> Result<Ending> {
         None => verdict(&check, &ctx.world.part_names()),
     };
     let payload = serde_json::to_value(&check)?;
-    ctx.append(&state.store, None, EventKind::Check, payload)
-        .await?;
+    ctx.append(None, EventKind::Check, payload).await?;
     Ok(ending)
 }
 

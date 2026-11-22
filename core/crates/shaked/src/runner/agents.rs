@@ -137,12 +137,7 @@ fn restore_notes(ctx: &BranchCtx, from: &StartPoint) -> Result<()> {
 
 /// The ticket, the instructions, and the handoff notes left for the agent: in a legacy run the
 /// previous agent's (which must exist), otherwise every note recorded so far for it.
-async fn agent_input(
-    state: &AppState,
-    ctx: &BranchCtx,
-    idx: usize,
-    brief: &Brief,
-) -> Result<String> {
+async fn agent_input(ctx: &BranchCtx, idx: usize, brief: &Brief) -> Result<String> {
     let Brief {
         ticket,
         title,
@@ -153,7 +148,7 @@ async fn agent_input(
     input.push_str(&format!("{ticket}\n# {title}\n\n{instructions}\n"));
     let notes = match ctx.rules.handoff_required {
         true => legacy_note(ctx, idx)?.into_iter().collect(),
-        false => notes_for(state, ctx, &ctx.roster.team.agents[idx].id).await?,
+        false => notes_for(ctx, &ctx.roster.team.agents[idx].id).await?,
     };
     for (from, note) in notes {
         input.push_str(&format!("\n# Handoff note from {from}\n\n{note}\n"));
@@ -175,12 +170,8 @@ fn legacy_note(ctx: &BranchCtx, idx: usize) -> Result<Option<(String, String)>> 
 }
 
 /// The name of the sender and the note of each handoff recorded so far for `agent`.
-async fn notes_for(
-    state: &AppState,
-    ctx: &BranchCtx,
-    agent: &str,
-) -> Result<Vec<(String, String)>> {
-    let events = ctx.records(&state.store).events(&ctx.branch_id).await?;
+async fn notes_for(ctx: &BranchCtx, agent: &str) -> Result<Vec<(String, String)>> {
+    let events = ctx.records().events().await?;
     let name_of = |id: &str| {
         let spec = ctx.roster.team.agents.iter().find(|a| a.id == id);
         spec.map_or_else(|| id.to_string(), |a| a.name.clone())
@@ -202,10 +193,10 @@ async fn run_agent(
     resume: Option<Vec<Value>>,
 ) -> Result<Option<Ending>> {
     let spec = ctx.roster.team.agents[idx].clone();
-    let input = agent_input(state, ctx, idx, brief).await?;
+    let input = agent_input(ctx, idx, brief).await?;
     let driver = driver_for(state, spec.kind)?;
     let start = AgentStartPayload::of(&spec);
-    ctx.record(&state.store, Some(&spec.id), &start).await?;
+    ctx.record(Some(&spec.id), &start).await?;
     let run = AgentRun {
         branch: ctx.clone(),
         spec: spec.clone(),
@@ -213,24 +204,18 @@ async fn run_agent(
         resume,
     };
     let result = driver.run(run).await;
-    record_end(state, ctx, &spec.id, &result).await?;
+    record_end(ctx, &spec.id, &result).await?;
     Ok(agent_ending(ctx, &spec.id, result))
 }
 
 /// Records an agent's AgentEnd; in a legacy run the world is frozen first after the last agent,
 /// so nothing happens in it after its end. Otherwise it freezes once every agent is done.
-async fn record_end(
-    state: &AppState,
-    ctx: &BranchCtx,
-    agent: &str,
-    result: &AgentResult,
-) -> Result<()> {
+async fn record_end(ctx: &BranchCtx, agent: &str, result: &AgentResult) -> Result<()> {
     if ctx.rules.handoff_required && ctx.roster.is_last(agent) {
         freeze(ctx).await;
     }
     let end = serde_json::to_value(agent_end(result))?;
-    ctx.append(&state.store, Some(agent), EventKind::AgentEnd, end)
-        .await?;
+    ctx.append(Some(agent), EventKind::AgentEnd, end).await?;
     Ok(())
 }
 

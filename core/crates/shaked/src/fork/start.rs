@@ -13,7 +13,7 @@ use super::{
 use crate::{
     app::AppState,
     clock::BranchClock,
-    exec::BranchCtx,
+    exec::{BranchCtx, StoreRecords},
     external,
     model::*,
     overhead::{self, Cat},
@@ -79,7 +79,9 @@ pub async fn fork_with(
     let new_id = create_child(records, &parent, &rerun, &team, &req).await?;
     let (world, restore_ms) =
         start_child_world(state, records, &events, &parent.id, &new_id, &mut rerun).await?;
-    let ctx = BranchCtx::new(new_id, Arc::new(world), team, task_id.clone());
+    let store = StoreRecords::new(state.store.clone(), scope.clone(), new_id.clone());
+    let ctx = BranchCtx::new(new_id, Arc::new(world), team, task_id.clone())
+        .with_records(Arc::new(store));
     let ctx = child_ctx(ctx, &events, &rerun, scope, restore_ms);
     reschedule(state, &ctx, &schedule).await?;
     if ctx.rules.runner == Runner::External {
@@ -125,7 +127,7 @@ async fn reschedule(
         return Ok(());
     };
     ctx.world.stop().await;
-    runner::setup_failed(ctx.records(&state.store), &ctx.branch_id, e.clone()).await;
+    runner::setup_failed(ctx.scoped(&state.store), &ctx.branch_id, e.clone()).await;
     let part = calls.first().map(|c| c.part.clone()).unwrap_or_default();
     Err(ForkError::Refused(crate::restore::Refused {
         part,

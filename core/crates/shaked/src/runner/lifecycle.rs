@@ -30,7 +30,7 @@ pub fn spawn_branch(state: &Arc<AppState>, ctx: Arc<BranchCtx>, from: StartPoint
         if let Err(e) = inner.await {
             leave_live(&state, &ctx).await;
             let ending = Ending::infra(format!("runner crashed: {e}"));
-            record_ending(&state, &ctx, ending).await;
+            record_ending(&ctx, ending).await;
         }
     });
 }
@@ -102,7 +102,7 @@ async fn conclude(state: &AppState, ctx: &BranchCtx, outcome: Result<Ending>) ->
         (None, Ok(v)) => v,
         (None, Err(e)) => Ending::infra(format!("{e:#}")),
     };
-    record_ending(state, ctx, ending.clone()).await;
+    record_ending(ctx, ending.clone()).await;
     ending
 }
 
@@ -154,12 +154,11 @@ impl Ending {
 /// Records how a branch ended, trying once more when the store fails; a failure is logged (the
 /// branch then stays `running` in the store). What overhead built up after its last event has no
 /// event to go on, and is dropped.
-async fn record_ending(state: &AppState, ctx: &BranchCtx, Ending { status, error }: Ending) {
+async fn record_ending(ctx: &BranchCtx, Ending { status, error }: Ending) {
     ctx.overhead.take();
     let branch_id = &ctx.branch_id;
-    let records = ctx.records(&state.store);
     for attempt in 1..=2 {
-        let set = records.set_status(branch_id, status, error.clone());
+        let set = ctx.records().set_status(status, error.clone());
         match set.await {
             Ok(()) => return,
             Err(e) => {

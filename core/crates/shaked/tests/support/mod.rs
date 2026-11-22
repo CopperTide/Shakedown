@@ -236,3 +236,13 @@ pub fn copy_dir(from: &std::path::Path, to: &std::path::Path) {
         }
     }
 }
+
+/// A hand-made branch recording into `store` for its caller, as `begin_run` gives every branch.
+pub fn in_store(
+    ctx: shaked::exec::BranchCtx,
+    store: &std::sync::Arc<shaked::store::Store>,
+) -> shaked::exec::BranchCtx {
+    let (caller, id) = (ctx.caller.clone(), ctx.branch_id.clone());
+    let records = shaked::exec::StoreRecords::new(store.clone(), caller, id);
+    ctx.with_records(std::sync::Arc::new(records))
+}

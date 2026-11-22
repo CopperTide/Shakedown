@@ -35,7 +35,7 @@ impl ToolExec {
             paused_ms: paused.elapsed_ms(),
         };
         drop(paused);
-        let recorded = branch.record(&self.store, None, &payload).await;
+        let recorded = branch.record(None, &payload).await;
         recorded
             .map(Some)
             .map_err(|e| format!("recording a save point: {e:#}"))

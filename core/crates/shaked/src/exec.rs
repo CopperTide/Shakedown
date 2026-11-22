@@ -4,6 +4,7 @@ mod http;
 mod lifecycle;
 mod links;
 mod mailbox;
+mod records;
 mod roster;
 mod save_point;
 mod setup;
@@ -31,6 +32,7 @@ pub use http::{HttpAnswer, HttpCall, NOT_RUNNING};
 pub use lifecycle::Lifecycle;
 pub use links::LINK_ACTOR;
 pub use mailbox::Mailbox;
+pub use records::{BranchRecords, StoreRecords};
 pub use roster::Roster;
 pub use setup::SETUP_ACTOR;
 pub use talk::{handoff_schema, mail_for, said_text, HANDOFF, INBOX, MESSAGE};
@@ -62,6 +64,8 @@ pub struct BranchCtx {
     pub window: std::sync::Mutex<Option<crate::window::Held>>,
     /// Who the branch runs for: its records are written for this caller.
     pub caller: Arc<crate::auth::Caller>,
+    /// Where its events and status are written and read.
+    records: Arc<dyn BranchRecords>,
 }
 
 impl BranchCtx {
@@ -83,6 +87,7 @@ impl BranchCtx {
             overhead: Ledger::default(),
             window: std::sync::Mutex::default(),
             caller: Arc::new(crate::auth::Caller::person()),
+            records: Arc::new(records::NoRecords),
         }
     }
 
@@ -103,8 +108,19 @@ impl BranchCtx {
         self.roster.ensure_token(agent, self.token_ttl())
     }
 
-    /// The store's records as this branch's scope.
-    pub fn records<'a>(&'a self, store: &'a Store) -> crate::store::Scoped<'a> {
+    /// The same branch recording into `records`.
+    pub fn with_records(mut self, records: Arc<dyn BranchRecords>) -> BranchCtx {
+        self.records = records;
+        self
+    }
+
+    /// The branch's records: its events and status.
+    pub fn records(&self) -> &dyn BranchRecords {
+        &*self.records
+    }
+
+    /// The store as this branch's scope (for what is not the branch's own events or status).
+    pub fn scoped<'a>(&'a self, store: &'a Store) -> crate::store::Scoped<'a> {
         store.at(&self.caller)
     }
 
@@ -144,24 +160,22 @@ impl BranchCtx {
     /// Records `payload` as an event of its kind on this branch (see `append`).
     pub async fn record<P: EventPayload>(
         &self,
-        store: &Store,
         agent: Option<&str>,
         payload: &P,
     ) -> anyhow::Result<Event> {
         let payload = serde_json::to_value(payload)?;
-        self.append(store, agent, P::KIND, payload).await
+        self.append(agent, P::KIND, payload).await
     }
 
     /// Records an event of this branch with the world clock paused: recording is Shakedown's work.
     pub async fn append(
         &self,
-        store: &Store,
         agent: Option<&str>,
         kind: EventKind,
         payload: Value,
     ) -> anyhow::Result<Event> {
         let _paused = self.clock.paused();
-        self.append_now(store, agent, kind, payload).await
+        self.append_now(agent, kind, payload).await
     }
 
     /// Records an event of this branch, the world clock running on (for what happens outside the
@@ -169,44 +183,37 @@ impl BranchCtx {
     /// the branch's last event; the time it takes is overhead of the kind `record`.
     pub async fn append_now(
         &self,
-        store: &Store,
         agent: Option<&str>,
         kind: EventKind,
         payload: Value,
     ) -> anyhow::Result<Event> {
         let since = std::time::Instant::now();
-        let (id, built_up) = (&self.branch_id, self.overhead.take());
-        let ev = self
-            .records(store)
-            .append_with(id, agent, kind, payload, built_up)
-            .await;
+        let built_up = self.overhead.take();
+        let ev = self.records.append(agent, kind, payload, built_up).await;
         self.overhead.add_since(Cat::Record, since);
         ev
     }
 
     /// Pauses the branch: new tool calls and model calls wait and the world clock stands still
     /// until `resume`. Records `Pause`; false when the branch wasn't running.
-    pub async fn pause(&self, store: &Store) -> anyhow::Result<bool> {
+    pub async fn pause(&self) -> anyhow::Result<bool> {
         if !self.flow.pause() {
             return Ok(false);
         }
         self.clock.pause();
-        self.record(store, None, &PausePayload {}).await?;
+        self.record(None, &PausePayload {}).await?;
         Ok(true)
     }
 
     /// Resumes a paused branch: the calls that wait go on and the clock runs again. Records
     /// `Resume` with how long the pause lasted (counted as Shakedown's time, not the run's); false
     /// when the branch wasn't paused.
-    pub async fn resume(&self, store: &Store) -> anyhow::Result<bool> {
-        Ok(self.resume_lasting(store).await?.is_some())
+    pub async fn resume(&self) -> anyhow::Result<bool> {
+        Ok(self.resume_lasting().await?.is_some())
     }
 
     /// `resume`, saying how long the pause lasted (None: the branch wasn't paused).
-    pub async fn resume_lasting(
-        &self,
-        store: &Store,
-    ) -> anyhow::Result<Option<std::time::Duration>> {
+    pub async fn resume_lasting(&self) -> anyhow::Result<Option<std::time::Duration>> {
         let Some(lasted) = self.flow.resume() else {
             return Ok(None);
         };
@@ -217,7 +224,7 @@ impl BranchCtx {
         let resumed = ResumePayload {
             paused_ms: ms.round() as i64,
         };
-        self.record(store, None, &resumed).await?;
+        self.record(None, &resumed).await?;
         Ok(Some(lasted))
     }
 
@@ -543,7 +550,7 @@ impl ToolExec {
     ) -> Result<i64, String> {
         let v = serde_json::to_value(payload).map_err(|e| format!("internal error: {e}"))?;
         let e = branch
-            .append(&self.store, agent, kind, v)
+            .append(agent, kind, v)
             .await
             .map_err(|e| format!("internal error: recording event: {e:#}"))?;
         Ok(e.seq)

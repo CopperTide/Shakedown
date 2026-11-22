@@ -65,12 +65,8 @@ async fn setup_with(tag: &str, extra: &[PathBuf], bench: &str) -> Fx {
     let world = hub.start_world(bench, &branch).await;
     let state = AppState::new(store.clone(), hub.hub.clone(), Config::new());
     let state = Arc::new(state.with_benchmark(bench));
-    let ctx = Arc::new(BranchCtx::new(
-        branch.clone(),
-        world.clone(),
-        team,
-        "task".into(),
-    ));
+    let ctx = BranchCtx::new(branch.clone(), world.clone(), team, "task".into());
+    let ctx = Arc::new(support::in_store(ctx, &store));
     state.live.insert(ctx.clone());
     let (listener, base) = app::bind().await;
     app::serve(listener, &state);
