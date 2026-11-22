@@ -67,6 +67,15 @@ pub struct Config {
     pub link_hello_timeout: Duration,
     /// How long a worker's link may stay silent (not even answering a ping) before it is closed.
     pub link_idle_timeout: Duration,
+    /// How long a worker told to stop its branch has to report its end before the control box
+    /// ends the branch itself.
+    pub link_end_grace: Duration,
+    /// How often the control box sweeps the branches sandboxes' workers run (see
+    /// `worker::holds::sweep`).
+    pub link_sweep_every: Duration,
+    /// A `shaked worker`'s only: the control box's gateway its agents' model calls go on to,
+    /// with its worker token. None: the gateway calls the providers itself.
+    pub forward_to: Option<crate::gateway::ForwardTo>,
 }
 
 pub const DEFAULT_DRIVER_GRACE: Duration = Duration::from_secs(30);
@@ -75,6 +84,8 @@ pub const DEFAULT_RETRY_BASE: Duration = Duration::from_secs(1);
 pub const DEFAULT_PROXY_TIMEOUT: Duration = Duration::from_secs(300);
 pub const DEFAULT_LINK_HELLO_TIMEOUT: Duration = Duration::from_secs(10);
 pub const DEFAULT_LINK_IDLE_TIMEOUT: Duration = Duration::from_secs(60);
+pub const DEFAULT_LINK_END_GRACE: Duration = Duration::from_secs(30);
+pub const DEFAULT_LINK_SWEEP_EVERY: Duration = Duration::from_secs(60);
 
 pub use crate::providers::{is_openrouter_url, OPENROUTER_BASE};
 
@@ -124,6 +135,9 @@ impl Config {
             project_dir: None,
             link_hello_timeout: DEFAULT_LINK_HELLO_TIMEOUT,
             link_idle_timeout: DEFAULT_LINK_IDLE_TIMEOUT,
+            link_end_grace: DEFAULT_LINK_END_GRACE,
+            link_sweep_every: DEFAULT_LINK_SWEEP_EVERY,
+            forward_to: None,
         }
     }
 
@@ -177,6 +191,10 @@ pub struct AppState {
     /// Shared HTTP client (gateway upstream, open agent loop, key tests and model lists), guarded
     /// by the layer's policy ([`crate::providers::reach::guard`]).
     pub http: reqwest::Client,
+    /// The client of calls whose answer may stream for long (the gateway's pass-through and a
+    /// worker's forwarding): a connect timeout and an idle timeout per read
+    /// ([`STREAM_IDLE`]), no limit on the whole answer. Guarded as `http` is.
+    pub stream_http: reqwest::Client,
     /// Set once, after the `Arc<AppState>` exists (the open driver holds a `Weak` to it).
     pub drivers: OnceLock<Drivers>,
     /// Set to true when shutdown starts; SSE streams end on it.
@@ -196,6 +214,19 @@ pub struct AppState {
     pub objects: Option<Arc<crate::objects::ObjectStores>>,
     /// The branches workers in sandboxes run for this control box, and their tickets.
     pub links: crate::worker::Links,
+}
+
+/// How long a streamed answer may stay silent before the gateway gives it up.
+pub const STREAM_IDLE: Duration = Duration::from_secs(300);
+
+/// The streaming client ([`AppState::stream_http`]), guarded by `policy`.
+fn stream_client(policy: &crate::layer::Policy) -> reqwest::Client {
+    let http = reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(10))
+        .read_timeout(STREAM_IDLE);
+    crate::providers::reach::guard(http, policy)
+        .build()
+        .expect("http client")
 }
 
 /// The shared HTTP client, guarded by `policy` ([`crate::providers::reach::guard`]).
@@ -226,7 +257,7 @@ fn start_benchmarks(hub: &Hub, config: &Config) -> (String, String) {
 impl AppState {
     pub fn new(store: Arc<Store>, hub: Arc<Hub>, mut config: Config) -> AppState {
         let policy = store.layer().policy();
-        let http = shared_client(policy);
+        let (http, stream_http) = (shared_client(policy), stream_client(policy));
         if !policy.environment_keys {
             config.providers = ProviderConfig::without_environment();
         }
@@ -241,6 +272,7 @@ impl AppState {
             live: LiveBranches::default(),
             config,
             http,
+            stream_http,
             drivers: OnceLock::new(),
             shutdown: tokio::sync::watch::channel(false).0,
             cleanup: Arc::default(),
@@ -393,19 +425,22 @@ fn only_benchmark(hub: &Hub) -> String {
 /// `config.public_url` are final: the agents get URLs on the public base.
 pub fn install_default_drivers(state: &Arc<AppState>) -> bool {
     let base = state.config.public_base().to_string();
+    // In a worker, the CLI agents' model calls go through its gateway too.
+    let routed = state.config.forward_to.is_some();
     let mut m: Drivers = HashMap::new();
     m.insert(AgentKind::Open, Arc::new(OpenDriver::new(state.clone())));
-    m.insert(
-        AgentKind::ClaudeCode,
-        Arc::new(ClaudeDriver::new(base.clone())),
-    );
+    let mut claude = ClaudeDriver::new(base.clone());
+    claude.via_gateway = routed;
+    m.insert(AgentKind::ClaudeCode, Arc::new(claude));
     let http = HttpDriver::new(
         state,
         state.config.http_agent_base(),
         state.config.http_agent_timeout,
     );
     m.insert(AgentKind::Http, Arc::new(http));
-    m.insert(AgentKind::Codex, Arc::new(CodexDriver::new(base)));
+    let mut codex = CodexDriver::new(base);
+    codex.via_gateway = routed;
+    m.insert(AgentKind::Codex, Arc::new(codex));
     state.install_drivers(m)
 }
 

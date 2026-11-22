@@ -191,6 +191,17 @@ impl Provider {
         }
     }
 
+    /// A `POST` to `path` under the provider's base with its own key, as its API takes it
+    /// (`x-api-key` for Claude's, else a bearer token), and nothing else: for a request passed
+    /// on as an agent sent it.
+    pub fn raw_post(&self, http: &reqwest::Client, path: &str) -> reqwest::RequestBuilder {
+        let post = reqwest::Method::POST;
+        match self.kind {
+            ProviderKind::Anthropic => anthropic::request(self, http, post, path),
+            _ => openai::request(self, http, post, path),
+        }
+    }
+
     /// Why the provider can't take calls (no request is made to find out).
     pub fn unavailable(&self) -> Option<Unavailable> {
         let missing = |env| {

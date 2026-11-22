@@ -24,7 +24,8 @@ use tokio::{sync::mpsc::UnboundedReceiver, time::Instant};
 
 use super::{
     frames::{ToControl, ToWorker, REFUSED_ENDED, REFUSED_TOKEN},
-    links::Link,
+    holds,
+    links::{frame_of, Held, Link},
     tickets::Taken,
 };
 use crate::{
@@ -34,7 +35,7 @@ use crate::{
         run_tokens::{prefix, resolve_run_token, DEFAULT_TOKEN_SECS},
         Action, Caller, CallerKind, Decision, RunTokenKind, Target,
     },
-    model::BranchStatus,
+    model::{BranchStatus, Hold},
     runner::BranchPlan,
     store::Linked,
 };
@@ -137,7 +138,7 @@ async fn next_frame(socket: &mut WebSocket) -> Result<ToControl, End> {
 /// Opens the connection whose first frame is `first` on its branch's link: `Start` is sent to a
 /// ticket's worker first.
 async fn hello(
-    state: &AppState,
+    state: &Arc<AppState>,
     parts: &Parts,
     socket: &mut WebSocket,
     first: ToControl,
@@ -158,12 +159,21 @@ async fn hello(
     if let Some(start) = start {
         say(socket, &start).await?;
     }
+    tell_hold(socket, &link).await?;
     Ok(Opened {
         link,
         generation,
         caller,
         relay,
     })
+}
+
+/// Tells a worker that (re)joins what its branch is held to, if anything.
+async fn tell_hold(socket: &mut WebSocket, link: &Link) -> Result<(), End> {
+    match frame_of(link.hold(), &link.limit_reason()) {
+        Some(f) => say(socket, &f).await,
+        None => Ok(()),
+    }
 }
 
 /// Refuses a `resume_from` past the last event `link` has.
@@ -277,7 +287,7 @@ async fn worker_caller(state: &AppState, secret: &str) -> Result<Caller, End> {
 /// it, while the branch is running. A rebuilt link records for whom the layer says the token
 /// acts (the branch's owner), and goes on from the last `n` the store has.
 async fn rejoin(
-    state: &AppState,
+    state: &Arc<AppState>,
     parts: &Parts,
     secret: &str,
     resume_from: u64,
@@ -311,7 +321,7 @@ async fn still_running(state: &AppState, caller: &Caller, branch: &str) -> Resul
 }
 
 async fn rebuilt(
-    state: &AppState,
+    state: &Arc<AppState>,
     parts: &Parts,
     c: Caller,
     run: &str,
@@ -320,9 +330,34 @@ async fn rebuilt(
     let layer = state.store.layer();
     let acting = layer.authenticate(parts, Some(c)).await;
     let acting = Arc::new(acting.map_err(|r| refused(r.message))?);
-    let last = state.store.at(&acting).last_link_n(branch).await;
+    let lock = state.store.branch_lock(branch);
+    let locked = lock.lock().await;
+    let (last, held) = on_record(state, &acting, branch).await?;
+    let stopping = held.hold.ending();
+    let link = state.links.rejoined((run, branch), acting, last, held);
+    drop(locked);
+    // A restart lost the grace of a branch the control box was stopping: it is armed again.
+    if let Some(status) = stopping {
+        holds::arm(state, branch, status, &link.limit_reason());
+    }
+    Ok(link)
+}
+
+/// What the store kept of `branch` for its rebuilt link: its worker's last `n`, and what it is
+/// held to. A limit recorded reached whose hold was lost is put on that hold again.
+async fn on_record(state: &AppState, acting: &Caller, branch: &str) -> Result<(u64, Held), End> {
+    let at = state.store.at(acting);
+    let last = at.last_link_n(branch).await;
     let last = last.map_err(|e| logged(branch, "reading its last event", e))?;
-    Ok(state.links.rejoined(run, branch, acting, last))
+    let kept = at.controlled(branch).await;
+    let kept = kept.map_err(|e| logged(branch, "reading what it is held to", e))?;
+    let mut kept = kept.ok_or_else(|| refused("no such branch"))?;
+    if kept.refused && kept.hold == Hold::Running {
+        let repaired = at.set_hold(branch, Hold::OVER_BUDGET).await;
+        repaired.map_err(|e| logged(branch, "holding it for its limit", e))?;
+        kept.hold = Hold::OVER_BUDGET;
+    }
+    Ok((last, Held::of_record(&kept)))
 }
 
 /// What the connection waits on next: a frame relayed from the API, what the worker sent, or
@@ -439,24 +474,34 @@ async fn append(state: &AppState, o: &Opened, f: ToControl) -> Result<ToWorker, 
     let branch = &o.link.branch_id;
     let appended = state.store.at(&o.caller).append_linked(branch, ev).await;
     let ev = appended.map_err(|e| logged(branch, "appending an event", e))?;
+    let ev = ev.ok_or_else(|| refused(format!("{REFUSED_ENDED}: it takes no more events")))?;
     done.push(n, ev.seq);
     Ok(ToWorker::Ack { n, seq: ev.seq })
 }
 
 /// Records how the branch ended, revokes its worker token and forgets its link: the connection
-/// closes.
+/// closes. A branch the control box was stopping ends as its hold says (`stopped`, or
+/// `budget_exceeded`), whatever the worker reports; one it ended already is not changed. The hold
+/// is read, and the end recorded, under the branch's lock.
 async fn ended(state: &AppState, o: &Opened, status: BranchStatus, error: Option<String>) -> End {
     if status == BranchStatus::Running {
         return refused("a branch does not end running");
     }
     let branch = &o.link.branch_id;
-    let at = state.store.at(&o.caller);
-    if let Err(e) = at.set_status(branch, status, error).await {
+    let lock = state.store.branch_lock(branch);
+    let _locked = lock.lock().await;
+    let hold = state.store.at(&o.caller).hold(branch).await;
+    let hold = match hold {
+        Ok(h) => h,
+        Err(e) => return logged(branch, "reading its hold", e),
+    };
+    let (status, error) = match hold.ending() {
+        Some(held) if held != status => (held, holds::stop_error(held, &o.link.limit_reason())),
+        _ => (status, error),
+    };
+    let end = holds::end_locked(state, branch, (status, error), crate::jobs::EndIf::Running);
+    if let Err(e) = end.await {
         return logged(branch, "recording how it ended", e);
     }
-    if let Err(e) = at.revoke_run_tokens(branch, None).await {
-        logged(branch, "revoking its worker token", e);
-    }
-    state.links.forget(branch);
     End::Close
 }

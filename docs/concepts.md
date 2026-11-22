@@ -257,7 +257,12 @@ Isolation of the CLI agents (`core/crates/shaked/src/agents/`; checked live by t
   `OPENROUTER_API_KEY`, `SHAKEDOWN_LOCAL_MODELS` and every `SHAKEDOWN_LOCAL_KEY_*` removed from their environment. Each
   keeps only its own vendor's key, which it may sign in with: Claude Code keeps `ANTHROPIC_API_KEY` and loses
   `OPENAI_API_KEY`; Codex keeps `OPENAI_API_KEY` and loses `ANTHROPIC_API_KEY`. The `provider` of API mode does
-  not apply to them.
+  not apply to them on this machine.
+- In a sandbox (`shaked worker`), which holds no model key, their model calls go through the worker's gateway
+  instead: Claude Code's `ANTHROPIC_BASE_URL` and Codex's `OPENAI_BASE_URL` point at it, the agent's token as the
+  key, and the control box sends each call on with the run's key (an agent's `provider`, if it names one, picks
+  that key) and records it. A dispatch session there prices its calls into the run's estimate but leaves their
+  `model_call` events to the control box.
 - A CLI session cannot be resumed in the middle, which drives the fork rules below.
 
 ## Forking
@@ -360,6 +365,35 @@ work, not after:
   it, the gateway answers each further model call 402 `{error}` without sending it upstream, and the first refusal
   is recorded as the world event `budget/limit_reached`. The run goes on (its driver decides to stop) and is scored
   when it finishes or its window ends.
+- A run in a sandbox (`shaked worker`) is held to its limit by the control box, not by the sandbox:
+  - The limit is the one the control box planned the run with, kept in the store with the branch's rules, never
+    what the worker records; a linked branch with no rules on record makes no model calls (503).
+  - The control box's gateway prices every model call of the branch (all three routes) into its own estimate. A call
+    whose cost can't be known (output without a reported cost, a zero one, or a stream cut before it said what it
+    used: it broke off, said `error`, or ended without its final event) is charged a conservative estimate: its
+    input (as reported, else its request's size in bytes over 4) at the provider's highest listed input price times
+    1.25 (it could all have been a cache write), plus its output at the highest output price, the output being the
+    largest of every output limit the request names and the output it reported (4096 when it names none, unless it
+    used more). An OpenRouter model `vendor/model` is bounded by its vendor's prices. When even that can't be had, a
+    run with a limit is put over it at once; a run without one goes on. Models without a known cost are refused
+    (400).
+  - Once the estimate is past the limit, every further call is refused 402 before it reaches a provider,
+    `budget/limit_reached` is recorded once, and the branch is stopped for its limit: it ends `budget_exceeded`,
+    scored, whatever its worker reports, and the control box ends it itself if the worker does not within 30 s.
+  - A branch has a pool of 4 times its agents' count of calls in flight at once, shared by all its agents (Claude
+    Code makes some in parallel), so at most that many in-flight calls can finish past the limit: the overshoot is
+    bounded, not zero.
+  - The estimate, the hold and the refusal are kept in the store: a control-box restart rebuilds them (the spend
+    from the `charged_usd` of the calls it recorded).
+- The worker keeps its own estimate too, so a well-behaved one stops first. On a local run only the run's own count
+  decides: a person's stop stays `stopped`, and a failed agent's infrastructure error stays `infra_error`, over the
+  limit or not.
+
+Pausing and stopping a run in a sandbox works the same as a local one for whoever presses it: the control box keeps
+the pause or stop itself, refuses the branch's model calls while it is paused (409) or stopping, tells the worker
+when it can, and has the last word on how a stopped branch ends. A stopped run in the cloud ends even across a
+control-box restart: the restarted control box gives its worker the same 30 s to report its end, then ends it
+itself.
 
 ## World time windows
 

@@ -289,6 +289,7 @@ async fn create_child(
     store
         .set_restore(&id, req.restore, &rerun.restored())
         .await?;
+    store.inherit_rules(&id, &parent.id).await?;
     Ok(id)
 }
 

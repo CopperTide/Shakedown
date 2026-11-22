@@ -92,14 +92,62 @@ All JSON on `http://127.0.0.1:4510`, except the event stream. Errors are `{error
 
 New runs and forks answer 507 once the saves reach the disk limit. The `/api` routes answer only
 requests whose `Host` is a loopback address. The agents' MCP endpoints (`/mcp/{branch}/{agent}`) and the
-API-mode gateway (`/gateway/{branch}/{agent}/v1/chat/completions`) are for shaked's own agents.
+model gateway are for shaked's own agents. The gateway's main routes are, under `/gateway/{branch}/{agent}/v1/`:
+`chat/completions` (the canonical format of API mode, sent to any provider), and two pass-through routes for CLI
+agents, `messages` (Anthropic Messages, streamed or not, to an `anthropic` provider) and `responses` (OpenAI
+Responses, streamed or not, to `openai`, `openrouter` or a local server); an agent that names no provider gets
+`anthropic` on `messages` and `openai` on `responses`. Each takes the agent's token, as a bearer token or as
+`x-api-key` (as Claude Code sends its key), or the worker token of the branch (any other branch's is 401), and
+picks the key as `chat/completions` does: your own key, then the environment's, then the layer's. A pass-through
+request goes on as the agent sent it, with that key and, of the agent's headers, only `anthropic-version`,
+`anthropic-beta` and `openai-beta`; the answer comes back as it came, a stream chunk by chunk. A body is read only
+once the call is let through (its token checked, its branch not held), up to 32 MiB on `messages` and
+`messages/count_tokens` and 64 MiB on `chat/completions` and `responses` (413 past it, `{error}` as every refusal).
+It is recorded once, when it ends, as a `model_call` event holding the raw request, the response (a
+streamed one made whole: a Messages stream's message, a Responses stream's final response), `usage` in the
+canonical counts (`prompt_tokens` is the whole input; Messages also keeps `input_tokens`,
+`cache_creation_input_tokens` and `cache_read_input_tokens`, Responses `prompt_tokens_details.cached_tokens`),
+`provider`, `api` (`messages` or `responses`), `stream: true` when streamed, and `interrupted` (why) when the
+provider's stream broke off, stayed silent for 5 minutes (a stream has no limit on its whole length), said `error`
+on the way, or ended without its final event (`message_stop` or a `message_delta` with its stop reason;
+`response.completed` or `response.incomplete`); it is
+priced and metered as a `chat/completions` call is. A call whose cost is known answers `x-shakedown-cost-usd`. A
+provider that can't be found is a 502, recorded as a failed call. `messages/count_tokens` goes to the provider the
+same way and is neither recorded nor charged, but refused like a model call while its branch is held. With a worker
+token the control box holds the branch itself, whatever its worker does and whether it is connected or not:
+- 503 while the worker is not linked (try again), or when the branch has no rules on record (`this branch has no
+  limits on record`: a branch from before they were kept; never unlimited);
+- 404 for an agent not in the branch's team;
+- 429 while the branch's pool of calls in flight (4 times its agents, shared by all of them) has been in use
+  for more than 10 s (`count_tokens` takes none);
+- 409 while the branch is paused (with `x-shakedown-held: paused`) or stopping;
+- 402 once the run's spend estimate on the control box passed its limit, or the branch is stopping for it (see
+  concepts.md, "Spend limits");
+- 400 for a model whose cost could not be known (no reported cost, no price in the table).
+Each such call's event also keeps `charged_usd` (and `estimated: true` when that is the conservative estimate).
+The control box keeps the branch's rules (`branches.rules`, its spend limit among them) and its hold
+(`branches.hold`: `paused`, `stopping` or `budget_exceeded`) in the store, so a restart keeps both; it never reads a
+limit from the worker's own records.
 `GET /worker` is the WebSocket a `shaked worker` running a branch in a sandbox links to: it says hello with
 a one-use ticket (good for ten minutes, bound to its branch and sandbox) and gets the branch's plan and a
 worker token, which it reconnects with, also after shaked restarted: each event keeps the worker's own
 counter (`events.link_n`), so an event sent again is acknowledged with the seq it got, never appended twice.
-The token only links its own branch and calls the gateway for its agents, and dies when the branch ends. A
+The token only links its own branch and calls the gateway for its agents, and dies when the branch ends. It lives
+a day of unpaused time: a pause does not count against it (the store keeps when the pause began, and the resume
+extends the token by it), so the worker of a long-paused branch can still rejoin, and a restart keeps the branch. A
 link must say hello within 10 s, frames are at most 8 MiB, and a link silent for 60 s (pings unanswered) is
-closed. Pause, resume and stop on such a branch are relayed to its worker.
+closed. Pause, resume and stop on such a branch are held by the control box: the hold is stored first, enforced on
+the branch's model calls, and told to the worker when it is connected and again whenever it (re)joins; a pause or
+stop never answers 409 because the worker is away. A stop ends the branch on the control box: at once when no worker
+is connected, else when the worker reports its end, or after 30 s when it doesn't; a stop pressed again ends it at
+once when no worker is connected. The branch then ends `stopped` (or `budget_exceeded` for a stop for its limit)
+whatever the worker reports, its tokens are revoked, so its worker's calls get 401, a connection still open is
+told `Refused` (the branch ended) and closed, and the branch takes no more events: every end holds the branch's lock
+over its status and the revoke. A restart loses no stop: at start, and every minute, the control box arms the 30 s
+again for each branch it was stopping (and again when a worker rejoins one). The same sweep ends `infra_error` a
+running, unpaused branch whose worker token died (a day of unpaused time after it was made; checked again as it
+ends); at start, such a branch is marked `interrupted` first. A paused branch is left alone: its token's time stands
+still while it is paused (`branches.paused_at`).
 
 ## Configuration
 
@@ -217,7 +265,14 @@ from. The retail example reads its data from `data/retail` (relative to its pack
   the worker reads the file only once it ends with a newline. Every event goes over the link and counts as
   recorded once acknowledged; at most 64 wait for acknowledgement. It holds no database and no secrets (no vault,
   no model keys from its environment), and its agents reach its MCP endpoint, gateway and proxy on `127.0.0.1`
-  only. An event too large for one frame is cut down first: strings over 16 KiB are cut to 16 KiB and the payload
+  only. Its gateway checks the agent's token, holds a paused branch's calls and makes the save point, then sends
+  each model call on to the control box's gateway (`Start.gateway`, the same route) with the worker token as its
+  only credential: the control box adds the run's key (chosen as above), calls the provider and records the call as
+  its one `model_call` event (the worker records none). A call the control box held for a pause the worker had
+  not heard of yet goes again once the pause ends; its 402 puts the run over its limit in the worker too, and its
+  `OverBudget` frame stops the branch, which ends `budget_exceeded`. Claude Code there gets `ANTHROPIC_BASE_URL`
+  (its agent's route on the worker's gateway) and Codex `OPENAI_BASE_URL` (the same, `…/v1`), each with the
+  agent's token as its key (`ANTHROPIC_API_KEY`; `OPENAI_API_KEY` and `CODEX_API_KEY`). An event too large for one frame is cut down first: strings over 16 KiB are cut to 16 KiB and the payload
   gets `truncated: true`; when that is still too large, the payload becomes `{truncated: true, bytes, head}` (its
   size and its first 64 KiB as JSON). A dropped link is tried again at once, then every 2 s, resending what was
   not acknowledged. The link counts as down until the control box shows it works again (an ack, a pause, resume
@@ -300,6 +355,8 @@ What the gateway does per provider:
   carried over, so sampling fields such as `temperature` are dropped, and a forced tool choice becomes `auto`. The
   answer is translated back: `stop_reason` `end_turn` is `stop`, `tool_use` is `tool_calls`, `max_tokens` is
   `length` and `refusal` is `content_filter`; usage becomes prompt, completion and total tokens.
+- CLI agents' calls through `messages` and `responses` (see "HTTP API" above) are not translated: they go to a
+  provider that speaks that API as they came, and are recorded raw.
 - Every call is recorded in the canonical (OpenAI) form, with `provider` (the id that answered) and, when the
   provider's own answer differs from the canonical one (Anthropic), `provider_response`. A 401 or 403 answer is
   recorded without its error message, which may quote the key.

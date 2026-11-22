@@ -108,6 +108,10 @@ pub const BASE_FILES: Files = Files {
             "0004_event_link_n.sql",
             include_str!("../migrations/shakedown/0004_event_link_n.sql"),
         ),
+        (
+            "0005_branch_rules_hold.sql",
+            include_str!("../migrations/shakedown/0005_branch_rules_hold.sql"),
+        ),
     ],
     also_accept: &[],
 };

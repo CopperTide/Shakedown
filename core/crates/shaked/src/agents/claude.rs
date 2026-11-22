@@ -16,7 +16,7 @@ use serde_json::{json, Value};
 
 use super::{
     session::{Session, SessionStart},
-    AgentResult, AgentRun, Driver, Mcp, CLI_TIMEOUT_SECS,
+    AgentResult, AgentRun, Driver, Mcp, ModelRoute, CLI_TIMEOUT_SECS,
 };
 use crate::model::{AgentSpec, TokenUsage};
 
@@ -24,6 +24,8 @@ pub struct ClaudeDriver {
     pub self_base: String,
     pub binary: String,
     pub timeout_secs: u64,
+    /// The model calls go through shaked's gateway (in a `shaked worker`), not to Anthropic.
+    pub via_gateway: bool,
 }
 
 impl ClaudeDriver {
@@ -32,6 +34,7 @@ impl ClaudeDriver {
             self_base: self_base.into(),
             binary: "claude".into(),
             timeout_secs: CLI_TIMEOUT_SECS,
+            via_gateway: false,
         }
     }
 }
@@ -143,6 +146,13 @@ fn isolated(binary: &str, spec: &AgentSpec, mcp: &Mcp, config: &str) -> Command 
     c
 }
 
+/// Claude Code's model calls go to `route` (`ANTHROPIC_BASE_URL`, to which it adds
+/// `/v1/messages`), the agent's token its key (`ANTHROPIC_API_KEY`, sent as `x-api-key`).
+pub fn route_models(c: &mut Command, route: &ModelRoute) {
+    c.env("ANTHROPIC_BASE_URL", &route.base)
+        .env("ANTHROPIC_API_KEY", &route.token);
+}
+
 /// A long-lived session (see `claude_session`): the isolated command taking its turns as a stream
 /// of user messages on stdin and answering in stream-json; its MCP config in `dir`.
 pub fn session_command(
@@ -190,9 +200,23 @@ pub fn parse(stdout: &str) -> AgentResult {
     }
 }
 
+impl ClaudeDriver {
+    /// Where `agent`'s model calls go, when they go through the gateway.
+    fn route(&self, branch: &crate::exec::BranchCtx, agent: &str) -> Option<ModelRoute> {
+        let route = || ModelRoute::for_agent(&self.self_base, branch, agent);
+        self.via_gateway.then(route)
+    }
+}
+
 impl Driver for ClaudeDriver {
     fn session(&self, start: SessionStart) -> Result<Box<dyn Session>, String> {
-        let s = super::claude_session::ClaudeSession::start(&self.self_base, &self.binary, start)?;
+        let route = self.route(&start.branch, &start.spec.id);
+        let s = super::claude_session::ClaudeSession::start(
+            &self.self_base,
+            &self.binary,
+            start,
+            route,
+        )?;
         Ok(Box::new(s))
     }
 
@@ -200,8 +224,11 @@ impl Driver for ClaudeDriver {
         Box::pin(async move {
             let mcp = Mcp::of(&self.self_base, &run);
             let prompt = super::prompt_of(&run);
+            let route = self.route(&run.branch, &run.spec.id);
             let build = |workdir: &std::path::Path| {
-                driver_command(&self.binary, &run.spec, &mcp, &prompt, workdir)
+                let mut c = driver_command(&self.binary, &run.spec, &mcp, &prompt, workdir)?;
+                route.iter().for_each(|r| route_models(&mut c, r));
+                Ok(c)
             };
             super::run_in_workdir(&run, self.timeout_secs, build, |out, _| parse(out)).await
         })

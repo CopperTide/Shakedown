@@ -1,7 +1,8 @@
 //! One Claude Code agent as a long-lived headless process, for the dispatch runner: the same
 //! isolation as the one-shot driver (`claude::session_command`), taking each turn as a user
 //! message on stdin (stream-json) and ending it with the stream's `result`. Each model call the
-//! stream shows is recorded as a `model_call` reported by the client (see `usage`).
+//! stream shows is recorded as a `model_call` reported by the client (see `usage`), except in a
+//! `shaked worker`, where the calls go through the gateway and the control box records each one.
 
 use std::{
     path::PathBuf,
@@ -21,7 +22,7 @@ use super::{
     session::{end_error, BoxFuture, Session, SessionStart, Turn},
     tail,
     usage::UsageMeter,
-    AgentResult, Mcp, CLI_TIMEOUT_SECS,
+    AgentResult, Mcp, ModelRoute, CLI_TIMEOUT_SECS,
 };
 use crate::{
     exec::BranchCtx,
@@ -38,6 +39,8 @@ pub struct ClaudeSession {
     spoke: bool,
     respawns: u32,
     mcp: Mcp,
+    /// Where its model calls go when they go through the gateway (which records them).
+    route: Option<ModelRoute>,
     binary: String,
     spec: crate::model::AgentSpec,
     workdir: PathBuf,
@@ -55,6 +58,22 @@ pub struct ClaudeSession {
     last_call: Option<(String, i64)>,
     error: Option<String>,
     busy: Duration,
+}
+
+/// The session's command in `workdir`, its model calls sent on `route` when given.
+fn command(
+    binary: &str,
+    spec: &crate::model::AgentSpec,
+    mcp: &Mcp,
+    workdir: &std::path::Path,
+    route: Option<&ModelRoute>,
+) -> Result<std::process::Command, String> {
+    let made = super::claude::session_command(binary, spec, mcp, workdir);
+    let mut c = made.map_err(|e| format!("writing the MCP config: {e}"))?;
+    if let Some(r) = route {
+        super::claude::route_models(&mut c, r);
+    }
+    Ok(c)
 }
 
 /// Starts `command` in `workdir` with its input, output and errors piped (killed on drop).
@@ -123,12 +142,17 @@ struct Process {
 const RESPAWNS: u32 = 2;
 
 impl ClaudeSession {
-    /// Starts the process in a fresh work folder, its MCP endpoint the agent's on the branch.
-    pub fn start(self_base: &str, binary: &str, s: SessionStart) -> Result<ClaudeSession, String> {
+    /// Starts the process in a fresh work folder, its MCP endpoint the agent's on the branch, its
+    /// model calls through the gateway on `route` when given.
+    pub fn start(
+        self_base: &str,
+        binary: &str,
+        s: SessionStart,
+        route: Option<ModelRoute>,
+    ) -> Result<ClaudeSession, String> {
         let workdir = super::fresh_workdir().map_err(|e| format!("cannot create workdir: {e}"))?;
         let mcp = Mcp::for_agent(self_base, &s.branch, &s.spec.id);
-        let command = super::claude::session_command(binary, &s.spec, &mcp, &workdir)
-            .map_err(|e| format!("writing the MCP config: {e}"))?;
+        let command = command(binary, &s.spec, &mcp, &workdir, route.as_ref())?;
         let p = spawn(command, &workdir).inspect_err(|_| {
             let _ = std::fs::remove_dir_all(&workdir);
         })?;
@@ -140,6 +164,7 @@ impl ClaudeSession {
             spoke: false,
             respawns: 0,
             mcp,
+            route,
             binary: binary.to_string(),
             spec: s.spec.clone(),
             workdir,
@@ -162,9 +187,8 @@ impl ClaudeSession {
             "branch {}: {}'s claude died before it said anything; starting it again",
             self.branch.branch_id, self.agent
         );
-        let command =
-            super::claude::session_command(&self.binary, &self.spec, &self.mcp, &self.workdir)
-                .map_err(|e| format!("writing the MCP config: {e}"))?;
+        let (spec, route) = (&self.spec, self.route.as_ref());
+        let command = command(&self.binary, spec, &self.mcp, &self.workdir, route)?;
         let p = spawn(command, &self.workdir)?;
         (self.child, self.stdin, self.lines, self.stderr) = (p.child, p.stdin, p.lines, p.stderr);
         self.send(text).await
@@ -188,12 +212,16 @@ impl ClaudeSession {
         }
     }
 
-    /// Records one model call, and prices it into the run's spend estimate: its seq.
+    /// Records one model call, and prices it into the run's spend estimate: its seq. A call
+    /// through the gateway is priced only: the control box records it.
     async fn record(&mut self, report: &UsageReport) -> Option<i64> {
         if let Some(usd) = report.list_price("anthropic") {
             if let Some(why) = self.branch.budget.add(&self.agent, usd) {
                 self.over.get_or_insert(why);
             }
+        }
+        if self.route.is_some() {
+            return None;
         }
         let p = report.payload();
         let at = Some(self.agent.as_str());

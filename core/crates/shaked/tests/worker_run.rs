@@ -4,6 +4,9 @@
 //! scripted agent (an `http` agent written here, no model), recording every event through the
 //! link. The branch ends on the control box as a local run of the same team ends.
 mod support;
+use support::fake_apis::{
+    fake_apis, store_org_keys, FakeApis, COMPLETED, ORG_CLAUDE_KEY, ORG_ROUTER_KEY,
+};
 use support::{app, live, packages, records, run, AppFx};
 
 use std::{
@@ -492,5 +495,187 @@ fn a_worker_whose_link_is_gone_for_good_exits_1() {
         ];
         let code = run_worker_with(&relay.link(), &ticket, &toys, &env).await;
         assert_eq!(code, Some(1));
+    });
+}
+
+/// What the model-calling scripted agents got: each one's token and its answer's text, in turn.
+type Answers = Arc<std::sync::Mutex<Vec<(String, String)>>>;
+
+/// The scripted agents of a worker's model calls, through their gateway: `a` calls Claude's
+/// Messages API with its token as `x-api-key` (as Claude Code sends it), `c` OpenAI's Responses
+/// API streamed (on OpenRouter, whose calls report their cost) with its token as the bearer (as
+/// Codex does), then pokes the box once.
+async fn calls_models(State(answers): State<Answers>, Json(run): Json<Value>) -> Json<Value> {
+    if run["type"] == "hello" {
+        return Json(json!({}));
+    }
+    let (gateway, token) = (
+        run["gateway_url"].as_str().unwrap(),
+        run["token"].as_str().unwrap(),
+    );
+    let text = match run["agent"] == "a" {
+        true => ask_claude(gateway, token).await,
+        false => ask_openai(gateway, token).await,
+    };
+    answers.lock().unwrap().push((token.to_string(), text));
+    if run["agent"] == "c" {
+        let call = json!({"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+                          "params": {"name": "poke", "arguments": {}}});
+        mcp(run["mcp_url"].as_str().unwrap(), token, call).await;
+    }
+    Json(json!({"ok": true}))
+}
+
+/// Claude's answer to one Messages call through `gateway`, the token as `x-api-key`.
+async fn ask_claude(gateway: &str, token: &str) -> String {
+    let ask = json!({"model": "claude-sonnet-5-5", "max_tokens": 8,
+                     "messages": [{"role": "user", "content": "hi"}]});
+    let req = reqwest::Client::new().post(format!("{gateway}/messages"));
+    let req = req
+        .header("x-api-key", token)
+        .header("anthropic-version", "2023-06-01");
+    let r = req.json(&ask).send().await.unwrap();
+    r.text().await.unwrap()
+}
+
+/// The whole stream of one streamed Responses call through `gateway`, the token the bearer.
+async fn ask_openai(gateway: &str, token: &str) -> String {
+    let ask = json!({"model": "gpt-x", "stream": true, "input": "hi"});
+    let req = reqwest::Client::new().post(format!("{gateway}/responses"));
+    let r = req.bearer_auth(token).json(&ask).send().await.unwrap();
+    r.text().await.unwrap()
+}
+
+/// The model-calling scripted agent served on a free port: the team of it alone.
+async fn model_calling_team(answers: Answers) -> Team {
+    let app = Router::new()
+        .route("/run", post(calls_models))
+        .with_state(answers);
+    let (listener, base) = app::bind().await;
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    let url = format!("{base}/run");
+    let a = json!({"id": "a", "name": "A", "kind": "http", "url": url});
+    let c = json!({"id": "c", "name": "C", "kind": "http", "url": url, "provider": "openrouter"});
+    serde_json::from_value(json!({"id": "t", "name": "T", "agents": [a, c]})).unwrap()
+}
+
+/// What reached the spy: each request's path and headers.
+type Left = Arc<std::sync::Mutex<Vec<(String, axum::http::HeaderMap)>>>;
+
+/// An HTTP relay to the control box at `to` that keeps the path and headers of each request it
+/// relays: everything that leaves the worker for the control box's gateway.
+async fn spy(
+    State((to, left)): State<(String, Left)>,
+    req: axum::extract::Request,
+) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    let (parts, body) = req.into_parts();
+    let path = parts.uri.path().to_string();
+    left.lock()
+        .unwrap()
+        .push((path.clone(), parts.headers.clone()));
+    let body = axum::body::to_bytes(body, usize::MAX).await.unwrap();
+    let mut headers = parts.headers;
+    headers.remove(axum::http::header::HOST);
+    let req = reqwest::Client::new()
+        .post(format!("{to}{path}"))
+        .headers(headers);
+    let r = req.body(body).send().await.unwrap();
+    let (status, kind) = (r.status(), r.headers()["content-type"].clone());
+    let body = r.bytes().await.unwrap();
+    (status, [(axum::http::header::CONTENT_TYPE, kind)], body).into_response()
+}
+
+/// A control box on the toy world whose model providers are `up`, with the org's keys stored,
+/// handing its workers the gateway at `public` (a spy in front of it).
+async fn keyed_control(tag: &str, up: &FakeApis, public: String) -> (AppFx, PathBuf) {
+    let root = packages::toy_world(&format!("wrun-{tag}"), &[], &["--scored"]);
+    let dir = root.0.clone();
+    let fx = AppFx::idle("worker_run", tag).root(root).bench("toybench");
+    let fx = fx
+        .providers(up.providers())
+        .config(move |c| c.public_url = public);
+    let fx = fx.start().await;
+    store_org_keys(&fx).await;
+    (fx, dir)
+}
+
+/// No request that left the worker carries a model key or the agent's token: each is a
+/// gateway call of its branch's agent with the worker token alone.
+fn only_the_worker_token_left(
+    left: &[(String, axum::http::HeaderMap)],
+    branch: &str,
+    agent_tokens: &[&str],
+) {
+    let paths: Vec<&str> = left.iter().map(|(p, _)| p.as_str()).collect();
+    let want = [
+        format!("/gateway/{branch}/a/v1/messages"),
+        format!("/gateway/{branch}/c/v1/responses"),
+    ];
+    assert_eq!(paths, want, "one request per model call");
+    for (path, h) in left {
+        let auth = h["authorization"].to_str().unwrap();
+        assert!(auth.starts_with("Bearer sdw_"), "{auth}");
+        assert!(h.get("x-api-key").is_none(), "{path}");
+        for (name, v) in h {
+            let v = v.to_str().unwrap_or_default();
+            assert!(
+                !v.contains("sk-") && !agent_tokens.iter().any(|t| v.contains(t)),
+                "{name}: {v}"
+            );
+        }
+    }
+}
+
+/// The providers saw the org's stored keys, and only them.
+fn the_providers_saw_the_orgs_keys(up: &FakeApis) {
+    let seen = up.seen();
+    let paths: Vec<&str> = seen.iter().map(|s| s.path.as_str()).collect();
+    assert_eq!(paths, ["/v1/messages", "/v1/responses"]);
+    assert_eq!(seen[0].headers["x-api-key"], ORG_CLAUDE_KEY);
+    assert!(seen[0].headers.get("authorization").is_none());
+    let auth = seen[1].headers["authorization"].to_str().unwrap();
+    assert_eq!(auth, format!("Bearer {ORG_ROUTER_KEY}"));
+    assert!(seen[1].headers.get("x-api-key").is_none());
+}
+
+/// Model keys a sandbox's environment might have: the worker sends none of them.
+const SANDBOX_KEYS: [(&str, &str); 2] = [
+    ("OPENAI_API_KEY", "sk-sandbox-env-3333"),
+    ("ANTHROPIC_API_KEY", "sk-ant-sandbox-env-4444"),
+];
+
+/// The spy served on `listener`, relaying to `to`: what it relays.
+fn spying(listener: tokio::net::TcpListener, to: &str) -> Left {
+    let left: Left = Arc::default();
+    let relay = Router::new().fallback(spy);
+    let relay = relay.with_state((to.to_string(), left.clone()));
+    tokio::spawn(async move { axum::serve(listener, relay).await.unwrap() });
+    left
+}
+
+#[test]
+fn a_workers_model_calls_carry_no_model_key_and_are_recorded_once() {
+    run(async {
+        let up = fake_apis().await;
+        up.gate.add_permits(10);
+        let (listener, public) = app::bind().await;
+        let (fx, toys) = keyed_control("keys", &up, public).await;
+        let left = spying(listener, &fx.base);
+        let answers: Answers = Arc::default();
+        let (plan, ticket) = branch(&fx, model_calling_team(answers.clone()).await).await;
+        let code = run_worker_with(&ws_url(&fx.base), &ticket, &toys, &SANDBOX_KEYS).await;
+        assert_eq!(code, Some(0));
+        let b = live::ended(&fx.state, &plan.branch_id).await;
+        assert_eq!(b.status, BranchStatus::Passed, "{:?}", b.error);
+        let got = answers.lock().unwrap().clone();
+        assert!(got[0].1.contains("hello from claude"), "{}", got[0].1);
+        assert!(got[1].1.ends_with(COMPLETED), "the stream came whole");
+        let tokens = [got[0].0.as_str(), got[1].0.as_str()];
+        only_the_worker_token_left(&left.lock().unwrap(), &plan.branch_id, &tokens);
+        the_providers_saw_the_orgs_keys(&up);
+        let (kinds, _) = recorded(&fx, &plan.branch_id).await;
+        let calls = kinds.iter().filter(|k| **k == EventKind::ModelCall).count();
+        assert_eq!(calls, 2, "each call recorded once, on the control box");
     });
 }

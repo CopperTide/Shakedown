@@ -1,6 +1,7 @@
 //! Pausing, resuming and stopping a live branch (`POST /api/branches/{id}/pause`, `/resume`,
 //! `/stop`), whatever drives its agents, and asking for a save point (`/save`). A branch a worker
-//! in a sandbox runs is not live here: the three are relayed to its worker.
+//! in a sandbox runs is not live here: the control box holds it itself ([`holds`]), whether its
+//! worker is connected or not, and tells the worker.
 
 use crate::auth::{Caller, Who};
 use std::sync::Arc;
@@ -16,9 +17,10 @@ use super::{ApiError, ApiResult};
 use crate::{
     app::AppState,
     exec::{BranchCtx, ToolExec},
+    model::Hold,
     model::{SavePointPayload, SAVE_ASKED},
     runner,
-    worker::frames::ToWorker,
+    worker::holds,
 };
 
 pub(super) fn router() -> Router<Arc<AppState>> {
@@ -41,21 +43,32 @@ async fn live(state: &AppState, caller: &Caller, id: &str) -> Result<Arc<BranchC
     }
 }
 
-/// Relays `f` to the worker running branch `id`, when the branch is not live here and a worker
-/// is connected: false when there is none; 404 when the caller can't see the branch.
+/// What a stop pressed by a person says.
+const STOPPED_BY_HAND: &str = "stopped";
+
+/// Puts branch `id` on `hold` when a sandbox's worker runs it (see [`holds`]): whether the hold
+/// changed; None when it runs here, or no longer runs. 404 when the caller can't see it.
 async fn relayed(
-    state: &AppState,
+    state: &Arc<AppState>,
     caller: &Caller,
     id: &str,
-    f: ToWorker,
-) -> Result<bool, ApiError> {
-    if state.live.contains(id) || !state.links.connected(id) {
-        return Ok(false);
+    hold: Hold,
+) -> Result<Option<bool>, ApiError> {
+    if state.live.contains(id) {
+        return Ok(None);
     }
-    if state.store.at(caller).find_branch(id).await?.is_none() {
+    let at = state.store.at(caller);
+    if at.find_branch(id).await?.is_none() {
         return Err(super::no_branch(id));
     }
-    Ok(state.links.send(id, f))
+    if !state.links.has(id) && !at.is_linked(id).await? {
+        return Ok(None);
+    }
+    // The branch records for its link's caller once its worker started.
+    let acting = state.links.started(id).and_then(|l| l.caller());
+    let acting = acting.unwrap_or_else(|| Arc::new(caller.clone()));
+    let changed = holds::put(state, &acting, id, hold, STOPPED_BY_HAND).await?;
+    Ok(Some(changed))
 }
 
 /// Whether the branch is paused now, and whether the request changed that.
@@ -71,8 +84,8 @@ async fn pause(
     Who(caller): Who,
     Path(id): Path<String>,
 ) -> ApiResult<Value> {
-    if relayed(&state, &caller, &id, ToWorker::Pause).await? {
-        return Ok(Json(json!({"paused": true, "changed": true})));
+    if let Some(changed) = relayed(&state, &caller, &id, Hold::Paused).await? {
+        return Ok(Json(json!({"paused": true, "changed": changed})));
     }
     let ctx = live(&state, &caller, &id).await?;
     paused(&ctx, ctx.pause().await?)
@@ -84,8 +97,8 @@ async fn resume(
     Who(caller): Who,
     Path(id): Path<String>,
 ) -> ApiResult<Value> {
-    if relayed(&state, &caller, &id, ToWorker::Resume).await? {
-        return Ok(Json(json!({"paused": false, "changed": true})));
+    if let Some(changed) = relayed(&state, &caller, &id, Hold::Running).await? {
+        return Ok(Json(json!({"paused": false, "changed": changed})));
     }
     let ctx = live(&state, &caller, &id).await?;
     let lasted = ctx.resume_lasting().await?;
@@ -104,7 +117,10 @@ async fn stop(
     Who(caller): Who,
     Path(id): Path<String>,
 ) -> ApiResult<Value> {
-    if relayed(&state, &caller, &id, ToWorker::Stop).await? {
+    if relayed(&state, &caller, &id, Hold::STOPPED)
+        .await?
+        .is_some()
+    {
         return Ok(Json(json!({"stopping": true})));
     }
     let ctx = live(&state, &caller, &id).await?;

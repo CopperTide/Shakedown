@@ -24,6 +24,10 @@ pub fn positive(v: f64) -> Option<f64> {
     (v.is_finite() && v > 0.0).then_some(v)
 }
 
+/// What a run past its limit is told when the estimate that passed it is not at hand (a
+/// control box that restarted keeps the limit's hold, not the sentence).
+pub const OVER_LIMIT: &str = "the run's model spend estimate passed its limit";
+
 /// The reason a run ends `budget_exceeded`.
 pub fn reason(spent: f64, limit: f64) -> String {
     format!("the run's model spend estimate, USD {spent:.2}, passed its limit of USD {limit:.2}")
@@ -37,6 +41,8 @@ pub struct Budget {
     spent: Mutex<HashMap<String, (f64, f64)>>,
     /// Set once a model call was refused for the limit.
     refused: AtomicBool,
+    /// Set when another estimate (the control box's, for a sandbox's run) says the run is over.
+    forced: Mutex<Option<String>>,
 }
 
 impl Budget {
@@ -45,7 +51,14 @@ impl Budget {
             limit: limit.and_then(positive),
             spent: Mutex::default(),
             refused: AtomicBool::new(false),
+            forced: Mutex::default(),
         }
+    }
+
+    /// The run is over its limit for `why`, whatever this estimate says (a sandbox's worker is
+    /// told so by the control box, whose estimate is the one that counts).
+    pub fn force_over(&self, why: String) {
+        self.forced.lock().unwrap().get_or_insert(why);
     }
 
     pub fn limit(&self) -> Option<f64> {
@@ -89,8 +102,17 @@ impl Budget {
         !self.refused.swap(true, Ordering::SeqCst)
     }
 
+    /// Why the run is over its limit by another estimate's word (the control box's, for a
+    /// sandbox's run), when it was told so ([`Budget::force_over`]).
+    pub fn forced(&self) -> Option<String> {
+        self.forced.lock().unwrap().clone()
+    }
+
     /// The reason to stop: the estimate is past the limit.
     pub fn over(&self) -> Option<String> {
+        if let Some(why) = self.forced.lock().unwrap().clone() {
+            return Some(why);
+        }
         let limit = self.limit?;
         let spent = self.spent();
         (spent > limit).then(|| reason(spent, limit))
@@ -117,6 +139,22 @@ mod tests {
             "{why}"
         );
         assert!((b.live("lead") - 0.8).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_run_told_it_is_over_stays_over() {
+        let b = Budget::new(None);
+        assert_eq!(b.over(), None);
+        let over = Budget::new(Some(0.1));
+        over.add("a", 1.0);
+        assert!(
+            over.over().is_some() && over.forced().is_none(),
+            "over by itself"
+        );
+        b.force_over("the control box says so".into());
+        b.force_over("a later reason".into());
+        assert_eq!(b.over().as_deref(), Some("the control box says so"));
+        assert_eq!(b.forced(), b.over());
     }
 
     #[test]

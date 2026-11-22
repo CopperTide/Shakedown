@@ -15,13 +15,15 @@ use std::{future::Future, path::Path, pin::Pin, process::Command};
 
 use serde_json::{json, Value};
 
-use super::{AgentResult, AgentRun, Driver, Mcp, CLI_TIMEOUT_SECS};
+use super::{AgentResult, AgentRun, Driver, Mcp, ModelRoute, CLI_TIMEOUT_SECS};
 use crate::model::{AgentSpec, TokenUsage};
 
 pub struct CodexDriver {
     pub self_base: String,
     pub binary: String,
     pub timeout_secs: u64,
+    /// The model calls go through shaked's gateway (in a `shaked worker`), not to OpenAI.
+    pub via_gateway: bool,
 }
 
 impl CodexDriver {
@@ -30,6 +32,7 @@ impl CodexDriver {
             self_base: self_base.into(),
             binary: "codex".into(),
             timeout_secs: CLI_TIMEOUT_SECS,
+            via_gateway: false,
         }
     }
 }
@@ -108,6 +111,15 @@ pub fn command_with(
     c
 }
 
+/// Codex's model calls go to `route` (`OPENAI_BASE_URL`, `…/v1`, to which it adds
+/// `/responses`), the agent's token its key (`OPENAI_API_KEY`, and `CODEX_API_KEY`, which
+/// `codex exec` reads; sent as a bearer token).
+pub fn route_models(c: &mut Command, route: &ModelRoute) {
+    c.env("OPENAI_BASE_URL", format!("{}/v1", route.base))
+        .env("OPENAI_API_KEY", &route.token)
+        .env("CODEX_API_KEY", &route.token);
+}
+
 /// What the JSONL events of a run add up to.
 #[derive(Default)]
 struct Turns {
@@ -172,14 +184,12 @@ impl Driver for CodexDriver {
         Box::pin(async move {
             let mcp = Mcp::of(&self.self_base, &run);
             let prompt = super::prompt_of(&run);
+            let route = (self.via_gateway)
+                .then(|| ModelRoute::for_agent(&self.self_base, &run.branch, &run.spec.id));
             let build = |workdir: &Path| {
-                Ok(command_with(
-                    &self.binary,
-                    &run.spec,
-                    &mcp,
-                    workdir,
-                    &prompt,
-                ))
+                let mut c = command_with(&self.binary, &run.spec, &mcp, workdir, &prompt);
+                route.iter().for_each(|r| route_models(&mut c, r));
+                Ok(c)
             };
             super::run_in_workdir(&run, self.timeout_secs, build, parse).await
         })

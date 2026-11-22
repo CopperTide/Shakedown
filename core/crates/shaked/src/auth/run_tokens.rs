@@ -33,8 +33,23 @@ fn kind_of(s: &str) -> Option<RunTokenKind> {
     .find(|k| k.as_str() == s)
 }
 
-const LOOKUP: &str = "SELECT run_id, branch_id, kind, agent, sandbox_id FROM shakedown.run_tokens
-    WHERE token_hash = $1 AND revoked_at IS NULL AND expires_at > now()";
+/// A run token `t` of the branch `b` is live: not revoked, and not past its expiry counted in
+/// unpaused time (a pause in progress since `b.paused_at` doesn't count against it, as its resume
+/// extends the token by the pause). The one definition every query of a token's liveness splices
+/// in, with those aliases.
+macro_rules! token_live {
+    () => {
+        "t.revoked_at IS NULL AND t.expires_at + coalesce(now() - b.paused_at, interval '0') > now()"
+    };
+}
+pub(crate) use token_live;
+
+const LOOKUP: &str = concat!(
+    "SELECT t.run_id, t.branch_id, t.kind, t.agent, t.sandbox_id FROM shakedown.run_tokens t
+       LEFT JOIN shakedown.branches b ON b.id = t.branch_id
+     WHERE t.token_hash = $1 AND ",
+    token_live!()
+);
 
 /// The branch-bound caller an `sdr_` or `sdw_` bearer token is; None when it is unknown, revoked
 /// or expired.

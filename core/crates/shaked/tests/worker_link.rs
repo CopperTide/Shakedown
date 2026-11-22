@@ -409,13 +409,18 @@ fn a_silent_link_is_closed() {
     });
 }
 
+/// A pause pressed before the branch's worker started is kept, and the worker hears it right
+/// after its `Start`.
 #[test]
-fn a_pause_with_no_worker_connected_is_a_conflict() {
+fn a_pause_before_the_worker_starts_is_told_it_after_start() {
     run(async {
         let fx = setup("unlinked").await;
-        let (plan, _) = branch(&fx).await;
+        let (plan, ticket) = branch(&fx).await;
         let path = format!("/api/branches/{}/pause", plan.branch_id);
-        assert_eq!(fx.post(&path, json!({})).await.0, 409);
+        let (status, v) = fx.post(&path, json!({})).await;
+        assert_eq!((status, v), (200, json!({"paused": true, "changed": true})));
+        let (mut ws, _) = started(&fx, &plan, &ticket).await;
+        assert_eq!(hear(&mut ws).await, ToWorker::Pause);
     });
 }
 

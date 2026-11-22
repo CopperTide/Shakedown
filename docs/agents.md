@@ -130,7 +130,9 @@ request is recorded as an `http` step of the part that serves its host: inspecta
 
 The agent works through `mcp_url`, an MCP endpoint (streamable HTTP, JSON answers) with the world's tools and
 the talk tools, sending `Authorization: Bearer <token>` on every call; a call without it gets 401. The same
-token opens `gateway_url`, the recording model gateway (OpenAI-compatible: `{gateway_url}/chat/completions`).
+token opens `gateway_url`, the recording model gateway (OpenAI-compatible: `{gateway_url}/chat/completions`;
+`{gateway_url}/messages` and `{gateway_url}/responses` pass Anthropic Messages and OpenAI Responses calls through
+as sent, see [reference.md](reference.md#http-api)).
 Every tool call is recorded as for any other agent, refusals included.
 
 **Every agent has a token.** Since 2026-11-20 no MCP or gateway call gets in without the agent's token

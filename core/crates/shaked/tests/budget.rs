@@ -171,3 +171,98 @@ fn a_run_whose_reported_cost_passes_its_limit_ends_budget_exceeded_and_scored() 
         assert_eq!(shown["status"], "budget_exceeded");
     });
 }
+
+/// An `http` agent that answers its run once `go` is notified: `fail` with HTTP 500, else
+/// never.
+async fn waiting_agent(go: Arc<tokio::sync::Notify>, fail: bool) -> String {
+    let app = Router::new().route(
+        "/run",
+        post(move |Json(body): Json<Value>| {
+            let go = go.clone();
+            async move {
+                if body["type"] == "hello" {
+                    return (axum::http::StatusCode::OK, Json(json!({"name": "Waiter"})));
+                }
+                go.notified().await;
+                if !fail {
+                    std::future::pending::<()>().await;
+                }
+                (
+                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({})),
+                )
+            }
+        }),
+    );
+    let (listener, base) = app::bind().await;
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    format!("{base}/run")
+}
+
+/// A local run over its estimate: its app (with what drops its database), base and branch.
+struct Local {
+    state: Arc<shaked::app::AppState>,
+    base: String,
+    id: String,
+    _hub: TestHub,
+    _clean: support::pg::Cleanup,
+}
+
+/// A local run of the agent at `url` with a limit of USD 0.1, its estimate put past it (by its
+/// own count, not the control box's word).
+async fn over_its_estimate(url: &str, tag: &str) -> Local {
+    let hub = TestHub::new(&[]);
+    let (store, clean) = app::meta_store("budget", tag).await;
+    let (state, base) = app::idle_app(store, hub.hub.clone(), None, |_| {}).await;
+    let team = json!({"id": "t", "name": "T", "agents": [
+        {"id": "remote", "name": "Remote", "kind": "http", "url": url}]});
+    let body = json!({"task_id": "27", "team": team, "max_cost_usd": 0.1});
+    let (st, v) = post_run(&base, body).await;
+    assert_eq!(st, 200, "{v}");
+    let id = v["branch_id"].as_str().unwrap().to_string();
+    let ctx = loop {
+        if let Some(ctx) = state.live.get(&id) {
+            break ctx;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    };
+    ctx.budget.add("remote", 1.0);
+    assert!(ctx.budget.over().is_some() && ctx.budget.forced().is_none());
+    Local {
+        state,
+        base,
+        id,
+        _hub: hub,
+        _clean: clean,
+    }
+}
+
+/// Only the control box's word turns a stop into `budget_exceeded`: a person's stop of a local
+/// run stays `stopped`, its estimate past its limit or not.
+#[test]
+fn a_local_stop_stays_stopped_over_its_estimate() {
+    run(async {
+        let go = Arc::new(tokio::sync::Notify::new());
+        let url = waiting_agent(go.clone(), false).await;
+        let run = over_its_estimate(&url, "stop").await;
+        let stop = format!("{}/api/branches/{}/stop", run.base, run.id);
+        let req = reqwest::Client::new().post(stop);
+        assert_eq!(app::send(req.json(&json!({}))).await.0, 200);
+        let b = live::ended(&run.state, &run.id).await;
+        assert_eq!(b.status, BranchStatus::Stopped, "{:?}", b.error);
+    });
+}
+
+/// A local agent's genuine infrastructure failure stays `infra_error`, its estimate past its
+/// limit or not.
+#[test]
+fn a_local_infra_failure_stays_infra_error_over_its_estimate() {
+    run(async {
+        let go = Arc::new(tokio::sync::Notify::new());
+        let url = waiting_agent(go.clone(), true).await;
+        let run = over_its_estimate(&url, "infra").await;
+        go.notify_one();
+        let b = live::ended(&run.state, &run.id).await;
+        assert_eq!(b.status, BranchStatus::InfraError, "{:?}", b.error);
+    });
+}

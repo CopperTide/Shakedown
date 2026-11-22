@@ -9,9 +9,10 @@
 //! plan and worker token; the worker stands the world up and drives the agents, recording every
 //! event through the link ([`LinkRecords`]). It holds no database.
 //!
-//! The agents reach the worker's MCP endpoint, gateway and proxy on `127.0.0.1` only. Model calls
-//! go to `Start.gateway` with the worker token once the gateway forwards them (Task 6); until then
-//! the worker's gateway answers as a local one with no provider keys.
+//! The agents reach the worker's MCP endpoint, gateway and proxy on `127.0.0.1` only. The gateway
+//! sends every model call on to `Start.gateway` with the worker token
+//! ([`crate::gateway::ForwardTo`]): the control box adds the run's key and records the call. CLI
+//! agents get that gateway as their API's base URL, their agent token as the key.
 //!
 //! A dropped link is tried again at once, then every [`Patience::retry`], with the worker token
 //! and the last `n` acknowledged; every event not acknowledged is sent again, in order. The link
@@ -46,7 +47,8 @@ use super::{
 use crate::{
     app::{AppState, Config},
     exec::BranchCtx,
-    providers::ProviderConfig,
+    gateway::ForwardTo,
+    providers::{ProviderConfig, Secret},
     runner::{self, BranchPlan, StartPoint},
     store::Store,
 };
@@ -391,30 +393,33 @@ impl Link {
 }
 
 /// The worker's own shaked on `hub`, reached at `base`: no database (its records go over the
-/// link), [`WorkerLayer`] (no vault, no keys from the environment).
-fn worker_app(hub: parts::Hub, base: String) -> Result<Arc<AppState>> {
+/// link), [`WorkerLayer`] (no vault, no keys from the environment), its model calls sent on
+/// `to` the control box.
+fn worker_app(hub: parts::Hub, base: String, to: ForwardTo) -> Result<Arc<AppState>> {
     let store = Arc::new(Store::detached(Arc::new(WorkerLayer))?);
     let mut config = Config::with_providers(ProviderConfig::without_environment());
     config.self_base = base;
+    config.forward_to = Some(to);
     let state = Arc::new(AppState::new(store, Arc::new(hub), config));
     crate::app::install_default_drivers(&state);
     Ok(state)
 }
 
 /// The worker's shaked ([`worker_app`]) on the hub from the environment, serving its agents' MCP
-/// endpoint, gateway and proxy on 127.0.0.1.
-async fn worker_state() -> Result<Arc<AppState>> {
+/// endpoint, gateway (forwarding `to` the control box) and proxy on 127.0.0.1.
+async fn worker_state(to: ForwardTo) -> Result<Arc<AppState>> {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let hub = crate::serve::worker_hub().await?;
-    let state = worker_app(hub, format!("http://{}", listener.local_addr()?))?;
-    let agents = crate::mcp::router().merge(crate::gateway::router());
+    let state = worker_app(hub, format!("http://{}", listener.local_addr()?), to)?;
+    let agents = crate::mcp::router().merge(crate::gateway::worker_router());
     let agents = agents.with_state(state.clone());
     tokio::spawn(async move { axum::serve(listener, agents).await });
     crate::serve::start_proxy(&state).await?;
     Ok(state)
 }
 
-/// Pauses, resumes and stops the branch as the control box says.
+/// Pauses, resumes and stops the branch as the control box says; over the run's limit by the
+/// control box's estimate, the branch stops and ends `budget_exceeded`.
 async fn obey(
     state: Arc<AppState>,
     ctx: Arc<BranchCtx>,
@@ -425,6 +430,11 @@ async fn obey(
             ToWorker::Pause => ctx.pause().await.map(|_| ()),
             ToWorker::Resume => ctx.resume().await.map(|_| ()),
             ToWorker::Stop => {
+                runner::stop(&state, &ctx).await;
+                Ok(())
+            }
+            ToWorker::OverBudget { why } => {
+                ctx.budget.force_over(why.clone());
                 runner::stop(&state, &ctx).await;
                 Ok(())
             }
@@ -469,12 +479,14 @@ async fn until_end(
 async fn drive(o: Opened) -> Result<()> {
     let Opened {
         plan,
+        token,
+        gateway,
         records,
         controls,
         link,
-        ..
     } = o;
-    let state = worker_state().await?;
+    let token = Secret::new(token);
+    let state = worker_state(ForwardTo { gateway, token }).await?;
     let ctx = match runner::stand_up(&state, &plan, records).await {
         Ok(ctx) => Arc::new(ctx),
         // Its end (`infra_error`) went over the link.
@@ -508,13 +520,23 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let registry = parts::Registry::scan(&[]).unwrap();
         let hub = parts::Hub::new(registry, dir.path().into(), dir.path().into());
-        let state = worker_app(hub, "http://127.0.0.1:9".into()).unwrap();
+        let to = ForwardTo {
+            gateway: "http://127.0.0.1:9/gateway".into(),
+            token: Secret::new("sdw_t"),
+        };
+        let state = worker_app(hub, "http://127.0.0.1:9".into(), to).unwrap();
         let Err(refused) = state.vault() else {
             panic!("no vault in a worker");
         };
         assert!(refused.contains("worker"), "{refused}");
         assert!(!state.store.layer().policy().environment_keys);
         assert!(!state.config.providers.machine_credentials);
+        let to = state
+            .config
+            .forward_to
+            .as_ref()
+            .expect("model calls go to the control box");
+        assert_eq!(to.gateway, "http://127.0.0.1:9/gateway");
     }
 
     #[test]

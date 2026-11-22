@@ -4,17 +4,82 @@
 //! event's `n` too (`events.link_n`): a link lost with a restart is rebuilt from it.
 
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::{HashMap, HashSet, VecDeque},
     sync::{Arc, Mutex},
 };
 
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, Semaphore};
 
 use super::{
-    frames::{ToWorker, WINDOW},
+    frames::{ToWorker, REFUSED_ENDED, WINDOW},
     tickets::Tickets,
 };
-use crate::{auth::Caller, runner::BranchPlan};
+
+use crate::{
+    auth::Caller,
+    budget::{Budget, OVER_LIMIT},
+    model::{BranchStatus, Hold},
+    runner::BranchPlan,
+    store::Controlled,
+};
+
+/// A linked branch's pool of model calls in flight at once is this many per agent of its team
+/// (Claude Code makes some in parallel: subagents, a background call to a small model).
+pub const INFLIGHT_PER_AGENT: usize = 4;
+
+/// Who the spend a rebuilt link's branch had before the control box restarted is charged to.
+const SPENT_BEFORE: &str = "(before the restart)";
+
+/// What the control box holds a link's branch to, whatever its worker does: the run's spend
+/// estimate and limit, the hold, whether its limits are on record at all, and how many agents its
+/// team has (its pool of calls in flight is [`INFLIGHT_PER_AGENT`] times that).
+pub struct Held {
+    pub budget: Budget,
+    pub hold: Hold,
+    pub limits_known: bool,
+    pub agents: usize,
+}
+
+impl Held {
+    /// What `plan`'s branch starts held to: the control box's own rules.
+    pub fn of_plan(plan: &BranchPlan) -> Held {
+        Held {
+            budget: Budget::new(plan.rules.max_cost_usd),
+            hold: Hold::Running,
+            limits_known: true,
+            agents: plan.team.agents.len(),
+        }
+    }
+
+    /// What a branch is held to after a restart, from what the store kept (never from the
+    /// worker's own records).
+    pub fn of_record(c: &Controlled) -> Held {
+        let budget = Budget::new(c.limit.flatten());
+        budget.add(SPENT_BEFORE, c.spent);
+        if c.refused {
+            budget.first_refusal();
+        }
+        Held {
+            budget,
+            hold: c.hold,
+            limits_known: c.limit.is_some(),
+            agents: c.agents,
+        }
+    }
+}
+
+/// The frame that tells a worker its branch is on `hold` (`why`: the reason of a stop for the
+/// spend limit); None for going on unpaused.
+pub fn frame_of(hold: Hold, why: &str) -> Option<ToWorker> {
+    match hold {
+        Hold::Running => None,
+        Hold::Paused => Some(ToWorker::Pause),
+        Hold::Stopping(BranchStatus::BudgetExceeded) => Some(ToWorker::OverBudget {
+            why: why.to_string(),
+        }),
+        Hold::Stopping(_) => Some(ToWorker::Stop),
+    }
+}
 
 /// Every branch a worker runs (or is about to) for this control box, and the tickets issued for
 /// them.
@@ -22,6 +87,8 @@ use crate::{auth::Caller, runner::BranchPlan};
 pub struct Links {
     pub tickets: Tickets,
     branches: Mutex<HashMap<String, Arc<Link>>>,
+    /// The branches whose end after the grace is armed (see `holds`).
+    armed: Mutex<HashSet<String>>,
 }
 
 /// One branch's link.
@@ -31,6 +98,14 @@ pub struct Link {
     /// What `Start` carries; None for a link rebuilt when its worker reconnected (a reconnect is
     /// never started).
     pub plan: Option<BranchPlan>,
+    /// The run's spend estimate and limit as the control box keeps them: the gateway charges
+    /// every model call of the branch here and refuses calls once it is over (402).
+    pub budget: Budget,
+    hold: Mutex<Hold>,
+    /// False when the branch's rules are not on record: its calls are refused (503).
+    pub limits_known: bool,
+    /// [`INFLIGHT_PER_AGENT`] permits per agent: the model calls of the branch in flight at once.
+    pub inflight: Arc<Semaphore>,
     wire: Mutex<Wire>,
     pub(super) appended: tokio::sync::Mutex<Appended>,
 }
@@ -83,27 +158,29 @@ impl Appended {
 impl Links {
     /// A worker for `plan`'s branch will say hello: its ticket's `Start` carries `plan`.
     pub fn expect(&self, plan: BranchPlan) {
-        let mut link = Link::new(&plan.run_id, &plan.branch_id, Wire::default(), 0);
+        let held = Held::of_plan(&plan);
+        let mut link = Link::new((&plan.run_id, &plan.branch_id), Wire::default(), 0, held);
         link.plan = Some(plan);
         let id = link.branch_id.clone();
         self.branches.lock().unwrap().insert(id, Arc::new(link));
     }
 
     /// The link of `branch` (of `run`), rebuilt when this control box no longer has it (it
-    /// restarted): started for `caller`, `last_n` its worker's last event in the store.
+    /// restarted): started for `caller`, `last_n` its worker's last event in the store, `held`
+    /// to what the store kept.
     pub(super) fn rejoined(
         &self,
-        run: &str,
-        branch: &str,
+        (run, branch): (&str, &str),
         caller: Arc<Caller>,
         last_n: u64,
+        held: Held,
     ) -> Arc<Link> {
         let mut branches = self.branches.lock().unwrap();
         let wire = Wire {
             caller: Some(caller),
             ..Wire::default()
         };
-        let made = || Arc::new(Link::new(run, branch, wire, last_n));
+        let made = || Arc::new(Link::new((run, branch), wire, last_n, held));
         branches
             .entry(branch.to_string())
             .or_insert_with(made)
@@ -119,24 +196,67 @@ impl Links {
         wire.out.as_ref().is_some_and(|out| out.send(f).is_ok())
     }
 
+    /// Puts `branch`'s link on `hold`, as the store has it already ([`Hold::then`]).
+    pub fn set_hold(&self, branch: &str, hold: Hold) {
+        if let Some(link) = self.get(branch) {
+            let mut now = link.hold.lock().unwrap();
+            *now = now.then(hold).unwrap_or(*now);
+        }
+    }
+
+    /// Marks `branch`'s end after the grace armed: false when it was already.
+    pub fn arm(&self, branch: &str) -> bool {
+        self.armed.lock().unwrap().insert(branch.to_string())
+    }
+
+    /// `branch`'s end after the grace went off (or was not needed).
+    pub fn disarm(&self, branch: &str) {
+        self.armed.lock().unwrap().remove(branch);
+    }
+
+    /// Why `branch`'s run is over its limit: its link's reason ([`Link::limit_reason`]), else
+    /// [`OVER_LIMIT`].
+    pub fn limit_reason(&self, branch: &str) -> String {
+        let reason = self.get(branch).map(|l| l.limit_reason());
+        reason.unwrap_or_else(|| OVER_LIMIT.to_string())
+    }
+
+    /// True when this control box keeps a link for `branch` (its worker may not have started).
+    pub fn has(&self, branch: &str) -> bool {
+        self.get(branch).is_some()
+    }
+
     /// True when `branch`'s worker is connected now.
     pub fn connected(&self, branch: &str) -> bool {
         self.get(branch)
             .is_some_and(|l| l.wire.lock().unwrap().out.is_some())
     }
 
+    /// The link of `branch`, once its worker has started.
+    pub fn started(&self, branch: &str) -> Option<Arc<Link>> {
+        self.get(branch).filter(|l| l.caller().is_some())
+    }
+
     pub(super) fn get(&self, branch: &str) -> Option<Arc<Link>> {
         self.branches.lock().unwrap().get(branch).cloned()
     }
 
-    /// The branch ended: its link is no longer kept.
-    pub(super) fn forget(&self, branch: &str) {
-        self.branches.lock().unwrap().remove(branch);
+    /// The branch ended (`status`): its link is no longer kept, and a connection still open is
+    /// told so (`Refused`) and closed.
+    pub fn forget(&self, branch: &str, status: BranchStatus) {
+        let Some(link) = self.branches.lock().unwrap().remove(branch) else {
+            return;
+        };
+        let out = link.wire.lock().unwrap().out.take();
+        if let Some(out) = out {
+            let why = format!("{REFUSED_ENDED} {}", status.as_str());
+            let _ = out.send(ToWorker::Refused { why });
+        }
     }
 }
 
 impl Link {
-    fn new(run: &str, branch: &str, wire: Wire, last_n: u64) -> Link {
+    fn new((run, branch): (&str, &str), wire: Wire, last_n: u64, held: Held) -> Link {
         let appended = Appended {
             last_n,
             recent: VecDeque::new(),
@@ -145,13 +265,27 @@ impl Link {
             run_id: run.to_string(),
             branch_id: branch.to_string(),
             plan: None,
+            budget: held.budget,
+            hold: Mutex::new(held.hold),
+            limits_known: held.limits_known,
+            inflight: Arc::new(Semaphore::new(INFLIGHT_PER_AGENT * held.agents.max(1))),
             wire: Mutex::new(wire),
             appended: tokio::sync::Mutex::new(appended),
         }
     }
 
+    /// Why the run is over its limit: its estimate's reason, else [`OVER_LIMIT`].
+    pub fn limit_reason(&self) -> String {
+        self.budget.over().unwrap_or_else(|| OVER_LIMIT.to_string())
+    }
+
+    /// What the control box last told the worker.
+    pub fn hold(&self) -> Hold {
+        *self.hold.lock().unwrap()
+    }
+
     /// Who the branch records for, once its worker has started.
-    pub(super) fn caller(&self) -> Option<Arc<Caller>> {
+    pub fn caller(&self) -> Option<Arc<Caller>> {
         self.wire.lock().unwrap().caller.clone()
     }
 

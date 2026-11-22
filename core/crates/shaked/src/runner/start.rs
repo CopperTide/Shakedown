@@ -215,9 +215,11 @@ pub async fn record_start(
     world::plan(&state.hub, &bench).await?;
     let records = state.store.at(scope);
     let run_id = records.create_run(spec.task_id, &spec.team).await?;
-    let branch_id = records
-        .create_branch(&run_id, None, &spec.team, &json!([]), None)
-        .await?;
+    let none = json!([]);
+    let created = records.create_branch(&run_id, None, &spec.team, &none, None);
+    let branch_id = created.await?;
+    // The rules on record are the control box's: a sandbox's worker cannot change them.
+    records.set_rules(&branch_id, &spec.rules).await?;
     Ok(BranchPlan {
         run_id,
         branch_id,

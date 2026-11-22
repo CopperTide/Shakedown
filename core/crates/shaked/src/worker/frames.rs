@@ -60,6 +60,11 @@ pub enum ToWorker {
     Pause,
     Resume,
     Stop,
+    /// The run's spend estimate on the control box passed its limit (`why`): the worker stops
+    /// the branch, which ends `budget_exceeded`. The control box refuses its model calls (402).
+    OverBudget {
+        why: String,
+    },
     /// The control box closes the link after this.
     Refused {
         why: String,

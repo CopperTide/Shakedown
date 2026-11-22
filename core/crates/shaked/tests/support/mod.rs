@@ -4,6 +4,7 @@
 
 pub mod app;
 pub mod driven;
+pub mod fake_apis;
 pub mod fake_llm;
 pub mod legacy;
 pub mod live;

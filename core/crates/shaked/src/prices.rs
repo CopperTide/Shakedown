@@ -62,6 +62,21 @@ impl Prices {
             .find(|p| p.provider == provider && p.model == model)
     }
 
+    /// The most an input token and an output token of `provider` can cost, per million tokens,
+    /// over every model the table lists for it (an input token at its dearest: a cache write at
+    /// the long-context rate); None when it lists none.
+    pub fn highest(&self, provider: &str) -> Option<(f64, f64)> {
+        let of = self.price.iter().filter(|p| p.provider == provider);
+        let rates = |p: &Price| {
+            let long = p.long_input_per_mtok.unwrap_or(0.0).max(p.input_per_mtok);
+            let input = long.max(p.cache_write_rate() * long / p.input_per_mtok);
+            let output = p.long_output_per_mtok.unwrap_or(0.0).max(p.output_per_mtok);
+            (input, output)
+        };
+        of.map(rates)
+            .reduce(|(i, o), (i2, o2)| (i.max(i2), o.max(o2)))
+    }
+
     /// `find`, for pricing a total of many calls: not a price with a long-context tier, whose
     /// rate depends on each call's prompt.
     pub fn find_flat(&self, provider: &str, model: &str) -> Option<&Price> {
@@ -90,6 +105,12 @@ const CACHE_WRITE_RATE: f64 = 1.25;
 const CACHE_READ_RATE: f64 = 0.1;
 
 impl Price {
+    /// What a cache write costs per million tokens: the listed price, else the provider's stated
+    /// multiple of the input price.
+    fn cache_write_rate(&self) -> f64 {
+        (self.cache_write_per_mtok).unwrap_or(self.input_per_mtok * CACHE_WRITE_RATE)
+    }
+
     /// What `prompt` input and `completion` output tokens cost at this price.
     pub fn cost(&self, prompt: i64, completion: i64) -> f64 {
         let per = |n: i64, p: f64| n as f64 * p / 1_000_000.0;
@@ -105,9 +126,7 @@ impl Price {
             _ => (self.input_per_mtok, self.output_per_mtok),
         };
         let scale = input / self.input_per_mtok;
-        let write = self
-            .cache_write_per_mtok
-            .unwrap_or(self.input_per_mtok * CACHE_WRITE_RATE);
+        let write = self.cache_write_rate();
         let read = self
             .cache_read_per_mtok
             .unwrap_or(self.input_per_mtok * CACHE_READ_RATE);

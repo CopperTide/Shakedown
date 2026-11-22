@@ -60,6 +60,8 @@ pub async fn run(store: Store, opts: ServeOptions) -> anyhow::Result<()> {
     }
     let listener = tokio::net::TcpListener::bind(opts.bind.addr).await?;
     start_proxy(&state).await?;
+    // The branches sandboxes' workers run: stops a restart interrupted, dead worker tokens.
+    tokio::spawn(crate::worker::holds::sweep_every(state.clone()));
     let line = listening_line(&state, &opts.bind, bench.as_ref(), opts.ui_dist.as_deref());
     println!("{line}");
     axum::serve(listener, router)

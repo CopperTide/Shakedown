@@ -48,7 +48,7 @@ pub(super) async fn drive(
     // Stopping drops the agents where they are (a CLI agent's process is killed with it).
     let ended = tokio::select! {
         ended = agents => ended?,
-        () = ctx.flow.stopped() => return Ok(Ending::STOPPED),
+        () = ctx.flow.stopped() => return stopped(state, ctx).await,
     };
     if let Some(end) = ended {
         // Over its spend limit, a run is scored as it stands (a failure).
@@ -60,6 +60,17 @@ pub(super) async fn drive(
     }
     freeze(ctx).await;
     check(state, ctx).await
+}
+
+/// How a stopped branch ends: `stopped`, or `budget_exceeded`, scored as it stands, when the
+/// control box stopped a sandbox's run for its limit (only its word turns a stop into that).
+async fn stopped(state: &Arc<AppState>, ctx: &Arc<BranchCtx>) -> Result<Ending> {
+    let Some(why) = ctx.budget.forced() else {
+        return Ok(Ending::STOPPED);
+    };
+    freeze(ctx).await;
+    check(state, ctx).await?;
+    Ok(Ending::because(BranchStatus::BudgetExceeded, why))
 }
 
 /// The task's ticket, the benchmark's instructions and the world's clock.
@@ -252,9 +263,12 @@ fn agent_ending(ctx: &BranchCtx, agent: &str, result: AgentResult) -> Option<End
     if !result.ok {
         let e = result.error.unwrap_or_else(|| "agent failed".to_string());
         // The model's own behavior is a failed attempt, not a broken harness.
+        // An agent that failed once the control box said the run was over its limit (its
+        // model call refused 402) failed for the limit.
         let status = match result.failure {
             Some(FailureKind::Model) => BranchStatus::Failed,
             Some(FailureKind::Budget) => BranchStatus::BudgetExceeded,
+            None if ctx.budget.forced().is_some() => BranchStatus::BudgetExceeded,
             None => BranchStatus::InfraError,
         };
         return Some(Ending::because(status, e));

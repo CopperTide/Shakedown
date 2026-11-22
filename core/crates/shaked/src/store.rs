@@ -19,6 +19,7 @@ use crate::{
 
 mod api_tokens;
 mod connections;
+mod control;
 mod experiments;
 mod linked;
 mod open;
@@ -30,11 +31,13 @@ mod suites;
 mod tx;
 pub use api_tokens::ApiTokenRow;
 pub use connections::{is_secret, Connection, NewConnection, REDACTED};
+pub use control::Controlled;
 pub use experiments::{NewExperiment, NewSetup};
 pub use linked::Linked;
 pub use open::{prepare_db, template_key};
 pub use provider_keys::{KeyKind, KeyRow, NameTaken, NewKey, OpenKey};
 pub use reviews::{ReviewDone, StoredReview};
+pub(crate) use run_tokens::REVOKE;
 pub(crate) use saves::{repoint_saves, saves_on};
 pub use saves::{NewSave, SaveRow, SAVE_RETENTION};
 pub use suites::NewSuite;
@@ -156,6 +159,12 @@ impl Store {
             tx,
             locks: Mutex::new(HashMap::new()),
         }
+    }
+
+    /// The per-branch lock every append of the branch takes: what the control box decides for a
+    /// linked branch (its hold, its end, its rebuilt link) is decided under it too.
+    pub fn branch_lock(&self, branch: &str) -> std::sync::Arc<AsyncMutex<()>> {
+        self.lock_for(branch)
     }
 
     fn lock_for(&self, branch: &str) -> std::sync::Arc<AsyncMutex<()>> {

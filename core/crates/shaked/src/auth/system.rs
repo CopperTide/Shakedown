@@ -13,6 +13,9 @@ pub enum SystemJob {
     ResolveToken,
     /// Copying stored objects between stores.
     StoreCopy,
+    /// Ending the branches sandboxes' workers run that the control box stops, or whose worker
+    /// token died (at start, and now and then).
+    LinkSweep,
 }
 
 /// Permission to open one system job's transactions (`Store::system_tx`). Built only in this
@@ -52,6 +55,13 @@ impl SystemScope {
     pub(crate) fn store_copy() -> SystemScope {
         SystemScope {
             job: SystemJob::StoreCopy,
+        }
+    }
+
+    /// Finding and ending linked branches the control box stops, or whose worker token died.
+    pub(crate) fn link_sweep() -> SystemScope {
+        SystemScope {
+            job: SystemJob::LinkSweep,
         }
     }
 }

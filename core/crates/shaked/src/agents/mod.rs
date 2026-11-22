@@ -197,6 +197,25 @@ impl Mcp {
     }
 }
 
+/// Where a CLI agent in a `shaked worker` sends its model calls: the worker's gateway for its
+/// branch and agent (`…/gateway/<branch>/<agent>`), its agent token as the key. A sandbox holds
+/// no model key: the control box adds the run's own.
+pub struct ModelRoute {
+    pub base: String,
+    pub token: String,
+}
+
+impl ModelRoute {
+    /// `agent`'s route on `branch`, on the shaked at `self_base`.
+    pub(crate) fn for_agent(self_base: &str, branch: &BranchCtx, agent: &str) -> ModelRoute {
+        let base = self_base.trim_end_matches('/');
+        ModelRoute {
+            base: format!("{base}/gateway/{}/{agent}", branch.branch_id),
+            token: branch.agent_token(agent),
+        }
+    }
+}
+
 /// The name the CLIs give the world's MCP server: the benchmark's name, each character outside
 /// `[A-Za-z0-9_-]` (what Claude Code and Codex accept) replaced by `_`; `shakedown` if it is empty.
 pub fn server_name(benchmark: &str) -> String {

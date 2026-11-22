@@ -283,6 +283,64 @@ fn drivers_name_the_mcp_server_after_the_benchmark() {
     })
 }
 
+/// A fake CLI that writes the env vars `vars`, one per line, to a fresh file: (the CLI, the file).
+fn env_recorder(vars: &[&str]) -> (String, std::path::PathBuf) {
+    let out = std::env::temp_dir().join(format!("fakeenv-{}", uuid::Uuid::new_v4().simple()));
+    let lines: Vec<String> = vars
+        .iter()
+        .map(|v| format!("printf '%s\\n' \"${v}\""))
+        .collect();
+    let script = format!("{{ {}; }} > {}; exit 1", lines.join("; "), out.display());
+    (fake(&script), out)
+}
+
+/// What the fake CLI recorded, once run.
+fn recorded_env(out: &std::path::Path) -> Vec<String> {
+    let text = std::fs::read_to_string(out).unwrap_or_default();
+    let _ = std::fs::remove_file(out);
+    text.lines().map(str::to_string).collect()
+}
+
+/// What Claude Code (else Codex) run with `via_gateway` saw of `vars`, and its agent's token.
+async fn routed_env(toy: &ToyWorld, claude: bool, via_gateway: bool) -> (Vec<String>, String) {
+    let run = bare_run(toy, None);
+    let token = run.branch.agent_token("triage");
+    let vars = match claude {
+        true => ["ANTHROPIC_BASE_URL", "ANTHROPIC_API_KEY"],
+        false => ["OPENAI_BASE_URL", "OPENAI_API_KEY"],
+    };
+    let (binary, out) = env_recorder(&vars);
+    if claude {
+        let mut d = ClaudeDriver::new("http://127.0.0.1:7");
+        (d.binary, d.via_gateway) = (binary, via_gateway);
+        d.run(run).await;
+    } else {
+        let mut d = CodexDriver::new("http://127.0.0.1:7");
+        (d.binary, d.via_gateway) = (binary, via_gateway);
+        d.run(run).await;
+    }
+    (recorded_env(&out), token)
+}
+
+/// In a worker (`via_gateway`) a CLI agent's API goes to the worker's gateway for its branch
+/// and agent, its agent token as the key; elsewhere neither is set.
+#[test]
+fn cli_agents_in_a_worker_send_model_calls_to_its_gateway() {
+    run(async {
+        let toy = toy_world("cliroute").await;
+        let base = "http://127.0.0.1:7/gateway/b1/triage";
+        let (seen, token) = routed_env(&toy, true, true).await;
+        assert_eq!(seen, [base.to_string(), token], "Claude Code");
+        let (seen, token) = routed_env(&toy, false, true).await;
+        assert_eq!(seen, [format!("{base}/v1"), token], "Codex");
+        for claude in [true, false] {
+            // The CLI's own key, if the environment has one, is its sign-in: left alone.
+            let (seen, _) = routed_env(&toy, claude, false).await;
+            assert_eq!(seen[0], "", "not in a worker");
+        }
+    })
+}
+
 #[test]
 fn driver_times_out() {
     run(async {
