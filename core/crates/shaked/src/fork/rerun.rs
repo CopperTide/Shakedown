@@ -3,7 +3,7 @@
 //! fingerprint check for replays, and starting the new branch's world that way.
 
 use crate::store::Scoped;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use parts::proto::{BenchDescribe, ExactKind, FromSave, Mode};
 use serde::Serialize;
@@ -25,7 +25,7 @@ use crate::{
 #[derive(Debug, Clone)]
 pub struct ForkRequest {
     pub at_seq: i64,
-    pub changes: std::collections::HashMap<String, Change>,
+    pub changes: HashMap<String, Change>,
     pub restore: Mode,
     /// Another team for the new branch, in place of `changes` (only for a run an external
     /// system drives: how its agents resume is that system's choice).
@@ -129,6 +129,16 @@ fn replay_unsaved(parts: &mut [PartRestore], restore: &Saves) {
     }
 }
 
+/// Refuses a tools change that lists a tool the world doesn't offer agents.
+fn known_tools(world: &Plan, changes: &HashMap<String, Change>) -> Result<(), ForkError> {
+    let listed = changes.values().flat_map(|c| c.tools.iter().flatten());
+    let offered = |name: &String| world.tools.iter().any(|(t, _)| t.name == *name);
+    match listed.into_iter().find(|name| !offered(name)) {
+        Some(name) => Err(ForkError::UnknownTool(name.clone())),
+        None => Ok(()),
+    }
+}
+
 /// Plans a rerun of `branch` (its `events`) for `req`.
 pub async fn prepare(
     state: &AppState,
@@ -143,6 +153,7 @@ pub async fn prepare(
     let run = run_info(events);
     let bench = state.hub.bench_describe(&run.benchmark).await?;
     let world = world::plan(&state.hub, &bench).await?;
+    known_tools(&world, &req.changes)?;
     let mut parts = part_restores(&world, req.restore)?;
     let skip = replayed_names(&parts);
     let plan = plan_fork_with(events, &branch.team, req.at_seq, &req.changes, &skip)?;

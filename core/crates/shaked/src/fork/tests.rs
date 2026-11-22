@@ -573,6 +573,32 @@ fn a_read_only_change_is_carried_and_only_counts_when_it_differs() {
 }
 
 #[test]
+fn a_tools_change_sets_exactly_that_list_and_only_counts_when_it_differs() {
+    let t = team(AgentKind::Open);
+    let tools = |names: &[&str]| Change {
+        tools: Some(names.iter().map(|n| n.to_string()).collect()),
+        ..Default::default()
+    };
+    // The agent's setup lists no tools (every tool): an empty list is no change.
+    assert!(!is_change(&tools(&[]), &t.agents[1]));
+    assert!(is_change(&tools(&["get_order_details"]), &t.agents[1]));
+    let forked = apply_changes(&t, &change("resolver", tools(&["get_order_details"])));
+    assert_eq!(forked.agents[1].tools, ["get_order_details"]);
+    assert!(forked.agents[1].may_use("get_order_details"));
+    assert!(!forked.agents[1].may_use("exchange_delivered_order_items"));
+    assert!(forked.agents[0].tools.is_empty() && t.agents[1].tools.is_empty());
+    // The same list again is no change; another one is.
+    assert!(!is_change(
+        &tools(&["get_order_details"]),
+        &forked.agents[1]
+    ));
+    assert!(is_change(&tools(&[]), &forked.agents[1]));
+    // Like a prompt change, it resumes the open agent where asked.
+    let p = plan_fork(&events(), &t, 11, &change("resolver", tools(&["x"]))).unwrap();
+    assert_eq!((p.start_seq, p.moved_from), (11, None));
+}
+
+#[test]
 fn same_kind_is_not_a_mode_change() {
     let t = team(AgentKind::Open);
     let c = change(

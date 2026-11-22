@@ -39,6 +39,9 @@ pub enum ForkError {
         "the {part} integration is running on a different machine or version than the original"
     )]
     FingerprintMismatch { part: String },
+    /// A tools change lists a tool the world doesn't offer agents.
+    #[error("the world has no tool \"{0}\" for an agent to use")]
+    UnknownTool(String),
     /// A team change the run can't take (see [`ForkRequest::team`]).
     #[error("{0}")]
     TeamChange(&'static str),

@@ -1,0 +1,152 @@
+//! What a fork may change beyond an agent's prompt and model, without a model: the test drives
+//! a retail run as an external system does (registers its agent and calls the world through the
+//! agent's MCP endpoint), finishes it, forks it and calls the world again on the new branch.
+mod support;
+use support::records;
+
+use serde_json::{json, Value};
+use shaked::model::*;
+use support::{run, AppFx};
+
+const ORDER: &str = "#W2378156";
+
+async fn setup(tag: &str) -> AppFx {
+    AppFx::idle("forkopts", tag).start().await
+}
+
+/// An agent's endpoint on a live branch: where it calls the world, and its token.
+struct Agent {
+    mcp_url: String,
+    token: String,
+}
+
+impl Agent {
+    fn of(answer: &Value) -> Agent {
+        Agent {
+            mcp_url: answer["mcp_url"].as_str().unwrap().to_string(),
+            token: answer["token"].as_str().unwrap().to_string(),
+        }
+    }
+
+    async fn rpc(&self, method: &str, params: Value) -> Value {
+        let body = json!({"jsonrpc": "2.0", "id": 1, "method": method, "params": params});
+        let r = reqwest::Client::new()
+            .post(&self.mcp_url)
+            .bearer_auth(&self.token);
+        let v: Value = r.json(&body).send().await.unwrap().json().await.unwrap();
+        v["result"].clone()
+    }
+
+    /// A tool call's result (`isError`, `content`, `structuredContent`).
+    async fn call(&self, name: &str, args: Value) -> Value {
+        let params = json!({"name": name, "arguments": args});
+        self.rpc("tools/call", params).await
+    }
+
+    /// The names of the tools it is offered.
+    async fn tools(&self) -> Vec<String> {
+        let l = self.rpc("tools/list", json!({})).await;
+        let names = l["tools"].as_array().unwrap().iter();
+        names
+            .map(|t| t["name"].as_str().unwrap().to_string())
+            .collect()
+    }
+}
+
+/// Starts an external run of task 27 with the agent `solo` registered: the branch and the agent.
+async fn start(fx: &AppFx) -> (String, Agent) {
+    let team = json!({"id": "own", "name": "Own design", "agents": []});
+    let body = json!({"task_id": "27", "team": team, "runner": "external"});
+    let (status, v) = fx.post("/api/runs", body).await;
+    assert_eq!(status, 200, "{v}");
+    let branch = v["branch_id"].as_str().unwrap().to_string();
+    let (status, a) = fx.on(&branch, "agents", json!({"id": "solo"})).await;
+    assert_eq!(status, 200, "{a}");
+    (branch, Agent::of(&a))
+}
+
+impl AppFx {
+    /// `POST /api/branches/{branch}/{what}`.
+    async fn on(&self, branch: &str, what: &str, body: Value) -> (u16, Value) {
+        self.post(&format!("/api/branches/{branch}/{what}"), body)
+            .await
+    }
+
+    async fn finish(&self, branch: &str) {
+        let (status, v) = self.on(branch, "finish", json!({})).await;
+        assert_eq!(status, 200, "{v}");
+    }
+
+    async fn events(&self, branch: &str) -> Vec<Event> {
+        records(&self.state.store).events(branch).await.unwrap()
+    }
+
+    /// Forks `branch` as `body` asks: the new branch and its agent `solo`.
+    async fn fork(&self, branch: &str, body: Value) -> (String, Agent) {
+        let (status, f) = self.on(branch, "fork", body).await;
+        assert_eq!(status, 200, "{f}");
+        let agents = f["agents"].as_array().unwrap();
+        let solo = agents.iter().find(|a| a["agent"] == "solo").unwrap();
+        (
+            f["branch_id"].as_str().unwrap().to_string(),
+            Agent::of(solo),
+        )
+    }
+
+    /// The retail world's tool names.
+    async fn world_tools(&self) -> Vec<String> {
+        let bench = self.state.hub.bench_describe("retail").await.unwrap();
+        bench.tools.into_iter().map(|t| t.name).collect()
+    }
+}
+
+/// The seq of the first tool call on the branch.
+fn first_call(evs: &[Event]) -> i64 {
+    let call = evs.iter().find(|e| e.kind == EventKind::ToolCall);
+    call.expect("a tool call").seq
+}
+
+/// The forked agent is offered only `get_order_details` of the world's tools, may call it, and
+/// is refused another.
+async fn assert_only_order_details(fx: &AppFx, forked: &Agent) {
+    let world = fx.world_tools().await;
+    let offered: Vec<String> = (forked.tools().await.into_iter())
+        .filter(|t| world.contains(t))
+        .collect();
+    assert_eq!(offered, ["get_order_details"]);
+    let read = forked.call("get_order_details", json!({"order_id": ORDER}));
+    let read = read.await;
+    assert_eq!(read["isError"], false, "{read}");
+    let refused = forked.call("get_user_details", json!({"user_id": "x"}));
+    let refused = refused.await;
+    assert_eq!(refused["isError"], true, "{refused}");
+    let text = refused["content"][0]["text"].as_str().unwrap();
+    assert!(text.contains("setup does not list"), "{text}");
+}
+
+#[test]
+fn a_fork_may_give_an_agent_exactly_the_tools_it_lists() {
+    run(async {
+        let fx = setup("tools").await;
+        let (branch, solo) = start(&fx).await;
+        let read = solo.call("get_order_details", json!({"order_id": ORDER}));
+        assert_eq!(read.await["isError"], false);
+        fx.finish(&branch).await;
+        let at = first_call(&fx.events(&branch).await);
+        let only = json!({"solo": {"tools": ["get_order_details"]}});
+        let body = json!({"at_seq": at, "changes": only});
+        let (child, forked) = fx.fork(&branch, body).await;
+        assert_only_order_details(&fx, &forked).await;
+        // The parent keeps every tool; the new branch records its list.
+        let parent = records(&fx.state.store).branch(&branch).await.unwrap();
+        assert!(parent.team.agents[0].tools.is_empty());
+        let stored = records(&fx.state.store).branch(&child).await.unwrap();
+        assert_eq!(stored.team.agents[0].tools, ["get_order_details"]);
+        fx.finish(&child).await;
+        // A tool the world doesn't have is refused before anything is made.
+        let typo = json!({"at_seq": at, "changes": {"solo": {"tools": ["get_order"]}}});
+        let (status, v) = fx.on(&branch, "fork", typo).await;
+        assert_eq!(status, 400, "{v}");
+        assert!(v["error"].as_str().unwrap().contains("get_order"), "{v}");
+    })
+}

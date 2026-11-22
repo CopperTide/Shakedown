@@ -50,6 +50,8 @@ def test_scenarios_and_changes():
     assert as_scenario(Scenario([Disruption("x")])) == {"disruptions": [{"id": "x"}]}
     assert as_scenario(None) is None
     assert Change(model="", prompt="new").to_dict() == {"model": "", "prompt": "new"}
+    assert Change(tools=["get_order_details"]).to_dict() == {"tools": ["get_order_details"]}
+    assert Change(tools=[]).to_dict() == {"tools": []}
 
 
 def test_check_result_named_and_gold():

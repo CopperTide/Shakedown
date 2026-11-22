@@ -245,8 +245,8 @@ Isolation of the CLI agents (`core/crates/shaked/src/agents/`; checked live by t
 
 ## Forking
 
-You choose a step N and a change (prompt, model, provider, kind or `read_only` of one or more agents) and a
-restore mode.
+You choose a step N and a change (prompt, model, provider, kind, `read_only` or `tools` of one or more agents) and
+a restore mode.
 
 - Each part of the world is put back as it was just before the fork point, in the restore mode you choose.
 - Agents that finished before the fork point keep their recorded output (for example the handoff note).
@@ -275,6 +275,9 @@ restore mode.
   belongs to the old provider, unless the same change sets one; only OpenRouter has a default model, so the web UI
   always sends a model with a provider. Naming the agent's own provider is no change.
 - Changing `read_only` is treated like a prompt change; setting it to what the agent already has is no change.
+- `tools` gives the agent exactly the world tools it lists from the fork on (an empty list: every tool again), like
+  a setup's `tools`; it is treated like a prompt change, the same list as the agent's is no change, and a tool the
+  world doesn't offer agents is refused (400).
 
 ## External designs
 

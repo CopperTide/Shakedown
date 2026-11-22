@@ -164,6 +164,10 @@ pub struct Change {
     /// Whether the agent is kept from writing (see [`AgentSpec::read_only`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub read_only: Option<bool>,
+    /// The world tools the agent may see and call after the fork: exactly this list (see
+    /// [`AgentSpec::tools`]; empty: every tool again).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tools: Option<Vec<String>>,
 }
 
 /// A stored team as it ran: an agent recorded before `read_only` existed (no such key) ran under

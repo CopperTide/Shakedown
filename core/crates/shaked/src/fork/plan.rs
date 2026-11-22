@@ -110,11 +110,17 @@ fn changes_read_only(c: &Change, spec: &AgentSpec) -> bool {
     c.read_only.is_some_and(|r| r != spec.read_only)
 }
 
-/// A provider change is a model change: the fork rules treat both alike. A read-only change is
-/// treated like a prompt change.
+/// True when `c` gives the agent another list of world tools.
+fn changes_tools(c: &Change, spec: &AgentSpec) -> bool {
+    c.tools.as_ref().is_some_and(|t| *t != spec.tools)
+}
+
+/// A provider change is a model change: the fork rules treat both alike. A read-only or tools
+/// change is treated like a prompt change.
 pub(super) fn is_change(c: &Change, spec: &AgentSpec) -> bool {
     c.prompt.is_some()
         || changes_read_only(c, spec)
+        || changes_tools(c, spec)
         || changes_model(c, spec)
         || changes_provider(c, spec)
         || changes_kind(c, spec)
@@ -476,8 +482,8 @@ fn finish_plan(
     }
 }
 
-/// `team` with each agent's prompt/model/kind/provider/read_only replaced where `changes` sets
-/// them.
+/// `team` with each agent's prompt/model/kind/provider/read_only/tools replaced where `changes`
+/// sets them.
 pub fn apply_changes(team: &Team, changes: &HashMap<String, Change>) -> Team {
     let mut t = team.clone();
     for spec in &mut t.agents {
@@ -507,5 +513,8 @@ fn apply_change(spec: &mut AgentSpec, c: &Change) {
     }
     if let Some(r) = c.read_only {
         spec.read_only = r;
+    }
+    if let Some(t) = &c.tools {
+        spec.tools = t.clone();
     }
 }

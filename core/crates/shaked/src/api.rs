@@ -213,6 +213,7 @@ impl From<ForkError> for ApiError {
             ForkError::UnknownSeq
             | ForkError::TeamChange(_)
             | ForkError::UnknownAgent(_)
+            | ForkError::UnknownTool(_)
             | ForkError::MissingHandoff(_)
             | ForkError::NoRestorePoint { .. } => StatusCode::BAD_REQUEST,
             ForkError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
