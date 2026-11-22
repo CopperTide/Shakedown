@@ -39,11 +39,19 @@ when confirmed.
 **Deploying** a project experiment (`POST /api/project/experiments/{id}/deploy`, `core/crates/shaked/src/ops/deploy.rs`)
 maps the files onto an engine experiment: the world's `package` is the benchmark it runs on, the scenario's `preset` is
 the task, each event's `fault` and `params` become the package's disruptions, each setup becomes a team (runner
-`chain`), and `repeats.per_setup` and `budget.per_run_usd` become runs per setup and each run's spend limit. Until
+`chain`; a built-in agent's `key` becomes its provider `key:<name>`, and an `http` setup's `auth` becomes a
+reference the endpoint's requests are signed from), and `repeats.per_setup` and `budget.per_run_usd` become runs per setup and each run's spend limit. Until
 worlds run from their files alone, nothing else in the files reaches a run: a world's connectors, flows, data, people
 and observability; a scenario's `task` text (runs get the preset task's ticket), `changes`, `gates`, `checks` and each
-event's `at`, `after_calls` and `effects`; a built-in agent's `key` (built-in agents run in API mode on the default
-provider, OpenRouter) and an `http` setup's `auth`; an experiment's `per_deployment_usd` (seeds are always paired).
+event's `at`, `after_calls` and `effects`; an experiment's `per_deployment_usd` (seeds are always paired). A `key` that is not stored, or is another
+member's and names its own server, refuses the deploy with a 400 that names it and the setup. An `auth` is checked the
+same way: `auth.key` must name one of your own stored keys of kind `custom` (a model provider key or a key shared with
+you is refused), the secret must not be empty, and naming both `key` and `env` is refused. `auth.env` is read only where
+the layer lets environment keys serve callers (never on a hosted shaked), and only for names starting with
+`SHAKEDOWN_AGENT_`; otherwise the 400 does not say whether the variable exists. The agent keeps only the reference
+(`{key: name}` or `{env: NAME}`); the secret is read from your keys each time a request is made, under the caller the
+run is for, and appears in no event, record, fork note or log. Header values typed into a team are kept in memory for
+the org that typed them, and another caller citing their reference gets nothing.
 Setups of kind `code` and `madl` are refused ("can't be deployed from a file yet"). Each deployment is an experiment
 linked to its file (`GET /api/project/experiments/{id}/runs`). `project.import` moves installed benchmarks and earlier
 experiments into the project as files.
