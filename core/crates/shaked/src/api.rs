@@ -545,6 +545,13 @@ async fn new_run_world(
         return Err(ApiError::bad("seed must be at most 2^53 - 1"));
     }
     scenario.seed = req.seed;
+    let runner = match req.connection {
+        Some(_) => Runner::External,
+        None => req.runner,
+    };
+    if let Some(why) = crate::scenario::refusal(runner, &scenario) {
+        return Err(ApiError::bad(why));
+    }
     Ok((bench, scenario))
 }
 

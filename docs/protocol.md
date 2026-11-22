@@ -224,6 +224,10 @@ builder shows them, and a run or suite names the ones it chose.
   `setup` names for that part, else the part's last call). A task with no setup call of that part gets the call
   `setup` gives for it. The tools `setup` names are the world's own, like any setup's. Several disruptions of one
   part share its call.
+- A scenario may also give `timed: [{part, disruption}]`, disruptions as they are (a project scenario's world-time
+  events, see [Scheduled disruptions](#scheduled-disruptions)), appended to `args.disruptions` of that part's setup
+  call the same way, and `generators: [...]`, set as `args.generators` on every part's setup call. Both are recorded
+  with the scenario, and so is its stepped `clock`.
 - The expanded scenario is recorded in the run's `RunStart` as `scenario: {disruptions: [{id, label, part, params,
   disruption}]}` (`params` with the defaults filled in, `disruption` the filled template); a run without one has no
   `scenario`. Forks and replays keep it: a fork's record starts with its parent's events (so with its `RunStart`), and
@@ -245,9 +249,10 @@ may list more). The Python kit implements this convention (`shakedown_part.disru
   `writes`, so shaked saves the count with the step without making the step a write: the schedule is part of the
   part's state, so forks and replays meet the same schedule. `inspect` shows `_disruption/<id>` with its count
   (`seen`) and whether it `fired`.
-- **The known-at rule.** A disruption may also be timed in world time: `{id, at, known_at, do, text}` (see
-  [Stepped clock](#stepped-clock)), where `at` is when it takes effect and `known_at` when the world learns of it
-  (default `at`; earlier is a forecast, later is found out late). A part must not reveal a scheduled event in any tool
+- **The known-at rule.** A disruption may also be timed in world time: `{id, at, known_at, at_ms, known_at_ms, do,
+  text}` (see [Stepped clock](#stepped-clock)), where `at` is when it takes effect and `known_at` when the world
+  learns of it (default `at`; earlier is a forecast, later is found out late), each as a world time
+  (`YYYY-MM-DDTHH:MM:SS`) and as the branch clock in ms (`at_ms`, `known_at_ms`). A part must not reveal a scheduled event in any tool
   result or event before its `known_at`; it reports `wake_at_ms` for its next reveal or effect.
 - `do.kind` is the part's own. pharma-logistics: `lane_capacity {carrier, origin, destination, capacity}`,
   `lane_unavailable {carrier, origin, destination}`, `transit_delay {carrier, origin, destination, extra_days}`,

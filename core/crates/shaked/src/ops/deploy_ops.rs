@@ -37,7 +37,15 @@ fn deploy_one<'a>(ctx: &'a OpCtx<'a>, _: &'static Operation, value: Value) -> Op
     Box::pin(async move {
         let id = Id::parse(&input::<IdInput>(value)?.id)?;
         let app = ctx.app("deploying")?;
-        let req = deploy::request(&ctx.project.current()?, &id)?;
+        let project = ctx.project.current()?;
+        let (package, task) = deploy::runtime_of(&project, &id)?;
+        let clock_start = match app.bench_named(&package).await {
+            Ok(bench) => {
+                (bench.tasks.iter().find(|t| t.id == task)).and_then(|t| t.clock_start.clone())
+            }
+            Err(_) => None,
+        };
+        let req = deploy::request(&project, &id, clock_start.as_deref())?;
         let detail = create_experiment(app, &ctx.caller, None, req).await?;
         serde_json::to_value(detail).map_err(|e| OpError::bad_request(e.to_string()))
     })

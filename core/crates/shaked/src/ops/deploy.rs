@@ -1,11 +1,15 @@
 //! Maps a project experiment onto the engine: its world's package runs it, its scenario's preset
-//! task is played with the scenario's faults as disruptions, and each setup becomes a team. Until
-//! worlds run from their files alone, this is the bridge from files to runs.
+//! task is played with the scenario's faults as disruptions and its timed events as disruptions
+//! of the parts they name, and each setup becomes a team (led, on a stepped clock). Until worlds
+//! run from their files alone, this is the bridge from files to runs.
 
 use axum::http::StatusCode;
-use parts::proto::{ChosenDisruption, ScenarioRequest};
+use chrono::{NaiveDateTime, NaiveTime};
+use parts::proto::{ChosenDisruption, ScenarioRequest, SteppedClock, TimedDisruption};
+use serde_json::{json, Value};
 use shakedown_project::format::{
-    ExperimentFile, Kind, ScenarioFile, SetupFile, Team as FileTeam, WorldFile,
+    parse_duration_ms, ClockSpec, ExperimentFile, Kind, ScenarioFile, SetupFile, Team as FileTeam,
+    WorldFile,
 };
 use shakedown_project::{Id, ItemBody, Project};
 
@@ -13,21 +17,39 @@ use super::OpError;
 use crate::api::experiments::{NewExperimentReq, SetupReq};
 use crate::model::{AgentKind, AgentSpec, Runner, Team};
 
-/// The engine experiment that deploying experiment `id` starts.
-pub(crate) fn request(project: &Project, id: &Id) -> Result<NewExperimentReq, OpError> {
+/// The package and task deploying experiment `id` runs (so the caller can look up the task's
+/// `clock_start` for [`request`]).
+pub(crate) fn runtime_of(project: &Project, id: &Id) -> Result<(String, String), OpError> {
+    let exp = experiment_of(project, id)?;
+    runtime(
+        world_of(project, &exp.world)?,
+        scenario_of(project, &exp.scenario)?,
+    )
+}
+
+/// The engine experiment that deploying experiment `id` starts. `clock_start` is the task's
+/// (`describe`): world times in the scenario (`HH:MM` on its day, or an ISO time) are placed
+/// against it.
+pub(crate) fn request(
+    project: &Project,
+    id: &Id,
+    clock_start: Option<&str>,
+) -> Result<NewExperimentReq, OpError> {
     let exp = experiment_of(project, id)?;
     no_problems(project, id, exp)?;
     let scenario = scenario_of(project, &exp.scenario)?;
     let (package, task) = runtime(world_of(project, &exp.world)?, scenario)?;
+    let start = WorldStart::of(clock_start);
+    let clock = stepped_clock(scenario, &start)?;
     let setups = exp
         .setups
         .iter()
-        .map(|s| setup_req(project, s))
+        .map(|s| setup_req(project, s, clock.is_some()))
         .collect::<Result<Vec<_>, _>>()?;
     Ok(NewExperimentReq {
         name: Some(exp.label.clone()),
         task,
-        scenario: disruptions(scenario),
+        scenario: scenario_req(scenario, &start, clock)?,
         runs: i32::try_from(exp.repeats.per_setup).unwrap_or(i32::MAX),
         setups,
         max_cost_usd: exp.budget.per_run_usd,
@@ -113,9 +135,140 @@ fn no_problems(project: &Project, id: &Id, exp: &ExperimentFile) -> Result<(), O
     Ok(())
 }
 
+/// The run's scenario: the faults as the package's disruptions, the timed events as disruptions
+/// of their parts, the generators and the stepped clock. None when it has none of them.
+fn scenario_req(
+    scenario: &ScenarioFile,
+    start: &WorldStart,
+    clock: Option<SteppedClock>,
+) -> Result<Option<ScenarioRequest>, OpError> {
+    let req = ScenarioRequest {
+        disruptions: disruptions(scenario),
+        timed: timed(scenario, start)?,
+        generators: scenario.generators.clone(),
+        clock,
+    };
+    Ok((req != ScenarioRequest::default()).then_some(req))
+}
+
+/// The task's clock 0 in world time, when it gives one.
+struct WorldStart(Option<NaiveDateTime>);
+
+impl WorldStart {
+    fn of(clock_start: Option<&str>) -> WorldStart {
+        let parse = |s: &str| {
+            NaiveDateTime::parse_from_str(s.trim(), "%Y-%m-%dT%H:%M:%S")
+                .or_else(|_| NaiveDateTime::parse_from_str(s.trim(), "%Y-%m-%dT%H:%M:%S%.f"))
+                .ok()
+        };
+        WorldStart(clock_start.and_then(parse))
+    }
+
+    /// `text` (`HH:MM` on the start's day, or `YYYY-MM-DDTHH:MM[:SS]`) as a world time and as
+    /// the branch clock (ms since the start). `what` names the value in an error.
+    fn place(&self, text: &str, what: &str) -> Result<(String, i64), OpError> {
+        let start = self.0.ok_or_else(|| {
+            unprocessable(format!(
+                "{what} is a world time, and the task gives no clock_start to place it against"
+            ))
+        })?;
+        let t = text.trim();
+        let at = NaiveTime::parse_from_str(t, "%H:%M")
+            .map(|time| start.date().and_time(time))
+            .or_else(|_| NaiveDateTime::parse_from_str(t, "%Y-%m-%dT%H:%M:%S"))
+            .or_else(|_| NaiveDateTime::parse_from_str(t, "%Y-%m-%dT%H:%M"))
+            .map_err(|_| {
+                unprocessable(format!(
+                    "{what} `{t}` is not a world time: write HH:MM or YYYY-MM-DDTHH:MM"
+                ))
+            })?;
+        let ms = (at - start).num_milliseconds();
+        Ok((at.format("%Y-%m-%dT%H:%M:%S").to_string(), ms))
+    }
+}
+
+/// The scenario's stepped clock in branch-clock ms; None for a wall clock.
+fn stepped_clock(
+    scenario: &ScenarioFile,
+    start: &WorldStart,
+) -> Result<Option<SteppedClock>, OpError> {
+    let Some(spec) = scenario.clock.as_ref().filter(|c| c.is_stepped()) else {
+        return Ok(None);
+    };
+    let bad = |e: String| unprocessable(format!("{}: clock: {e}", scenario.label));
+    let cost = &spec.action_cost;
+    let tools = (cost.tools.iter())
+        .map(|(t, d)| parse_duration_ms(d).map(|ms| (t.clone(), ms)))
+        .collect::<Result<_, _>>()
+        .map_err(bad)?;
+    let horizon = match &spec.horizon {
+        Some(h) => Some(start.place(h, "the clock's horizon")?.1),
+        None => None,
+    };
+    Ok(Some(SteppedClock {
+        read_ms: parse_duration_ms(&cost.read).map_err(bad)?,
+        write_ms: parse_duration_ms(&cost.write).map_err(bad)?,
+        tools,
+        epoch_ms: ClockSpec::epoch_ms(spec).map_err(bad)?,
+        horizon_ms: horizon,
+    }))
+}
+
+/// The scenario's events that name a part and a world time, each as a disruption of that part:
+/// `{id, at, known_at, at_ms, known_at_ms, do, text}` (`known_at` defaults to `at`, and `at` to
+/// `known_at`).
+fn timed(scenario: &ScenarioFile, start: &WorldStart) -> Result<Vec<TimedDisruption>, OpError> {
+    let mut ids: Vec<String> = vec![];
+    let mut out = vec![];
+    for e in &scenario.events {
+        let Some(part) = &e.part else { continue };
+        let (Some(at), Some(known)) = (
+            e.at.as_ref().or(e.known_at.as_ref()),
+            e.known_at.as_ref().or(e.at.as_ref()),
+        ) else {
+            continue;
+        };
+        let (at, at_ms) = start.place(at, &format!("{}: at", e.name))?;
+        let (known_at, known_ms) = start.place(known, &format!("{}: known_at", e.name))?;
+        let id = unique(slug(&e.name), &ids);
+        ids.push(id.clone());
+        let disruption = json!({"id": id, "at": at, "known_at": known_at, "at_ms": at_ms,
+            "known_at_ms": known_ms, "do": e.do_.clone().unwrap_or(Value::Null), "text": e.name});
+        out.push(TimedDisruption {
+            part: part.clone(),
+            disruption,
+        });
+    }
+    Ok(out)
+}
+
+/// `name` in lower case, with every run of other characters than letters and digits made `-`.
+fn slug(name: &str) -> String {
+    let lower = name.to_lowercase();
+    let words: Vec<&str> = lower
+        .split(|c: char| !c.is_ascii_alphanumeric())
+        .filter(|w| !w.is_empty())
+        .collect();
+    match words.is_empty() {
+        true => "event".into(),
+        false => words.join("-"),
+    }
+}
+
+/// `id`, or `id-2`, `id-3`, … when `taken` has it.
+fn unique(id: String, taken: &[String]) -> String {
+    if !taken.contains(&id) {
+        return id;
+    }
+    (2..)
+        .map(|n| format!("{id}-{n}"))
+        .find(|c| !taken.contains(c))
+        .unwrap()
+}
+
 /// The scenario's database and system faults, as the package's disruptions.
-fn disruptions(scenario: &ScenarioFile) -> Option<ScenarioRequest> {
-    let chosen: Vec<ChosenDisruption> = scenario
+fn disruptions(scenario: &ScenarioFile) -> Vec<ChosenDisruption> {
+    scenario
         .events
         .iter()
         .filter_map(|e| {
@@ -127,14 +280,12 @@ fn disruptions(scenario: &ScenarioFile) -> Option<ScenarioRequest> {
                 .unwrap_or_default();
             Some(ChosenDisruption { id, params })
         })
-        .collect();
-    (!chosen.is_empty()).then_some(ScenarioRequest {
-        disruptions: chosen,
-        clock: None,
-    })
+        .collect()
 }
 
-fn setup_req(project: &Project, name: &str) -> Result<SetupReq, OpError> {
+/// `name`'s setup as an engine setup: on a stepped clock it runs as a dispatch team (its lead,
+/// else its first agent, leads).
+fn setup_req(project: &Project, name: &str, stepped: bool) -> Result<SetupReq, OpError> {
     let setup: &SetupFile = match body(project, Kind::Setup, name)? {
         ItemBody::Setup(s) => s,
         _ => return Err(unprocessable(format!("{name} is not an agent setup"))),
@@ -148,7 +299,10 @@ fn setup_req(project: &Project, name: &str) -> Result<SetupReq, OpError> {
     Ok(SetupReq {
         name: Some(setup.label.clone()),
         team,
-        runner: Runner::Chain,
+        runner: match stepped {
+            true => Runner::Dispatch,
+            false => Runner::Chain,
+        },
         connection: None,
     })
 }

@@ -346,7 +346,16 @@ part answered or refused (a call the world's gates refused costs it too). No tic
 World clock section of an agent's first input says the clock "moves when the team acts or waits" instead of "runs
 while you work", and every agent's first input explains world time.
 
-A stepped clock runs only in a [dispatch run](#dispatch-runs). When the team is quiet (no agent working, no mail
+Deploying an experiment (`experiments.deploy`) turns its scenario into the run's scenario. Each event with a `part`
+and a world time becomes a disruption of that part, appended to its setup call's `args.disruptions` as `{id, at,
+known_at, at_ms, known_at_ms, do, text}`: `id` is the event's name in lower case with dashes, `text` the name, `at`
+and `known_at` world times (`HH:MM` is placed on the day of the task's `clock_start`) and `at_ms` and `known_at_ms`
+the same as branch clock ms. The scenario's `generators` go to every part's setup call as `args.generators`. A
+stepped clock makes every setup a dispatch team (its lead, else its first agent, leads), and the horizon is placed
+the same way. World times need the task to give `clock_start`.
+
+A stepped clock runs only in a [dispatch run](#dispatch-runs); a chain, concurrent or external run with one is
+refused before it starts: "stepped clock needs a team with a lead (dispatch runner)". When the team is quiet (no agent working, no mail
 waiting), shaked moves the world on at once, to the earliest of:
 
 - the next thing a part has scheduled (the earliest `wake_at_ms` its `advance` or calls reported, see

@@ -142,6 +142,30 @@ impl<'a> RunOptions<'a> {
     }
 }
 
+/// The benchmark `benchmark` (else the current one), which must have the task `task_id`.
+async fn bench_with(
+    state: &AppState,
+    benchmark: Option<&str>,
+    task_id: &str,
+) -> Result<BenchDescribe, RunError> {
+    let bench = match benchmark {
+        Some(name) => state.bench_named(name).await?,
+        None => state.bench().await?,
+    };
+    if !bench.tasks.iter().any(|t| t.id == task_id) {
+        return Err(RunError::UnknownTask(task_id.to_string()));
+    }
+    Ok(bench)
+}
+
+/// `rules` with `scenario`'s stepped clock; refused on another runner than dispatch.
+fn stepped_rules(rules: Rules, scenario: &Scenario) -> Result<Rules, RunError> {
+    if let Some(why) = crate::scenario::refusal(rules.runner, scenario) {
+        return Err(RunError::Other(anyhow!(why)));
+    }
+    Ok(rules.with_stepped(scenario.clock.clone()))
+}
+
 /// Creates a run and its first branch, starts its world from the base save, records `RunStart`
 /// with `rules` and `scenario`, and makes the task's setup (with the scenario's disruptions): the
 /// branch, ready to be driven.
@@ -154,14 +178,8 @@ pub async fn begin_run(
     rules: Rules,
     scenario: &Scenario,
 ) -> Result<(RunId, BranchCtx), RunError> {
-    let rules = rules.with_stepped(scenario.clock.clone());
-    let bench = match benchmark {
-        Some(name) => state.bench_named(name).await?,
-        None => state.bench().await?,
-    };
-    if !bench.tasks.iter().any(|t| t.id == task_id) {
-        return Err(RunError::UnknownTask(task_id.to_string()));
-    }
+    let rules = stepped_rules(rules, scenario)?;
+    let bench = bench_with(state, benchmark, task_id).await?;
     let planned = world::plan(&state.hub, &bench).await?;
     let records = state.store.at(scope);
     let run_id = records.create_run(task_id, &team).await?;

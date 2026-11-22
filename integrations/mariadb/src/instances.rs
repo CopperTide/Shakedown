@@ -123,7 +123,7 @@ impl Mariadb {
         let inst = self.instance(&p.instance)?;
         let tool = match which(&p.name, self.sql_tools) {
             Ok(t) => t,
-            Err(out) => return Ok(out),
+            Err(out) => return Ok(*out),
         };
         let (text, params) = match sql_args(&p.args) {
             Ok(a) => a,

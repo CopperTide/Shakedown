@@ -377,6 +377,18 @@ fn refusal(branch: &BranchCtx, agent: &str, name: &str) -> Option<String> {
     })
 }
 
+/// Moves a stepped clock on by what a call of the world's tool `name` costs (a tool the world
+/// doesn't have costs nothing).
+fn charge(branch: &BranchCtx, name: &str) {
+    if branch.world.has_tool(name) {
+        let effect = match branch.world.is_write(name) {
+            true => Effect::Write,
+            false => Effect::Read,
+        };
+        branch.clock.charge(effect, name);
+    }
+}
+
 /// Saves what changed with a step (the part written to, the clock parts that changed) with the
 /// clock paused, and records the saves, a failure and the pause.
 async fn save_step(branch: &BranchCtx, written: Option<&str>, facts: &mut CallFacts) {
@@ -524,13 +536,7 @@ impl ToolExec {
             Ok(c) => c,
             Err(e) => return (Err(failure(branch, e)), facts),
         };
-        if branch.world.has_tool(name) {
-            let effect = match branch.world.is_write(name) {
-                true => Effect::Write,
-                false => Effect::Read,
-            };
-            branch.clock.charge(effect, name);
-        }
+        charge(branch, name);
         let gate_ms = called.gate_ms;
         facts.duration_ms = Some((since.elapsed().as_secs_f64() * 1000.0 - gate_ms).max(0.0));
         branch.overhead.add(Cat::Gate, gate_ms);

@@ -298,13 +298,7 @@ impl Board {
             Input::Pause => self.pause(now),
             Input::Resume => self.unpause(now),
             Input::Stop => vec![Action::End(End::Stopped)],
-            Input::Advanced { to, alerts } => self.advanced(to, alerts),
-            Input::Stuck => {
-                self.advancing = false;
-                self.stuck = true;
-                vec![]
-            }
-            Input::WorldFailed(why) => vec![Action::End(End::Broken(why))],
+            world => self.world_moved(world),
         };
         let mut out = out;
         if out.iter().any(|a| matches!(a, Action::End(_))) {
@@ -330,6 +324,20 @@ impl Board {
         }
         self.advancing = true;
         out.push(Action::Advance);
+    }
+
+    /// What a stepped world's move came to (`Advanced`, `Stuck` or `WorldFailed`).
+    fn world_moved(&mut self, input: Input) -> Vec<Action> {
+        self.advancing = false;
+        match input {
+            Input::Advanced { to, alerts } => self.advanced(to, alerts),
+            Input::Stuck => {
+                self.stuck = true;
+                vec![]
+            }
+            Input::WorldFailed(why) => vec![Action::End(End::Broken(why))],
+            _ => vec![],
+        }
     }
 
     /// The world moved on to `to`: at the horizon the run ends; the alerts it told the lead wake

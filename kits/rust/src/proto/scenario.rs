@@ -95,14 +95,30 @@ impl ScenarioParam {
     }
 }
 
-/// The scenario a run or suite asks for: `{disruptions: [{id, params}], clock?}`.
+/// The scenario a run or suite asks for: `{disruptions: [{id, params}], timed?, generators?,
+/// clock?}`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ScenarioRequest {
     #[serde(default)]
     pub disruptions: Vec<ChosenDisruption>,
+    /// Disruptions given as they are (a project scenario's timed events), each for the setup call
+    /// of its part.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub timed: Vec<TimedDisruption>,
+    /// Background generators, given to every part's setup call as `args.generators`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub generators: Vec<Value>,
     /// A stepped world clock for the run; absent: the clock runs on wall time.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub clock: Option<SteppedClock>,
+}
+
+/// A disruption for `part`'s setup call, as it is: `{id, at, known_at, at_ms, known_at_ms, do,
+/// text}` for a world-time event (see docs/protocol.md, "Scheduled disruptions").
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TimedDisruption {
+    pub part: String,
+    pub disruption: Value,
 }
 
 /// A stepped world clock (see docs/protocol.md, "Stepped clock"), in world ms: what agents' tool

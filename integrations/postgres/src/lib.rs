@@ -561,7 +561,7 @@ impl Part for Postgres {
         let db = self.instance_db(&p.instance).await?;
         let tool = match which(&p.name, self.sql_tools) {
             Ok(t) => t,
-            Err(out) => return Ok(out),
+            Err(out) => return Ok(*out),
         };
         let (sql, params) = match sql_args(&p.args) {
             Ok(a) => a,

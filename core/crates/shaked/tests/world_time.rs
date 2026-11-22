@@ -187,40 +187,8 @@ impl SteppedFx {
         let root = packages::toy_world(tag, part_args, &[]);
         let saves =
             std::env::temp_dir().join(format!("shaked-stepped-{tag}-{}", std::process::id()));
-        std::fs::create_dir_all(&saves).unwrap();
-        let registry = parts::Registry::scan(std::slice::from_ref(&root.0)).unwrap();
-        let hub = std::sync::Arc::new(parts::Hub::new(
-            registry,
-            packages::bin_dir(),
-            saves.clone(),
-        ));
         let (store, clean) = support::app::meta_store("stepped", tag).await;
-        let team = Team {
-            id: "t".into(),
-            name: "T".into(),
-            agents: vec![AgentSpec::new("planner", AgentKind::Open)],
-        };
-        let run_id = records(&store).create_run("t1", &team).await.unwrap();
-        let branch = records(&store)
-            .create_branch(&run_id, None, &team, &json!([]), None)
-            .await
-            .unwrap();
-        let bench = hub.bench_describe("toybench").await.unwrap();
-        let from = shaked::world::WorldFrom::Base;
-        let world = shaked::world::World::start(hub.clone(), &bench, &branch, 1, from).await;
-        let cost = shaked::clock::StepCost {
-            read_ms: 0,
-            write_ms: 120_000,
-            tools: Default::default(),
-        };
-        let clock = shaked::clock::BranchClock::stepped(0, cost);
-        let ctx = shaked::exec::BranchCtx::new(
-            branch,
-            std::sync::Arc::new(world.unwrap()),
-            team,
-            "t1".into(),
-        )
-        .with_clock(clock);
+        let ctx = stepped_branch(&root, &saves, &store).await;
         SteppedFx {
             ctx: std::sync::Arc::new(ctx),
             exec: shaked::exec::ToolExec::new(store.clone()),
@@ -248,6 +216,39 @@ impl SteppedFx {
             .map(|e| e.payload["clock_ms"].as_i64().unwrap())
             .collect()
     }
+}
+
+/// A branch of `toybench` from `root` (saves in `saves`) on a stepped clock whose writes cost two
+/// world minutes, recorded in `store`.
+async fn stepped_branch(
+    root: &packages::ToyRoot,
+    saves: &std::path::Path,
+    store: &shaked::store::Store,
+) -> shaked::exec::BranchCtx {
+    std::fs::create_dir_all(saves).unwrap();
+    let registry = parts::Registry::scan(std::slice::from_ref(&root.0)).unwrap();
+    let hub = parts::Hub::new(registry, packages::bin_dir(), saves.to_path_buf());
+    let hub = std::sync::Arc::new(hub);
+    let team = Team {
+        id: "t".into(),
+        name: "T".into(),
+        agents: vec![AgentSpec::new("planner", AgentKind::Open)],
+    };
+    let run_id = records(store).create_run("t1", &team).await.unwrap();
+    let branch = (records(store).create_branch(&run_id, None, &team, &json!([]), None))
+        .await
+        .unwrap();
+    let bench = hub.bench_describe("toybench").await.unwrap();
+    let from = shaked::world::WorldFrom::Base;
+    let world = shaked::world::World::start(hub.clone(), &bench, &branch, 1, from).await;
+    let cost = shaked::clock::StepCost {
+        read_ms: 0,
+        write_ms: 120_000,
+        tools: Default::default(),
+    };
+    let world = std::sync::Arc::new(world.unwrap());
+    shaked::exec::BranchCtx::new(branch, world, team, "t1".into())
+        .with_clock(shaked::clock::BranchClock::stepped(0, cost))
 }
 
 impl Drop for SteppedFx {
@@ -303,6 +304,19 @@ fn finishes() -> Value {
 
 const HOUR: i64 = 3_600_000;
 
+/// The providers: only the scripted server `pod` at `base`.
+fn pod(base: &str) -> shaked::providers::ProviderConfig {
+    use shaked::providers::{Endpoint, LocalEndpoint, ProviderConfig};
+    let mut providers = ProviderConfig::default();
+    providers.locals.push(LocalEndpoint {
+        name: "pod".into(),
+        endpoint: Endpoint::new(base, None),
+        rate: None,
+    });
+    providers.default = "local:pod".into();
+    providers
+}
+
 /// A dispatch run of the toy world on a stepped clock (`clock`), its lead an API-mode agent on a
 /// scripted server answering `answers` in order: the ended branch's events.
 async fn stepped_run(
@@ -311,20 +325,12 @@ async fn stepped_run(
     clock: Value,
     answers: Vec<Value>,
 ) -> (AppFx, Vec<Event>) {
-    use shaked::providers::{Endpoint, LocalEndpoint, ProviderConfig};
     let llm = support::fake_llm::fake_llm(answers.into_iter().map(|a| (200, a)).collect()).await;
-    let mut providers = ProviderConfig::default();
-    providers.locals.push(LocalEndpoint {
-        name: "pod".into(),
-        endpoint: Endpoint::new(&llm.base, None),
-        rate: None,
-    });
-    providers.default = "local:pod".into();
     let root = packages::toy_world(tag, part_args, &["--clock-start", "2026-03-10T06:00:00"]);
     let fx = AppFx::idle("stepped", tag)
         .root(root)
         .bench("toybench")
-        .providers(providers)
+        .providers(pod(&llm.base))
         .start()
         .await;
     let mut lead = AgentSpec::new("lead", AgentKind::Open)
@@ -337,12 +343,16 @@ async fn stepped_run(
     let body = json!({"task_id": "t1", "team": team, "runner": "dispatch", "scenario": scenario});
     let (status, v) = fx.post("/api/runs", body).await;
     assert_eq!(status, 200, "{v}");
-    let branch = v["branch_id"].as_str().unwrap().to_string();
+    let evs = ended(&fx, v["branch_id"].as_str().unwrap()).await;
+    (fx, evs)
+}
+
+/// The events of `branch` once it has ended.
+async fn ended(fx: &AppFx, branch: &str) -> Vec<Event> {
     for _ in 0..600 {
         let (_, b) = fx.get(&format!("/api/branches/{branch}")).await;
         if !b["ended_at"].is_null() {
-            let evs = records(&fx.state.store).events(&branch).await.unwrap();
-            return (fx, evs);
+            return records(&fx.state.store).events(branch).await.unwrap();
         }
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
@@ -487,5 +497,31 @@ fn epoch_gives_lead_a_look() {
                 ("horizon".to_string(), 3 * HOUR)
             ]
         );
+    })
+}
+
+/// A stepped clock needs a lead to wake: other runners refuse it before anything runs.
+#[test]
+fn a_stepped_run_on_another_runner_is_refused() {
+    run(async {
+        let root = packages::toy_world("steppedchain", &["--uses-clock"], &[]);
+        let fx = AppFx::idle("stepped", "chain")
+            .root(root)
+            .bench("toybench")
+            .start()
+            .await;
+        let team = json!({"id": "t", "name": "T", "agents": []});
+        let scenario = json!({"disruptions": [], "clock": {"write_ms": 120_000}});
+        for runner in ["chain", "external"] {
+            let body =
+                json!({"task_id": "t1", "team": team, "runner": runner, "scenario": scenario});
+            let (status, v) = fx.post("/api/runs", body).await;
+            assert_eq!(status, 400, "{v}");
+            assert_eq!(
+                v["error"],
+                "stepped clock needs a team with a lead (dispatch runner)"
+            );
+        }
+        assert!(records(&fx.state.store).runs().await.unwrap().is_empty());
     })
 }

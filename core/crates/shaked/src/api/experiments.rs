@@ -231,6 +231,11 @@ async fn store_experiment(
     let bench = super::benchmark_asked(state, req.benchmark.as_deref())?;
     super::suites::suite_tasks(state, &bench, vec![req.task.clone()]).await?;
     let scenario = super::twin::scenario_of(state, &bench, req.scenario.as_ref()).await?;
+    for (name, setup) in names.iter().zip(&req.setups) {
+        if let Some(why) = crate::scenario::refusal(setup.runner, &scenario) {
+            return Err(ApiError::bad(format!("{name}: {why}")));
+        }
+    }
     check_disk(state).await?;
     let setups = new_setups(names, &req.setups);
     let new = NewExperiment {

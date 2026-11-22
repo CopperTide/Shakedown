@@ -5,7 +5,7 @@
 
 use parts::proto::{
     DisruptionOption, ParamKind, ScenarioOptions, ScenarioParam, ScenarioRequest, SetupCall,
-    SteppedClock,
+    SteppedClock, TimedDisruption,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
@@ -32,6 +32,13 @@ pub struct Scenario {
     /// `seed`); otherwise shaked picks one at random. `RunStart` records the seed either way.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub seed: Option<u64>,
+    /// Disruptions given as they are (a project scenario's timed events), each appended to the
+    /// setup call of its part like an expanded one.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub timed: Vec<TimedDisruption>,
+    /// Background generators, set as `args.generators` on every part's setup call.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub generators: Vec<Value>,
     /// A stepped world clock (docs/protocol.md, "Stepped clock"); none: the clock runs on wall
     /// time. Forks read it back from `RunStart.scenario`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -39,12 +46,24 @@ pub struct Scenario {
 }
 
 impl Scenario {
-    /// True when no disruption is chosen and the clock is not stepped (a seed alone is recorded
-    /// in `RunStart.seed`).
+    /// True when no disruption is chosen or given, there are no generators and the clock is not
+    /// stepped (a seed alone is recorded in `RunStart.seed`).
     pub fn is_empty(&self) -> bool {
-        self.disruptions.is_empty() && self.clock.is_none()
+        self.disruptions.is_empty()
+            && self.timed.is_empty()
+            && self.generators.is_empty()
+            && self.clock.is_none()
     }
 }
+
+/// Why a run on `runner` can't take `scenario`: a stepped clock runs only in a dispatch run.
+pub fn refusal(runner: crate::model::Runner, scenario: &Scenario) -> Option<String> {
+    (scenario.clock.is_some() && runner != crate::model::Runner::Dispatch)
+        .then(|| STEPPED_NEEDS_DISPATCH.to_string())
+}
+
+/// Why a stepped scenario is refused on another runner.
+pub const STEPPED_NEEDS_DISPATCH: &str = "stepped clock needs a team with a lead (dispatch runner)";
 
 /// `req` expanded with `options`: each chosen option once, its params checked (a missing one
 /// takes its default), and every expanded disruption's `id` different. The error says what is
@@ -53,7 +72,10 @@ pub fn expand(
     options: Option<&ScenarioOptions>,
     req: &ScenarioRequest,
 ) -> Result<Scenario, String> {
+    check_timed(&req.timed)?;
     let mut out = Scenario {
+        timed: req.timed.clone(),
+        generators: req.generators.clone(),
         clock: req.clock.clone(),
         ..Scenario::default()
     };
@@ -79,6 +101,20 @@ pub fn expand(
         return Err("two chosen disruptions expand to the same id".into());
     }
     Ok(out)
+}
+
+/// Each timed disruption names a part and is an object.
+fn check_timed(timed: &[TimedDisruption]) -> Result<(), String> {
+    match timed
+        .iter()
+        .find(|t| t.part.is_empty() || !t.disruption.is_object())
+    {
+        Some(t) => Err(format!(
+            "a timed disruption names a part and is an object: {}",
+            t.disruption
+        )),
+        None => Ok(()),
+    }
 }
 
 fn expand_one(opt: &DisruptionOption, given: &Map<String, Value>) -> Result<Expanded, String> {
@@ -164,17 +200,42 @@ pub fn setup_calls(
     options: Option<&ScenarioOptions>,
 ) -> Result<Vec<SetupCall>, String> {
     let mut calls = setup.to_vec();
-    for e in &scenario.disruptions {
-        let i = match call_of(&calls, &e.part, options) {
+    let expanded = scenario
+        .disruptions
+        .iter()
+        .map(|e| (&e.part, &e.disruption));
+    let timed = scenario.timed.iter().map(|t| (&t.part, &t.disruption));
+    for (part, disruption) in expanded.chain(timed) {
+        let i = match call_of(&calls, part, options) {
             Some(i) => i,
             None => {
-                calls.push(new_call(&e.part, options)?);
+                calls.push(new_call(part, options)?);
                 calls.len() - 1
             }
         };
-        append(&mut calls[i].args, &e.disruption, &e.part)?;
+        append(&mut calls[i].args, disruption, part)?;
+    }
+    if !scenario.generators.is_empty() {
+        let parts: std::collections::BTreeSet<String> =
+            calls.iter().map(|c| c.part.clone()).collect();
+        for part in parts {
+            if let Some(i) = call_of(&calls, &part, options) {
+                set_generators(&mut calls[i].args, &scenario.generators, &part)?;
+            }
+        }
     }
     Ok(calls)
+}
+
+fn set_generators(args: &mut Value, generators: &[Value], part: &str) -> Result<(), String> {
+    if args.is_null() {
+        *args = json!({});
+    }
+    let map = args
+        .as_object_mut()
+        .ok_or_else(|| format!("the setup call of {part} takes no object to add generators to"))?;
+    map.insert("generators".into(), json!(generators));
+    Ok(())
 }
 
 /// The index of the call of `part` that carries its disruptions.

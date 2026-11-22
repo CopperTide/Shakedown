@@ -50,11 +50,11 @@ pub fn schemas(params_hint: &str) -> Vec<ToolSchema> {
 }
 
 /// The tool `name` names, when the tools are on; otherwise the output to answer with.
-pub fn which(name: &str, enabled: bool) -> Result<SqlTool, ToolOutput> {
+pub fn which(name: &str, enabled: bool) -> Result<SqlTool, Box<ToolOutput>> {
     match (name, enabled) {
         ("sql_query", true) => Ok(SqlTool::Query),
         ("sql_execute", true) => Ok(SqlTool::Execute),
-        (other, _) => Err(tool_error(format!("unknown tool {other}"))),
+        (other, _) => Err(Box::new(tool_error(format!("unknown tool {other}")))),
     }
 }
 

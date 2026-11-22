@@ -155,11 +155,7 @@ impl Crew {
             .map(|a| a.id.clone())
             .collect();
         let limits = Limits::from_env();
-        let board = Board::new(&ids, ctx.roster.team.lead_index(), limits);
-        let board = match ctx.rules.stepped.is_some() {
-            true => board.stepped(),
-            false => board,
-        };
+        let board = board_of(ctx, &ids, limits);
         Crew {
             state: state.clone(),
             ctx: ctx.clone(),
@@ -312,6 +308,28 @@ impl Crew {
         Ok(self.board.step(Input::Said(said), self.began.elapsed()))
     }
 
+    /// What opens `agent`'s first turn: the world clock, the brief, how the run works (and how
+    /// world time moves, on a stepped clock) and, on a fork, its history.
+    fn first_input(&self, agent: &str) -> String {
+        let (team, lead) = (&self.ctx.roster.team, self.board.lead_id());
+        let mut input = String::new();
+        if let Some(c) = self.brief.clock {
+            input.push_str(&c.brief(self.ctx.clock.now_ms()));
+        }
+        input.push_str(&inputs::brief_text(&self.brief));
+        input.push_str(&match agent == lead {
+            true => inputs::how_for_lead(team, lead),
+            false => inputs::how_for_member(team, lead),
+        });
+        if self.ctx.rules.stepped.is_some() {
+            input.push_str(inputs::STEPPED);
+        }
+        if let Some(h) = self.history.get(agent) {
+            input.push_str(&inputs::history_text(h));
+        }
+        input
+    }
+
     /// The input of `agent`'s turn: on its first, the brief, how the run works and (on a fork) its
     /// history; then why it was woken.
     fn input_for(&self, agent: &str, reason: Reason, mail: &[Mail]) -> String {
@@ -321,20 +339,7 @@ impl Crew {
         let clock = self.brief.clock;
         let first = !self.slots.contains_key(agent);
         if first {
-            if let Some(c) = clock {
-                input.push_str(&c.brief(self.ctx.clock.now_ms()));
-            }
-            input.push_str(&inputs::brief_text(&self.brief));
-            input.push_str(&match agent == lead {
-                true => inputs::how_for_lead(team, lead),
-                false => inputs::how_for_member(team, lead),
-            });
-            if self.ctx.rules.stepped.is_some() {
-                input.push_str(inputs::STEPPED);
-            }
-            if let Some(h) = self.history.get(agent) {
-                input.push_str(&inputs::history_text(h));
-            }
+            input.push_str(&self.first_input(agent));
         }
         let max = self.limits.max_idle_wakes;
         input.push_str(&match reason {
@@ -475,6 +480,15 @@ impl Crew {
             }
         }
         got
+    }
+}
+
+/// The board of `ctx`'s team of `ids` (stepped when its clock is).
+fn board_of(ctx: &BranchCtx, ids: &[String], limits: Limits) -> Board {
+    let board = Board::new(ids, ctx.roster.team.lead_index(), limits);
+    match ctx.rules.stepped.is_some() {
+        true => board.stepped(),
+        false => board,
     }
 }
 
