@@ -7,3 +7,5 @@ core/crates/shaked/src/store/open.rs:(2026-11-20); convert it with core/scripts/
 # A layer may put its own policies under the store; these say what the engine does under one.
 core/crates/shaked/src/harness.rs:/// Who a system job's transaction runs as: the login and whether it bypasses row-level security
 core/crates/shaked/src/store.rs:/// row-level security) is not found.
+# The free map tiles the world views draw on (a domain, not an org).
+ui/src/features/views/mapStyle.ts:export const MAP_STYLE = 'https://tiles.openfreemap.org/styles/positron';
