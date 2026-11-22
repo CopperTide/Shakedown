@@ -109,13 +109,14 @@ fn reasoning_reaches_the_agent() {
             dir.join("setups/solo-planner.yaml"),
             "format: shakedown-setup/1\nlabel: Thinking planner\nteam:\n  kind: builtin\n  agents:\n    \
              - {id: planner, role: You plan., model: deepseek/deepseek-v4-pro, key: openrouter, \
-             reasoning: {effort: high}}\n",
+             reasoning: {effort: high}, max_tokens: 32000}\n",
         )
         .unwrap();
     });
     let req = request(&p, &exp(), None).unwrap();
     let agent = &req.setups[0].team.agents[0];
     assert_eq!(agent.reasoning, Some(serde_json::json!({"effort": "high"})));
+    assert_eq!(agent.max_tokens, Some(32_000));
 }
 
 #[test]

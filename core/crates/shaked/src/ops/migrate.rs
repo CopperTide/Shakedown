@@ -266,6 +266,7 @@ fn builtin(a: &AgentSpec) -> FileAgent {
             .reasoning
             .as_ref()
             .and_then(|r| serde_json::from_value(r.clone()).ok()),
+        max_tokens: a.max_tokens,
     }
 }
 

@@ -305,6 +305,25 @@ fn gateway_url(state: &AppState, branch: &str, agent: &str) -> String {
     )
 }
 
+/// One model call's request: the conversation, the tools and the model, with the agent's
+/// `reasoning` and `max_tokens` when it has them.
+fn call_body(
+    messages: &[Value],
+    tools: &[Value],
+    model: &str,
+    reasoning: Option<&Value>,
+    max_tokens: Option<u32>,
+) -> Value {
+    let mut body = json!({"messages": messages, "tools": tools, "model": model});
+    if let Some(r) = reasoning {
+        body["reasoning"] = r.clone();
+    }
+    if let Some(n) = max_tokens {
+        body["max_tokens"] = json!(n);
+    }
+    body
+}
+
 /// What an agent's loop talks to: the gateway to its provider and model, and its tools.
 struct Loop {
     state: Arc<AppState>,
@@ -316,6 +335,8 @@ struct Loop {
     agent: String,
     /// The agent's `reasoning` setting, sent with every call when it has one.
     reasoning: Option<Value>,
+    /// The agent's `max_tokens`, sent with every call when it has one.
+    max_tokens: Option<u32>,
 }
 
 impl Loop {
@@ -333,6 +354,7 @@ impl Loop {
             branch,
             agent: spec.id.clone(),
             reasoning: spec.reasoning.clone(),
+            max_tokens: spec.max_tokens,
         })
     }
 
@@ -347,10 +369,7 @@ impl Loop {
         let exec = ToolExec::new(self.state.store.clone());
         let base = self.state.config.retry_base;
         for _ in 0..MAX_MODEL_CALLS {
-            let mut body = json!({"messages": messages, "tools": self.tools, "model": self.model});
-            if let Some(r) = &self.reasoning {
-                body["reasoning"] = r.clone();
-            }
+            let body = call_body(messages, &self.tools, &self.model, self.reasoning.as_ref(), self.max_tokens);
             let v = model_call(&self.state.http, &self.url, &body, base).await?;
             totals.add(&self.provider, &v["usage"]);
             // The gateway priced the call into the run's estimate: stop once it is over.
@@ -490,6 +509,17 @@ async fn run_calls(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_call_carries_the_agents_reasoning_and_max_tokens_only_when_set() {
+        let msgs = [json!({"role": "user", "content": "hi"})];
+        let plain = call_body(&msgs, &[], "m", None, None);
+        assert!(plain.get("reasoning").is_none() && plain.get("max_tokens").is_none());
+        let set = call_body(&msgs, &[], "m", Some(&json!({"effort": "high"})), Some(16_000));
+        assert_eq!(set["reasoning"], json!({"effort": "high"}));
+        assert_eq!(set["max_tokens"], json!(16_000));
+        assert_eq!(set["model"], "m");
+    }
 
     #[test]
     fn retries_wait_as_asked_else_twice_as_long_each_time() {

@@ -344,6 +344,7 @@ fn builtin_agent(spec: &shakedown_project::format::AgentSpec) -> AgentSpec {
         .reasoning
         .as_ref()
         .and_then(|r| serde_json::to_value(r).ok());
+    agent.max_tokens = spec.max_tokens;
     agent
 }
 

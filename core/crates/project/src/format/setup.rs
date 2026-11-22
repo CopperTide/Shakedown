@@ -96,6 +96,11 @@ pub struct AgentSpec {
     /// `reasoning` (OpenRouter's reasoning tokens): its thinking is then recorded with each turn.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reasoning: Option<Reasoning>,
+    /// The most tokens a `builtin` agent's answer may have (reasoning included), sent as each
+    /// call's `max_tokens`. Absent, the provider's default (OpenRouter holds credit for the
+    /// model's whole output on every call).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_tokens: Option<u32>,
 }
 
 /// How much a model reasons before it answers (OpenRouter's `reasoning` request field).

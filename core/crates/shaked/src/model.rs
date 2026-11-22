@@ -100,6 +100,11 @@ pub struct AgentSpec {
     /// its model calls (OpenRouter's `{effort, max_tokens, exclude}`); absent, none is sent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reasoning: Option<serde_json::Value>,
+    /// The most tokens an API-mode agent's answer may have, sent as each call's `max_tokens`;
+    /// absent, none is sent (the provider's default: OpenRouter then holds credit for the
+    /// model's whole output on every call).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_tokens: Option<u32>,
 }
 
 impl AgentSpec {
@@ -120,6 +125,7 @@ impl AgentSpec {
             headers: Headers::default(),
             tools: Vec::new(),
             reasoning: None,
+            max_tokens: None,
         }
     }
 

@@ -47,6 +47,8 @@ pub(super) struct AgentSpecIn {
     tools: Vec<String>,
     #[serde(default)]
     reasoning: Option<serde_json::Value>,
+    #[serde(default)]
+    max_tokens: Option<u32>,
 }
 
 impl From<AgentSpecIn> for AgentSpec {
@@ -75,6 +77,7 @@ impl From<AgentSpecIn> for AgentSpec {
             headers: a.headers,
             tools: a.tools,
             reasoning: a.reasoning,
+            max_tokens: a.max_tokens,
         }
     }
 }

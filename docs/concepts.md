@@ -127,6 +127,9 @@ An API-mode agent may also say `reasoning: {effort: minimal|low|medium|high|xhig
 sends it as the request's `reasoning` field with each of the agent's model calls (OpenRouter's reasoning tokens), and
 the thinking each answer carries is recorded as the agent's `reasoning` events, shown on the run's timeline and in
 the inspector with the model call it came from.
+It may also say `max_tokens: N`, sent as each of its calls' `max_tokens` (reasoning included). Without it the
+provider's default applies, and OpenRouter then holds credit for the model's whole output on every call, so a key
+with a spend limit can refuse calls that would have been small.
 
 Every agent also gets three tools for talking to the others, all optional and recorded when used (a dispatch run
 has its own set, below):
