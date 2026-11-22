@@ -46,9 +46,10 @@ pub struct Ticker {
 }
 
 impl Ticker {
-    /// Starts ticking `ctx`'s world; None when the world has no clock parts.
+    /// Starts ticking `ctx`'s world; None when the world has no clock parts or the branch's
+    /// clock is stepped (the runner moves a stepped world itself).
     pub fn start(exec: ToolExec, ctx: Arc<BranchCtx>) -> Option<Ticker> {
-        if !ctx.world.uses_clock() {
+        if !ctx.world.uses_clock() || ctx.clock.is_stepped() {
             return None;
         }
         let (stop, stopped) = oneshot::channel();

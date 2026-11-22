@@ -788,12 +788,17 @@ mod tests {
         assert_eq!(a.wake_at_ms, Some(5_400_000));
         let old: Advanced = serde_json::from_str(r#"{"changed":true,"events":[]}"#).unwrap();
         assert_eq!(old.wake_at_ms, None);
-        assert!(serde_json::to_value(&old).unwrap().get("wake_at_ms").is_none());
-        let out: ToolOutput =
-            serde_json::from_str(r#"{"result":{},"wake_at_ms":60000}"#).unwrap();
+        assert!(serde_json::to_value(&old)
+            .unwrap()
+            .get("wake_at_ms")
+            .is_none());
+        let out: ToolOutput = serde_json::from_str(r#"{"result":{},"wake_at_ms":60000}"#).unwrap();
         assert_eq!(out.wake_at_ms, Some(60_000));
         let plain = ToolOutput::default();
-        assert!(serde_json::to_value(&plain).unwrap().get("wake_at_ms").is_none());
+        assert!(serde_json::to_value(&plain)
+            .unwrap()
+            .get("wake_at_ms")
+            .is_none());
     }
 
     #[test]

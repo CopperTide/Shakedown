@@ -339,6 +339,12 @@ Durations are a whole number and a unit: `ms`, `s`, `m` or `h`. An event fires a
 parts as they are, and each part expands them from the run's seed. A check's `query` may be plain text or a
 structured query such as `{part: driver, key: kpis, field: cost_vs_baseline, op: lt, value: 1.0}`.
 
+On a stepped clock, world time stands still while agents think. Each tool call an agent makes on the world costs
+world time by its effect (`action_cost`: a read `0m` and a write `2m` unless set, or the tool's own entry in
+`tools`): the call runs at the clock before the charge, and the clock moves on by the charge after it, whether the
+part answered or refused. No ticker runs for a stepped branch. The World clock section of an agent's first input says
+the clock "moves when the team acts or waits" instead of "runs while you work".
+
 ## What the world says about itself
 
 An integration may say in `describe` what kind of system it is: `system: {kind, product, stands_in_for?,

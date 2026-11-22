@@ -167,22 +167,34 @@ fn spend_cap_round_trips() {
 }
 
 fn stepped_storm() -> String {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/scenarios/stepped-storm.yaml");
+    let path =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/scenarios/stepped-storm.yaml");
     std::fs::read_to_string(path).expect("fixture exists")
 }
 
 #[test]
 fn parses_stepped_clock_and_timed_events() {
-    let scenario = parse::<ScenarioFile>("s.yaml", &stepped_storm()).expect("stepped scenario parses");
+    let scenario =
+        parse::<ScenarioFile>("s.yaml", &stepped_storm()).expect("stepped scenario parses");
     let clock = scenario.clock.as_ref().expect("clock set");
     assert_eq!(clock.mode, ClockMode::Stepped);
     assert_eq!(clock.epoch.as_deref(), Some("60m"));
     assert_eq!(clock.horizon.as_deref(), Some("23:59"));
-    assert_eq!(clock.action_cost.tools.get("plan_recovery").map(String::as_str), Some("5m"));
+    assert_eq!(
+        clock
+            .action_cost
+            .tools
+            .get("plan_recovery")
+            .map(String::as_str),
+        Some("5m")
+    );
     let event = &scenario.events[0];
     assert_eq!(event.known_at.as_deref(), Some("14:40"));
     assert_eq!(event.part.as_deref(), Some("driver"));
-    assert_eq!(event.do_.as_ref().and_then(|d| d["kind"].as_str()), Some("capacity_program"));
+    assert_eq!(
+        event.do_.as_ref().and_then(|d| d["kind"].as_str()),
+        Some("capacity_program")
+    );
     assert_eq!(scenario.generators.len(), 1);
     let again: ScenarioFile = parse("s.yaml", &to_yaml(&scenario).unwrap()).expect("re-parses");
     assert_eq!(scenario, again);
@@ -205,7 +217,11 @@ fn wall_is_default() {
     assert_eq!(clock.mode, ClockMode::Wall);
     assert_eq!(clock.action_cost.read, "0m");
     assert_eq!(clock.action_cost.write, "2m");
-    assert_eq!(clock.epoch_ms(), Ok(Some(3_600_000)), "epoch defaults to 60m");
+    assert_eq!(
+        clock.epoch_ms(),
+        Ok(Some(3_600_000)),
+        "epoch defaults to 60m"
+    );
 }
 
 #[test]

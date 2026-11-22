@@ -452,7 +452,8 @@ impl ToolExec {
     }
 
     /// Runs a tool call on the branch's world at the branch clock (the clock parts advanced to
-    /// it first), then saves what changed.
+    /// it first), then saves what changed. On a stepped clock, a call that reached its part
+    /// (answered or refused there) then moves the clock on by what it costs.
     async fn execute(
         &self,
         branch: &BranchCtx,
@@ -474,6 +475,13 @@ impl ToolExec {
             Ok(c) => c,
             Err(e) => return (Err(failure(branch, e)), facts),
         };
+        if called.part.is_some() {
+            let effect = match branch.world.is_write(name) {
+                true => Effect::Write,
+                false => Effect::Read,
+            };
+            branch.clock.charge(effect, name);
+        }
         let gate_ms = called.gate_ms;
         facts.duration_ms = Some((since.elapsed().as_secs_f64() * 1000.0 - gate_ms).max(0.0));
         branch.overhead.add(Cat::Gate, gate_ms);

@@ -170,7 +170,9 @@ fn default_write() -> String {
 /// # Errors
 /// The text is not a whole, non-negative number followed by `ms`, `s`, `m` or `h`.
 pub fn parse_duration_ms(text: &str) -> Result<i64, String> {
-    let bad = || format!("`{text}` is not a duration: write a whole number and a unit, like 2m, 90s or 1h");
+    let bad = || {
+        format!("`{text}` is not a duration: write a whole number and a unit, like 2m, 90s or 1h")
+    };
     let t = text.trim();
     let split = t.find(|c: char| !c.is_ascii_digit()).ok_or_else(bad)?;
     let (number, unit) = t.split_at(split);
@@ -213,11 +215,7 @@ pub struct Event {
     pub part: Option<String>,
     /// What the part does, e.g. `{kind: capacity_program, station: ORD}`. Passed to the part's
     /// setup as it is.
-    #[serde(
-        default,
-        rename = "do",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(default, rename = "do", skip_serializing_if = "Option::is_none")]
     pub do_: Option<Value>,
     /// Fires after this many agent calls instead.
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -179,8 +179,10 @@ fn scenario_file(exp: &OldExperiment, world: &Id) -> ScenarioFile {
         world: world.to_string(),
         task: format!("Task {} of {}", exp.task, exp.benchmark),
         preset: Some(exp.task.clone()),
+        clock: None,
         changes: vec![],
         events: vec![],
+        generators: vec![],
         gates: vec![],
         checks: vec![],
     }

@@ -70,7 +70,8 @@ async fn brief_of(state: &AppState, ctx: &BranchCtx) -> Result<Brief> {
     Ok(Brief {
         ticket: task.ticket.clone(),
         title: prompts::instructions_title(&bench).to_string(),
-        clock: WorldClock::of(task.clock_start.as_deref(), ctx.clock.speed()),
+        clock: WorldClock::of(task.clock_start.as_deref(), ctx.clock.speed())
+            .map(|c| c.stepped_if(ctx.clock.is_stepped())),
         instructions: bench.instructions,
     })
 }

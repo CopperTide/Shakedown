@@ -170,3 +170,115 @@ fn the_clock_route_tells_world_time() {
         assert_eq!(fx.fx.get(&path).await.0, 409);
     })
 }
+
+/// A branch of the toy world `toybench` (a clock part `box` started with `part_args`) on a
+/// stepped clock whose writes cost two world minutes, made by hand: no runner moves it.
+struct SteppedFx {
+    ctx: std::sync::Arc<shaked::exec::BranchCtx>,
+    exec: shaked::exec::ToolExec,
+    store: std::sync::Arc<shaked::store::Store>,
+    _clean: support::pg::Cleanup,
+    _saves: std::path::PathBuf,
+    _root: packages::ToyRoot,
+}
+
+impl SteppedFx {
+    async fn new(tag: &str, part_args: &[&str]) -> SteppedFx {
+        let root = packages::toy_world(tag, part_args, &[]);
+        let saves =
+            std::env::temp_dir().join(format!("shaked-stepped-{tag}-{}", std::process::id()));
+        std::fs::create_dir_all(&saves).unwrap();
+        let registry = parts::Registry::scan(std::slice::from_ref(&root.0)).unwrap();
+        let hub = std::sync::Arc::new(parts::Hub::new(
+            registry,
+            packages::bin_dir(),
+            saves.clone(),
+        ));
+        let (store, clean) = support::app::meta_store("stepped", tag).await;
+        let team = Team {
+            id: "t".into(),
+            name: "T".into(),
+            agents: vec![AgentSpec::new("planner", AgentKind::Open)],
+        };
+        let run_id = records(&store).create_run("t1", &team).await.unwrap();
+        let branch = records(&store)
+            .create_branch(&run_id, None, &team, &json!([]), None)
+            .await
+            .unwrap();
+        let bench = hub.bench_describe("toybench").await.unwrap();
+        let from = shaked::world::WorldFrom::Base;
+        let world = shaked::world::World::start(hub.clone(), &bench, &branch, 1, from).await;
+        let cost = shaked::clock::StepCost {
+            read_ms: 0,
+            write_ms: 120_000,
+            tools: Default::default(),
+        };
+        let clock = shaked::clock::BranchClock::stepped(0, cost);
+        let ctx = shaked::exec::BranchCtx::new(
+            branch,
+            std::sync::Arc::new(world.unwrap()),
+            team,
+            "t1".into(),
+        )
+        .with_clock(clock);
+        SteppedFx {
+            ctx: std::sync::Arc::new(ctx),
+            exec: shaked::exec::ToolExec::new(store.clone()),
+            store,
+            _clean: clean,
+            _saves: saves,
+            _root: root,
+        }
+    }
+
+    async fn call(&self, tool: &str) -> Value {
+        self.exec
+            .run(&self.ctx, "planner", tool, json!({}), None)
+            .await
+    }
+
+    /// The `clock_ms` each recorded tool call ran at.
+    async fn call_clocks(&self) -> Vec<i64> {
+        let evs = records(&self.store)
+            .events(&self.ctx.branch_id)
+            .await
+            .unwrap();
+        evs.iter()
+            .filter(|e| e.kind == EventKind::ToolCall)
+            .map(|e| e.payload["clock_ms"].as_i64().unwrap())
+            .collect()
+    }
+}
+
+impl Drop for SteppedFx {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self._saves);
+    }
+}
+
+/// On a stepped clock a write moves world time by its cost after the call (the call runs at the
+/// clock before it), a read costs nothing here, and no ticker moves the clock meanwhile.
+#[test]
+fn tool_call_charges_world_minutes() {
+    run(async {
+        let fx = SteppedFx::new("charge", &["--uses-clock"]).await;
+        fx.ctx.start_ticker(&fx.store).await;
+        assert!(
+            !shaked::ticker::is_running(&fx.ctx.branch_id),
+            "a stepped branch has no ticker"
+        );
+        assert!(fx.call("poke").await.get("error").is_none());
+        assert_eq!(fx.ctx.clock.now_ms(), 120_000);
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        assert!(fx.call("peek").await.get("error").is_none());
+        assert_eq!(
+            fx.ctx.clock.now_ms(),
+            120_000,
+            "a read costs nothing, and wall time none"
+        );
+        fx.call("poke").await;
+        assert_eq!(fx.call_clocks().await, [0, 120_000, 120_000]);
+        assert_eq!(fx.ctx.clock.now_ms(), 240_000);
+        fx.ctx.world.stop().await;
+    })
+}

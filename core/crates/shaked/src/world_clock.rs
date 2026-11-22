@@ -8,11 +8,13 @@ use chrono::{DateTime, Duration, NaiveDateTime, Utc};
 /// The format of a task's `clock_start`.
 const START_FORMAT: &str = "%Y-%m-%dT%H:%M:%S";
 
-/// A world's clock: its date and time at branch clock 0, and how fast the branch clock runs.
+/// A world's clock: its date and time at branch clock 0, and how fast the branch clock runs (or
+/// that it is stepped: it moves when the team acts or waits).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct WorldClock {
     pub start: NaiveDateTime,
     pub speed: f64,
+    pub stepped: bool,
 }
 
 impl WorldClock {
@@ -20,7 +22,17 @@ impl WorldClock {
     /// second allowed); None when it gives none or one that doesn't parse.
     pub fn of(start: Option<&str>, speed: f64) -> Option<WorldClock> {
         let start = parse_start(start?)?;
-        Some(WorldClock { start, speed })
+        Some(WorldClock {
+            start,
+            speed,
+            stepped: false,
+        })
+    }
+
+    /// The same clock, stepped when `stepped`.
+    pub fn stepped_if(mut self, stepped: bool) -> WorldClock {
+        self.stepped = stepped;
+        self
     }
 
     /// The unix ms of a world's clock 0: the task's `clock_start` read as UTC, else the run's
@@ -41,12 +53,16 @@ impl WorldClock {
     /// is not today's.
     pub fn brief(&self, now_ms: i64) -> String {
         let pace = match self.speed {
-            s if (s - 1.0).abs() < 1e-9 => "with real time".to_string(),
-            s => format!("at about {} times real time", trim_number(s)),
+            _ if self.stepped => "moves when the team acts or waits: each action takes world time, \
+                                  thinking takes none, and when the whole team waits the world moves on to \
+                                  the next thing that happens"
+                .to_string(),
+            s if (s - 1.0).abs() < 1e-9 => "runs while you work, with real time".to_string(),
+            s => format!("runs while you work, at about {} times real time", trim_number(s)),
         };
         format!(
             "# World clock\n\nThis world keeps its own clock, which is not today's date. In this world \
-             it is now {} (world time). The clock started at {} and runs while you work, {pace}. Read \
+             it is now {} (world time). The clock started at {} and {pace}. Read \
              every date and time in the world's systems against this clock, not against the date your \
              own environment reports: \"today\" and \"now\" mean the world's.\n\n",
             stamp(self.at(now_ms)),
@@ -130,6 +146,13 @@ mod tests {
             .brief(0)
             .contains("runs while you work, with real time"));
         assert!(clock(0.25).brief(0).contains("about 0.25 times"));
+    }
+
+    #[test]
+    fn a_stepped_brief_says_the_clock_moves_when_the_team_acts_or_waits() {
+        let b = clock(1.0).stepped_if(true).brief(0);
+        assert!(b.contains("moves when the team acts or waits"), "{b}");
+        assert!(!b.contains("runs while you work"), "{b}");
     }
 
     #[test]
