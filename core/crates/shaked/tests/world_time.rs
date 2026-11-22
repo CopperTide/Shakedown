@@ -282,3 +282,210 @@ fn tool_call_charges_world_minutes() {
         fx.ctx.world.stop().await;
     })
 }
+
+/// A chat answer with `content` and no tool call: the agent's turn ends.
+fn says(content: &str) -> Value {
+    json!({"id": "c", "object": "chat.completion", "model": "m",
+        "choices": [{"index": 0, "finish_reason": "stop",
+                     "message": {"role": "assistant", "content": content}}],
+        "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}})
+}
+
+/// A chat answer that calls `finish`.
+fn finishes() -> Value {
+    json!({"id": "c", "object": "chat.completion", "model": "m",
+        "choices": [{"index": 0, "finish_reason": "tool_calls",
+                     "message": {"role": "assistant", "content": null, "tool_calls": [
+                        {"id": "call-1", "type": "function",
+                         "function": {"name": "finish", "arguments": "{\"summary\":\"done\"}"}}]}}],
+        "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}})
+}
+
+const HOUR: i64 = 3_600_000;
+
+/// A dispatch run of the toy world on a stepped clock (`clock`), its lead an API-mode agent on a
+/// scripted server answering `answers` in order: the ended branch's events.
+async fn stepped_run(
+    tag: &str,
+    part_args: &[&str],
+    clock: Value,
+    answers: Vec<Value>,
+) -> (AppFx, Vec<Event>) {
+    use shaked::providers::{Endpoint, LocalEndpoint, ProviderConfig};
+    let llm = support::fake_llm::fake_llm(answers.into_iter().map(|a| (200, a)).collect()).await;
+    let mut providers = ProviderConfig::default();
+    providers.locals.push(LocalEndpoint {
+        name: "pod".into(),
+        endpoint: Endpoint::new(&llm.base, None),
+        rate: None,
+    });
+    providers.default = "local:pod".into();
+    let root = packages::toy_world(tag, part_args, &["--clock-start", "2026-03-10T06:00:00"]);
+    let fx = AppFx::idle("stepped", tag)
+        .root(root)
+        .bench("toybench")
+        .providers(providers)
+        .start()
+        .await;
+    let mut lead = AgentSpec::new("lead", AgentKind::Open)
+        .with_model("m")
+        .with_provider("local:pod")
+        .with_prompt("You lead.");
+    lead.lead = true;
+    let team = json!({"id": "t", "name": "T", "agents": [lead]});
+    let scenario = json!({"disruptions": [], "clock": clock});
+    let body = json!({"task_id": "t1", "team": team, "runner": "dispatch", "scenario": scenario});
+    let (status, v) = fx.post("/api/runs", body).await;
+    assert_eq!(status, 200, "{v}");
+    let branch = v["branch_id"].as_str().unwrap().to_string();
+    for _ in 0..600 {
+        let (_, b) = fx.get(&format!("/api/branches/{branch}")).await;
+        if !b["ended_at"].is_null() {
+            let evs = records(&fx.state.store).events(&branch).await.unwrap();
+            return (fx, evs);
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    panic!("the stepped run did not end");
+}
+
+/// The clock moves a quiet stepped world made: `(reason, clock_ms)`.
+fn moves(evs: &[Event]) -> Vec<(String, i64)> {
+    let mine = evs.iter().filter(|e| {
+        e.kind == EventKind::WorldEvent
+            && e.payload["part"] == "clock"
+            && e.payload["kind"] == "advance"
+    });
+    mine.map(|e| {
+        let reason = e.payload["data"]["reason"].as_str().unwrap().to_string();
+        (reason, e.payload["clock_ms"].as_i64().unwrap())
+    })
+    .collect()
+}
+
+/// The lead's wakes: their reasons.
+fn wake_reasons(evs: &[Event]) -> Vec<String> {
+    let wakes = evs.iter().filter(|e| e.kind == EventKind::Wake);
+    wakes
+        .map(|e| e.payload["reason"].as_str().unwrap().to_string())
+        .collect()
+}
+
+/// With no alert and no epoch, a quiet team's world goes straight to the horizon: the lead is
+/// never woken again, and the idle rule never runs.
+#[test]
+fn quiet_world_runs_to_horizon_without_wakes() {
+    run(async {
+        let clock = json!({"write_ms": 120_000, "horizon_ms": 3 * HOUR});
+        let (_fx, evs) = stepped_run(
+            "quiet",
+            &["--uses-clock"],
+            clock,
+            vec![says("Nothing to do.")],
+        )
+        .await;
+        assert_eq!(wake_reasons(&evs), ["start"]);
+        assert_eq!(moves(&evs), [("horizon".to_string(), 3 * HOUR)]);
+        assert!(
+            evs.iter().any(|e| e.kind == EventKind::Check),
+            "scored at the horizon"
+        );
+        let first = evs.iter().find(|e| e.kind == EventKind::Wake).unwrap();
+        assert!(
+            first.payload["input"]
+                .as_str()
+                .unwrap()
+                .contains("moves when the team acts or waits"),
+            "{}",
+            first.payload["input"]
+        );
+    })
+}
+
+/// A part's alert wakes the lead with the alert as mail at the world time it fired.
+#[test]
+fn alert_wakes_lead_with_mail() {
+    run(async {
+        let clock = json!({"write_ms": 120_000, "horizon_ms": 3 * HOUR});
+        let part = ["--uses-clock", "--alert-at", "3600000"];
+        let (_fx, evs) = stepped_run("alert", &part, clock, vec![says("Waiting.")]).await;
+        assert_eq!(wake_reasons(&evs), ["start", "mail"]);
+        let alert = evs
+            .iter()
+            .find(|e| e.kind == EventKind::WorldEvent && e.payload["kind"] == "alert")
+            .unwrap();
+        assert_eq!(alert.payload["clock_ms"], HOUR);
+        let mail_wake = evs
+            .iter()
+            .filter(|e| e.kind == EventKind::Wake)
+            .nth(1)
+            .unwrap();
+        assert_eq!(mail_wake.payload["mail"], json!([alert.seq]));
+        assert!(mail_wake.payload["input"]
+            .as_str()
+            .unwrap()
+            .contains("the toy needs a look"));
+        assert_eq!(
+            moves(&evs),
+            [
+                ("wake".to_string(), HOUR),
+                ("horizon".to_string(), 3 * HOUR)
+            ]
+        );
+    })
+}
+
+/// A lead that finishes before the world's events still has them land: the world runs on, with
+/// no agent, through each wake to the horizon, recorded, and is scored there.
+#[test]
+fn finish_early_runs_to_horizon() {
+    run(async {
+        let clock = json!({"write_ms": 120_000, "horizon_ms": 3 * HOUR});
+        let part = ["--uses-clock", "--alert-at", "3600000"];
+        let (_fx, evs) = stepped_run("finish", &part, clock, vec![finishes(), says("Done.")]).await;
+        let finish = evs
+            .iter()
+            .position(|e| e.kind == EventKind::Finish)
+            .expect("finished");
+        assert_eq!(
+            moves(&evs[finish..]),
+            [
+                ("wake".to_string(), HOUR),
+                ("horizon".to_string(), 3 * HOUR)
+            ]
+        );
+        assert!(evs[finish..]
+            .iter()
+            .any(|e| e.kind == EventKind::WorldEvent && e.payload["kind"] == "alert"));
+        assert_eq!(
+            wake_reasons(&evs),
+            ["start"],
+            "no one is woken after the finish"
+        );
+        let check = evs
+            .iter()
+            .position(|e| e.kind == EventKind::Check)
+            .expect("scored");
+        assert!(check > finish);
+    })
+}
+
+/// With no alert, the epoch gives the lead a look every hour of world time, and looks are no
+/// idle wakes: the run reaches its horizon.
+#[test]
+fn epoch_gives_lead_a_look() {
+    run(async {
+        let clock = json!({"write_ms": 120_000, "epoch_ms": HOUR, "horizon_ms": 3 * HOUR});
+        let (_fx, evs) =
+            stepped_run("look", &["--uses-clock"], clock, vec![says("All calm.")]).await;
+        assert_eq!(wake_reasons(&evs), ["start", "look", "look"]);
+        assert_eq!(
+            moves(&evs),
+            [
+                ("look".to_string(), HOUR),
+                ("look".to_string(), 2 * HOUR),
+                ("horizon".to_string(), 3 * HOUR)
+            ]
+        );
+    })
+}

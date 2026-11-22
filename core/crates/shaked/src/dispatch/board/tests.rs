@@ -306,3 +306,74 @@ fn a_fork_restarts_who_was_working_and_delivers_what_was_waiting() {
         "one idle wake was used before the fork"
     );
 }
+
+fn stepped() -> Board {
+    board().stepped()
+}
+
+fn advances(actions: &[Action]) -> bool {
+    actions.iter().any(|a| matches!(a, Action::Advance))
+}
+
+fn alert(seq: i64) -> Input {
+    said(
+        seq,
+        "driver",
+        EventKind::WorldEvent,
+        Some("lead"),
+        "storm forecast",
+    )
+}
+
+/// On a stepped clock a quiet team moves the world on at once, and again after each move that
+/// woke no one; the horizon ends the run.
+#[test]
+fn a_quiet_stepped_team_moves_the_world_on_until_the_horizon() {
+    let mut b = stepped();
+    let a = b.start();
+    assert!(!advances(&a), "the lead works first");
+    let a = b.step(ended("lead", "nothing yet"), S);
+    assert!(advances(&a), "{a:?}");
+    assert!(b.step(Input::Tick, S).is_empty(), "one move at a time");
+    let to = WakePoint::Part;
+    let a = b.step(Input::Advanced { to, alerts: 0 }, S);
+    assert!(advances(&a) && wakes(&a).is_empty(), "{a:?}");
+    let to = WakePoint::Horizon;
+    let a = b.step(Input::Advanced { to, alerts: 0 }, S);
+    assert_eq!(end(&a), Some(End::Horizon));
+}
+
+/// An alert the world told the lead wakes it with the alert as mail; the world waits meanwhile.
+#[test]
+fn an_alert_wakes_the_lead_with_mail() {
+    let mut b = stepped();
+    b.start();
+    b.step(ended("lead", "waiting"), S);
+    let to = WakePoint::Part;
+    assert!(b.step(Input::Advanced { to, alerts: 1 }, S).is_empty());
+    let a = b.step(alert(9), S);
+    assert_eq!(wakes(&a), [wake("lead", Reason::Mail, &[9])]);
+}
+
+/// A look wakes the lead without counting as an idle wake; the idle rule runs only when the world
+/// has nowhere to move on to.
+#[test]
+fn looks_are_no_idle_wakes_and_the_idle_rule_waits_for_a_stuck_world() {
+    let mut b = stepped();
+    b.start();
+    for _ in 0..4 {
+        b.step(ended("lead", "calm"), S);
+        let to = WakePoint::Look;
+        let a = b.step(Input::Advanced { to, alerts: 0 }, S);
+        assert_eq!(wakes(&a), [wake("lead", Reason::Look, &[])]);
+    }
+    b.step(ended("lead", "calm"), S);
+    assert!(
+        b.step(Input::Tick, 100 * S).is_empty(),
+        "no idle wake while the world can move"
+    );
+    b.step(Input::Stuck, 100 * S);
+    b.step(Input::Tick, 100 * S);
+    let a = b.step(Input::Tick, 111 * S);
+    assert_eq!(wakes(&a), [wake("lead", Reason::Idle(1), &[])]);
+}

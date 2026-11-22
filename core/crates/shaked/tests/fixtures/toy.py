@@ -6,7 +6,7 @@
               [--gc-waits-for FILE] [--tool-event KIND] [--system JSON] [--internal-peeks]
               [--http-route HOST=URL ... [--route-env K=V ...] [--route-reads PATTERN ...]
               [--route-honours-readonly] [--route-after-save URL]] [--save-at step|points]
-              [--log-time FILE]
+              [--log-time FILE] [--alert-at MS]
       An integration with one counter per instance and tools `poke` (write, adds 1) and `peek`
       (read), named `<P>poke` and `<P>peek` with --prefix. It exits on its N-th call_tool (only
       once across restarts when FILE marks that it did); every `save` after the first N is an
@@ -27,7 +27,9 @@
       the --route-after-save URL, as a service that restarts on a new port); without
       one, `http_routes` answers -32601. --save-at sets `describe.save_at`. --log-time
       appends "start <instance> <epoch_ms> <speed>" (from `world_time`, "none" without it) per `start` and
-      "advance <instance> <clock_ms> <wall unix ms>" per `advance` to FILE.
+      "advance <instance> <clock_ms> <wall unix ms>" per `advance` to FILE. With --alert-at MS (and
+      --uses-clock), `advance` reports `wake_at_ms` MS until the clock reaches it, then an `alert` event
+      once per instance.
   toy.py bench [--name NAME] --integration NAME [--part NAME=INTEGRATION ...] [--gold TOOL [--gold-args JSON]]
                [--config PART=JSON ...] [--clash] [--bench-tool [--tool-part PART]] [--link JSON ...]
                [--gate JSON ...] [--setup JSON ...] [--scored [--two-tasks] [--safety]]
@@ -80,6 +82,7 @@ class Part:
         self.saves_ok = int(opt("--save-fails-after", "-1"))
         self.calls = self.saved = 0
         self.counters, self.saves, self.clocks = {}, {}, {}
+        self.alerted = set()
         self.saved_instances = set()
         self.peeks, self.peek_saves = {}, {}
 
@@ -126,7 +129,16 @@ class Part:
         self.clocks[i] = max(t, self.clocks.get(i, 0))
         wake = first or "--event-every" in ARGS
         events = [{"kind": "alarm", "text": "the toy woke up", "data": {"at": t}}] if wake else []
-        return {"changed": changed, "events": events}
+        out = {"changed": changed, "events": events}
+        alert_at = opt("--alert-at", None)
+        if alert_at is not None:
+            alert_at = int(alert_at)
+            if self.clocks[i] < alert_at:
+                out["wake_at_ms"] = alert_at
+            elif i not in self.alerted:
+                self.alerted.add(i)
+                events.append({"kind": "alert", "text": "the toy needs a look", "data": {"at": alert_at}})
+        return out
 
     def call_tool(self, p):
         self.calls += 1

@@ -30,6 +30,15 @@ pub struct StepCost {
 }
 
 impl StepCost {
+    /// What a stepped clock's calls cost, as a run's scenario gives it.
+    pub fn of_clock(c: &parts::proto::SteppedClock) -> StepCost {
+        StepCost {
+            read_ms: c.read_ms,
+            write_ms: c.write_ms,
+            tools: c.tools.clone().into_iter().collect(),
+        }
+    }
+
     /// What a call of `tool`, which has `effect`, costs.
     pub fn of(&self, effect: Effect, tool: &str) -> i64 {
         let by_effect = match effect {
@@ -126,6 +135,15 @@ impl BranchClock {
         let mut s = self.state.lock().unwrap();
         if s.stepped.is_some() && !s.frozen {
             s.counted = s.counted.max(ms as f64);
+        }
+    }
+
+    /// The clock a branch under `rules` gets at `base_ms`: stepped when the rules say so, else
+    /// running at the speed `SHAKEDOWN_CLOCK_SPEED` sets.
+    pub fn for_rules(rules: &crate::model::Rules, base_ms: i64) -> BranchClock {
+        match &rules.stepped {
+            Some(c) => BranchClock::stepped(base_ms, StepCost::of_clock(c)),
+            None => BranchClock::from_env(base_ms),
         }
     }
 

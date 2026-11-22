@@ -2,6 +2,8 @@
 //! doing (idle, working, failed), the mail waiting for it, and the guard rails. It takes what
 //! happened (an agent said something, a turn ended, time passed, a pause) and answers what to do
 //! (wake an agent with its mail, pass on what an agent said at the end of a turn, end the run).
+//! On a stepped clock, a quiet team (no agent working, no mail waiting) asks the runner to move
+//! the world on to its next wake point instead of waiting out the idle rule.
 
 use std::time::Duration;
 
@@ -43,6 +45,8 @@ pub enum MailKind {
     Message,
     /// Shakedown's own notice to the lead: an agent failed, or work for it could not be delivered.
     Notice,
+    /// A world event a part marked `alert` (stepped clock only), for the lead.
+    Alert,
 }
 
 /// One piece of mail: what was said (at step `seq`), by whom, and its text.
@@ -65,6 +69,29 @@ pub enum Reason {
     Idle(u32),
     /// A fork: the agent was working at the fork point and carries on.
     Resume,
+    /// A stepped world went its epoch without an alert: the lead gets a look.
+    Look,
+}
+
+/// Why a stepped world was moved on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WakePoint {
+    /// A part has something scheduled then.
+    Part,
+    /// The lead's look is due (its epoch since its last wake).
+    Look,
+    /// The run's horizon: the run ends there.
+    Horizon,
+}
+
+impl WakePoint {
+    pub fn word(self) -> &'static str {
+        match self {
+            WakePoint::Part => "wake",
+            WakePoint::Look => "look",
+            WakePoint::Horizon => "horizon",
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -82,6 +109,16 @@ pub enum Input {
     Pause,
     Resume,
     Stop,
+    /// A stepped world was moved on to a wake point; `alerts` of its events were told to the lead
+    /// (they arrive as `Said`).
+    Advanced {
+        to: WakePoint,
+        alerts: usize,
+    },
+    /// A stepped world has no wake point to move on to (no part wake, no epoch, no horizon).
+    Stuck,
+    /// Moving a stepped world on failed.
+    WorldFailed(String),
 }
 
 /// How a run ends.
@@ -96,6 +133,8 @@ pub enum End {
     /// The run's spend estimate passed its limit: scored as it stands, `budget_exceeded`.
     OverBudget(String),
     Stopped,
+    /// A stepped world reached its horizon: score the world as for a finish.
+    Horizon,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -112,6 +151,9 @@ pub enum Action {
         agent: String,
         text: String,
     },
+    /// The team is quiet on a stepped clock: move the world on to its next wake point and tell
+    /// the board with `Input::Advanced` (or `Input::Stuck`).
+    Advance,
     End(End),
 }
 
@@ -134,6 +176,12 @@ pub struct Board {
     idle_since: Option<Duration>,
     idle_wakes: u32,
     ended: bool,
+    /// The clock is stepped: a quiet team moves the world on.
+    stepped: bool,
+    /// An `Advance` was asked for and its answer has not come.
+    advancing: bool,
+    /// The stepped world had nowhere to move on to: the idle rule applies until a wake.
+    stuck: bool,
 }
 
 /// What an agent is doing and what it said last, for the lead's idle wake.
@@ -163,7 +211,16 @@ impl Board {
             idle_since: None,
             idle_wakes: 0,
             ended: false,
+            stepped: false,
+            advancing: false,
+            stuck: false,
         }
+    }
+
+    /// The same board on a stepped clock.
+    pub fn stepped(mut self) -> Board {
+        self.stepped = true;
+        self
     }
 
     /// A new run: the lead's first turn.
@@ -191,6 +248,7 @@ impl Board {
             .map(|id| self.wake(id, Reason::Resume, vec![]))
             .collect();
         out.extend(self.deliver_all());
+        self.maybe_advance(&mut out);
         out
     }
 
@@ -240,11 +298,58 @@ impl Board {
             Input::Pause => self.pause(now),
             Input::Resume => self.unpause(now),
             Input::Stop => vec![Action::End(End::Stopped)],
+            Input::Advanced { to, alerts } => self.advanced(to, alerts),
+            Input::Stuck => {
+                self.advancing = false;
+                self.stuck = true;
+                vec![]
+            }
+            Input::WorldFailed(why) => vec![Action::End(End::Broken(why))],
         };
+        let mut out = out;
         if out.iter().any(|a| matches!(a, Action::End(_))) {
             self.ended = true;
+        } else {
+            self.maybe_advance(&mut out);
         }
         out
+    }
+
+    /// True when no agent works, no mail waits and the run isn't paused.
+    fn quiet(&self) -> bool {
+        let waiting = |a: &Agent| a.state != State::Working && a.mail.is_empty();
+        self.paused_since.is_none() && self.agents.iter().all(waiting)
+    }
+
+    /// On a stepped clock, asks for the world to move on when the team is quiet and nothing else
+    /// is to be done (no wake, no report to pass on) and no move is already under way.
+    fn maybe_advance(&mut self, out: &mut Vec<Action>) {
+        let busy = |a: &Action| !matches!(a, Action::Advance);
+        if !self.stepped || self.advancing || self.stuck || out.iter().any(busy) || !self.quiet() {
+            return;
+        }
+        self.advancing = true;
+        out.push(Action::Advance);
+    }
+
+    /// The world moved on to `to`: at the horizon the run ends; the alerts it told the lead wake
+    /// it as mail; a look wakes the lead; otherwise the world moves on again (`maybe_advance`).
+    fn advanced(&mut self, to: WakePoint, alerts: usize) -> Vec<Action> {
+        self.advancing = false;
+        if to == WakePoint::Horizon {
+            return vec![Action::End(End::Horizon)];
+        }
+        if alerts > 0 {
+            // The alerts come as `Said`; until then, no move on.
+            self.advancing = true;
+            return vec![];
+        }
+        let lead = self.lead_id().to_string();
+        let lead_idle = self.agents[self.lead].state == State::Idle;
+        if to == WakePoint::Look && lead_idle && self.quiet() {
+            return vec![self.wake(&lead, Reason::Look, vec![])];
+        }
+        vec![]
     }
 
     fn pause(&mut self, now: Duration) -> Vec<Action> {
@@ -283,6 +388,7 @@ impl Board {
             a.reported = false;
         }
         self.idle_since = None;
+        self.stuck = false;
         Action::Wake {
             agent: id.to_string(),
             reason,
@@ -305,6 +411,10 @@ impl Board {
         let kind = match s.kind {
             EventKind::Delegation => MailKind::Delegation,
             EventKind::Report => MailKind::Report,
+            EventKind::WorldEvent => {
+                self.advancing = false;
+                MailKind::Alert
+            }
             _ => MailKind::Message,
         };
         let mail = Mail {
@@ -423,7 +533,7 @@ impl Board {
             return vec![Action::End(End::Failed(why))];
         }
         let waiting = |a: &Agent| a.state != State::Working && a.mail.is_empty();
-        if !self.agents.iter().all(waiting) {
+        if !self.agents.iter().all(waiting) || (self.stepped && !self.stuck) {
             self.idle_since = None;
             return vec![];
         }

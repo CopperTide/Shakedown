@@ -220,6 +220,9 @@ pub struct Rules {
     /// The run's world time window in minutes (`crate::window`): a run an external system
     /// drives is scored when it ends; None: no window.
     pub world_minutes: Option<f64>,
+    /// A stepped world clock (`crate::clock::BranchClock::stepped`), from the run's scenario;
+    /// None: the clock runs on wall time.
+    pub stepped: Option<parts::proto::SteppedClock>,
 }
 
 impl Rules {
@@ -231,6 +234,7 @@ impl Rules {
             max_cost_usd: crate::budget::env_default(),
             connection: None,
             world_minutes: None,
+            stepped: None,
         }
     }
 
@@ -256,6 +260,7 @@ impl Rules {
             max_cost_usd: None,
             connection: None,
             world_minutes: None,
+            stepped: None,
         }
     }
 
@@ -268,9 +273,17 @@ impl Rules {
                 max_cost_usd: start.max_cost_usd.and_then(crate::budget::positive),
                 connection: start.connection.clone(),
                 world_minutes: start.world_minutes,
+                stepped: (start.scenario.as_ref())
+                    .and_then(|s| serde_json::from_value(s.get("clock")?.clone()).ok()),
             },
             None => Rules::legacy(),
         }
+    }
+
+    /// These rules with the stepped clock `clock` (`None`: a wall clock).
+    pub fn with_stepped(mut self, clock: Option<parts::proto::SteppedClock>) -> Rules {
+        self.stepped = clock;
+        self
     }
 
     /// These rules with the Code connection `id` (`None` keeps none).

@@ -29,7 +29,7 @@ use crate::{
 pub use dispatch::{Said, CLOSED, DELEGATE, FINISH, REPORT};
 pub use http::{HttpAnswer, HttpCall, NOT_RUNNING};
 pub use lifecycle::Lifecycle;
-pub use links::LINK_ACTOR;
+pub use links::{ALERT, LINK_ACTOR};
 pub use mailbox::Mailbox;
 pub use roster::Roster;
 pub use setup::SETUP_ACTOR;
@@ -443,12 +443,61 @@ impl ToolExec {
 
     /// Advances the clock parts to `clock_ms` and reports the events they give.
     async fn advance(&self, branch: &BranchCtx, clock_ms: i64) -> Result<(), String> {
-        let events = branch
+        let (events, _) = branch
             .world
             .advance_all(clock_ms)
             .await
             .map_err(|e| failure(branch, e))?;
         self.report(branch, events).await.map(drop)
+    }
+
+    /// Advances the clock parts to the branch clock behind the gate, unless they are there
+    /// already (so they say what they have scheduled): how many alerts they reported.
+    pub async fn catch_up(&self, branch: &BranchCtx) -> Result<usize, String> {
+        let _gate = branch.gate().await;
+        if let Some(f) = branch.lifecycle.fatal() {
+            return Err(f);
+        }
+        let now = branch.clock.now_ms();
+        if branch.world.advanced_to() == Some(now) {
+            return Ok(0);
+        }
+        let (events, _) = (branch.world.advance_all(now).await).map_err(|e| failure(branch, e))?;
+        self.report_counted(branch, events)
+            .await
+            .map(|(_, alerts)| alerts)
+    }
+
+    /// Moves a stepped branch's clock and its world on to `clock_ms` (never back), behind the
+    /// gate: records the move as the world event `clock/advance` (`{from_ms, reason}`), then what
+    /// the world reports. How many of the reported events were alerts (told to the lead).
+    pub async fn step_world(
+        &self,
+        branch: &BranchCtx,
+        clock_ms: i64,
+        reason: &str,
+    ) -> Result<usize, String> {
+        let _gate = branch.gate().await;
+        if let Some(f) = branch.lifecycle.fatal() {
+            return Err(f);
+        }
+        let from_ms = branch.clock.now_ms();
+        branch.clock.step_to(clock_ms);
+        let to = branch.clock.now_ms();
+        let (events, _) = (branch.world.advance_all(to).await).map_err(|e| failure(branch, e))?;
+        let minutes = (to - from_ms) as f64 / 60_000.0;
+        let moved = WorldEventPayload {
+            part: "clock".into(),
+            kind: "advance".into(),
+            text: format!("World time moved on {minutes:.0} min ({reason})"),
+            data: json!({"from_ms": from_ms, "reason": reason}),
+            clock_ms: to,
+        };
+        self.record(branch, None, EventKind::WorldEvent, &moved)
+            .await?;
+        self.report_counted(branch, events)
+            .await
+            .map(|(_, alerts)| alerts)
     }
 
     /// Runs a tool call on the branch's world at the branch clock (the clock parts advanced to
@@ -475,7 +524,7 @@ impl ToolExec {
             Ok(c) => c,
             Err(e) => return (Err(failure(branch, e)), facts),
         };
-        if called.part.is_some() {
+        if branch.world.has_tool(name) {
             let effect = match branch.world.is_write(name) {
                 true => Effect::Write,
                 false => Effect::Read,

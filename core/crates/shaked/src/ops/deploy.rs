@@ -130,6 +130,7 @@ fn disruptions(scenario: &ScenarioFile) -> Option<ScenarioRequest> {
         .collect();
     (!chosen.is_empty()).then_some(ScenarioRequest {
         disruptions: chosen,
+        clock: None,
     })
 }
 

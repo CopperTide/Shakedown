@@ -64,6 +64,7 @@ fn req(chosen: &[(&str, Value)]) -> ScenarioRequest {
     };
     ScenarioRequest {
         disruptions: chosen.iter().map(one).collect(),
+        ..Default::default()
     }
 }
 

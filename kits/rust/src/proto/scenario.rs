@@ -95,11 +95,33 @@ impl ScenarioParam {
     }
 }
 
-/// The scenario a run or suite asks for: `{disruptions: [{id, params}]}`.
+/// The scenario a run or suite asks for: `{disruptions: [{id, params}], clock?}`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ScenarioRequest {
     #[serde(default)]
     pub disruptions: Vec<ChosenDisruption>,
+    /// A stepped world clock for the run; absent: the clock runs on wall time.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub clock: Option<SteppedClock>,
+}
+
+/// A stepped world clock (see docs/protocol.md, "Stepped clock"), in world ms: what agents' tool
+/// calls cost, how long a quiet team goes before the lead gets a look, and where the run ends.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SteppedClock {
+    #[serde(default)]
+    pub read_ms: i64,
+    #[serde(default)]
+    pub write_ms: i64,
+    /// Per tool, its own cost.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub tools: BTreeMap<String, i64>,
+    /// The longest a quiet team goes before the lead is woken for a look; absent: no looks.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub epoch_ms: Option<i64>,
+    /// The branch clock the run ends at; absent: it ends when the lead finishes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub horizon_ms: Option<i64>,
 }
 
 /// One disruption chosen: an option's `id` and the values of its params (defaults fill the rest).

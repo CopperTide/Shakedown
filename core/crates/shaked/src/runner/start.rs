@@ -154,6 +154,7 @@ pub async fn begin_run(
     rules: Rules,
     scenario: &Scenario,
 ) -> Result<(RunId, BranchCtx), RunError> {
+    let rules = rules.with_stepped(scenario.clock.clone());
     let bench = match benchmark {
         Some(name) => state.bench_named(name).await?,
         None => state.bench().await?,
@@ -177,7 +178,8 @@ pub async fn begin_run(
     let started = start_world(state, records, &bench, planned, start).await;
     let (world, start_seq, record_ms) = setup_or_infra_error(records, &branch_id, started).await?;
     let ctx = BranchCtx::new(branch_id, Arc::new(world), team, task_id.to_string());
-    let ctx = ctx.with_rules(rules).with_caller(scope.clone());
+    let clock = crate::clock::BranchClock::for_rules(&rules, 0);
+    let ctx = (ctx.with_rules(rules).with_clock(clock)).with_caller(scope.clone());
     ctx.overhead.add(Cat::Record, record_ms);
     set_up_task(state, &bench, &ctx, scenario, start_seq).await?;
     Ok((run_id, ctx))
@@ -270,7 +272,10 @@ async fn start_world(
     let branch_id = of.branch_id;
     let seed = of.scenario.seed.unwrap_or_else(new_seed);
     let (hub, mut planned) = (state.hub.clone(), planned);
-    let world_time = world_time_of(bench, of.task_id);
+    let mut world_time = world_time_of(bench, of.task_id);
+    if of.rules.stepped.is_some() {
+        world_time.speed = 0.0; // a stepped clock runs on no wall time
+    }
     planned.world_time = Some(world_time);
     let since = Instant::now();
     let world = World::start_planned(hub, bench, planned, branch_id, seed, WorldFrom::Base).await?;

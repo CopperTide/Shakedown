@@ -51,6 +51,7 @@ fn heading(team: &Team, m: &Mail) -> String {
         MailKind::Report => format!("Report from {from}, step {}", m.seq),
         MailKind::Message => format!("Message from {from}, step {}", m.seq),
         MailKind::Notice => "Notice from Shakedown".to_string(),
+        MailKind::Alert => format!("Alert from {from}, step {}", m.seq),
     }
 }
 
@@ -103,6 +104,16 @@ pub fn history_text(history: &str) -> String {
          Here is what you did and were told before it, oldest first; the world is as it was then.\n\n{history}\n"
     )
 }
+
+/// How world time moves on a stepped clock, for every agent's first turn.
+pub const STEPPED: &str = "\n# World time\n\nThe world's clock moves when the team acts or waits: each \
+     action in the world takes world time, thinking takes none. When the whole team waits, the world \
+     moves on to the next thing that happens, and the lead is woken with the alerts it raises.\n";
+
+/// What the lead is told when its epoch passed with no alert.
+pub const LOOK: &str =
+    "\n# A look at the world\n\nThe team has been waiting and no alert came. Look at \
+     the world and act if it needs you; otherwise end your turn and the world moves on.\n";
 
 /// What an agent that was working at the fork point is told.
 pub const CARRY_ON: &str = "\n# Carry on\n\nCarry on with your work from where it stood.\n";

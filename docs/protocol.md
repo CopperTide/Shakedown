@@ -460,6 +460,9 @@ The branch clock then stands still while agents think and moves only when the te
   clock contract is the same, so how the advances are split never changes the state.
 - Parts that use the clock report `wake_at_ms` so the clock stops at their next scheduled reveal or effect. A part
   that reports none is advanced to the next look or the horizon.
+- An event of kind `alert` (from `advance`, a call's result or a link) is mail for the run's lead; other events
+  wake no one. Each move is recorded as the world event `clock/advance` before the parts' events.
+- After the lead finishes, the world is advanced on, through each `wake_at_ms`, to the horizon before scoring.
 
 ## Errors
 

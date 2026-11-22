@@ -243,9 +243,14 @@ pub async fn start_world(
         Some(p) => p,
         None => world::plan(&hub, &rerun.bench).await?,
     };
+    let stepped = crate::recorded::rules(events).stepped.is_some();
     planned.world_time = Some(parts::proto::WorldTimeParams {
         epoch_ms: crate::recorded::world_epoch_ms(events),
-        speed: crate::clock::speed_from_env(),
+        speed: if stepped {
+            0.0
+        } else {
+            crate::clock::speed_from_env()
+        },
     });
     let world = World::start_planned(hub, &rerun.bench, planned, new_id, seed, from)
         .await

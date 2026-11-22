@@ -76,9 +76,11 @@ pub async fn fork_with(
     let new_id = create_child(records, &parent, &rerun, &team, &req).await?;
     let (world, restore_ms) =
         start_child_world(state, records, &events, &parent.id, &new_id, &mut rerun).await?;
+    let rules = recorded::rules(&events);
+    let clock = BranchClock::for_rules(&rules, rerun.clock_ms);
     let ctx = BranchCtx::new(new_id, Arc::new(world), team, task_id.clone())
-        .with_rules(recorded::rules(&events))
-        .with_clock(BranchClock::from_env(rerun.clock_ms))
+        .with_rules(rules)
+        .with_clock(clock)
         .with_caller(scope.clone());
     ctx.overhead.add(Cat::Restore, restore_ms);
     if ctx.rules.runner == Runner::External {

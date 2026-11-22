@@ -5,6 +5,7 @@
 
 use parts::proto::{
     DisruptionOption, ParamKind, ScenarioOptions, ScenarioParam, ScenarioRequest, SetupCall,
+    SteppedClock,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
@@ -31,12 +32,17 @@ pub struct Scenario {
     /// `seed`); otherwise shaked picks one at random. `RunStart` records the seed either way.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub seed: Option<u64>,
+    /// A stepped world clock (docs/protocol.md, "Stepped clock"); none: the clock runs on wall
+    /// time. Forks read it back from `RunStart.scenario`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub clock: Option<SteppedClock>,
 }
 
 impl Scenario {
-    /// True when no disruption is chosen (a seed alone is recorded in `RunStart.seed`).
+    /// True when no disruption is chosen and the clock is not stepped (a seed alone is recorded
+    /// in `RunStart.seed`).
     pub fn is_empty(&self) -> bool {
-        self.disruptions.is_empty()
+        self.disruptions.is_empty() && self.clock.is_none()
     }
 }
 
@@ -47,11 +53,14 @@ pub fn expand(
     options: Option<&ScenarioOptions>,
     req: &ScenarioRequest,
 ) -> Result<Scenario, String> {
+    let mut out = Scenario {
+        clock: req.clock.clone(),
+        ..Scenario::default()
+    };
     if req.disruptions.is_empty() {
-        return Ok(Scenario::default());
+        return Ok(out);
     }
     let options = options.ok_or("the benchmark offers no disruptions")?;
-    let mut out = Scenario::default();
     for chosen in &req.disruptions {
         let opt = (options.disruptions.iter())
             .find(|o| o.id == chosen.id)

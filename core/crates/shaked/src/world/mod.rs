@@ -201,6 +201,12 @@ struct Track {
     dirty: BTreeSet<String>,
     /// Clock parts whose `advance` reported a change since their last save.
     changed: BTreeSet<String>,
+    /// Per part, the earliest clock it has something scheduled for (`wake_at_ms`), as it last
+    /// said in an `advance` or a call's result.
+    wakes: BTreeMap<String, i64>,
+    /// The latest clock every clock part was advanced to together, once they were.
+    advanced_to: i64,
+    advanced: bool,
     stopped: bool,
 }
 
@@ -550,6 +556,7 @@ impl World {
             (None, Route::Part(i)) => {
                 let p = &self.parts[i];
                 let output = p.call_tool(name, args, clock_ms).await?;
+                self.called_wake(&p.name, output.wake_at_ms);
                 Called::new(output, Some(p.name.clone()))
             }
         };
@@ -565,7 +572,9 @@ impl World {
         args: Value,
         clock_ms: i64,
     ) -> Result<ToolOutput, WorldError> {
-        self.part(part)?.call_tool(name, args, clock_ms).await
+        let output = self.part(part)?.call_tool(name, args, clock_ms).await?;
+        self.called_wake(part, output.wake_at_ms);
+        Ok(output)
     }
 
     async fn call_bench_tool(&self, name: &str, args: Value) -> Result<Called, WorldError> {

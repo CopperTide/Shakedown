@@ -10,6 +10,7 @@
 mod board;
 mod inputs;
 mod resume;
+mod stepped;
 
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -25,6 +26,7 @@ use tokio::{
 
 pub use board::Limits;
 use board::{Action, Board, End, Input, Mail, Reason};
+pub use stepped::{next_point, run_to_horizon};
 
 use crate::{
     agents::{
@@ -78,8 +80,16 @@ pub(crate) async fn run(
     let first = crew.begin(&events).await?;
     let end = crew.drive(first.into()).await?;
     crew.wind_down(&end).await?;
+    if end == End::Finished {
+        if let Some(clock) = &ctx.rules.stepped {
+            let exec = crate::exec::ToolExec::new(state.store.clone());
+            if let Err(why) = run_to_horizon(&exec, ctx, clock).await {
+                return Ok(Some(Ending::infra(why)));
+            }
+        }
+    }
     Ok(match end {
-        End::Finished => None,
+        End::Finished | End::Horizon => None,
         End::Failed(why) => {
             runner::freeze(ctx).await;
             runner::check(state, ctx).await?;
@@ -120,6 +130,10 @@ struct Crew {
     stop: watch::Sender<bool>,
     paused: bool,
     began: Instant,
+    /// The board asked for a stepped world to move on (see `stepped`).
+    advance: bool,
+    /// The branch clock when the lead was last woken: its next look is an epoch later.
+    last_look_ms: i64,
 }
 
 impl Drop for Crew {
@@ -141,11 +155,16 @@ impl Crew {
             .map(|a| a.id.clone())
             .collect();
         let limits = Limits::from_env();
+        let board = Board::new(&ids, ctx.roster.team.lead_index(), limits);
+        let board = match ctx.rules.stepped.is_some() {
+            true => board.stepped(),
+            false => board,
+        };
         Crew {
             state: state.clone(),
             ctx: ctx.clone(),
             brief: brief.clone(),
-            board: Board::new(&ids, ctx.roster.team.lead_index(), limits),
+            board,
             limits,
             slots: HashMap::new(),
             working: HashSet::new(),
@@ -156,6 +175,8 @@ impl Crew {
             stop: watch::channel(false).0,
             paused: false,
             began: Instant::now(),
+            advance: false,
+            last_look_ms: ctx.clock.now_ms(),
         }
     }
 
@@ -218,6 +239,7 @@ impl Crew {
                     Action::PassOn { agent, text } => {
                         queue.extend(self.pass_on(&agent, text).await?)
                     }
+                    Action::Advance => self.advance = true,
                 }
             }
             let input = self.next_input(&mut tick).await?;
@@ -238,6 +260,12 @@ impl Crew {
             } else {
                 Input::Resume
             });
+        }
+        if let Ok(said) = self.said.try_recv() {
+            return Ok(Input::Said(said));
+        }
+        if std::mem::take(&mut self.advance) {
+            return Ok(self.move_on().await);
         }
         tokio::select! {
             Some(said) = self.said.recv() => Ok(Input::Said(said)),
@@ -301,6 +329,9 @@ impl Crew {
                 true => inputs::how_for_lead(team, lead),
                 false => inputs::how_for_member(team, lead),
             });
+            if self.ctx.rules.stepped.is_some() {
+                input.push_str(inputs::STEPPED);
+            }
             if let Some(h) = self.history.get(agent) {
                 input.push_str(&inputs::history_text(h));
             }
@@ -311,6 +342,7 @@ impl Crew {
             Reason::Resume => inputs::CARRY_ON.to_string(),
             Reason::Mail => inputs::mail_text(team, mail),
             Reason::Idle(n) => inputs::idle_text(team, lead, n, max, &self.board.statuses()),
+            Reason::Look => inputs::LOOK.to_string(),
         });
         if let Some(c) = clock.filter(|_| !first) {
             input.push_str(&c.now_line(self.ctx.clock.now_ms()));
@@ -318,8 +350,38 @@ impl Crew {
         input
     }
 
+    /// Moves a stepped world on to its next wake point (see [`next_point`]): what the board is
+    /// told.
+    async fn move_on(&mut self) -> Input {
+        let Some(clock) = self.ctx.rules.stepped.clone() else {
+            return Input::Stuck;
+        };
+        let exec = crate::exec::ToolExec::new(self.state.store.clone());
+        match exec.catch_up(&self.ctx).await {
+            Ok(0) => {}
+            Ok(alerts) => {
+                let to = board::WakePoint::Part;
+                return Input::Advanced { to, alerts };
+            }
+            Err(why) => return Input::WorldFailed(why),
+        }
+        let (world, now) = (&self.ctx.world, self.ctx.clock.now_ms());
+        let look_at = clock.epoch_ms.map(|e| self.last_look_ms + e);
+        let wake = world.due_by(now).map(|_| now).or(world.next_wake(now));
+        let Some((to_ms, to)) = next_point(now, wake, look_at, clock.horizon_ms) else {
+            return Input::Stuck;
+        };
+        match exec.step_world(&self.ctx, to_ms, to.word()).await {
+            Ok(alerts) => Input::Advanced { to, alerts },
+            Err(why) => Input::WorldFailed(why),
+        }
+    }
+
     /// Records `agent`'s wake and starts its turn (its session first, on its first turn).
     async fn wake(&mut self, agent: &str, reason: Reason, mail: &[Mail]) -> Result<()> {
+        if agent == self.board.lead_id() {
+            self.last_look_ms = self.ctx.clock.now_ms();
+        }
         let input = self.input_for(agent, reason, mail);
         self.record(agent, &wake_payload(reason, mail, &input))
             .await?;
@@ -424,6 +486,7 @@ fn wake_payload(reason: Reason, mail: &[Mail], input: &str) -> WakePayload {
         Reason::Mail => ("mail", None),
         Reason::Idle(n) => ("idle", Some(n)),
         Reason::Resume => ("resume", None),
+        Reason::Look => ("look", None),
     };
     let recorded = mail.iter().filter(|m| m.kind != board::MailKind::Notice);
     WakePayload {

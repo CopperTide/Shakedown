@@ -25,6 +25,10 @@ pub const LINK_ACTOR: &str = "link";
 /// The most calls one report may make, so links that set each other off can't run forever.
 const MAX_LINK_CALLS: usize = 64;
 
+/// The kind of world event a part marks as one the lead must hear of: on a stepped clock it
+/// becomes mail to the lead (docs/protocol.md, "Stepped clock").
+pub const ALERT: &str = "alert";
+
 /// A call the world makes of a part (for a link or a task's setup), made and not yet recorded.
 pub(super) struct LinkStep {
     pub(super) tool: String,
@@ -138,8 +142,21 @@ impl ToolExec {
         branch: &BranchCtx,
         events: Vec<PartEvent>,
     ) -> Result<Option<i64>, String> {
+        self.report_counted(branch, events)
+            .await
+            .map(|(wrote, _)| wrote)
+    }
+
+    /// `report`, also counting the alerts among the events (the links' own included).
+    pub(super) async fn report_counted(
+        &self,
+        branch: &BranchCtx,
+        events: Vec<PartEvent>,
+    ) -> Result<(Option<i64>, usize), String> {
         let since = std::time::Instant::now();
         let mut log = run_links(branch, events).await;
+        let is_alert = |r: &Reported| matches!(r, Reported::Event(e) if e.event.kind == ALERT);
+        let alerts = log.iter().filter(|r| is_alert(r)).count();
         if log.iter().any(|r| matches!(r, Reported::Link(_))) {
             branch.overhead.add_since(Cat::Link, since);
         }
@@ -149,7 +166,7 @@ impl ToolExec {
             let seq = self.record_reported(branch, entry).await?;
             wrote = seq.or(wrote);
         }
-        Ok(wrote)
+        Ok((wrote, alerts))
     }
 
     /// Records one reported entry; the seq of a link's step that wrote.
@@ -160,10 +177,14 @@ impl ToolExec {
     ) -> Result<Option<i64>, String> {
         match entry {
             Reported::Event(e) => {
+                let alert = e.event.kind == ALERT && branch.clock.is_stepped();
+                let said = alert.then(|| (e.part.clone(), e.event.text.clone()));
                 let payload = world_event_payload(e);
-                self.record(branch, None, EventKind::WorldEvent, &payload)
-                    .await
-                    .map(|_| None)
+                let seq = (self.record_seq(branch, None, EventKind::WorldEvent, &payload)).await?;
+                if let Some((part, text)) = said {
+                    tell_lead(branch, seq, &part, &text);
+                }
+                Ok(None)
             }
             Reported::Link(s) => {
                 let wrote = s.facts.wrote_world();
@@ -175,4 +196,15 @@ impl ToolExec {
             }
         }
     }
+}
+
+/// Passes an alert recorded at `seq` on to a dispatch runner listening, as mail for the lead.
+fn tell_lead(branch: &BranchCtx, seq: i64, part: &str, text: &str) {
+    let team = &branch.roster.team;
+    let Some(lead) = team.agents.get(team.lead_index()) else {
+        return;
+    };
+    let mut said = super::Said::new(part, EventKind::WorldEvent, Some(&lead.id), text);
+    said.seq = seq;
+    branch.mailbox.tell(said);
 }

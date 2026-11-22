@@ -49,9 +49,12 @@ pub(super) async fn scenario_of(
     bench: &str,
     asked: Option<&ScenarioRequest>,
 ) -> Result<Scenario, ApiError> {
-    let Some(asked) = asked.filter(|a| !a.disruptions.is_empty()) else {
+    let Some(asked) = asked else {
         return Ok(Scenario::default());
     };
+    if asked.disruptions.is_empty() {
+        return scenario::expand(None, asked).map_err(ApiError::bad);
+    }
     let bench = state.bench_named(bench).await?;
     scenario::expand(bench.scenario_options.as_ref(), asked).map_err(ApiError::bad)
 }

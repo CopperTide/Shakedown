@@ -342,8 +342,26 @@ structured query such as `{part: driver, key: kpis, field: cost_vs_baseline, op:
 On a stepped clock, world time stands still while agents think. Each tool call an agent makes on the world costs
 world time by its effect (`action_cost`: a read `0m` and a write `2m` unless set, or the tool's own entry in
 `tools`): the call runs at the clock before the charge, and the clock moves on by the charge after it, whether the
-part answered or refused. No ticker runs for a stepped branch. The World clock section of an agent's first input says
-the clock "moves when the team acts or waits" instead of "runs while you work".
+part answered or refused (a call the world's gates refused costs it too). No ticker runs for a stepped branch. The
+World clock section of an agent's first input says the clock "moves when the team acts or waits" instead of "runs
+while you work", and every agent's first input explains world time.
+
+A stepped clock runs only in a [dispatch run](#dispatch-runs). When the team is quiet (no agent working, no mail
+waiting), shaked moves the world on at once, to the earliest of:
+
+- the next thing a part has scheduled (the earliest `wake_at_ms` its `advance` or calls reported, see
+  [protocol.md](protocol.md#stepped-clock));
+- the lead's next look: `epoch` after the lead was last woken (none with `epoch: none`);
+- the run's `horizon`.
+
+Each move is recorded as the world event `clock/advance` (`{from_ms, reason}`, `reason` `wake`, `look` or
+`horizon`), at the clock it moved to, followed by what the parts reported. A world event of kind `alert` becomes
+mail for the lead (`Alert from <part>`), which wakes it; other events wake no one, and a move that brings no alert
+wakes no one either: the world moves on again. A look wakes the lead with no mail. At the horizon the run ends and is
+scored as if the lead had finished. When the lead finishes earlier, the world runs on with no agent through each
+part's wake to the horizon, and is scored there, so costs that land later still count. Looks and alerts are not idle
+wakes: the idle rule (and its limit of wakes) applies only when the world has nowhere to move on to (no part wake, no
+epoch, no horizon).
 
 ## What the world says about itself
 
