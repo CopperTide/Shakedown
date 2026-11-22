@@ -326,7 +326,12 @@ fn agents_of(name: &str, team: &FileTeam) -> Result<Vec<AgentSpec>, OpError> {
 }
 
 fn builtin_agent(spec: &shakedown_project::format::AgentSpec) -> AgentSpec {
-    let mut agent = AgentSpec::new(spec.id.clone(), AgentKind::Open);
+    use shakedown_project::format::AgentRuntime;
+    let kind = match spec.kind {
+        AgentRuntime::Builtin => AgentKind::Open,
+        AgentRuntime::ClaudeCode => AgentKind::ClaudeCode,
+    };
+    let mut agent = AgentSpec::new(spec.id.clone(), kind);
     agent.model = Some(spec.model.clone());
     agent.prompt = spec.role.clone();
     agent.tools = spec

@@ -18,7 +18,7 @@ pub use scenario::{
     parse_duration_ms, ActionCost, Breach, Change, Check, CheckKind, ClockMode, ClockSpec, Event,
     Gate, ScenarioFile,
 };
-pub use setup::{AgentSpec, SetupFile, Team};
+pub use setup::{AgentRuntime, AgentSpec, SetupFile, Team};
 pub use view::{
     BarValue, BarsPanel, BoardPanel, Column, Count, FeedPanel, Field, Figure, Filter, Find, Join,
     KeyRef, KpiItem, KpisPanel, Layer, MapPanel, Panel, PathLayer, PointsLayer, Screen, Shown,

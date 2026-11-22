@@ -78,6 +78,30 @@ fn maps_builtin_setup() {
 }
 
 #[test]
+fn claude_code_team_from_a_file() {
+    let (_dir, p) = project(|dir| {
+        runnable(dir);
+        std::fs::write(
+            dir.join("setups/solo-planner.yaml"),
+            "format: shakedown-setup/1\nlabel: Claude Code pair\nteam:\n  kind: builtin\n  agents:\n    \
+             - {id: lead, kind: claude-code, role: You lead., model: opus, tools: [a]}\n    \
+             - {id: helper, kind: claude-code, role: You help., model: sonnet}\n",
+        )
+        .unwrap();
+    });
+    let req = request(&p, &exp(), None).unwrap();
+    let agents = &req.setups[0].team.agents;
+    assert!(agents
+        .iter()
+        .all(|a| a.kind == crate::model::AgentKind::ClaudeCode));
+    assert_eq!(
+        agents.iter().map(|a| a.model.as_deref()).collect::<Vec<_>>(),
+        [Some("opus"), Some("sonnet")]
+    );
+    assert_eq!(agents[0].tools, ["a"]);
+}
+
+#[test]
 fn faults_become_disruptions() {
     let (_dir, p) = project(runnable);
     let scenario = request(&p, &exp(), None)

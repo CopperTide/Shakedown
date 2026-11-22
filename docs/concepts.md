@@ -118,6 +118,11 @@ agent. A benchmark may suggest more teams (`GET /api/teams`), each with the runn
 pharma offers a dispatching team and its coordinated chain beside the single agent, factory its incident team.
 The Run screen opens with the default and offers the others one click away; picking one picks its runner. An agent setup may also list the world tools an agent gets (`tools`): it sees only those, and a call of another
 world tool is refused, so a team can give each role only its own systems.
+In a project's setup file (`setups/<id>.yaml`, `team: {kind: builtin, agents: [...]}`) each agent runs in API
+mode with a key-store `key` unless it says `kind: claude-code`: then it is Claude Code headless, signed in on this
+machine, with `model` a Claude Code model (`fable`, `opus`, `sonnet`, `haiku` or a full id) and no key. So a team of
+several Claude Code agents, each with its own role, model and tools (a dispatch team), is one setup file;
+`team: {kind: claude-code}` stays the single Claude Code agent.
 
 Every agent also gets three tools for talking to the others, all optional and recorded when used (a dispatch run
 has its own set, below):

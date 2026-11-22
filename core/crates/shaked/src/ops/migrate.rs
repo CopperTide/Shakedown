@@ -5,7 +5,7 @@
 use std::collections::BTreeSet;
 
 use shakedown_project::format::{
-    AgentSpec as FileAgent, ExperimentFile, Kind, Repeats, ScenarioFile, SetupFile,
+    AgentRuntime, AgentSpec as FileAgent, ExperimentFile, Kind, Repeats, ScenarioFile, SetupFile,
     Team as FileTeam, WorldFile,
 };
 use shakedown_project::{Id, ItemBody, Project};
@@ -222,6 +222,9 @@ fn team_of(team: &Team) -> Result<FileTeam, String> {
             agents: team.agents.iter().map(builtin).collect(),
         }),
         AgentKind::ClaudeCode if one => Ok(FileTeam::ClaudeCode),
+        AgentKind::ClaudeCode => Ok(FileTeam::Builtin {
+            agents: team.agents.iter().map(builtin).collect(),
+        }),
         AgentKind::Codex if one => Ok(FileTeam::Codex),
         AgentKind::Http if one => Ok(FileTeam::Http {
             url: team.agents[0].url.clone().unwrap_or_default(),
@@ -238,11 +241,22 @@ fn team_of(team: &Team) -> Result<FileTeam, String> {
 }
 
 fn builtin(a: &AgentSpec) -> FileAgent {
+    let cli = a.kind == AgentKind::ClaudeCode;
     FileAgent {
         id: a.id.clone(),
+        kind: match cli {
+            true => AgentRuntime::ClaudeCode,
+            false => AgentRuntime::Builtin,
+        },
         role: a.prompt.clone(),
-        model: a.model.clone().unwrap_or_else(|| "default".into()),
-        key: a.provider.clone().unwrap_or_else(|| "default".into()),
+        model: a.model.clone().unwrap_or_else(|| match cli {
+            true => "sonnet".into(),
+            false => "default".into(),
+        }),
+        key: match cli {
+            true => String::new(),
+            false => a.provider.clone().unwrap_or_else(|| "default".into()),
+        },
         tools: if a.tools.is_empty() {
             vec!["*".into()]
         } else {
