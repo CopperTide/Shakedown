@@ -10,6 +10,8 @@ import { recordedLine } from '@/features/scenario/scenario';
 import { runStartOf } from '@/model/events';
 import type { BranchView } from '@/model/twin';
 import type { BranchDetail } from '@/model/types';
+import { useWorldViews } from '@/features/views/useViews';
+import ViewsWorld from '@/features/views/ViewsWorld';
 import { drivenLine } from './page';
 import TwinView, { useWorldView } from './TwinView';
 import { useViews } from './useWorld';
@@ -33,12 +35,9 @@ function Body({ runId, d, views }: { runId: string; d: BranchDetail; views: Bran
   );
 }
 
-/** The digital twin of the run's world at any step: an HMI overview and a scrubber. */
-export default function World() {
-  const { runId = '', branchId = '' } = useParams();
-  const { detail, error, reload } = useBranch(branchId, runId);
+/** The digital twin of the run's world: the twin's views, or the run's empty state. */
+function TwinWorld({ runId, branchId, detail }: { runId: string; branchId: string; detail: BranchDetail }) {
   const { views, error: viewError } = useViews(branchId, detail);
-  if (!detail) return <PageGate title="World" label="Loading the world…" rows={6} error={error} onRetry={reload} />;
   if (!views.length) {
     return (
       <><PageHeader title="World" status={<StatusChip status={detail.status} />} actions={<RunMenu runId={runId} d={detail} page="world" step={null} />} />
@@ -48,4 +47,17 @@ export default function World() {
     );
   }
   return <Body runId={runId} d={detail} views={views} />;
+}
+
+/**
+ * The run's world at any step: the screens its world's view files declare (`features/views`), else the
+ * benchmark's digital twin (an HMI overview and a scrubber); the twin too when the world views can't be read.
+ */
+export default function World() {
+  const { runId = '', branchId = '' } = useParams();
+  const { detail, error, reload } = useBranch(branchId, runId);
+  const worldViews = useWorldViews(branchId);
+  if (!detail || !worldViews.settled) return <PageGate title="World" label="Loading the world…" rows={6} error={error} onRetry={reload} />;
+  if (worldViews.defs?.views?.length) return <ViewsWorld runId={runId} d={detail} defs={worldViews.defs} />;
+  return <TwinWorld runId={runId} branchId={branchId} detail={detail} />;
 }

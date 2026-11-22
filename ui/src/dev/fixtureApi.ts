@@ -1,13 +1,26 @@
 // Dev only: answers /api with the pharma fixtures, so the real pages (world view, run page,
 // compare, Run once and New experiment) render without shaked. Bundled only when the build
 // sets VITE_SHAKEDOWN_FIXTURES=1 (see main.tsx); never in a normal build.
+//
+// World views (features/views): the branches `wv-recorded` (ended, scrubbed) and `wv-live` (running,
+// polled) of run `run-wv` have them: /world/run-wv/wv-recorded and /world/run-wv/wv-live. Their two
+// endpoints read JSON files from public/dev-fixtures/world-views/ (not committed) when present:
+//   defs.json                    GET /api/branches/{id}/world-views
+//   <view>.<screen>.<at>.json    GET /api/branches/{id}/world-views/<view>?screen=<screen>&at=<at>
+//                                (<at> is live, final or a step's seq; `at` absent reads `final`)
+//   <view>.<screen>.json         the same screen at any point, when the file for that point is absent
+//   branch.json                  optional: a BranchDetail served as `wv-recorded` (its events give
+//                                the scrubber's stops, so they line up with real payloads' seqs)
+// A file that is absent (or isn't JSON) falls back to the generic synthetic world in dev/worldViews.ts.
+// Every other branch answers `{world: null, views: []}`, so its World page draws the twin.
 import { form as builderForm, preview as builderPreview, templates as builderTemplates } from '@/features/build/fixtures';
 import { scenarioOptions } from '@/features/scenario/fixtures';
 import { comparison, runs, team, v1Detail, v2Detail, views } from '@/features/world/fixtures';
-import type { Health } from '@/model/types';
+import type { BranchDetail, Health } from '@/model/types';
 import type { BuiltWorld } from '@/model/world';
+import { DEFS, WV_RECORDED, syntheticAt, syntheticScreen, viewBranches } from './worldViews';
 
-const branches = { [v1Detail.id]: v1Detail, [v2Detail.id]: v2Detail };
+const branches: Record<string, BranchDetail> = { [v1Detail.id]: v1Detail, [v2Detail.id]: v2Detail, ...viewBranches(team) };
 
 const health: Health = {
   open_available: false, claude: false, codex: false, providers: [],
@@ -64,6 +77,7 @@ const ROUTES: Route[] = [
   [/^\/api\/runs$/, () => runs],
   [/^\/api\/experiments$/, () => []],
   [/^\/api\/compare$/, () => comparison],
+  [/^\/api\/branches\/([^/]+)\/world-views$/, () => ({ world: null, views: [] })],
   [/^\/api\/branches\/([^/]+)\/views$/, (m) => views[decodeURIComponent(m[1])] ?? null],
   [/^\/api\/branches\/([^/]+)\/restore-plan$/, () => ({ parts: ['erp', 'lims', 'logistics', 'approvals'].map((part) => ({ part, how: 'save' })) })],
   [/^\/api\/branches\/([^/]+)\/rows$/, (_m, url) => ({ seq: Number(url.searchParams.get('seq')), rows: {} })],
@@ -111,7 +125,8 @@ export function install() {
       return new Response(JSON.stringify(checkAnswer(JSON.parse(String(init.body ?? '{}')))), { status: 200, headers: { 'content-type': 'application/json' } });
     }
     if ((init?.method ?? 'GET') !== 'GET') return notGet(url.pathname, init);
-    return answer(url.pathname, url);
+    const withViews = await worldViewsAnswer(url, real);
+    return withViews ?? answer(url.pathname, url);
   };
 }
 
@@ -120,4 +135,42 @@ function notGet(pathname: string, init?: RequestInit): Response {
   const posted = init?.method === 'POST' ? postAnswer(pathname, JSON.parse(String(init.body ?? '{}'))) : null;
   if (!posted) return new Response(JSON.stringify({ error: 'The fixture API starts nothing.' }), { status: 409 });
   return new Response(JSON.stringify(posted[1]), { status: posted[0], headers: { 'content-type': 'application/json' } });
+}
+
+const FILES = '/dev-fixtures/world-views/';
+const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+
+/** A JSON file under public/dev-fixtures/world-views/, or null when it is absent (the dev server answers index.html then). */
+async function fixtureFile<T>(real: typeof fetch, name: string): Promise<T | null> {
+  try {
+    const res = await real(`${FILES}${name}`);
+    if (!res.ok || !(res.headers.get('content-type') ?? '').includes('json')) return null;
+    return (await res.json()) as T;
+  } catch {
+    return null;
+  }
+}
+
+/** The fixture branches with views, `wv-recorded` from branch.json when there is one. */
+async function viewBranch(real: typeof fetch, id: string): Promise<BranchDetail | null> {
+  if (id === WV_RECORDED) {
+    const file = await fixtureFile<BranchDetail>(real, 'branch.json');
+    if (file) return { ...file, id, run_id: branches[id].run_id, events: file.events.map((e) => ({ ...e, branch_id: id })) };
+  }
+  return id in branches && id.startsWith('wv-') ? branches[id] : null;
+}
+
+/** The world-views endpoints (and the branch itself) for the fixture branches that have views; null for anything else. */
+async function worldViewsAnswer(url: URL, real: typeof fetch): Promise<Response | null> {
+  const m = /^\/api\/branches\/(wv-[^/]+)(\/world-views(?:\/([^/]+))?)?$/.exec(url.pathname);
+  if (!m) return null;
+  const branch = await viewBranch(real, decodeURIComponent(m[1]));
+  if (!branch) return null;
+  if (!m[2]) return json(branch);
+  if (!m[3]) return json((await fixtureFile(real, 'defs.json')) ?? DEFS);
+  const view = decodeURIComponent(m[3]), screen = url.searchParams.get('screen') ?? '', at = url.searchParams.get('at');
+  const file = (await fixtureFile(real, `${view}.${screen}.${at ?? 'final'}.json`)) ?? (await fixtureFile(real, `${view}.${screen}.json`));
+  if (file) return json(file);
+  const point = syntheticAt(at, branch);
+  return json(syntheticScreen(screen, point.clock, point.at));
 }

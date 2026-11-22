@@ -90,6 +90,8 @@ export interface WorldBody {
   data?: DataSource[];
   people?: Person[];
   observability?: Observability;
+  /** View files (shakedown-view/1), relative to the world's folder. */
+  views?: string[];
 }
 
 export interface Change { record: string; value: unknown }

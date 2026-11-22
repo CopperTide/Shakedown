@@ -215,6 +215,17 @@ Logic lives in pure modules with tests, and components only render. For example:
   an external system drives can take). The selected
   step is `?step=` in the address, shared by the run page, the process view and the world view. On
   phones the zones stack and flows are listed.
+- **World views** (`features/views/`, on the World page). When the run's world ships view files
+  (`GET /api/branches/{id}/world-views` is not empty), the World page draws them instead of the twin: the view's
+  label as the serif title, its screens as tabs (`?screen=`, `?view=` when there are several), each screen a CSS grid
+  of ruled, square panels from the file's `areas`. One renderer per panel kind, never per world: figures (`kpis`),
+  a MapLibre map on OpenFreeMap's positron tiles repainted in the warm grays (lazy-loaded; points ringed when toned,
+  moving docs as chevrons placed on the great circle by the world clock each frame), a board (sticky header, sort,
+  quick filters by the payload's bitmask, search, windowed rows), a timeline (windowed lanes, UTC axis, copper now
+  line, −/Fit/+ zoom), bars against a limit and a feed. Tones come from the row (`--tone-*` tokens), never from
+  the world. A live run polls `at=live` each second and moves aircraft between polls by `speed`; a recorded run
+  scrubs over the steps where world time moved plus the end (`?step=`, ←/→, Space). A panel that can't be
+  evaluated shows its error alone. Dev fixtures: `src/dev/worldViews.ts` (branches `wv-recorded`, `wv-live`).
 - **Team board** (`board/`, React Flow). Any team as a read-only CopperTide-style board: agents as
   cards (name, a one-line job from the prompt, model badge, Read-only, the decisions it owns), group
   zones and "hands work to" arrows from a CopperTide design; any other team laid out from its runner

@@ -49,6 +49,18 @@
   --series-2: #a59d92;
   --shadow: 0 1px 0 rgb(27 24 21 / 4%), 0 1px 3px rgb(27 24 21 / 3%);
   --shadow-pop: 0 12px 40px rgb(16 14 12 / 16%), 0 2px 6px rgb(16 14 12 / 6%);
+  /* World views: the tones a view file names (never colours), and the base map's warm grays. */
+  --tone-neutral: #8c8479;
+  --tone-active: #4d6683;
+  --tone-done: #6a8470;
+  --tone-warn: #a5761a;
+  --tone-critical: #a3412b;
+  --tone-accent: #b85d27;
+  --map-land: #eeeae3;
+  --map-water: #d9d4cb;
+  --map-road: #f8f6f2;
+  --map-boundary: #b9b0a3;
+  --map-label: #857d72;
 }
 
 :root[data-theme='dark'] {
@@ -84,6 +96,17 @@
   --series-2: #8c857c;
   --shadow: none;
   --shadow-pop: 0 12px 32px rgb(0 0 0 / 55%), 0 0 0 1px var(--line);
+  --tone-neutral: #81796f;
+  --tone-active: #8ba3c0;
+  --tone-done: #8dab94;
+  --tone-warn: #d6a24a;
+  --tone-critical: #de7660;
+  --tone-accent: #ee7a3a;
+  --map-land: #1b1815;
+  --map-water: #262119;
+  --map-road: #2b2621;
+  --map-boundary: #4a433b;
+  --map-label: #7d766c;
 }
 
 @theme inline {
@@ -116,6 +139,12 @@
   --color-flow-strong: var(--flow-strong);
   --shadow-panel: var(--shadow);
   --shadow-pop: var(--shadow-pop);
+  --color-tone-neutral: var(--tone-neutral);
+  --color-tone-active: var(--tone-active);
+  --color-tone-done: var(--tone-done);
+  --color-tone-warn: var(--tone-warn);
+  --color-tone-critical: var(--tone-critical);
+  --color-tone-accent: var(--tone-accent);
 }
 
 @theme {
@@ -205,4 +234,18 @@
   .react-flow__attribution {
     display: none;
   }
+}
+
+/* World views' map: MapLibre's attribution in the page's ink (unlayered and doubly classed: MapLibre's own CSS is unlayered too). */
+.views-map .maplibregl-ctrl.maplibregl-ctrl-attrib {
+  background: color-mix(in srgb, var(--surface) 85%, transparent);
+  color: var(--faint);
+  font-family: var(--font-sans);
+  font-size: 10px;
+}
+.views-map .maplibregl-ctrl.maplibregl-ctrl-attrib a {
+  color: var(--muted);
+}
+.views-map .maplibregl-ctrl-attrib.maplibregl-compact .maplibregl-ctrl-attrib-button {
+  background-color: var(--surface);
 }
