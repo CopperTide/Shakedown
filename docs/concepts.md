@@ -398,6 +398,11 @@ and `tools` maps each tool of the world to `{effect, part?}` (a benchmark's own 
 records the part it ran on). With each tool call's `part`, a UI can tell from the run's record alone which system
 a step touched and whether it read or wrote. A run recorded before this, or a part that does not say, has no such
 entry: unknown, not guessed. Named checks keep their `safety` flag in the run's `check` event.
+
+A world can also ship how it is watched: view files in its folder (`views:` in `world.yaml`,
+`format: shakedown-view/1`) declare maps, boards, timelines, bars, feeds and figures over its parts' docs, and one
+generic renderer draws them on the run's World page, live while the run goes and at any step afterwards. A world
+never ships UI code ([protocol.md](protocol.md#declarative-views-world-files)).
 Each tool call also records `duration_ms`, how long the tool ran in the world (gate checks and saves left out;
 absent for a call that reached no part, and in older runs).
 

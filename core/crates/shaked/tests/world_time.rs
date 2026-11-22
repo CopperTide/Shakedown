@@ -25,6 +25,16 @@ impl TimeFx {
 
     /// `new` with the clock part also started with `part_args`.
     async fn with_part(tag: &str, part_args: &[&str], bench_args: &[&str]) -> TimeFx {
+        TimeFx::build(tag, part_args, bench_args, None).await
+    }
+
+    /// `with_part`, shaked serving the project folder `project` when given.
+    async fn build(
+        tag: &str,
+        part_args: &[&str],
+        bench_args: &[&str],
+        project: Option<std::path::PathBuf>,
+    ) -> TimeFx {
         let log =
             std::env::temp_dir().join(format!("shaked-time-{tag}-{}.log", std::process::id()));
         let _ = std::fs::remove_file(&log);
@@ -35,6 +45,7 @@ impl TimeFx {
         let fx = AppFx::idle("worldtime", tag)
             .root(root)
             .bench("toybench")
+            .config(move |c| c.project_dir = project)
             .start()
             .await;
         let team = json!({"id": "own", "name": "Own design", "agents": []});
@@ -245,6 +256,109 @@ fn rows_show_a_clock_part_at_the_steps_clock_and_at_the_end() {
             .find(|e| e.kind == EventKind::WorldEvent && e.payload["data"]["reason"] == "end")
             .unwrap();
         assert_eq!(clock_row(&fx.fx, &fx.branch, "final").await, clock(end));
+    })
+}
+
+/// A project whose world `toy` is run by `toybench` and has one view `clock`: a figure of the
+/// clock part's clock and a board of its docs.
+fn view_project(tag: &str) -> tempfile::TempDir {
+    let root = tempfile::Builder::new().prefix(tag).tempdir().unwrap();
+    let world = root.path().join("worlds/toy");
+    std::fs::create_dir_all(world.join("views")).unwrap();
+    let project = "format: shakedown-project/1\nname: P\n";
+    std::fs::write(root.path().join("shakedown.yaml"), project).unwrap();
+    let file =
+        "format: shakedown-world/3\nlabel: Toy\npackage: toybench\nviews: [views/clock.yaml]\n";
+    std::fs::write(world.join("world.yaml"), file).unwrap();
+    let view = r#"format: shakedown-view/1
+label: Clock
+part: box
+panels:
+  now: {kind: kpis, items: [{label: Clock, value: {key: box/clock, field: ms}, format: int}]}
+  docs: {kind: board, data: {find: "box/*"}, columns: [{field: n, label: N}]}
+  feed: {kind: feed, kinds: [alarm]}
+screens:
+  - {id: main, label: Main, areas: ["now feed", "docs feed"]}
+"#;
+    std::fs::write(world.join("views/clock.yaml"), view).unwrap();
+    root
+}
+
+/// The clock figure of the view `clock` at `at`.
+async fn clock_figure(fx: &AppFx, branch: &str, at: &str) -> (Value, Value) {
+    let path = format!("/api/branches/{branch}/world-views/clock?screen=main&at={at}");
+    let (status, v) = fx.get(&path).await;
+    assert_eq!(status, 200, "{v}");
+    (
+        v["panels"]["now"]["items"][0]["value"].clone(),
+        v["at"].clone(),
+    )
+}
+
+/// The clock of the branch's move to its frozen clock.
+async fn end_clock(fx: &TimeFx) -> Value {
+    let evs = records(&fx.fx.state.store)
+        .events(&fx.branch)
+        .await
+        .unwrap();
+    let end = (evs.iter().rev())
+        .find(|e| e.kind == EventKind::WorldEvent && e.payload["data"]["reason"] == "end")
+        .expect("the move to the end");
+    end.payload["clock_ms"].clone()
+}
+
+/// The branch's view list names its project world and the view `clock`.
+async fn assert_listed(fx: &TimeFx) {
+    let (status, list) = fx
+        .fx
+        .get(&format!("/api/branches/{}/world-views", fx.branch))
+        .await;
+    assert_eq!(status, 200, "{list}");
+    assert_eq!(
+        (&list["world"], &list["views"][0]["id"]),
+        (&json!("toy"), &json!("clock"))
+    );
+}
+
+/// A live view of an ended branch is a conflict, and a view its world lacks is not found.
+async fn assert_refused(fx: &TimeFx) {
+    let path = format!("/api/branches/{}/world-views/clock?at=live", fx.branch);
+    assert_eq!(fx.fx.get(&path).await.0, 409);
+    let path = format!("/api/branches/{}/world-views/nope", fx.branch);
+    assert_eq!(fx.fx.get(&path).await.0, 404);
+}
+
+/// A world's view lists from its project world, and evaluates live, at a step (the clock part
+/// moved on to the step's clock) and at the end; live once the run ended is a conflict.
+#[test]
+fn a_worlds_view_evaluates_live_at_a_step_and_at_the_end() {
+    run(async {
+        let project = view_project("views");
+        let part = ["--event-every", "--clock-doc"];
+        let fx = TimeFx::build("views", &part, &[], Some(project.path().to_path_buf())).await;
+        assert_listed(&fx).await;
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        let (live, at) = clock_figure(&fx.fx, &fx.branch, "live").await;
+        assert!(live.as_i64().unwrap() > 0 && at["point"] == "live", "{at}");
+        let evs = records(&fx.fx.state.store)
+            .events(&fx.branch)
+            .await
+            .unwrap();
+        let tick = (evs.iter().rev())
+            .find(|e| e.kind == EventKind::WorldEvent)
+            .unwrap();
+        let (value, at) = clock_figure(&fx.fx, &fx.branch, &tick.seq.to_string()).await;
+        assert_eq!(
+            (&value, &at["clock_ms"]),
+            (&tick.payload["clock_ms"], &tick.payload["clock_ms"])
+        );
+        assert_eq!(fx.on(&fx.branch, "finish").await.0, 200);
+        let (value, at) = clock_figure(&fx.fx, &fx.branch, "final").await;
+        assert_eq!(
+            (value, &at["point"]),
+            (end_clock(&fx).await, &json!("final"))
+        );
+        assert_refused(&fx).await;
     })
 }
 

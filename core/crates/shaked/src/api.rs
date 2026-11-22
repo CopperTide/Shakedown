@@ -49,6 +49,7 @@ mod tokens;
 mod twin;
 mod ui;
 mod world;
+mod world_views;
 mod worlds;
 
 use extract::{JsonBody, OptionalJson, StartPermit};
@@ -93,6 +94,7 @@ fn modules() -> Router<Arc<AppState>> {
         .merge(review::router())
         .merge(sandbox::router())
         .merge(twin::router())
+        .merge(world_views::router())
         .merge(recording::router())
         .merge(worlds::router())
         .merge(crate::ops::http::router())

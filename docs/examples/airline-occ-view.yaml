@@ -1,0 +1,162 @@
+# The airline's operations control centre: the network day as an OCC sees it. Goes in the airline repo at
+# worlds/network-day/views/occ.yaml, listed in world.yaml as `views: [views/occ.yaml]`. Every binding reads the
+# driver part's inspect docs (flight/<id>, tail/<tail>, crew/<id>, station/<code>, kpis) and its world events.
+# Station docs need `lat` and `lon` for the map.
+format: shakedown-view/1
+label: Operations control
+part: driver
+
+styles:
+  flight:
+    - {where: {status: cancelled}, tone: critical, label: CNX}
+    - {where: {delay_min: {">=": 60}}, tone: critical}
+    - {where: {delay_min: {">=": 15}}, tone: warn}
+    - {where: {status: {in: [out, "off", "on"]}}, tone: active}
+    - {where: {status: in}, tone: done}
+    - {tone: neutral}
+  flight_status:
+    - {where: {status: cancelled}, tone: critical, label: Cancelled}
+    - {where: {status: out}, tone: active, label: Taxi out}
+    - {where: {status: "off"}, tone: active, label: Airborne}
+    - {where: {status: "on"}, tone: active, label: Landed}
+    - {where: {status: in}, tone: done, label: In}
+    - {where: {delay_min: {">=": 15}}, tone: warn, label: Delayed}
+    - {tone: neutral, label: Scheduled}
+  station:
+    - {where: {program: {exists: true}}, tone: critical, label: Ground delay}
+    - {tone: neutral}
+  duty:
+    - {where: {ratio: {">=": 1}}, tone: critical, label: Over FDP}
+    - {where: {ratio: {">=": 0.85}}, tone: warn}
+    - {tone: active}
+  otp:
+    - {where: {value: {"<": 70}}, tone: critical}
+    - {where: {value: {"<": 80}}, tone: warn}
+    - {tone: neutral}
+  completion:
+    - {where: {value: {"<": 97}}, tone: critical}
+    - {where: {value: {"<": 99}}, tone: warn}
+    - {tone: neutral}
+  cost:
+    - {where: {value: {">": 1.1}}, tone: critical}
+    - {where: {value: {">": 1}}, tone: warn}
+    - {tone: done}
+  breaches:
+    - {where: {value: {">": 0}}, tone: critical}
+    - {tone: done}
+  event:
+    - {where: {kind: alert}, tone: critical}
+    - {where: {kind: capacity_program}, tone: warn}
+    - {where: {kind: defect}, tone: warn}
+    - {where: {kind: crew_report}, tone: accent}
+    - {tone: neutral}
+
+panels:
+  kpis:
+    kind: kpis
+    items:
+      - {label: OTP A15, value: {key: kpis, field: otp_a15_pct}, format: percent, decimals: 1, style: otp}
+      - {label: Completion, value: {key: kpis, field: completion_pct}, format: percent, decimals: 1, style: completion}
+      - {label: Cost vs do-nothing, value: {key: kpis, field: cost_vs_baseline}, format: ratio_pct, decimals: 0, style: cost}
+      - {label: Legality breaches, value: {key: kpis, field: legality_regulatory}, format: int, style: breaches}
+      - {label: Airborne, value: {find: "flight/*", where: {status: "off"}, count: true}, format: int}
+      - {label: Cancelled, value: {key: kpis, field: cancellations}, format: int}
+      - {label: Misconnects, value: {key: kpis, field: misconnect_pax}, format: int}
+      - {label: Total cost, value: {key: kpis, field: total_cost_usd}, format: usd}
+
+  network:
+    kind: map
+    title: Network
+    center: [-96.5, 38.5]
+    zoom: 3.4
+    layers:
+      - id: stations
+        kind: points
+        data: {find: "station/*"}
+        lat: lat
+        lon: lon
+        key: code
+        label: code
+        style: station
+      - id: aircraft
+        kind: moving
+        data: {find: "flight/*", where: {status: "off"}}
+        origin: {layer: stations, field: origin}
+        dest: {layer: stations, field: dest}
+        depart: "off"
+        arrive: ["on", eta]
+        label: number
+        style: flight
+
+  alerts:
+    kind: feed
+    title: Alerts and messages
+    kinds: [alert, capacity_program, defect, crew_report]
+    style: event
+    top: 80
+
+  flights:
+    kind: board
+    title: Flights
+    data: {find: "flight/*"}
+    columns:
+      - {field: number, label: Flight}
+      - {field: origin, label: From}
+      - {field: dest, label: To}
+      - {field: tail, label: Tail}
+      - {field: std, label: STD, format: time}
+      - {field: etd, label: ETD, format: time}
+      - {field: ["off", etd], label: "Off / est", format: time}
+      - {field: ["on", eta], label: "On / est", format: time}
+      - {field: delay_min, label: Delay, format: minutes}
+      - {field: booked_pax, label: Pax, format: int}
+      - {field: status, label: Status, format: chip}
+    sort: {field: std}
+    style: flight_status
+    filters:
+      - {id: delayed, label: "Delayed 15+", where: {delay_min: {">=": 15}}}
+      - {id: airborne, label: Airborne, where: {status: "off"}}
+      - {id: cancelled, label: Cancelled, where: {status: cancelled}}
+      - {id: iad, label: "To IAD", where: {dest: IAD}}
+
+  tails:
+    kind: timeline
+    title: Aircraft rotations
+    data: {find: "flight/*"}
+    lane: tail
+    lane_label: Tail
+    start: [out, etd, std]
+    end: [in, eta, sta]
+    label: number
+    style: flight
+
+  duty:
+    kind: bars
+    title: Crew duty against the FDP limit
+    data: {find: "crew/*", where: {status: on_duty}}
+    label: id
+    value: {since: report}
+    limit: fdp_limit_min
+    unit: min
+    style: duty
+    top: 60
+
+screens:
+  - id: overview
+    label: OCC overview
+    areas: ["kpis kpis", "network alerts"]
+    columns: "minmax(0, 3fr) minmax(320px, 1fr)"
+    rows: "auto minmax(0, 1fr)"
+  - id: flights
+    label: Flight board
+    areas: ["kpis", "flights"]
+    rows: "auto minmax(0, 1fr)"
+  - id: rotations
+    label: Tail rotations
+    areas: ["tails"]
+    rows: "minmax(0, 1fr)"
+  - id: crew
+    label: Crew duty
+    areas: ["duty alerts"]
+    columns: "minmax(0, 2fr) minmax(320px, 1fr)"
+    rows: "minmax(0, 1fr)"

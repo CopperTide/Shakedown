@@ -104,6 +104,7 @@ fn add_world(p: &mut Plan, project: &Project, name: &str, title: &str) {
         data: vec![],
         people: vec![],
         observability: None,
+        views: vec![],
     };
     p.add(project, Kind::World, id, ItemBody::World(world));
 }

@@ -69,7 +69,7 @@ Every panel has `kind` and an optional `title`.
 |---|---|---|
 | `kpis` | `items: [{label, value: <one doc> \| <many docs> with count: true, format?, decimals?, style?}]` | a strip of figures; `style` rules see `{value}` |
 | `map` | `center: [lon, lat]`, `zoom`, `layers: [Layer]` | a MapLibre map on OpenFreeMap tiles |
-| `board` | `data: <many docs>`, `key?`, `columns: [{field, label, format?, style?}]`, `sort?: {field, desc?}`, `style?`, `filters?: [{id, label, where}]`, `top?` | a dense table with status chips, quick filters and search |
+| `board` | `data: <many docs>`, `columns: [{field, label, format?}]`, `sort?: {field, desc?}`, `style?`, `filters?: [{id, label, where}]`, `top?` | a dense table with status chips, quick filters and search |
 | `timeline` | `data`, `lane`, `start`, `end`, `label?`, `style?`, `lane_label?` | one lane per distinct `lane` value, a bar per doc, a now line; virtualized |
 | `bars` | `data`, `label`, `value: <field> \| {since: <time field>}`, `limit: <field>`, `unit?`, `style?`, `top?` | a value against its limit, worst ratio first |
 | `feed` | `kinds: [<event kind>]`, `parts?: [<part>]`, `style?`, `top?` | the world's events, newest first |
@@ -121,16 +121,16 @@ UI never sees whole docs.
 ### API
 
 `GET /api/branches/{id}/world-views` lists the branch's views: `{world, views: [{id, label, panels, screens}]}`
-(the files as parsed, the panel definitions included so the renderer knows labels and formats). The branch's
-world is its project experiment's world, else the project world whose `package` is the run's benchmark.
-Empty `views` when it has none.
+(the files as parsed, the panel definitions included so the renderer knows labels and formats), and `problems`
+for files that don't parse. The branch's world is the project world whose `package` is the run's benchmark
+(a run doesn't record its project experiment's world). Empty `views` when it has none.
 
 `GET /api/branches/{id}/world-views/{view}?screen=<id>&at=live|final|<seq>` evaluates one screen:
 
 ```json
 {"view": "occ", "screen": "overview",
  "at": {"seq": 812, "point": "step", "clock_ms": 51000000, "world_ms": 1786626600000,
-        "speed": 0, "paused": false},
+        "epoch_ms": 1786575600000, "speed": 0, "paused": false},
  "panels": {
    "kpis":    {"kind": "kpis", "items": [{"value": 81.2, "tone": "warn"}]},
    "network": {"kind": "map", "layers": {
@@ -139,10 +139,11 @@ Empty `views` when it has none.
    "flights": {"kind": "board", "columns": ["key", "number", "origin", "tone", "chip", "filters"], "rows": [], "total": 2495},
    "tails":   {"kind": "timeline", "lanes": ["N101UA"], "columns": ["lane", "key", "label", "start", "end", "tone", "chip"], "rows": [], "range": [0, 0]},
    "duty":    {"kind": "bars", "columns": ["key", "label", "value", "limit", "ratio", "tone", "chip"], "rows": []},
-   "alerts":  {"kind": "feed", "columns": ["seq", "clock_ms", "part", "kind", "text", "tone", "chip"], "rows": []}}}
+   "alerts":  {"kind": "feed", "columns": ["seq", "clock_ms", "world_ms", "part", "kind", "text", "tone", "chip"], "rows": []}}}
 ```
 
-`kpis.items` follow the file's order. A board column named in the file appears under its field's dotted path;
+`kpis.items` follow the file's order. A board column appears under its field's dotted path (the first path of a
+list), and a row carries the board's one tone and chip;
 a timeline row's `lane` is an index into `lanes`. `world_ms` is the world's epoch plus `clock_ms`; `speed` is
 world ms per real ms while live and running (0 on a stepped or frozen clock), so the renderer can move aircraft
 between polls. A panel that can't be evaluated (a part the world lacks, a bad field) comes back as

@@ -298,6 +298,37 @@ TwinView = {title, clock?: string,
 
 Item ids are unique across the view, so flows and an item's `link` (an item it points at) can name them.
 
+#### Declarative views (world files)
+
+A world in a project may instead ship its maps and dashboards as view files (`format: shakedown-view/1`), listed in
+its `world.yaml` as `views: [views/occ.yaml]`. No code draws them: shaked evaluates each screen's panels against the
+parts' `inspect` docs and the UI's one renderer draws the rows. Nothing is recorded; a view is evaluated on request,
+at a point of the branch.
+
+- **Bindings** are the expected end state's finders without the check: one doc `{part?, key, field?}`, or many
+  `{part?, find: "<glob>", where?}` (`*` any run, `?` one character; `where` with the ops `= != < <= > >= in contains
+  exists absent`, numbers equal within 0.005). A field is a dotted path; a list of fields is the first present and not
+  null. The view's `part` is the part a binding reads when it names none.
+- **Styles** map field values to tones: `styles: {name: [{where?, tone, label?}]}`, first match wins; tones are
+  `neutral active done warn critical accent`. A view never names a colour.
+- **Panels** (`panels: {id: {kind, title?, ...}}`): `kpis` (`items: [{label, value: <one doc> | <many docs> with
+  count: true, format?, decimals?, style?}]`), `map` (`center: [lon, lat]`, `zoom`, `layers`: `points` with `data, lat,
+  lon, key, label?, style?`; `arcs` and `moving` with `data, origin: {layer, field}, dest: {layer, field}, label?,
+  style?`, and `depart`/`arrive` time fields for `moving`), `board` (`data, columns: [{field, label, format?}], sort?:
+  {field, desc?}, style?, filters?: [{id, label, where}], top?`), `timeline` (`data, lane, start, end, label?, style?,
+  lane_label?`), `bars` (`data, label, value: <field> | {since: <time field>}, limit, unit?, style?, top?`; its style
+  rules also see `value`, `limit`, `ratio`) and `feed` (`kinds, parts?, style?, top?`; rules see `{part, kind, text,
+  data}`). Formats: `text int number percent ratio_pct usd minutes time chip`.
+- **Screens** lay panels out as a grid of named areas: `screens: [{id, label, areas: ["kpis kpis", "map feed"],
+  columns?, rows?}]` (CSS `grid-template-areas`, `-columns`, `-rows`).
+- **Evaluation**: `GET /api/branches/{id}/world-views/{view}?screen=&at=live|final|<seq>` reads the docs of the parts
+  the screen's panels name, at `live` (the live instances now), `final` (the check's final saves) or just after a step
+  (a clock part moved on to the step's clock, as `rows` reads it), and answers `{view, screen, at: {point, seq,
+  clock_ms, world_ms, epoch_ms, speed, paused}, panels}`. Each panel is `{kind, columns, rows, ...}` with only the
+  fields the view names, times as epoch ms, and per row a `tone` and `chip` from its style (a board row also carries
+  `filters`, a bitmask of the filters it passes); a panel that can't be evaluated is `{kind, error}` alone.
+  `docs/examples/airline-occ-view.yaml` is a whole operations-centre view.
+
 ### Gates on tools
 
 A gate lets a call through only if a document of another part says so. It is how a world makes one part's

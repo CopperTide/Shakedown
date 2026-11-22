@@ -152,6 +152,7 @@ impl Project {
     pub fn reload(&mut self) -> Result<(), ProjectError> {
         let (items, mut problems) = load_all(&self.root)?;
         problems.extend(cross_check(&items));
+        problems.extend(crate::views::view_problems(&self.root, &items));
         self.items = items;
         self.problems = problems;
         Ok(())

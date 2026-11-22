@@ -9,6 +9,7 @@ mod load;
 mod project;
 pub mod secrets;
 mod validate;
+mod views;
 mod write;
 
 pub use error::{FormatError, ProjectError};
@@ -16,3 +17,4 @@ pub use ids::Id;
 pub use item::{kind_name, Item, ItemBody, Problem};
 pub use load::item_file;
 pub use project::Project;
+pub use views::{world_views, WorldView};

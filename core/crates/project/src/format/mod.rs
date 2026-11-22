@@ -6,6 +6,7 @@ mod observability;
 mod project;
 mod scenario;
 mod setup;
+mod view;
 mod world;
 
 pub use experiment::{Budget, ExperimentFile, Repeats};
@@ -18,6 +19,11 @@ pub use scenario::{
     Gate, ScenarioFile,
 };
 pub use setup::{AgentSpec, SetupFile, Team};
+pub use view::{
+    BarValue, BarsPanel, BoardPanel, Column, Count, FeedPanel, Field, Figure, Filter, Find, Join,
+    KeyRef, KpiItem, KpisPanel, Layer, MapPanel, Panel, PathLayer, PointsLayer, Screen, Shown,
+    Since, Sort, StyleRule, TimelinePanel, Tone, ViewFile,
+};
 pub use world::{Auth, Connector, ConnectorMode, DataSource, Flow, Person, WorldFile};
 
 use serde::{de::DeserializeOwned, Serialize};

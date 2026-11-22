@@ -12,18 +12,28 @@ impl World {
         self.view.is_some()
     }
 
+    /// The docs of `keys` (every doc for none) of `part`'s live instance.
+    pub async fn inspect_live(
+        &self,
+        part: &str,
+        keys: &[String],
+    ) -> Result<Map<String, Value>, WorldError> {
+        let p = self.part(part)?;
+        let params = InspectParams {
+            target: p.target(),
+            keys: keys.to_vec(),
+        };
+        let docs: Docs = request(&p.client, &p.label(), &params).await?;
+        Ok(docs.docs)
+    }
+
     /// `{part: {key: doc}}` of the live instances of the parts the view reads.
     async fn view_docs(&self) -> Result<Map<String, Value>, WorldError> {
         let names = self.view.iter().flat_map(|v| &v.docs);
         let mut out = Map::new();
         for name in names {
-            let p = self.part(name)?;
-            let params = InspectParams {
-                target: p.target(),
-                keys: vec![],
-            };
-            let docs: Docs = request(&p.client, &p.label(), &params).await?;
-            out.insert(p.name.clone(), Value::Object(docs.docs));
+            let docs = self.inspect_live(name, &[]).await?;
+            out.insert(name.clone(), Value::Object(docs));
         }
         Ok(out)
     }

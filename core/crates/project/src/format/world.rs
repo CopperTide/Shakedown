@@ -32,6 +32,9 @@ pub struct WorldFile {
     /// Monitoring, alerting and on-call.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub observability: Option<super::Observability>,
+    /// View files (`shakedown-view/1`), relative to the world's folder: its maps and dashboards.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub views: Vec<String>,
 }
 
 impl Format for WorldFile {
@@ -42,6 +45,9 @@ impl Format for WorldFile {
             source
                 .check()
                 .map_err(|m| Invalid::new(format!("/data/{i}"), m))?;
+        }
+        for (i, view) in self.views.iter().enumerate() {
+            check_view_path(view).map_err(|m| Invalid::new(format!("/views/{i}"), m))?;
         }
         Ok(())
     }
@@ -168,4 +174,17 @@ pub struct Person {
     /// What they do, e.g. `planner`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub role: Option<String>,
+}
+
+/// A view file's path: a `.yaml` file inside the world's folder.
+fn check_view_path(path: &str) -> Result<(), String> {
+    let inside = std::path::Path::new(path)
+        .components()
+        .all(|c| matches!(c, std::path::Component::Normal(_)));
+    match (inside, path.ends_with(".yaml")) {
+        (true, true) => Ok(()),
+        _ => Err(format!(
+            "{path} is not a .yaml file inside the world's folder"
+        )),
+    }
 }
