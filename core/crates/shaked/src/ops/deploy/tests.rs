@@ -286,6 +286,21 @@ fn stepped_picks_dispatch() {
 }
 
 #[test]
+fn team_start_is_placed_on_the_clock_start_day() {
+    let (_dir, p) = project(|dir| {
+        stepped(dir);
+        let path = dir.join("scenarios/supplier-slip.yaml");
+        let text = std::fs::read_to_string(&path).unwrap();
+        std::fs::write(path, text.replace("horizon: \"23:59\"}", "horizon: \"23:59\", team_start: \"12:00\"}")).unwrap();
+    });
+    let clock = request(&p, &exp(), START).unwrap().scenario.unwrap().clock.unwrap();
+    assert_eq!(clock.team_start_ms, Some(6 * 3_600_000), "12:00 on a day whose clock starts at 06:00");
+    let (_dir, full) = project(stepped);
+    let clock = request(&full, &exp(), START).unwrap().scenario.unwrap().clock.unwrap();
+    assert_eq!(clock.team_start_ms, None, "the full day stays the default");
+}
+
+#[test]
 fn chain_refuses_stepped() {
     use crate::scenario::{refusal, Scenario, STEPPED_NEEDS_DISPATCH};
     let stepped = Scenario {

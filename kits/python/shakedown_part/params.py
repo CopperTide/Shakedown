@@ -14,21 +14,40 @@ TYPES = {"string": (str,), "integer": (int,), "number": (int, float), "boolean":
          "object": (dict,)}
 
 
+def _is(value, kind: str) -> bool:
+    return isinstance(value, TYPES[kind]) and (kind == "boolean" or not isinstance(value, bool))
+
+
 @dataclass(frozen=True)
 class Param:
     name: str
     type: str  # a JSON Schema type, a key of TYPES
     default: object = REQUIRED
+    # An array's items: a JSON Schema type name (`"string"`), or a whole JSON Schema (an object's `properties`,
+    # `required`). Models fill an array whose item type they are told; told nothing, some send `[]`.
+    items: object = None
 
     def check(self, value):
-        ok = isinstance(value, TYPES[self.type]) and (self.type == "boolean" or not isinstance(value, bool))
-        if not ok and not (value is None and self.default is None):
+        if not _is(value, self.type):
+            if value is None and self.default is None:
+                return
             raise Refusal(f"{self.name} must be of type {self.type}")
+        kind = self.items if isinstance(self.items, str) else (self.items or {}).get("type")
+        if self.type == "array" and kind in TYPES:
+            for i, v in enumerate(value):
+                if not _is(v, kind):
+                    raise Refusal(f"{self.name}[{i}] must be of type {kind}")
+
+    def schema(self) -> dict:
+        out = {"type": self.type}
+        if self.items is not None:
+            out["items"] = {"type": self.items} if isinstance(self.items, str) else dict(self.items)
+        return out
 
 
 def input_schema(params) -> dict:
     """The MCP `inputSchema` of a tool with these params."""
-    props = {p.name: {"type": p.type} for p in params}
+    props = {p.name: p.schema() for p in params}
     return {"type": "object", "properties": props, "required": [p.name for p in params if p.default is REQUIRED]}
 
 

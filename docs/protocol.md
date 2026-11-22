@@ -471,6 +471,13 @@ request is recorded as a step named `http` owned by the part. A part that answer
 - Recorded HTTP requests are never sent again: a part that serves HTTP must restore from saves. A world with a part
   that serves HTTP and restores by replay is refused.
 
+## Tool parameters
+
+A tool's `inputSchema` (`describe.tools[].inputSchema`, JSON Schema) is what a model reads to call it. An `array`
+parameter should say what its items are (`"items": {"type": "string"}`, or an object's `properties` and `required`):
+told nothing, some models send an empty array. The Python kit's `Param(name, "array", items=...)` writes it and checks
+each item's type on the call.
+
 ## What a model saw
 
 Each model call through shaked's gateway is recorded with its request as sent (`model_call.request`) and the

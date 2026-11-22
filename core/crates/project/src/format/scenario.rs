@@ -85,6 +85,10 @@ pub struct ClockSpec {
     /// The world time the run ends at, e.g. `23:59` on the task's day or an ISO timestamp.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub horizon: Option<String>,
+    /// The world time the team starts at, e.g. `12:00`: until then the world runs on with nobody
+    /// deciding, and the run is still scored over the whole day. Absent: from the start.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub team_start: Option<String>,
 }
 
 impl ClockSpec {

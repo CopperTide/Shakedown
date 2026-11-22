@@ -41,23 +41,46 @@ pub async fn run_to_horizon(
     ctx: &BranchCtx,
     clock: &SteppedClock,
 ) -> Result<(), String> {
-    let Some(horizon) = clock.horizon_ms else {
-        return Ok(());
-    };
+    match clock.horizon_ms {
+        Some(horizon) => run_to(exec, ctx, horizon, WakePoint::Horizon.word()).await,
+        None => Ok(()),
+    }
+}
+
+/// The reason recorded on the move that brings a stepped world to its team's start.
+pub const TEAM_START: &str = "team_start";
+
+/// Runs a branch's world, with no agent, to the clock its team starts at (`team_start_ms`),
+/// through every part's wake; nothing when the clock is there already (a fork after the start).
+pub async fn run_to_team_start(
+    exec: &ToolExec,
+    ctx: &BranchCtx,
+    clock: &SteppedClock,
+) -> Result<(), String> {
+    match clock.team_start_ms {
+        Some(start) if ctx.clock.now_ms() < start => run_to(exec, ctx, start, TEAM_START).await,
+        _ => Ok(()),
+    }
+}
+
+/// Moves the world on, with no agent, through every part's wake to `target`, the last move
+/// recorded with `reason`.
+async fn run_to(exec: &ToolExec, ctx: &BranchCtx, target: i64, reason: &str) -> Result<(), String> {
     exec.catch_up(ctx).await?;
     for _ in 0..MAX_MOVES {
         let (world, now) = (&ctx.world, ctx.clock.now_ms());
-        if now >= horizon {
+        if now >= target {
             return Ok(());
         }
         let wake = world.due_by(now).map(|_| now).or(world.next_wake(now));
-        let (to_ms, to) =
-            next_point(now, wake, None, Some(horizon)).unwrap_or((horizon, WakePoint::Horizon));
-        exec.step_world(ctx, to_ms, to.word()).await?;
+        match next_point(now, wake, None, Some(target)) {
+            Some((to_ms, to)) if to != WakePoint::Horizon => {
+                exec.step_world(ctx, to_ms, to.word()).await?;
+            }
+            _ => break,
+        }
     }
-    exec.step_world(ctx, horizon, WakePoint::Horizon.word())
-        .await
-        .map(drop)
+    exec.step_world(ctx, target, reason).await.map(drop)
 }
 
 #[cfg(test)]

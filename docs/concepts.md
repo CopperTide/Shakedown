@@ -401,6 +401,15 @@ the same as branch clock ms. The scenario's `generators` go to every part's setu
 stepped clock makes every setup a dispatch team (its lead, else its first agent, leads), and the horizon is placed
 the same way. World times need the task to give `clock_start`.
 
+A scenario's clock may also say `team_start` (e.g. `12:00` on the task's day; `team_start_ms` in a run's `clock`):
+the world runs on alone from clock 0 to that time, through every part's wake, as it does after an early finish (its
+parts' own routine automation, nobody deciding), each move recorded, the last with the reason `team_start`; then the
+lead's first turn opens. The run is scored over the whole day, as without it. A fork after the start begins as any
+fork; one before it runs the world alone to the start again. Without `team_start` the team starts at clock 0.
+
+On a stepped clock with a horizon the lead's first input also says that `finish` ends the team's watch, not the
+day: the world runs on to the horizon with nobody deciding and is scored there, so to wait, end the turn.
+
 A stepped clock runs only in a [dispatch run](#dispatch-runs); a chain, concurrent or external run with one is
 refused before it starts: "stepped clock needs a team with a lead (dispatch runner)". When the team is quiet (no agent working, no mail
 waiting), shaked moves the world on at once, to the earliest of:

@@ -26,7 +26,7 @@ use tokio::{
 
 pub use board::Limits;
 use board::{Action, Board, End, Input, Mail, Reason};
-pub use stepped::{next_point, run_to_horizon};
+pub use stepped::{next_point, run_to_horizon, run_to_team_start};
 
 use crate::{
     agents::{
@@ -75,6 +75,13 @@ pub(crate) async fn run(
     ctx: &Arc<BranchCtx>,
     brief: &Brief,
 ) -> Result<Option<Ending>> {
+    // A team that starts later than the clock: the world runs on alone until then.
+    if let Some(clock) = &ctx.rules.stepped {
+        let exec = crate::exec::ToolExec::new(state.store.clone());
+        if let Err(why) = run_to_team_start(&exec, ctx, clock).await {
+            return Ok(Some(Ending::infra(why)));
+        }
+    }
     let events = ctx.records(&state.store).events(&ctx.branch_id).await?;
     let mut crew = Crew::new(state, ctx, brief);
     let first = crew.begin(&events).await?;
@@ -331,8 +338,11 @@ impl Crew {
             true => inputs::how_for_lead(team, lead),
             false => inputs::how_for_member(team, lead),
         });
-        if self.ctx.rules.stepped.is_some() {
+        if let Some(clock) = &self.ctx.rules.stepped {
             input.push_str(inputs::STEPPED);
+            if agent == lead && clock.horizon_ms.is_some() {
+                input.push_str(inputs::LEAD_STEPPED);
+            }
         }
         if let Some(h) = self.history.get(agent) {
             input.push_str(&inputs::history_text(h));

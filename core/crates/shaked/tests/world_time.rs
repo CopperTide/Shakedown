@@ -775,3 +775,29 @@ fn a_stepped_run_on_another_runner_is_refused() {
         assert!(records(&fx.state.store).runs().await.unwrap().is_empty());
     })
 }
+
+/// A team that starts later than the clock: the world runs on alone to `team_start_ms`, through
+/// its parts' wakes, and the lead's first turn opens there; the run is still scored at the horizon.
+#[test]
+fn a_late_team_start_runs_the_world_alone_until_then() {
+    run(async {
+        let clock = json!({"write_ms": 120_000, "horizon_ms": 3 * HOUR, "team_start_ms": 2 * HOUR});
+        let part = ["--uses-clock", "--alert-at", "3600000"];
+        let (_fx, evs) = stepped_run("late", &part, clock, vec![says("Waiting."), says("Still waiting.")]).await;
+        let m = moves(&evs);
+        assert_eq!(m.first(), Some(&("wake".to_string(), HOUR)), "{m:?}");
+        assert!(m.contains(&("team_start".to_string(), 2 * HOUR)), "{m:?}");
+        assert_eq!(m.last(), Some(&("horizon".to_string(), 3 * HOUR)), "{m:?}");
+        let first = evs.iter().find(|e| e.kind == EventKind::Wake).unwrap();
+        let start = evs
+            .iter()
+            .find(|e| e.kind == EventKind::WorldEvent && e.payload["data"]["reason"] == "team_start")
+            .unwrap();
+        assert!(first.seq > start.seq, "no agent works before the team starts");
+        assert!(
+            first.payload["input"].as_str().unwrap().contains("ends your team's watch, not the day"),
+            "the lead is told what finish means on a stepped clock"
+        );
+        assert!(evs.iter().any(|e| e.kind == EventKind::Check), "scored at the horizon");
+    })
+}

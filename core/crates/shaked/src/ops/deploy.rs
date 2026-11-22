@@ -205,12 +205,22 @@ fn stepped_clock(
         Some(h) => Some(start.place(h, "the clock's horizon")?.1),
         None => None,
     };
+    let team_start = match &spec.team_start {
+        Some(t) => Some(start.place(t, "the clock's team_start")?.1),
+        None => None,
+    };
+    if let (Some(t), Some(h)) = (team_start, horizon) {
+        if t >= h {
+            return Err(bad("team_start must come before the horizon".into()));
+        }
+    }
     Ok(Some(SteppedClock {
         read_ms: parse_duration_ms(&cost.read).map_err(bad)?,
         write_ms: parse_duration_ms(&cost.write).map_err(bad)?,
         tools,
         epoch_ms: ClockSpec::epoch_ms(spec).map_err(bad)?,
         horizon_ms: horizon,
+        team_start_ms: team_start.filter(|t| *t > 0),
     }))
 }
 

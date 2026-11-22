@@ -138,6 +138,11 @@ pub struct SteppedClock {
     /// The branch clock the run ends at; absent: it ends when the lead finishes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub horizon_ms: Option<i64>,
+    /// The branch clock the team starts at: before it the world runs with nobody deciding (its
+    /// parts' own routine automation), through every wake, as after an early finish. Absent: the
+    /// team starts at clock 0.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub team_start_ms: Option<i64>,
 }
 
 /// One disruption chosen: an option's `id` and the values of its params (defaults fill the rest).

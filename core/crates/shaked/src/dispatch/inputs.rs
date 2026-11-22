@@ -132,6 +132,12 @@ pub fn turn_cut(stepped: bool) -> String {
     s
 }
 
+/// What the lead is also told on a stepped clock with a horizon: finishing early hands the rest of
+/// the day to nobody.
+pub const LEAD_STEPPED: &str = "\n# Finishing\n\n`finish` ends your team's watch, not the day: the world \
+     runs on to the end of the run's day with nobody deciding, and is scored there. Until then, to wait for \
+     the next thing to happen, end your turn instead; you are woken by alerts, mail and your next look.\n";
+
 /// What the lead is told when its epoch passed with no alert.
 pub const LOOK: &str =
     "\n# A look at the world\n\nThe team has been waiting and no alert came. Look at \
@@ -150,5 +156,7 @@ mod tests {
         assert!(stepped.contains("40 model calls") && stepped.contains("To wait, end your turn"));
         assert!(!turn_cut(false).contains("clock"), "no world-time advice without a stepped clock");
         assert!(STEPPED.contains("To let time pass, end your turn"));
+        assert!(LEAD_STEPPED.contains("ends your team's watch, not the day"));
+        assert!(LEAD_STEPPED.contains("end your turn instead"));
     }
 }
