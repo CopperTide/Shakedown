@@ -24,7 +24,10 @@ SHAKEDOWN_BIN_DIR=core/target/debug core/target/debug/shakedown-part-check integ
 `shakedown-part-check` runs the program and checks describe, start, the examples, save and restore, diff, replay
 and `drop_save`. It prints a JSON report and exits 0 if all passed, 1 if not, 2 if it could not run.
 
-Install a package by putting its folder under one of the `SHAKEDOWN_PACKAGES` roots. A `command` run is for
+Install a package by putting its folder under one of the `SHAKEDOWN_PACKAGES` roots, or import the repo that holds
+it (`shaked import <url>`, or **Import from git** in the app): shaked fetches the repo into the project, installs
+its Python packages with uv in an environment of their own and registers every package in it
+([reference](reference.md#import-from-git)). A `command` run is for
 programs you trust; it runs in the package folder with only `PATH`, `HOME`, `SHAKEDOWN_PG_URL`, `UV_CACHE_DIR`,
 `XDG_CACHE_HOME`, `RUST_LOG` and `SHAKEDOWN_SAVES` in its environment. An `image` run is boxed in a container: no
 network unless the manifest asks for host networking (`needs.network = "host"`), no environment from shaked,

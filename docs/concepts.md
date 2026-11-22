@@ -21,6 +21,9 @@ are in [reference.md](reference.md).
   state, starts from a save, shows the state (`inspect`) and compares two states (`diff`). In `describe` it
   declares its tools, how it can restore, and whether it uses the Shakedown clock.
 - **Part**: one instance of an integration in a world, with a name and a config.
+- **Import**: a git repo brought into a project at one commit (`project.import_git`): its packages installed and
+  registered under the import's id, its worlds, scenarios, setups and experiments copied into the project. A world
+  then runs the systems the repo already has, not a rebuilt copy (see [reference.md](reference.md#import-from-git)).
 - **World**: the list of parts a benchmark names. Tool names must be unique across a world.
 - **Benchmark**: a package that names a world and brings tasks, instructions for the agents, tools, the data
   that seeds the world, and for each task the gold actions that define the expected result.

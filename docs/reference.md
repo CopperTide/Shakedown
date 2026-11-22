@@ -12,8 +12,9 @@ All JSON on `http://127.0.0.1:4510`, except the event stream. Errors are `{error
 | `GET /api/health` | `{open_available, providers, claude, codex, benchmark, disk: {bytes, limit_bytes}}`. `providers` is each model provider as the configuration alone tells it, in the shape of `/api/providers` without `models`; a local server is not asked, so it is `available: false, checked: false` with why `not checked (GET /api/providers asks the server)`. `open_available` is true when some provider can take calls, judged from the configuration (a configured local server counts, up or not) |
 | `GET /api/providers` | `[{id, kind, label, available, checked, why?, models?}]`, one per model provider, your own keys applied; see [Model providers](#model-providers) |
 | `GET /api/me` | `{mode, user: {name}, features}`: `mode` is `local` and `user.name` `You` for an open-source shaked; a deployment's layer may add `account` (the UI's account menu) |
-| `GET /api/project` | `project.status`: `{name, counts: {worlds, scenarios, setups, experiments}, problems, root}` for the project folder `SHAKEDOWN_PROJECT` names; 409 when none is open. `problems` lists unreadable files and broken references (`{kind, id, pointer, message}`); a problem never stops the rest of the project from loading |
+| `GET /api/project` | `project.status`: `{name, counts: {worlds, scenarios, setups, experiments}, problems, root, imports}` for the project folder `SHAKEDOWN_PROJECT` names; 409 when none is open. `problems` lists unreadable files and broken references (`{kind, id, pointer, message}`); a problem never stops the rest of the project from loading. `imports` lists the project's git imports, `[{id, url, ref, commit, imported_at, packages, items}]` |
 | `POST /api/project` | `project.init`: `{name, git?}` creates a project in the configured folder; 409 when one is already there |
+| `POST /api/project/import-git` | `project.import_git`: `{url, ref?, id?, confirm?}` imports a git repo, its packages and its project items (see [Import from git](#import-from-git)). Without `confirm` the ref is fetched and the plan answered, and nothing is installed, registered or written: `{proposed: true, id, url, ref, commit, checkout, project: {name, problems}, packages: [{name, kind, dir, python}], items: [{kind, id, label, action: write\|replace\|same\|keep, reason}], views: [{world, file}], compose: [{file, services, volumes, part}], python: [{root, env}], edits, notes, problems, conflicts, previous_commit}`. With `confirm` the same, plus `registered` (true when shaked runs) and `written`. 400 for a URL other than https, ssh, `git@host:path`, `file://` or an absolute path, or a ref starting with `-`; 409 when a package name is installed already; 422 when git or uv fails; 403 on a shaked that serves others |
 | `GET /api/project/{worlds\|scenarios\|setups\|experiments}` | `{items: [{kind, id, label, hash, problems}]}` |
 | `GET /api/project/{kind}/{id}` | one item with its `body` (the file's contents as JSON) |
 | `PUT /api/project/{kind}/{id}` | `{body, confirm?}` creates or replaces the item's file. `body` is checked exactly like the file: unknown fields, a wrong `format:` and credentials written inline are 422 with a JSON pointer (a credential's value is never echoed). Unless `confirm` is true and while the project's `permissions.edit` is `diff_first` (the default), nothing is written and the answer is `{proposed: true, diff}`. Writes are atomic: a file is never left half-written. Needs the `admin` token scope |
@@ -193,6 +194,12 @@ from. The retail example reads its data from `data/retail` (relative to its pack
 - `shaked mcp [--project <folder>]`: the control MCP server over stdio for a project folder (default
   `SHAKEDOWN_PROJECT`), one JSON-RPC message per line. It runs as the person at this machine on the folder
   alone: no database, no server.
+- `shaked import <git-url-or-path> [--ref <ref>] [--id <id>] [--project <folder>] [--dry-run]`: imports a git
+  repo into the project folder (default `SHAKEDOWN_PROJECT`; a folder that is not a project yet becomes one with
+  the repo's `shakedown.yaml`), as `project.import_git` with `confirm` (the person typing is the confirmation):
+  see [Import from git](#import-from-git). A relative path is taken from the working folder. It prints what was
+  found and done. A running shaked registers the packages at its next start or on the next deploy;
+  `--dry-run` prints the plan and changes nothing.
 - `shaked token create --name <name> [--scope read|run|admin ...] [--expires-days N]`: prints a new API token
   (default scope `read`) and nothing else.
 - `shaked store copy --from <store> --to <store> [--prefix <p>/] [--repoint]`: copies every object (under
@@ -200,6 +207,44 @@ from. The retail example reads its data from `data/retail` (relative to its pack
   object already there with the right checksum is skipped, so it reruns safely. `--repoint` points the saves
   whose objects all verified at the destination; a save whose object no longer matches its recorded checksum
   stays where it is. Exits 1 when any object failed.
+
+## Import from git
+
+A customer's repo becomes the world as it is: its packages run as they are written, and its worlds, scenarios,
+setups and experiments become the project's (design: `docs/superpowers/specs/2026-11-22-git-import-design.md`).
+From the app (**Import from git** on the Worlds page: Check, then Import), the API (`POST
+/api/project/import-git`), MCP and the assistant (`project_import_git`) or the CLI (`shaked import`).
+
+- **Fetch:** one ref (a branch, a tag or a full commit SHA; default `HEAD`) with depth 1, into
+  `<project>/.shakedown/imports/<id>/<commit12>/`, hooks off, no prompts, no submodules. The id is the repo's
+  name unless given. Only the https, http, ssh, git and file transports are allowed.
+- **Found:** `shakedown.yaml` at the repo's root (its worlds with their folders, scenarios, setups and
+  experiments, and each world's `views:`), every `shakedown-package.toml` in the tree (not under dot folders,
+  `node_modules`, `target` or `__pycache__`), and Compose files outside packages, listed as candidates for the
+  `service` integration with the part config a world would use. Nothing found is run.
+- **Python:** a package whose command starts with `uv` runs in its uv project (`--project`, else its folder) or the
+  workspace holding it. Each workspace gets one environment per commit,
+  `<project>/.shakedown/imports/<id>/env/<commit12>-<root>/`, made with `uv sync --all-packages`; no `.venv` lands in
+  the checkout. The programs get `UV_PROJECT_ENVIRONMENT` (that folder) and `UV_FROZEN=1`. Sources of Shakedown's own
+  packages (`shakedown-part`, `arena-part`, `shakedown-sdk`) are pointed at this Shakedown's `kits/python` and
+  `sdk/python`, whatever path the repo's author had; the edits are listed and show as `git diff` in the checkout.
+  Another absolute path source is noted when it is on this machine and is a problem when it is not.
+- **Registered:** the packages join the registry under the import's id. A name another package has is refused
+  before anything is installed. shaked registers the configured project's imports at start, and `experiments.deploy`
+  registers any that are not (an import made with `shaked import` while shaked runs).
+- **Items:** copied under their own ids. An id the project has already is kept unless the last import of this repo
+  wrote it and it is unchanged since; then it is replaced. Each item's action is in the plan.
+- **A new commit:** a new checkout and environment; the packages are swapped once they are ready (a run going keeps
+  its program). The commit before is kept, older ones removed. Fingerprints follow the code and the world folders,
+  so old runs keep the fingerprint they recorded.
+- **Trust:** the repo's code runs on this machine as a package program, with the cleared environment every
+  `command` package gets. The import itself runs only git and `uv sync` (which may run the repo's build backend). A
+  shaked that serves others refuses imports (403) until a run's sandbox can run them.
+
+Verified: the tests in `core/crates/shaked/tests/git_import.rs` (a repo made in the test, with one Python part run
+through uv, is imported, registered and deployed; a new commit keeps the project's own edits) and, on this machine,
+`live_airline_world_imports` against the airline repo (11 packages, 2 worlds with their views, 2 scenarios, 2
+setups, 2 experiments, no problems; its benchmark describes itself from the import's environment).
 
 ## Use Shakedown from an agent (MCP)
 

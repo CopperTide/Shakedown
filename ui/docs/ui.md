@@ -65,6 +65,13 @@ secondary metadata lines, few borders, plenty of whitespace.
   the tasks with their checks, the images (✓ present, ⚠ missing with its command) and memory, and what was left
   out. Then "◐ Preparing · 23 s" with an indeterminate bar, "✓ Ready · 38 s" with **Run** and **New
   experiment**, or "✕ Failed", why and **Try again**. Model in `features/build/builder.ts`.
+- **Import from git** (`features/editors/ImportFromGit.tsx`, beside **New world** on the Worlds page): a
+  repository (a git URL or a path on the machine shaked runs on) and a ref (default `HEAD`). **Check**
+  (`POST /api/project/import-git`) fetches the ref and shows the commit, the repo's packages, its project files with
+  what happens to each (new, replaces the last import, already the same, or kept, why on hover), its views, its
+  Compose files as `service` candidates, and any problems or taken package names in alarm ink; a taken name
+  disables **Import**. **Import** (`confirm: true`) installs, registers and writes, says how many packages were
+  registered, and reloads the list.
 - **World picker** (`features/start/WorldPicker.tsx`, on Run once and New experiment above the task): the worlds
   by title, the current one chosen; choosing one makes it current (`POST /api/worlds/{name}/use`) and reloads the
   page; the last option is "Build a world…".

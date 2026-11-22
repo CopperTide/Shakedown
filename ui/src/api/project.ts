@@ -51,3 +51,26 @@ export interface ImportPlan { proposed?: true; files?: { kind: string; id: strin
 
 /** Moves earlier work into the project; without `confirm`, only what it would write. */
 export const importProject = (confirm: boolean) => post<ImportPlan>('/api/project/import', { confirm });
+
+/** What importing a git repo found, and what happens (or happened) to each piece. */
+export interface GitImport {
+  proposed?: true;
+  id: string;
+  url: string;
+  ref: string;
+  commit: string;
+  project: { name: string; problems: string[] } | null;
+  packages: { name: string; kind: string; dir: string; python: string | null }[];
+  items: { kind: string; id: string; label: string; action: 'write' | 'replace' | 'same' | 'keep'; reason: string | null }[];
+  views: { world: string; file: string }[];
+  compose: { file: string; services: string[]; volumes: string[] }[];
+  notes: string[];
+  problems: string[];
+  conflicts: string[];
+  previous_commit: string | null;
+  registered?: boolean;
+}
+
+/** Imports a git repo (a URL or a local path) at a ref; without `confirm`, only the plan. */
+export const importGit = (url: string, ref: string, confirm: boolean) =>
+  post<GitImport>('/api/project/import-git', { url, ref: ref || undefined, confirm });

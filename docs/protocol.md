@@ -29,7 +29,8 @@ args = {}
 ```
 
 `command` runs as a local program, for integrations installed from a folder you trust, and may contain
-`${SHAKEDOWN_BIN_DIR}`. `image` runs boxed in a container: no network at all unless `needs.network = "host"`,
+`${SHAKEDOWN_BIN_DIR}`. A package imported from git (`project.import_git`) whose command runs `uv` also gets
+`UV_PROJECT_ENVIRONMENT` (the environment the import installed, outside the repo's checkout) and `UV_FROZEN=1`. `image` runs boxed in a container: no network at all unless `needs.network = "host"`,
 which gives it the host's network (every service the host can reach, not only those in `needs.services`;
 shaked does not enforce `services`); no environment from shaked; disk only under its own save folder,
 mounted at `/saves`.

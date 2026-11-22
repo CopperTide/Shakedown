@@ -1,4 +1,5 @@
-// A kind's list: every item with its problems, each a link to its editor, and New.
+// A kind's list: every item with its problems, each a link to its editor, and New (worlds also
+// Import from git).
 import { AlertTriangle } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { listItems } from '@/api/project';
@@ -7,6 +8,7 @@ import { PageBody, PageHeader } from '@/components/ui/page';
 import { EmptyState, ErrorState } from '@/components/ui/state';
 import { useQuery } from '@/hooks/useQuery';
 import type { ItemKind, ItemSummary } from '@/model/project';
+import ImportFromGit from './ImportFromGit';
 import { KINDS } from './kinds';
 import NewItemDialog from './NewItemDialog';
 
@@ -33,7 +35,7 @@ export default function ItemListPage({ kind }: { kind: ItemKind }) {
   const create = <NewItemDialog kind={kind} taken={items.map((i) => i.id)} onCreated={(id) => navigate(`${info.route}/${id}`)} />;
   return (
     <>
-      <PageHeader title={info.many} meta={info.about} actions={create} width="wide" />
+      <PageHeader title={info.many} meta={info.about} actions={kind === 'worlds' ? <div className="flex gap-2"><ImportFromGit onImported={q.reload} />{create}</div> : create} width="wide" />
       <PageBody width="wide">
         {q.error && <ErrorState error={q.error} onRetry={q.reload} />}
         <Card>
