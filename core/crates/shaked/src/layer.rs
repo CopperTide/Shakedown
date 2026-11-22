@@ -65,15 +65,9 @@ pub trait Layer: Send + Sync + 'static {
     ) -> BoxFuture<'a, anyhow::Result<Vec<uuid::Uuid>>>;
     /// Who `c` is within its `object_prefix` scope: the person, an API token's holder, a user.
     /// Header values a caller types into a team are kept for the scope and this principal, so
-    /// a colleague in the same scope cannot cite them. A hosting layer returns the user's id; the
-    /// default tells tokens apart.
-    fn principal(&self, c: &Caller) -> String {
-        match &c.kind {
-            crate::auth::CallerKind::ApiToken { id, .. } => id.to_string(),
-            crate::auth::CallerKind::RunToken { branch, .. } => format!("run:{branch}"),
-            crate::auth::CallerKind::Person => "person".to_string(),
-        }
-    }
+    /// a colleague in the same scope cannot cite them. Required, with no default, so that a layer
+    /// serving several users cannot forget to tell them apart.
+    fn principal(&self, c: &Caller) -> String;
     /// The project folder `c` works in; `configured` is `SHAKEDOWN_PROJECT`. Personal use has the
     /// one folder; a hosting layer may give callers folders of their own.
     fn project_dir(&self, _c: &Caller, configured: Option<&Path>) -> Option<PathBuf> {
@@ -98,6 +92,16 @@ impl Policy {
 impl Layer for LocalLayer {
     fn policy(&self) -> &Policy {
         &Policy::LOCAL
+    }
+
+    /// The person, or an API token's holder: each token is told apart from the person and from
+    /// other tokens.
+    fn principal(&self, c: &Caller) -> String {
+        match &c.kind {
+            crate::auth::CallerKind::ApiToken { id, .. } => id.to_string(),
+            crate::auth::CallerKind::RunToken { branch, .. } => format!("run:{branch}"),
+            crate::auth::CallerKind::Person => "person".to_string(),
+        }
     }
 
     /// The token the engine found, else the person at this machine (the Host guard already kept
@@ -201,5 +205,24 @@ pub async fn meter(store: &crate::store::Store, c: &Caller, u: Usage<'_>) {
     let key = u.key.clone();
     if let Err(e) = store.layer().meter(c, u).await {
         eprintln!("shaked: metering {key}: {e:#}");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_person_and_each_token_keep_header_values_apart_under_one_prefix() {
+        let person = Caller::person();
+        let a = Caller::api_token(uuid::Uuid::new_v4(), vec![]);
+        let b = Caller::api_token(uuid::Uuid::new_v4(), vec![]);
+        let scopes: Vec<String> = [&person, &a, &b]
+            .iter()
+            .map(|c| secret_scope(&LocalLayer, c))
+            .collect();
+        assert!(scopes.iter().all(|s| s.starts_with("local")));
+        assert!(scopes[0] != scopes[1] && scopes[1] != scopes[2] && scopes[0] != scopes[2]);
+        assert_eq!(scopes[0], secret_scope(&LocalLayer, &Caller::person()));
     }
 }

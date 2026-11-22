@@ -64,6 +64,16 @@ impl HttpDriver {
     }
 }
 
+/// The `Authorization` value for `auth`, read for `caller` while the server is still there.
+async fn read_bearer(
+    state: &Weak<AppState>,
+    caller: &crate::auth::Caller,
+    auth: &crate::model::AuthRef,
+) -> Result<String, String> {
+    let state = state.upgrade().ok_or("server is shutting down")?;
+    super::endpoint_auth::bearer(&state, caller, auth).await
+}
+
 /// The URL's host (and port), the only part of it an error names: a URL may carry a credential
 /// in its query.
 pub fn host_of(url: &str) -> String {
@@ -296,8 +306,7 @@ impl HttpDriver {
         let Some(auth) = &run.spec.auth else {
             return Ok(None);
         };
-        let state = self.state.upgrade().ok_or("server is shutting down")?;
-        let read = super::endpoint_auth::bearer(&state, &run.branch.caller, auth).await;
+        let read = read_bearer(&self.state, &run.branch.caller, auth).await;
         read.map(Some)
             .map_err(|why| format!("the agent's credential could not be read: {why}"))
     }
@@ -356,6 +365,14 @@ impl Driver for HttpDriver {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn a_dropped_server_answers_that_it_is_shutting_down() {
+        let caller = crate::auth::Caller::person();
+        let auth = crate::model::AuthRef::Key("k".into());
+        let e = read_bearer(&Weak::new(), &caller, &auth).await.unwrap_err();
+        assert!(e.contains("server is shutting down"), "{e}");
+    }
 
     #[test]
     fn answers_map_to_results() {

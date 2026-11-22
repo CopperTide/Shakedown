@@ -482,3 +482,23 @@ fn branch_ids(v: &Value) -> Vec<String> {
         _ => vec![],
     }
 }
+
+#[test]
+fn auth_on_a_team_member_that_is_not_http_is_a_400() {
+    run(async {
+        let dir = runnable_project();
+        let fx = deploy_app("deploy-auth-kind", dir.path()).await;
+        let agent = json!({"id": "a", "name": "A", "kind": "open", "auth": {"key": "k"}});
+        let team = json!({"id": "t", "name": "T", "agents": [agent]});
+        let body =
+            json!({"task_id": "t1", "team": team, "runner": "chain", "benchmark": "toybench"});
+        let (status, refused) = fx.post("/api/runs", body).await;
+        assert_eq!(status, 400, "{refused}");
+        assert!(
+            refused
+                .to_string()
+                .contains("auth belongs to http agents only"),
+            "{refused}"
+        );
+    });
+}

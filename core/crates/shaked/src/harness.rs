@@ -250,6 +250,10 @@ impl Layer for SpyLayer {
         LocalLayer.object_prefix(c)
     }
 
+    fn principal(&self, c: &Caller) -> String {
+        LocalLayer.principal(c)
+    }
+
     fn own_keys<'a>(
         &'a self,
         _c: &'a Caller,

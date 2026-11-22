@@ -93,12 +93,6 @@ pub fn validate_agents(providers: &ProviderConfig, agents: &[AgentSpec]) -> Resu
         }
         if a.kind == AgentKind::Http {
             validate_http(a)?;
-        } else if a.auth.is_some() {
-            let why = "auth belongs to http agents only".to_string();
-            return Err(TeamError::Http {
-                id: a.id.clone(),
-                why,
-            });
         }
     }
     Ok(())
