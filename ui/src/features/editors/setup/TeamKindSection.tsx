@@ -21,7 +21,7 @@ function KindFields({ team, onChange }: { team: TeamSpec; onChange: (t: TeamSpec
 export default function TeamKindSection({ setup, onChange }: { setup: SetupBody; onChange: (s: SetupBody) => void }) {
   return (
     <div className="grid gap-4">
-      <SectionHead title="How it runs" about="Shakedown's built-in agents, or your own. Every kind gets the same ticket, tools and data, so results compare fairly." />
+      <SectionHead title="How it runs" about="Shakedown's built-in agents, or your own. Every setup in an experiment gets the same task, so results compare fairly." />
       <div role="radiogroup" aria-label="Kind of team" className="grid gap-3 md:grid-cols-3">
         {TEAM_KINDS.map((k) => (
           <button key={k.kind} type="button" role="radio" aria-checked={setup.team.kind === k.kind} aria-label={k.label}

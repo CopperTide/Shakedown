@@ -15,7 +15,7 @@ export default function FlowsSection({ world, onChange }: { world: WorldBody; on
   const add = () => { onChange({ ...world, flows: addTo(list, { id: f.id, trigger: f.trigger, steps: stepsOf(f.steps) }) }); setF({ id: '', trigger: '', steps: '' }); };
   return (
     <div className="grid gap-4">
-      <SectionHead title="Software flows" about="Automations that already run in production with no agent involved. Runs replay them exactly." />
+      <SectionHead title="Software flows" about="Automations that already run in production with no agent involved. Saved with the world. Runs use them once worlds run from their own files." />
       <Card>
         <ItemRows items={list} empty="No software flows yet." onRemove={(i) => onChange({ ...world, flows: removeAt(list, i) })}
           render={(fl) => <span><span className="font-medium">{fl.id}</span> <span className="text-faint">when {fl.trigger} · {fl.steps.length} steps</span></span>} />

@@ -12,7 +12,7 @@ export default function PeopleSection({ world, onChange }: { world: WorldBody; o
   const add = () => { onChange({ ...world, people: addTo(list, { id: f.id, label: f.label, ...(f.role ? { role: f.role } : {}) }) }); setF({ id: '', label: '', role: '' }); };
   return (
     <div className="grid gap-4">
-      <SectionHead title="People" about="Simulated approvers, planners and operators that agents can ask, or must ask. Optional." />
+      <SectionHead title="People" about="Simulated approvers, planners and operators that agents can ask, or must ask. Optional. Saved with the world; runs use them once worlds run from their own files." />
       <Card>
         <ItemRows items={list} empty="No simulated people yet." onRemove={(i) => onChange({ ...world, people: removeAt(list, i) })}
           render={(p) => <span><span className="font-medium">{p.label}</span> <span className="text-faint">{p.role}</span></span>} />

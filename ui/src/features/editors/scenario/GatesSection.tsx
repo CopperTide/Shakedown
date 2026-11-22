@@ -1,4 +1,4 @@
-// Rules that must hold during the run, checked on every agent call.
+// Rules that must hold during the run, saved with the scenario.
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -14,7 +14,7 @@ export default function GatesSection({ scenario, onChange }: { scenario: Scenari
   const add = () => { onChange({ ...scenario, gates: addTo(list, f) }); setF({ rule: '', scope: '', on_breach: 'block' }); };
   return (
     <div className="grid gap-4">
-      <SectionHead title="Gates" about="Rules that must hold during the run. Shakedown checks every agent call against them as it happens." />
+      <SectionHead title="Gates" about="Rules that must hold during the run. Saved with the scenario. Runs check them once worlds run from their own files." />
       <Card>
         <ItemRows items={list} empty="No gates yet." onRemove={(i) => onChange({ ...scenario, gates: removeAt(list, i) })}
           render={(g) => <span><span className="font-medium">{g.rule}</span> <span className="text-faint">· {g.scope} · {g.on_breach === 'block' ? 'blocks' : 'flags'}</span></span>} />

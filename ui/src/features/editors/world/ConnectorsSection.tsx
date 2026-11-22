@@ -46,7 +46,7 @@ export default function ConnectorsSection({ world, onChange }: { world: WorldBod
   const list = world.connectors ?? [];
   return (
     <div className="grid gap-4">
-      <SectionHead title="Connectors" about="The software products agents work against. Runs use a sandboxed copy; real systems are never written to." />
+      <SectionHead title="Connectors" about="The software products agents work against. Saved with the world. Runs use them once worlds run from their own files." />
       <Card>
         <ItemRows items={list} empty="No connectors yet." onRemove={(i) => onChange({ ...world, connectors: removeAt(list, i) })}
           render={(c) => <span><span className="font-medium">{c.label}</span> <span className="font-mono text-2xs text-faint">{c.id} · {c.mode}</span></span>} />

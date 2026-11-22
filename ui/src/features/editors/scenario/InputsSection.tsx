@@ -1,4 +1,4 @@
-// The scenario's inputs: its world, the package task it plays, and the ticket every setup gets.
+// The scenario's inputs: its world, the package task it plays, and the ticket text (runs use the preset task's ticket for now).
 import { listItems } from '@/api/project';
 import { Card } from '@/components/ui/card';
 import { useQuery } from '@/hooks/useQuery';
@@ -11,7 +11,7 @@ export default function InputsSection({ scenario, onChange }: { scenario: Scenar
   const options = [{ value: '', label: 'Choose a world' }, ...(worlds.data?.items ?? []).map((w) => ({ value: w.id, label: w.label }))];
   return (
     <div className="grid gap-4">
-      <SectionHead title="Inputs" about="The ticket every setup gets, written the way you would write it to a person." />
+      <SectionHead title="Inputs" about="The ticket, written the way you would write it to a person. Saved with the scenario. Runs use the ticket of the preset task until worlds run from their own files." />
       <Card>
         <div className="grid gap-3 p-[18px]">
           <ChoiceField label="World" value={scenario.world} options={options} onChange={(v) => onChange(setIn(scenario, ['world'], v))} />

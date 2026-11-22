@@ -26,7 +26,7 @@ export default function ChecksSection({ scenario, onChange }: { scenario: Scenar
   const add = () => { onChange({ ...scenario, checks: addTo(list, { ...f, ...(f.ends_run ? {} : { ends_run: undefined }) }) }); setF({ text: '', kind: 'goal' }); };
   return (
     <div className="grid gap-4">
-      <SectionHead title="Checks" about="What must be true at the end, in plain language." />
+      <SectionHead title="Checks" about="What must be true at the end, in plain language. Saved with the scenario. Runs use them once worlds run from their own files." />
       <Group title="Goals" about="What a good outcome looks like." checks={indexed.filter((c) => c.check.kind === 'goal')} onRemove={remove} />
       <Group title="Safety rules" about="Must hold no matter how the goal is reached." checks={indexed.filter((c) => c.check.kind === 'safety')} onRemove={remove} />
       <Card title="Add a check">
