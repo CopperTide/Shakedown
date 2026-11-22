@@ -84,6 +84,19 @@ pub fn world_epoch_ms(events: &[Event]) -> i64 {
     recorded.unwrap_or_else(|| start.at.timestamp_millis())
 }
 
+/// The world time a restarted part of the run of `events` gets (a fork's, a step's scratch
+/// instance): its run's epoch, and no wall-time speed on a stepped clock.
+pub fn world_time_of(events: &[Event]) -> parts::proto::WorldTimeParams {
+    let speed = match rules(events).stepped {
+        Some(_) => 0.0,
+        None => crate::clock::speed_from_env(),
+    };
+    parts::proto::WorldTimeParams {
+        epoch_ms: world_epoch_ms(events),
+        speed,
+    }
+}
+
 /// The world clock just before step `before_seq`: the `clock_ms` of the last event before it
 /// that has one (a tool call or world event), else 0.
 pub fn clock_at(events: &[Event], before_seq: i64) -> i64 {

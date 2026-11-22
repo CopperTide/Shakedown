@@ -6,7 +6,7 @@
               [--gc-waits-for FILE] [--tool-event KIND] [--system JSON] [--internal-peeks]
               [--http-route HOST=URL ... [--route-env K=V ...] [--route-reads PATTERN ...]
               [--route-honours-readonly] [--route-after-save URL]] [--save-at step|points]
-              [--log-time FILE] [--alert-at MS]
+              [--log-time FILE] [--alert-at MS] [--clock-doc]
       An integration with one counter per instance and tools `poke` (write, adds 1) and `peek`
       (read), named `<P>poke` and `<P>peek` with --prefix. It exits on its N-th call_tool (only
       once across restarts when FILE marks that it did); every `save` after the first N is an
@@ -29,7 +29,8 @@
       appends "start <instance> <epoch_ms> <speed>" (from `world_time`, "none" without it) per `start` and
       "advance <instance> <clock_ms> <wall unix ms>" per `advance` to FILE. With --alert-at MS (and
       --uses-clock), `advance` reports `wake_at_ms` MS until the clock reaches it, then an `alert` event
-      once per instance.
+      once per instance. With --clock-doc (and --uses-clock), `inspect` also has `box/clock` ({"ms": the clock the
+      instance was advanced to}), saves keep the clock and a start from a save takes it back.
   toy.py bench [--name NAME] --integration NAME [--part NAME=INTEGRATION ...] [--gold TOOL [--gold-args JSON]]
                [--config PART=JSON ...] [--clash] [--bench-tool [--tool-part PART]] [--link JSON ...]
                [--gate JSON ...] [--setup JSON ...] [--scored [--two-tasks] [--safety]]
@@ -74,6 +75,7 @@ TOOLS = [
 ]
 EXACT = opt("--exact", "save")
 APPROXIMATE = "--approximate" in ARGS
+CLOCK_DOC = "--clock-doc" in ARGS
 
 
 class Part:
@@ -82,6 +84,7 @@ class Part:
         self.saves_ok = int(opt("--save-fails-after", "-1"))
         self.calls = self.saved = 0
         self.counters, self.saves, self.clocks = {}, {}, {}
+        self.clock_saves = {}
         self.alerted = set()
         self.saved_instances = set()
         self.peeks, self.peek_saves = {}, {}
@@ -116,6 +119,8 @@ class Part:
             raise RpcError(-32001, "the toy can't restore from a save in that mode")
         self.counters[p["instance"]] = 0 if not src else self.lookup(self.saves, src["save"], "save")
         self.peeks[p["instance"]] = self.peek_saves.get(src.get("save"), 0)
+        if CLOCK_DOC and src:
+            self.clocks[p["instance"]] = self.clock_saves.get(src["save"], 0)
         world = p.get("world_time") or {}
         log_time("start %s %s %s" % (p["instance"], world.get("epoch_ms", "none"), world.get("speed", "none")))
         return {}
@@ -179,14 +184,23 @@ class Part:
         self.saves[p["save"]] = self.lookup(self.counters, p["instance"], "instance")
         self.saved_instances.add(p["instance"])
         self.peek_saves[p["save"]] = self.peeks.get(p["instance"], 0)
+        self.clock_saves[p["save"]] = self.clocks.get(p["instance"], 0)
         return {"bytes": 1, "exact": EXACT == "save"}
 
     def inspect(self, p):
         v = self.value(p["target"])
-        keys = p.get("keys") or ["box/n"]
+        keys = p.get("keys") or (["box/n", "box/clock"] if CLOCK_DOC else ["box/n"])
         if any(k.startswith("bad/") for k in keys):
             raise RpcError(-32602, "the toy has no bad keys")
-        return {"docs": {k: ({"n": v} if k == "box/n" else None) for k in keys}}
+        docs = {k: ({"n": v} if k == "box/n" else None) for k in keys}
+        if CLOCK_DOC and "box/clock" in keys:
+            docs["box/clock"] = {"ms": self.clock_of(p["target"])}
+        return {"docs": docs}
+
+    def clock_of(self, target):
+        if "save" in target:
+            return self.clock_saves.get(target["save"], 0)
+        return self.clocks.get(target["instance"], 0)
 
     def diff(self, p):
         if "--bad-diff" in ARGS:

@@ -36,7 +36,7 @@ use crate::restore::{in_shared_saves, keeps_saves};
 
 pub use clocked::PartEvent;
 pub use hosts::{HostRoute, Hosts, HTTP_TOOL};
-pub use ids::{instance_id, new_save_id};
+pub use ids::{instance_id, new_save_id, scratch_instance_id};
 pub use links::link_args;
 pub use plan::{plan, Plan, PlannedPart, Route};
 pub use saving::StepSaves;

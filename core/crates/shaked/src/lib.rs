@@ -8,6 +8,7 @@ pub mod cli;
 pub mod clock;
 pub mod compare;
 pub mod dispatch;
+pub mod docs_at;
 pub mod driver;
 pub mod exec;
 pub mod experiment;

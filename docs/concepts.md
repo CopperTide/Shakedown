@@ -92,6 +92,17 @@ whose world was saved, with the reason "the world was last saved before an earli
 the run's start always restores, from the base. A write whose save failed (a part saved after each step) still
 refuses the fork, as before.
 
+### A clock part's state at a step
+
+A part that uses the clock changes as world time passes, but it is saved only with the steps that write to it (and
+at the end), never on a tick: at 2,880× a tick is ten world minutes, and saving a whole simulation every 200 ms would
+cost more than the run. So to show a clock part at a step (`GET /api/branches/{id}/rows`, a world's views), shaked
+takes its last save at or before the step and, when the step's world clock is later than that save's, starts the save
+in a scratch instance, advances it to the step's clock, inspects it and stops it. That is the state a rerun from that
+step would see, and by the clock contract ([protocol.md](protocol.md#stepped-clock): how advances are split never
+changes the state) the state the run had. Only the steps someone looks at pay for it. A part that restores by replay
+has no exact save to start, and shows as its last save left it.
+
 ## Teams and agents
 
 A team is a description: agents, each with an id, a name, a kind, a model and a prompt. It is not a protocol.

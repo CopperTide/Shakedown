@@ -1,4 +1,6 @@
-//! The docs of some keys of a part as they were just after a step (`GET /api/branches/{id}/rows`).
+//! The docs of some keys of a part as they were just after a step, or at the branch's end
+//! (`GET /api/branches/{id}/rows`); see `crate::docs_at` for how a clock part's state at a step
+//! is read.
 
 use crate::auth::Who;
 use std::{collections::HashMap, sync::Arc};
@@ -13,25 +15,26 @@ use serde_json::{json, Value};
 use super::{branch_or_404, ApiError, ApiResult};
 use crate::{
     app::AppState,
+    docs_at::{self, docs_at, NotThere, Point},
     model::*,
-    recorded::{run_info, saves_at},
-    saves::{self, part_named, part_refusal, world_of},
+    saves::{part_named, part_refusal, world_of},
 };
 
 const MAX_KEYS: usize = 50;
 
-/// A rows request: the step, at most `MAX_KEYS` keys (`<kind>/<id>`), and the part to read.
+/// A rows request: the step (or the end), at most `MAX_KEYS` keys (`<kind>/<id>`), and the part
+/// to read.
 struct RowsQuery {
-    seq: i64,
+    at: Point,
     keys: Vec<String>,
     part: Option<String>,
 }
 
 fn parse_rows_query(q: &HashMap<String, String>) -> Result<RowsQuery, ApiError> {
-    let seq: i64 = q
+    let at = q
         .get("seq")
-        .and_then(|s| s.parse().ok())
-        .ok_or_else(|| ApiError::bad("seq must be an integer"))?;
+        .and_then(|s| Point::parse(s))
+        .ok_or_else(|| ApiError::bad("seq must be an integer or final"))?;
     let keys: Vec<String> = q
         .get("keys")
         .map(String::as_str)
@@ -51,16 +54,16 @@ fn parse_rows_query(q: &HashMap<String, String>) -> Result<RowsQuery, ApiError> 
         )));
     }
     let part = q.get("part").filter(|p| !p.is_empty()).cloned();
-    Ok(RowsQuery { seq, keys, part })
+    Ok(RowsQuery { at, keys, part })
 }
 
 /// The part a rows request reads: `?part=`, else the step's part, else the world's first part.
 fn rows_part<'a>(
     asked: Option<&str>,
-    step: &Event,
+    step: Option<&Event>,
     world: &'a [WorldPart],
 ) -> Result<&'a WorldPart, ApiError> {
-    match asked.or(step.payload["part"].as_str()) {
+    match asked.or(step.and_then(|e| e.payload["part"].as_str())) {
         Some(n) => part_named(world, n)
             .ok_or_else(|| ApiError::bad(format!("there is no part {n} in this world"))),
         None => world
@@ -69,9 +72,12 @@ fn rows_part<'a>(
     }
 }
 
-/// A part's refusal of the keys (`-32602`) is a bad request with the part's message; a save that
-/// is gone (`-32002`) a conflict.
+/// A point with no state is a bad request saying why; a part's refusal of the keys (`-32602`) is
+/// a bad request with the part's message; a save that is gone (`-32002`) a conflict.
 fn rows_error(e: anyhow::Error) -> ApiError {
+    if let Some(n) = e.downcast_ref::<NotThere>() {
+        return ApiError::bad(n.to_string());
+    }
     match part_refusal(&e) {
         Some((-32602, message)) => ApiError::bad(message),
         Some((-32002, _)) => ApiError::conflict("the saved state for that step is gone"),
@@ -79,27 +85,38 @@ fn rows_error(e: anyhow::Error) -> ApiError {
     }
 }
 
-/// The docs of the request's keys in the save holding the part's state just after the step.
-async fn read_rows(state: &AppState, events: &[Event], q: &RowsQuery) -> Result<Value, ApiError> {
-    let step = events
-        .iter()
-        .find(|e| e.seq == q.seq)
-        .ok_or_else(|| ApiError::bad("there is no step with that number on this branch"))?;
-    let saves = saves_at(events, q.seq, &run_info(events).base).map_err(|n| {
-        ApiError::bad(format!(
-            "the world after that step can't be restored: the write at step {} to the part {} has no save",
-            n.seq, n.part
-        ))
-    })?;
+/// The docs of the request's keys in the part's state at the request's point.
+async fn read_rows(
+    state: &AppState,
+    branch: &str,
+    events: &[Event],
+    q: &RowsQuery,
+) -> Result<Value, ApiError> {
+    let step = match q.at {
+        Point::Step(seq) => Some(
+            (events.iter().find(|e| e.seq == seq))
+                .ok_or_else(|| rows_error(NotThere::NoStep.into()))?,
+        ),
+        Point::Final => None,
+    };
     let world = world_of(&state.hub, events).await?;
     let part = rows_part(q.part.as_deref(), step, &world)?;
-    let save = saves
-        .get(&part.part)
-        .ok_or_else(|| ApiError::bad(format!("there is no save of the part {}", part.part)))?;
-    let docs = saves::inspect(&state.hub, &part.integration, save, &q.keys)
+    if q.keys.is_empty() {
+        docs_at::save_at(branch, events, &part.part, q.at).map_err(|n| rows_error(n.into()))?;
+        return Ok(json!({"seq": seq_of(q.at), "rows": {}}));
+    }
+    let docs = docs_at(&state.hub, branch, events, part, q.at, &q.keys)
         .await
         .map_err(rows_error)?;
-    Ok(json!({"seq": q.seq, "rows": docs}))
+    Ok(json!({"seq": seq_of(q.at), "rows": docs}))
+}
+
+/// The point as the answer names it: the step's seq, or `final`.
+fn seq_of(at: Point) -> Value {
+    match at {
+        Point::Step(seq) => json!(seq),
+        Point::Final => json!("final"),
+    }
 }
 
 pub(super) async fn rows(
@@ -111,5 +128,5 @@ pub(super) async fn rows(
     let q = parse_rows_query(&q)?;
     branch_or_404(&state, &caller, &id).await?;
     let events = state.store.at(&caller).events(&id).await?;
-    Ok(Json(read_rows(&state, &events, &q).await?))
+    Ok(Json(read_rows(&state, &id, &events, &q).await?))
 }

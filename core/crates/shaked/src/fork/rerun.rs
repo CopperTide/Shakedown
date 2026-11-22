@@ -226,18 +226,6 @@ fn start_error(e: anyhow::Error) -> ForkError {
     }
 }
 
-/// A fork's world time: its run's epoch, and no wall-time speed on a stepped clock.
-fn world_time_of(events: &[Event]) -> parts::proto::WorldTimeParams {
-    let speed = match crate::recorded::rules(events).stepped {
-        Some(_) => 0.0,
-        None => crate::clock::speed_from_env(),
-    };
-    parts::proto::WorldTimeParams {
-        epoch_ms: crate::recorded::world_epoch_ms(events),
-        speed,
-    }
-}
-
 /// Starts the new branch's world: each part from its save and moved to the fork point's clock,
 /// or fresh and then replayed from the branch's recorded `events` up to the fork point. On a
 /// failure every instance is stopped.
@@ -255,7 +243,7 @@ pub async fn start_world(
         Some(p) => p,
         None => world::plan(&hub, &rerun.bench).await?,
     };
-    planned.world_time = Some(world_time_of(events));
+    planned.world_time = Some(crate::recorded::world_time_of(events));
     let world = World::start_planned(hub, &rerun.bench, planned, new_id, seed, from)
         .await
         .map_err(start_error)?;

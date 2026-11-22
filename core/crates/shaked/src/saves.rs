@@ -7,8 +7,8 @@ use std::{collections::BTreeSet, future::Future, time::Duration};
 use anyhow::{Context, Result};
 use parts::{
     proto::{
-        kept, DiffParams, Differing, Docs, GcParams, GcResult, InspectParams, SaveId, Target,
-        Usage, WorldPart,
+        kept, AdvanceParams, DiffParams, Differing, Docs, GcParams, GcResult, InspectParams,
+        SaveId, StartParams, Target, Usage, WorldPart,
     },
     request::{GetUsage, Stop},
     CallError, Hub, Request,
@@ -79,6 +79,62 @@ pub async fn inspect(
     };
     let d: Docs = request(hub, integration, &params).await?;
     Ok(d.docs)
+}
+
+/// The docs of `keys` in `target`, every doc for no keys.
+async fn inspect_target(
+    hub: &Hub,
+    integration: &str,
+    target: Target,
+    keys: &[String],
+) -> Result<Map<String, Value>> {
+    let params = InspectParams {
+        target,
+        keys: keys.to_vec(),
+    };
+    let d: Docs = request(hub, integration, &params).await?;
+    Ok(d.docs)
+}
+
+/// The docs of `keys` in `save`, every doc for no keys.
+pub async fn inspect_all(
+    hub: &Hub,
+    integration: &str,
+    save: &str,
+    keys: &[String],
+) -> Result<Map<String, Value>> {
+    inspect_target(hub, integration, saved(save), keys).await
+}
+
+/// The docs of `keys` (every doc for none) of a clock part as it stands once moved on from a save
+/// to `clock_ms`: `start` (from the save, in a scratch instance) started, advanced, inspected and
+/// stopped, also when a step fails. The events the advance reports are dropped: they were recorded.
+pub async fn inspect_advanced(
+    hub: &Hub,
+    integration: &str,
+    start: &StartParams,
+    clock_ms: i64,
+    keys: &[String],
+) -> Result<Map<String, Value>> {
+    let instance = start.instance.clone();
+    let docs = async {
+        let _: Value = request(hub, integration, start).await?;
+        let advance = AdvanceParams {
+            instance: instance.clone(),
+            clock_ms,
+        };
+        let _: Value = request(hub, integration, &advance).await?;
+        let target = Target::Instance {
+            instance: instance.clone(),
+        };
+        inspect_target(hub, integration, target, keys).await
+    }
+    .await;
+    let stopped: Result<Value> = request(hub, integration, &Stop::instance(&instance)).await;
+    if let Err(e) = stopped {
+        eprintln!("stopping the scratch instance {instance}: {e:#}");
+    }
+    docs
 }
 
 /// The keys that differ between two saves of one integration.

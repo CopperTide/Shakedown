@@ -34,6 +34,11 @@ pub fn instance_id(branch: &str, part: &str) -> String {
     id_for("b", branch, part)
 }
 
+/// A fresh instance of `part` outside any branch's world (a recorded step's state, read once).
+pub fn scratch_instance_id(part: &str) -> String {
+    id_for("v", &uuid::Uuid::new_v4().simple().to_string(), part)
+}
+
 /// A fresh save id.
 pub fn new_save_id() -> String {
     format!("s_{}", uuid::Uuid::new_v4().simple())

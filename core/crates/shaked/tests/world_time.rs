@@ -20,11 +20,17 @@ struct TimeFx {
 
 impl TimeFx {
     async fn new(tag: &str, bench_args: &[&str]) -> TimeFx {
+        TimeFx::with_part(tag, &[], bench_args).await
+    }
+
+    /// `new` with the clock part also started with `part_args`.
+    async fn with_part(tag: &str, part_args: &[&str], bench_args: &[&str]) -> TimeFx {
         let log =
             std::env::temp_dir().join(format!("shaked-time-{tag}-{}.log", std::process::id()));
         let _ = std::fs::remove_file(&log);
         let log_arg = log.to_string_lossy().into_owned();
-        let part = ["--uses-clock", "--log-time", log_arg.as_str()];
+        let mut part = vec!["--uses-clock", "--log-time", log_arg.as_str()];
+        part.extend_from_slice(part_args);
         let root = packages::toy_world(tag, &part, bench_args);
         let fx = AppFx::idle("worldtime", tag)
             .root(root)
@@ -195,6 +201,50 @@ fn a_finished_runs_clock_parts_are_scored_at_the_frozen_clock() {
         assert_eq!(last[2].parse::<i64>().unwrap(), frozen);
         let check = evs.iter().find(|e| e.kind == EventKind::Check).unwrap();
         assert!(end.seq < check.seq, "moved before it was scored");
+    })
+}
+
+/// The clock `box/clock` shows in the rows of `branch` at `at` (a step's seq, or `final`).
+async fn clock_row(fx: &AppFx, branch: &str, at: &str) -> i64 {
+    let path = format!("/api/branches/{branch}/rows?seq={at}&keys=box/clock&part=box");
+    let (status, v) = fx.get(&path).await;
+    assert_eq!(status, 200, "{v}");
+    v["rows"]["box/clock"]["ms"].as_i64().unwrap()
+}
+
+/// Rows show a clock part as it stands at each step, not as its last save left it: a world event
+/// between saves reads the part at that event's clock, and `seq=final` reads the final state.
+#[test]
+fn rows_show_a_clock_part_at_the_steps_clock_and_at_the_end() {
+    run(async {
+        let fx = TimeFx::with_part("rows", &["--event-every", "--clock-doc"], &[]).await;
+        let ctx = fx.fx.state.live.get(&fx.branch).unwrap();
+        let exec = shaked::exec::ToolExec::new(fx.fx.state.store.clone());
+        tokio::time::sleep(Duration::from_millis(250)).await;
+        assert!(exec.run(&ctx, "planner", "poke", json!({}), None).await["error"].is_null());
+        tokio::time::sleep(Duration::from_millis(600)).await;
+        let evs = records(&fx.fx.state.store)
+            .events(&fx.branch)
+            .await
+            .unwrap();
+        let poke = evs.iter().rfind(|e| e.kind == EventKind::ToolCall).unwrap();
+        let clock = |e: &Event| e.payload["clock_ms"].as_i64().unwrap();
+        let seq = poke.seq.to_string();
+        assert_eq!(clock_row(&fx.fx, &fx.branch, &seq).await, clock(poke));
+        let later = (evs.iter().rev())
+            .find(|e| e.kind == EventKind::WorldEvent && clock(e) > clock(poke))
+            .expect("a tick's event after the poke");
+        let at = later.seq.to_string();
+        assert_eq!(clock_row(&fx.fx, &fx.branch, &at).await, clock(later));
+        assert_eq!(fx.on(&fx.branch, "finish").await.0, 200);
+        let evs = records(&fx.fx.state.store)
+            .events(&fx.branch)
+            .await
+            .unwrap();
+        let end = (evs.iter().rev())
+            .find(|e| e.kind == EventKind::WorldEvent && e.payload["data"]["reason"] == "end")
+            .unwrap();
+        assert_eq!(clock_row(&fx.fx, &fx.branch, "final").await, clock(end));
     })
 }
 
