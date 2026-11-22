@@ -114,6 +114,7 @@ fn only_an_external_run_takes_another_team_and_not_with_changes() {
         at_seq: 1,
         changes: HashMap::new(),
         restore: RestoreMode::Exact,
+        disruptions: Default::default(),
         team: Some(Team {
             id,
             ..team(AgentKind::Open)

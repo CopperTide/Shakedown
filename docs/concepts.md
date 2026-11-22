@@ -284,6 +284,12 @@ a restore mode.
   belongs to the old provider, unless the same change sets one; only OpenRouter has a default model, so the web UI
   always sends a model with a provider. Naming the agent's own provider is no change.
 - Changing `read_only` is treated like a prompt change; setting it to what the agent already has is no change.
+- `disruptions: {add, remove}` changes the world's scheduled disruptions from the fork point on: `add` takes options
+  of the benchmark's scenario (as a run's `scenario` does), `remove` the ids of disruptions the branch's setups armed
+  before the fork point (one that already fired is dropped too, but what it changed stays). The change is one call of
+  each part's scenario tool, recorded as a setup step at the new branch's start ([protocol.md](protocol.md), "A
+  run's scenario"); a part whose tool can't take it refuses the fork. Retail's faults take it; the scenario tools on
+  the Python kit's `jsonstate` (utility, OT network, roster, the pharma parts, the hub) don't yet.
 - `tools` gives the agent exactly the world tools it lists from the fork on (an empty list: every tool again), like
   a setup's `tools`; it is treated like a prompt change, the same list as the agent's is no change, and a tool the
   world doesn't offer agents is refused (400).

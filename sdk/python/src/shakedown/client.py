@@ -24,6 +24,7 @@ from .models import (
     RunSummary,
     Task,
     Team,
+    as_disruption_change,
     as_scenario,
     as_team,
 )
@@ -557,11 +558,15 @@ class Branch:
         changes: Optional[dict[str, Union[Change, dict[str, Any]]]] = None,
         restore: str = "exact",
         team: TeamLike = None,
+        add: Optional[Sequence[Any]] = None,
+        remove: Optional[Sequence[str]] = None,
     ) -> "Branch":
         """A new branch from just before step ``at_seq``, with ``changes`` to agents
         (``{agent id: Change(...)}``) or, for an external run, another ``team``. The world is
         restored ``exact`` or ``approximate``; a part that can't be is refused (:class:`Conflict`).
-        ``restore="none"`` (evaluation only) leaves the world as this branch ended.
+        ``restore="none"`` (evaluation only) leaves the world as this branch ended. ``add`` (scenario
+        options, as a run's ``scenario`` takes them) and ``remove`` (ids of disruptions armed before
+        ``at_seq``) change the scheduled disruptions from the fork point on.
         The fork may start earlier than asked (``fork_info.moved_from``/``reason``). A fork of an
         external run stays live: its ``agents`` hold each agent's endpoints and ``history``."""
         body: dict[str, Any] = {"at_seq": at_seq, "restore": restore}
@@ -571,6 +576,9 @@ class Branch:
             }
         if team is not None:
             body["team"] = as_team(team)
+        disruptions = as_disruption_change(add, remove)
+        if disruptions:
+            body["disruptions"] = disruptions
         ans = self.shakedown.post(f"/api/branches/{self.id}/fork", body)
         info = ForkInfo(ans["start_seq"], ans.get("moved_from"), ans.get("reason"))
         b = Branch(self.shakedown, ans["branch_id"], self.run_id, task_id=self.task_id, fork=info)

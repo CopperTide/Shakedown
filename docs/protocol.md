@@ -225,6 +225,13 @@ builder shows them, and a run or suite names the ones it chose.
   disruption}]}` (`params` with the defaults filled in, `disruption` the filled template); a run without one has no
   `scenario`. Forks and replays keep it: a fork's record starts with its parent's events (so with its `RunStart`), and
   its parts restore from saves made after the setup or repeat the setup's recorded calls.
+- A fork may change the schedule from its start on (`POST /api/branches/{id}/fork` with `disruptions: {add, remove}`):
+  shaked calls the scenario tool `setup` names for each part concerned, once, on the new branch's world before any
+  agent, with `{disruptions: [the added options' filled templates], remove: [ids]}` (not the template's `args`), and
+  records it as a setup step. A part that takes it drops the disruptions `remove` names (fired or not) and arms the
+  others as at setup; one that can't answers an error: the fork is refused (409) and its new branch ends
+  `infra_error` saying why. Retail takes it; the Python kit's
+  `jsonstate` scenario tools need `name`, so they don't yet.
 
 ### Scheduled disruptions
 

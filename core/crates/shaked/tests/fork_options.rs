@@ -130,3 +130,76 @@ fn restore_none_leaves_the_world_as_the_parent_ended() {
         assert_eq!(status, 409, "{v}");
     })
 }
+
+/// The order's status as `agent` reads it (`ORDER` is delivered).
+async fn status(agent: &Agent) -> Value {
+    let o = agent
+        .call("get_order_details", json!({"order_id": ORDER}))
+        .await;
+    o["structuredContent"]["status"].clone()
+}
+
+/// A finished run whose first order read met fault X1 (a stale status): the branch and the
+/// read's seq.
+async fn stale_read(fx: &AppFx) -> (String, i64) {
+    let x1 = json!({"scenario": {"disruptions": [{"id": "stale-order-status"}]}});
+    let (branch, solo) = start(fx, x1).await;
+    assert_eq!(status(&solo).await, "pending", "the stale status");
+    finish(fx, &branch).await;
+    let evs = events(fx, &branch).await;
+    let read = evs
+        .iter()
+        .find(|e| e.payload["name"] == "get_order_details");
+    (branch, read.unwrap().seq)
+}
+
+#[test]
+fn a_fork_may_remove_a_disruption_from_its_start_on() {
+    run(async {
+        let fx = setup("unplant").await;
+        let (branch, at) = stale_read(&fx).await;
+        let (same, agent) = fork(&fx, &branch, json!({"at_seq": at})).await;
+        assert_eq!(
+            status(&agent).await,
+            "pending",
+            "the same schedule as the parent"
+        );
+        finish(&fx, &same).await;
+        let remove = json!({"remove": ["stale-order-status"]});
+        let body = json!({"at_seq": at, "disruptions": remove});
+        let (child, agent) = fork(&fx, &branch, body).await;
+        assert_eq!(status(&agent).await, "delivered", "the true status");
+        let evs = events(&fx, &child).await;
+        let step = evs
+            .iter()
+            .find(|e| e.seq >= at && e.agent.as_deref() == Some("setup"));
+        let step = step.expect("the change is recorded as a setup step");
+        assert_eq!(
+            step.payload["args"]["remove"],
+            json!(["stale-order-status"])
+        );
+        finish(&fx, &child).await;
+        let unknown = json!({"at_seq": at, "disruptions": {"remove": ["nope"]}});
+        let (status, v) = on(&fx, &branch, "fork", unknown).await;
+        assert_eq!(status, 400, "{v}");
+    })
+}
+
+#[test]
+fn a_fork_may_add_a_disruption_from_its_start_on() {
+    run(async {
+        let fx = setup("plant").await;
+        let (branch, solo) = start(&fx, json!({})).await;
+        assert_eq!(status(&solo).await, "delivered");
+        finish(&fx, &branch).await;
+        let at = first_call(&events(&fx, &branch).await);
+        let add = json!({"add": [{"id": "order-read-timeout"}]});
+        let (child, agent) = fork(&fx, &branch, json!({"at_seq": at, "disruptions": add})).await;
+        let o = agent
+            .call("get_order_details", json!({"order_id": ORDER}))
+            .await;
+        assert_eq!(o["isError"], true, "{o}");
+        assert_eq!(status(&agent).await, "delivered", "it fires once");
+        finish(&fx, &child).await;
+    })
+}

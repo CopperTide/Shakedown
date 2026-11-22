@@ -7,7 +7,7 @@ import pytest
 from shakedown import Agent, Change, Disruption, Scenario, Team
 from shakedown.errors import BadRequest, Conflict, DiskFull, NotFound, from_status, ApiError
 from shakedown.export import branch_row, event_rows
-from shakedown.models import BranchRecord, CheckResult, Event, as_scenario, as_team
+from shakedown.models import BranchRecord, CheckResult, Event, as_disruption_change, as_scenario, as_team
 from shakedown.sse import parse
 from shakedown.mcp import Tool, ToolResult
 from shakedown.env import _messages_for, _parse_action, END
@@ -52,6 +52,10 @@ def test_scenarios_and_changes():
     assert Change(model="", prompt="new").to_dict() == {"model": "", "prompt": "new"}
     assert Change(tools=["get_order_details"]).to_dict() == {"tools": ["get_order_details"]}
     assert Change(tools=[]).to_dict() == {"tools": []}
+    assert as_disruption_change() is None
+    assert as_disruption_change(["x1", Disruption("x2", {"after": 1})], ["x3"]) == {
+        "add": [{"id": "x1"}, {"id": "x2", "params": {"after": 1}}], "remove": ["x3"]}
+    assert as_disruption_change(remove=["x3"]) == {"add": [], "remove": ["x3"]}
 
 
 def test_check_result_named_and_gold():

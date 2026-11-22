@@ -213,6 +213,7 @@ impl From<ForkError> for ApiError {
             | ForkError::TeamChange(_)
             | ForkError::UnknownAgent(_)
             | ForkError::UnknownTool(_)
+            | ForkError::Disruptions(_)
             | ForkError::MissingHandoff(_)
             | ForkError::NoRestorePoint { .. } => StatusCode::BAD_REQUEST,
             ForkError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
@@ -660,6 +661,9 @@ struct ForkReq {
     /// Another team, for a run an external system drives (in place of `changes`).
     #[serde(default)]
     team: Option<Team>,
+    /// Disruptions to add or remove from the fork point on.
+    #[serde(default)]
+    disruptions: fork::DisruptionChange,
 }
 
 /// The branch to fork: 404 for an unknown branch and 409 for a running one; these come before
@@ -730,6 +734,7 @@ async fn fork_admitted(
         changes: req.changes,
         restore: req.restore,
         team: req.team,
+        disruptions: req.disruptions,
     };
     let resp = detached(async move {
         let _permit = permit;

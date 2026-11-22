@@ -20,7 +20,9 @@ tools, and acts on that call's answer only:
 | `variant-out-of-stock` | `get_product_details` | `variant_unavailable` | the product's first variant in stock (by id) as out of stock |
 | `lost-write` | every write tool | `lost_write` | the write's usual answer, but nothing is written and the step names no written key |
 
-When one fires, the call records a `disruption` world event (`data: {id, kind}`).
+When one fires, the call records a `disruption` world event (`data: {id, kind}`). A fork may add or remove them
+from its start on (`disruptions: {add, remove}`): `retail_scenario` then gets `{disruptions, remove}`, drops the
+removed ids and arms the added ones, all or nothing.
 
 ## Tests
 

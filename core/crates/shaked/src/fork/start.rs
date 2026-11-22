@@ -7,8 +7,8 @@ use std::{collections::HashMap, sync::Arc};
 use serde::Serialize;
 
 use super::{
-    apply_changes, part_plans, prepare, rerun, settle_changes, ForkError, ForkPlan, ForkRequest,
-    PartPlan, Rerun, TEAM_AND_CHANGES, TEAM_NOT_EXTERNAL,
+    apply_changes, disruptions, part_plans, prepare, rerun, settle_changes, ForkError, ForkPlan,
+    ForkRequest, PartPlan, Rerun, TEAM_AND_CHANGES, TEAM_NOT_EXTERNAL,
 };
 use crate::{
     app::AppState,
@@ -52,6 +52,7 @@ pub async fn fork(
         changes,
         restore,
         team: None,
+        disruptions: Default::default(),
     };
     let local = Arc::new(crate::auth::Caller::person());
     fork_with(state, &local, branch_id, req).await
@@ -70,16 +71,17 @@ pub async fn fork_with(
     settle_changes(&parent.team, &mut req.changes, &state.config.providers);
     let events = records.events(branch_id).await?;
     let mut rerun = prepare(state, records, &parent, &events, &req).await?;
+    let start = rerun.plan.start_seq;
+    let schedule = disruptions::calls(&req.disruptions, &rerun.bench, &events, start);
+    let schedule = schedule.map_err(ForkError::Disruptions)?;
     let task_id = task_of(records, &events, &parent).await?;
     let team = new_team(&parent.team, &events, &req)?;
     let new_id = create_child(records, &parent, &rerun, &team, &req).await?;
     let (world, restore_ms) =
         start_child_world(state, records, &events, &parent.id, &new_id, &mut rerun).await?;
-    let ctx = BranchCtx::new(new_id, Arc::new(world), team, task_id.clone())
-        .with_rules(recorded::rules(&events))
-        .with_clock(BranchClock::from_env(rerun.clock_ms))
-        .with_caller(scope.clone());
-    ctx.overhead.add(Cat::Restore, restore_ms);
+    let ctx = BranchCtx::new(new_id, Arc::new(world), team, task_id.clone());
+    let ctx = child_ctx(ctx, &events, &rerun, scope, restore_ms);
+    reschedule(state, &ctx, &schedule).await?;
     if ctx.rules.runner == Runner::External {
         let conn = ctx.rules.connection.clone();
         let mut res = live_child(state, ctx, rerun.plan, &events).await;
@@ -91,6 +93,44 @@ pub async fn fork_with(
         return Ok(res);
     }
     Ok(spawn_child(state, ctx, rerun.plan))
+}
+
+/// The new branch's context: the run's rules, the clock at the fork point, the caller, and the
+/// time restoring took.
+fn child_ctx(
+    ctx: BranchCtx,
+    events: &[Event],
+    rerun: &Rerun,
+    scope: &Arc<Caller>,
+    restore_ms: f64,
+) -> BranchCtx {
+    let ctx = ctx
+        .with_rules(recorded::rules(events))
+        .with_clock(BranchClock::from_env(rerun.clock_ms))
+        .with_caller(scope.clone());
+    ctx.overhead.add(Cat::Restore, restore_ms);
+    ctx
+}
+
+/// Makes the fork's change to the scheduled disruptions on the new branch's world (its setup
+/// steps), before any agent. A part that refuses it stops the world and ends the branch
+/// `infra_error` saying why.
+async fn reschedule(
+    state: &AppState,
+    ctx: &BranchCtx,
+    calls: &[parts::proto::SetupCall],
+) -> Result<(), ForkError> {
+    let exec = crate::exec::ToolExec::new(state.store.clone());
+    let Err(e) = exec.setup(ctx, calls).await else {
+        return Ok(());
+    };
+    ctx.world.stop().await;
+    runner::setup_failed(ctx.records(&state.store), &ctx.branch_id, e.clone()).await;
+    let part = calls.first().map(|c| c.part.clone()).unwrap_or_default();
+    Err(ForkError::Refused(crate::restore::Refused {
+        part,
+        reason: e,
+    }))
 }
 
 /// Starts the Code connection `conn_id`'s driver again for the new branch `branch_id` of a fork
@@ -180,6 +220,7 @@ pub async fn restore_preview(
         changes: HashMap::new(),
         restore,
         team: None,
+        disruptions: Default::default(),
     };
     let rerun = prepare(state, records, &branch, &events, &req).await?;
     Ok(part_plans(&rerun, &events))

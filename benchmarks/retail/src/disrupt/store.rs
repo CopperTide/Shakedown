@@ -22,6 +22,16 @@ pub async fn load(c: &Client) -> Result<Vec<Disruption>> {
     Ok(docs.map(serde_json::from_value).collect::<Result<_, _>>()?)
 }
 
+/// Drops the disruptions `ids` (an id not armed is no change).
+pub async fn remove(c: &Client, ids: &[String]) -> Result<()> {
+    if ids.is_empty() || load(c).await?.is_empty() {
+        return Ok(());
+    }
+    let delete = format!("DELETE FROM {TABLE} WHERE id = ANY($1)");
+    c.execute(&delete, &[&ids]).await?;
+    Ok(())
+}
+
 /// Writes `changed` back (adding new ones).
 pub async fn save(c: &Client, changed: &[Disruption]) -> Result<()> {
     if changed.is_empty() {

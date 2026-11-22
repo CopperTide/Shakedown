@@ -2,6 +2,7 @@
 //! world restored as it was just before step N: exactly (from saves, or by replay), or
 //! approximately when asked.
 
+mod disruptions;
 mod error;
 mod exact;
 mod plan;
@@ -10,6 +11,7 @@ mod start;
 #[cfg(test)]
 mod tests;
 
+pub use disruptions::DisruptionChange;
 pub use error::{ForkError, TEAM_AND_CHANGES, TEAM_NOT_EXTERNAL};
 pub use plan::{
     apply_changes, plan_fork, plan_fork_with, settle_changes, ForkPlan, REASON_AGENT_RESTART,

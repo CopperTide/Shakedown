@@ -38,35 +38,56 @@ fn with_keys(mut writes: Vec<String>, ds: &[Disruption]) -> Vec<String> {
     writes
 }
 
-/// Arms `args.disruptions` (refusing them all if one is bad or an id is taken).
+/// Drops the disruptions `args.remove` names (a fork's change) and arms `args.disruptions`, or
+/// refuses the lot (one is bad, or an id is taken).
 pub async fn arm(c: &Client, args: &Value) -> Result<Answer> {
-    let Some(given) = args["disruptions"].as_array() else {
-        return Ok(Answer::refused("disruptions must be a list".into()));
-    };
-    let new: Result<Vec<Disruption>, String> = given.iter().map(checked).collect();
-    let new = match new {
-        Ok(new) => new,
+    let armed = store::load(c).await?;
+    let (removed, new) = match asked(args, &armed) {
+        Ok(asked) => asked,
         Err(e) => return Ok(Answer::refused(e)),
     };
-    let mut ids: Vec<String> = store::load(c).await?.into_iter().map(|d| d.id).collect();
-    ids.extend(new.iter().map(|d| d.id.clone()));
-    let mut unique = ids.clone();
-    unique.sort();
-    unique.dedup();
-    if unique.len() != ids.len() {
-        return Ok(Answer::refused("two disruptions have the same id".into()));
-    }
+    store::remove(c, &removed).await?;
     store::save(c, &new).await?;
+    let gone = removed.iter().map(|id| format!("_disruption/{id}"));
     let outcome = ToolOutcome {
-        result: Some(json!({"armed": new.len()})),
+        result: Some(json!({"armed": new.len(), "removed": removed})),
         error: None,
         reads: vec![],
-        writes: with_keys(vec![], &new),
+        writes: with_keys(gone.collect(), &new),
     };
     Ok(Answer {
         outcome,
         events: vec![],
     })
+}
+
+/// The ids to remove and the disruptions to arm, checked against those `armed`.
+fn asked(args: &Value, armed: &[Disruption]) -> Result<(Vec<String>, Vec<Disruption>), String> {
+    let removed = ids(&args["remove"]).ok_or("remove must be a list of disruption ids")?;
+    let given = args["disruptions"].as_array();
+    let given = given.ok_or("disruptions must be a list")?;
+    let new: Vec<Disruption> = given.iter().map(checked).collect::<Result<_, _>>()?;
+    let kept = armed
+        .iter()
+        .map(|d| &d.id)
+        .filter(|id| !removed.contains(id));
+    let mut ids: Vec<&String> = kept.chain(new.iter().map(|d| &d.id)).collect();
+    let n = ids.len();
+    ids.sort();
+    ids.dedup();
+    if ids.len() != n {
+        return Err("two disruptions have the same id".into());
+    }
+    Ok((removed, new))
+}
+
+/// The ids of `remove`: none when absent, None when it isn't a list of text.
+fn ids(remove: &Value) -> Option<Vec<String>> {
+    match remove {
+        Value::Null => Some(vec![]),
+        Value::Array(ids) => ids.iter().map(|i| i.as_str().map(str::to_string)).collect(),
+        _ => None,
+    }
 }
 
 /// An agent's call of `name`: the disruptions it fires act on its answer, and every one it

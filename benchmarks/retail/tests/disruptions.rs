@@ -76,3 +76,34 @@ async fn a_bad_or_taken_disruption_is_refused_and_arms_nothing() {
         "nothing was armed"
     );
 }
+
+#[tokio::test]
+async fn a_removed_disruption_no_longer_fires() {
+    let db = TestDb::seeded("disrupt_rm").await;
+    call(
+        &db.url,
+        "retail_scenario",
+        json!({"disruptions": [timeout_after(0)]}),
+    )
+    .await;
+    let removed = call(
+        &db.url,
+        "retail_scenario",
+        json!({"disruptions": [], "remove": ["slow"]}),
+    )
+    .await;
+    assert_eq!(
+        (removed.error, removed.writes),
+        (None, vec!["_disruption/slow".to_string()])
+    );
+    let read = call(
+        &db.url,
+        "get_order_details",
+        json!({"order_id": "#W2378156"}),
+    )
+    .await;
+    assert!(read.error.is_none() && read.events.is_empty());
+    // An id freed by a removal may be armed again.
+    let again = json!({"disruptions": [timeout_after(0)], "remove": []});
+    assert_eq!(call(&db.url, "retail_scenario", again).await.error, None);
+}

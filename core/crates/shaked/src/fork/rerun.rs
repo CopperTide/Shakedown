@@ -30,6 +30,8 @@ pub struct ForkRequest {
     /// Another team for the new branch, in place of `changes` (only for a run an external
     /// system drives: how its agents resume is that system's choice).
     pub team: Option<Team>,
+    /// The scheduled disruptions the new branch adds or removes from its start on.
+    pub disruptions: super::DisruptionChange,
 }
 
 /// How one part of the new world is restored.
