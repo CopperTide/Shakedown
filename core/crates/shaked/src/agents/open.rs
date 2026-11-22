@@ -15,7 +15,7 @@ use crate::{
     app::AppState,
     exec::{tool_schemas, BranchCtx, ToolExec, FINISH, HANDOFF},
     model::{add_cost, AgentSpec, TokenUsage},
-    providers::Provider,
+    providers::{Provider, ProviderConfig},
 };
 
 pub const MAX_MODEL_CALLS: usize = 40;
@@ -100,7 +100,9 @@ impl Driver for OpenDriver {
 
     fn session(&self, start: SessionStart) -> Result<Box<dyn Session>, String> {
         let state = self.state.upgrade().ok_or("server is shutting down")?;
-        let lp = Loop::new(state, start.branch, &start.spec).map_err(|f| f.split().0)?;
+        let providers = &state.config.providers;
+        let lp = Loop::new(state.clone(), start.branch, &start.spec, providers)
+            .map_err(|f| f.split().0)?;
         let system = json!({"role": "system", "content": start.spec.prompt});
         Ok(Box::new(OpenSession {
             lp,
@@ -317,8 +319,13 @@ struct Loop {
 }
 
 impl Loop {
-    fn new(state: Arc<AppState>, branch: Arc<BranchCtx>, spec: &AgentSpec) -> Result<Loop, Fault> {
-        let (provider, model) = provider_and_model(&state, spec)?;
+    fn new(
+        state: Arc<AppState>,
+        branch: Arc<BranchCtx>,
+        spec: &AgentSpec,
+        providers: &ProviderConfig,
+    ) -> Result<Loop, Fault> {
+        let (provider, model) = provider_and_model(providers, spec)?;
         Ok(Loop {
             url: Gateway {
                 url: gateway_url(&state, &branch.branch_id, &spec.id),
@@ -398,7 +405,9 @@ impl OpenDriver {
 
     async fn drive(&self, run: &AgentRun, totals: &mut Totals) -> Result<(), Fault> {
         let state = self.state.upgrade().ok_or("server is shutting down")?;
-        let lp = Loop::new(state, run.branch.clone(), &run.spec)?;
+        // The caller's own keys are known here, so an agent may name one (`key:<name>`).
+        let providers = crate::providers::keys::config_for(&state, &run.branch.caller).await;
+        let lp = Loop::new(state, run.branch.clone(), &run.spec, &providers)?;
         let mut messages = initial_messages(run);
         lp.until_done(&mut messages, totals).await.map(drop)
     }
@@ -407,14 +416,11 @@ impl OpenDriver {
 /// The agent's provider, and its model, else the provider's default; an error when the
 /// provider is unknown or has no default.
 fn provider_and_model<'a>(
-    state: &AppState,
+    providers: &ProviderConfig,
     spec: &'a AgentSpec,
 ) -> Result<(Provider, &'a str), Fault> {
     // The gateway resolves the real provider with your keys; this one prices the calls.
-    let provider = state
-        .config
-        .providers
-        .resolve_pricing(spec.provider.as_deref())?;
+    let provider = providers.resolve_pricing(spec.provider.as_deref())?;
     let named = spec.model.as_deref().filter(|m| !m.trim().is_empty());
     let model = named.or(provider.default_model()).ok_or_else(|| {
         Fault::Infra(format!(

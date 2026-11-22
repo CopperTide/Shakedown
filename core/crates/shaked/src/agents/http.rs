@@ -19,6 +19,7 @@ use serde_json::{json, Value};
 
 use super::{AgentResult, AgentRun, Driver, FailureKind};
 use crate::{
+    app::AppState,
     layer::Policy,
     model::{AgentSpec, TokenUsage},
     store::Store,
@@ -31,6 +32,7 @@ pub const HELLO_TIMEOUT: Duration = Duration::from_secs(10);
 pub const COST_SOURCE: &str = "agent_reported";
 
 pub struct HttpDriver {
+    state: Arc<AppState>,
     /// The shaked base URL the agent is told to reach the MCP endpoint at.
     pub agent_base: String,
     pub store: Arc<Store>,
@@ -40,12 +42,14 @@ pub struct HttpDriver {
 }
 
 impl HttpDriver {
-    pub fn new(agent_base: String, store: Arc<Store>, timeout: Duration) -> HttpDriver {
+    pub fn new(state: Arc<AppState>, agent_base: String, timeout: Duration) -> HttpDriver {
+        let store = state.store.clone();
         let http = reqwest::Client::builder().connect_timeout(Duration::from_secs(10));
         let http = crate::providers::reach::guard(http, store.layer().policy())
             .build()
             .expect("http client");
         HttpDriver {
+            state,
             agent_base,
             store,
             http,
@@ -77,10 +81,22 @@ pub fn bad_url(url: Option<&str>) -> Option<String> {
     }
 }
 
+/// What a request to the agent carries besides the run: its typed headers, kept for `scope`, and
+/// the credential `auth` stands for, already read for this request.
+pub struct Sent<'a> {
+    pub scope: &'a str,
+    pub bearer: Option<&'a str>,
+}
+
 /// The agent's headers with their values, as sensitive header values.
-fn headers_of(spec: &AgentSpec) -> Result<HeaderMap, String> {
+fn headers_of(spec: &AgentSpec, sent: &Sent) -> Result<HeaderMap, String> {
     let mut map = HeaderMap::new();
-    for (name, value) in spec.headers.reveal()? {
+    let mut pairs = spec.headers.reveal_for(sent.scope)?;
+    pairs.extend(
+        sent.bearer
+            .map(|b| ("Authorization".to_string(), b.to_string())),
+    );
+    for (name, value) in pairs {
         let n = HeaderName::from_bytes(name.trim().as_bytes())
             .map_err(|_| format!("{name:?} is not a header name"))?;
         let mut v = HeaderValue::from_str(value.trim())
@@ -165,6 +181,7 @@ async fn post(
     http: &reqwest::Client,
     policy: &Policy,
     spec: &AgentSpec,
+    sent: &Sent<'_>,
     body: &Value,
 ) -> Result<(u16, String), String> {
     let url = spec.url.as_deref().unwrap_or_default();
@@ -174,7 +191,7 @@ async fn post(
         .map_err(|why| format!("the agent at {host} cannot be reached from here: {why}"))?;
     let r = http
         .post(url)
-        .headers(headers_of(spec)?)
+        .headers(headers_of(spec, sent)?)
         .json(body)
         .send()
         .await;
@@ -194,10 +211,11 @@ pub async fn hello(
     http: &reqwest::Client,
     policy: &Policy,
     spec: &AgentSpec,
+    sent: &Sent<'_>,
 ) -> Result<Option<String>, String> {
     let host = host_of(spec.url.as_deref().unwrap_or_default());
     let body = json!({"protocol": PROTOCOL, "type": "hello"});
-    let said = post(http, policy, spec, &body);
+    let said = post(http, policy, spec, sent, &body);
     let (status, text) = tokio::time::timeout(HELLO_TIMEOUT, said)
         .await
         .map_err(|_| {
@@ -267,6 +285,37 @@ impl HttpDriver {
         result
     }
 
+    /// The credential the agent's `auth` stands for, read now for the caller the run is for.
+    async fn bearer(&self, run: &AgentRun) -> Result<Option<String>, String> {
+        let Some(auth) = &run.spec.auth else {
+            return Ok(None);
+        };
+        let read = super::endpoint_auth::bearer(&self.state, &run.branch.caller, auth).await;
+        read.map(Some)
+            .map_err(|why| format!("the agent's credential could not be read: {why}"))
+    }
+
+    /// POSTs the run to the agent within the run's time, with the credential read now; `None`
+    /// when no answer came in time.
+    async fn send_run(
+        &self,
+        run: &AgentRun,
+        body: &Value,
+    ) -> Option<Result<(u16, String), String>> {
+        let scope = self.store.layer().object_prefix(&run.branch.caller);
+        let bearer = match self.bearer(run).await {
+            Ok(b) => b,
+            Err(e) => return Some(Err(e)),
+        };
+        let sent = Sent {
+            scope: &scope,
+            bearer: bearer.as_deref(),
+        };
+        let policy = self.store.layer().policy();
+        let post = post(&self.http, policy, &run.spec, &sent, body);
+        run.branch.flow.timeout(self.timeout, post).await
+    }
+
     async fn call(&self, run: &AgentRun, token: &str) -> AgentResult {
         let body = match self.run_body(run, token).await {
             Ok(b) => b,
@@ -274,14 +323,7 @@ impl HttpDriver {
         };
         let host = host_of(run.spec.url.as_deref().unwrap_or_default());
         let started = std::time::Instant::now();
-        let waited = run
-            .branch
-            .flow
-            .timeout(
-                self.timeout,
-                post(&self.http, self.store.layer().policy(), &run.spec, &body),
-            )
-            .await;
+        let waited = self.send_run(run, &body).await;
         let mut r = match waited {
             None => {
                 let secs = self.timeout.as_secs();

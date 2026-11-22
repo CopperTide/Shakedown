@@ -213,6 +213,16 @@ fn withheld(ov: &Overlay, asked: Option<&str>) -> Option<String> {
     })
 }
 
+/// Why an agent may not name key `row` as its provider, if it may not: another member's key that
+/// names its own server (`own`: the key is yours).
+pub fn provider_refusal(row: &KeyRow, own: bool) -> Option<String> {
+    (!own && names_its_server(row)).then(|| {
+        "is another member's and names its own server, which would see your agents' prompts: \
+         add a key of your own"
+            .to_string()
+    })
+}
+
 /// `found` on the environment's key, else the layer's fallback when it needs a key the
 /// environment does not have.
 async fn environment_or_fallback(

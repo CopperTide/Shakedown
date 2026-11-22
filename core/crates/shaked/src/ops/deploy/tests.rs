@@ -4,7 +4,10 @@ use std::path::Path;
 
 use shakedown_project::{Id, Project};
 
-use super::request;
+use crate::ops::OpError;
+
+use super::{request as deploy_request, Credentials};
+use crate::model::AuthRef;
 
 fn copy(from: &Path, to: &Path) {
     std::fs::create_dir_all(to).unwrap();
@@ -47,6 +50,18 @@ fn runnable(dir: &Path) {
         "[solo-planner, planner-with-rules]",
     );
     std::fs::write(exp, text).unwrap();
+}
+
+/// Both names of the example project are usable.
+fn creds() -> Credentials {
+    let mut c = Credentials::default();
+    c.provider("anthropic-main", Ok(()));
+    c.credential(AuthRef::Key("planner-endpoint".into()), Ok(()));
+    c
+}
+
+fn request(p: &Project, id: &Id) -> Result<crate::api::experiments::NewExperimentReq, OpError> {
+    deploy_request(p, id, &creds())
 }
 
 fn exp() -> Id {
@@ -157,4 +172,84 @@ fn problems_block_deploy() {
         "{}",
         err.message
     );
+}
+
+#[test]
+fn a_builtin_agents_key_becomes_its_provider() {
+    let (_dir, p) = project(runnable);
+    let req = request(&p, &exp()).unwrap();
+    let solo = &req.setups[0].team.agents[0];
+    assert_eq!(solo.provider.as_deref(), Some("key:anthropic-main"));
+    assert_eq!(solo.model.as_deref(), Some("claude-sonnet"));
+}
+
+#[test]
+fn a_key_that_is_not_stored_or_not_yours_is_refused() {
+    let (_dir, p) = project(runnable);
+    let err = deploy_request(&p, &exp(), &Credentials::default()).unwrap_err();
+    assert_eq!(err.status.as_u16(), 400);
+    assert!(
+        err.message.contains("anthropic-main") && err.message.contains("solo-planner"),
+        "{}",
+        err.message
+    );
+    let mut withheld = creds();
+    withheld.provider("anthropic-main", Err("is another member's".into()));
+    let err = deploy_request(&p, &exp(), &withheld).unwrap_err();
+    assert!(err.message.contains("another member's"), "{}", err.message);
+}
+
+#[test]
+fn an_endpoints_auth_becomes_a_reference_without_the_secret() {
+    let (_dir, p) = project(runnable);
+    let req = request(&p, &exp()).unwrap();
+    let endpoint = &req.setups[1].team.agents[0];
+    assert_eq!(endpoint.auth, Some(AuthRef::Key("planner-endpoint".into())));
+    assert!(endpoint.headers.is_empty());
+}
+
+#[test]
+fn an_auth_that_may_not_be_used_is_refused_with_its_reason() {
+    let (_dir, p) = project(runnable);
+    let mut c = creds();
+    c.credential(
+        AuthRef::Key("planner-endpoint".into()),
+        Err("the key is shared with you".into()),
+    );
+    let err = deploy_request(&p, &exp(), &c).unwrap_err();
+    assert_eq!(err.status.as_u16(), 400);
+    assert!(
+        err.message.contains("planner-with-rules") && err.message.contains("shared with you"),
+        "{}",
+        err.message
+    );
+}
+
+fn with_auth(auth: &'static str) -> (tempfile::TempDir, Project) {
+    project(move |dir| {
+        runnable(dir);
+        let f = dir.join("setups/planner-with-rules.yaml");
+        let text = std::fs::read_to_string(&f).unwrap();
+        std::fs::write(&f, text.replace("auth: {key: planner-endpoint}", auth)).unwrap();
+    })
+}
+
+#[test]
+fn an_auth_naming_a_key_and_a_variable_is_refused() {
+    let (_dir, p) = with_auth("auth: {key: planner-endpoint, env: SHAKEDOWN_AGENT_T}");
+    let needs = super::needs(&p, &exp());
+    assert_eq!(needs.err().map(|e| e.status.as_u16()), Some(400));
+}
+
+#[test]
+fn an_auth_env_is_a_reference_to_the_variable() {
+    let (_dir, p) = with_auth("auth: {env: SHAKEDOWN_AGENT_T}");
+    let mut c = creds();
+    c.credential(AuthRef::Env("SHAKEDOWN_AGENT_T".into()), Ok(()));
+    let req = deploy_request(&p, &exp(), &c).unwrap();
+    let got = &req.setups[1].team.agents[0].auth;
+    assert_eq!(got, &Some(AuthRef::Env("SHAKEDOWN_AGENT_T".into())));
+    let needs = super::needs(&p, &exp()).unwrap();
+    assert_eq!(needs.auth, [AuthRef::Env("SHAKEDOWN_AGENT_T".into())]);
+    assert_eq!(needs.providers, ["anthropic-main"]);
 }

@@ -46,6 +46,15 @@ macro_rules! named_enum {
     };
 }
 
+/// Where an `http` agent's credential is kept: the name of one of the caller's own stored keys,
+/// or an environment variable (`SHAKEDOWN_AGENT_*`, where a layer lets it). Never the secret.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AuthRef {
+    Key(String),
+    Env(String),
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AgentKind {
@@ -92,6 +101,10 @@ pub struct AgentSpec {
     /// out (see [`crate::secrets`]).
     #[serde(default, skip_serializing_if = "Headers::is_empty")]
     pub headers: Headers,
+    /// Where an `http` agent's credential lives, by reference: resolved for the caller the run
+    /// is for each time a request is made, never kept in the agent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auth: Option<AuthRef>,
     /// The world tools this agent may see and call, by name (empty: every tool). A restriction
     /// of the setup, like `read_only`; the talk tools of its runner are always offered.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -114,6 +127,7 @@ impl AgentSpec {
             lead: false,
             url: None,
             headers: Headers::default(),
+            auth: None,
             tools: Vec::new(),
         }
     }

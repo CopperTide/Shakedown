@@ -137,10 +137,14 @@ pub async fn authenticate(
     }
     let who = state.store.layer().authenticate(&parts, found).await;
     match who {
-        Ok(c) => {
-            parts.extensions.insert(Arc::new(c));
-            next.run(Request::from_parts(parts, body)).await
-        }
+        Ok(c) => serve(&state, c, Request::from_parts(parts, body), next).await,
         Err(r) => refuse(r.status, &r.message),
     }
+}
+
+/// Serves `req` for `c`, with the header values it reads kept for `c`'s scope.
+async fn serve(state: &AppState, c: Caller, mut req: Request, next: Next) -> Response {
+    let scope = state.store.layer().object_prefix(&c);
+    req.extensions_mut().insert(Arc::new(c));
+    crate::secrets::scoped(scope, next.run(req)).await
 }

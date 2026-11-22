@@ -379,8 +379,8 @@ pub fn install_default_drivers(state: &Arc<AppState>) -> bool {
         Arc::new(ClaudeDriver::new(base.clone())),
     );
     let http = HttpDriver::new(
+        state.clone(),
         state.config.http_agent_base(),
-        state.store.clone(),
         state.config.http_agent_timeout,
     );
     m.insert(AgentKind::Http, Arc::new(http));

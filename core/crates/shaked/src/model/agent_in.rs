@@ -2,7 +2,7 @@
 
 use serde::Deserialize;
 
-use super::{AgentKind, AgentSpec, Headers};
+use super::{AgentKind, AgentSpec, AuthRef, Headers};
 use crate::providers::BEDROCK_PREFIX;
 
 /// The kinds a team member may name: every [`AgentKind`], and `bedrock`, which is an `open`
@@ -44,6 +44,8 @@ pub(super) struct AgentSpecIn {
     #[serde(default)]
     headers: Headers,
     #[serde(default)]
+    auth: Option<AuthRef>,
+    #[serde(default)]
     tools: Vec<String>,
 }
 
@@ -71,6 +73,7 @@ impl From<AgentSpecIn> for AgentSpec {
             lead: a.lead,
             url: a.url,
             headers: a.headers,
+            auth: a.auth,
             tools: a.tools,
         }
     }

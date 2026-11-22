@@ -10,8 +10,12 @@ use serde_json::{json, Value};
 
 use super::{parse_body, ApiError, ApiResult};
 use crate::{
-    agents::http::{hello, host_of},
+    agents::{
+        endpoint_auth,
+        http::{hello, host_of, Sent},
+    },
     app::AppState,
+    auth::{Caller, Who},
     model::*,
     providers::BEDROCK_PREFIX,
 };
@@ -59,11 +63,20 @@ async fn ping_bedrock(state: &AppState, a: &AgentSpec) -> Result<(), String> {
 }
 
 /// Reaches the agent once; the name it goes by.
-async fn reach(state: &AppState, a: &AgentSpec) -> Result<Option<String>, String> {
+async fn reach(state: &AppState, who: &Caller, a: &AgentSpec) -> Result<Option<String>, String> {
     if is_bedrock(a) {
         return ping_bedrock(state, a).await.map(|()| None);
     }
-    hello(&state.http, state.store.layer().policy(), a).await
+    let bearer = match &a.auth {
+        Some(auth) => Some(endpoint_auth::bearer(state, who, auth).await?),
+        None => None,
+    };
+    let scope = state.store.layer().object_prefix(who);
+    let sent = Sent {
+        scope: &scope,
+        bearer: bearer.as_deref(),
+    };
+    hello(&state.http, state.store.layer().policy(), a, &sent).await
 }
 
 /// What an agent that names itself nothing is called: its host, or its model.
@@ -74,7 +87,7 @@ fn default_name(a: &AgentSpec) -> String {
     }
 }
 
-async fn check(State(state): State<Arc<AppState>>, body: Bytes) -> ApiResult<Value> {
+async fn check(State(state): State<Arc<AppState>>, Who(who): Who, body: Bytes) -> ApiResult<Value> {
     let mut agent = agent_of(&body)?;
     match agent.kind {
         AgentKind::Http => team::validate_http(&agent)?,
@@ -86,7 +99,7 @@ async fn check(State(state): State<Arc<AppState>>, body: Bytes) -> ApiResult<Val
         }
     }
     let started = Instant::now();
-    let reached = reach(&state, &agent).await;
+    let reached = reach(&state, &who, &agent).await;
     let ms = started.elapsed().as_millis() as u64;
     let said = match reached {
         Ok(said) => said,

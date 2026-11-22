@@ -10,21 +10,46 @@ use std::{
 
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 
-fn vault() -> &'static Mutex<HashMap<String, String>> {
-    static VAULT: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
+/// A kept value and the scope (a caller's scope) that kept it.
+type Kept = (String, String);
+
+fn vault() -> &'static Mutex<HashMap<String, Kept>> {
+    static VAULT: OnceLock<Mutex<HashMap<String, Kept>>> = OnceLock::new();
     VAULT.get_or_init(Default::default)
 }
 
-/// Keeps `value` in memory and gives back its reference.
+tokio::task_local! {
+    /// The scope of the request being served: what a header value read now is kept for.
+    static SCOPE: String;
+}
+
+/// Runs `work` with `scope` as the scope of every header value read in it (a request's caller).
+pub async fn scoped<F: std::future::Future>(scope: String, work: F) -> F::Output {
+    SCOPE.scope(scope, work).await
+}
+
+/// The scope of the request being served; empty outside a request.
+fn current_scope() -> String {
+    SCOPE.try_with(Clone::clone).unwrap_or_default()
+}
+
+/// Keeps `value` in memory for the current scope and gives back its reference.
 fn keep(value: String) -> String {
     let id = uuid::Uuid::new_v4().simple().to_string();
-    vault().lock().unwrap().insert(id.clone(), value);
+    vault()
+        .lock()
+        .unwrap()
+        .insert(id.clone(), (current_scope(), value));
     id
 }
 
-/// The value `reference` stands for, while this process holds it.
-fn reveal(reference: &str) -> Option<String> {
-    vault().lock().unwrap().get(reference).cloned()
+/// The value `reference` stands for, while this process holds it and only for the scope that
+/// kept it: another caller's reference reads as gone.
+fn reveal(reference: &str, scope: &str) -> Option<String> {
+    let kept = vault().lock().unwrap();
+    kept.get(reference)
+        .filter(|(owner, _)| owner == scope)
+        .map(|(_, value)| value.clone())
 }
 
 /// An `http` agent's request headers: each name with a reference to its value.
@@ -52,9 +77,16 @@ impl Headers {
         self.0.keys().map(String::as_str)
     }
 
-    /// Each name with its value; `Err` names the first header whose value is gone.
+    /// Each name with its value, for the current request's scope; `Err` names the first header
+    /// whose value is gone or was kept for someone else.
     pub fn reveal(&self) -> Result<Vec<(String, String)>, String> {
-        let one = |(k, r): (&String, &String)| reveal(r).map(|v| (k.clone(), v)).ok_or(gone(k));
+        self.reveal_for(&current_scope())
+    }
+
+    /// The same for `scope` (a run reads its headers for the caller it runs for).
+    pub fn reveal_for(&self, scope: &str) -> Result<Vec<(String, String)>, String> {
+        let one =
+            |(k, r): (&String, &String)| reveal(r, scope).map(|v| (k.clone(), v)).ok_or(gone(k));
         self.0.iter().map(one).collect()
     }
 }
@@ -116,6 +148,23 @@ mod tests {
             again.reveal().unwrap(),
             [("Authorization".to_string(), "Bearer s3cret".to_string())]
         );
+    }
+
+    #[tokio::test]
+    async fn a_reference_is_good_only_for_the_scope_that_kept_it() {
+        let h: Headers = scoped("scope-a".into(), async {
+            serde_json::from_value(json!({"X-Key": "mine"})).unwrap()
+        })
+        .await;
+        let written = serde_json::to_string(&h).unwrap();
+        assert_eq!(h.reveal_for("scope-a").unwrap()[0].1, "mine");
+        // Another scope citing the reference gets nothing, and the same message as for a gone one.
+        let cited: Headers = scoped("scope-b".into(), async {
+            serde_json::from_str(&written).unwrap()
+        })
+        .await;
+        let e = cited.reveal_for("scope-b").unwrap_err();
+        assert!(e.contains("connect the agent again"), "{e}");
     }
 
     #[test]

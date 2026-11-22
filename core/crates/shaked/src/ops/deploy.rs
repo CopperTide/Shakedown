@@ -2,19 +2,72 @@
 //! task is played with the scenario's faults as disruptions, and each setup becomes a team. Until
 //! worlds run from their files alone, this is the bridge from files to runs.
 
+use std::collections::HashMap;
+
 use axum::http::StatusCode;
 use parts::proto::{ChosenDisruption, ScenarioRequest};
 use shakedown_project::format::{
-    ExperimentFile, Kind, ScenarioFile, SetupFile, Team as FileTeam, WorldFile,
+    Auth, ExperimentFile, Kind, ScenarioFile, SetupFile, Team as FileTeam, WorldFile,
 };
 use shakedown_project::{Id, ItemBody, Project};
 
 use super::OpError;
 use crate::api::experiments::{NewExperimentReq, SetupReq};
-use crate::model::{AgentKind, AgentSpec, Runner, Team};
+use crate::model::{AgentKind, AgentSpec, AuthRef, Runner, Team};
+use crate::providers::KEY_PREFIX;
+
+/// What a deploy refers to by name, and may use: for each stored key a built-in agent names, and
+/// each credential an endpoint's `auth` names, `Ok` or why it may not be used. No secret is held.
+#[derive(Default)]
+pub(crate) struct Credentials {
+    providers: HashMap<String, Result<(), String>>,
+    auth: HashMap<AuthRef, Result<(), String>>,
+}
+
+impl Credentials {
+    pub(crate) fn provider(&mut self, key: &str, verdict: Result<(), String>) {
+        self.providers.insert(key.to_string(), verdict);
+    }
+
+    pub(crate) fn credential(&mut self, auth: AuthRef, verdict: Result<(), String>) {
+        self.auth.insert(auth, verdict);
+    }
+}
+
+/// What the setups of an experiment name: stored keys (as providers) and credentials.
+#[derive(Default)]
+pub(crate) struct Needs {
+    pub providers: Vec<String>,
+    pub auth: Vec<AuthRef>,
+}
+
+/// The keys and credentials the experiment's setups name, so only those are looked up.
+pub(crate) fn needs(project: &Project, id: &Id) -> Result<Needs, OpError> {
+    let mut out = Needs::default();
+    for name in &experiment_of(project, id)?.setups {
+        match &setup_of(project, name)?.team {
+            FileTeam::Builtin { agents } => {
+                let keys = agents
+                    .iter()
+                    .map(|a| a.key.trim())
+                    .filter(|k| !k.is_empty());
+                out.providers.extend(keys.map(str::to_string));
+            }
+            FileTeam::Http {
+                auth: Some(auth), ..
+            } => out.auth.extend(auth_ref(name, auth)?),
+            _ => {}
+        }
+    }
+    Ok(out)
+}
 
 /// The engine experiment that deploying experiment `id` starts.
-pub(crate) fn request(project: &Project, id: &Id) -> Result<NewExperimentReq, OpError> {
+pub(crate) fn request(
+    project: &Project,
+    id: &Id,
+    creds: &Credentials,
+) -> Result<NewExperimentReq, OpError> {
     let exp = experiment_of(project, id)?;
     no_problems(project, id, exp)?;
     let scenario = scenario_of(project, &exp.scenario)?;
@@ -22,7 +75,7 @@ pub(crate) fn request(project: &Project, id: &Id) -> Result<NewExperimentReq, Op
     let setups = exp
         .setups
         .iter()
-        .map(|s| setup_req(project, s))
+        .map(|s| setup_req(project, s, creds))
         .collect::<Result<Vec<_>, _>>()?;
     Ok(NewExperimentReq {
         name: Some(exp.label.clone()),
@@ -133,12 +186,16 @@ fn disruptions(scenario: &ScenarioFile) -> Option<ScenarioRequest> {
     })
 }
 
-fn setup_req(project: &Project, name: &str) -> Result<SetupReq, OpError> {
-    let setup: &SetupFile = match body(project, Kind::Setup, name)? {
-        ItemBody::Setup(s) => s,
-        _ => return Err(unprocessable(format!("{name} is not an agent setup"))),
-    };
-    let agents = agents_of(name, &setup.team)?;
+fn setup_of<'a>(project: &'a Project, name: &str) -> Result<&'a SetupFile, OpError> {
+    match body(project, Kind::Setup, name)? {
+        ItemBody::Setup(s) => Ok(s),
+        _ => Err(unprocessable(format!("{name} is not an agent setup"))),
+    }
+}
+
+fn setup_req(project: &Project, name: &str, creds: &Credentials) -> Result<SetupReq, OpError> {
+    let setup = setup_of(project, name)?;
+    let agents = agents_of(name, &setup.team, creds)?;
     let team = Team {
         id: name.to_string(),
         name: setup.label.clone(),
@@ -152,14 +209,20 @@ fn setup_req(project: &Project, name: &str) -> Result<SetupReq, OpError> {
     })
 }
 
-fn agents_of(name: &str, team: &FileTeam) -> Result<Vec<AgentSpec>, OpError> {
+fn agents_of(name: &str, team: &FileTeam, creds: &Credentials) -> Result<Vec<AgentSpec>, OpError> {
     Ok(match team {
-        FileTeam::Builtin { agents } => agents.iter().map(builtin_agent).collect(),
+        FileTeam::Builtin { agents } => agents
+            .iter()
+            .map(|a| builtin_agent(name, a, creds))
+            .collect::<Result<_, _>>()?,
         FileTeam::ClaudeCode => vec![AgentSpec::new("claude-code", AgentKind::ClaudeCode)],
         FileTeam::Codex => vec![AgentSpec::new("codex", AgentKind::Codex)],
-        FileTeam::Http { url, .. } => {
+        FileTeam::Http { url, auth } => {
             let mut agent = AgentSpec::new("endpoint", AgentKind::Http);
             agent.url = Some(url.clone());
+            if let Some(auth) = auth {
+                agent.auth = endpoint_auth(name, auth, creds)?;
+            }
             vec![agent]
         }
         FileTeam::Code { .. } | FileTeam::Madl { .. } => {
@@ -170,7 +233,44 @@ fn agents_of(name: &str, team: &FileTeam) -> Result<Vec<AgentSpec>, OpError> {
     })
 }
 
-fn builtin_agent(spec: &shakedown_project::format::AgentSpec) -> AgentSpec {
+/// The reference an endpoint's `auth` makes: `None` when it names nothing; naming both a key and
+/// a variable is refused.
+fn auth_ref(setup: &str, auth: &Auth) -> Result<Option<AuthRef>, OpError> {
+    match (&auth.key, &auth.env) {
+        (Some(_), Some(_)) => Err(OpError::bad_request(format!(
+            "{setup}: auth names both a key and an environment variable: name one"
+        ))),
+        (Some(key), None) => Ok(Some(AuthRef::Key(key.clone()))),
+        (None, Some(var)) => Ok(Some(AuthRef::Env(var.clone()))),
+        (None, None) => Ok(None),
+    }
+}
+
+/// The credential reference of an endpoint, checked: it must be one a deploy found usable.
+fn endpoint_auth(
+    setup: &str,
+    auth: &Auth,
+    creds: &Credentials,
+) -> Result<Option<AuthRef>, OpError> {
+    let Some(found) = auth_ref(setup, auth)? else {
+        return Ok(None);
+    };
+    match creds.auth.get(&found) {
+        Some(Ok(())) => Ok(Some(found)),
+        Some(Err(why)) => Err(OpError::bad_request(format!("{setup}: auth: {why}"))),
+        None => Err(OpError::bad_request(format!(
+            "{setup}: auth names nothing usable"
+        ))),
+    }
+}
+
+/// A built-in agent. Its `key` makes `key:<name>` its provider, so it runs on that key's
+/// provider and model; a key that is not stored, or may not serve you, refuses the deploy.
+fn builtin_agent(
+    setup: &str,
+    spec: &shakedown_project::format::AgentSpec,
+    creds: &Credentials,
+) -> Result<AgentSpec, OpError> {
     let mut agent = AgentSpec::new(spec.id.clone(), AgentKind::Open);
     agent.model = Some(spec.model.clone());
     agent.prompt = spec.role.clone();
@@ -180,7 +280,21 @@ fn builtin_agent(spec: &shakedown_project::format::AgentSpec) -> AgentSpec {
         .filter(|t| t.as_str() != "*")
         .cloned()
         .collect();
-    agent
+    let key = spec.key.trim();
+    if !key.is_empty() {
+        match creds.providers.get(key) {
+            Some(Ok(())) => agent.provider = Some(format!("{KEY_PREFIX}{key}")),
+            Some(Err(why)) => return Err(key_refused(setup, &spec.id, key, why)),
+            None => return Err(key_refused(setup, &spec.id, key, "is not stored")),
+        }
+    }
+    Ok(agent)
+}
+
+fn key_refused(setup: &str, agent: &str, key: &str, why: &str) -> OpError {
+    OpError::bad_request(format!(
+        "{setup}: agent {agent} names the key {key:?}, which {why}"
+    ))
 }
 
 #[cfg(test)]
