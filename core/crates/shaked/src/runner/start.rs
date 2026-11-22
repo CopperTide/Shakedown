@@ -6,16 +6,17 @@ use std::{sync::Arc, time::Instant};
 
 use anyhow::{anyhow, Result};
 use parts::proto::{BenchDescribe, WorldTimeParams};
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::{
     app::AppState,
-    exec::{BranchCtx, StoreRecords, ToolExec},
+    exec::{BranchCtx, BranchRecords, StoreRecords, ToolExec},
     model::*,
     overhead::{self, Cat, Overhead},
     scenario::{self, Scenario},
     store::{BranchId, RunId},
-    world::{self, Plan, World, WorldFrom},
+    world::{self, World, WorldFrom},
 };
 
 /// The largest seed a run may ask for: below 2^53, so every JSON reader keeps it exact.
@@ -158,9 +159,25 @@ async fn bench_with_task(
     Ok(bench)
 }
 
+/// Everything a worker needs to stand a branch up and drive it. Serialisable: it travels in the
+/// `start` frame.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct BranchPlan {
+    pub run_id: RunId,
+    pub branch_id: BranchId,
+    pub task_id: String,
+    /// The benchmark the run is of (resolved, never empty).
+    pub benchmark: String,
+    pub team: Team,
+    pub rules: Rules,
+    pub scenario: Scenario,
+    /// Where the branch's world clock starts: 0 for a run's first branch.
+    pub clock_from_ms: i64,
+}
+
 /// Creates a run and its first branch, starts its world from the base save, records `RunStart`
 /// with `rules` and `scenario`, and makes the task's setup (with the scenario's disruptions): the
-/// branch, ready to be driven.
+/// branch, ready to be driven. `record_start`, then `stand_up` into the store.
 pub async fn begin_run(
     state: &AppState,
     scope: &Arc<Caller>,
@@ -170,29 +187,81 @@ pub async fn begin_run(
     rules: Rules,
     scenario: &Scenario,
 ) -> Result<(RunId, BranchCtx), RunError> {
-    let bench = bench_with_task(state, benchmark, task_id).await?;
-    let planned = world::plan(&state.hub, &bench).await?;
-    let records = state.store.at(scope);
-    let run_id = records.create_run(task_id, &team).await?;
-    let branch_id = records
-        .create_branch(&run_id, None, &team, &json!([]), None)
-        .await?;
-    let start = RunStartOf {
-        branch_id: &branch_id,
+    let spec = crate::launch::LaunchSpec {
+        scope: scope.clone(),
         task_id,
-        team: &team,
-        rules: rules.clone(),
+        team,
         scenario,
+        rules,
+        driver: None,
+        benchmark,
     };
-    let started = start_world(state, records, &bench, planned, start).await;
-    let (world, start_seq, record_ms) = setup_or_infra_error(records, &branch_id, started).await?;
-    let store = StoreRecords::new(state.store.clone(), scope.clone(), branch_id.clone());
-    let ctx = BranchCtx::new(branch_id, Arc::new(world), team, task_id.to_string());
-    let ctx = ctx.with_rules(rules).with_caller(scope.clone());
-    let ctx = ctx.with_records(Arc::new(store));
+    let plan = record_start(state, scope, &spec).await?;
+    let store = StoreRecords::new(state.store.clone(), scope.clone(), plan.branch_id.clone());
+    let ctx = stand_up(state, &plan, Arc::new(store)).await?;
+    Ok((plan.run_id, ctx.with_caller(scope.clone())))
+}
+
+/// The first half of beginning a run: creates the run and its first branch for `scope`, after
+/// checking the benchmark has the task. The plan to stand the branch up from (`RunStart` waits
+/// for the world, which it records, so `stand_up` writes it first of the branch's events).
+pub async fn record_start(
+    state: &AppState,
+    scope: &Arc<Caller>,
+    spec: &crate::launch::LaunchSpec<'_>,
+) -> Result<BranchPlan, RunError> {
+    let bench = bench_with_task(state, spec.benchmark, spec.task_id).await?;
+    // A world whose tools clash is refused before anything is recorded.
+    world::plan(&state.hub, &bench).await?;
+    let records = state.store.at(scope);
+    let run_id = records.create_run(spec.task_id, &spec.team).await?;
+    let branch_id = records
+        .create_branch(&run_id, None, &spec.team, &json!([]), None)
+        .await?;
+    Ok(BranchPlan {
+        run_id,
+        branch_id,
+        task_id: spec.task_id.to_string(),
+        benchmark: bench.name,
+        team: spec.team.clone(),
+        rules: spec.rules.clone(),
+        scenario: spec.scenario.clone(),
+        clock_from_ms: 0,
+    })
+}
+
+/// The second half: starts the branch's world from the base save, records `RunStart` (it holds
+/// what the world says, so it is recorded here) and makes the task's setup, recording through
+/// `records`. A failure ends the branch `infra_error` with why.
+pub async fn stand_up(
+    state: &AppState,
+    plan: &BranchPlan,
+    records: Arc<dyn BranchRecords>,
+) -> Result<BranchCtx, RunError> {
+    let started = start_world(state, plan, &*records).await;
+    let (bench, world, start_seq, record_ms) = match started {
+        Ok(s) => s,
+        Err(e) => {
+            log_setup_failure(&plan.branch_id, fail_branch(&*records, &e).await);
+            return Err(e.into());
+        }
+    };
+    let ctx = BranchCtx::new(
+        plan.branch_id.clone(),
+        Arc::new(world),
+        plan.team.clone(),
+        plan.task_id.clone(),
+    );
+    let ctx = ctx.with_rules(plan.rules.clone()).with_records(records);
     ctx.overhead.add(Cat::Record, record_ms);
-    set_up_task(state, &bench, &ctx, scenario, start_seq).await?;
-    Ok((run_id, ctx))
+    set_up_task(state, &bench, &ctx, &plan.scenario, start_seq).await?;
+    Ok(ctx)
+}
+
+/// Ends a branch `infra_error` with `e`'s message.
+async fn fail_branch(records: &dyn BranchRecords, e: &anyhow::Error) -> Result<()> {
+    let status = BranchStatus::InfraError;
+    records.set_status(status, Some(format!("{e:#}"))).await
 }
 
 /// Makes the task's setup calls (with `scenario`'s disruptions) on a new run's world, then records
@@ -234,15 +303,6 @@ async fn save_after_setup(exec: &ToolExec, ctx: &BranchCtx) {
     }
 }
 
-/// What a run's `RunStart` records besides its world.
-struct RunStartOf<'a> {
-    branch_id: &'a str,
-    task_id: &'a str,
-    team: &'a Team,
-    rules: Rules,
-    scenario: &'a Scenario,
-}
-
 /// A new branch's setup result; a failed setup ends the branch `infra_error` with its message.
 pub async fn setup_or_infra_error<T>(
     records: Scoped<'_>,
@@ -280,30 +340,35 @@ fn log_setup_failure(branch_id: &str, set: Result<()>) {
 /// systems, tools, scenario?}` (`saves` names only the parts that keep saves; `base_seed` is the
 /// seed the base save was made with; `runner` and `handoff` are the run's rules; `systems` and
 /// `tools` are what `World::systems` and `World::tool_info` say; `scenario` the expanded scenario,
-/// when the run has one), with the world's restore as its overhead. The world, `RunStart`'s seq
-/// and how long recording it took (overhead for the branch's next event).
+/// when the run has one), with the world's restore as its overhead. The benchmark, the world,
+/// `RunStart`'s seq and how long recording it took (overhead for the branch's next event).
 async fn start_world(
     state: &AppState,
-    records: Scoped<'_>,
-    bench: &BenchDescribe,
-    planned: Plan,
-    of: RunStartOf<'_>,
-) -> Result<(World, i64, f64)> {
+    plan: &BranchPlan,
+    records: &dyn BranchRecords,
+) -> Result<(BenchDescribe, World, i64, f64)> {
     crate::mode::local_only(state.store.layer().policy(), "starting a world's parts")
         .map_err(anyhow::Error::msg)?;
-    let branch_id = of.branch_id;
-    let seed = of.scenario.seed.unwrap_or_else(new_seed);
-    let (hub, mut planned) = (state.hub.clone(), planned);
-    let world_time = world_time_of(bench, of.task_id);
+    let bench = state.bench_named(&plan.benchmark).await?;
+    let mut planned = world::plan(&state.hub, &bench).await?;
+    let branch_id = plan.branch_id.as_str();
+    let seed = plan.scenario.seed.unwrap_or_else(new_seed);
+    let world_time = world_time_of(&bench, &plan.task_id);
     planned.world_time = Some(world_time);
     let since = Instant::now();
-    let world = World::start_planned(hub, bench, planned, branch_id, seed, WorldFrom::Base).await?;
+    let hub = state.hub.clone();
+    let world =
+        World::start_planned(hub, &bench, planned, branch_id, seed, WorldFrom::Base).await?;
     let restored = Overhead::of(Cat::Restore, overhead::ms_since(since));
-    let mut start = run_start(bench, &world, seed, &of);
+    let mut start = run_start(&bench, &world, seed, plan);
     start.world_epoch_ms = Some(world_time.epoch_ms);
     let since = Instant::now();
-    match records.record(branch_id, None, &start, restored).await {
-        Ok(e) => Ok((world, e.seq, overhead::ms_since(since))),
+    let payload = serde_json::to_value(&start)?;
+    match records
+        .append(None, EventKind::RunStart, payload, restored)
+        .await
+    {
+        Ok(e) => Ok((bench, world, e.seq, overhead::ms_since(since))),
         Err(e) => {
             world.stop().await;
             Err(e)
@@ -323,12 +388,7 @@ fn world_time_of(bench: &BenchDescribe, task_id: &str) -> WorldTimeParams {
 }
 
 /// The payload of `RunStart` (see `start_world`).
-fn run_start(
-    bench: &BenchDescribe,
-    world: &World,
-    seed: u64,
-    of: &RunStartOf<'_>,
-) -> RunStartPayload {
+fn run_start(bench: &BenchDescribe, world: &World, seed: u64, of: &BranchPlan) -> RunStartPayload {
     let scenario = (!of.scenario.is_empty()).then(|| json!(of.scenario));
     RunStartPayload {
         task_id: Some(of.task_id.to_string()),

@@ -225,7 +225,7 @@ impl Team {
 
 /// The rules a branch runs under, recorded in its run's `RunStart` (`runner`, `handoff`,
 /// `max_cost_usd`, `connection`, `world_minutes`).
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Rules {
     pub runner: Runner,
     /// True for runs recorded before handoffs were optional: every agent but the last must hand
