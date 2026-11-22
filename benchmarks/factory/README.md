@@ -136,10 +136,18 @@ simulated part (`docs/protocol.md`, "Scheduled disruptions"), which fires after 
 | `operator-callouts` | `roster` | `callout`: Mei Tanaka (cell R1) and Priya Shah (Line B), the two certified for the robot cell on shift, are off | `after` |
 | `truck-late` | `hub` | `delivery_delay`: the DP780 coil truck `INB-0310-1` for Line B arrives `hours` later (default 6), after the line runs out at 09:00 | `after`, `hours` |
 
+One more option is a planted fault, not a front, and is **not** offered selected (fault X6 of the cs2680 evaluation):
+
+| Option | Part | Disruption | Params |
+|---|---|---|---|
+| `meter-low` | `utility` | `meter_low`: from the agents' `utility_meter` reading after the first `after` (default 2), the site meter reads `percent` (default 15) low; the meter's state and the demand-response measures, which the checks read, keep the true load | `after`, `percent` |
+
 The plant's normal load is 1525 kW (base 430, Line A 420, B 330, C 260, the cell 85). Meeting 1200 kW takes stopping or
 slowing lines (each running line's load scales with its speed) or stopping the cell.
 
-**How it is wired.** A link carries every plant `power` event to the utility's `meter_load`. The interlocks are gates
+**How it is wired.** A link carries every plant `power` event to the utility's `meter_load`. The plant's boards show
+the utility's demand-response notice from its `demand_response_notified` event (not from every utility disruption, so
+a meter reading low shows nothing there). The interlocks are gates
 (`src/world.rs`, `interlocks`), so a refused call is recorded and its part is not called:
 
 | Tool | Reads | Requires |

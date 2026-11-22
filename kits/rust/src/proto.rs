@@ -528,6 +528,10 @@ pub struct BenchToolOutput {
     pub reads: Vec<String>,
     #[serde(default)]
     pub writes: Vec<String>,
+    /// Events the call gives the world, as a part's `call_tool` does (a scheduled disruption the
+    /// benchmark keeps in its part's state, say): recorded, and matched against the world's links.
+    #[serde(default, skip_serializing_if = "<[_]>::is_empty")]
+    pub events: Box<[WorldEvent]>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

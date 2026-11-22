@@ -121,7 +121,7 @@ fn run_cases() -> Vec<Case> {
     let mut cases = vec![case("/api/runs", json!({}), 400, not_json).raw("not json")];
     cases.extend(on("/api/runs", vec![
         (json!({"task_id": 5, "team": none}), 400, "bad request body: invalid type: integer `5`, expected a string at line 1 column 12"),
-        (json!({"task_id": "27", "team": none, "seed": big, "scenario": nope}), 400, "the benchmark offers no disruptions"),
+        (json!({"task_id": "27", "team": none, "seed": big, "scenario": nope}), 400, "the benchmark offers no disruption \"nope\""),
         (json!({"task_id": "27", "team": none, "seed": big, "max_cost_usd": -1}), 400, "seed must be at most 2^53 - 1"),
         (json!({"task_id": "27", "team": none, "max_cost_usd": -1}), 400, NO_AGENT),
         (json!({"task_id": "nope", "team": one, "max_cost_usd": -1}), 400, BAD_COST),

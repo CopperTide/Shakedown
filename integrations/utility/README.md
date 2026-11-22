@@ -39,13 +39,17 @@ Keys: `scenario/current`, `meter/site`, `dr/<event>`, `_disruption/<id>` (intern
 world events, `demand_response_active` and `demand_response_ended` (from `advance`; one found during a call waits for
 the next `advance`).
 
-**Scheduled disruption** (`shakedown_part.disruptions`, docs/protocol.md "Scheduled disruptions"): `demand_response {event,
+**Scheduled disruptions** (`shakedown_part.disruptions`, docs/protocol.md "Scheduled disruptions"): `demand_response {event,
 target_kw, lead_min, minutes}`. When it fires its notice is there (`notified`); the window opens `lead_min` minutes of
-plant time later and lasts `minutes`. `meter_load` and `utility_scenario` count for no disruption.
+plant time later and lasts `minutes`. `meter_low {percent}` (1 to 99): from the call it fires on, `utility_meter` reads
+`percent` low (its `kw`, `peak_kw`, `kwh_this_shift` and `energy_cost_usd`); the meter's state, its `meter/site` doc
+and the demand-response measures keep the true load, so a benchmark scores what really happened. `meter_load` and
+`utility_scenario` count for no disruption.
 
 ## Tests
 
 `uv run --with pytest pytest -q`: the meter on the clock, split advances, a window measured, a notice after its count,
-responses and refusals, save and restore, and `shakedown-part-check` (skipped without the built checker; `SHAKEDOWN_BIN_DIR` names
-where it is). Verified on Linux, 2026-11-07: all 9 pass, the conformance check included (replay skipped since the part
-restores from saves).
+responses and refusals, save and restore, a meter reading low (from its count on, kept by a save, its percent
+checked), and `shakedown-part-check` (skipped without the built checker; `SHAKEDOWN_BIN_DIR` names where it is).
+Verified on Linux, 2026-11-07: all 9 pass, the conformance check included (replay skipped since the part restores from
+saves). 2026-11-21: the 3 `meter_low` tests added, 12 pass (the conformance check skipped: no built checker).

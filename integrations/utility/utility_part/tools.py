@@ -9,7 +9,7 @@ BASE = "base"
 
 
 def _meter(config, state, args):
-    return Done(meter.meter_doc(config, state), reads=["meter/site"])
+    return Done(meter.reading(config, state), reads=["meter/site"])
 
 
 def _events(config, state, args):

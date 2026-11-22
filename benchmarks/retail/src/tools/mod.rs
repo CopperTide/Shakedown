@@ -17,6 +17,6 @@ mod retail;
 mod schema;
 mod value;
 
-pub use call::{call, ToolOutcome};
+pub use call::{call, call_unwritten, ToolOutcome};
 pub use schema::{is_write, tool_names, tool_schemas};
 pub use value::fold;

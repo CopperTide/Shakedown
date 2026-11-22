@@ -62,6 +62,9 @@ def test_how_the_advances_are_split_does_not_matter():
 def test_a_demand_response_window_opens_and_closes_and_is_measured():
     part, out = started(dr(lead=10, minutes=30))
     assert out["events"][0]["kind"] == "disruption" and "dr/DR-1" in out["writes"]
+    # Its own notice follows, for links to tell it from the utility's other disruptions.
+    assert out["events"][1] == {"kind": "demand_response_notified", "text": out["events"][1]["text"],
+                                "data": {"event": "DR-1", "status": "notified", "target_kw": 1200.0}}
     ev = call(part, "demand_response_events", {}, 0)["result"]["events"][0]
     assert (ev["status"], ev["starts_at"], ev["ends_at"]) == ("notified", "2026-03-10T06:10:00", "2026-03-10T06:40:00")
     assert part.advance("i1", 10 * MIN)["events"][0]["kind"] == "demand_response_active"
@@ -94,6 +97,46 @@ def test_the_notice_comes_only_after_the_counted_calls_and_world_calls_count_for
     third = call(part, "utility_meter", {}, 2 * MIN)
     assert third["events"][0]["data"]["event"] == "DR-1"
     assert doc(part, "dr/DR-1")["notice_at"] == "2026-03-10T06:02:00"
+
+
+def meter_low(after=2, percent=15):
+    return {"id": "meter-low", "when": {"after_calls": after, "tool": "utility_meter"},
+            "do": {"kind": "meter_low", "percent": percent}, "text": "The site meter starts reading 15% low"}
+
+
+def test_a_meter_reading_low_shows_agents_less_from_its_third_reading_and_keeps_the_true_load():
+    part, out = started(meter_low())
+    assert "events" not in out
+    call(part, "meter_load", {"kw": 1000}, 0)
+    for _ in range(2):
+        r = call(part, "utility_meter", {}, MIN)
+        assert "events" not in r and r["result"]["kw"] == 1000.0
+    third = call(part, "utility_meter", {}, 2 * MIN)
+    assert [e["data"] for e in third["events"]] == [{"id": "meter-low", "kind": "meter_low", "percent": 15}]
+    m = third["result"]
+    assert (m["kw"], m["peak_kw"]) == (850.0, 1275.0)
+    assert m["kwh_this_shift"] == pytest.approx(0.85 * doc(part, "meter/site")["kwh_this_shift"], abs=0.001)
+    # Only the agents' reading is low: the meter's state (what the checks read) keeps the true load.
+    assert (doc(part, "meter/site")["kw"], doc(part, "_disruption/meter-low")["fired"]) == (1000.0, True)
+    assert "events" not in call(part, "utility_meter", {}, 3 * MIN)
+    assert call(part, "utility_meter", {}, 3 * MIN)["result"]["kw"] == 850.0
+
+
+def test_a_meter_reading_low_is_kept_by_a_save(tmp_path):
+    part, _ = started(meter_low(after=0))
+    call(part, "utility_meter", {}, 0)
+    part.save("i1", "s1", str(tmp_path / "saves" / "utility" / "s1"))
+    again = Utility()
+    again.start("i2", CONFIG, 0, 0, {"save": "s1", "mode": "exact"})
+    assert again.call_tool("i2", "utility_meter", {}, 0)["result"]["kw"] == 1275.0
+
+
+def test_a_meter_reading_low_needs_a_percent_between_1_and_99():
+    part = Utility()
+    part.start("i1", CONFIG, 0, 0)
+    for bad in (0, 100, 120):
+        out = call(part, "utility_scenario", {"name": "base", "disruptions": [meter_low(percent=bad)]}, 0)
+        assert "percent must be between 1 and 99" in out["error"]
 
 
 def test_a_response_is_recorded_and_bad_ones_are_refused():

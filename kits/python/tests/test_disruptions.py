@@ -106,6 +106,17 @@ def test_after_zero_calls_it_fires_as_it_is_armed_and_world_tools_count_for_noth
     assert call(box, "peek")["result"]["cap"] == 9
 
 
+def test_a_kind_may_give_world_events_of_its_own_after_the_disruptions():
+    def _announce(config, state, do):
+        state["cap"] = do["cap"]
+        return disruptions.Fired(["box/cap"], [{"kind": "box_full", "text": "Full", "data": {"cap": do["cap"]}}])
+    kinds = {"cap": disruptions.Kind({"cap": "integer"}, _announce)}
+    state = {"n": 0, "cap": 9}
+    out = disruptions.arm({}, state, kinds, ["peek"], [cap_after(0)])
+    assert [e["kind"] for e in out.events] == ["disruption", "box_full"]
+    assert out.writes == ["_disruption/full", "box/cap"] and state["cap"] == 0
+
+
 def test_a_save_restores_the_count(tmp_path):
     box, _ = armed(cap_after(2))
     call(box, "peek")

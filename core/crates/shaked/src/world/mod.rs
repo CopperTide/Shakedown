@@ -135,11 +135,15 @@ impl Called {
 
     /// A tool error that reached no part.
     fn error(message: String) -> Called {
-        let output = ToolOutput {
-            error: Some(message),
-            ..Default::default()
-        };
-        Called::new(output, None)
+        Called::new(failed(message), None)
+    }
+}
+
+/// The output of a call that failed with `message`.
+fn failed(message: String) -> ToolOutput {
+    ToolOutput {
+        error: Some(message),
+        ..Default::default()
     }
 }
 
@@ -288,6 +292,8 @@ pub struct World {
     bench_client: Option<Arc<Client>>,
     parts: Vec<Part>,
     tools: Vec<(ToolSchema, Route)>,
+    /// The benchmark's tools a setup calls on a part (see [`World::call_part_tool`]).
+    setup_bench_tools: BTreeSet<String>,
     links: Vec<Link>,
     gates: Vec<Gate>,
     /// Present when the benchmark draws the world's view.
@@ -364,6 +370,7 @@ impl World {
             bench_client,
             parts: vec![],
             tools: plan.tools,
+            setup_bench_tools: plan.setup_bench_tools,
             links: plan.links,
             gates: plan.gates,
             view: plan.view,
@@ -557,7 +564,8 @@ impl World {
         Ok(called)
     }
 
-    /// Runs `part`'s own tool `name` (for a replay).
+    /// Runs `part`'s own tool `name` (for a link, a setup or a replay), or the benchmark's tool
+    /// `name` that a setup calls on `part` (it must answer for `part`).
     pub async fn call_part_tool(
         &self,
         part: &str,
@@ -565,10 +573,30 @@ impl World {
         args: Value,
         clock_ms: i64,
     ) -> Result<ToolOutput, WorldError> {
-        self.part(part)?.call_tool(name, args, clock_ms).await
+        if !self.setup_bench_tools.contains(name) {
+            return self.part(part)?.call_tool(name, args, clock_ms).await;
+        }
+        let (output, answered) = self.bench_output(name, args).await?;
+        match answered {
+            Some(p) if p != part => Ok(failed(format!(
+                "the benchmark's {name} acted on {p}, not on {part}"
+            ))),
+            _ => Ok(output),
+        }
     }
 
     async fn call_bench_tool(&self, name: &str, args: Value) -> Result<Called, WorldError> {
+        let (output, part) = self.bench_output(name, args).await?;
+        Ok(Called::new(output, part))
+    }
+
+    /// The benchmark's answer to its tool `name` and the part it acted on (none when the answer
+    /// can't stand: then the output is the error).
+    async fn bench_output(
+        &self,
+        name: &str,
+        args: Value,
+    ) -> Result<(ToolOutput, Option<String>), WorldError> {
         let params = BenchCallTool {
             name: name.to_string(),
             args,
@@ -577,16 +605,16 @@ impl World {
         let o: BenchToolOutput =
             request(self.bench_client()?, &self.bench_label(), &params).await?;
         if let Some(error) = self.bench_part_error(&o) {
-            return Ok(Called::error(error));
+            return Ok((failed(error), None));
         }
         let output = ToolOutput {
             result: o.result,
             error: o.error,
             reads: o.reads,
             writes: o.writes,
-            ..Default::default()
+            events: o.events,
         };
-        Ok(Called::new(output, Some(o.part)))
+        Ok((output, Some(o.part)))
     }
 
     /// Why a benchmark tool's answer can't stand: it names an unknown part, or wrote to a part

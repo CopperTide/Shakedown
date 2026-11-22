@@ -72,6 +72,23 @@ impl Touched {
 /// Runs one tool in one transaction. `Err` only for database failures; tool failures,
 /// unknown tools and bad arguments come back in `ToolOutcome.error`.
 pub async fn call(client: &mut Client, name: &str, args: &Value) -> Result<ToolOutcome> {
+    run(client, name, args, Keep::Writes).await
+}
+
+/// `call`, answered as if its writes were made, but none is: the transaction is rolled back and
+/// no key is written (a lost write).
+pub async fn call_unwritten(client: &mut Client, name: &str, args: &Value) -> Result<ToolOutcome> {
+    run(client, name, args, Keep::Nothing).await
+}
+
+/// Whether a successful call's writes are kept.
+#[derive(Clone, Copy, PartialEq)]
+enum Keep {
+    Writes,
+    Nothing,
+}
+
+async fn run(client: &mut Client, name: &str, args: &Value, keep: Keep) -> Result<ToolOutcome> {
     if let Err(msg) = check_call(name, args) {
         return Ok(ToolOutcome::failed(msg));
     }
@@ -85,7 +102,11 @@ pub async fn call(client: &mut Client, name: &str, args: &Value) -> Result<ToolO
         writes: BTreeSet::new(),
     };
     let out = retail.run(name, args).await;
-    let touched = Touched::of(&retail);
+    let mut touched = Touched::of(&retail);
+    if keep == Keep::Nothing {
+        touched.writes.clear();
+        touched.docs.clear();
+    }
     finish(tx, out, touched).await
 }
 

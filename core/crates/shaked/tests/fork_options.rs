@@ -6,6 +6,7 @@ use support::records;
 
 use serde_json::{json, Value};
 use shaked::model::*;
+use support::driven::{events, finish, fork, on, start, Agent};
 use support::{run, AppFx};
 
 const ORDER: &str = "#W2378156";
@@ -14,90 +15,10 @@ async fn setup(tag: &str) -> AppFx {
     AppFx::idle("forkopts", tag).start().await
 }
 
-/// An agent's endpoint on a live branch: where it calls the world, and its token.
-struct Agent {
-    mcp_url: String,
-    token: String,
-}
-
-impl Agent {
-    fn of(answer: &Value) -> Agent {
-        Agent {
-            mcp_url: answer["mcp_url"].as_str().unwrap().to_string(),
-            token: answer["token"].as_str().unwrap().to_string(),
-        }
-    }
-
-    async fn rpc(&self, method: &str, params: Value) -> Value {
-        let body = json!({"jsonrpc": "2.0", "id": 1, "method": method, "params": params});
-        let r = reqwest::Client::new()
-            .post(&self.mcp_url)
-            .bearer_auth(&self.token);
-        let v: Value = r.json(&body).send().await.unwrap().json().await.unwrap();
-        v["result"].clone()
-    }
-
-    /// A tool call's result (`isError`, `content`, `structuredContent`).
-    async fn call(&self, name: &str, args: Value) -> Value {
-        let params = json!({"name": name, "arguments": args});
-        self.rpc("tools/call", params).await
-    }
-
-    /// The names of the tools it is offered.
-    async fn tools(&self) -> Vec<String> {
-        let l = self.rpc("tools/list", json!({})).await;
-        let names = l["tools"].as_array().unwrap().iter();
-        names
-            .map(|t| t["name"].as_str().unwrap().to_string())
-            .collect()
-    }
-}
-
-/// Starts an external run of task 27 with the agent `solo` registered: the branch and the agent.
-async fn start(fx: &AppFx) -> (String, Agent) {
-    let team = json!({"id": "own", "name": "Own design", "agents": []});
-    let body = json!({"task_id": "27", "team": team, "runner": "external"});
-    let (status, v) = fx.post("/api/runs", body).await;
-    assert_eq!(status, 200, "{v}");
-    let branch = v["branch_id"].as_str().unwrap().to_string();
-    let (status, a) = fx.on(&branch, "agents", json!({"id": "solo"})).await;
-    assert_eq!(status, 200, "{a}");
-    (branch, Agent::of(&a))
-}
-
-impl AppFx {
-    /// `POST /api/branches/{branch}/{what}`.
-    async fn on(&self, branch: &str, what: &str, body: Value) -> (u16, Value) {
-        self.post(&format!("/api/branches/{branch}/{what}"), body)
-            .await
-    }
-
-    async fn finish(&self, branch: &str) {
-        let (status, v) = self.on(branch, "finish", json!({})).await;
-        assert_eq!(status, 200, "{v}");
-    }
-
-    async fn events(&self, branch: &str) -> Vec<Event> {
-        records(&self.state.store).events(branch).await.unwrap()
-    }
-
-    /// Forks `branch` as `body` asks: the new branch and its agent `solo`.
-    async fn fork(&self, branch: &str, body: Value) -> (String, Agent) {
-        let (status, f) = self.on(branch, "fork", body).await;
-        assert_eq!(status, 200, "{f}");
-        let agents = f["agents"].as_array().unwrap();
-        let solo = agents.iter().find(|a| a["agent"] == "solo").unwrap();
-        (
-            f["branch_id"].as_str().unwrap().to_string(),
-            Agent::of(solo),
-        )
-    }
-
-    /// The retail world's tool names.
-    async fn world_tools(&self) -> Vec<String> {
-        let bench = self.state.hub.bench_describe("retail").await.unwrap();
-        bench.tools.into_iter().map(|t| t.name).collect()
-    }
+/// The retail world's tool names.
+async fn world_tools(fx: &AppFx) -> Vec<String> {
+    let bench = fx.state.hub.bench_describe("retail").await.unwrap();
+    bench.tools.into_iter().map(|t| t.name).collect()
 }
 
 /// The seq of the first tool call on the branch.
@@ -109,7 +30,7 @@ fn first_call(evs: &[Event]) -> i64 {
 /// The forked agent is offered only `get_order_details` of the world's tools, may call it, and
 /// is refused another.
 async fn assert_only_order_details(fx: &AppFx, forked: &Agent) {
-    let world = fx.world_tools().await;
+    let world = world_tools(fx).await;
     let offered: Vec<String> = (forked.tools().await.into_iter())
         .filter(|t| world.contains(t))
         .collect();
@@ -128,24 +49,24 @@ async fn assert_only_order_details(fx: &AppFx, forked: &Agent) {
 fn a_fork_may_give_an_agent_exactly_the_tools_it_lists() {
     run(async {
         let fx = setup("tools").await;
-        let (branch, solo) = start(&fx).await;
+        let (branch, solo) = start(&fx, json!({})).await;
         let read = solo.call("get_order_details", json!({"order_id": ORDER}));
         assert_eq!(read.await["isError"], false);
-        fx.finish(&branch).await;
-        let at = first_call(&fx.events(&branch).await);
+        finish(&fx, &branch).await;
+        let at = first_call(&events(&fx, &branch).await);
         let only = json!({"solo": {"tools": ["get_order_details"]}});
         let body = json!({"at_seq": at, "changes": only});
-        let (child, forked) = fx.fork(&branch, body).await;
+        let (child, forked) = fork(&fx, &branch, body).await;
         assert_only_order_details(&fx, &forked).await;
         // The parent keeps every tool; the new branch records its list.
         let parent = records(&fx.state.store).branch(&branch).await.unwrap();
         assert!(parent.team.agents[0].tools.is_empty());
         let stored = records(&fx.state.store).branch(&child).await.unwrap();
         assert_eq!(stored.team.agents[0].tools, ["get_order_details"]);
-        fx.finish(&child).await;
+        finish(&fx, &child).await;
         // A tool the world doesn't have is refused before anything is made.
         let typo = json!({"at_seq": at, "changes": {"solo": {"tools": ["get_order"]}}});
-        let (status, v) = fx.on(&branch, "fork", typo).await;
+        let (status, v) = on(&fx, &branch, "fork", typo).await;
         assert_eq!(status, 400, "{v}");
         assert!(v["error"].as_str().unwrap().contains("get_order"), "{v}");
     })
@@ -170,14 +91,14 @@ async fn street(agent: &Agent) -> Value {
 /// A finished run whose agent moved `USER`: the branch, the seq of the write and the street the
 /// user had before it.
 async fn moved_user(fx: &AppFx) -> (String, i64, Value) {
-    let (branch, solo) = start(fx).await;
+    let (branch, solo) = start(fx, json!({})).await;
     let before = street(&solo).await;
     let w = solo
         .call("modify_user_address", address("7 Fork Road"))
         .await;
     assert_eq!(w["isError"], false, "{w}");
-    fx.finish(&branch).await;
-    let evs = fx.events(&branch).await;
+    finish(fx, &branch).await;
+    let evs = events(fx, &branch).await;
     let write = evs.iter().rev().find(|e| e.kind == EventKind::ToolCall);
     (branch, write.unwrap().seq, before)
 }
@@ -189,13 +110,12 @@ fn restore_none_leaves_the_world_as_the_parent_ended() {
         let (branch, at, before) = moved_user(&fx).await;
         assert_ne!(before, "7 Fork Road");
         // The default restores the world as it was just before the write.
-        let (exact, agent) = fx.fork(&branch, json!({"at_seq": at})).await;
+        let (exact, agent) = fork(&fx, &branch, json!({"at_seq": at})).await;
         assert_eq!(street(&agent).await, before);
-        fx.finish(&exact).await;
+        finish(&fx, &exact).await;
         // `none` keeps the agents' context up to the write but the world as the run ended.
-        let (child, agent) = fx
-            .fork(&branch, json!({"at_seq": at, "restore": "none"}))
-            .await;
+        let none = json!({"at_seq": at, "restore": "none"});
+        let (child, agent) = fork(&fx, &branch, none).await;
         assert_eq!(street(&agent).await, "7 Fork Road");
         let b = records(&fx.state.store).branch(&child).await.unwrap();
         assert_eq!(json!(b.restore_mode), "none");
@@ -203,10 +123,10 @@ fn restore_none_leaves_the_world_as_the_parent_ended() {
             json!(b.restored),
             json!([{"part": "retail", "how": "none"}])
         );
-        fx.finish(&child).await;
+        finish(&fx, &child).await;
         // Its own steps can't be forked: its world at its start isn't recorded.
-        let last = fx.events(&child).await.last().unwrap().seq;
-        let (status, v) = fx.on(&child, "fork", json!({"at_seq": last})).await;
+        let last = events(&fx, &child).await.last().unwrap().seq;
+        let (status, v) = on(&fx, &child, "fork", json!({"at_seq": last})).await;
         assert_eq!(status, 409, "{v}");
     })
 }

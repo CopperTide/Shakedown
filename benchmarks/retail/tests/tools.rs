@@ -204,11 +204,9 @@ async fn describe_suggests_triage_then_resolver() {
 async fn describe_lists_tools_and_their_effects() {
     let d = retail().describe().await.unwrap();
     for t in &d.tools {
-        let want = if WRITE_TOOLS.contains(&t.name.as_str()) {
-            Effect::Write
-        } else {
-            Effect::Read
-        };
+        // The scenario tool is the world's own (it schedules disruptions): a write.
+        let write = WRITE_TOOLS.contains(&t.name.as_str()) || t.name == "retail_scenario";
+        let want = if write { Effect::Write } else { Effect::Read };
         assert_eq!(t.effect, want, "{}", t.name);
         assert_eq!(t.input_schema["type"], "object");
     }
@@ -216,6 +214,7 @@ async fn describe_lists_tools_and_their_effects() {
     names.sort();
     let mut want: Vec<&str> = tools::tool_names().collect();
     assert_eq!(want.len(), 16);
+    want.push("retail_scenario");
     want.sort();
     assert_eq!(names, want);
     assert!(!names.contains(&"handoff"));

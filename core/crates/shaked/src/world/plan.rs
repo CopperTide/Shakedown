@@ -35,13 +35,15 @@ pub struct Plan {
     pub view: Option<ViewInfo>,
     /// The world's time its parts get at `start` (None for base and gold worlds).
     pub world_time: Option<WorldTimeParams>,
+    /// The benchmark's tools a setup calls on a part (the world's own, so not in `tools`).
+    pub setup_bench_tools: BTreeSet<String>,
 }
 
 /// The parts of `bench`'s world and its tool table: the benchmark's tools, then each part's.
 /// Refuses a world in which two tools share a name (`handoff` counts as one) or a link names a
 /// part or tool it doesn't have, or a gate, a task's setup, a scenario's setup or the view does. A
 /// tool a link or a setup (a task's, or the one a scenario adds) calls is the world's own: agents
-/// don't get it.
+/// don't get it. A setup may call a part's tool or a benchmark tool that acts on that part.
 pub async fn plan(hub: &Hub, bench: &BenchDescribe) -> Result<Plan> {
     let parts = describe_parts(hub, bench).await?;
     let mut tools = tool_table(bench, &parts)?;
@@ -50,11 +52,12 @@ pub async fn plan(hub: &Hub, bench: &BenchDescribe) -> Result<Plan> {
     let setup: Vec<&SetupCall> = (bench.tasks.iter().flat_map(|t| &t.setup))
         .chain(&scenario_setup)
         .collect();
-    check_setup(&setup, &parts)?;
+    check_setup(&setup, &parts, bench)?;
     check_view(bench.view.as_ref(), &parts)?;
     let worlds_own = |name: &str| {
         bench.links.iter().any(|l| l.tool == name) || setup.iter().any(|c| c.tool == name)
     };
+    let setup_bench_tools = setup_bench_tools(&setup, &tools);
     tools.retain(|(t, _)| !worlds_own(&t.name));
     check_gates(&bench.gates, &parts, &tools)?;
     Ok(Plan {
@@ -64,7 +67,17 @@ pub async fn plan(hub: &Hub, bench: &BenchDescribe) -> Result<Plan> {
         gates: bench.gates.clone(),
         view: bench.view.clone(),
         world_time: None,
+        setup_bench_tools,
     })
+}
+
+/// The benchmark's tools among those the `setup` calls make.
+fn setup_bench_tools(setup: &[&SetupCall], tools: &[(ToolSchema, Route)]) -> BTreeSet<String> {
+    let called = |name: &str| setup.iter().any(|c| c.tool == name);
+    let of_bench = tools
+        .iter()
+        .filter(|(t, r)| *r == Route::Bench && called(&t.name));
+    of_bench.map(|(t, _)| t.name.clone()).collect()
 }
 
 /// Every tool of the world, routed: the benchmark's, then each part's. Refused when two share a
@@ -126,12 +139,13 @@ fn check_links(links: &[Link], parts: &[PlannedPart]) -> Result<()> {
     Ok(())
 }
 
-fn check_setup(calls: &[&SetupCall], parts: &[PlannedPart]) -> Result<()> {
+fn check_setup(calls: &[&SetupCall], parts: &[PlannedPart], bench: &BenchDescribe) -> Result<()> {
     for c in calls {
         let Some(part) = parts.iter().find(|p| p.part.part == c.part) else {
             bail!("a task's setup calls {}, which is not a part", c.part);
         };
-        if !part.describe.tools.iter().any(|t| t.name == c.tool) {
+        let listed = |tools: &[ToolSchema]| tools.iter().any(|t| t.name == c.tool);
+        if !listed(&part.describe.tools) && !listed(&bench.tools) {
             bail!(
                 "a task's setup calls {}, which {} does not have",
                 c.tool,
