@@ -50,6 +50,15 @@ impl ProjectState {
         state
     }
 
+    /// The project at `root`, opened on first read and saying nothing now (for a folder that may
+    /// become a project, as `shaked import`'s).
+    pub fn unopened(root: PathBuf) -> ProjectState {
+        ProjectState {
+            root: Some(root),
+            cached: Mutex::new(None),
+        }
+    }
+
     /// The configured folder, if any.
     pub fn root(&self) -> Option<&Path> {
         self.root.as_deref()

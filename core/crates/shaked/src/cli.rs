@@ -33,7 +33,7 @@ async fn mcp(args: &[String]) -> Result<()> {
     let Some(dir) = dir else {
         bail!("shaked mcp needs a project: pass --project <folder> or set SHAKEDOWN_PROJECT");
     };
-    let project = crate::project_state::ProjectState::new(Some(dir));
+    let project = crate::project_state::ProjectState::unopened(dir);
     crate::ops::stdio::run(std::sync::Arc::new(project)).await
 }
 
