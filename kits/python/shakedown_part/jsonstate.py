@@ -11,7 +11,13 @@ starts empty) and `denials_doc(state)` is its `_audit/denials` document.
 
 A part with scheduled disruptions (`disruptions`) also gives `DISRUPTIONS` (`{do.kind: Kind}`) and
 `WORLD_TOOLS` (the tools a task's setup or a link calls: they are not agents' calls, so they count
-for no disruption). Its scenario tool arms them with `disruptions.arm`.
+for no disruption). Its scenario tool arms them with `disruptions.arm`, and timed ones (at a world
+time) with `disruptions.arm_timed`.
+
+A part on the world clock (`uses_clock: true` in `describe_fields`) is advanced in fixed one-minute
+steps (`STEP_MS`): `advance` calls `on_minute(inst, clock_ms)` at every whole minute it passes, which
+by default reveals and applies the timed disruptions due then, and reports the minute of the next one
+as `wake_at_ms`. The state keeps `clock_ms`, so how advances are split never changes the state.
 """
 import copy
 import json
@@ -25,6 +31,7 @@ from .params import Refusal, input_schema, normalize, refused
 
 FILE = "state.json"
 DENIALS = "_audit/denials"
+STEP_MS = 60_000  # a clocked part's internal step: one world minute
 
 
 @dataclass
@@ -120,6 +127,7 @@ class JsonStatePart(DocsPart):
         if tool is None:
             raise errors.invalid(f"unknown tool {name}")
         before = self._scheduled(inst, name)
+        wake = _wake(inst.state)
         work = copy.deepcopy(inst.state)
         try:
             done = tool.run(inst.config, work, normalize(name, tool.params, args))
@@ -129,7 +137,31 @@ class JsonStatePart(DocsPart):
         out = {"result": done.result, "reads": done.reads, "writes": done.writes}
         if done.events:
             out["events"] = done.events
+        if _wake(work) not in (None, wake):
+            out["wake_at_ms"] = _wake(work)
         return disruptions.merged(out, before)
+
+    def on_minute(self, inst, clock_ms) -> list:
+        """One world minute of a clocked part, at `clock_ms` (a whole minute): the events it gives. The
+        kit's step reveals and applies the timed disruptions due by then; a part that simulates more
+        overrides it and calls this one too."""
+        return disruptions.fire_timed(inst.config, inst.state, self.DISRUPTIONS, clock_ms).events
+
+    def advance(self, instance, clock_ms):
+        """Runs the state on to `clock_ms` a minute at a time (`on_minute` at each whole minute passed),
+        after the timed disruptions armed since the last minute that are due by it."""
+        inst = self._instance(instance)
+        before = copy.deepcopy(inst.state)
+        now = inst.state.get("clock_ms", 0)
+        last = now - now % STEP_MS
+        events = disruptions.fire_timed(inst.config, inst.state, self.DISRUPTIONS, last).events
+        for t in range(last + STEP_MS, clock_ms + 1, STEP_MS):
+            events += self.on_minute(inst, t)
+        inst.state["clock_ms"] = max(now, clock_ms)
+        out = {"changed": inst.state != before, "events": events}
+        if _wake(inst.state) is not None:
+            out["wake_at_ms"] = _wake(inst.state)
+        return out
 
     def on_refused(self, inst, name, args, error) -> dict:
         """The answer to a call the tool refused. A `Denied` is recorded on the state (its `denials`) and
@@ -215,7 +247,11 @@ def set_scenario(config, state, args, known, overlay, kinds, tools) -> Done:
     given = [*overlay(config, state).get("disruptions", []), *(args.get("disruptions") or [])]
     if not given:
         return Done({"scenario": args["name"]}, writes=["scenario/current"])
-    fired = disruptions.arm(config, state, kinds, list(tools), given)
+    counted = [d for d in given if not disruptions.is_timed(d)]
+    fired = disruptions.arm(config, state, kinds, list(tools), counted) if counted else disruptions.Fired()
+    timed = [d for d in given if disruptions.is_timed(d)]
+    if timed:
+        fired.add(disruptions.arm_timed(config, state, kinds, timed))
     result = {"scenario": args["name"], "disruptions": [d["id"] for d in given]}
     return Done(result, writes=["scenario/current", *fired.writes], events=fired.events)
 
@@ -246,6 +282,14 @@ class Scenarios:
     def set(self, config, state, args, kinds, tools) -> Done:
         """The scenario tool's work (`set_scenario`), with `kinds` and `tools` the part's own."""
         return set_scenario(config, state, args, self.names(config), self.overlay, kinds, tools)
+
+
+def _wake(state):
+    """The whole minute at which a clocked part next reveals or applies a timed disruption, or None."""
+    at = disruptions.next_wake(state)
+    if at is None:
+        return None
+    return -(-at // STEP_MS) * STEP_MS
 
 
 def _read(save_dir) -> dict:

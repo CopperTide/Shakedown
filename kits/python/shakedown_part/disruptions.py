@@ -9,6 +9,14 @@ A disruption is `{id, when: {after_calls, tool?}, do: {kind, ...}, text}`. `afte
 agents' calls this part answered since setup (only calls of `tool` when it is given); one with
 `after_calls` 0 and no `tool` fires as it is armed. A part says which `do.kind`s it knows with a
 `Kind` each: the fields `do` needs and how it changes the state.
+
+A timed disruption happens at a world time instead: `{id, at, known_at, at_ms, known_at_ms, do, text}`,
+`at_ms` the branch clock it takes effect at and `known_at_ms` the clock the world learns of it (each
+defaults to the other). `arm_timed` keeps them; `fire_timed` (inside the part's own fixed steps) gives an
+`alert` at `known_at_ms` (with `data.known_only` true for a forecast, before it hits) and applies it at
+`at_ms`, with a `disruption` event only when it was known by then: a part never reveals one before its
+`known_at_ms` (docs/protocol.md, "Scheduled disruptions"). `next_wake` is the clock of the next reveal or
+effect.
 """
 from dataclasses import dataclass, field
 from typing import Callable
@@ -16,6 +24,7 @@ from typing import Callable
 from .params import TYPES, Refusal
 
 EVENT = "disruption"  # the kind of the world event a disruption gives when it fires
+ALERT = "alert"  # the kind of the world event a timed disruption gives when the world learns of it
 
 
 def _no_check(config, do) -> None:
@@ -155,10 +164,100 @@ def merged(out: dict, before: Fired) -> dict:
 
 
 def docs(state) -> dict:
-    """`{_disruption/<id>: doc}`: each disruption with how many calls it has seen and whether it fired.
-    The keys are internal (docs/protocol.md, "Ids and keys"): shaked saves them but no step writes them."""
-    return {key(d): d for d in state.get("disruptions", [])}
+    """`{_disruption/<id>: doc}`: each disruption with how many calls it has seen and whether it fired (a
+    timed one: whether it is known and applied). The keys are internal (docs/protocol.md, "Ids and keys"):
+    shaked saves them but no step writes them."""
+    return {key(d): d for d in [*state.get("disruptions", []), *state.get("timed", [])]}
 
 
 def fired(state) -> list:
     return [d for d in state.get("disruptions", []) if d["fired"]]
+
+
+def is_timed(d) -> bool:
+    """True for a disruption given at a world time (no `when`)."""
+    return isinstance(d, dict) and "when" not in d and any(
+        k in d for k in ("at_ms", "known_at_ms", "at", "known_at"))
+
+
+def _clock(did, d, name):
+    value = d.get(name)
+    if value is not None and (not isinstance(value, int) or isinstance(value, bool)):
+        raise Refusal(f"disruption {did}: {name} must be a whole number of ms")
+    return value
+
+
+def _checked_timed(config, kinds, d) -> dict:
+    """`d` checked, as the schedule keeps it (not known, not applied)."""
+    did = d.get("id") if isinstance(d, dict) else None
+    if not isinstance(did, str) or not did:
+        raise Refusal("each disruption needs an id (text)")
+    if not isinstance(d.get("text"), str):
+        raise Refusal(f"disruption {did}: text must be text")
+    at, known = _clock(did, d, "at_ms"), _clock(did, d, "known_at_ms")
+    if at is None and known is None:
+        raise Refusal(f"disruption {did}: give at_ms or known_at_ms, the branch clock it happens or is known at")
+    at, known = (known if at is None else at), (at if known is None else known)
+    do = _do(config, kinds, did, d.get("do"))
+    return {"id": did, "at": d.get("at"), "known_at": d.get("known_at"), "at_ms": at, "known_ms": known,
+            "do": do, "text": d["text"], "known": False, "applied": False}
+
+
+def arm_timed(config, state, kinds, given) -> Fired:
+    """Adds the timed disruptions `given` to the schedule in `state` (refusing the lot if one is bad or an
+    id is taken, among the counted ones too). Nothing fires here: `fire_timed` does, at their clocks."""
+    if not isinstance(given, list):
+        raise Refusal("disruptions must be a list")
+    timed = state.setdefault("timed", [])
+    new = [_checked_timed(config, kinds, d) for d in given]
+    ids = [d["id"] for d in [*state.get("disruptions", []), *timed, *new]]
+    if len(set(ids)) != len(ids):
+        raise Refusal("two disruptions have the same id")
+    timed.extend(new)
+    return Fired([key(d) for d in new])
+
+
+def due(state, clock_ms) -> tuple:
+    """Takes the timed disruptions due by `clock_ms`: `(reveals, effects)`, those the world learns of and
+    those that take effect, each marked so it is taken once, in clock order."""
+    timed = state.get("timed", [])
+    reveals = sorted((d for d in timed if not d["known"] and d["known_ms"] <= clock_ms),
+                     key=lambda d: (d["known_ms"], d["id"]))
+    effects = sorted((d for d in timed if not d["applied"] and d["at_ms"] <= clock_ms),
+                     key=lambda d: (d["at_ms"], d["id"]))
+    for d in reveals:
+        d["known"] = True
+    for d in effects:
+        d["applied"] = True
+    return reveals, effects
+
+
+def _alert(d) -> dict:
+    data = {"id": d["id"], "at_ms": d["at_ms"], "known_at_ms": d["known_ms"],
+            "known_only": d["known_ms"] < d["at_ms"], **d["do"]}
+    return {"kind": ALERT, "text": d["text"], "data": data}
+
+
+def fire_timed(config, state, kinds, clock_ms) -> Fired:
+    """Reveals and applies the timed disruptions due by `clock_ms` (see the module's doc), in clock order, a
+    reveal before an effect at the same clock: the keys written and the events given."""
+    reveals, effects = due(state, clock_ms)
+    steps = sorted([(d["known_ms"], 0, d["id"], d) for d in reveals]
+                   + [(d["at_ms"], 1, d["id"], d) for d in effects], key=lambda s: s[:3])
+    out = Fired()
+    for _, effect, _, d in steps:
+        if not effect:
+            out.add(Fired([key(d)], [_alert(d)]))
+            continue
+        written = kinds[d["do"]["kind"]].apply(config, state, d["do"])
+        told = d["known_ms"] <= d["at_ms"]
+        events = [{"kind": EVENT, "text": d["text"], "data": {"id": d["id"], **d["do"]}}] if told else []
+        out.add(Fired([key(d), *written], events))
+    return out
+
+
+def next_wake(state):
+    """The branch clock of the next reveal or effect of a timed disruption, or None."""
+    times = [d["known_ms"] for d in state.get("timed", []) if not d["known"]]
+    times += [d["at_ms"] for d in state.get("timed", []) if not d["applied"]]
+    return min(times, default=None)

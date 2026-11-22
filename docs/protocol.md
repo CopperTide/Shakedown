@@ -254,6 +254,14 @@ may list more). The Python kit implements this convention (`shakedown_part.disru
   learns of it (default `at`; earlier is a forecast, later is found out late), each as a world time
   (`YYYY-MM-DDTHH:MM:SS`) and as the branch clock in ms (`at_ms`, `known_at_ms`). A part must not reveal a scheduled event in any tool
   result or event before its `known_at`; it reports `wake_at_ms` for its next reveal or effect.
+- The Python kit runs timed disruptions too: a `jsonstate` part's scenario tool arms the disruptions with `at_ms`
+  or `known_at_ms` (no `when`) with `disruptions.arm_timed`, and a clocked `JsonStatePart` (`uses_clock: true`)
+  steps one world minute at a time in `advance`, calling `on_minute(inst, clock_ms)` at each whole minute. There
+  `disruptions.fire_timed` gives an `alert` at `known_at_ms` (`data: {id, at_ms, known_at_ms, known_only, ...do}`,
+  `known_only` true for a forecast, before it hits) and applies the disruption at `at_ms`, with a `disruption`
+  event only when it was known by then (found out late, it takes effect unseen until its alert). `advance`
+  reports the minute of the next reveal or effect as `wake_at_ms`, and so does the call that armed it.
+  `disruptions.due` and `disruptions.next_wake` are the pieces, for a part that steps itself.
 - `do.kind` is the part's own. pharma-logistics: `lane_capacity {carrier, origin, destination, capacity}`,
   `lane_unavailable {carrier, origin, destination}`, `transit_delay {carrier, origin, destination, extra_days}`,
   `reject_next {action, note?}` (the director rejects the next decision on that action). pharma-lims: `result_fails
