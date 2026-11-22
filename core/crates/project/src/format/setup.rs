@@ -92,4 +92,31 @@ pub struct AgentSpec {
     /// Tools it may call; `*` for all.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tools: Vec<String>,
+    /// A `builtin` agent's reasoning, sent with each of its model calls as the request's
+    /// `reasoning` (OpenRouter's reasoning tokens): its thinking is then recorded with each turn.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning: Option<Reasoning>,
+}
+
+/// How much a model reasons before it answers (OpenRouter's `reasoning` request field).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Reasoning {
+    /// `minimal`, `low`, `medium`, `high` or `xhigh`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effort: Option<Effort>,
+    /// A token budget for the reasoning, where the model takes one instead of an effort.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_tokens: Option<u32>,
+}
+
+/// A reasoning effort.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum Effort {
+    Minimal,
+    Low,
+    Medium,
+    High,
+    Xhigh,
 }

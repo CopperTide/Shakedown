@@ -262,6 +262,10 @@ fn builtin(a: &AgentSpec) -> FileAgent {
         } else {
             a.tools.clone()
         },
+        reasoning: a
+            .reasoning
+            .as_ref()
+            .and_then(|r| serde_json::from_value(r.clone()).ok()),
     }
 }
 

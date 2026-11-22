@@ -96,6 +96,10 @@ pub struct AgentSpec {
     /// of the setup, like `read_only`; the talk tools of its runner are always offered.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tools: Vec<String>,
+    /// An API-mode agent's reasoning setting, sent as the request's `reasoning` field with each of
+    /// its model calls (OpenRouter's `{effort, max_tokens, exclude}`); absent, none is sent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning: Option<serde_json::Value>,
 }
 
 impl AgentSpec {
@@ -115,6 +119,7 @@ impl AgentSpec {
             url: None,
             headers: Headers::default(),
             tools: Vec::new(),
+            reasoning: None,
         }
     }
 

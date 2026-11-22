@@ -102,6 +102,23 @@ fn claude_code_team_from_a_file() {
 }
 
 #[test]
+fn reasoning_reaches_the_agent() {
+    let (_dir, p) = project(|dir| {
+        runnable(dir);
+        std::fs::write(
+            dir.join("setups/solo-planner.yaml"),
+            "format: shakedown-setup/1\nlabel: Thinking planner\nteam:\n  kind: builtin\n  agents:\n    \
+             - {id: planner, role: You plan., model: deepseek/deepseek-v4-pro, key: openrouter, \
+             reasoning: {effort: high}}\n",
+        )
+        .unwrap();
+    });
+    let req = request(&p, &exp(), None).unwrap();
+    let agent = &req.setups[0].team.agents[0];
+    assert_eq!(agent.reasoning, Some(serde_json::json!({"effort": "high"})));
+}
+
+#[test]
 fn faults_become_disruptions() {
     let (_dir, p) = project(runnable);
     let scenario = request(&p, &exp(), None)

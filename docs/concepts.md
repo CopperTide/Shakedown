@@ -123,6 +123,10 @@ mode with a key-store `key` unless it says `kind: claude-code`: then it is Claud
 machine, with `model` a Claude Code model (`fable`, `opus`, `sonnet`, `haiku` or a full id) and no key. So a team of
 several Claude Code agents, each with its own role, model and tools (a dispatch team), is one setup file;
 `team: {kind: claude-code}` stays the single Claude Code agent.
+An API-mode agent may also say `reasoning: {effort: minimal|low|medium|high|xhigh}` (or `{max_tokens: N}`): shaked
+sends it as the request's `reasoning` field with each of the agent's model calls (OpenRouter's reasoning tokens), and
+the thinking each answer carries is recorded as the agent's `reasoning` events, shown on the run's timeline and in
+the inspector with the model call it came from.
 
 Every agent also gets three tools for talking to the others, all optional and recorded when used (a dispatch run
 has its own set, below):

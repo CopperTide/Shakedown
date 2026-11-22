@@ -45,6 +45,8 @@ pub(super) struct AgentSpecIn {
     headers: Headers,
     #[serde(default)]
     tools: Vec<String>,
+    #[serde(default)]
+    reasoning: Option<serde_json::Value>,
 }
 
 impl From<AgentSpecIn> for AgentSpec {
@@ -72,6 +74,7 @@ impl From<AgentSpecIn> for AgentSpec {
             url: a.url,
             headers: a.headers,
             tools: a.tools,
+            reasoning: a.reasoning,
         }
     }
 }

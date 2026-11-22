@@ -314,6 +314,8 @@ struct Loop {
     tools: Vec<Value>,
     branch: Arc<BranchCtx>,
     agent: String,
+    /// The agent's `reasoning` setting, sent with every call when it has one.
+    reasoning: Option<Value>,
 }
 
 impl Loop {
@@ -330,6 +332,7 @@ impl Loop {
             state,
             branch,
             agent: spec.id.clone(),
+            reasoning: spec.reasoning.clone(),
         })
     }
 
@@ -344,7 +347,10 @@ impl Loop {
         let exec = ToolExec::new(self.state.store.clone());
         let base = self.state.config.retry_base;
         for _ in 0..MAX_MODEL_CALLS {
-            let body = json!({"messages": messages, "tools": self.tools, "model": self.model});
+            let mut body = json!({"messages": messages, "tools": self.tools, "model": self.model});
+            if let Some(r) = &self.reasoning {
+                body["reasoning"] = r.clone();
+            }
             let v = model_call(&self.state.http, &self.url, &body, base).await?;
             totals.add(&self.provider, &v["usage"]);
             // The gateway priced the call into the run's estimate: stop once it is over.

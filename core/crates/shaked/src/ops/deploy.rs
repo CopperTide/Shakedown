@@ -340,6 +340,10 @@ fn builtin_agent(spec: &shakedown_project::format::AgentSpec) -> AgentSpec {
         .filter(|t| t.as_str() != "*")
         .cloned()
         .collect();
+    agent.reasoning = spec
+        .reasoning
+        .as_ref()
+        .and_then(|r| serde_json::to_value(r).ok());
     agent
 }
 
