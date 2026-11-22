@@ -79,10 +79,8 @@ pub async fn fork_with(
     let new_id = create_child(records, &parent, &rerun, &team, &req).await?;
     let (world, restore_ms) =
         start_child_world(state, records, &events, &parent.id, &new_id, &mut rerun).await?;
-    let store = StoreRecords::new(state.store.clone(), scope.clone(), new_id.clone());
-    let ctx = BranchCtx::new(new_id, Arc::new(world), team, task_id.clone())
-        .with_records(Arc::new(store));
-    let ctx = child_ctx(ctx, &events, &rerun, scope, restore_ms);
+    let ctx = BranchCtx::new(new_id, Arc::new(world), team, task_id.clone());
+    let ctx = child_ctx(state, ctx, &events, &rerun, scope, restore_ms);
     reschedule(state, &ctx, &schedule).await?;
     if ctx.rules.runner == Runner::External {
         let conn = ctx.rules.connection.clone();
@@ -100,16 +98,19 @@ pub async fn fork_with(
 /// The new branch's context: the run's rules, the clock at the fork point, the caller, and the
 /// time restoring took.
 fn child_ctx(
+    state: &AppState,
     ctx: BranchCtx,
     events: &[Event],
     rerun: &Rerun,
     scope: &Arc<Caller>,
     restore_ms: f64,
 ) -> BranchCtx {
+    let store = StoreRecords::new(state.store.clone(), scope.clone(), ctx.branch_id.clone());
     let ctx = ctx
         .with_rules(recorded::rules(events))
         .with_clock(BranchClock::from_env(rerun.clock_ms))
-        .with_caller(scope.clone());
+        .with_caller(scope.clone())
+        .with_records(Arc::new(store));
     ctx.overhead.add(Cat::Restore, restore_ms);
     ctx
 }
