@@ -13,7 +13,10 @@ pub use observability::{
     Alert, Behavior, HumanRule, Moment, ObsMode, ObsTool, Observability, Operator, Then,
 };
 pub use project::{AssistantSettings, Defaults, EditPolicy, Permissions, ProjectFile, SpendPolicy};
-pub use scenario::{Breach, Change, Check, CheckKind, Event, Gate, ScenarioFile};
+pub use scenario::{
+    parse_duration_ms, ActionCost, Breach, Change, Check, CheckKind, ClockMode, ClockSpec, Event,
+    Gate, ScenarioFile,
+};
 pub use setup::{AgentSpec, SetupFile, Team};
 pub use world::{Auth, Connector, ConnectorMode, DataSource, Flow, Person, WorldFile};
 

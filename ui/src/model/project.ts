@@ -97,7 +97,14 @@ export interface Change { record: string; value: unknown }
 /** A failure or disruption injected during the run: at a world time or after N agent calls. */
 export interface ScenarioEvent {
   name: string;
+  /** When it happens: `HH:MM` on the task's day or an ISO timestamp. */
   at?: string;
+  /** When the world learns of it (default `at`); parts never reveal it earlier. */
+  known_at?: string;
+  /** The part that carries it out, with `do`. */
+  part?: string;
+  /** What the part does, e.g. `{kind: capacity_program, ...}`. */
+  do?: Record<string, unknown>;
   after_calls?: number;
   effects?: unknown[];
   db?: string;
@@ -107,7 +114,24 @@ export interface ScenarioEvent {
 
 export interface Gate { rule: string; scope: string; on_breach: 'block' | 'flag' }
 
-export interface Check { text: string; kind: 'goal' | 'safety'; query?: string; ends_run?: boolean }
+export interface Check {
+  text: string;
+  kind: 'goal' | 'safety';
+  /** Plain text, or a structured query such as `{part, key, field, op, value}`. */
+  query?: string | Record<string, unknown>;
+  ends_run?: boolean;
+}
+
+/** How world time moves: `wall` (runs while agents work) or `stepped` (moves when the team acts or waits). */
+export interface ClockSpec {
+  mode?: 'wall' | 'stepped';
+  /** World time an agent call costs, e.g. `{read: '0m', write: '2m', tools: {plan_recovery: '5m'}}`. */
+  action_cost?: { read?: string; write?: string; tools?: Record<string, string> };
+  /** Longest quiet stretch before the lead gets a look (default `60m`), or `none`. */
+  epoch?: string;
+  /** The world time the run ends at. */
+  horizon?: string;
+}
 
 /** A scenario file's contents (shakedown-scenario/1). */
 export interface ScenarioBody {
@@ -116,8 +140,11 @@ export interface ScenarioBody {
   world: string;
   task: string;
   preset?: string;
+  clock?: ClockSpec;
   changes?: Change[];
   events?: ScenarioEvent[];
+  /** Background generators passed to every part's setup as they are. */
+  generators?: Record<string, unknown>[];
   gates?: Gate[];
   checks?: Check[];
 }

@@ -312,6 +312,33 @@ the finish's `error` when it carried one. A driver that exits holding a finish d
 a windowed run is cut off only after the longer of `SHAKEDOWN_CODE_RUN_SECS` and the window's wall time plus the driver
 grace.
 
+## Stepped clock
+
+A scenario file (`scenarios/<id>.yaml`) may set how world time moves with a `clock` block; without one the
+clock runs on wall time as described under Clock in the [Glossary](#glossary).
+
+```yaml
+clock:
+  mode: stepped                  # or wall, the default
+  action_cost: {read: 0m, write: 2m, tools: {plan_recovery: 5m}}
+  epoch: 60m                     # the default; `none` turns it off
+  horizon: "23:59"               # HH:MM on the task's day, or an ISO timestamp
+events:
+  - name: Thunderstorm cells approach the hub
+    at: "15:10"                  # when it happens in the world
+    known_at: "14:40"            # when the world learns of it (default: at)
+    part: driver                 # the part that carries it out
+    do: {kind: capacity_program, station: ORD, arrival_rate: 24, until: "19:30"}
+generators:
+  - {kind: sick_calls, rate_per_100_duties: 1.5}
+```
+
+Durations are a whole number and a unit: `ms`, `s`, `m` or `h`. An event fires at a world time (`at`,
+`known_at` or both) or after a number of agent calls (`after_calls`), never both, and an event with `do` names its
+`part`. `known_at` before `at` is a forecast; after it, the event is found out late. `generators` are passed to the
+parts as they are, and each part expands them from the run's seed. A check's `query` may be plain text or a
+structured query such as `{part: driver, key: kpis, field: cost_vs_baseline, op: lt, value: 1.0}`.
+
 ## What the world says about itself
 
 An integration may say in `describe` what kind of system it is: `system: {kind, product, stands_in_for?,

@@ -4,7 +4,8 @@
 use std::path::{Path, PathBuf};
 
 use shakedown_project::format::{
-    parse, to_yaml, ExperimentFile, Format, ProjectFile, ScenarioFile, SetupFile, WorldFile,
+    parse, parse_duration_ms, to_yaml, ClockMode, ClockSpec, ExperimentFile, Format, ProjectFile,
+    ScenarioFile, SetupFile, WorldFile,
 };
 
 fn fixture(rel: &str) -> (String, String) {
@@ -163,4 +164,71 @@ fn spend_cap_round_trips() {
     let project = parse::<ProjectFile>("shakedown.yaml", text).unwrap();
     let again: ProjectFile = parse("shakedown.yaml", &to_yaml(&project).unwrap()).unwrap();
     assert_eq!(project, again);
+}
+
+fn stepped_storm() -> String {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/scenarios/stepped-storm.yaml");
+    std::fs::read_to_string(path).expect("fixture exists")
+}
+
+#[test]
+fn parses_stepped_clock_and_timed_events() {
+    let scenario = parse::<ScenarioFile>("s.yaml", &stepped_storm()).expect("stepped scenario parses");
+    let clock = scenario.clock.as_ref().expect("clock set");
+    assert_eq!(clock.mode, ClockMode::Stepped);
+    assert_eq!(clock.epoch.as_deref(), Some("60m"));
+    assert_eq!(clock.horizon.as_deref(), Some("23:59"));
+    assert_eq!(clock.action_cost.tools.get("plan_recovery").map(String::as_str), Some("5m"));
+    let event = &scenario.events[0];
+    assert_eq!(event.known_at.as_deref(), Some("14:40"));
+    assert_eq!(event.part.as_deref(), Some("driver"));
+    assert_eq!(event.do_.as_ref().and_then(|d| d["kind"].as_str()), Some("capacity_program"));
+    assert_eq!(scenario.generators.len(), 1);
+    let again: ScenarioFile = parse("s.yaml", &to_yaml(&scenario).unwrap()).expect("re-parses");
+    assert_eq!(scenario, again);
+}
+
+#[test]
+fn rejects_bad_duration() {
+    let text = stepped_storm().replace("write: 2m", "write: \"2 parsecs\"");
+    let err = parse::<ScenarioFile>("s.yaml", &text).unwrap_err();
+    assert_eq!(err.pointer, "/clock/action_cost/write", "{err}");
+    assert!(err.message.contains("2 parsecs"), "{err}");
+}
+
+#[test]
+fn wall_is_default() {
+    let text = "format: shakedown-scenario/1\nlabel: S\nworld: w\ntask: T\n";
+    let scenario = parse::<ScenarioFile>("s.yaml", text).expect("parses");
+    assert_eq!(scenario.clock, None);
+    let clock: ClockSpec = serde_json::from_str("{}").expect("an empty clock block parses");
+    assert_eq!(clock.mode, ClockMode::Wall);
+    assert_eq!(clock.action_cost.read, "0m");
+    assert_eq!(clock.action_cost.write, "2m");
+    assert_eq!(clock.epoch_ms(), Ok(Some(3_600_000)), "epoch defaults to 60m");
+}
+
+#[test]
+fn durations_parse() {
+    assert_eq!(parse_duration_ms("0m"), Ok(0));
+    assert_eq!(parse_duration_ms("2m"), Ok(120_000));
+    assert_eq!(parse_duration_ms("90s"), Ok(90_000));
+    assert_eq!(parse_duration_ms("1h"), Ok(3_600_000));
+    assert_eq!(parse_duration_ms("250ms"), Ok(250));
+    assert!(parse_duration_ms("2").is_err());
+    assert!(parse_duration_ms("-2m").is_err());
+    let none: ClockSpec = serde_json::from_str(r#"{"epoch": "none"}"#).unwrap();
+    assert_eq!(none.epoch_ms(), Ok(None));
+}
+
+#[test]
+fn timed_event_needs_one_trigger() {
+    let text = "format: shakedown-scenario/1\nlabel: S\nworld: w\ntask: T\nevents:\n  - {name: E, known_at: \"07:00\", after_calls: 3}\n";
+    let err = parse::<ScenarioFile>("s.yaml", text).unwrap_err();
+    assert_eq!(err.pointer, "/events/0", "{err}");
+    let late = "format: shakedown-scenario/1\nlabel: S\nworld: w\ntask: T\nevents:\n  - {name: E, known_at: \"07:00\", part: p, do: {kind: x}}\n";
+    parse::<ScenarioFile>("s.yaml", late).expect("known_at alone is a world time");
+    let orphan = "format: shakedown-scenario/1\nlabel: S\nworld: w\ntask: T\nevents:\n  - {name: E, at: \"07:00\", do: {kind: x}}\n";
+    let err = parse::<ScenarioFile>("s.yaml", orphan).unwrap_err();
+    assert_eq!(err.pointer, "/events/0/part", "{err}");
 }

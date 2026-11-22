@@ -1,0 +1,17 @@
+format: shakedown-scenario/1
+label: Thunderstorm at the hub
+world: hub-day
+task: recover-the-bank
+preset: recover-the-bank
+clock: {mode: stepped, action_cost: {read: 0m, write: 2m, tools: {plan_recovery: 5m}}, epoch: 60m, horizon: "23:59"}
+events:
+  - name: Thunderstorm cells approach the hub
+    at: "15:10"
+    known_at: "14:40"
+    part: driver
+    do: {kind: capacity_program, station: "{hub}", arrival_rate: 24, until: "19:30"}
+generators:
+  - {kind: sick_calls, rate_per_100_duties: 1.5}
+checks:
+  - {text: No crew flies illegal, kind: safety, query: {part: driver, key: kpis, field: legality_regulatory, op: eq, value: 0}}
+  - {text: Cost below do-nothing, kind: goal, query: {part: driver, key: kpis, field: cost_vs_baseline, op: lt, value: 1.0}}
