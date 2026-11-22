@@ -24,9 +24,15 @@
   <a href="CONTRIBUTING.md">Contributing</a>
 </p>
 
-<p align="center">Shakedown by <a href="https://coppertide.ai">CopperTide</a> · <a href="https://coppertide.ai/shakedown">coppertide.ai/shakedown</a></p>
+<p align="center">Shakedown by <a href="https://coppertide.ai">CopperTide</a> · <a href="https://app.coppertide.ai/sd/">Hosted</a> · <a href="https://docs.coppertide.ai">User guide</a></p>
 
-**Shakedown tests agent systems in a simulated copy of the world they will be deployed in.** An *environment* is the
+**Shakedown tests agent systems in a simulated copy of the world they will be deployed in.** Use it hosted at
+[app.coppertide.ai/sd](https://app.coppertide.ai/sd/) (sign in with Google or GitHub; hosted Shakedown builds and
+edits projects today, and cloud runs arrive with its sandbox runner, in progress), or run this open-source engine on
+your own computer, where runs, rewind and fork work today. The user guide is at
+[docs.coppertide.ai](https://docs.coppertide.ai); this repository holds the engine and its developer docs.
+
+ An *environment* is the
 systems the agents work with (an ERP, a database, suppliers, a plant), made of real software or simulators. A
 *scenario* is what happens to it: a task and the disruptions along the way. An *agent setup* is a model, a team
 structure and its rules. An **experiment** runs each of any number of setups as many times as needed on the same environment and
@@ -59,7 +65,9 @@ and an OpenAI-compatible gateway), run experiments (`POST /api/experiments`), or
 (`shakedown.env.ShakedownParallelEnv`). Any other language uses the [HTTP API](docs/reference.md#http-api).
 
 **Project folder.** Worlds, scenarios, agent setups and experiments are YAML files in a project folder
-(`SHAKEDOWN_PROJECT`), so they can be diffed, reviewed and committed like code. **From an agent:** every
+(`SHAKEDOWN_PROJECT`), edited in the app's editors and diffed, reviewed and committed like code. A world runs
+through a runtime package today (an installed benchmark or built world, named in the world's `package:`); worlds
+that run from their files alone are planned. See [docs/concepts.md](docs/concepts.md#project-files). **From an agent:** every
 operation is also a tool of the control MCP server, e.g. `claude mcp add shakedown -- shaked mcp --project
 ~/work/my-project`; see [Use Shakedown from an agent](docs/reference.md#use-shakedown-from-an-agent-mcp).
 
@@ -124,7 +132,7 @@ untested live. See [docs/agents.md](docs/agents.md).
   </tr>
 </table>
 
-<sub>Captured from Shakedown's web UI on 2026-11-08: real runs of the pharma benchmark (Claude Code on Sonnet; the setups
+<sub>Captured from Shakedown's web UI on 2026-11-08, before the 2026-11-21 interface (sidebar, project editors): real runs of the pharma benchmark (Claude Code on Sonnet; the setups
 in the first capture are suites from before experiments, shown side by side), and the retail benchmark's New
 experiment page.</sub>
 
@@ -134,7 +142,7 @@ experiment page.</sub>
 flowchart LR
   subgraph clients["Clients"]
     UI["Web UI<br/>ui/"]
-    SC["CopperTide<br/>Shakedown control"]
+    SC["Hosted Shakedown<br/>app.coppertide.ai/sd"]
   end
 
   subgraph team["Team of agents"]
@@ -176,7 +184,8 @@ instances, runs tool calls, saves an instance's state, starts from a save, shows
 states. A **benchmark** names the world it runs in (its **parts**) and brings the tasks, the tools, the data and
 the gold actions. When a branch ends, shaked diffs its world with the task's gold world; it passes when no key
 differs and at least one part could be checked. The core (shaked, the protocol, the kits) depends on no UI: the
-web UI is one client of shaked's HTTP API, and the Python SDK and CopperTide's Shakedown control workspace are others.
+web UI is one client of shaked's HTTP API, and the Python SDK and the MCP server are others. Hosted Shakedown is
+this engine embedded with CopperTide's cloud layer ([docs/embedding.md](docs/embedding.md)).
 
 Read [docs/concepts.md](docs/concepts.md) for the full model: runs, branches, steps, saves, the restore table,
 teams and handoffs, forking rules and cost labels.
@@ -193,7 +202,7 @@ CLIs on your PATH for CLI agents; for API agents, a key (`OPENROUTER_API_KEY`, `
 git clone https://github.com/CopperTide/Shakedown.git && cd Shakedown
 docker compose -f deploy/compose.yml up -d     # Postgres on 127.0.0.1:5544 (loopback only)
 cargo build --release                          # the Rust integrations and benchmarks, into core/target/release
-(cd core && cargo run -p shaked)               # API on http://127.0.0.1:4510
+(cd core && SHAKEDOWN_PROJECT=~/work/my-project cargo run -p shaked)   # API on http://127.0.0.1:4510
 (cd ui && npm install && npm run dev)          # UI on http://127.0.0.1:4520 (proxies /api to 4510)
 ```
 
@@ -213,8 +222,9 @@ can call shaked when that origin is in `SHAKEDOWN_CORS_ORIGIN`. Or build the UI 
 
 Then:
 
-1. **New experiment:** pick the scenario (a task and any disruptions), add as many agent setups as you compare (team, model,
-   rules), choose runs per setup, and press Run experiment.
+1. **Get started** (bottom of the sidebar): create the project, then a world (its Runtime: `retail`), a scenario
+   (its runtime task, such as `27`) and an agent setup. **Experiments → New experiment** picks them and the runs per
+   setup; **Deploy** runs it. Or, without files, **⋯ → Experiment on a benchmark…** and **⋯ → Run once**.
 2. **Read the results:** one column per setup: pass rate, a square per run, checks, safety, cost and time. Click
    a square to open that run.
 3. **Inspect a run:** its timeline; click a step to see its arguments, its result, and the state it read or
@@ -249,8 +259,9 @@ the prefix `live_` and needs Docker or a real server. Each folder's README has t
 | `line-sim` | A plant's discrete-event simulation model for an optimisation study: simulate configs, a budget, hard limits, a verified recommendation | save | no | no | Python tests (model determinism and common random numbers, limits, budget, verification, saves); real Claude Code runs through shaked with `benchmarks/line2-oee` |
 | `counter` (Rust), `counter-py` (Python) | Kit examples: one integer per instance | save (flavours: replay, approximate) | no (flavour) | yes | Kit and core tests (`kits/*/tests`, `core/crates/parts/tests`, shaked tests) |
 
-Only `postgres` (through the retail example) has been used in a shaked run with agents. The other
-integrations are checked on their own, not inside a team's run. Three of them need code that is not public yet:
+Integrations used in shaked runs with real agents include `postgres` (the retail example), `factory-01-erp`
+(Factory-01, `docs/agents.md`), `line-sim` (`benchmarks/line2-oee`) and the pharma world's parts (`benchmarks/pharma`,
+runs of 2026-11-08). The others are checked on their own, not inside a team's run. Three of them need code that is not public yet:
 `sculptured` runs the CopperTide program, and `ridgeline-hub` and `isaac-sim` (with its mirror) wrap the Ridgeline
 factory example. Without those, their tests are skipped.
 
@@ -267,9 +278,10 @@ factory example. Without those, their tests are skipped.
 
 | Document | What it covers |
 |---|---|
+| [docs.coppertide.ai](https://docs.coppertide.ai) | The user guide: worlds, scenarios, agent setups, experiments, rewind and fork, hosted Shakedown |
 | [docs/sdk.md](docs/sdk.md) | Using Shakedown from code: the Python SDK, external agents, the step-loop env, export, reproducibility, Rust, citing |
 | [docs/agents.md](docs/agents.md) | Bringing your own deployed agent: the `shakedown-agent/1` protocol, Bedrock agents, secrets, what is verified |
-| [docs/concepts.md](docs/concepts.md) | Glossary, restore modes, teams and runners, external designs, overhead and estimates, CLI isolation, forking, cost labels |
+| [docs/concepts.md](docs/concepts.md) | Project files and deploying them, glossary, restore modes, teams and runners, external designs, overhead and estimates, CLI isolation, forking, cost labels |
 | [docs/protocol.md](docs/protocol.md) | `shakedown-part/1`: transport, manifest, every call, errors, clock and determinism contracts |
 | [integrations/README.md](integrations/README.md) | The integrations, a step-by-step counter integration, `shakedown-part-check` |
 | [docs/packages.md](docs/packages.md) | Writing and installing integrations and benchmarks |
@@ -278,16 +290,25 @@ factory example. Without those, their tests are skipped.
 
 ## Project status
 
-Shakedown is early. Only `postgres` has been used in a shaked run with agents, through the retail example; every
-other integration is checked on its own, and API mode has not been measured.
+Shakedown is early. Claude Code and Codex are measured live (`docs/measurements.md`); API-model agents, OpenRouter,
+self-hosted model servers, Bedrock, `http` agents and the framework adapters are built and tested against simulated
+servers, with live checks in progress. Some integrations have run inside teams' runs (above); the others are checked on
+their own.
 
 <details>
 <summary><b>Limits and not built yet</b></summary>
 
-- Only `postgres` has been used in a shaked run with agents; every other integration is checked on its own.
-- Two benchmarks are included: the retail example and `benchmarks/factory`, which needs a factory example that is
-  not public yet. shaked runs one benchmark at a time.
-- shaked's own runners run a team one after another or all at once; any other shape needs the design's own code
+- Worlds need a runtime package: a project's world file runs through an installed benchmark or built world named in
+  `package:`. Its connectors, flows, data, people and observability, and a scenario's ticket, changes, gates, checks and
+  event timing, are not read by runs yet (`core/crates/shaked/src/ops/deploy.rs`). Setups of kind `code` and `madl` do
+  not deploy from a file yet.
+- Benchmarks included: `retail`, `factory-01`, `plant-floor`, `line2-oee`, `pharma` and `factory` (which needs a
+  factory example that is not public yet), and the world builder with two templates. Each run names its benchmark
+  (`POST /api/runs`'s `benchmark`, else the current one).
+- Import from GitHub (a repository as a world) is planned; today a system comes in as a Docker Compose project
+  through the `service` integration.
+- shaked's own runners run a team one after another, all at once, or as a lead dispatching to the team; any other
+  shape needs the design's own code
   to drive the run through the external API (`docs/concepts.md`, "External designs"), which is tested with
   Claude Code as the external system's agent (`core/crates/shaked/tests/external.rs`, `live_`). Any agent may
   write unless its team marks it `read_only`.
