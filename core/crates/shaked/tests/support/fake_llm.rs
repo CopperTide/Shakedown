@@ -42,6 +42,11 @@ pub async fn fake_llm(answers: Vec<(u16, Value)>) -> FakeLlm {
     let app = Router::new()
         .route("/v1/chat/completions", post(answer))
         .with_state(script);
+    serve(app, seen).await
+}
+
+/// Serves `app` on a free port until the server is dropped.
+async fn serve(app: Router, seen: Arc<Mutex<Vec<Seen>>>) -> FakeLlm {
     let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}/v1", l.local_addr().unwrap());
     let (stop, stopped) = oneshot::channel::<()>();
@@ -54,6 +59,35 @@ pub async fn fake_llm(answers: Vec<(u16, Value)>) -> FakeLlm {
         seen,
         _stop: stop,
     }
+}
+
+/// What a scripted server answers to a request's body.
+pub type Answerer = Arc<dyn Fn(&Value) -> Value + Send + Sync>;
+
+/// A server answering `POST …/v1/chat/completions` with what `answerer` gives for each request
+/// (200), for agents whose turns depend on what they were asked rather than on the order.
+pub async fn fake_llm_with(answerer: Answerer) -> FakeLlm {
+    let seen = Arc::new(Mutex::new(vec![]));
+    let state = (answerer, seen.clone());
+    let app = Router::new()
+        .route("/v1/chat/completions", post(answer_with))
+        .with_state(state);
+    serve(app, seen).await
+}
+
+async fn answer_with(
+    State((answerer, seen)): State<(Answerer, Arc<Mutex<Vec<Seen>>>)>,
+    Json(body): Json<Value>,
+) -> Response {
+    let out = answerer(&body);
+    let path = "/v1/chat/completions".to_string();
+    let authorization = None;
+    seen.lock().unwrap().push(Seen {
+        path,
+        authorization,
+        body,
+    });
+    Json(out).into_response()
 }
 
 async fn answer(State(s): State<Script>, headers: HeaderMap, Json(body): Json<Value>) -> Response {

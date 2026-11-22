@@ -178,6 +178,11 @@ engineer, the Production supervisor, the Supply and customer desk), who `report`
 report and `finish`es. A strict chain (each agent one turn, in order) suits the shift badly, since its fronts open and
 change while the plant runs. The runs below used the earlier version of this team on the `concurrent` runner.
 
+**Forks of a `dispatch` run** are tested without a model on the retail world only
+(`core/crates/shaked/tests/dispatch_fork.rs`, 2026-11-21: a lead and a worker on a scripted model, forked at the
+delegation and at the worker's step, and with a fault removed at the fork), not yet on this world: that needs the
+ERPNext and Twenty stacks, the Sculptured program and this example.
+
 **The twin** (`describe.view`, `src/twin/`): areas for the press lines, the robot cell, the AMRs, energy (the meter and
 the events), the OT network (zones and sessions), the shift's stations, the trucks, the orders at risk (the bearing's
 16 once PR-A1 is down, the shift's 4 once the truck is late, each covered by a notice on an approved change) and the
