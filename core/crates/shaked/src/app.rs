@@ -63,12 +63,18 @@ pub struct Config {
     /// The project folder whose worlds, scenarios, setups and experiments shaked serves
     /// (`SHAKEDOWN_PROJECT`, set by shaked's main). None: the project operations answer 409.
     pub project_dir: Option<std::path::PathBuf>,
+    /// How long a worker's link may take to say hello before it is refused.
+    pub link_hello_timeout: Duration,
+    /// How long a worker's link may stay silent (not even answering a ping) before it is closed.
+    pub link_idle_timeout: Duration,
 }
 
 pub const DEFAULT_DRIVER_GRACE: Duration = Duration::from_secs(30);
 pub const DEFAULT_MAX_DB_BYTES: u64 = 5 * 1024 * 1024 * 1024;
 pub const DEFAULT_RETRY_BASE: Duration = Duration::from_secs(1);
 pub const DEFAULT_PROXY_TIMEOUT: Duration = Duration::from_secs(300);
+pub const DEFAULT_LINK_HELLO_TIMEOUT: Duration = Duration::from_secs(10);
+pub const DEFAULT_LINK_IDLE_TIMEOUT: Duration = Duration::from_secs(60);
 
 pub use crate::providers::{is_openrouter_url, OPENROUTER_BASE};
 
@@ -111,6 +117,8 @@ impl Config {
             public_url: String::new(),
             allowed_hosts: Vec::new(),
             project_dir: None,
+            link_hello_timeout: DEFAULT_LINK_HELLO_TIMEOUT,
+            link_idle_timeout: DEFAULT_LINK_IDLE_TIMEOUT,
         }
     }
 

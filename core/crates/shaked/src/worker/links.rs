@@ -1,6 +1,7 @@
 //! The worker links this control box keeps, by branch id: the plan each branch's worker is
-//! started from, who the branch records for, the connection open now (if one is) and the events
-//! appended so far, so a resent event is acknowledged again instead of appended twice.
+//! started from, who the branch records for, the connection open now (if one is) and the last
+//! events appended, so a resent event is acknowledged again without a query. The store keeps each
+//! event's `n` too (`events.link_n`): a link lost with a restart is rebuilt from it.
 
 use std::{
     collections::{HashMap, VecDeque},
@@ -25,7 +26,11 @@ pub struct Links {
 
 /// One branch's link.
 pub struct Link {
-    pub plan: BranchPlan,
+    pub run_id: String,
+    pub branch_id: String,
+    /// What `Start` carries; None for a link rebuilt when its worker reconnected (a reconnect is
+    /// never started).
+    pub plan: Option<BranchPlan>,
     wire: Mutex<Wire>,
     pub(super) appended: tokio::sync::Mutex<Appended>,
 }
@@ -39,8 +44,8 @@ struct Wire {
     out: Option<mpsc::UnboundedSender<ToWorker>>,
 }
 
-/// The last `n` appended and the seqs of the last [`WINDOW`] appended events: a worker never
-/// resends an older one.
+/// The last `n` appended and the seqs of the last [`WINDOW`] appended here (a worker never has
+/// more unacknowledged).
 #[derive(Default)]
 pub(super) struct Appended {
     pub(super) last_n: u64,
@@ -53,18 +58,21 @@ impl Appended {
         self.recent.iter().find(|(m, _)| *m == n).map(|(_, s)| *s)
     }
 
-    /// The seq of event `n` when it was appended already, None when it is the next one, and why
-    /// not when it is neither.
+    /// The seq of event `n` when it is known here to be appended already; None when the store
+    /// is to append it (or find it, appended before this link was rebuilt); why not when it
+    /// would leave a gap.
     pub(super) fn resent(&self, n: u64) -> Result<Option<i64>, String> {
-        match n <= self.last_n {
-            true => (self.seq_of(n).map(Some)).ok_or(format!("event {n} is older than the window")),
-            false if n == self.last_n + 1 => Ok(None),
-            false => Err(format!("event {n} came after {}", self.last_n)),
+        match self.seq_of(n) {
+            Some(seq) => Ok(Some(seq)),
+            None if n == 0 => Err("events count from 1".into()),
+            None if n <= self.last_n + 1 => Ok(None),
+            None => Err(format!("event {n} came after {}", self.last_n)),
         }
     }
 
+    /// Event `n` has `seq`.
     pub(super) fn push(&mut self, n: u64, seq: i64) {
-        self.last_n = n;
+        self.last_n = self.last_n.max(n);
         self.recent.push_back((n, seq));
         if self.recent.len() as u64 > WINDOW {
             self.recent.pop_front();
@@ -75,13 +83,31 @@ impl Appended {
 impl Links {
     /// A worker for `plan`'s branch will say hello: its ticket's `Start` carries `plan`.
     pub fn expect(&self, plan: BranchPlan) {
-        let link = Arc::new(Link {
-            plan,
-            wire: Mutex::default(),
-            appended: tokio::sync::Mutex::default(),
-        });
-        let id = link.plan.branch_id.clone();
-        self.branches.lock().unwrap().insert(id, link);
+        let mut link = Link::new(&plan.run_id, &plan.branch_id, Wire::default(), 0);
+        link.plan = Some(plan);
+        let id = link.branch_id.clone();
+        self.branches.lock().unwrap().insert(id, Arc::new(link));
+    }
+
+    /// The link of `branch` (of `run`), rebuilt when this control box no longer has it (it
+    /// restarted): started for `caller`, `last_n` its worker's last event in the store.
+    pub(super) fn rejoined(
+        &self,
+        run: &str,
+        branch: &str,
+        caller: Arc<Caller>,
+        last_n: u64,
+    ) -> Arc<Link> {
+        let mut branches = self.branches.lock().unwrap();
+        let wire = Wire {
+            caller: Some(caller),
+            ..Wire::default()
+        };
+        let made = || Arc::new(Link::new(run, branch, wire, last_n));
+        branches
+            .entry(branch.to_string())
+            .or_insert_with(made)
+            .clone()
     }
 
     /// Sends `f` to `branch`'s worker: false when no worker is connected.
@@ -110,6 +136,20 @@ impl Links {
 }
 
 impl Link {
+    fn new(run: &str, branch: &str, wire: Wire, last_n: u64) -> Link {
+        let appended = Appended {
+            last_n,
+            recent: VecDeque::new(),
+        };
+        Link {
+            run_id: run.to_string(),
+            branch_id: branch.to_string(),
+            plan: None,
+            wire: Mutex::new(wire),
+            appended: tokio::sync::Mutex::new(appended),
+        }
+    }
+
     /// Who the branch records for, once its worker has started.
     pub(super) fn caller(&self) -> Option<Arc<Caller>> {
         self.wire.lock().unwrap().caller.clone()
@@ -123,6 +163,11 @@ impl Link {
         }
         wire.caller = Some(caller);
         true
+    }
+
+    /// Undoes [`start_for`](Self::start_for): the branch's worker could not be started.
+    pub(super) fn release(&self) {
+        self.wire.lock().unwrap().caller = None;
     }
 
     /// Makes a new connection the open one (a connection still open is dropped from the relay):
@@ -164,7 +209,10 @@ mod tests {
         assert_eq!(a.seq_of(3), Some(13));
         assert_eq!(a.seq_of(2), None);
         assert_eq!(a.resent(3), Ok(Some(13)));
+        assert_eq!(a.resent(2), Ok(None), "older: the store finds it");
         assert_eq!(a.resent(WINDOW + 3), Ok(None));
-        assert!(a.resent(2).is_err() && a.resent(WINDOW + 4).is_err());
+        assert!(a.resent(WINDOW + 4).is_err());
+        a.push(2, 12);
+        assert_eq!(a.last_n, WINDOW + 2, "an older event leaves the last n");
     }
 }

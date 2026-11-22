@@ -104,6 +104,10 @@ pub const BASE_FILES: Files = Files {
             "0003_project_experiments.sql",
             include_str!("../migrations/shakedown/0003_project_experiments.sql"),
         ),
+        (
+            "0004_event_link_n.sql",
+            include_str!("../migrations/shakedown/0004_event_link_n.sql"),
+        ),
     ],
     also_accept: &[],
 };

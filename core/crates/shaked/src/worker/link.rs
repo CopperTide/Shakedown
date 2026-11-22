@@ -1,27 +1,31 @@
 //! `GET /worker`: the control box's end of a worker's link, one WebSocket per connection. The
-//! first frame is `Hello`, with a ticket (answered `Start`, with the branch's worker token) or, on
-//! a reconnect, that worker token. Each `Event` is appended once per `n` and acknowledged; a
-//! resent one is acknowledged again. `Ended` records how the branch ended and revokes the token.
-//! Pause, resume and stop pressed in the UI are relayed to the open connection.
+//! first frame is `Hello`, within [`Config::link_hello_timeout`](crate::app::Config), with a
+//! ticket (answered `Start`, with the branch's worker token) or, on a reconnect, that worker
+//! token; a link this control box lost (it restarted) is rebuilt from the token and the store.
+//! Each `Event` is appended once per `n` (the store keeps `n`) and acknowledged; a resent one is
+//! acknowledged again with the seq it got. `Ended` records how the branch ended and revokes the
+//! token. Pause, resume and stop pressed in the UI are relayed to the open connection, which is
+//! pinged and closed once it stays silent for `link_idle_timeout`.
 
 use std::sync::Arc;
 
 use axum::{
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
-        State,
+        FromRequestParts, Request, State,
     },
-    response::Response,
+    http::request::Parts,
+    response::{IntoResponse, Response},
     routing::get,
     Router,
 };
 use chrono::Utc;
-use tokio::sync::mpsc::UnboundedReceiver;
-use uuid::Uuid;
+use tokio::{sync::mpsc::UnboundedReceiver, time::Instant};
 
 use super::{
     frames::{ToControl, ToWorker},
     links::Link,
+    tickets::Taken,
 };
 use crate::{
     app::AppState,
@@ -30,16 +34,30 @@ use crate::{
         run_tokens::{prefix, resolve_run_token, DEFAULT_TOKEN_SECS},
         Action, Caller, CallerKind, Decision, RunTokenKind, Target,
     },
-    exec::{BranchRecords, StoreRecords},
     model::BranchStatus,
+    runner::BranchPlan,
+    store::Linked,
 };
+
+/// The largest frame (and message) a worker may send: an event as large as the store is asked
+/// to keep. A model call's event holds its request and answer, so this is more than an API
+/// body's 2 MiB.
+pub const MAX_LINK_FRAME: usize = 8 * 1024 * 1024;
 
 pub fn router() -> Router<Arc<AppState>> {
     Router::new().route("/worker", get(upgrade))
 }
 
-async fn upgrade(State(state): State<Arc<AppState>>, ws: WebSocketUpgrade) -> Response {
-    ws.on_upgrade(move |socket| serve(state, socket))
+async fn upgrade(State(state): State<Arc<AppState>>, req: Request) -> Response {
+    let (mut parts, _) = req.into_parts();
+    let ws = match WebSocketUpgrade::from_request_parts(&mut parts, &state).await {
+        Ok(ws) => ws,
+        Err(r) => return r.into_response(),
+    };
+    let ws = ws
+        .max_message_size(MAX_LINK_FRAME)
+        .max_frame_size(MAX_LINK_FRAME);
+    ws.on_upgrade(move |socket| serve(state, parts, socket))
 }
 
 /// How a connection ends: `Refused` with why (the worker should not come back with the same
@@ -62,15 +80,15 @@ struct Opened {
     relay: UnboundedReceiver<ToWorker>,
 }
 
-impl Opened {
-    fn records(&self, state: &AppState) -> StoreRecords {
-        let branch = self.link.plan.branch_id.clone();
-        StoreRecords::new(state.store.clone(), self.caller.clone(), branch)
-    }
-}
-
-async fn serve(state: Arc<AppState>, mut socket: WebSocket) {
-    let opened = match hello(&state, &mut socket).await {
+async fn serve(state: Arc<AppState>, parts: Parts, mut socket: WebSocket) {
+    let within = state.config.link_hello_timeout;
+    let first = tokio::time::timeout(within, next_frame(&mut socket)).await;
+    let first = first.unwrap_or_else(|_| Err(refused("no hello in time")));
+    let opened = match first {
+        Ok(f) => hello(&state, &parts, &mut socket, f).await,
+        Err(end) => Err(end),
+    };
+    let opened = match opened {
         Ok(o) => o,
         Err(end) => return finish(&mut socket, end).await,
     };
@@ -94,39 +112,47 @@ async fn say(socket: &mut WebSocket, f: &ToWorker) -> Result<(), End> {
     sent.map_err(|_| End::Close)
 }
 
-/// The worker's next frame: closed when the connection is; refused when it is no frame.
+/// What the worker sent next: a frame, or None for a ping or pong (it is still there). Closed
+/// when the connection is; refused when it sent no frame.
+async fn heard(socket: &mut WebSocket) -> Result<Option<ToControl>, End> {
+    match socket.recv().await {
+        Some(Ok(Message::Text(t))) => serde_json::from_str(&t)
+            .map(Some)
+            .map_err(|e| refused(format!("bad frame: {e}"))),
+        Some(Ok(Message::Ping(_) | Message::Pong(_))) => Ok(None),
+        Some(Ok(Message::Binary(_))) => Err(refused("frames are text")),
+        Some(Ok(Message::Close(_)) | Err(_)) | None => Err(End::Close),
+    }
+}
+
+/// The worker's next frame, past pings and pongs.
 async fn next_frame(socket: &mut WebSocket) -> Result<ToControl, End> {
     loop {
-        match socket.recv().await {
-            Some(Ok(Message::Text(t))) => {
-                return serde_json::from_str(&t).map_err(|e| refused(format!("bad frame: {e}")))
-            }
-            Some(Ok(Message::Ping(_) | Message::Pong(_))) => continue,
-            Some(Ok(Message::Binary(_))) => return Err(refused("frames are text")),
-            Some(Ok(Message::Close(_)) | Err(_)) | None => return Err(End::Close),
+        if let Some(f) = heard(socket).await? {
+            return Ok(f);
         }
     }
 }
 
-/// Reads the hello and opens the connection on its branch's link: `Start` is sent to a ticket's
-/// worker first.
-async fn hello(state: &AppState, socket: &mut WebSocket) -> Result<Opened, End> {
+/// Opens the connection whose first frame is `first` on its branch's link: `Start` is sent to a
+/// ticket's worker first.
+async fn hello(
+    state: &AppState,
+    parts: &Parts,
+    socket: &mut WebSocket,
+    first: ToControl,
+) -> Result<Opened, End> {
     let ToControl::Hello {
         ticket,
         resume_from,
-    } = next_frame(socket).await?
+    } = first
     else {
         return Err(refused("the first frame must be hello"));
     };
     let (link, start) = match ticket.starts_with(prefix(RunTokenKind::Ticket)) {
-        true => redeem(state, &ticket).await?,
-        false => (rejoin(state, &ticket).await?, None),
+        true => redeem(state, &ticket, resume_from).await?,
+        false => (rejoin(state, parts, &ticket, resume_from).await?, None),
     };
-    let last = link.appended.lock().await.last_n;
-    if resume_from > last {
-        let why = format!("resume_from {resume_from} is past the last event appended ({last})");
-        return Err(refused(why));
-    }
     let caller = link.caller().ok_or(End::Close)?;
     let (generation, relay) = link.attach();
     if let Some(start) = start {
@@ -140,27 +166,67 @@ async fn hello(state: &AppState, socket: &mut WebSocket) -> Result<Opened, End> 
     })
 }
 
+/// Refuses a `resume_from` past the last event `link` has.
+async fn check_resume(link: &Link, resume_from: u64) -> Result<(), End> {
+    let last = link.appended.lock().await.last_n;
+    if resume_from > last {
+        let why = format!("resume_from {resume_from} is past the last event appended ({last})");
+        return Err(refused(why));
+    }
+    Ok(())
+}
+
 /// The link a ticket starts, and its `Start`: the plan, a new worker token and the gateway.
-async fn redeem(state: &AppState, secret: &str) -> Result<(Arc<Link>, Option<ToWorker>), End> {
-    let t = (state.links.tickets.redeem(secret))
-        .ok_or_else(|| refused("unknown, used or expired ticket"))?;
-    let link = (state.links.get(&t.branch_id))
-        .ok_or_else(|| refused("no worker is expected for this branch"))?;
-    let sandbox =
-        Uuid::parse_str(&t.sandbox).map_err(|_| refused("the ticket's sandbox is no uuid"))?;
-    if link.caller().is_some() {
-        return Err(refused("this branch's worker has started already"));
+async fn redeem(
+    state: &AppState,
+    secret: &str,
+    resume_from: u64,
+) -> Result<(Arc<Link>, Option<ToWorker>), End> {
+    if resume_from != 0 {
+        return Err(refused("a ticket's worker resumes from 0"));
     }
-    let token = worker_token(state, &link, &t.caller, sandbox).await?;
-    if !link.start_for(t.caller.clone()) {
-        return Err(refused("this branch's worker has started already"));
-    }
+    let (taken, link, plan) = take_ticket(state, secret)?;
+    let token = claimed_token(state, &link, secret, taken).await?;
     let start = ToWorker::Start {
-        plan: Box::new(link.plan.clone()),
+        plan: Box::new(plan),
         token,
         gateway: format!("{}/gateway", state.config.public_base()),
     };
     Ok((link, Some(start)))
+}
+
+/// The ticket `secret`, used up only when its branch's link is waiting for its worker: the
+/// ticket, the link and its plan.
+fn take_ticket(state: &AppState, secret: &str) -> Result<(Taken, Arc<Link>, BranchPlan), End> {
+    let waiting = |branch: &str| state.links.get(branch).filter(|l| l.caller().is_none());
+    let taken = (state.links.tickets).take_if(secret, |t| waiting(&t.branch_id).is_some());
+    let taken = taken.ok_or_else(|| refused("unknown, used or expired ticket"))?;
+    let link = waiting(&taken.ticket.branch_id);
+    let link = link.ok_or_else(|| refused("this branch's worker has started"))?;
+    let plan = link.plan.clone();
+    let plan = plan.ok_or_else(|| refused("no plan for this branch"))?;
+    Ok((taken, link, plan))
+}
+
+/// Claims `link`'s branch for the ticket's caller, then makes its worker token: of two tickets
+/// for one branch only one makes a token. When the token could not be made, the claim is let go
+/// and the ticket given back.
+async fn claimed_token(
+    state: &AppState,
+    link: &Link,
+    secret: &str,
+    taken: Taken,
+) -> Result<String, End> {
+    let t = &taken.ticket;
+    if !link.start_for(t.caller.clone()) {
+        return Err(refused("this branch's worker has started"));
+    }
+    let made = worker_token(state, link, &t.caller, t.sandbox).await;
+    if made.is_err() {
+        link.release();
+        state.links.tickets.give_back(secret, taken);
+    }
+    made
 }
 
 /// A new worker token for `link`'s branch in `sandbox`, for `caller`: it lives as long as the
@@ -169,23 +235,15 @@ async fn worker_token(
     state: &AppState,
     link: &Link,
     caller: &Caller,
-    sandbox: Uuid,
+    sandbox: uuid::Uuid,
 ) -> Result<String, End> {
-    let plan = &link.plan;
     let expires = Utc::now() + chrono::Duration::seconds(DEFAULT_TOKEN_SECS as i64);
     let kind = RunTokenKind::Worker;
     let at = state.store.at(caller);
-    let minted = at.mint_run_token(
-        &plan.run_id,
-        &plan.branch_id,
-        kind,
-        None,
-        Some(sandbox),
-        expires,
-    );
-    minted
-        .await
-        .map_err(|e| logged(&plan.branch_id, "minting its worker token", e))
+    let (run, branch) = (&link.run_id, &link.branch_id);
+    let minted = at.mint_run_token(run, branch, kind, None, Some(sandbox), expires);
+    let token = minted.await;
+    token.map_err(|e| logged(branch, "minting its worker token", e))
 }
 
 fn logged(branch: &str, doing: &str, e: anyhow::Error) -> End {
@@ -193,8 +251,8 @@ fn logged(branch: &str, doing: &str, e: anyhow::Error) -> End {
     End::Close
 }
 
-/// The link a worker token reconnects to: its own branch's, while this control box keeps it.
-async fn rejoin(state: &AppState, secret: &str) -> Result<Arc<Link>, End> {
+/// The worker token `secret` names, when it is one for a branch's link: its caller.
+async fn worker_caller(state: &AppState, secret: &str) -> Result<Caller, End> {
     let found = resolve_run_token(&state.store, secret).await;
     let found = found.map_err(|e| logged("?", "resolving a worker token", e))?;
     let unknown = || refused("unknown, revoked or expired worker token");
@@ -209,35 +267,106 @@ async fn rejoin(state: &AppState, secret: &str) -> Result<Arc<Link>, End> {
         return Err(unknown());
     };
     let on = Target::Branch { run, branch };
-    if engine_check(&c, &Action::WorkerLink, &on) != Decision::Allow {
-        return Err(unknown());
+    match engine_check(&c, &Action::WorkerLink, &on) {
+        Decision::Allow => Ok(c),
+        _ => Err(unknown()),
     }
-    let link = state.links.get(branch).filter(|l| l.caller().is_some());
-    link.ok_or_else(|| refused("this control box keeps no link for that branch"))
 }
 
-/// What the connection waits on next: a frame relayed from the API, or one from the worker.
+/// The link a worker token reconnects to: its own branch's, rebuilt when this control box lost
+/// it. A rebuilt link records for whom the layer says the token acts (the branch's owner), and
+/// goes on from the last `n` the store has.
+async fn rejoin(
+    state: &AppState,
+    parts: &Parts,
+    secret: &str,
+    resume_from: u64,
+) -> Result<Arc<Link>, End> {
+    let c = worker_caller(state, secret).await?;
+    let CallerKind::RunToken { run, branch, .. } = c.kind.clone() else {
+        return Err(End::Close);
+    };
+    let link = match state.links.get(&branch).filter(|l| l.caller().is_some()) {
+        Some(link) => link,
+        None => rebuilt(state, parts, c, &run, &branch).await?,
+    };
+    check_resume(&link, resume_from).await?;
+    Ok(link)
+}
+
+async fn rebuilt(
+    state: &AppState,
+    parts: &Parts,
+    c: Caller,
+    run: &str,
+    branch: &str,
+) -> Result<Arc<Link>, End> {
+    let layer = state.store.layer();
+    let acting = layer.authenticate(parts, Some(c)).await;
+    let acting = Arc::new(acting.map_err(|r| refused(r.message))?);
+    let last = state.store.at(&acting).last_link_n(branch).await;
+    let last = last.map_err(|e| logged(branch, "reading its last event", e))?;
+    Ok(state.links.rejoined(run, branch, acting, last))
+}
+
+/// What the connection waits on next: a frame relayed from the API, what the worker sent, or
+/// the keepalive tick.
 enum Got {
     Relay(Option<ToWorker>),
-    Frame(Result<ToControl, End>),
+    Heard(Result<Option<ToControl>, End>),
+    Tick,
 }
 
-/// Answers the worker's frames and relays the API's until the connection ends.
+/// When the worker was last heard from, and how long it may stay silent.
+struct Keepalive {
+    idle: std::time::Duration,
+    last_heard: Instant,
+}
+
+/// Answers the worker's frames and relays the API's until the connection ends: it is pinged
+/// every third of the idle timeout and closed once it was silent for all of it.
 async fn pump(state: &AppState, socket: &mut WebSocket, mut o: Opened) -> End {
+    let idle = state.config.link_idle_timeout;
+    let every = (idle / 3).max(std::time::Duration::from_millis(10));
+    let mut tick = tokio::time::interval(every);
+    let mut keep = Keepalive {
+        idle,
+        last_heard: Instant::now(),
+    };
     loop {
         let got = tokio::select! {
             out = o.relay.recv() => Got::Relay(out),
-            f = next_frame(socket) => Got::Frame(f),
+            h = heard(socket) => Got::Heard(h),
+            _ = tick.tick() => Got::Tick,
         };
-        let step = match got {
-            Got::Relay(Some(f)) => say(socket, &f).await,
-            // A newer connection took the relay over.
-            Got::Relay(None) => Err(End::Close),
-            Got::Frame(Ok(f)) => answer(state, socket, &o, f).await,
-            Got::Frame(Err(end)) => Err(end),
-        };
-        if let Err(end) = step {
+        if let Err(end) = step(state, socket, &o, got, &mut keep).await {
             return end;
+        }
+    }
+}
+
+async fn step(
+    state: &AppState,
+    socket: &mut WebSocket,
+    o: &Opened,
+    got: Got,
+    keep: &mut Keepalive,
+) -> Result<(), End> {
+    match got {
+        Got::Relay(Some(f)) => say(socket, &f).await,
+        // A newer connection took the relay over.
+        Got::Relay(None) => Err(End::Close),
+        Got::Heard(h) => {
+            keep.last_heard = Instant::now();
+            match h? {
+                Some(f) => answer(state, socket, o, f).await,
+                None => Ok(()),
+            }
+        }
+        Got::Tick if keep.last_heard.elapsed() >= keep.idle => Err(End::Close),
+        Got::Tick => {
+            let ping = socket.send(Message::Ping(Default::default())).await;
+            ping.map_err(|_| End::Close)
         }
     }
 }
@@ -258,8 +387,8 @@ async fn answer(
     }
 }
 
-/// Appends event `n` when it is the next one, or acks it again when it was appended already.
-async fn append(state: &AppState, o: &Opened, f: ToControl) -> Result<ToWorker, End> {
+/// The event an `Event` frame carries.
+fn linked(f: ToControl) -> Option<Linked> {
     let ToControl::Event {
         n,
         agent,
@@ -268,8 +397,22 @@ async fn append(state: &AppState, o: &Opened, f: ToControl) -> Result<ToWorker, 
         overhead,
     } = f
     else {
-        return Err(End::Close);
+        return None;
     };
+    Some(Linked {
+        n,
+        agent,
+        kind,
+        payload,
+        overhead,
+    })
+}
+
+/// Appends event `n` when it is the next one, or acks it again when it was appended already
+/// (known here, or found in the store).
+async fn append(state: &AppState, o: &Opened, f: ToControl) -> Result<ToWorker, End> {
+    let ev = linked(f).ok_or(End::Close)?;
+    let n = ev.n;
     let mut done = o.link.appended.lock().await;
     if !o.link.is_current(o.generation) {
         return Err(End::Close);
@@ -277,11 +420,8 @@ async fn append(state: &AppState, o: &Opened, f: ToControl) -> Result<ToWorker, 
     if let Some(seq) = done.resent(n).map_err(refused)? {
         return Ok(ToWorker::Ack { n, seq });
     }
-    let branch = &o.link.plan.branch_id;
-    let records = o.records(state);
-    let appended = records
-        .append(agent.as_deref(), kind, payload, overhead)
-        .await;
+    let branch = &o.link.branch_id;
+    let appended = state.store.at(&o.caller).append_linked(branch, ev).await;
     let ev = appended.map_err(|e| logged(branch, "appending an event", e))?;
     done.push(n, ev.seq);
     Ok(ToWorker::Ack { n, seq: ev.seq })
@@ -293,11 +433,11 @@ async fn ended(state: &AppState, o: &Opened, status: BranchStatus, error: Option
     if status == BranchStatus::Running {
         return refused("a branch does not end running");
     }
-    let branch = &o.link.plan.branch_id;
-    if let Err(e) = o.records(state).set_status(status, error).await {
+    let branch = &o.link.branch_id;
+    let at = state.store.at(&o.caller);
+    if let Err(e) = at.set_status(branch, status, error).await {
         return logged(branch, "recording how it ended", e);
     }
-    let at = state.store.at(&o.caller);
     if let Err(e) = at.revoke_run_tokens(branch, None).await {
         logged(branch, "revoking its worker token", e);
     }

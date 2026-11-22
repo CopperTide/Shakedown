@@ -2,14 +2,15 @@
 //! `shaked worker` in a sandbox would. The branch is made by `record_start`, so it has no events
 //! before the worker's first (the worker records `RunStart` itself).
 mod support;
-use support::{app::send, records, run, AppFx};
+use support::{app::send, pg::query_text, records, run, AppFx};
 
 use std::{sync::Arc, time::Duration};
 
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{json, Value};
 use shaked::{
-    auth::{run_tokens::resolve_run_token, Caller},
+    app::{AppState, Config},
+    auth::{run_tokens::resolve_run_token, Caller, Decision},
     launch::LaunchSpec,
     model::*,
     runner::{self, BranchPlan},
@@ -29,6 +30,16 @@ async fn setup(tag: &str) -> AppFx {
     AppFx::idle("worker", tag).bench("retail").start().await
 }
 
+/// `setup` with the link's hello and idle timeouts at `ms` milliseconds.
+async fn impatient(tag: &str, ms: u64) -> AppFx {
+    let fx = AppFx::idle("worker", tag).bench("retail");
+    let fx = fx.config(move |c| {
+        c.link_hello_timeout = Duration::from_millis(ms);
+        c.link_idle_timeout = Duration::from_millis(ms);
+    });
+    fx.start().await
+}
+
 fn team() -> Team {
     Team {
         id: "t".into(),
@@ -40,7 +51,7 @@ fn team() -> Team {
 fn ticket_for(plan: &BranchPlan) -> Ticket {
     Ticket {
         branch_id: plan.branch_id.clone(),
-        sandbox: Uuid::new_v4().to_string(),
+        sandbox: Uuid::new_v4(),
         caller: Arc::new(Caller::person()),
     }
 }
@@ -67,7 +78,11 @@ async fn branch(fx: &AppFx) -> (BranchPlan, String) {
 }
 
 async fn connect(fx: &AppFx) -> Ws {
-    let url = format!("{}/worker", fx.base.replace("http://", "ws://"));
+    connect_to(&fx.base).await
+}
+
+async fn connect_to(base: &str) -> Ws {
+    let url = format!("{}/worker", base.replace("http://", "ws://"));
     tokio_tungstenite::connect_async(url).await.unwrap().0
 }
 
@@ -90,6 +105,13 @@ async fn heard(ws: &mut Ws) -> Option<ToWorker> {
 
 async fn hear(ws: &mut Ws) -> ToWorker {
     heard(ws).await.expect("a frame, not a closed link")
+}
+
+/// True when the control box sends no frame (pings aside) within `ms` milliseconds.
+async fn quiet_for(ws: &mut Ws, ms: u64) -> bool {
+    tokio::time::timeout(Duration::from_millis(ms), heard(ws))
+        .await
+        .is_err()
 }
 
 fn hello(ticket: &str, resume_from: u64) -> ToControl {
@@ -228,7 +250,7 @@ fn a_ticket_works_once_and_only_for_its_branch() {
 }
 
 #[test]
-fn restart_mid_run_loses_and_doubles_nothing() {
+fn a_dropped_connection_loses_and_doubles_nothing() {
     run(async {
         let fx = setup("restart").await;
         let (plan, ticket) = branch(&fx).await;
@@ -280,5 +302,133 @@ fn pause_from_the_ui_reaches_the_worker() {
         let (status, v) = fx.post(&on("stop"), json!({})).await;
         assert_eq!((status, v), (200, json!({"stopping": true})));
         assert_eq!(hear(&mut ws).await, ToWorker::Stop);
+    });
+}
+
+/// Sends events `ns` and checks each is acked with the seq paired with it.
+async fn acked(ws: &mut Ws, ns: &[(u64, i64)]) {
+    for (n, _) in ns {
+        say(ws, &event(*n)).await;
+    }
+    for &(n, seq) in ns {
+        assert_eq!(hear(ws).await, ToWorker::Ack { n, seq });
+    }
+}
+
+/// A second control box on `fx`'s database, with nothing in memory: its base URL.
+async fn restarted(fx: &AppFx) -> (Arc<AppState>, String) {
+    let (listener, base) = support::app::bind().await;
+    let mut config = Config::new();
+    config.self_base = base.clone();
+    let store = fx.state.store.clone();
+    let state = Arc::new(AppState::new(store, fx.state.hub.clone(), config));
+    support::app::serve(listener, &state);
+    (state, base)
+}
+
+#[test]
+fn a_restarted_control_box_rejoins_without_doubling() {
+    run(async {
+        let fx = setup("rejoin").await;
+        let (plan, ticket) = branch(&fx).await;
+        let id = plan.branch_id.clone();
+        let (mut ws, token) = started(&fx, &plan, &ticket).await;
+        acked(&mut ws, &[(1, 1), (2, 2), (3, 3)]).await;
+        // The control box records one of its own: the worker's n and the seqs part.
+        let store = records(&fx.state.store);
+        let own = store.append(&id, None, EventKind::WorldEvent, json!({}));
+        assert_eq!(own.await.unwrap().seq, 4);
+        acked(&mut ws, &[(4, 5), (5, 6)]).await;
+        drop(ws);
+
+        let (again, base) = restarted(&fx).await;
+        assert!(!again.links.connected(&id));
+        let mut ws = connect_to(&base).await;
+        say(&mut ws, &hello(&token, 3)).await;
+        acked(&mut ws, &[(4, 5), (5, 6), (6, 7)]).await;
+        assert!(again.links.connected(&id));
+        let mut want = numbered(1..=7);
+        want[3].1 = String::new(); // seq 4 is the control box's own
+        for (seq, text) in &mut want[4..] {
+            *text = format!("event {}", *seq - 1);
+        }
+        assert_eq!(texts(&fx, &id).await, want, "each event once, in order");
+    });
+}
+
+#[test]
+fn two_tickets_for_one_branch_start_one_worker() {
+    run(async {
+        let fx = setup("race").await;
+        let (plan, first) = branch(&fx).await;
+        let second = fx.state.links.tickets.issue(ticket_for(&plan));
+        let (mut a, mut b) = (connect(&fx).await, connect(&fx).await);
+        say(&mut a, &hello(&first, 0)).await;
+        say(&mut b, &hello(&second, 0)).await;
+        let answers = [hear(&mut a).await, hear(&mut b).await];
+        let starts = answers
+            .iter()
+            .filter(|f| matches!(f, ToWorker::Start { .. }));
+        let refusals = answers
+            .iter()
+            .filter(|f| matches!(f, ToWorker::Refused { .. }));
+        assert_eq!((starts.count(), refusals.count()), (1, 1), "{answers:?}");
+        let live = format!(
+            "SELECT count(*) FROM shakedown.run_tokens WHERE branch_id = '{}'
+             AND kind = 'worker' AND revoked_at IS NULL",
+            plan.branch_id
+        );
+        assert_eq!(query_text(&fx.db, &live).await.as_deref(), Some("1"));
+    });
+}
+
+#[test]
+fn a_link_without_hello_in_time_is_refused() {
+    run(async {
+        let fx = impatient("hello", 300).await;
+        let mut ws = connect(&fx).await;
+        assert!(refused(&mut ws).await.contains("hello"));
+        assert_eq!(heard(&mut ws).await, None, "and closed");
+    });
+}
+
+#[test]
+fn a_silent_link_is_closed() {
+    run(async {
+        let fx = impatient("idle", 300).await;
+        let (plan, ticket) = branch(&fx).await;
+        let (_ws, _) = started(&fx, &plan, &ticket).await;
+        // The client never reads again, so it answers no ping.
+        let gone = async {
+            while fx.state.links.connected(&plan.branch_id) {
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+        };
+        let within = tokio::time::timeout(Duration::from_secs(5), gone).await;
+        assert!(within.is_ok(), "connected() went false");
+    });
+}
+
+#[test]
+fn a_pause_with_no_worker_connected_is_a_conflict() {
+    run(async {
+        let fx = setup("unlinked").await;
+        let (plan, _) = branch(&fx).await;
+        let path = format!("/api/branches/{}/pause", plan.branch_id);
+        assert_eq!(fx.post(&path, json!({})).await.0, 409);
+    });
+}
+
+#[test]
+fn a_caller_who_cannot_see_the_branch_relays_nothing() {
+    run(async {
+        let hidden = shaked::harness::SpyLayer::deny(Decision::NotFound);
+        let fx = AppFx::idle("worker", "hidden").bench("retail");
+        let fx = fx.layer(Arc::new(hidden)).start().await;
+        let (plan, ticket) = branch(&fx).await;
+        let (mut ws, _) = started(&fx, &plan, &ticket).await;
+        let path = format!("/api/branches/{}/pause", plan.branch_id);
+        assert_eq!(fx.post(&path, json!({})).await.0, 404);
+        assert!(quiet_for(&mut ws, 300).await, "no pause reached the worker");
     });
 }

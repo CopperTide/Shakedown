@@ -20,6 +20,7 @@ use crate::{
 mod api_tokens;
 mod connections;
 mod experiments;
+mod linked;
 mod open;
 mod provider_keys;
 mod reviews;
@@ -30,6 +31,7 @@ mod tx;
 pub use api_tokens::ApiTokenRow;
 pub use connections::{is_secret, Connection, NewConnection, REDACTED};
 pub use experiments::{NewExperiment, NewSetup};
+pub use linked::Linked;
 pub use open::{prepare_db, template_key};
 pub use provider_keys::{KeyKind, KeyRow, NameTaken, NewKey, OpenKey};
 pub use reviews::{ReviewDone, StoredReview};
@@ -331,12 +333,10 @@ impl Scoped<'_> {
         branch_id: &str,
         agent: Option<&str>,
         kind: EventKind,
-        mut payload: Value,
+        payload: Value,
         overhead: Option<Overhead>,
     ) -> Result<Event> {
-        if let (Some(o), Some(obj)) = (overhead, payload.as_object_mut()) {
-            obj.insert("overhead_ms".into(), serde_json::to_value(o)?);
-        }
+        let payload = with_overhead(payload, overhead)?;
         self.insert_event(branch_id, agent, kind, payload).await
     }
 
@@ -529,6 +529,14 @@ impl Scoped<'_> {
         .await?;
         Ok(())
     }
+}
+
+/// `payload` with `overhead` as its `overhead_ms`, when it is an object.
+fn with_overhead(mut payload: Value, overhead: Option<Overhead>) -> Result<Value> {
+    if let (Some(o), Some(obj)) = (overhead, payload.as_object_mut()) {
+        obj.insert("overhead_ms".into(), serde_json::to_value(o)?);
+    }
+    Ok(payload)
 }
 
 fn event_from(r: &Row) -> Result<Event> {

@@ -95,8 +95,11 @@ requests whose `Host` is a loopback address. The agents' MCP endpoints (`/mcp/{b
 API-mode gateway (`/gateway/{branch}/{agent}/v1/chat/completions`) are for shaked's own agents.
 `GET /worker` is the WebSocket a `shaked worker` running a branch in a sandbox links to: it says hello with
 a one-use ticket (good for ten minutes, bound to its branch and sandbox) and gets the branch's plan and a
-worker token, which it reconnects with. The token only links its own branch and calls the gateway for its
-agents, and dies when the branch ends. Pause, resume and stop on such a branch are relayed to its worker.
+worker token, which it reconnects with, also after shaked restarted: each event keeps the worker's own
+counter (`events.link_n`), so an event sent again is acknowledged with the seq it got, never appended twice.
+The token only links its own branch and calls the gateway for its agents, and dies when the branch ends. A
+link must say hello within 10 s, frames are at most 8 MiB, and a link silent for 60 s (pings unanswered) is
+closed. Pause, resume and stop on such a branch are relayed to its worker.
 
 ## Configuration
 
