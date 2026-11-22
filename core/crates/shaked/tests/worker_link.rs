@@ -432,3 +432,97 @@ fn a_caller_who_cannot_see_the_branch_relays_nothing() {
         assert!(quiet_for(&mut ws, 300).await, "no pause reached the worker");
     });
 }
+
+/// Puts `plan`'s run into a new experiment (through a suite of it): the experiment's id.
+async fn in_experiment(fx: &AppFx, plan: &BranchPlan, tag: &str) -> String {
+    let (exp, suite) = (format!("exp-{tag}"), format!("suite-{tag}"));
+    let sql = format!(
+        "INSERT INTO shakedown.experiments (id, name, task_id, benchmark, runs)
+           VALUES ('{exp}', 'e', '27', 'retail', 1);
+         INSERT INTO shakedown.suites (id, name, team, tasks, repeats, runner, benchmark, experiment_id)
+           VALUES ('{suite}', 's', '{{}}', '[]', 1, 'chain', 'retail', '{exp}');
+         INSERT INTO shakedown.suite_runs (suite_id, ord, task_id, repeat, run_id, branch_id)
+           VALUES ('{suite}', 0, '27', 0, '{}', '{}');",
+        plan.run_id, plan.branch_id
+    );
+    support::pg::execute(&fx.db, &sql).await;
+    exp
+}
+
+async fn ended_at(fx: &AppFx, experiment: &str) -> Option<String> {
+    let sql = format!("SELECT ended_at FROM shakedown.experiments WHERE id = '{experiment}'");
+    query_text(&fx.db, &sql).await
+}
+
+async fn status(fx: &AppFx, branch: &str) -> BranchStatus {
+    let b = records(&fx.state.store).find_branch(branch).await.unwrap();
+    b.unwrap().status
+}
+
+#[test]
+fn a_real_restart_keeps_a_linked_branch_running() {
+    run(async {
+        let fx = setup("startup").await;
+        let (plan, ticket) = branch(&fx).await;
+        let (idle, _) = branch(&fx).await;
+        let (linked_exp, idle_exp) = (
+            in_experiment(&fx, &plan, "a").await,
+            in_experiment(&fx, &idle, "b").await,
+        );
+        let (mut ws, token) = started(&fx, &plan, &ticket).await;
+        acked(&mut ws, &[(1, 1), (2, 2)]).await;
+        drop(ws);
+
+        // What a restarted shaked does first.
+        shaked::jobs::interrupt_at_start(&fx.state.store)
+            .await
+            .unwrap();
+        assert_eq!(status(&fx, &plan.branch_id).await, BranchStatus::Running);
+        assert_eq!(ended_at(&fx, &linked_exp).await, None);
+        assert_eq!(
+            status(&fx, &idle.branch_id).await,
+            BranchStatus::Interrupted
+        );
+        assert!(
+            ended_at(&fx, &idle_exp).await.is_some(),
+            "no worker: ended as before"
+        );
+
+        let (_again, base) = restarted(&fx).await;
+        let mut ws = connect_to(&base).await;
+        say(&mut ws, &hello(&token, 1)).await;
+        acked(&mut ws, &[(2, 2), (3, 3)]).await;
+        assert_eq!(texts(&fx, &plan.branch_id).await, numbered(1..=3));
+    });
+}
+
+#[test]
+fn a_worker_token_of_an_ended_branch_cannot_rejoin() {
+    run(async {
+        let fx = setup("endedrejoin").await;
+        let (plan, ticket) = branch(&fx).await;
+        let (ws, token) = started(&fx, &plan, &ticket).await;
+        drop(ws);
+        let store = records(&fx.state.store);
+        let ended = store.set_status(&plan.branch_id, BranchStatus::Interrupted, None);
+        ended.await.unwrap();
+        for base in [fx.base.clone(), restarted(&fx).await.1] {
+            let mut ws = connect_to(&base).await;
+            say(&mut ws, &hello(&token, 0)).await;
+            assert!(refused(&mut ws).await.contains("ended"), "{base}");
+        }
+        assert!(texts(&fx, &plan.branch_id).await.is_empty());
+    });
+}
+
+#[test]
+fn a_quiet_worker_that_answers_pings_stays_linked() {
+    run(async {
+        let fx = impatient("pings", 300).await;
+        let (plan, ticket) = branch(&fx).await;
+        let (mut ws, _) = started(&fx, &plan, &ticket).await;
+        // Reading answers the control box's pings; no frame comes for three idle timeouts.
+        assert!(quiet_for(&mut ws, 1000).await);
+        assert!(fx.state.links.connected(&plan.branch_id));
+    });
+}

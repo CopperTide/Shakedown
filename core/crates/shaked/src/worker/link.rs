@@ -274,8 +274,8 @@ async fn worker_caller(state: &AppState, secret: &str) -> Result<Caller, End> {
 }
 
 /// The link a worker token reconnects to: its own branch's, rebuilt when this control box lost
-/// it. A rebuilt link records for whom the layer says the token acts (the branch's owner), and
-/// goes on from the last `n` the store has.
+/// it, while the branch is running. A rebuilt link records for whom the layer says the token
+/// acts (the branch's owner), and goes on from the last `n` the store has.
 async fn rejoin(
     state: &AppState,
     parts: &Parts,
@@ -286,12 +286,28 @@ async fn rejoin(
     let CallerKind::RunToken { run, branch, .. } = c.kind.clone() else {
         return Err(End::Close);
     };
-    let link = match state.links.get(&branch).filter(|l| l.caller().is_some()) {
+    let link = match state.links.get(&branch) {
+        Some(link) if link.caller().is_none() => {
+            return Err(refused("this branch's worker has not started"))
+        }
         Some(link) => link,
         None => rebuilt(state, parts, c, &run, &branch).await?,
     };
+    let caller = link.caller().ok_or(End::Close)?;
+    still_running(state, &caller, &branch).await?;
     check_resume(&link, resume_from).await?;
     Ok(link)
+}
+
+/// Refuses a branch that is not running (any more): its worker has nothing to append.
+async fn still_running(state: &AppState, caller: &Caller, branch: &str) -> Result<(), End> {
+    let found = state.store.at(caller).find_branch(branch).await;
+    let found = found.map_err(|e| logged(branch, "reading its status", e))?;
+    match found {
+        Some(b) if b.status == BranchStatus::Running => Ok(()),
+        Some(b) => Err(refused(format!("the branch ended {}", b.status.as_str()))),
+        None => Err(refused("no such branch")),
+    }
 }
 
 async fn rebuilt(

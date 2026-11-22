@@ -26,7 +26,7 @@ impl Scoped<'_> {
             "WITH added AS (
                  INSERT INTO events (branch_id, seq, agent, kind, payload, link_n)
                  SELECT $1, coalesce(max(seq), 0) + 1, $2, $3, $4, $5 FROM events WHERE branch_id = $1
-                 ON CONFLICT (branch_id, link_n) DO NOTHING
+                 ON CONFLICT (branch_id, link_n) WHERE link_n IS NOT NULL DO NOTHING
                  RETURNING {EVENT_COLS})
              SELECT {EVENT_COLS}, true AS added FROM added
              UNION ALL
