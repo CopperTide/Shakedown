@@ -44,7 +44,7 @@ pub(super) async fn dispatch(ctx: &OpCtx<'_>, call: &Value, answer: &mut ChatAns
         .as_str()
         .and_then(|a| serde_json::from_str(a).ok())
         .unwrap_or_else(|| json!({}));
-    let content = match ops::all().iter().find(|op| mcp::tool_name(op) == name) {
+    let content = match mcp::by_tool(&name) {
         None => format!("no tool named {name}"),
         Some(op) => outcome(ctx, op, args, answer).await,
     };

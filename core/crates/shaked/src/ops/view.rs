@@ -1,12 +1,12 @@
 //! How items and problems are shown to callers. Responses carry ids and names, never paths.
 
 use serde_json::{json, Value};
-use shakedown_project::{kind_name, Item, ItemBody, Problem, Project};
+use shakedown_project::{kind_name, Item, Problem, Project};
 
 /// An item with its body and its problems.
 pub(super) fn item(project: &Project, item: &Item) -> Value {
     let mut out = summary(project, item);
-    out["body"] = body(&item.body);
+    out["body"] = serde_json::to_value(&item.body).unwrap_or(Value::Null);
     out
 }
 
@@ -34,14 +34,4 @@ pub(super) fn problem(p: &Problem) -> Value {
         "pointer": p.pointer,
         "message": p.message,
     })
-}
-
-fn body(body: &ItemBody) -> Value {
-    let value = match body {
-        ItemBody::World(b) => serde_json::to_value(b),
-        ItemBody::Scenario(b) => serde_json::to_value(b),
-        ItemBody::Setup(b) => serde_json::to_value(b),
-        ItemBody::Experiment(b) => serde_json::to_value(b),
-    };
-    value.unwrap_or(Value::Null)
 }

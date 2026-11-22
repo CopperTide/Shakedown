@@ -1,12 +1,11 @@
 //! MADL setups: the team file validated with the MADL crate, and drawn as agents and the
 //! connections between them (patterns expanded).
 
-use axum::http::StatusCode;
 use serde_json::{json, Value};
-use shakedown_project::format::{Kind, Team};
-use shakedown_project::{Id, ItemBody, Project};
+use shakedown_project::format::{Kind, SetupFile, Team};
+use shakedown_project::{Id, Project, ProjectError};
 
-use super::{input, schema, Access, IdInput, OpCtx, OpError, OpFuture, Operation};
+use super::{input, schema, unprocessable, Access, IdInput, OpCtx, OpError, OpFuture, Operation};
 
 pub(super) fn ops() -> Vec<Operation> {
     vec![Operation {
@@ -21,10 +20,6 @@ pub(super) fn ops() -> Vec<Operation> {
         input_schema: schema::<IdInput>,
         run: madl_of,
     }]
-}
-
-fn unprocessable(message: String) -> OpError {
-    OpError::new(StatusCode::UNPROCESSABLE_ENTITY, message)
 }
 
 fn madl_of<'a>(ctx: &'a OpCtx<'a>, _: &'static Operation, value: Value) -> OpFuture<'a> {
@@ -43,24 +38,18 @@ fn madl_of<'a>(ctx: &'a OpCtx<'a>, _: &'static Operation, value: Value) -> OpFut
 
 /// The MADL file of setup `id`, which must name one in its own folder.
 fn team_file(project: &Project, id: &Id) -> Result<std::path::PathBuf, OpError> {
-    let file = match project.get(Kind::Setup, id).map(|i| &i.body) {
-        Some(ItemBody::Setup(s)) => match &s.team {
-            Team::Madl { file } => file.clone(),
-            _ => return Err(unprocessable(format!("{id} isn't described in MADL"))),
-        },
-        _ => {
-            return Err(OpError::new(
-                StatusCode::NOT_FOUND,
-                format!("no setup named {id}"),
-            ))
-        }
+    let setup = project
+        .body::<SetupFile>(id)
+        .ok_or_else(|| ProjectError::not_found(Kind::Setup, id))?;
+    let Team::Madl { file } = &setup.team else {
+        return Err(unprocessable(format!("{id} isn't described in MADL")));
     };
     if file.contains('/') || file.contains('\\') || file.starts_with('.') {
         return Err(unprocessable(format!(
             "{file} must be a file name in the setup's folder"
         )));
     }
-    let path = project.root.join("setups").join(id.as_str()).join(&file);
+    let path = project.root.join("setups").join(id.as_str()).join(file);
     if !path.is_file() {
         return Err(unprocessable(format!(
             "{file} is missing from the setup's folder"

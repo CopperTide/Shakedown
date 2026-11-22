@@ -1,5 +1,9 @@
 //! Errors a file can fail with, located by file and JSON pointer.
 
+use crate::format::Kind;
+use crate::item::kind_name;
+use crate::Id;
+
 /// A file that could not be read as its format, with where in the file the problem is.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error("{file}{}: {message}", at(pointer))]
@@ -72,4 +76,14 @@ pub enum ProjectError {
         /// The underlying error.
         source: std::io::Error,
     },
+}
+
+impl ProjectError {
+    /// No item of `kind` named `id`.
+    pub fn not_found(kind: Kind, id: &Id) -> ProjectError {
+        ProjectError::NotFound {
+            kind: kind_name(kind),
+            id: id.to_string(),
+        }
+    }
 }

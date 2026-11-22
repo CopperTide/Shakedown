@@ -4,14 +4,13 @@
 
 use std::collections::HashMap;
 
-use axum::http::StatusCode;
 use parts::proto::{ChosenDisruption, ScenarioRequest};
 use shakedown_project::format::{
     Auth, ExperimentFile, Kind, ScenarioFile, SetupFile, Team as FileTeam, WorldFile,
 };
-use shakedown_project::{Id, ItemBody, Project};
+use shakedown_project::{kind_name, Id, KindFile, Project, ProjectError};
 
-use super::OpError;
+use super::{unprocessable, OpError};
 use crate::api::experiments::{NewExperimentReq, SetupReq};
 use crate::model::{AgentKind, AgentSpec, AuthRef, Runner, Team};
 use crate::providers::KEY_PREFIX;
@@ -45,9 +44,8 @@ pub(crate) struct Needs {
 pub(crate) fn needs(project: &Project, id: &Id) -> Result<Needs, OpError> {
     let mut out = Needs::default();
     let exp = experiment_of(project, id)?;
-    no_problems(project, id, exp)?;
     for name in &exp.setups {
-        match &setup_of(project, name)?.team {
+        match &named::<SetupFile>(project, name)?.team {
             FileTeam::Builtin { agents } => {
                 let keys = agents
                     .iter()
@@ -71,9 +69,8 @@ pub(crate) fn request(
     creds: &Credentials,
 ) -> Result<NewExperimentReq, OpError> {
     let exp = experiment_of(project, id)?;
-    no_problems(project, id, exp)?;
-    let scenario = scenario_of(project, &exp.scenario)?;
-    let (package, task) = runtime(world_of(project, &exp.world)?, scenario)?;
+    let scenario = named::<ScenarioFile>(project, &exp.scenario)?;
+    let (package, task) = runtime(named::<WorldFile>(project, &exp.world)?, scenario)?;
     let setups = exp
         .setups
         .iter()
@@ -108,55 +105,31 @@ fn runtime(world: &WorldFile, scenario: &ScenarioFile) -> Result<(String, String
     Ok((package, task))
 }
 
-fn unprocessable(message: String) -> OpError {
-    OpError::new(StatusCode::UNPROCESSABLE_ENTITY, message)
-}
-
-fn body<'a>(project: &'a Project, kind: Kind, name: &str) -> Result<&'a ItemBody, OpError> {
-    let missing = || {
-        unprocessable(format!(
-            "no {} named {name}",
-            shakedown_project::kind_name(kind)
-        ))
-    };
-    let id = Id::parse(name).map_err(|_| missing())?;
-    project
-        .get(kind, &id)
-        .map(|item| &item.body)
-        .ok_or_else(missing)
-}
-
+/// Experiment `id` (404 if there is none), refused when it or anything it names has problems.
 fn experiment_of<'a>(project: &'a Project, id: &Id) -> Result<&'a ExperimentFile, OpError> {
-    let not_found = || OpError::new(StatusCode::NOT_FOUND, format!("no experiment named {id}"));
-    match project.get(Kind::Experiment, id).map(|i| &i.body) {
-        Some(ItemBody::Experiment(e)) => Ok(e),
-        _ => Err(not_found()),
-    }
+    let exp = project
+        .body::<ExperimentFile>(id)
+        .ok_or_else(|| ProjectError::not_found(Kind::Experiment, id))?;
+    no_problems(project, id, exp)?;
+    Ok(exp)
 }
 
-fn world_of<'a>(project: &'a Project, name: &str) -> Result<&'a WorldFile, OpError> {
-    match body(project, Kind::World, name)? {
-        ItemBody::World(w) => Ok(w),
-        _ => Err(unprocessable(format!("{name} is not a world"))),
-    }
-}
-
-fn scenario_of<'a>(project: &'a Project, name: &str) -> Result<&'a ScenarioFile, OpError> {
-    match body(project, Kind::Scenario, name)? {
-        ItemBody::Scenario(s) => Ok(s),
-        _ => Err(unprocessable(format!("{name} is not a scenario"))),
-    }
+/// The item of format `B` that an experiment or setup names; naming none is 422.
+fn named<'a, B: KindFile>(project: &'a Project, name: &str) -> Result<&'a B, OpError> {
+    let missing = || unprocessable(format!("no {} named {name}", kind_name(B::KIND)));
+    let id = Id::parse(name).map_err(|_| missing())?;
+    project.body::<B>(&id).ok_or_else(missing)
 }
 
 /// Refuses an experiment whose own file, world, scenario or setups have problems.
 fn no_problems(project: &Project, id: &Id, exp: &ExperimentFile) -> Result<(), OpError> {
-    let mut named = vec![
+    let mut refs = vec![
         (Kind::Experiment, id.to_string()),
         (Kind::World, exp.world.clone()),
         (Kind::Scenario, exp.scenario.clone()),
     ];
-    named.extend(exp.setups.iter().map(|s| (Kind::Setup, s.clone())));
-    for (kind, name) in named {
+    refs.extend(exp.setups.iter().map(|s| (Kind::Setup, s.clone())));
+    for (kind, name) in refs {
         let Ok(item) = Id::parse(&name) else { continue };
         if let Some(p) = project.problems_of(kind, &item).first() {
             return Err(unprocessable(format!(
@@ -188,15 +161,8 @@ fn disruptions(scenario: &ScenarioFile) -> Option<ScenarioRequest> {
     })
 }
 
-fn setup_of<'a>(project: &'a Project, name: &str) -> Result<&'a SetupFile, OpError> {
-    match body(project, Kind::Setup, name)? {
-        ItemBody::Setup(s) => Ok(s),
-        _ => Err(unprocessable(format!("{name} is not an agent setup"))),
-    }
-}
-
 fn setup_req(project: &Project, name: &str, creds: &Credentials) -> Result<SetupReq, OpError> {
-    let setup = setup_of(project, name)?;
+    let setup = named::<SetupFile>(project, name)?;
     let agents = agents_of(name, &setup.team, creds)?;
     let team = Team {
         id: name.to_string(),

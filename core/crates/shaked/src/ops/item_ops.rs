@@ -2,16 +2,19 @@
 //! project's permissions: with "show a diff first", a put returns the diff and writes nothing until
 //! it is sent again with `confirm: true`.
 
+use std::ops::ControlFlow;
+
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::{json, Value};
-use shakedown_project::format::{
-    EditPolicy, ExperimentFile, Kind, ScenarioFile, SetupFile, WorldFile,
-};
-use shakedown_project::{item_file, Id, ItemBody, Project};
+use shakedown_project::format::{ExperimentFile, Kind, ScenarioFile, SetupFile, WorldFile};
+use shakedown_project::{item_file, Id, ItemBody, ProjectError};
 
 use super::project_ops::NoInput;
-use super::{input, schema, view, Access, IdInput, OpCtx, OpError, OpFn, OpFuture, Operation};
+use super::{
+    as_yaml, diff_first, input, schema, view, Access, IdInput, OpCtx, OpError, OpFn, OpFuture,
+    Operation,
+};
 
 pub(super) fn ops() -> Vec<Operation> {
     Kind::ALL.iter().flat_map(|kind| for_kind(*kind)).collect()
@@ -136,7 +139,9 @@ fn get<'a>(ctx: &'a OpCtx<'a>, op: &'static Operation, value: Value) -> OpFuture
     Box::pin(async move {
         let (kind, id) = (kind_of(op)?, Id::parse(&input::<IdInput>(value)?.id)?);
         let project = ctx.project.current()?;
-        let item = project.get(kind, &id).ok_or_else(|| not_found(kind, &id))?;
+        let item = project
+            .get(kind, &id)
+            .ok_or_else(|| ProjectError::not_found(kind, &id))?;
         Ok(view::item(&project, item))
     })
 }
@@ -146,12 +151,18 @@ fn put<'a>(ctx: &'a OpCtx<'a>, op: &'static Operation, value: Value) -> OpFuture
         let kind = kind_of(op)?;
         let PutInput { id, body, confirm } = input(value)?;
         let id = Id::parse(&id)?;
-        let body = parse_body(kind, &id, &body)?;
+        // Checked exactly as the file would be checked when read back.
+        let body = ItemBody::parse(kind, &item_file(kind, &id), &as_yaml(&body)?)?;
         let project = ctx.project.current()?;
-        let diff = diff_against(&project, kind, &id, &body)?;
-        if project.config.permissions.edit == EditPolicy::DiffFirst && !confirm {
-            return Ok(json!({ "proposed": true, "diff": diff }));
-        }
+        let old = match project.get(kind, &id) {
+            Some(item) => item.body.to_yaml()?,
+            None => String::new(),
+        };
+        let policy = project.config.permissions.edit;
+        let diff = match diff_first(policy, &old, &body.to_yaml()?, confirm) {
+            ControlFlow::Continue(diff) => diff,
+            ControlFlow::Break(proposal) => return Ok(proposal),
+        };
         let item = ctx.project.change(|p| p.put(kind, &id, body))??;
         let mut out = view::item(&ctx.project.current()?, &item);
         out["diff"] = Value::String(diff);
@@ -165,35 +176,4 @@ fn delete<'a>(ctx: &'a OpCtx<'a>, op: &'static Operation, value: Value) -> OpFut
         ctx.project.change(|p| p.remove(kind, &id))??;
         Ok(json!({ "deleted": id.as_str() }))
     })
-}
-
-/// Checks `body` exactly as the file would be checked when read back.
-fn parse_body(kind: Kind, id: &Id, body: &Value) -> Result<ItemBody, OpError> {
-    let yaml = serde_yaml_ng::to_string(body).map_err(|e| OpError::bad_request(e.to_string()))?;
-    Ok(ItemBody::parse(kind, &item_file(kind, id), &yaml)?)
-}
-
-/// The change `body` makes to the item as it is now, as a unified diff of its YAML.
-fn diff_against(
-    project: &Project,
-    kind: Kind,
-    id: &Id,
-    body: &ItemBody,
-) -> Result<String, OpError> {
-    let old = match project.get(kind, id) {
-        Some(item) => item.body.to_yaml()?,
-        None => String::new(),
-    };
-    let new = body.to_yaml()?;
-    Ok(similar::TextDiff::from_lines(&old, &new)
-        .unified_diff()
-        .to_string())
-}
-
-fn not_found(kind: Kind, id: &Id) -> OpError {
-    shakedown_project::ProjectError::NotFound {
-        kind: shakedown_project::kind_name(kind),
-        id: id.to_string(),
-    }
-    .into()
 }

@@ -82,6 +82,11 @@ pub fn tool_name(op: &Operation) -> String {
     op.name.replace('.', "_")
 }
 
+/// The operation whose tool name is `name`.
+pub fn by_tool(name: &str) -> Option<&'static Operation> {
+    all().iter().find(|op| tool_name(op) == name)
+}
+
 fn tools() -> Vec<Value> {
     all()
         .iter()
@@ -101,10 +106,7 @@ async fn call(ctx: &OpCtx<'_>, asker: &Asker<'_>, params: &Value) -> Result<Valu
         .get("name")
         .and_then(Value::as_str)
         .unwrap_or_default();
-    let op = all()
-        .iter()
-        .find(|op| tool_name(op) == name)
-        .ok_or_else(|| (INVALID_PARAMS, format!("no tool named {name}")))?;
+    let op = by_tool(name).ok_or_else(|| (INVALID_PARAMS, format!("no tool named {name}")))?;
     let args = params
         .get("arguments")
         .cloned()

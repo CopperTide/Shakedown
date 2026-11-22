@@ -15,12 +15,13 @@ mod project_ops;
 pub mod stdio;
 mod view;
 
+use std::ops::ControlFlow;
 use std::sync::{Arc, OnceLock};
 
 use futures_util::future::BoxFuture;
 use serde::de::DeserializeOwned;
-use serde_json::Value;
-use shakedown_project::format::Kind;
+use serde_json::{json, Value};
+use shakedown_project::format::{EditPolicy, Kind};
 
 use crate::app::AppState;
 use crate::auth::Caller;
@@ -149,4 +150,31 @@ fn input<T: DeserializeOwned>(value: Value) -> Result<T, OpError> {
 /// The JSON Schema of `T`, as a value.
 fn schema<T: schemars::JsonSchema>() -> Value {
     serde_json::to_value(schemars::schema_for!(T)).unwrap_or(Value::Null)
+}
+
+/// An input body as YAML, to be parsed as a file would be; one that can't be is 400.
+fn as_yaml(body: &Value) -> Result<String, OpError> {
+    serde_yaml_ng::to_string(body).map_err(|e| OpError::bad_request(e.to_string()))
+}
+
+/// The unified diff of an edit from `old` to `new` YAML. When the project's edit `policy` shows a
+/// diff first and the edit is not confirmed, breaks with the reply to give instead of writing.
+fn diff_first(
+    policy: EditPolicy,
+    old: &str,
+    new: &str,
+    confirm: bool,
+) -> ControlFlow<Value, String> {
+    let diff = similar::TextDiff::from_lines(old, new)
+        .unified_diff()
+        .to_string();
+    if policy == EditPolicy::DiffFirst && !confirm {
+        return ControlFlow::Break(json!({ "proposed": true, "diff": diff }));
+    }
+    ControlFlow::Continue(diff)
+}
+
+/// A request that names something unusable (422).
+fn unprocessable(message: String) -> OpError {
+    OpError::new(axum::http::StatusCode::UNPROCESSABLE_ENTITY, message)
 }

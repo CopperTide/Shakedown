@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use crate::error::ProjectError;
 use crate::format::{parse, to_yaml, Kind, ProjectFile};
-use crate::item::{kind_name, Item, ItemBody, Problem};
+use crate::item::{kind_name, Item, ItemBody, KindFile, Problem};
 use crate::load::{io, item_file, load_all, Items};
 use crate::validate::cross_check;
 use crate::write::write_atomic;
@@ -104,6 +104,11 @@ impl Project {
         self.items.get(&(kind, id.clone()))
     }
 
+    /// The body of item `id` of the kind `B` is the file format of.
+    pub fn body<B: KindFile>(&self, id: &Id) -> Option<&B> {
+        self.get(B::KIND, id).and_then(|item| B::of(&item.body))
+    }
+
     /// The problems on one item.
     pub fn problems_of(&self, kind: Kind, id: &Id) -> Vec<&Problem> {
         let id = id.as_str();
@@ -135,13 +140,13 @@ impl Project {
         self.reload()?;
         self.get(kind, id)
             .cloned()
-            .ok_or_else(|| not_found(kind, id))
+            .ok_or_else(|| ProjectError::not_found(kind, id))
     }
 
     /// Deletes item `id` of `kind`. A world's data folder is kept; only its `world.yaml` goes.
     pub fn remove(&mut self, kind: Kind, id: &Id) -> Result<(), ProjectError> {
         if self.get(kind, id).is_none() {
-            return Err(not_found(kind, id));
+            return Err(ProjectError::not_found(kind, id));
         }
         let file = item_file(kind, id);
         std::fs::remove_file(self.root.join(&file)).map_err(|e| io("deleting", &file, e))?;
@@ -155,13 +160,6 @@ impl Project {
         self.items = items;
         self.problems = problems;
         Ok(())
-    }
-}
-
-fn not_found(kind: Kind, id: &Id) -> ProjectError {
-    ProjectError::NotFound {
-        kind: kind_name(kind),
-        id: id.to_string(),
     }
 }
 
