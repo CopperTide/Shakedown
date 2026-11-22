@@ -38,7 +38,7 @@ zone is `-32602`.
 | `revoke_session {session, reason}` | write | revokes a session; records whether its zone was isolated then |
 | `restore_zone {zone, proposal_id}` | write | reconnects a zone; records any unknown session still live into it (`restored_with_live_session`) |
 | `report_security_incident {summary, session?, zone?, actions?}` | write | an incident record `INC-001`, ... |
-| `ot_scenario {name, disruptions?}` | write | sets the scenario and schedules disruptions; a task's setup calls it, so agents don't get it |
+| `ot_scenario {name?, disruptions?, remove?}` | write | sets the scenario and schedules disruptions (without `name`, a fork's change: drops `remove`'s and arms `disruptions`); a task's setup calls it, so agents don't get it |
 
 Keys: `scenario/current`, `gateway/<id>`, `playbook/<id>`, `zone/<id>`, `conduit/<id>`, `session/<id>`,
 `incident/<id>`, `log/actions` (every action numbered, so the order of a response can be read from the end state),

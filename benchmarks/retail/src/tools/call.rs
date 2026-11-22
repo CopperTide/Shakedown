@@ -103,7 +103,8 @@ async fn run(client: &mut Client, name: &str, args: &Value, keep: Keep) -> Resul
     };
     let out = retail.run(name, args).await;
     let mut touched = Touched::of(&retail);
-    if keep == Keep::Nothing {
+    // A lost write that succeeds writes nothing; one that fails reports what it tried, as any.
+    if keep == Keep::Nothing && out.is_ok() {
         touched.writes.clear();
         touched.docs.clear();
     }

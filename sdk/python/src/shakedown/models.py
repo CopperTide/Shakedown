@@ -129,7 +129,7 @@ def as_team(team: "Team | list[Agent] | dict[str, Any] | None") -> dict[str, Any
 @dataclass
 class Change:
     """A change to one agent in a fork. Unset fields are left as they are; ``model=""`` clears the
-    model; ``tools`` gives exactly the world tools listed (``[]``: every tool again)."""
+    model; ``tools`` gives exactly the world tools listed (``[]`` is refused: it would mean every tool)."""
 
     prompt: Optional[str] = None
     model: Optional[str] = None

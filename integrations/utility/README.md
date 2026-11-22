@@ -33,7 +33,7 @@ A negative `initial_kw`, a tariff without both prices or a bad `plant_start` is 
 | `demand_response_events {}` | read | each event: target, window (plant time), status (`notified`, `active`, `ended`), the site's response, the minutes inside the window so far, the average and highest kW there and the minutes over the target |
 | `respond_to_event {event, committed_kw, plan}` | write | the site's answer to an event (refused once it has ended) |
 | `meter_load {kw, cause?}` | write | a reading of the plant's load; a link calls it, so agents don't get it |
-| `utility_scenario {name, disruptions?}` | write | sets the scenario and schedules disruptions; a task's setup calls it, so agents don't get it |
+| `utility_scenario {name?, disruptions?, remove?}` | write | sets the scenario and schedules disruptions (without `name`, a fork's change: drops `remove`'s and arms `disruptions`); a task's setup calls it, so agents don't get it |
 
 Keys: `scenario/current`, `meter/site`, `dr/<event>`, `_disruption/<id>` (internal). A window's start and end are
 world events, `demand_response_active` and `demand_response_ended` (from `advance`; one found during a call waits for

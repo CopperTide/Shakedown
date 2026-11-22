@@ -230,8 +230,9 @@ builder shows them, and a run or suite names the ones it chose.
   agent, with `{disruptions: [the added options' filled templates], remove: [ids]}` (not the template's `args`), and
   records it as a setup step. A part that takes it drops the disruptions `remove` names (fired or not) and arms the
   others as at setup; one that can't answers an error: the fork is refused (409) and its new branch ends
-  `infra_error` saying why. Retail takes it; the Python kit's
-  `jsonstate` scenario tools need `name`, so they don't yet.
+  `infra_error` saying why. Retail takes it, and so do the Python kit's `jsonstate` scenario tools
+  (`jsonstate.SCENARIO_PARAMS`, `change_scenario`: without `name` they keep the scenario and don't arm its data's
+  disruptions again) and the ridgeline hub's.
 
 ### Scheduled disruptions
 
@@ -264,7 +265,8 @@ tool of its own (retail does).
   reads delivered for pending and pending for delivered), `timeout` (the call isn't made and answers that it timed
   out and may not have been processed), `variant_unavailable {item_id?}` (the variant, else the product's first in
   stock, reads out of stock) and `lost_write` (the write answers as if made but writes nothing); each acts on the
-  answer of the call it fires on only, and one can't fire as it is armed.
+  answer of the call it fires on only, and counts only calls it changes (an order delivered or pending, a product
+  with the variant in stock, a write that succeeds; a timeout any call). One can't fire as it is armed.
 
 ### The world's view
 

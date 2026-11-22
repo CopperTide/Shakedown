@@ -21,7 +21,7 @@ from typing import Callable
 
 from . import disruptions, errors, saves
 from .docspart import DocsPart, pick
-from .params import Refusal, input_schema, normalize, refused
+from .params import Param, Refusal, input_schema, normalize, refused
 
 FILE = "state.json"
 DENIALS = "_audit/denials"
@@ -205,10 +205,31 @@ class ClockedJsonStatePart(JsonStatePart):
         return super().call_tool(instance, name, args, clock_ms)
 
 
+SCENARIO_PARAMS = (Param("name", "string", None), Param("disruptions", "array", None),
+                   Param("remove", "array", None))
+"""A scenario tool's params: a setup gives `name` (and `disruptions`); a fork's change gives `disruptions`
+and `remove` without `name`."""
+
+
+def change_scenario(config, state, args, kinds, tools) -> Done:
+    """A fork's change (docs/protocol.md, "A run's scenario"): keeps the scenario, drops the disruptions
+    `args["remove"]` names and arms those in `args["disruptions"]`."""
+    removed = disruptions.remove(state, args.get("remove") or [])
+    given = args.get("disruptions") or []
+    fired = disruptions.arm(config, state, kinds, list(tools), given)
+    result = {"scenario": state["scenario"], "removed": list(args.get("remove") or []),
+              "disruptions": [d["id"] for d in given]}
+    writes = sorted({*removed, *fired.writes})
+    return Done(result, writes=writes, events=fired.events)
+
+
 def set_scenario(config, state, args, known, overlay, kinds, tools) -> Done:
     """A scenario tool's work: sets `state["scenario"]` to `args["name"]` (one of `known`) and arms
     the disruptions the scenario's data lists (`overlay(config, state)["disruptions"]`), then those
-    in `args["disruptions"]`, as `disruptions.arm` does with `kinds` and the part's `tools`."""
+    in `args["disruptions"]`, as `disruptions.arm` does with `kinds` and the part's `tools`. Without
+    `name` it is a fork's change (`change_scenario`)."""
+    if args.get("name") is None:
+        return change_scenario(config, state, args, kinds, tools)
     if args["name"] not in known:
         raise Refusal(f"unknown scenario {args['name']} (known: {', '.join(known)})")
     state["scenario"] = args["name"]

@@ -165,7 +165,7 @@ pub struct Change {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub read_only: Option<bool>,
     /// The world tools the agent may see and call after the fork: exactly this list (see
-    /// [`AgentSpec::tools`]; empty: every tool again).
+    /// [`AgentSpec::tools`]). An empty list is refused: it would mean every tool, not none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tools: Option<Vec<String>>,
 }

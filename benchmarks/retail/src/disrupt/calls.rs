@@ -6,7 +6,7 @@ use serde_json::{json, Value};
 use shakedown_part::proto::WorldEvent;
 use tokio_postgres::Client;
 
-use super::{before_call, checked, effects, store, Disruption};
+use super::{checked, effects, settle, store, Disruption};
 use crate::tools::ToolOutcome;
 
 /// A call's answer and the world events it gives.
@@ -90,13 +90,16 @@ fn ids(remove: &Value) -> Option<Vec<String>> {
     }
 }
 
-/// An agent's call of `name`: the disruptions it fires act on its answer, and every one it
-/// changed names its key in `writes` (so the step is saved with the count).
+/// An agent's call of `name`: the disruptions that may count it decide how it is made, those it
+/// changes fire on it (and act on its answer) or count it, and each of those names its key in
+/// `writes` (so the step is saved with the count).
 pub async fn agent_call(c: &mut Client, name: &str, args: &Value) -> Result<Answer> {
     let mut schedule = store::load(c).await?;
-    let on = before_call(&mut schedule, name);
+    let counting: Vec<&Disruption> = schedule.iter().filter(|d| d.counts(name)).collect();
+    let outcome = effects::call(c, name, args, &counting).await?;
+    let on = settle(&mut schedule, name, |d| effects::alters(d, &outcome));
     store::save(c, &on.changed).await?;
-    let mut outcome = effects::answer(c, name, args, &on.fired).await?;
+    let mut outcome = effects::misreported(outcome, &on.fired);
     outcome.writes = with_keys(outcome.writes, &on.changed);
     let events = on.fired.iter().map(Disruption::event).collect();
     Ok(Answer { outcome, events })

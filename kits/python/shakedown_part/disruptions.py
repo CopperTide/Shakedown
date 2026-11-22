@@ -118,6 +118,15 @@ def arm(config, state, kinds, tools, given) -> Fired:
     return out
 
 
+def remove(state, ids) -> list:
+    """Drops the disruptions `ids` from the schedule in `state` (fired or not; what a fired one changed
+    stays) and gives their keys; an id not armed is no change."""
+    armed = state.get("disruptions", [])
+    gone = [d for d in armed if d["id"] in ids]
+    state["disruptions"] = [d for d in armed if d["id"] not in ids]
+    return [key(d) for d in gone]
+
+
 def pending(state, tool) -> list:
     """The disruptions not fired yet that a call of `tool` counts for."""
     return [d for d in state.get("disruptions", [])

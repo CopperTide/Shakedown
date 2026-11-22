@@ -23,7 +23,7 @@ region}]`), `today`, and `defer` (the change actions another desk decides: the Q
 | `send_customer_notice {customer, order, new_date, message}` | write | a notice (`N-0001`, ...); refused for an unknown customer or a date that isn't `YYYY-MM-DD` |
 | `customer_notices {}` | read | the notices |
 | `customer_requests {}` | read | requests customers sent to the desk (an order escalated as urgent) |
-| `logistics_scenario {name, disruptions?}` | write | sets the scenario and schedules disruptions; a task's `setup` calls it |
+| `logistics_scenario {name?, disruptions?, remove?}` | write | sets the scenario and schedules disruptions (without `name`, a fork's change: drops `remove`'s and arms `disruptions`); a task's `setup` calls it |
 | `supply_review {id, action, payload, summary?}` | write | the director reviews a change; a link calls it |
 
 Keys: `scenario/current`, `register/lanes` (the register as it stands now), `quote/<id>`, `shipment/<id>`, `notice/<id>`,

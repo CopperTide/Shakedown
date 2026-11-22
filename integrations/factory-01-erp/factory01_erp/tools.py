@@ -1,6 +1,6 @@
 """The ERP's tools: inventory, schedule and suppliers to read; reserving stock, rescheduling an order and
 placing a purchase order to change things; a flag for a human; and the scenario a task's setup sets."""
-from shakedown_part.jsonstate import Denied, Done, Scenarios, Tool, event
+from shakedown_part.jsonstate import SCENARIO_PARAMS, Denied, Done, Scenarios, Tool, event
 from shakedown_part.params import Param, Refusal
 
 from . import disrupt, erp
@@ -159,6 +159,6 @@ TOOLS = {t.name: t for t in [
          (Param("order_id", "string"), Param("reason", "string"), Param("amount_usd", "number", None)),
          _flag),
     Tool("erp_scenario", "Sets the ERP's scenario and schedules its disruptions (a task's setup calls it; "
-         "agents don't get it).", "write", (Param("name", "string"), Param("disruptions", "array", None)),
+         "agents don't get it).", "write", SCENARIO_PARAMS,
          _scenario),
 ]}

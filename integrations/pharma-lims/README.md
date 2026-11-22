@@ -29,7 +29,7 @@ A start without `lims`, `lots` or a date in `today` is `-32602`.
 | `lims_em_results {batch?, grade?}` | read | samples with CFU, limits and status (`within limits`, `alert limit exceeded`, `action limit exceeded`) |
 | `lims_batch_results {batch}` | read | the batch's release tests, `complete`, `all_passed`, and its samples above the action limit |
 | `lims_documents {}`, `lims_get_document {id}` | read | the documents, with text |
-| `lims_scenario {name, disruptions?}` | write | sets the scenario and schedules disruptions; a task's `setup` calls it, so agents don't get it |
+| `lims_scenario {name?, disruptions?, remove?}` | write | sets the scenario and schedules disruptions (without `name`, a fork's change: drops `remove`'s and arms `disruptions`); a task's `setup` calls it, so agents don't get it |
 | `qa_review {id, action, payload, summary?}` | write | the QA head reviews a change; a link calls it, so agents don't get it |
 
 Keys: `scenario/current`, `review/<change id>`, `sample/<id>`, `batch/<id>`, `document/<id>`, `_disruption/<id>` (internal). An unknown batch,

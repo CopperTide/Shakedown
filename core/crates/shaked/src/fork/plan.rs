@@ -482,6 +482,26 @@ fn finish_plan(
     }
 }
 
+/// For each agent whose setup lists its tools, the tools `changes` give it beyond that list (by
+/// agent id, sorted).
+pub fn tools_added(team: &Team, changes: &HashMap<String, Change>) -> Vec<(String, Vec<String>)> {
+    let mut out: Vec<(String, Vec<String>)> = team
+        .agents
+        .iter()
+        .filter(|spec| !spec.tools.is_empty())
+        .filter_map(|spec| {
+            let listed = changes.get(&spec.id)?.tools.as_ref()?;
+            let added: Vec<String> = (listed.iter())
+                .filter(|t| !spec.tools.contains(t))
+                .cloned()
+                .collect();
+            (!added.is_empty()).then(|| (spec.id.clone(), added))
+        })
+        .collect();
+    out.sort();
+    out
+}
+
 /// `team` with each agent's prompt/model/kind/provider/read_only/tools replaced where `changes`
 /// sets them.
 pub fn apply_changes(team: &Team, changes: &HashMap<String, Change>) -> Team {

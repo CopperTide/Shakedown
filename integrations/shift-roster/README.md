@@ -29,7 +29,7 @@ Given by the factory benchmark (`benchmarks/factory/data/shift.json`, `roster`).
 | `shift_roster {}` | read | each station with its operator and whether it is staffed (and why not); each operator; overtime so far |
 | `assign_operator {operator, station}` | write | puts an on-shift operator (id or name) at a station; whoever was there floats. An operator not certified for it is placed with a warning, and the station is not staffed |
 | `call_in_operator {operator}` | write | an on-call operator joins the shift, on overtime |
-| `roster_scenario {name, disruptions?}` | write | sets the scenario and schedules disruptions; a task's setup calls it, so agents don't get it |
+| `roster_scenario {name?, disruptions?, remove?}` | write | sets the scenario and schedules disruptions (without `name`, a fork's change: drops `remove`'s and arms `disruptions`); a task's setup calls it, so agents don't get it |
 
 Keys: `scenario/current`, `station/<id>` (`staffed`: its operator is on shift and certified for it), `operator/<id>`,
 `overtime/shift`, `log/actions`, `_disruption/<id>` (internal). The factory benchmark gates the plant's `start_cell`

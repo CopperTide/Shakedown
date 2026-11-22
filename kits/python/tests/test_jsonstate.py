@@ -109,3 +109,23 @@ def test_scenarios_are_read_at_a_path_and_set_by_the_scenario_tool():
     assert (state["scenario"], done.result, done.writes) == ("zeta", {"scenario": "zeta"}, ["scenario/current"])
     with pytest.raises(Refusal, match=r"unknown scenario nope \(known: base, alpha, zeta\)"):
         nested.set(config, state, {"name": "nope"}, {}, {})
+
+
+def test_a_scenario_change_without_a_name_drops_and_arms_and_keeps_the_scenario():
+    """A fork's change: `{disruptions, remove}` with no `name` keeps the scenario and its data's disruptions."""
+    from shakedown_part import disruptions
+
+    def _cap(config, state, do):
+        state["cap"] = do["cap"]
+        return ["box/cap"]
+    kinds = {"cap": disruptions.Kind({"cap": "integer"}, _cap)}
+    def d(did, n):
+        return {"id": did, "when": {"after_calls": n, "tool": "peek"}, "do": {"kind": "cap", "cap": 0}, "text": "t"}
+    config = {"scenarios": {"tight": {"disruptions": [d("data", 3)]}}}
+    top, state = Scenarios(), {"scenario": "base"}
+    top.set(config, state, {"name": "tight", "disruptions": [d("full", 1)]}, kinds, ["peek"])
+    done = top.set(config, state, {"disruptions": [d("later", 5)], "remove": ["full"]}, kinds, ["peek"])
+    assert state["scenario"] == "tight"
+    assert [x["id"] for x in state["disruptions"]] == ["data", "later"], "the data's disruption isn't armed twice"
+    assert done.writes == ["_disruption/full", "_disruption/later"]
+    assert done.result == {"scenario": "tight", "removed": ["full"], "disruptions": ["later"]}

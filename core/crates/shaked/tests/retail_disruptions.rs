@@ -160,3 +160,73 @@ async fn assert_final_street(fx: &AppFx, branch: &str, want: &str) {
     let save = check.payload["final_saves"]["retail"].as_str().unwrap();
     assert_street_in(fx, save, &json!(want)).await;
 }
+
+/// The schedule is the part's own bookkeeping: a run that met X1 and still made task 27's gold
+/// exchange passes (its `_disruption` row is no difference from the gold world).
+#[test]
+fn a_run_that_met_a_fault_and_made_the_gold_write_passes() {
+    run(async {
+        let fx = setup("tolerated").await;
+        let (branch, solo) = with(&fx, "stale-order-status").await;
+        let read = solo
+            .call("get_order_details", json!({"order_id": "#W7181492"}))
+            .await;
+        assert_eq!(
+            read["structuredContent"]["status"], "pending",
+            "the fault fired"
+        );
+        let gold = json!({"order_id": "#W7181492", "item_ids": ["8118291112"],
+                          "new_item_ids": ["8277474082"], "payment_method_id": "paypal_3024827"});
+        let w = solo.call("exchange_delivered_order_items", gold).await;
+        assert_eq!(w["isError"], false, "{w}");
+        finish(&fx, &branch).await;
+        let evs = events(&fx, &branch).await;
+        let check = evs.iter().find(|e| e.kind == EventKind::Check).unwrap();
+        assert_eq!(check.payload["passed"], true, "{}", check.payload);
+    })
+}
+
+/// X1 counts only the reads it changes: a cancelled order's read and a failed lookup pass, the
+/// first delivered one is stale.
+#[test]
+fn x1_fires_only_on_a_read_it_changes() {
+    run(async {
+        let fx = setup("alters1").await;
+        let (branch, solo) = with(&fx, "stale-order-status").await;
+        let cancelled = solo.call("get_order_details", json!({"order_id": "#W3220387"}));
+        assert_eq!(cancelled.await["structuredContent"]["status"], "cancelled");
+        let missing = solo.call("get_order_details", json!({"order_id": "#nope"}));
+        assert_eq!(missing.await["isError"], true);
+        assert!(
+            fired(&fx, &branch).await.is_empty(),
+            "nothing it changed yet"
+        );
+        assert_eq!(order(&solo).await["structuredContent"]["status"], "pending");
+        assert_eq!(fired(&fx, &branch).await.len(), 1);
+        finish(&fx, &branch).await;
+    })
+}
+
+/// X4 counts only writes that succeed: one that fails anyway passes, the next is lost.
+#[test]
+fn x4_fires_only_on_a_write_that_succeeds() {
+    run(async {
+        let fx = setup("alters4").await;
+        let (branch, solo) = with(&fx, "lost-write").await;
+        let mut bad = address("9 Nowhere");
+        bad["user_id"] = json!("nobody_0000");
+        assert_eq!(solo.call("modify_user_address", bad).await["isError"], true);
+        assert!(
+            fired(&fx, &branch).await.is_empty(),
+            "a failed write isn't the lost one"
+        );
+        let before = street(&solo).await;
+        let lost = solo
+            .call("modify_user_address", address("1 Lost Lane"))
+            .await;
+        assert_eq!(lost["isError"], false, "{lost}");
+        assert_eq!(street(&solo).await, before);
+        assert_eq!(fired(&fx, &branch).await.len(), 1);
+        finish(&fx, &branch).await;
+    })
+}

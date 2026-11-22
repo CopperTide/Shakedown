@@ -3,7 +3,7 @@
 //! keep no saves (only replay) are never saved; parts with replay are not in the shared saves,
 //! so they are not compared with them.
 
-use parts::proto::{DiffParams, Differing, SaveAt, SaveParams, Target};
+use parts::proto::{is_internal_key, DiffParams, Differing, SaveAt, SaveParams, Target};
 use serde_json::Value;
 
 use super::{new_save_id, request, Part, Saves, World, WorldError};
@@ -150,8 +150,8 @@ impl World {
     }
 
     /// Keys that differ between each part's live instance and `other[part]` (shared saves: base
-    /// or gold), sorted; prefixed `part:` only when the world has more than one part. Parts not
-    /// in the shared saves are skipped (see `unchecked_parts`).
+    /// or gold), sorted, internal keys left out; prefixed `part:` only when the world has more
+    /// than one part. Parts not in the shared saves are skipped (see `unchecked_parts`).
     pub async fn diff_with(&self, other: &Saves) -> Result<Vec<String>, WorldError> {
         let many = self.parts.len() > 1;
         let mut out = vec![];
@@ -168,13 +168,9 @@ impl World {
             };
             // A malformed answer is an error, never "nothing differs".
             let d: Differing = request(&p.client, &p.label(), &params).await?;
-            out.extend(d.differing.into_iter().map(|k| {
-                if many {
-                    format!("{}:{k}", p.name)
-                } else {
-                    k
-                }
-            }));
+            // A part's internal keys (a disruption's schedule) are its bookkeeping, not the world.
+            let world = d.differing.into_iter().filter(|k| !is_internal_key(k));
+            out.extend(world.map(|k| if many { format!("{}:{k}", p.name) } else { k }));
         }
         out.sort();
         out.dedup();

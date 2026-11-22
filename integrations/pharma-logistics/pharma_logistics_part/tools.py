@@ -1,6 +1,6 @@
 """The logistics tools: the qualified-lanes register, quotes, bookings and notices for agents, the scenario a
 task's setup sets, and the supply chain director's review that a benchmark's link calls."""
-from shakedown_part.jsonstate import Done, Tool
+from shakedown_part.jsonstate import SCENARIO_PARAMS, Done, Tool
 from shakedown_part.params import Param
 
 from . import director, disrupt, freight, network
@@ -48,7 +48,7 @@ TOOLS = {t.name: t for t in [
          (), _requests),
     Tool("logistics_scenario", "Sets the carriers' scenario and schedules its disruptions (a task's setup "
          "calls it; agents don't get it).", "write",
-         (Param("name", "string"), Param("disruptions", "array", None)), _scenario),
+         SCENARIO_PARAMS, _scenario),
     Tool("supply_review", "The supply chain director reviews a proposed change (a benchmark's link calls it; "
          "agents don't get it).", "write",
          (Param("id", "string"), Param("action", "string"), Param("payload", "object", None),

@@ -1,7 +1,7 @@
 //! Scheduled disruptions in the retail world (docs/protocol.md, "Scheduled disruptions"): faults
-//! that act on one agent's call, armed by the world's own tool `retail_scenario`. Each fires
-//! once, deterministically, before the benchmark answers the call that crosses its count, and acts
-//! on that call's answer only. The schedule is kept in the retail database (`store`), so a save
+//! that act on one agent's call, armed by the world's own tool `retail_scenario`. Each counts only
+//! the calls it would change, fires once, deterministically, on the one that crosses its count,
+//! and acts on that call's answer only. The schedule is kept in the retail database (`store`), so a save
 //! keeps it and a fork meets the same schedule.
 //!
 //! - `when: {after_calls, tool?}` counts the agents' calls (only of `tool`, which may also be a
@@ -64,8 +64,13 @@ impl Disruption {
         self.act["kind"].as_str().unwrap_or_default()
     }
 
-    /// True when a call of `tool` counts for it (it hasn't fired).
-    fn counts(&self, tool: &str) -> bool {
+    /// True when its count is reached: the next call it would change fires it.
+    pub fn due(&self) -> bool {
+        self.seen >= self.when.after_calls
+    }
+
+    /// True when a call of `tool` may count for it (it hasn't fired).
+    pub fn counts(&self, tool: &str) -> bool {
         let of = self.when.tool.as_ref();
         !self.fired && of.is_none_or(|t| t.iter().any(|n| n == tool))
     }
@@ -156,20 +161,25 @@ fn act(id: &str, act: &Value) -> Result<Value, String> {
     Ok(act.clone())
 }
 
-/// What the schedule did on one agent's call: the disruptions that fired on it and the keys of
-/// every disruption it changed (fired or counted).
+/// What the schedule did on one agent's call: the disruptions that fired on it and every
+/// disruption it changed (fired or counted).
 #[derive(Debug, Default, PartialEq)]
 pub struct OnCall {
     pub fired: Vec<Disruption>,
     pub changed: Vec<Disruption>,
 }
 
-/// For an agent's call of `tool`, before it is answered: fires the disruptions whose count it
-/// crosses, then counts it for the others.
-pub fn before_call(schedule: &mut [Disruption], tool: &str) -> OnCall {
+/// For an agent's call of `tool`, once it is answered: each disruption it may count for and that
+/// `alters` says it changes fires when due, else counts the call. A call it wouldn't change (an
+/// order neither delivered nor pending, a write that failed anyway) counts for nothing.
+pub fn settle(
+    schedule: &mut [Disruption],
+    tool: &str,
+    alters: impl Fn(&Disruption) -> bool,
+) -> OnCall {
     let mut out = OnCall::default();
-    for d in schedule.iter_mut().filter(|d| d.counts(tool)) {
-        if d.seen >= d.when.after_calls {
+    for d in schedule.iter_mut().filter(|d| d.counts(tool) && alters(d)) {
+        if d.due() {
             d.fired = true;
             out.fired.push(d.clone());
         } else {
@@ -193,22 +203,36 @@ mod tests {
     fn it_fires_once_on_the_call_that_crosses_its_count_of_its_tools_only() {
         let d = checked(&given(1, json!("get_order_details"), "stale_status")).unwrap();
         let mut s = vec![d];
-        let other = before_call(&mut s, "get_user_details");
+        let alters = |_: &Disruption| true;
+        let other = settle(&mut s, "get_user_details", alters);
         assert_eq!(other, OnCall::default(), "another tool counts for nothing");
-        let first = before_call(&mut s, "get_order_details");
+        let unchanged = settle(&mut s, "get_order_details", |_| false);
+        assert_eq!(
+            unchanged,
+            OnCall::default(),
+            "a call it wouldn't change counts for nothing"
+        );
+        let first = settle(&mut s, "get_order_details", alters);
         assert!(first.fired.is_empty() && first.changed[0].seen == 1);
-        let second = before_call(&mut s, "get_order_details");
+        let second = settle(&mut s, "get_order_details", alters);
         assert_eq!(second.fired[0].id, "x1");
         assert_eq!(second.fired[0].key(), "_disruption/x1");
-        assert_eq!(before_call(&mut s, "get_order_details"), OnCall::default());
+        assert_eq!(
+            settle(&mut s, "get_order_details", alters),
+            OnCall::default()
+        );
     }
 
     #[test]
     fn a_list_of_tools_counts_a_call_of_any_of_them() {
         let writes = json!(["modify_user_address", "cancel_pending_order"]);
         let mut s = vec![checked(&given(0, writes, "lost_write")).unwrap()];
-        assert!(before_call(&mut s, "get_order_details").fired.is_empty());
-        assert_eq!(before_call(&mut s, "cancel_pending_order").fired.len(), 1);
+        let alters = |_: &Disruption| true;
+        assert!(settle(&mut s, "get_order_details", alters).fired.is_empty());
+        assert_eq!(
+            settle(&mut s, "cancel_pending_order", alters).fired.len(),
+            1
+        );
     }
 
     #[test]

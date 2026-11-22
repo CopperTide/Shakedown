@@ -62,7 +62,7 @@ benchmark's shift task. A world without `inbound` sees the hub as before, except
 | tool | effect | what |
 |---|---|---|
 | `inbound_deliveries {}` | read | each truck: material, supplier, carrier, line, `eta` (plant time: `plant_start` plus `eta_hours` plus any delay), `status` (`in transit` or `arrived`, from the hub's clock), `line_runs_out` (plant start plus `line_stock_hours`) and `line_short_hours` |
-| `hub_scenario {name, disruptions?}` | write | sets the scenario (`base`) and schedules disruptions; a task's setup calls it, so agents don't get it |
+| `hub_scenario {name?, disruptions?, remove?}` | write | sets the scenario (`base`) and schedules disruptions (without `name`, a fork's change: drops `remove`'s and arms `disruptions`); a task's setup calls it, so agents don't get it |
 
 - Keys: `inbound/<id>`, `scenario/inbound`, `_disruption/<id>` (internal).
 - **Scheduled disruption** (`shakedown_part.disruptions`, docs/protocol.md "Scheduled disruptions"): `delivery_delay

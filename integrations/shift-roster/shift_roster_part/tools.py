@@ -1,6 +1,6 @@
 """The roster's tools: the shift for agents, assigning an operator to a station and calling one in, and the
 scenario a task's setup sets."""
-from shakedown_part.jsonstate import Done, Scenarios, Tool
+from shakedown_part.jsonstate import SCENARIO_PARAMS, Done, Scenarios, Tool
 from shakedown_part.params import Param, Refusal
 
 from . import disrupt, roster
@@ -63,6 +63,6 @@ TOOLS = {t.name: t for t in [
     Tool("call_in_operator", "Call in an operator who is on call: they join the shift, on overtime.", "write",
          (Param("operator", "string"),), _call_in),
     Tool("roster_scenario", "Sets the roster's scenario and schedules its disruptions (a task's setup calls it; "
-         "agents don't get it).", "write", (Param("name", "string"), Param("disruptions", "array", None)),
+         "agents don't get it).", "write", SCENARIO_PARAMS,
          _scenario),
 ]}

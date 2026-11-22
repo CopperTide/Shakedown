@@ -39,6 +39,9 @@ pub enum ForkError {
         "the {part} integration is running on a different machine or version than the original"
     )]
     FingerprintMismatch { part: String },
+    /// A tools change with an empty list: that would mean every tool again, not none.
+    #[error("a fork can't cut every tool of \"{0}\" with `tools: []`, which means every tool again; make it read_only or list the tools it keeps")]
+    NoTools(String),
     /// A tools change lists a tool the world doesn't offer agents.
     #[error("the world has no tool \"{0}\" for an agent to use")]
     UnknownTool(String),

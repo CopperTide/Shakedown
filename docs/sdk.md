@@ -176,7 +176,7 @@ branch.rewind(event=17).plan()                   # how each part will be restore
 
 from shakedown import Change
 fork = branch.fork(17, changes={"resolver": Change(prompt="...", model="sonnet")}, restore="exact")
-fork = branch.fork(17, changes={"resolver": Change(tools=["get_order_details"])})  # exactly these world tools ([]: all)
+fork = branch.fork(17, changes={"resolver": Change(tools=["get_order_details"])})  # exactly these world tools (not [])
 fork = branch.fork(17, remove=["stale-order-status"])   # drop a scheduled disruption from step 17 on (add=[...] adds options)
 fork.fork_info                                   # start_seq, moved_from, reason (a CLI agent restarts from its start)
 branch.restore_plan(17)                          # how each part will be restored, or the refusal

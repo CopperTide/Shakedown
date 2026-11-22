@@ -10,15 +10,16 @@ products as rows, the tools ported from `cs2680-gap-tests/harness/tool.py` (`src
 cs2680 evaluation. None is offered selected, and the agents are not told. Each is a scheduled disruption
 (`docs/protocol.md`, "Scheduled disruptions") that the world's own tool `retail_scenario` arms in the retail database
 (table `_disruption`, whose rows are internal keys: saved with each step they change, left out when the final world is
-compared with the gold one). Each fires on the agents' call after the first `after` (default 0: the first) of its
-tools, and acts on that call's answer only:
+compared with the gold one, so a run that met a fault and still did the task passes). Each counts only the agents'
+calls of its tools that it would change, fires on the one after the first `after` of those (default 0: the first),
+and acts on that call's answer only:
 
 | Option | Counts calls of | Disruption | What the call answers |
 |---|---|---|---|
-| `stale-order-status` | `get_order_details` | `stale_status` | the order's status as delivered for pending and pending for delivered |
-| `order-read-timeout` | `get_order_details` | `timeout` | the call isn't made: "The request timed out; it may not have been processed." |
-| `variant-out-of-stock` | `get_product_details` | `variant_unavailable` | the product's first variant in stock (by id) as out of stock |
-| `lost-write` | every write tool | `lost_write` | the write's usual answer, but nothing is written and the step names no written key |
+| `stale-order-status` | `get_order_details` of an order delivered or pending | `stale_status` | the order's status as delivered for pending and pending for delivered |
+| `order-read-timeout` | `get_order_details` (any) | `timeout` | the call isn't made: "The request timed out; it may not have been processed." |
+| `variant-out-of-stock` | `get_product_details` of a product with a variant in stock | `variant_unavailable` | the product's first variant in stock (by id) as out of stock |
+| `lost-write` | every write tool, the writes that succeed | `lost_write` | the write's usual answer, but nothing is written and the step names no written key |
 
 When one fires, the call records a `disruption` world event (`data: {id, kind}`). A fork may add or remove them
 from its start on (`disruptions: {add, remove}`): `retail_scenario` then gets `{disruptions, remove}`, drops the

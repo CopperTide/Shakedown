@@ -213,6 +213,7 @@ impl From<ForkError> for ApiError {
             | ForkError::TeamChange(_)
             | ForkError::UnknownAgent(_)
             | ForkError::UnknownTool(_)
+            | ForkError::NoTools(_)
             | ForkError::Disruptions(_)
             | ForkError::MissingHandoff(_)
             | ForkError::NoRestorePoint { .. } => StatusCode::BAD_REQUEST,

@@ -279,7 +279,7 @@ async fn create_child(
     let plan = &rerun.plan;
     let from = Some((parent.id.as_str(), plan.start_seq));
     let swapped = (req.team.as_ref()).map(|t| format!("the team changed to {}", t.name));
-    let note = plan.reason.clone().or(swapped);
+    let note = join_notes([plan.reason.clone().or(swapped), widened(&parent.team, req)]);
     let id = store
         .create_branch(&parent.run_id, from, team, &changes_json, note)
         .await?;
@@ -287,6 +287,22 @@ async fn create_child(
         .set_restore(&id, req.restore, &rerun.restored())
         .await?;
     Ok(id)
+}
+
+/// The fork note's word on tools the fork gives agents beyond their setup's list, if any.
+fn widened(parent: &Team, req: &ForkRequest) -> Option<String> {
+    let added = super::tools_added(parent, &req.changes);
+    let each = added
+        .iter()
+        .map(|(agent, tools)| format!("{agent}: {}", tools.join(", ")));
+    let each: Vec<String> = each.collect();
+    (!each.is_empty()).then(|| format!("tools added beyond the setup ({})", each.join("; ")))
+}
+
+/// The notes given, joined; None when there is none.
+fn join_notes(notes: [Option<String>; 2]) -> Option<String> {
+    let given: Vec<String> = notes.into_iter().flatten().collect();
+    (!given.is_empty()).then(|| given.join("; "))
 }
 
 /// The task of the run: from `RunStart`, else from the run row.

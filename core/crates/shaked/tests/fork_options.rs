@@ -72,6 +72,35 @@ fn a_fork_may_give_an_agent_exactly_the_tools_it_lists() {
     })
 }
 
+/// `tools: []` can't cut an agent's tools (empty means every tool), so it is refused; a fork that
+/// gives an agent tools its setup doesn't list says so in its note.
+#[test]
+fn a_fork_refuses_an_empty_tool_list_and_notes_tools_it_adds() {
+    run(async {
+        let fx = setup("toolnote").await;
+        let (branch, _) = start(&fx, json!({})).await;
+        finish(&fx, &branch).await;
+        let at = events(&fx, &branch).await.last().unwrap().seq;
+        let none = json!({"at_seq": at, "changes": {"solo": {"tools": []}}});
+        let (status, v) = on(&fx, &branch, "fork", none).await;
+        assert_eq!(status, 400, "{v}");
+        assert!(v["error"].as_str().unwrap().contains("read_only"), "{v}");
+        let one = json!({"solo": {"tools": ["get_order_details"]}});
+        let (narrow, _) = fork(&fx, &branch, json!({"at_seq": at, "changes": one})).await;
+        finish(&fx, &narrow).await;
+        let two = json!({"solo": {"tools": ["get_order_details", "get_user_details"]}});
+        let (wide, _) = fork(&fx, &narrow, json!({"at_seq": at, "changes": two})).await;
+        let b = records(&fx.state.store).branch(&wide).await.unwrap();
+        let note = b.fork_note.unwrap_or_default();
+        assert!(
+            note.contains("solo") && note.contains("get_user_details"),
+            "{note}"
+        );
+        assert!(!note.contains("get_order_details"), "{note}");
+        finish(&fx, &wide).await;
+    })
+}
+
 fn address(street: &str) -> Value {
     json!({"user_id": USER, "address1": street, "address2": "", "city": "New York",
            "state": "NY", "country": "USA", "zip": "10001"})

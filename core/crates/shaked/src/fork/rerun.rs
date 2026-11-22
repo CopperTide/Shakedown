@@ -145,8 +145,15 @@ fn replay_unsaved(parts: &mut [PartRestore], restore: &Saves) {
     }
 }
 
-/// Refuses a tools change that lists a tool the world doesn't offer agents.
+/// Refuses a tools change that is empty (it would widen, not cut) or lists a tool the world
+/// doesn't offer agents.
 fn known_tools(world: &Plan, changes: &HashMap<String, Change>) -> Result<(), ForkError> {
+    let empty = changes
+        .iter()
+        .find(|(_, c)| c.tools.as_ref().is_some_and(Vec::is_empty));
+    if let Some((agent, _)) = empty {
+        return Err(ForkError::NoTools(agent.clone()));
+    }
     let listed = changes.values().flat_map(|c| c.tools.iter().flatten());
     let offered = |name: &String| world.tools.iter().any(|(t, _)| t.name == *name);
     match listed.into_iter().find(|name| !offered(name)) {

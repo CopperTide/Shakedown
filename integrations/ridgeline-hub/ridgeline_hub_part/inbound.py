@@ -6,8 +6,8 @@ from datetime import datetime, timedelta
 
 from shakedown_part import disruptions
 from shakedown_part.disruptions import Kind
-from shakedown_part.jsonstate import Tool
-from shakedown_part.params import Param, Refusal, normalize, refused
+from shakedown_part.jsonstate import SCENARIO_PARAMS, Tool
+from shakedown_part.params import Refusal, normalize, refused
 
 BASE = "base"
 WORLD_TOOLS = frozenset({"hub_scenario"})
@@ -71,9 +71,22 @@ def _deliveries(world, args, _names) -> dict:
     return {"result": {"deliveries": rows}, "reads": [f"inbound/{r['id']}" for r in rows], "writes": []}
 
 
+def _change(world, args, names) -> dict:
+    """A fork's change (no `name`): keeps the scenario, drops the disruptions `remove` names and arms those given."""
+    removed = disruptions.remove(world.inbound, args["remove"] or [])
+    fired = disruptions.arm(world.cfg, world.inbound, KINDS, list(names), args["disruptions"] or [])
+    out = {"result": {"scenario": world.inbound["scenario"], "removed": args["remove"] or []}, "reads": [],
+           "writes": sorted({*removed, *fired.writes})}
+    if fired.events:
+        out["events"] = fired.events
+    return out
+
+
 def _scenario(world, args, names) -> dict:
     """Sets the scenario and arms the disruptions given (whose `when.tool` may name any of the hub's tools,
-    `names`); the arming is all or nothing."""
+    `names`); the arming is all or nothing. Without `name` it is a fork's change (`_change`)."""
+    if args["name"] is None:
+        return _change(world, args, names)
     if args["name"] != BASE:
         raise Refusal(f"unknown scenario {args['name']} (known: {BASE})")
     fired = disruptions.arm(world.cfg, world.inbound, KINDS, list(names), args["disruptions"] or [])
@@ -90,7 +103,7 @@ TOOLS = {t.name: t for t in [
          "line it feeds, its arrival (plant time), any delay, and when that line runs out without it.", "read",
          (), _deliveries),
     Tool("hub_scenario", "Sets the hub's scenario and schedules its disruptions (a task's setup calls it; agents "
-         "don't get it).", "write", (Param("name", "string"), Param("disruptions", "array", None)), _scenario),
+         "don't get it).", "write", SCENARIO_PARAMS, _scenario),
 ]}
 
 

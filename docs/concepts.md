@@ -288,11 +288,12 @@ a restore mode.
   of the benchmark's scenario (as a run's `scenario` does), `remove` the ids of disruptions the branch's setups armed
   before the fork point (one that already fired is dropped too, but what it changed stays). The change is one call of
   each part's scenario tool, recorded as a setup step at the new branch's start ([protocol.md](protocol.md), "A
-  run's scenario"); a part whose tool can't take it refuses the fork. Retail's faults take it; the scenario tools on
-  the Python kit's `jsonstate` (utility, OT network, roster, the pharma parts, the hub) don't yet.
-- `tools` gives the agent exactly the world tools it lists from the fork on (an empty list: every tool again), like
-  a setup's `tools`; it is treated like a prompt change, the same list as the agent's is no change, and a tool the
-  world doesn't offer agents is refused (400).
+  run's scenario"); a part whose tool can't take it refuses the fork. Retail's faults take it, and so do the
+  scenario tools on the Python kit's `jsonstate` (utility, OT network, roster, the pharma parts) and the hub's.
+- `tools` gives the agent exactly the world tools it lists from the fork on, like a setup's `tools`; it is treated
+  like a prompt change, and the same list as the agent's is no change. A tool the world doesn't offer agents is
+  refused (400), and so is an empty list, which would mean every tool rather than none (make the agent `read_only`
+  or list what it keeps). Tools the fork gives an agent beyond its setup's list are named in the fork note.
 
 ## External designs
 
