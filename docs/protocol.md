@@ -61,8 +61,8 @@ environment, and `${SHAKEDOWN_BIN_DIR}` substituted). Use it for a part on anoth
 |---|---|---|
 | `describe` | `{}` | `{name, version, protocol, restore: {exact: "save"\|"replay"\|"none", approximate: bool}, uses_clock: bool, fingerprint: {...}, tools: [ToolSchema], system?: {kind, product, stands_in_for?, simulated}, save_at?: "step"\|"points"}` |
 | `start` | `{instance, config, seed, clock_ms, from?: {save, mode: "exact"\|"approximate"}, world_time?: {epoch_ms, speed}}` | `{}` |
-| `call_tool` | `{instance, name, args, clock_ms}` | `{result?, error?, reads: [key], writes: [key], events?: [{kind, text, data}]}` |
-| `advance` | `{instance, clock_ms}` | `{changed: bool, events: [{kind, text, data}]}` |
+| `call_tool` | `{instance, name, args, clock_ms}` | `{result?, error?, reads: [key], writes: [key], events?: [{kind, text, data}], wake_at_ms?}` |
+| `advance` | `{instance, clock_ms}` | `{changed: bool, events: [{kind, text, data}], wake_at_ms?}` |
 | `save` | `{instance, save, dir}` | `{bytes, exact: bool}` |
 | `inspect` | `{target: {instance}\|{save}, keys: [key]}` | `{docs: {key: doc\|null}}` |
 | `diff` | `{a: target, b: target}` | `{differing: [key]}` |
@@ -91,6 +91,10 @@ real product. Each tool's `effect` already says whether it reads or writes.
   part reports (an alarm, a shipment arriving) are recorded as world events.
 - `events` in a `call_tool` result are recorded as world events right after the call, for a part that has
   something to report at once (`advance` is the other way; parts without the clock have only this one).
+- `wake_at_ms` (optional, additive) in an `advance` or `call_tool` result is the earliest branch clock at which the
+  part has something scheduled to reveal or apply (a timed disruption's `known_at` or `at`, a flight landing). A
+  [stepped clock](#stepped-clock) stops there when the team is quiet. Leave it out when nothing is scheduled; a
+  value at or before the current clock means "now". Parts on a wall clock may send it; it is then ignored.
 - A refused call (`error`) usually has empty `writes`. A part that changed anyway (a scheduled disruption fired
   before it answered, see [Scheduled disruptions](#scheduled-disruptions)) names what it wrote and may give
   `events`: shaked saves the part with that step, as for any write, so a fork after it keeps the change.
@@ -241,6 +245,10 @@ may list more). The Python kit implements this convention (`shakedown_part.disru
   `writes`, so shaked saves the count with the step without making the step a write: the schedule is part of the
   part's state, so forks and replays meet the same schedule. `inspect` shows `_disruption/<id>` with its count
   (`seen`) and whether it `fired`.
+- **The known-at rule.** A disruption may also be timed in world time: `{id, at, known_at, do, text}` (see
+  [Stepped clock](#stepped-clock)), where `at` is when it takes effect and `known_at` when the world learns of it
+  (default `at`; earlier is a forecast, later is found out late). A part must not reveal a scheduled event in any tool
+  result or event before its `known_at`; it reports `wake_at_ms` for its next reveal or effect.
 - `do.kind` is the part's own. pharma-logistics: `lane_capacity {carrier, origin, destination, capacity}`,
   `lane_unavailable {carrier, origin, destination}`, `transit_delay {carrier, origin, destination, extra_days}`,
   `reject_next {action, note?}` (the director rejects the next decision on that action). pharma-lims: `result_fails
@@ -439,6 +447,19 @@ The kits turn this into stamps: Rust `shakedown_part::helpers::world_time::World
 take the unix ms as it is. Between clocks, `now_ms` runs on at `speed` for at most 1 s of wall time past the last
 clock seen (a paused branch sends none), and never goes back. The Python kit keeps each instance's `WorldTime` from
 `start` (`Part.world_time(instance)`, None without one) and shows it every `call_tool` and `advance` clock.
+
+## Stepped clock
+
+A scenario may run on a stepped clock (`clock: {mode: stepped}`, see [concepts.md](concepts.md#stepped-clock)).
+The branch clock then stands still while agents think and moves only when the team acts or waits:
+
+- Each agent tool call costs world time by its `effect` (`action_cost: {read, write}`, with per-tool overrides):
+  the call runs at the clock before the charge, and the clock moves by the charge after it.
+- When the team is quiet, shaked advances the world to the next wake point: the earliest `wake_at_ms` any part
+  reported, the lead's next look (`epoch`), or the run's `horizon`. Parts get `advance` as on a wall clock, and the
+  clock contract is the same, so how the advances are split never changes the state.
+- Parts that use the clock report `wake_at_ms` so the clock stops at their next scheduled reveal or effect. A part
+  that reports none is advanced to the next look or the horizon.
 
 ## Errors
 

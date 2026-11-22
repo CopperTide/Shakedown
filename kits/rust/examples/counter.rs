@@ -264,7 +264,7 @@ impl Part for Counter {
         }
         Ok(Advanced {
             changed: d > 0,
-            events: vec![],
+            ..Advanced::default()
         })
     }
 

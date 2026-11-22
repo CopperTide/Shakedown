@@ -267,6 +267,10 @@ pub struct ToolOutput {
     /// Events the call itself gives the world: recorded, and matched against the world's links.
     #[serde(default, skip_serializing_if = "<[_]>::is_empty")]
     pub events: Box<[WorldEvent]>,
+    /// The earliest world clock (ms) at which the part has something scheduled to reveal or
+    /// apply, when the call changed it. A stepped clock stops there. See docs/protocol.md.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wake_at_ms: Option<i64>,
 }
 
 /// True for a key that is the part's own bookkeeping, which no agent's call is about: its kind
@@ -301,6 +305,10 @@ pub struct Advanced {
     pub changed: bool,
     #[serde(default)]
     pub events: Vec<WorldEvent>,
+    /// The earliest world clock (ms) at which the part has something scheduled to reveal or
+    /// apply; none when nothing is. A stepped clock stops there. See docs/protocol.md.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wake_at_ms: Option<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -771,6 +779,21 @@ mod tests {
         );
         let none: HttpRoutes = serde_json::from_value(serde_json::json!({"routes": []})).unwrap();
         assert_eq!(none, HttpRoutes::default());
+    }
+
+    #[test]
+    fn advanced_carries_wake_at() {
+        let a: Advanced =
+            serde_json::from_str(r#"{"changed":false,"events":[],"wake_at_ms":5400000}"#).unwrap();
+        assert_eq!(a.wake_at_ms, Some(5_400_000));
+        let old: Advanced = serde_json::from_str(r#"{"changed":true,"events":[]}"#).unwrap();
+        assert_eq!(old.wake_at_ms, None);
+        assert!(serde_json::to_value(&old).unwrap().get("wake_at_ms").is_none());
+        let out: ToolOutput =
+            serde_json::from_str(r#"{"result":{},"wake_at_ms":60000}"#).unwrap();
+        assert_eq!(out.wake_at_ms, Some(60_000));
+        let plain = ToolOutput::default();
+        assert!(serde_json::to_value(&plain).unwrap().get("wake_at_ms").is_none());
     }
 
     #[test]

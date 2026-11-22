@@ -181,6 +181,7 @@ impl Service {
         Ok(Advanced {
             changed: config.live,
             events,
+            wake_at_ms: None,
         })
     }
 
