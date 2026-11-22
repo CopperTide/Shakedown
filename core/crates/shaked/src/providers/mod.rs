@@ -6,7 +6,9 @@
 
 mod anthropic;
 pub(crate) mod bedrock;
+mod canonical;
 mod config;
+mod key_check;
 pub mod keys;
 mod listing;
 mod openai;

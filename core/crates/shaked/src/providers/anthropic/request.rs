@@ -9,6 +9,7 @@
 use serde_json::{json, Value};
 
 use super::{CONTENT_KEY, CONTEXT_KEY};
+use crate::providers::canonical;
 
 /// The Messages API request for canonical `chat` (with `max_tokens` when it names none), and
 /// the context its thinking will be bound to (see [`context_of`]). Only the fields below are
@@ -50,21 +51,9 @@ fn named_max_tokens(chat: &Value) -> Option<u64> {
         .find_map(|k| chat[*k].as_u64())
 }
 
-fn messages(chat: &Value) -> impl Iterator<Item = &Value> {
-    chat["messages"].as_array().into_iter().flatten()
-}
-
-fn is_system(m: &Value) -> bool {
-    matches!(m["role"].as_str(), Some("system" | "developer"))
-}
-
 /// The text of a message's content: a string, or its parts' text (see [`part_text`]).
 fn text_of(content: &Value) -> String {
-    match content {
-        Value::String(s) => s.clone(),
-        Value::Array(parts) => parts.iter().map(part_text).collect::<Vec<_>>().join("\n"),
-        _ => String::new(),
-    }
+    canonical::content_text(content, |p| Some(part_text(p)))
 }
 
 /// A content part's text; a part that isn't text (an image, audio, a file) is not sent, and a
@@ -84,8 +73,8 @@ fn part_text(part: &Value) -> String {
 
 /// The system and developer messages, in order, as one prompt.
 fn system(chat: &Value) -> Option<String> {
-    let parts: Vec<String> = messages(chat)
-        .filter(|m| is_system(m))
+    let parts: Vec<String> = canonical::messages(chat)
+        .filter(|m| canonical::is_system(m))
         .map(|m| text_of(&m["content"]))
         .filter(|t| !t.trim().is_empty())
         .collect();
@@ -127,30 +116,15 @@ fn tool_choice(choice: &Value) -> Option<Value> {
 /// The conversation as alternating user and assistant turns of content blocks.
 fn turns(chat: &Value, context: &str) -> Vec<Value> {
     let mut out = vec![];
-    for m in messages(chat).filter(|m| !is_system(m)) {
+    for m in canonical::messages(chat).filter(|m| !canonical::is_system(m)) {
         let (role, blocks) = match m["role"].as_str() {
             Some("assistant") => ("assistant", assistant_blocks(m, context)),
             Some("tool") => ("user", vec![tool_result(m)]),
             _ => ("user", user_blocks(&m["content"])),
         };
-        push_turn(&mut out, role, blocks);
+        canonical::push_turn(&mut out, role, blocks);
     }
     out
-}
-
-/// Appends `blocks` as a `role` turn, into the last turn when it has the same role: turns
-/// alternate, and the results of parallel tool calls go back in one user turn.
-fn push_turn(turns: &mut Vec<Value>, role: &str, blocks: Vec<Value>) {
-    if blocks.is_empty() {
-        return;
-    }
-    if let Some(last) = turns.last_mut().filter(|t| t["role"] == role) {
-        if let Some(content) = last["content"].as_array_mut() {
-            content.extend(blocks);
-            return;
-        }
-    }
-    turns.push(json!({"role": role, "content": blocks}));
 }
 
 fn text_block(text: &str) -> Option<Value> {
@@ -212,19 +186,12 @@ fn rebuilt(m: &Value) -> Vec<Value> {
         .collect()
 }
 
+/// The call as a `tool_use` block; its input `{}` when the arguments aren't a JSON object (their
+/// raw text stays in the recorded canonical request).
 fn tool_use(call: &Value) -> Value {
-    let f = &call["function"];
-    let input = arguments(f["arguments"].as_str().unwrap_or(""));
-    json!({"type": "tool_use", "id": call["id"], "name": f["name"], "input": input})
-}
-
-/// The parsed arguments; `{}` when they aren't a JSON object (their raw text stays in the
-/// recorded canonical request).
-fn arguments(raw: &str) -> Value {
-    serde_json::from_str::<Value>(raw)
-        .ok()
-        .filter(Value::is_object)
-        .unwrap_or_else(|| json!({}))
+    let input = canonical::arguments(call).filter(Value::is_object);
+    let input = input.unwrap_or_else(|| json!({}));
+    json!({"type": "tool_use", "id": call["id"], "name": call["function"]["name"], "input": input})
 }
 
 #[cfg(test)]

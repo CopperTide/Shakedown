@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use serde_json::Value;
 
-use super::{anthropic, openai, Provider, ProviderKind};
+use super::{anthropic, openai, reach, Provider, ProviderKind};
 
 /// How long a provider's model list may take; the lists are asked for all at once.
 pub const LIST_TIMEOUT: Duration = Duration::from_secs(3);
@@ -37,18 +37,9 @@ pub(super) enum ListFailure {
     Failed(String),
 }
 
-/// `host[:port]` of a base URL: what a label or a reason may show of it (never credentials).
+/// `host[:port]` of a model server's base URL, as labels and reasons name it.
 pub(super) fn host_of(base: &str) -> String {
-    reqwest::Url::parse(base)
-        .ok()
-        .and_then(|u| {
-            let host = u.host_str()?.to_string();
-            Some(match u.port() {
-                Some(p) => format!("{host}:{p}"),
-                None => host,
-            })
-        })
-        .unwrap_or_else(|| "the server".to_string())
+    reach::host_of(base, "the server")
 }
 
 /// The provider's model-list request, with its own way of sending the key.

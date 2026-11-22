@@ -8,28 +8,21 @@
 use serde_json::{json, Value};
 
 use super::{CONTENT_KEY, CONTEXT_KEY};
+use crate::providers::canonical;
 
 /// The canonical response for Messages API message `raw`, answered to a request made under
 /// `context` (the fingerprint [`super::request::translate`] gave).
 pub(super) fn translate(raw: &Value, context: &str) -> Value {
     let blocks = raw["content"].as_array().map_or(&[][..], Vec::as_slice);
     let finish = finish_reason(raw["stop_reason"].as_str());
-    let mut choice = json!({
-        "index": 0,
-        "message": message(blocks, finish, context),
-        "finish_reason": finish,
-    });
+    let message = message(blocks, finish, context);
+    let mut out = canonical::completion(&raw["model"], message, finish, usage(&raw["usage"]));
+    out["id"] = raw["id"].clone();
     // Why a turn was declined (`refusal`): its category, and what the API explains.
     if let Some(details) = raw.get("stop_details").filter(|d| !d.is_null()) {
-        choice["stop_details"] = details.clone();
+        out["choices"][0]["stop_details"] = details.clone();
     }
-    json!({
-        "id": raw["id"],
-        "object": "chat.completion",
-        "model": raw["model"],
-        "choices": [choice],
-        "usage": usage(&raw["usage"]),
-    })
+    out
 }
 
 fn finish_reason(stop: Option<&str>) -> &'static str {
@@ -44,16 +37,13 @@ fn finish_reason(stop: Option<&str>) -> &'static str {
 }
 
 fn message(blocks: &[Value], finish: &str, context: &str) -> Value {
-    let mut m = json!({"role": "assistant", "content": text_of(blocks)});
     let kept = kept_blocks(blocks, finish);
     let calls: Vec<Value> = kept
         .iter()
         .filter(|b| b["type"] == "tool_use")
-        .map(tool_call)
+        .map(|b| canonical::tool_call(&b["id"], &b["name"], &b["input"]))
         .collect();
-    if !calls.is_empty() {
-        m["tool_calls"] = json!(calls);
-    }
+    let mut m = canonical::assistant(text_of(blocks), calls);
     m[CONTENT_KEY] = json!(kept);
     m[CONTEXT_KEY] = json!(context);
     m
@@ -84,14 +74,6 @@ fn kept_blocks(blocks: &[Value], finish: &str) -> Vec<Value> {
         .filter(|b| offered || b["type"] != "tool_use")
         .cloned()
         .collect()
-}
-
-fn tool_call(block: &Value) -> Value {
-    json!({
-        "id": block["id"],
-        "type": "function",
-        "function": {"name": block["name"], "arguments": block["input"].to_string()},
-    })
 }
 
 /// Prompt tokens count the cached input too: read from the cache, and written to it.

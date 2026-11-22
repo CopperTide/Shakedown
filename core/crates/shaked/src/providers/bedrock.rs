@@ -11,7 +11,7 @@ mod sigv4;
 use chrono::Utc;
 use serde_json::Value;
 
-use super::{transport, Provider, Upstream, BEDROCK_PREFIX};
+use super::{reach, transport, Provider, Upstream, BEDROCK_PREFIX};
 use credentials::Auth;
 
 /// Where Bedrock Runtime answers in `region`.
@@ -47,16 +47,6 @@ pub(super) async fn send(
 
 const JSON: &str = "application/json";
 
-/// `host[:port]` of `url`, as its `Host` header carries it.
-fn host_of(url: &str) -> Result<String, String> {
-    let parsed = reqwest::Url::parse(url).map_err(|e| format!("bad Bedrock address: {e}"))?;
-    match (parsed.host_str(), parsed.port()) {
-        (Some(h), Some(port)) => Ok(format!("{h}:{port}")),
-        (Some(h), None) => Ok(h.to_string()),
-        (None, _) => Err("bad Bedrock address: no host".into()),
-    }
-}
-
 /// The headers that prove who sends `req`: a bearer token, or a SigV4 signature for `region`.
 fn auth_headers(
     region: &str,
@@ -86,7 +76,8 @@ fn signed(
     let path = format!("/model/{}/converse", sigv4::uri_encode(model));
     let url = transport::url(&p.endpoint.base, path.trim_start_matches('/'));
     let payload = serde_json::to_vec(&converse::request(chat)).map_err(|e| e.to_string())?;
-    let host = host_of(&url)?;
+    let parsed = reqwest::Url::parse(&url).map_err(|e| format!("bad Bedrock address: {e}"))?;
+    let host = reach::host_port(&parsed).ok_or("bad Bedrock address: no host")?;
     let mut req = http.post(url).header("content-type", JSON);
     let r = sigv4::Request {
         method: "POST",
