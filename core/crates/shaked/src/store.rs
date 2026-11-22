@@ -128,6 +128,14 @@ impl Store {
         Store::with_pools(pool, system).with_layer(layer)
     }
 
+    /// A store with no database behind it, for a `shaked worker`: a worker records through its
+    /// link and holds no database, so every query fails at once (a path that still reads the
+    /// store fails loudly, never writes somewhere else).
+    pub fn detached(layer: Arc<dyn Layer>) -> Result<Store> {
+        let pool = open::pool("host=/nonexistent user=worker dbname=none connect_timeout=1")?;
+        Ok(Store::from_pools(pool, None, layer))
+    }
+
     /// This store, calling `layer` at its hooks.
     pub fn with_layer(mut self, layer: Arc<dyn Layer>) -> Store {
         self.layer = layer;
@@ -532,7 +540,7 @@ impl Scoped<'_> {
 }
 
 /// `payload` with `overhead` as its `overhead_ms`, when it is an object.
-fn with_overhead(mut payload: Value, overhead: Option<Overhead>) -> Result<Value> {
+pub(crate) fn with_overhead(mut payload: Value, overhead: Option<Overhead>) -> Result<Value> {
     if let (Some(o), Some(obj)) = (overhead, payload.as_object_mut()) {
         obj.insert("overhead_ms".into(), serde_json::to_value(o)?);
     }

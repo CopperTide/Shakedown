@@ -23,7 +23,7 @@ use chrono::Utc;
 use tokio::{sync::mpsc::UnboundedReceiver, time::Instant};
 
 use super::{
-    frames::{ToControl, ToWorker},
+    frames::{ToControl, ToWorker, REFUSED_ENDED, REFUSED_TOKEN},
     links::Link,
     tickets::Taken,
 };
@@ -255,7 +255,7 @@ fn logged(branch: &str, doing: &str, e: anyhow::Error) -> End {
 async fn worker_caller(state: &AppState, secret: &str) -> Result<Caller, End> {
     let found = resolve_run_token(&state.store, secret).await;
     let found = found.map_err(|e| logged("?", "resolving a worker token", e))?;
-    let unknown = || refused("unknown, revoked or expired worker token");
+    let unknown = || refused(REFUSED_TOKEN);
     let c = found.ok_or_else(unknown)?;
     let CallerKind::RunToken {
         run,
@@ -305,7 +305,7 @@ async fn still_running(state: &AppState, caller: &Caller, branch: &str) -> Resul
     let found = found.map_err(|e| logged(branch, "reading its status", e))?;
     match found {
         Some(b) if b.status == BranchStatus::Running => Ok(()),
-        Some(b) => Err(refused(format!("the branch ended {}", b.status.as_str()))),
+        Some(b) => Err(refused(format!("{REFUSED_ENDED} {}", b.status.as_str()))),
         None => Err(refused("no such branch")),
     }
 }

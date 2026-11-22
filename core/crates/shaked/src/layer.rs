@@ -73,6 +73,11 @@ pub trait Layer: Send + Sync + 'static {
     fn project_dir(&self, _c: &Caller, configured: Option<&Path>) -> Option<PathBuf> {
         configured.map(Path::to_path_buf)
     }
+    /// False where no secret may be decrypted, such as a sandbox's worker: the vault is refused
+    /// and its key never read or made.
+    fn keeps_secrets(&self) -> bool {
+        true
+    }
 }
 
 /// Personal use: this machine only, everything allowed, nothing metered.

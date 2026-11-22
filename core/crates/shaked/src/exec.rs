@@ -40,6 +40,8 @@ pub use talk::{handoff_schema, mail_for, said_text, HANDOFF, INBOX, MESSAGE};
 /// One running branch: its world, team, world clock and per-agent handoff notes.
 pub struct BranchCtx {
     pub branch_id: String,
+    /// The run it is of, when it was started knowing it (else the store has it).
+    pub run_id: Option<String>,
     pub world: Arc<World>,
     pub task_id: String,
     /// The branch's world clock (from 0 at the run's start, from the fork point on a fork).
@@ -74,6 +76,7 @@ impl BranchCtx {
     pub fn new(branch_id: String, world: Arc<World>, team: Team, task_id: String) -> BranchCtx {
         BranchCtx {
             branch_id,
+            run_id: None,
             world,
             task_id,
             clock: BranchClock::from_env(0),
@@ -106,6 +109,12 @@ impl BranchCtx {
     /// `agent`'s token on this branch, issued on first use.
     pub fn agent_token(&self, agent: &str) -> String {
         self.roster.ensure_token(agent, self.token_ttl())
+    }
+
+    /// The same branch, known to be of the run `run_id`.
+    pub fn with_run_id(mut self, run_id: String) -> BranchCtx {
+        self.run_id = Some(run_id);
+        self
     }
 
     /// The same branch recording into `records`.

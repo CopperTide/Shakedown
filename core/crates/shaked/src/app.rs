@@ -94,8 +94,13 @@ impl Default for Config {
 impl Config {
     /// Defaults plus the providers' keys and local servers from the environment.
     pub fn new() -> Config {
+        Config::with_providers(ProviderConfig::from_env())
+    }
+
+    /// [`Config::new`] on `providers`, the environment's model keys left unread.
+    pub fn with_providers(providers: ProviderConfig) -> Config {
         Config {
-            providers: ProviderConfig::from_env(),
+            providers,
             self_base: String::new(),
             max_db_bytes: env_number("SHAKEDOWN_MAX_DB_BYTES").unwrap_or(DEFAULT_MAX_DB_BYTES),
             retry_base: DEFAULT_RETRY_BASE,
@@ -297,8 +302,13 @@ impl AppState {
         if let Some(v) = self.vault.get() {
             return Ok(v.clone());
         }
-        let policy = self.store.layer().policy();
-        let made = Arc::new(crate::vault::Vault::for_policy(policy)?);
+        let layer = self.store.layer();
+        if !layer.keeps_secrets() {
+            return Err(
+                "this shaked keeps no secrets (a sandbox's worker): it has no vault".into(),
+            );
+        }
+        let made = Arc::new(crate::vault::Vault::for_policy(layer.policy())?);
         Ok(self.vault.get_or_init(|| made).clone())
     }
 

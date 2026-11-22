@@ -17,6 +17,12 @@ pub const WINDOW: u64 = 64;
 /// How long a worker keeps trying to reconnect before it gives up and stops.
 pub const GIVE_UP: Duration = Duration::from_secs(300);
 
+/// The `Refused` a worker token gets once it no longer works: the branch's end revoked it (or it
+/// was never one, or expired).
+pub const REFUSED_TOKEN: &str = "unknown, revoked or expired worker token";
+/// What `Refused` starts with when a worker rejoins a branch that has ended (its status follows).
+pub const REFUSED_ENDED: &str = "the branch ended";
+
 /// Worker to control box.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]

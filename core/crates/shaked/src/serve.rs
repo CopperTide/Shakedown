@@ -118,6 +118,12 @@ fn hub(pg_url: &str, worlds: &std::path::Path) -> anyhow::Result<Hub> {
         .with_env(program_env(pg_url)))
 }
 
+/// The hub a `shaked worker` runs its branch's world on: the one `shaked` would serve with, from
+/// the same environment.
+pub(crate) async fn worker_hub() -> anyhow::Result<Hub> {
+    hub(&crate::pg::configured_url().await, &worlds_dir()?)
+}
+
 /// The stores `SHAKEDOWN_OBJECT_STORE` names; where the layer serves others, the write store is
 /// probed first and a start without a working one is refused.
 pub async fn object_stores(
@@ -221,7 +227,7 @@ fn ui_dist_from_env() -> Option<PathBuf> {
 }
 
 /// Serves the recording proxy on 127.0.0.1 (`SHAKEDOWN_PROXY_PORT`).
-async fn start_proxy(state: &Arc<AppState>) -> anyhow::Result<()> {
+pub(crate) async fn start_proxy(state: &Arc<AppState>) -> anyhow::Result<()> {
     let proxy = tokio::net::TcpListener::bind(("127.0.0.1", proxy_port_from_env()?)).await?;
     println!("shaked: proxy on http://{}", proxy.local_addr()?);
     tokio::spawn(crate::proxy::serve(state.clone(), proxy));

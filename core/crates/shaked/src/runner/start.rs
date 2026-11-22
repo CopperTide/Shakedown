@@ -253,6 +253,7 @@ pub async fn stand_up(
         plan.task_id.clone(),
     );
     let ctx = ctx.with_rules(plan.rules.clone()).with_records(records);
+    let ctx = ctx.with_run_id(plan.run_id.clone());
     ctx.overhead.add(Cat::Record, record_ms);
     set_up_task(state, &bench, &ctx, &plan.scenario, start_seq).await?;
     Ok(ctx)

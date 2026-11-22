@@ -210,6 +210,21 @@ from. The retail example reads its data from `data/retail` (relative to its pack
   object already there with the right checksum is skipped, so it reruns safely. `--repoint` points the saves
   whose objects all verified at the destination; a save whose object no longer matches its recorded checksum
   stays where it is. Exits 1 when any object failed.
+- `shaked worker --link <ws(s)://host/worker> --ticket-file <path>`: runs one branch in a sandbox for the shaked
+  at `--link` (cloud runs start it; you don't run it by hand). It waits for the ticket file, reads it and deletes
+  it, links to `GET /worker`, stands the world up from the base save and drives the agents. Hand the ticket over
+  by writing it, newline-terminated, to a temporary file in the same folder and renaming that to `--ticket-file`:
+  the worker reads the file only once it ends with a newline. Every event goes over the link and counts as
+  recorded once acknowledged; at most 64 wait for acknowledgement. It holds no database and no secrets (no vault,
+  no model keys from its environment), and its agents reach its MCP endpoint, gateway and proxy on `127.0.0.1`
+  only. An event too large for one frame is cut down first: strings over 16 KiB are cut to 16 KiB and the payload
+  gets `truncated: true`; when that is still too large, the payload becomes `{truncated: true, bytes, head}` (its
+  size and its first 64 KiB as JSON). A dropped link is tried again at once, then every 2 s, resending what was
+  not acknowledged. The link counts as down until the control box shows it works again (an ack, a pause, resume
+  or stop, or a ping while nothing waits for an ack), so a connection that is accepted and then closed, or that
+  pings but never acknowledges, keeps the clock running; after 5
+  minutes down the worker stops the world and exits 1. It exits 0 once the branch's end is recorded.
+  `SHAKEDOWN_WORKER_RETRY_MS` and `SHAKEDOWN_WORKER_GIVE_UP_MS` change the 2 s and the 5 minutes (for tests).
 
 ## Use Shakedown from an agent (MCP)
 

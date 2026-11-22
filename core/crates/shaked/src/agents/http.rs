@@ -261,11 +261,13 @@ pub async fn hello(
 impl HttpDriver {
     async fn run_body(&self, run: &AgentRun, token: &str) -> anyhow::Result<Value> {
         let branch = &run.branch;
-        let run_id = branch
-            .scoped(&self.store)
-            .branch(&branch.branch_id)
-            .await?
-            .run_id;
+        let run_id = match &branch.run_id {
+            Some(id) => id.clone(),
+            None => {
+                let records = branch.scoped(&self.store);
+                records.branch(&branch.branch_id).await?.run_id
+            }
+        };
         let ends = crate::external::endpoints(
             &self.agent_base,
             &branch.branch_id,

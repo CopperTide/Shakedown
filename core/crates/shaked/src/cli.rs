@@ -1,4 +1,5 @@
-//! shaked's commands besides serving: `shaked token create`, `shaked store copy` and `shaked mcp`.
+//! shaked's commands besides serving: `shaked token create`, `shaked store copy`, `shaked mcp`
+//! and `shaked worker` (see [`crate::worker::run`]).
 
 use anyhow::{bail, Context, Result};
 
@@ -14,6 +15,7 @@ pub async fn run(args: &[String]) -> Option<Result<()>> {
         Some("token") => Some(token(&args[1..]).await),
         Some("store") => Some(store_copy(&args[1..]).await),
         Some("mcp") => Some(mcp(&args[1..]).await),
+        Some("worker") => Some(crate::worker::run::command(&args[1..]).await),
         _ => None,
     }
 }
