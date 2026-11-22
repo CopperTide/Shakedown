@@ -71,7 +71,7 @@ async fn reach(state: &AppState, who: &Caller, a: &AgentSpec) -> Result<Option<S
         Some(auth) => Some(endpoint_auth::bearer(state, who, auth).await?),
         None => None,
     };
-    let scope = state.store.layer().object_prefix(who);
+    let scope = crate::layer::secret_scope(state.store.layer().as_ref(), who);
     let sent = Sent {
         scope: &scope,
         bearer: bearer.as_deref(),

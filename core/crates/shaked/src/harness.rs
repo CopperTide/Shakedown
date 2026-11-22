@@ -51,7 +51,6 @@ struct Spy {
     headers: Mutex<Vec<String>>,
     digests: Mutex<Vec<Option<BodySha256>>>,
     shares_keys: std::sync::atomic::AtomicBool,
-    token_scopes: std::sync::atomic::AtomicBool,
     projects: Mutex<Option<std::path::PathBuf>>,
 }
 
@@ -114,13 +113,6 @@ impl SpyLayer {
     /// `own_keys` answers none: every key is someone else's, shared with the caller.
     pub fn sharing_keys(self) -> SpyLayer {
         (self.0.shares_keys).store(true, std::sync::atomic::Ordering::Relaxed);
-        self
-    }
-
-    /// `object_prefix` gives each API token a scope of its own (its id), as a hosting layer's callers
-    /// each have one; the person keeps `local`.
-    pub fn scoping_by_token(self) -> SpyLayer {
-        (self.0.token_scopes).store(true, std::sync::atomic::Ordering::Relaxed);
         self
     }
 
@@ -255,11 +247,7 @@ impl Layer for SpyLayer {
     }
 
     fn object_prefix(&self, c: &Caller) -> String {
-        let scoped = (self.0.token_scopes).load(std::sync::atomic::Ordering::Relaxed);
-        match (&c.kind, scoped) {
-            (crate::auth::CallerKind::ApiToken { id, .. }, true) => id.to_string(),
-            _ => LocalLayer.object_prefix(c),
-        }
+        LocalLayer.object_prefix(c)
     }
 
     fn own_keys<'a>(

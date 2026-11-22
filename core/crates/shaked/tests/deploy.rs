@@ -428,25 +428,30 @@ fn an_auth_that_may_not_be_sent_is_refused_at_deploy() {
     });
 }
 
-/// A second caller citing the first's reference or key gets nothing of it.
+/// An API token with every scope: a second caller beside the person.
+async fn token_of(fx: &AppFx) -> String {
+    let body = json!({"name": "w", "scopes": ["read", "run", "admin"]});
+    let (_, minted) = fx.post("/api/tokens", body).await;
+    minted["token"].as_str().unwrap().to_string()
+}
+
+/// A colleague in the same scope (the layer gives both one prefix) citing a reference typed by
+/// the first caller gets nothing of it; the first caller's own team still works.
 #[test]
 fn another_caller_cannot_use_a_reference_it_did_not_make() {
     run(async {
-        let layer = Arc::new(shaked::harness::SpyLayer::new().scoping_by_token());
+        let layer = Arc::new(shaked::harness::SpyLayer::new());
         let dir = runnable_project();
         let fx = deploy_app_on("deploy-scopes", dir.path(), Some(layer)).await;
-        let (_, minted) = fx
-            .post(
-                "/api/tokens",
-                json!({"name": "w", "scopes": ["read", "run", "admin"]}),
-            )
-            .await;
-        let token = minted["token"].as_str().unwrap().to_string();
+        let token = token_of(&fx).await;
         let url = endpoint(Arc::new(Mutex::new(vec![]))).await;
         let agent = json!({"kind": "http", "url": url, "headers": {"X-Key": ENDPOINT_SECRET}});
         let (status, checked) = fx.post("/api/agents/check", agent).await;
         assert_eq!(status, 200, "{checked}");
         let reference = checked["agent"]["headers"].clone();
+        let own = json!({"kind": "http", "url": url, "headers": reference});
+        let (_, mine) = fx.post("/api/agents/check", own).await;
+        assert_eq!(mine["ok"], true, "{mine}");
         assert!(reference["X-Key"]["secret"].is_string(), "{checked}");
         let cited = json!({"kind": "http", "url": url, "headers": reference});
         let again = fx
@@ -462,6 +467,7 @@ fn another_caller_cannot_use_a_reference_it_did_not_make() {
         assert!(!text.contains(ENDPOINT_SECRET));
     });
 }
+
 /// Every string under a `branch_id` or `branch` key in `v`.
 fn branch_ids(v: &Value) -> Vec<String> {
     match v {

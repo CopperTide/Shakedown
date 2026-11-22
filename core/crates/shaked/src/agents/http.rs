@@ -11,7 +11,12 @@
 //! No answer by the deadline, or `ok: false`, is a failed run (the agent's doing); an agent that
 //! can't be reached or answers an error status is an infrastructure error.
 
-use std::{future::Future, pin::Pin, sync::Arc, time::Duration};
+use std::{
+    future::Future,
+    pin::Pin,
+    sync::{Arc, Weak},
+    time::Duration,
+};
 
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use serde::Deserialize;
@@ -32,7 +37,8 @@ pub const HELLO_TIMEOUT: Duration = Duration::from_secs(10);
 pub const COST_SOURCE: &str = "agent_reported";
 
 pub struct HttpDriver {
-    state: Arc<AppState>,
+    // Weak: `AppState` owns the drivers, so a strong reference would be a cycle.
+    state: Weak<AppState>,
     /// The shaked base URL the agent is told to reach the MCP endpoint at.
     pub agent_base: String,
     pub store: Arc<Store>,
@@ -42,14 +48,14 @@ pub struct HttpDriver {
 }
 
 impl HttpDriver {
-    pub fn new(state: Arc<AppState>, agent_base: String, timeout: Duration) -> HttpDriver {
+    pub fn new(state: &Arc<AppState>, agent_base: String, timeout: Duration) -> HttpDriver {
         let store = state.store.clone();
         let http = reqwest::Client::builder().connect_timeout(Duration::from_secs(10));
         let http = crate::providers::reach::guard(http, store.layer().policy())
             .build()
             .expect("http client");
         HttpDriver {
-            state,
+            state: Arc::downgrade(state),
             agent_base,
             store,
             http,
@@ -290,7 +296,8 @@ impl HttpDriver {
         let Some(auth) = &run.spec.auth else {
             return Ok(None);
         };
-        let read = super::endpoint_auth::bearer(&self.state, &run.branch.caller, auth).await;
+        let state = self.state.upgrade().ok_or("server is shutting down")?;
+        let read = super::endpoint_auth::bearer(&state, &run.branch.caller, auth).await;
         read.map(Some)
             .map_err(|why| format!("the agent's credential could not be read: {why}"))
     }
@@ -302,7 +309,7 @@ impl HttpDriver {
         run: &AgentRun,
         body: &Value,
     ) -> Option<Result<(u16, String), String>> {
-        let scope = self.store.layer().object_prefix(&run.branch.caller);
+        let scope = crate::layer::secret_scope(self.store.layer().as_ref(), &run.branch.caller);
         let bearer = match self.bearer(run).await {
             Ok(b) => b,
             Err(e) => return Some(Err(e)),

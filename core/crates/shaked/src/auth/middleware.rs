@@ -144,7 +144,7 @@ pub async fn authenticate(
 
 /// Serves `req` for `c`, with the header values it reads kept for `c`'s scope.
 async fn serve(state: &AppState, c: Caller, mut req: Request, next: Next) -> Response {
-    let scope = state.store.layer().object_prefix(&c);
+    let scope = crate::layer::secret_scope(state.store.layer().as_ref(), &c);
     req.extensions_mut().insert(Arc::new(c));
     crate::secrets::scoped(scope, next.run(req)).await
 }

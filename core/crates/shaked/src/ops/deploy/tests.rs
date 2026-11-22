@@ -253,3 +253,21 @@ fn an_auth_env_is_a_reference_to_the_variable() {
     assert_eq!(needs.auth, [AuthRef::Env("SHAKEDOWN_AGENT_T".into())]);
     assert_eq!(needs.providers, ["anthropic-main"]);
 }
+
+#[test]
+fn problems_are_reported_before_any_key_is_looked_up() {
+    let (_dir, p) = project(|dir| {
+        runnable(dir);
+        let exp = dir.join("experiments/supplier-slip-solo-vs-team.yaml");
+        let text = std::fs::read_to_string(&exp).unwrap();
+        let broken = text.replace("[solo-planner, planner-with-rules]", "[solo-planner, gone]");
+        std::fs::write(&exp, broken).unwrap();
+    });
+    let err = super::needs(&p, &exp()).err().unwrap();
+    assert!(
+        err.message
+            .contains("fix supplier-slip-solo-vs-team before deploying"),
+        "{}",
+        err.message
+    );
+}

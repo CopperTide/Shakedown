@@ -63,6 +63,17 @@ pub trait Layer: Send + Sync + 'static {
         c: &'a Caller,
         keys: &'a [uuid::Uuid],
     ) -> BoxFuture<'a, anyhow::Result<Vec<uuid::Uuid>>>;
+    /// Who `c` is within its `object_prefix` scope: the person, an API token's holder, a user.
+    /// Header values a caller types into a team are kept for the scope and this principal, so
+    /// a colleague in the same scope cannot cite them. A hosting layer returns the user's id; the
+    /// default tells tokens apart.
+    fn principal(&self, c: &Caller) -> String {
+        match &c.kind {
+            crate::auth::CallerKind::ApiToken { id, .. } => id.to_string(),
+            crate::auth::CallerKind::RunToken { branch, .. } => format!("run:{branch}"),
+            crate::auth::CallerKind::Person => "person".to_string(),
+        }
+    }
     /// The project folder `c` works in; `configured` is `SHAKEDOWN_PROJECT`. Personal use has the
     /// one folder; a hosting layer may give callers folders of their own.
     fn project_dir(&self, _c: &Caller, configured: Option<&Path>) -> Option<PathBuf> {
@@ -165,6 +176,11 @@ impl Layer for LocalLayer {
     ) -> BoxFuture<'a, anyhow::Result<Vec<uuid::Uuid>>> {
         async move { Ok(keys.to_vec()) }.boxed()
     }
+}
+
+/// What header values `c` types into a team are kept for: its scope and its principal.
+pub fn secret_scope(layer: &dyn Layer, c: &Caller) -> String {
+    format!("{}\u{1f}{}", layer.object_prefix(c), layer.principal(c))
 }
 
 /// Asks `store`'s layer about `op`: `Ok(Some(warning))` to go with a warning, `Err` to stop.

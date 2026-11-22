@@ -44,7 +44,9 @@ pub(crate) struct Needs {
 /// The keys and credentials the experiment's setups name, so only those are looked up.
 pub(crate) fn needs(project: &Project, id: &Id) -> Result<Needs, OpError> {
     let mut out = Needs::default();
-    for name in &experiment_of(project, id)?.setups {
+    let exp = experiment_of(project, id)?;
+    no_problems(project, id, exp)?;
+    for name in &exp.setups {
         match &setup_of(project, name)?.team {
             FileTeam::Builtin { agents } => {
                 let keys = agents

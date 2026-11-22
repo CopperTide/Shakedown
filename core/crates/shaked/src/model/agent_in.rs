@@ -94,6 +94,19 @@ mod tests {
     }
 
     #[test]
+    fn auth_on_an_agent_that_is_not_http_is_refused() {
+        let a: AgentSpec = serde_json::from_value(json!({"id": "a", "name": "A",
+            "kind": "open", "auth": {"key": "k"}}))
+        .unwrap();
+        let providers = crate::providers::ProviderConfig::default();
+        let e = crate::model::team::validate_agents(&providers, &[a]).unwrap_err();
+        assert!(
+            e.to_string().contains("auth belongs to http agents only"),
+            "{e}"
+        );
+    }
+
+    #[test]
     fn a_bedrock_agent_is_an_open_agent_on_bedrock() {
         let a: AgentSpec =
             serde_json::from_value(json!({"id": "a", "name": "A", "kind": "bedrock",

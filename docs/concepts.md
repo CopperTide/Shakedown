@@ -51,7 +51,7 @@ the layer lets environment keys serve callers (never on a hosted shaked), and on
 `SHAKEDOWN_AGENT_`; otherwise the 400 does not say whether the variable exists. The agent keeps only the reference
 (`{key: name}` or `{env: NAME}`); the secret is read from your keys each time a request is made, under the caller the
 run is for, and appears in no event, record, fork note or log. Header values typed into a team are kept in memory for
-the org that typed them, and another caller citing their reference gets nothing.
+the caller that typed them (the scope and the principal: the person, the token's holder or the user), and another caller citing their reference, a colleague in the same scope included, gets nothing.
 Setups of kind `code` and `madl` are refused ("can't be deployed from a file yet"). Each deployment is an experiment
 linked to its file (`GET /api/project/experiments/{id}/runs`). `project.import` moves installed benchmarks and earlier
 experiments into the project as files.
