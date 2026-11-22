@@ -48,14 +48,16 @@ transport (`docs/protocol.md`, "Benchmark calls"). It answers:
 
 A benchmark's tools reach parts only through the parts' `connect` info (for `postgres`, `{url}`), so only parts
 with exact saves may be connected. In Rust, implement `shakedown_part::Benchmark` and end `main` with
-`serve_benchmark(..)`; the Python kit has no benchmark support yet.
+`serve_benchmark(..)`. In Python, the kit's `Benchmark` (`kits/python/shakedown_part/benchmark.py`) does the same;
+`benchmarks/factory-01`, `plant-floor` and `line2-oee` use it.
 
 `benchmarks/retail` is the included example: a Rust program (`src/main.rs`, `src/lib.rs`) whose world is one
 `postgres` part named `retail`; `src/load.rs` seeds it from `data/retail/db.json`, `src/tools/` holds the tools,
 and `src/tasks.rs` reads the tasks and gold actions from `data/retail/tasks.json` (the tasks offered are the
 ids in `data/retail/demo_tasks.json`); `src/team.rs` holds the team it suggests and the `Store policy` heading
-over its policy. Its tests are in `benchmarks/retail/tests`. shaked runs one benchmark at a time, chosen with
-`SHAKEDOWN_BENCHMARK`.
+over its policy. Its tests are in `benchmarks/retail/tests`. Each run names the benchmark it runs on (`POST /api/runs`'s
+`benchmark`, a project world's `package`), else the current one: `SHAKEDOWN_BENCHMARK`, or the one chosen with
+`POST /api/worlds/{name}/use`.
 
 `benchmarks/factory` is a benchmark over eight integrations (`erpnext`, `twenty-crm`, `ridgeline-hub`, the stand-in
 plant, `sculptured`, and three simulations: `utility`, `ot-network`, `shift-roster`) with two tasks, a press bearing
@@ -83,7 +85,9 @@ which serves the world and scores each task by its checks (`shakedown_part.expec
 
 - `kind = "builder"`: the package shaked asks for templates, previews and builds.
 - Templates: the ones shipped with the builder are in `benchmarks/world/library/` (its manifest passes
-  `--templates library`; `small-manufacturer`, see its README), beside its own `templates/` (none yet).
+  `--templates library`; `small-manufacturer`, see its README), beside its own `templates/` (`software-factory`:
+  a GitHub twin with Actions CI, Jira, three services in Docker Compose on `live-service`, an observability stack,
+  Slack, PagerDuty and simulated engineers).
 - `SHAKEDOWN_TEMPLATES`: `:`-separated folders of more templates (each `<id>/template.yaml`).
 - `SHAKEDOWN_WORLDS`: where built worlds are written (default `<repo>/core/worlds`, git-ignored), scanned at start like
   `SHAKEDOWN_PACKAGES`. A built world's command names `${SHAKEDOWN_DIR}`, the repository folder.

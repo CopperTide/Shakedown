@@ -18,6 +18,12 @@ All JSON on `http://127.0.0.1:4510`, except the event stream. Errors are `{error
 | `GET /api/project/{kind}/{id}` | one item with its `body` (the file's contents as JSON) |
 | `PUT /api/project/{kind}/{id}` | `{body, confirm?}` creates or replaces the item's file. `body` is checked exactly like the file: unknown fields, a wrong `format:` and credentials written inline are 422 with a JSON pointer (a credential's value is never echoed). Unless `confirm` is true and while the project's `permissions.edit` is `diff_first` (the default), nothing is written and the answer is `{proposed: true, diff}`. Writes are atomic: a file is never left half-written. Needs the `admin` token scope |
 | `DELETE /api/project/{kind}/{id}` | deletes the item's file (a world keeps its data folder) |
+| `PUT /api/project` | `project.update`: `{body, confirm?}` replaces `shakedown.yaml` (name, defaults, permissions, assistant), with a diff first under `diff_first` as for an item |
+| `POST /api/project/import` | `project.import`: `{confirm?}`. Without `confirm`, `{proposed: true, files, skipped}`: what moving installed benchmarks, built worlds and earlier experiments into the project would write (nothing existing is overwritten). With it, writes them and links each earlier experiment as its file's first deployment |
+| `POST /api/project/experiments/{id}/deploy` | `experiments.deploy`: runs the file experiment on its world's runtime package (see [concepts](concepts.md#project-files)); answers the engine experiment's detail. 422 when the world has no `package`, the scenario no `preset`, an item it names has a problem, or a setup is of kind `code` or `madl` |
+| `GET /api/project/experiments/{id}/runs` | `experiments.runs`: `{deployments}`, the experiment's deployments newest first, each as `GET /api/experiments/{id}` answers |
+| `GET /api/project/setups/{id}/madl` | `setups.madl`: a MADL setup's `{valid, diagnostics: [{code, severity, pointer, message}], graph: {agents, edges}}` (patterns expanded) |
+| `POST /api/assistant/chat` | the Ask drawer: `{messages, page?}` answered by the assistant on the project's model (at most 8 model turns): reads run at once, edits come back as diff cards, deploys and deletes as cards the person confirms |
 | `POST /mcp` | the control MCP server (JSON-RPC, protocol `2025-06-18`): every operation above as a tool (`worlds_list`, `scenarios_put`, …), each checked against the caller's token like its route. See [Use Shakedown from an agent](#use-shakedown-from-an-agent-mcp) |
 | `GET /api/tokens` | the live API tokens, `[{id, name, prefix, scopes, created_at, last_used_at, expires_at}]`: never a token or its hash |
 | `POST /api/tokens` | `{name, scopes: ["read"\|"run"\|"admin"], expires_days?}`: `{id, token, prefix}`, the token (`sd_…`) shown this once. `read` views; `run` also starts, forks, stops and records; `admin` does everything, model keys and tokens included |
@@ -200,8 +206,11 @@ from. The retail example reads its data from `data/retail` (relative to its pack
 
 ## Use Shakedown from an agent (MCP)
 
-Every operation shaked offers is defined once in its operation registry and served two ways: as an HTTP route
-and as a tool of the control MCP server, so the UI, the assistant, scripts and any agent can do the same things.
+Every project operation (the project's status, settings and import; listing, reading, writing and deleting worlds,
+scenarios, setups and experiments; deploying an experiment and listing its deployments; reading a MADL setup) is
+defined once in shaked's operation registry and served two ways: as an HTTP route and as a tool of the control MCP
+server (tool names replace `.` with `_`: `worlds_put`, `experiments_deploy`), so the UI, the assistant, scripts and any
+agent can do the same things. Runs, forks, compare and the other `/api` routes are HTTP only.
 A test (`core/crates/shaked/tests/parity.rs`) fails if an operation is missing from either.
 
 - On this machine, over stdio: `claude mcp add shakedown -- shaked mcp --project ~/work/my-project` (Codex:
@@ -209,7 +218,11 @@ A test (`core/crates/shaked/tests/parity.rs`) fails if an operation is missing f
 - Over HTTP: `POST /mcp` with `Authorization: Bearer <token>`. A `read` token lists and reads; editing or
   deleting project files needs `admin`; starting runs needs `run`.
 - Edits follow the project's `permissions` in `shakedown.yaml`: with `edit: diff_first` a put returns a diff and
-  writes only when sent again with `confirm: true`.
+  writes only when sent again with `confirm: true`. `spend` is stored but not enforced yet: the assistant always
+  asks before a deploy, and an MCP client's token scope alone decides.
+- `shaked mcp` (stdio) has no running engine, so `experiments_deploy` and `experiments_runs` answer that they need
+  one; use `POST /mcp` on a running shaked for those.
+- Hosted, the server is `https://app.coppertide.ai/sd/mcp` with an API token (Project settings → Use from an agent).
 
 This is separate from the MCP endpoint an agent under test gets in a run (`/mcp/{branch}/{agent}`, the world's
 tools).
@@ -276,8 +289,8 @@ What the gateway does per provider:
   with the category when Claude gives one.
 
 Cost per provider: OpenRouter's is the cost it reports (`cost_source: "openrouter"`). OpenAI and Anthropic
-report no price and shaked keeps no price table, so their tokens are recorded and the cost is unknown
-(`cost_usd: null`); the UI shows `unknown`. A local server's cost is 0 with
+report no price, so the call records tokens (`cost_usd: null`) and the metrics price them at `docs/prices.toml`'s list
+prices for the models it lists (`list-price estimate`), else the UI shows `unknown`. A local server's cost is 0 with
 `cost_source: "local (no API charge)"`; the UI shows `no API charge`.
 
 ## AI review
@@ -306,7 +319,7 @@ Optional. A real model reads a compact digest of the record and answers in JSON,
   review's runs must be runs of that suite): others are dropped and listed in `issues`, and an item whose every
   citation was dropped is marked `unverified`. A review is stored per branch, pair of branches or pair of suites,
   and redone only when asked. Reviews running when shaked stops are marked failed when it starts again.
-- **In the web UI.** Advanced → AI review turns it off in that browser. On the Run screen and the run page a
+- **In the web UI.** ⋯ → AI review turns it off in that browser. On the Run screen and the run page a
   Review card shows under the result; a run watched to its end there is reviewed at once, an older one has a
   "Review this run" button. Each cited step selects it; a prompt or team suggestion has "Rewind and try this",
   which opens "Change and rerun" at the suggested step with the text added to the agent's prompt. The compare pages
@@ -363,8 +376,11 @@ The tests of `integrations/ridgeline-hub` and `integrations/isaac-sim` read the 
 public yet**: without it every test of those two packages is skipped, and the packages can't start. The CopperTide
 program that `integrations/sculptured` runs is not published yet either; its live test is skipped without it.
 
-Tests never call a real model unless they are `live_`, and no test uses a fake model server or a scripted
-agent: everything an agent does in a test is done by a real model. shaked's `live_` tests
+Tests never call a real model unless they are `live_`. No test supplies a scripted agent to a run, and nothing
+client-facing uses one; some tests use a scripted OpenAI-compatible server standing in for a model
+(`core/crates/shaked/tests/support/fake_llm.rs`, for the assistant, provider keys, vLLM-shaped answers and external
+runs), a local server standing in for Bedrock (`src/providers/bedrock*`), or a stand-in for an agent's endpoint
+(`sdk/python/tests/test_adapters.py`). shaked's `live_` tests
 (`core/crates/shaked/tests/support/live.rs`) run on Claude Code (`claude`, signed in) with `SHAKEDOWN_LIVE_MODEL`
 (default `haiku`), or on shaked's own agent loop when a provider key is set (`ANTHROPIC_API_KEY`,
 `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, or `SHAKEDOWN_LOCAL_MODELS` with `SHAKEDOWN_LIVE_MODEL`); `SHAKEDOWN_LIVE_AGENT=claude`

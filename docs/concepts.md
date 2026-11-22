@@ -14,6 +14,40 @@ Whatever the design does in production, it does here. Shakedown is slower than p
 writes the record at every step), so it times its own work and reports what the run would take without it. The protocol each program speaks is in [protocol.md](protocol.md); routes, settings and disk use
 are in [reference.md](reference.md).
 
+## Project files
+
+What a person builds lives in a **project**: a folder (`SHAKEDOWN_PROJECT` locally; one per org in hosted
+Shakedown) with `shakedown.yaml` at its root and one YAML file per item, edited in the app's editors (Worlds,
+Scenarios, Agent setups, Experiments), through the control MCP server, or by hand. Code:
+`core/crates/project` (formats in `src/format/`); routes in [reference.md](reference.md#http-api).
+
+| Item | File | `format:` | Holds |
+|---|---|---|---|
+| Project | `shakedown.yaml` | `shakedown-project/1` | name, defaults, `permissions` (`edit: diff_first \| apply_then_tell`, `spend`), the assistant's model |
+| World | `worlds/<id>/world.yaml` | `shakedown-world/3` | `label`, `package` (its runtime), `connectors`, `flows`, `data`, `people`, `observability` |
+| Scenario | `scenarios/<id>.yaml` | `shakedown-scenario/1` | `world`, `task` (the ticket), `preset` (the package's task it plays), `changes`, `events`, `gates`, `checks` |
+| Agent setup | `setups/<id>.yaml` | `shakedown-setup/1` | `team`: `builtin` agents, `claude-code`, `codex`, `http`, `code` or `madl` |
+| Experiment | `experiments/<id>.yaml` | `shakedown-experiment/1` | `world`, `scenario`, `setups`, `repeats`, `budget`, `parent` |
+
+Every file parses strictly: an unknown field, a wrong `format:` or a credential written inline (a value shaped like a
+key, or a literal `password`/`token`-like field) is a problem with a JSON pointer, and a problem never stops the rest
+of the project from loading. Broken references (a scenario's world, an experiment's world, scenario, setups and
+parent, and an experiment whose world is not its scenario's) are problems of the item that holds them. Ids are 1–64
+lowercase letters, digits and dashes. Writes are atomic; with `edit: diff_first` a put answers a diff and writes only
+when confirmed.
+
+**Deploying** a project experiment (`POST /api/project/experiments/{id}/deploy`, `core/crates/shaked/src/ops/deploy.rs`)
+maps the files onto an engine experiment: the world's `package` is the benchmark it runs on, the scenario's `preset` is
+the task, each event's `fault` and `params` become the package's disruptions, each setup becomes a team (runner
+`chain`), and `repeats.per_setup` and `budget.per_run_usd` become runs per setup and each run's spend limit. Until
+worlds run from their files alone, nothing else in the files reaches a run: a world's connectors, flows, data, people
+and observability; a scenario's `task` text (runs get the preset task's ticket), `changes`, `gates`, `checks` and each
+event's `at`, `after_calls` and `effects`; a built-in agent's `key` (built-in agents run in API mode on the default
+provider, OpenRouter) and an `http` setup's `auth`; an experiment's `per_deployment_usd` (seeds are always paired).
+Setups of kind `code` and `madl` are refused ("can't be deployed from a file yet"). Each deployment is an experiment
+linked to its file (`GET /api/project/experiments/{id}/runs`). `project.import` moves installed benchmarks and earlier
+experiments into the project as files.
+
 ## Glossary
 
 - **Integration**: a program, in any language, that puts one kind of system in the world (a database, a folder
@@ -21,7 +55,8 @@ are in [reference.md](reference.md).
   state, starts from a save, shows the state (`inspect`) and compares two states (`diff`). In `describe` it
   declares its tools, how it can restore, and whether it uses the Shakedown clock.
 - **Part**: one instance of an integration in a world, with a name and a config.
-- **World**: the list of parts a benchmark names. Tool names must be unique across a world.
+- **World**: the list of parts a benchmark names. Tool names must be unique across a world. A project's world file
+  names the benchmark (or built world) whose world it runs on (see [Project files](#project-files)).
 - **Benchmark**: a package that names a world and brings tasks, instructions for the agents, tools, the data
   that seeds the world, and for each task the gold actions that define the expected result.
 - **Run**: one task, one team, one world. A run has one or more branches; its first branch is the original.
@@ -324,14 +359,14 @@ entry: unknown, not guessed. Named checks keep their `safety` flag in the run's 
 Each tool call also records `duration_ms`, how long the tool ran in the world (gate checks and saves left out;
 absent for a call that reached no part, and in older runs).
 
-Shakedown's web UI shows a run in the same control form as CopperTide Control (`/control/{run}/{branch}`): the agents
+Shakedown's web UI shows a run in its process view (`/control/{run}/{branch}`): the agents
 as units and the world's parts as equipment, labelled with their kind, product, what they stand in for and
 whether they are simulated, with the action flows between them; a timeline with a lane per agent, each tool call
 marked by system kind and read or write (writes solid, reads hollow, approvals and refusals as interlocks, errors
 and refusals the only colour), with its duration and outcome; trends (actions per minute per system, context per
 model call, tokens and cost); and the inspector for one step. It follows a running branch over the event stream.
-Suites have an overview (`/suites/{id}`: scenarios × repeats, pass rates, safety, spread) and a comparison
-(`/suites/compare/{a}/{b}`). Checked by eye on two external suites of the retail benchmark driven by a script
+Suites show as experiments (`/experiments/{id}`: pass rates, safety, spread; `/suites/{id}` redirects there), and
+several side by side at `/experiments/compare?ids=a,b`. Checked by eye on two external suites of the retail benchmark driven by a script
 before scripted drivers were removed; not yet checked again with real agents.
 
 ## Built worlds
@@ -342,7 +377,7 @@ The world builder (`benchmarks/world`, a package of `kind = "builder"`) generate
 and a seed, the same way every time, and shaked writes it to `SHAKEDOWN_WORLDS` as a benchmark package, installs it,
 makes its base saves in the background and then makes it the current benchmark (new runs use it). Runs, suites
 and experiments keep the benchmark they were created with, so choosing another world never changes a run that is
-going. Run once and New experiment have a world picker; the choice is remembered across a restart (unless
+going. Run once and Experiment on a benchmark have a world picker; the choice is remembered across a restart (unless
 `SHAKEDOWN_BENCHMARK` names another). A built world is never changed or deleted: a change is a new world under another
 name. See `docs/reference.md` (`/api/worlds`)
 and `docs/packages.md` ("Templates and built worlds").
@@ -398,8 +433,8 @@ start_seq`), as compare does:
   on its own events (`overhead_s`; when agents run at once, an event's overhead may have held up others too);
 - **cost** per agent: the cost the provider reported (`reported`; Claude Code's own figure is an API-equivalent
   estimate); `no API charge` for a local model; otherwise tokens times the list price in `docs/prices.toml`,
-  labelled `list-price estimate` with the price's source and date (base input and output prices only: caching,
-  batch and long-context prices are not modelled); otherwise `unknown`. Shakedown never makes up a price. The branch's
+  labelled `list-price estimate` with the price's source and date (cache and long-context rates included where the
+  table lists them; batch discounts are not modelled); otherwise `unknown`. Shakedown never makes up a price. The branch's
   cost is the sum when every agent's is known (labelled `mixed` when their labels differ), else `unknown`.
 
 ## AI review
@@ -414,8 +449,8 @@ citation against the record and stores the review. Details in [reference.md](ref
 
 - `openrouter`: the cost OpenRouter reports (API mode on OpenRouter).
 - `local (no API charge)`: API mode on a local server; the cost is 0 and the UI shows `no API charge`.
-- No label and no dollar figure on API mode with OpenAI or Anthropic: they report no price and shaked keeps no
-  price table, so only tokens are recorded; the UI shows the cost as `unknown`.
+- No provider label on API mode with OpenAI or Anthropic: they report no price, so the cost is the list-price
+  estimate of `docs/prices.toml` for the models it lists, else `unknown`.
 - These labels are the providers' own. The metrics above also estimate a cost from `docs/prices.toml` where no
   provider reported one.
 - `api_equivalent_estimate`: Claude Code's own `total_cost_usd`. It is what the same tokens would cost at API

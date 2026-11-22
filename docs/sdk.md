@@ -42,8 +42,10 @@ with Shakedown.local(                                     # or start one for the
     print(sd.health()["benchmark"])
 ```
 
-A shaked runs one benchmark. To use several, start one `Shakedown.local` per benchmark (each on its own port; they
-can share one Postgres server). `sd.health()`, `sd.providers()` and `sd.world()` say what the core can
+The SDK runs on the core's current benchmark (`SHAKEDOWN_BENCHMARK`, or the one chosen with `POST
+/api/worlds/{name}/use`). The HTTP API's `POST /api/runs` and `POST /api/experiments` also take a `benchmark` per
+call; from the SDK, start one `Shakedown.local` per benchmark (each on its own port; they can share one Postgres
+server). `sd.health()`, `sd.providers()` and `sd.world()` say what the core can
 do: which CLIs it found, which model providers have keys, what each part of the world can restore.
 
 `Shakedown(url, token="sd_…")` sends an API token (from Settings → API tokens in the UI, or
@@ -73,7 +75,8 @@ branch = sd.run(task, team, seed=7,
 The world itself is whatever the benchmark names: its parts and their seed data. To assemble your own world from
 part packages, write a benchmark package that lists the parts (`describe.world`) and brings the tasks, tools and
 gold actions or named checks ([packages.md](packages.md#write-a-benchmark)), put it in a folder, and pass that
-folder in `packages=[...]`. The core has no route to compose a world on the fly.
+folder in `packages=[...]`. The core has no route to compose a world of parts on the fly; the world builder (`POST /api/worlds`) generates
+one from a template ([packages.md](packages.md#templates-and-built-worlds)).
 
 ## Run teams
 
@@ -280,7 +283,7 @@ A typed Rust client crate is not written yet. Write integrations and benchmarks 
 ## Core and UI are separate
 
 The core (shaked, the protocol, the kits, the integrations and benchmarks) depends on no UI. The web UI (`ui/`)
-is one client of the HTTP API, as CopperTide's Shakedown control and this SDK are. shaked can serve a built UI
+is one client of the HTTP API, as this SDK and the control MCP server are. shaked can serve a built UI
 (`SHAKEDOWN_UI_DIST`) as a convenience; it is not required. A UI served from another origin can call the API when
 shaked lists that origin in `SHAKEDOWN_CORS_ORIGIN` ([reference.md](reference.md#configuration)); the API still
 answers only a loopback `Host`.
