@@ -1,9 +1,9 @@
 // The account menu: shown only when the deployment's layer gives one in `/api/me` (a local shaked
-// has none). It knows nothing of what its items mean: an item with `post` POSTs its `body` there,
-// then the page reloads.
+// has none). It knows nothing of what its items mean: an item with `post` POSTs its `body` there
+// (a path on the core, or a full URL of the deployment, as for signing out), then the page reloads.
 import { ChevronDown } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { api } from '@/api/core';
+import { CORE, coreUrl } from '@/api/core';
 import { withCsrf } from '@/api/csrf';
 import { type AccountItem, fetchMe, type Me } from '@/api/me';
 import { Button } from '@/components/ui/button';
@@ -13,10 +13,13 @@ interface Deps { fetch: (url: string, init: RequestInit) => Promise<Response>; r
 
 const browser: Deps = { fetch: (url, init) => window.fetch(url, init), reload: () => window.location.reload() };
 
+/** Where an item's `post` goes: a full URL as it is, a path on the core at `core`. */
+export const itemUrl = (post: string, core: string = CORE) => (/^https?:\/\//.test(post) ? post : coreUrl(post, core));
+
 /** Does what choosing `item` means: POSTs its body where it says, then reloads; nothing for the current one. */
 export async function choose(item: AccountItem, deps: Deps = browser): Promise<void> {
   if (!item.post) return;
-  await deps.fetch(api(item.post), withCsrf({
+  await deps.fetch(itemUrl(item.post), withCsrf({
     method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' }, body: JSON.stringify(item.body ?? {}),
   })!);
   deps.reload();
