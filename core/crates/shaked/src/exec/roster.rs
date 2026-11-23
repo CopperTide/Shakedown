@@ -11,7 +11,7 @@ pub struct Roster {
     /// Agents an external system registered while the branch runs (not in `team`).
     joined: RwLock<Vec<AgentSpec>>,
     /// The agents' tokens (`sda_…`), which their MCP endpoint and model gateway want.
-    tokens: super::agent_tokens::AgentTokens,
+    pub(super) tokens: super::agent_tokens::AgentTokens,
     /// The agent whose model call through the gateway came last (a driver's own HTTP requests
     /// are attributed to it).
     last_model_caller: Mutex<Option<String>>,
@@ -111,11 +111,6 @@ impl Roster {
         self.tokens.issue(agent, ttl)
     }
 
-    /// `agent`'s good token, else a new one valid for `ttl`.
-    pub fn ensure_token(&self, agent: &str, ttl: std::time::Duration) -> String {
-        self.tokens.ensure(agent, ttl)
-    }
-
     /// `agent`'s token while it is good: in memory only, for handing to the agent.
     pub fn token_of(&self, agent: &str) -> Option<String> {
         self.tokens.token_of(agent)
@@ -129,11 +124,6 @@ impl Roster {
     /// Takes back every agent's token (the branch ended).
     pub fn revoke_all(&self) {
         self.tokens.revoke_all();
-    }
-
-    /// Moves every token's expiry `by` later (the branch was paused that long).
-    pub fn extend(&self, by: std::time::Duration) {
-        self.tokens.extend(by);
     }
 
     /// True when a call to `agent`'s endpoints with `authorization` (the header's value) may go

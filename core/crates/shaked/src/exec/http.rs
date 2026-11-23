@@ -6,9 +6,8 @@ use bytes::Bytes;
 use parts::proto::Effect;
 use serde_json::{json, Value};
 
-use super::{save_step, tool_call_payload, BranchCtx, CallFacts, ToolExec};
+use super::{save_step, BranchCtx, CallFacts, Step, ToolExec};
 use crate::{
-    model::EventKind,
     proxy::{
         forward::{forward, Forwarded, Sender},
         record::{body_record, kept_headers},
@@ -135,13 +134,9 @@ impl ToolExec {
         call: HttpCall,
         refused: Option<(u16, &str)>,
     ) -> HttpAnswer {
-        if branch.flow.go().await.is_err() {
+        let Ok(_gate) = branch.enter_step().await else {
             return HttpAnswer::text(409, NOT_RUNNING);
-        }
-        let _gate = branch.gate_timed().await;
-        if branch.lifecycle.is_closed() {
-            return HttpAnswer::text(409, NOT_RUNNING);
-        }
+        };
         let attributed = agent.map_or_else(|| branch.roster.last_model_caller(), |_| None);
         let agent = agent.or(attributed.as_deref());
         let done = match refused {
@@ -154,8 +149,8 @@ impl ToolExec {
         if attributed.is_some() {
             args["attributed"] = json!(ATTRIBUTED);
         }
-        self.record_http(branch, agent, args, done.outcome, done.facts)
-            .await;
+        let step = Step::new(HTTP_TOOL, args, done.outcome, done.facts);
+        self.record_http(branch, agent, step).await;
         done.answer
     }
 
@@ -207,22 +202,10 @@ impl ToolExec {
     }
 
     /// Records the step (a view after a write, as for a tool call); failures are logged.
-    async fn record_http(
-        &self,
-        branch: &BranchCtx,
-        agent: Option<&str>,
-        args: Value,
-        outcome: Result<Value, String>,
-        facts: CallFacts,
-    ) {
-        let wrote = facts.wrote_world();
-        let payload = tool_call_payload(HTTP_TOOL, args, &outcome, None, facts);
-        match self
-            .record_seq(branch, agent, EventKind::ToolCall, &payload)
-            .await
-        {
-            Ok(seq) if wrote => self.record_view(branch, seq).await,
-            Ok(_) => {}
+    async fn record_http(&self, branch: &BranchCtx, agent: Option<&str>, step: Step) {
+        match self.record_step(branch, agent, step, None).await {
+            Ok(Some(seq)) => self.record_view(branch, seq).await,
+            Ok(None) => {}
             Err(e) => eprintln!("proxy: recording a request on {}: {e}", branch.branch_id),
         }
     }

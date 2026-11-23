@@ -92,3 +92,80 @@ fn the_overhead_the_store_adds_is_ignored() {
     let p = json!({"paused_ms": 40, "overhead_ms": {"record": 1.0}});
     assert_eq!(decoded::<ResumePayload>(p).paused_ms, 40);
 }
+
+/// Reads `json` as `P` and writes it back byte for byte: `P`'s recorded form is pinned.
+fn pinned<P: Serialize + DeserializeOwned>(json: &str) {
+    let p: P = serde_json::from_str(json).unwrap_or_else(|e| panic!("{json}: {e}"));
+    assert_eq!(serde_json::to_string(&p).unwrap(), json);
+}
+
+/// The payloads of steps and agents as recorded runs hold them: every key in its place, the
+/// optional ones left out when empty, and the oldest shapes still read.
+#[test]
+fn recorded_step_payloads_keep_their_json() {
+    use crate::model::{AgentEndPayload, ModelCallPayload, ToolCallPayload, WorldEventPayload};
+    pinned::<ToolCallPayload>(
+        r#"{"name":"get","args":{"id":1},"result":{"ok":true},"error":"no","reads":["a/1"],"writes":["a/2"],"internal":["_d/1"],"snapshot":"s1","snapshot_error":"bad","tool_call_id":"c1","part":"retail","saves":{"retail":"s1"},"clock_ms":5,"paused_ms":2,"duration_ms":1.5}"#,
+    );
+    pinned::<ToolCallPayload>(
+        r#"{"name":"get","args":{},"result":null,"error":null,"reads":[],"writes":[],"snapshot":null,"tool_call_id":null}"#,
+    );
+    pinned::<WorldEventPayload>(
+        r#"{"part":"clock","kind":"tick","text":"t","data":{"n":1},"clock_ms":7}"#,
+    );
+    pinned::<ModelCallPayload>(
+        r#"{"request":{},"response":{},"usage":{},"cost_usd":0.25,"cost_source":"x","provider":"openai","provider_response":{"r":1}}"#,
+    );
+    pinned::<ModelCallPayload>(
+        r#"{"request":{},"response":{},"usage":{},"cost_usd":null,"cost_source":null}"#,
+    );
+    pinned::<AgentEndPayload>(
+        r#"{"ok":true,"error":null,"tokens":3,"prompt_tokens":1,"completion_tokens":2,"cost_usd":0.5,"cost_source":"x","seconds":1.5}"#,
+    );
+    pinned::<AgentEndPayload>(
+        r#"{"ok":false,"error":"e","tokens":null,"cost_usd":null,"cost_source":null,"seconds":null}"#,
+    );
+}
+
+/// A score as recorded runs hold it; one recorded before `unchecked` still reads.
+#[test]
+fn a_recorded_check_keeps_its_json() {
+    use crate::model::CheckPayload;
+    pinned::<CheckPayload>(
+        r#"{"passed":false,"gold_db":"g","differing_rows":["t/1"],"checks":[{"name":"c","passed":false}],"final_saves":{"retail":"s"},"unchecked":["p"]}"#,
+    );
+    pinned::<CheckPayload>(
+        r#"{"passed":true,"gold_db":null,"differing_rows":null,"unchecked":[]}"#,
+    );
+    let old: CheckPayload =
+        serde_json::from_str(r#"{"passed":true,"gold_db":null,"differing_rows":null}"#).unwrap();
+    assert!(old.unchecked.is_empty());
+}
+
+/// The payloads of what agents say to each other, as recorded runs hold them.
+#[test]
+fn recorded_talk_payloads_keep_their_json() {
+    use crate::model::{
+        DelegationPayload, FinishPayload, HandoffPayload, MessagePayload, ReportPayload,
+    };
+    pinned::<HandoffPayload>(r#"{"note":"n","to":"b"}"#);
+    pinned::<HandoffPayload>(r#"{"note":"n"}"#);
+    pinned::<MessagePayload>(r#"{"to":"*","text":"hi"}"#);
+    pinned::<DelegationPayload>(r#"{"to":"b","task":"do"}"#);
+    pinned::<ReportPayload>(r#"{"to":"a","text":"done","turn_end":true}"#);
+    pinned::<ReportPayload>(r#"{"to":"a","text":"done"}"#);
+    pinned::<FinishPayload>(r#"{"summary":"s"}"#);
+}
+
+/// A world view is written as the `json!` it was built with before it was typed.
+#[test]
+fn a_world_view_keeps_its_json() {
+    let view = json!({"cards": [1, 2]});
+    let typed = WorldViewPayload {
+        seq_of: 4,
+        view: view.clone(),
+    };
+    let built = json!({"seq_of": 4, "view": view});
+    assert_eq!(serde_json::to_string(&typed).unwrap(), built.to_string());
+    pinned::<WorldViewPayload>(r#"{"seq_of":4,"view":{"cards":[1,2]}}"#);
+}

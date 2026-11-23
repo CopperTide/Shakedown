@@ -5,11 +5,8 @@
 
 use parts::proto::SetupCall;
 
-use super::{
-    links::{call_part, LinkStep},
-    save_step, tool_call_payload, BranchCtx, ToolExec,
-};
-use crate::{model::EventKind, world::PartEvent};
+use super::{links::call_part, save_step, BranchCtx, Step, ToolExec};
+use crate::world::PartEvent;
 
 /// The actor of a task's setup steps; no agent may have this id.
 pub const SETUP_ACTOR: &str = "setup";
@@ -46,7 +43,7 @@ impl ToolExec {
     async fn record_setup(
         &self,
         branch: &BranchCtx,
-        steps: Vec<LinkStep>,
+        steps: Vec<Step>,
     ) -> Result<(Vec<PartEvent>, Option<i64>), String> {
         let (mut events, mut failed, mut wrote) = (vec![], None, None);
         for mut s in steps {
@@ -54,12 +51,8 @@ impl ToolExec {
             if let Err(e) = &s.outcome {
                 failed.get_or_insert(format!("the task's setup call {} failed: {e}", s.tool));
             }
-            let writes = !s.facts.writes.is_empty();
-            let payload = tool_call_payload(&s.tool, s.args, &s.outcome, None, s.facts);
-            let recorded =
-                self.record_seq(branch, Some(SETUP_ACTOR), EventKind::ToolCall, &payload);
-            let seq = recorded.await?;
-            wrote = writes.then_some(seq).or(wrote);
+            let recorded = self.record_step(branch, Some(SETUP_ACTOR), s, None);
+            wrote = recorded.await?.or(wrote);
         }
         match failed {
             Some(e) => Err(e),
