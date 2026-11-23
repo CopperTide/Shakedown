@@ -249,7 +249,8 @@ implements `Layer` in the Cloud repository ([embedding](../embedding.md) lists e
 - **A new provider.** Add a `ProviderKind` and an adapter beside `openai.rs`. Keep the translation pure and
   tested on its own. `Api::speaking` decides which pass-through routes it serves.
 - **A new agent kind.** Implement `Driver` (`src/agents/mod.rs`), and `session` when it can serve dispatch
-  runs. Register it in `app::install_default_drivers`.
+  runs (it is async, so a session can read the caller's keys, as the open driver's does with
+  `keys::config_for`, and an agent may name `key:<name>`). Register it in `app::install_default_drivers`.
 - **A new pass-through API.** Add an `Api` variant and a row in `gateway::ROUTES`. Teach `sse.rs` its usage and
   stream end.
 - **Deployment rules.** Implement `Layer`. Never add deployment checks inside the engine.

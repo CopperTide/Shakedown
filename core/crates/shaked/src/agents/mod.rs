@@ -76,11 +76,12 @@ pub trait Driver: Send + Sync {
 
     /// Starts the agent as a session that stays alive across turns (for the dispatch runner);
     /// an error when this kind of agent can't keep one.
-    fn session(&self, start: session::SessionStart) -> Result<Box<dyn session::Session>, String> {
-        Err(format!(
+    fn session(&self, start: session::SessionStart) -> session::Started<'_> {
+        let why = format!(
             "a {:?} agent can't keep a session across turns, which a dispatch run needs",
             start.spec.kind
-        ))
+        );
+        Box::pin(async move { Err::<Box<dyn session::Session>, _>(why) })
     }
 }
 

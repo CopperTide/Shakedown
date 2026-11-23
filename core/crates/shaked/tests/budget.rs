@@ -67,7 +67,7 @@ async fn one_turn(ctx: &Arc<BranchCtx>, spec: AgentSpec) -> (Turn, AgentResult, 
         branch: ctx.clone(),
         spec,
     };
-    let mut session = driver.session(start).unwrap();
+    let mut session = driver.session(start).await.unwrap();
     let since = Instant::now();
     let turn = session.turn("go".into()).await;
     let took = since.elapsed();

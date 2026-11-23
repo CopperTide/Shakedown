@@ -64,3 +64,5 @@
 - **Open agents' chat calls to Claude and Bedrock are priced at the cache rates.** Their canonical
   usage now keeps the cache-write and cache-read counts, so a cache hit is no longer charged (and
   metered) as fresh input, about 10 times its price.
+- **A dispatch run's open agents can name your stored keys (`key:<name>`).** Their sessions now
+  resolve providers with the caller's keys, as other runs do, instead of the environment's only.

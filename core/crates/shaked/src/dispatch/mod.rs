@@ -239,7 +239,7 @@ impl Crew {
             .await?;
         self.working.insert(agent.to_string());
         if !self.slots.contains_key(agent) {
-            if let Err(e) = self.open(agent) {
+            if let Err(e) = self.open(agent).await {
                 let failed = Input::TurnEnded {
                     agent: agent.into(),
                     ok: false,
@@ -256,7 +256,7 @@ impl Crew {
     }
 
     /// Starts `agent`'s session on its own task.
-    fn open(&mut self, agent: &str) -> Result<(), String> {
+    async fn open(&mut self, agent: &str) -> Result<(), String> {
         let spec = self
             .ctx
             .roster
@@ -268,7 +268,7 @@ impl Crew {
             spec,
         };
         let (turns, ends) = (self.turns.0.clone(), self.ends.0.clone());
-        let session = driver.session(start)?;
+        let session = driver.session(start).await?;
         let slot = Slot::spawn(session, agent, turns, ends, self.stop.subscribe());
         self.slots.insert(agent.to_string(), slot);
         Ok(())

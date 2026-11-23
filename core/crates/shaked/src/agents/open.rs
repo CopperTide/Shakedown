@@ -8,7 +8,7 @@ use std::{
 use serde_json::{json, Value};
 
 use super::{
-    session::{end_error, BoxFuture, Session, SessionStart, Turn},
+    session::{end_error, BoxFuture, Session, SessionStart, Started, Turn},
     AgentResult, AgentRun, Driver, FailureKind,
 };
 use crate::{
@@ -16,7 +16,7 @@ use crate::{
     exec::{tool_schemas, BranchCtx, ToolExec, FINISH, HANDOFF},
     gateway::Api,
     model::{add_cost, AgentSpec, TokenUsage},
-    providers::{Provider, ProviderConfig},
+    providers::{keys, Provider, ProviderConfig},
 };
 
 pub const MAX_MODEL_CALLS: usize = 40;
@@ -99,19 +99,23 @@ impl Driver for OpenDriver {
         Box::pin(self.run_inner(run))
     }
 
-    fn session(&self, start: SessionStart) -> Result<Box<dyn Session>, String> {
-        let state = self.state.upgrade().ok_or("server is shutting down")?;
-        let providers = &state.config.providers;
-        let lp = Loop::new(state.clone(), start.branch, &start.spec, providers)
-            .map_err(|f| f.split().0)?;
-        let system = json!({"role": "system", "content": start.spec.prompt});
-        Ok(Box::new(OpenSession {
-            lp,
-            messages: vec![system],
-            totals: Totals::new(),
-            busy: Duration::ZERO,
-            error: None,
-        }))
+    fn session(&self, start: SessionStart) -> Started<'_> {
+        Box::pin(async move {
+            let state = self.state.upgrade().ok_or("server is shutting down")?;
+            // The caller's own keys, as for a run: an agent may name one (`key:<name>`).
+            let providers = keys::config_for(&state, &start.branch.caller).await;
+            let lp =
+                Loop::new(state, start.branch, &start.spec, &providers).map_err(|f| f.split().0)?;
+            let system = json!({"role": "system", "content": start.spec.prompt});
+            let session: Box<dyn Session> = Box::new(OpenSession {
+                lp,
+                messages: vec![system],
+                totals: Totals::new(),
+                busy: Duration::ZERO,
+                error: None,
+            });
+            Ok::<_, String>(session)
+        })
     }
 }
 
@@ -396,7 +400,7 @@ impl OpenDriver {
     async fn drive(&self, run: &AgentRun, totals: &mut Totals) -> Result<(), Fault> {
         let state = self.state.upgrade().ok_or("server is shutting down")?;
         // The caller's own keys are known here, so an agent may name one (`key:<name>`).
-        let providers = crate::providers::keys::config_for(&state, &run.branch.caller).await;
+        let providers = keys::config_for(&state, &run.branch.caller).await;
         let lp = Loop::new(state, run.branch.clone(), &run.spec, &providers)?;
         let mut messages = initial_messages(run);
         lp.until_done(&mut messages, totals).await.map(drop)

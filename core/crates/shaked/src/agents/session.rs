@@ -42,6 +42,9 @@ impl Turn {
 
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
+/// A session being started: the session, or why it can't be.
+pub type Started<'a> = BoxFuture<'a, Result<Box<dyn Session>, String>>;
+
 /// One agent alive across turns.
 pub trait Session: Send {
     /// Runs one turn with `input` as the user's message; resolves when the agent ends the turn.

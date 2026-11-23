@@ -16,7 +16,7 @@ use serde_json::{json, Value};
 
 use super::{
     jail::Jail,
-    session::{Session, SessionStart},
+    session::{Session, SessionStart, Started},
     AgentResult, AgentRun, Driver, Mcp, ModelRoute, CLI_TIMEOUT_SECS,
 };
 use crate::model::{AgentSpec, TokenUsage};
@@ -210,7 +210,7 @@ impl ClaudeDriver {
 }
 
 impl Driver for ClaudeDriver {
-    fn session(&self, start: SessionStart) -> Result<Box<dyn Session>, String> {
+    fn session(&self, start: SessionStart) -> Started<'_> {
         let route = self.route(&start.branch, &start.spec.id);
         let s = super::claude_session::ClaudeSession::start(
             &self.self_base,
@@ -218,8 +218,8 @@ impl Driver for ClaudeDriver {
             start,
             route,
             self.jail.clone(),
-        )?;
-        Ok(Box::new(s))
+        );
+        Box::pin(async move { s.map(|s| Box::new(s) as Box<dyn Session>) })
     }
 
     fn run<'a>(&'a self, run: AgentRun) -> Pin<Box<dyn Future<Output = AgentResult> + Send + 'a>> {
