@@ -75,7 +75,7 @@ async fn revoke(
     Who(caller): Who,
     Path(id): Path<String>,
 ) -> ApiResult<Value> {
-    let gone = || ApiError::not_found(format!("there is no token \"{id}\""));
+    let gone = || ApiError::missing("token", &id);
     let uuid: Uuid = id.parse().map_err(|_| gone())?;
     match state.store.at(&caller).revoke_api_token(uuid).await? {
         true => Ok(Json(json!({"revoked": id}))),

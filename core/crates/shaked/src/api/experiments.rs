@@ -13,7 +13,7 @@ use axum::{
 use parts::proto::ScenarioRequest;
 use serde::Deserialize;
 
-use super::{check_disk, detached, providers_of, settle_providers, JsonBody};
+use super::{check_disk, checked_seed, detached, providers_of, settle_providers, JsonBody};
 use super::{ApiError, ApiResult};
 use crate::{
     app::AppState,
@@ -86,17 +86,6 @@ pub(crate) struct NewExperimentReq {
     pub(crate) project_experiment: Option<String>,
 }
 
-/// The experiment's base seed: the one asked for (400 past 2^53 - 1), else a random one.
-fn base_seed(asked: Option<u64>) -> Result<u64, ApiError> {
-    match asked {
-        Some(s) if s > crate::runner::MAX_SEED => {
-            Err(ApiError::bad("seed must be at most 2^53 - 1"))
-        }
-        Some(s) => Ok(s),
-        None => Ok(crate::runner::new_seed()),
-    }
-}
-
 /// 400 unless shaked can run the setup itself: a built-in runner and a team it can run. The
 /// error names the setup.
 fn validate_setup(
@@ -161,7 +150,7 @@ async fn check_connections(
         if let Some(id) = &s.connection {
             super::connections::connection_or_404(state, caller, id)
                 .await
-                .map_err(|ApiError(code, msg)| ApiError(code, format!("{name}: {msg}")))?;
+                .map_err(|e| ApiError::new(e.status, format!("{name}: {}", e.message)))?;
         }
     }
     Ok(())
@@ -224,10 +213,9 @@ async fn store_experiment(
     req: &NewExperimentReq,
 ) -> Result<(experiment::Experiment, Vec<crate::suite::Suite>), ApiError> {
     let max_cost_usd = super::max_cost(req.max_cost_usd)?;
-    let (seed, world_minutes) = (
-        base_seed(req.seed)?,
-        super::world_minutes(req.world_minutes)?,
-    );
+    // The base seed: the one asked for, else a random one.
+    let seed = checked_seed(req.seed)?.unwrap_or_else(crate::runner::new_seed);
+    let world_minutes = super::world_minutes(req.world_minutes)?;
     let bench = super::benchmark_asked(state, req.benchmark.as_deref())?;
     super::suites::suite_tasks(state, &bench, vec![req.task.clone()]).await?;
     let scenario = super::twin::scenario_of(state, &bench, req.scenario.as_ref()).await?;
@@ -266,9 +254,7 @@ async fn find(state: &AppState, caller: &Caller, id: &str) -> Result<Found, ApiE
     }
     match records.suite(id).await? {
         Some(s) if s.experiment_id.is_none() => Ok(Found::Legacy(Box::new(s))),
-        _ => Err(ApiError::not_found(format!(
-            "there is no experiment \"{id}\""
-        ))),
+        _ => Err(ApiError::missing("experiment", id)),
     }
 }
 

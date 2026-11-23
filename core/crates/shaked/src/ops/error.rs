@@ -1,34 +1,13 @@
-//! Why an operation failed, as an HTTP status and a message safe to show.
+//! Why an operation failed: the API's error (an HTTP status and a message safe to show), and
+//! how the project's errors map onto it.
 
 use axum::http::StatusCode;
 use shakedown_project::{FormatError, ProjectError};
 
 use crate::project_state::NoProject;
 
-/// A failed operation.
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-#[error("{message}")]
-pub struct OpError {
-    /// The HTTP status it answers with.
-    pub status: StatusCode,
-    /// What went wrong. Never contains a secret.
-    pub message: String,
-}
-
-impl OpError {
-    /// A failure with `status`.
-    pub fn new(status: StatusCode, message: impl Into<String>) -> OpError {
-        OpError {
-            status,
-            message: message.into(),
-        }
-    }
-
-    /// The input was malformed (400).
-    pub fn bad_request(message: impl Into<String>) -> OpError {
-        OpError::new(StatusCode::BAD_REQUEST, message)
-    }
-}
+/// A failed operation: the same type as a failed request.
+pub type OpError = crate::api::ApiError;
 
 impl From<NoProject> for OpError {
     fn from(e: NoProject) -> OpError {
@@ -53,11 +32,5 @@ impl From<ProjectError> for OpError {
             ProjectError::Io { .. } => StatusCode::INTERNAL_SERVER_ERROR,
         };
         OpError::new(status, e.to_string())
-    }
-}
-
-impl From<crate::api::ApiError> for OpError {
-    fn from(e: crate::api::ApiError) -> OpError {
-        OpError::new(e.status(), e.message())
     }
 }

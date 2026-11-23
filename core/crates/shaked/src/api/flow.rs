@@ -39,7 +39,7 @@ async fn live(state: &AppState, caller: &Caller, id: &str) -> Result<Arc<BranchC
     }
     match state.store.at(caller).find_branch(id).await? {
         Some(_) => Err(ApiError::conflict("the run is not running")),
-        None => Err(super::no_branch(id)),
+        None => Err(ApiError::missing("branch", id)),
     }
 }
 
@@ -59,7 +59,7 @@ async fn relayed(
     }
     let at = state.store.at(caller);
     if at.find_branch(id).await?.is_none() {
-        return Err(super::no_branch(id));
+        return Err(ApiError::missing("branch", id));
     }
     if !state.links.has(id) && !at.is_linked(id).await? {
         return Ok(None);
@@ -141,7 +141,7 @@ async fn save(
     }
     let exec = ToolExec::new(state.store.clone());
     let made = exec.save_point(&ctx, SAVE_ASKED).await;
-    let made = made.map_err(|e| ApiError(axum::http::StatusCode::INTERNAL_SERVER_ERROR, e))?;
+    let made = made.map_err(|e| ApiError::new(axum::http::StatusCode::INTERNAL_SERVER_ERROR, e))?;
     let Some(e) = made else {
         return Ok(Json(json!({"seq": null, "saves": {}})));
     };

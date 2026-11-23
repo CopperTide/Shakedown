@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 
-use axum::{extract::State, http::StatusCode, routing::post, Json, Router};
+use axum::{extract::State, routing::post, Json, Router};
 
 use super::{ApiError, ApiResult, JsonBody};
 use crate::{
@@ -38,7 +38,7 @@ async fn model_for(state: &AppState, caller: &Caller) -> Result<(Provider, Strin
     let project = state.project_for(caller).current();
     let settings = project.ok().and_then(|p| p.config.assistant);
     let config = super::providers_of(state, caller).await;
-    let no_model = || ApiError(StatusCode::CONFLICT, NO_MODEL.into());
+    let no_model = || ApiError::conflict(NO_MODEL);
     let provider = config
         .resolve(settings.as_ref().and_then(|s| s.provider.as_deref()))
         .map_err(|_| no_model())?;

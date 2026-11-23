@@ -34,13 +34,6 @@ struct ImportInput {
     confirm: bool,
 }
 
-fn internal(e: anyhow::Error) -> OpError {
-    OpError::new(
-        axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-        format!("{e:#}"),
-    )
-}
-
 fn import<'a>(ctx: &'a OpCtx<'a>, _: &'static Operation, value: Value) -> OpFuture<'a> {
     Box::pin(async move {
         let ImportInput { confirm } = input(value)?;
@@ -82,7 +75,7 @@ async fn write(
             .at(&ctx.caller)
             .link_deployment(&old, id.as_str())
             .await
-            .map_err(internal)?
+            .map_err(OpError::internal)?
         {
             linked += 1;
         }
@@ -112,10 +105,11 @@ fn benchmarks(app: &AppState) -> Vec<(String, String)> {
 /// The experiments not yet in a project, with their setups' teams.
 async fn earlier(app: &AppState, caller: &Caller) -> Result<Vec<OldExperiment>, OpError> {
     let records = app.store.at(caller);
-    let suites = records.suites().await.map_err(internal)?;
+    let suites = records.suites().await.map_err(OpError::internal)?;
     let mut out = Vec::new();
-    for id in records.unlinked_experiments().await.map_err(internal)? {
-        let Some(e) = records.experiment(&id).await.map_err(internal)? else {
+    let unlinked = records.unlinked_experiments().await;
+    for id in unlinked.map_err(OpError::internal)? {
+        let Some(e) = records.experiment(&id).await.map_err(OpError::internal)? else {
             continue;
         };
         let teams = suites

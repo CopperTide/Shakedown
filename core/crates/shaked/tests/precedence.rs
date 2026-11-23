@@ -184,6 +184,64 @@ fn a_new_run_is_refused_in_this_order() {
     })
 }
 
+/// A run of task "nope" with no agents, with `extra`'s fields.
+fn run_body(extra: Value) -> Value {
+    let mut body = json!({"task_id": "nope", "team": team(json!([]))});
+    let extra = extra.as_object().unwrap().clone();
+    body.as_object_mut().unwrap().extend(extra);
+    body
+}
+
+/// One `POST /api/runs` case per row, `run_body(extra)` sent from an origin a Code run refuses.
+fn runs(rows: Vec<(Value, u16, &str)>) -> Vec<Case> {
+    let cases = rows
+        .into_iter()
+        .map(|(x, s, e)| case("/api/runs", run_body(x), s, e));
+    cases
+        .map(|c| c.header("origin", "http://evil.test"))
+        .collect()
+}
+
+/// `POST /api/runs`: the benchmark comes before the scenario, the seed and every limit; a
+/// built-in run never reads `world_minutes`; an external run reads it after the disk.
+fn limit_cases() -> Vec<Case> {
+    let (scenario, big) = (json!({"disruptions": [{"id": "nope"}]}), 1u64 << 53);
+    let bench = json!({"benchmark": "nope", "scenario": scenario, "seed": big});
+    let builtin = json!({"team": team(json!([claude()])), "world_minutes": 5000});
+    let external = json!({"runner": "external", "world_minutes": 5000});
+    runs(vec![
+        (bench, 409, NO_BENCH),
+        (builtin, 507, OVER),
+        (external, 507, OVER),
+    ])
+}
+
+/// `POST /api/runs` with a Code connection: the benchmark, the spend limit, then the window, all
+/// before the launch guard.
+fn code_limit_cases() -> Vec<Case> {
+    let window = "world_minutes must be from 0 to 1440 minutes of world time";
+    let bench = json!({"connection": "nope", "benchmark": "nope", "max_cost_usd": -1});
+    let costly = json!({"connection": "nope", "max_cost_usd": -1, "world_minutes": 5000});
+    let late = json!({"connection": "nope", "world_minutes": 5000});
+    runs(vec![
+        (bench, 409, NO_BENCH),
+        (costly, 400, BAD_COST),
+        (late, 400, window),
+    ])
+}
+
+const NO_BENCH: &str = "no benchmark named nope is installed";
+
+#[test]
+fn a_new_runs_limits_are_read_in_this_order() {
+    run(async {
+        let fx = setup("limits").await;
+        assert_cases(&fx, limit_cases()).await;
+        assert_cases(&fx, code_limit_cases()).await;
+        assert!(records(&fx.state.store).runs().await.unwrap().is_empty());
+    })
+}
+
 /// A finished root branch of task 27.
 async fn finished_branch(fx: &AppFx) -> String {
     let t = Team {

@@ -60,16 +60,8 @@ const fn public(method: &'static str, path: &'static str) -> RouteCase {
 }
 
 use Action::*;
-use On::{Branch, Instance};
+use On::{Branch, Instance, Kind, Resource as One};
 use ResourceKind as K;
-
-const fn kind(k: ResourceKind) -> On {
-    On::Kind(k)
-}
-
-const fn one(k: ResourceKind) -> On {
-    On::Resource(k)
-}
 
 pub const ROUTES: &[RouteCase] = &[
     public("GET", "/api/health"),
@@ -86,12 +78,12 @@ pub const ROUTES: &[RouteCase] = &[
     r("GET", "/api/usage", Read, Instance),
     r("POST", "/api/gc", InstanceAdmin, Instance),
     r("GET", "/api/review/settings", Read, Instance),
-    r("POST", "/api/agents/check", Start, kind(K::Run)),
-    r("GET", "/api/runs", Read, kind(K::Run)),
-    r("POST", "/api/runs", Start, kind(K::Run)),
-    r("DELETE", "/api/runs/{id}", Delete, one(K::Run)),
-    r("POST", "/api/runs/{id}/name", Rename, one(K::Run)),
-    r("GET", "/api/compare", Read, kind(K::Run)),
+    r("POST", "/api/agents/check", Start, Kind(K::Run)),
+    r("GET", "/api/runs", Read, Kind(K::Run)),
+    r("POST", "/api/runs", Start, Kind(K::Run)),
+    r("DELETE", "/api/runs/{id}", Delete, One(K::Run)),
+    r("POST", "/api/runs/{id}/name", Rename, One(K::Run)),
+    r("GET", "/api/compare", Read, Kind(K::Run)),
     r("GET", "/api/branches/{id}", Read, Branch),
     r("GET", "/api/branches/{id}/stream", Read, Branch),
     r("GET", "/api/branches/{id}/rows", Read, Branch),
@@ -128,78 +120,78 @@ pub const ROUTES: &[RouteCase] = &[
     ),
     r("POST", "/api/branches/{id}/finish", Finish, Branch),
     r("POST", "/api/branches/{id}/sandbox-events", Report, Branch),
-    r("GET", "/api/compare/review", Read, kind(K::Review)),
-    r("POST", "/api/compare/review", Create, kind(K::Review)),
-    r("GET", "/api/suites/compare/review", Read, kind(K::Review)),
+    r("GET", "/api/compare/review", Read, Kind(K::Review)),
+    r("POST", "/api/compare/review", Create, Kind(K::Review)),
+    r("GET", "/api/suites/compare/review", Read, Kind(K::Review)),
     r(
         "POST",
         "/api/suites/compare/review",
         Create,
-        kind(K::Review),
+        Kind(K::Review),
     ),
-    r("GET", "/api/connections", Read, kind(K::Connection)),
-    r("POST", "/api/connections", Create, kind(K::Connection)),
+    r("GET", "/api/connections", Read, Kind(K::Connection)),
+    r("POST", "/api/connections", Create, Kind(K::Connection)),
     r(
         "DELETE",
         "/api/connections/{id}",
         Delete,
-        one(K::Connection),
+        One(K::Connection),
     ),
     r(
         "POST",
         "/api/connections/{id}/test",
         UseInRun,
-        one(K::Connection),
+        One(K::Connection),
     ),
-    r("GET", "/api/experiments", Read, kind(K::Experiment)),
-    r("POST", "/api/experiments", Create, kind(K::Experiment)),
-    r("GET", "/api/experiments/{id}", Read, one(K::Experiment)),
+    r("GET", "/api/experiments", Read, Kind(K::Experiment)),
+    r("POST", "/api/experiments", Create, Kind(K::Experiment)),
+    r("GET", "/api/experiments/{id}", Read, One(K::Experiment)),
     r(
         "POST",
         "/api/experiments/{id}/stop",
         Stop,
-        one(K::Experiment),
+        One(K::Experiment),
     ),
-    r("GET", "/api/suites", Read, kind(K::Suite)),
-    r("POST", "/api/suites", Create, kind(K::Suite)),
-    r("GET", "/api/suites/compare", Read, kind(K::Suite)),
-    r("GET", "/api/suites/{id}", Read, one(K::Suite)),
-    r("POST", "/api/suites/{id}/claim", Start, one(K::Suite)),
+    r("GET", "/api/suites", Read, Kind(K::Suite)),
+    r("POST", "/api/suites", Create, Kind(K::Suite)),
+    r("GET", "/api/suites/compare", Read, Kind(K::Suite)),
+    r("GET", "/api/suites/{id}", Read, One(K::Suite)),
+    r("POST", "/api/suites/{id}/claim", Start, One(K::Suite)),
     r("GET", "/api/tokens", ManageTokens, Instance),
     r("POST", "/api/tokens", ManageTokens, Instance),
     r("DELETE", "/api/tokens/{id}", ManageTokens, Instance),
-    r("GET", "/api/models/keys", Read, kind(K::ProviderKey)),
-    r("POST", "/api/models/keys", Create, kind(K::ProviderKey)),
+    r("GET", "/api/models/keys", Read, Kind(K::ProviderKey)),
+    r("POST", "/api/models/keys", Create, Kind(K::ProviderKey)),
     r(
         "DELETE",
         "/api/models/keys/{id}",
         Delete,
-        one(K::ProviderKey),
+        One(K::ProviderKey),
     ),
     r(
         "POST",
         "/api/models/keys/{id}/secret",
         ReplaceSecret,
-        one(K::ProviderKey),
+        One(K::ProviderKey),
     ),
     r(
         "POST",
         "/api/models/keys/{id}/test",
         ChangeSetup,
-        one(K::ProviderKey),
+        One(K::ProviderKey),
     ),
     r("GET", "/api/templates", Read, Instance),
     r("GET", "/api/templates/{id}", Read, Instance),
     r("POST", "/api/templates/{id}/preview", Read, Instance),
-    r("GET", "/api/worlds", Read, kind(K::World)),
-    r("POST", "/api/worlds", Create, kind(K::World)),
-    r("GET", "/api/worlds/{name}", Read, one(K::World)),
-    r("POST", "/api/worlds/{name}/use", ChangeSetup, one(K::World)),
+    r("GET", "/api/worlds", Read, Kind(K::World)),
+    r("POST", "/api/worlds", Create, Kind(K::World)),
+    r("GET", "/api/worlds/{name}", Read, One(K::World)),
+    r("POST", "/api/worlds/{name}/use", ChangeSetup, One(K::World)),
     r(
         "POST",
         "/api/worlds/{name}/prepare",
         ChangeSetup,
-        one(K::World),
+        One(K::World),
     ),
 ];
 
@@ -241,7 +233,7 @@ pub async fn authorize_route(
         .get::<MatchedPath>()
         .map(|m| m.as_str().to_string());
     let Some(c) = pattern.and_then(|p| case(req.method().as_str(), &p)) else {
-        return ApiError::not_found("no such route".to_string()).into_response();
+        return ApiError::not_found("no such route").into_response();
     };
     if c.public {
         return next.run(req).await;
@@ -251,7 +243,7 @@ pub async fn authorize_route(
     };
     if changes_this_machine(c) && !state.store.layer().policy().runs_packages_here {
         let why = "this shaked runs packages only in sandboxes";
-        return ApiError(axum::http::StatusCode::FORBIDDEN, why.into()).into_response();
+        return ApiError::forbidden(why).into_response();
     }
     let id = param(c.path, req.uri().path()).to_string();
     match ask(&state, &caller, c, &id).await {

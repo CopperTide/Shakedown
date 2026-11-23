@@ -60,12 +60,12 @@ fn deployments<'a>(ctx: &'a OpCtx<'a>, _: &'static Operation, value: Value) -> O
         for exp in records
             .deployments_of(id.as_str())
             .await
-            .map_err(internal)?
+            .map_err(OpError::internal)?
         {
-            if let Some(stored) = records.experiment(&exp).await.map_err(internal)? {
+            if let Some(stored) = records.experiment(&exp).await.map_err(OpError::internal)? {
                 let detail = crate::experiment::detail(app.store.at(&ctx.caller), &stored)
                     .await
-                    .map_err(internal)?;
+                    .map_err(OpError::internal)?;
                 out.push(
                     serde_json::to_value(detail)
                         .map_err(|e| OpError::bad_request(e.to_string()))?,
@@ -86,14 +86,11 @@ async fn credentials(
 ) -> Result<deploy::Credentials, OpError> {
     let mut creds = deploy::Credentials::default();
     if !needs.providers.is_empty() {
-        let rows = app.store.at(caller).list_keys().await.map_err(internal)?;
+        let rows = app.store.at(caller).list_keys().await;
+        let rows = rows.map_err(OpError::internal)?;
         let ids: Vec<_> = rows.iter().map(|r| r.id).collect();
-        let mine = app
-            .store
-            .layer()
-            .own_keys(caller, &ids)
-            .await
-            .map_err(internal)?;
+        let mine = app.store.layer().own_keys(caller, &ids).await;
+        let mine = mine.map_err(OpError::internal)?;
         for name in &needs.providers {
             let found = rows.iter().find(|r| &r.name == name);
             let verdict = match found {
@@ -111,11 +108,4 @@ async fn credentials(
         creds.credential(auth.clone(), read.map(|_| ()));
     }
     Ok(creds)
-}
-
-fn internal(e: anyhow::Error) -> OpError {
-    OpError::new(
-        axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-        format!("{e:#}"),
-    )
 }
