@@ -3,6 +3,7 @@
 //! refusal). Without a model: nothing here starts an agent.
 mod support;
 use support::records;
+use support::team_of;
 
 use serde_json::{json, Value};
 use shaked::model::*;
@@ -244,11 +245,7 @@ fn a_new_runs_limits_are_read_in_this_order() {
 
 /// A finished root branch of task 27.
 async fn finished_branch(fx: &AppFx) -> String {
-    let t = Team {
-        id: "t".into(),
-        name: "T".into(),
-        agents: vec![AgentSpec::new("a", AgentKind::ClaudeCode)],
-    };
+    let t = team_of(vec![AgentSpec::new("a", AgentKind::ClaudeCode)]);
     let run_id = records(&fx.state.store).create_run("27", &t).await.unwrap();
     let store = &fx.state.store;
     let none = json!([]);

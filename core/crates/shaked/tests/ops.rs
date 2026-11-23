@@ -5,13 +5,8 @@ mod support;
 
 use serde_json::{json, Value};
 use shaked::ops::{self, Access};
+use support::project::project_app;
 use support::{run, AppFx};
-
-fn larkspur() -> tempfile::TempDir {
-    let dir = tempfile::tempdir().unwrap();
-    support::copy_dir(&support::project_fixture(), dir.path());
-    dir
-}
 
 async fn call(fx: &AppFx, name: &str, input: Value) -> Result<Value, ops::OpError> {
     let op = ops::find(name).unwrap_or_else(|| panic!("no operation {name}"));
@@ -71,8 +66,7 @@ fn access_classes_follow_the_verb() {
 #[test]
 fn list_and_get() {
     run(async {
-        let dir = larkspur();
-        let fx = AppFx::idle("ops", "list").project(dir.path()).start().await;
+        let fx = project_app("ops", "list").await;
         let listed = call(&fx, "setups.list", json!({})).await.unwrap();
         assert_eq!(listed["items"].as_array().unwrap().len(), 3);
         let got = call(&fx, "scenarios.get", json!({"id": "supplier-slip"}))
@@ -90,9 +84,8 @@ fn list_and_get() {
 #[test]
 fn put_diff_first_does_not_write() {
     run(async {
-        let dir = larkspur();
-        let fx = AppFx::idle("ops", "diff").project(dir.path()).start().await;
-        let path = dir.path().join("scenarios/supplier-slip.yaml");
+        let fx = project_app("ops", "diff").await;
+        let path = fx.dir.path().join("scenarios/supplier-slip.yaml");
         let before = std::fs::read_to_string(&path).unwrap();
         let input = json!({"id": "supplier-slip", "body": scenario_body("Renamed")});
         let out = call(&fx, "scenarios.put", input).await.unwrap();
@@ -108,26 +101,18 @@ fn put_diff_first_does_not_write() {
 #[test]
 fn put_confirm_writes() {
     run(async {
-        let dir = larkspur();
-        let fx = AppFx::idle("ops", "confirm")
-            .project(dir.path())
-            .start()
-            .await;
+        let fx = project_app("ops", "confirm").await;
         let input = json!({"id": "new-one", "body": scenario_body("New"), "confirm": true});
         let out = call(&fx, "scenarios.put", input).await.unwrap();
         assert_eq!(out["label"], "New");
-        assert!(dir.path().join("scenarios/new-one.yaml").is_file());
+        assert!(fx.dir.path().join("scenarios/new-one.yaml").is_file());
     });
 }
 
 #[test]
 fn put_rejects_inline_secrets() {
     run(async {
-        let dir = larkspur();
-        let fx = AppFx::idle("ops", "secret")
-            .project(dir.path())
-            .start()
-            .await;
+        let fx = project_app("ops", "secret").await;
         let body = json!({"format": "shakedown-setup/1", "label": "S",
                           "team": {"kind": "http", "url": "https://x", "auth": {"key": "sk-ant-zzz999"}}});
         let input = json!({"id": "s", "body": body, "confirm": true});
@@ -140,8 +125,7 @@ fn put_rejects_inline_secrets() {
 #[test]
 fn bad_input_is_400() {
     run(async {
-        let dir = larkspur();
-        let fx = AppFx::idle("ops", "bad").project(dir.path()).start().await;
+        let fx = project_app("ops", "bad").await;
         let err = call(&fx, "scenarios.get", json!({})).await.unwrap_err();
         assert_eq!(err.status.as_u16(), 400);
         let err = call(&fx, "scenarios.get", json!({"id": "../x"}))
@@ -154,11 +138,7 @@ fn bad_input_is_400() {
 #[test]
 fn delete_removes_file() {
     run(async {
-        let dir = larkspur();
-        let fx = AppFx::idle("ops", "delete")
-            .project(dir.path())
-            .start()
-            .await;
+        let fx = project_app("ops", "delete").await;
         call(
             &fx,
             "experiments.delete",
@@ -166,7 +146,8 @@ fn delete_removes_file() {
         )
         .await
         .unwrap();
-        assert!(!dir
+        assert!(!fx
+            .dir
             .path()
             .join("experiments/supplier-slip-solo-vs-team.yaml")
             .exists());
@@ -176,11 +157,7 @@ fn delete_removes_file() {
 #[test]
 fn status_counts_and_problems() {
     run(async {
-        let dir = larkspur();
-        let fx = AppFx::idle("ops", "status")
-            .project(dir.path())
-            .start()
-            .await;
+        let fx = project_app("ops", "status").await;
         let status = call(&fx, "project.status", json!({})).await.unwrap();
         assert_eq!(status["name"], "Larkspur Ops");
         assert_eq!(status["counts"]["setups"], 3);
@@ -215,8 +192,7 @@ fn init_creates_a_project() {
 #[test]
 fn http_put_then_get_round_trips() {
     run(async {
-        let dir = larkspur();
-        let fx = AppFx::idle("ops", "http").project(dir.path()).start().await;
+        let fx = project_app("ops", "http").await;
         let url = format!("{}/api/project/scenarios/from-http", fx.base);
         let body = json!({"body": scenario_body("Over HTTP"), "confirm": true});
         let put = fx.http.put(&url).json(&body).send().await.unwrap();
@@ -246,11 +222,7 @@ fn settings(edit: &str) -> Value {
 #[test]
 fn update_settings_diff_first() {
     run(async {
-        let dir = larkspur();
-        let fx = AppFx::idle("ops", "settings")
-            .project(dir.path())
-            .start()
-            .await;
+        let fx = project_app("ops", "settings").await;
         let out = call(
             &fx,
             "project.update",
@@ -274,8 +246,7 @@ fn update_settings_diff_first() {
 #[test]
 fn apply_then_tell_writes_directly() {
     run(async {
-        let dir = larkspur();
-        let fx = AppFx::idle("ops", "tell").project(dir.path()).start().await;
+        let fx = project_app("ops", "tell").await;
         call(
             &fx,
             "project.update",
@@ -286,16 +257,8 @@ fn apply_then_tell_writes_directly() {
         let input = json!({"id": "direct", "body": scenario_body("Direct")});
         let out = call(&fx, "scenarios.put", input).await.unwrap();
         assert_eq!(out["label"], "Direct", "{out}");
-        assert!(dir.path().join("scenarios/direct.yaml").is_file());
+        assert!(fx.dir.path().join("scenarios/direct.yaml").is_file());
     });
-}
-
-/// A token of `scopes`, as the person mints it.
-async fn token(fx: &AppFx, scopes: Value) -> String {
-    let (_, minted) = fx
-        .post("/api/tokens", json!({"name": "t", "scopes": scopes}))
-        .await;
-    minted["token"].as_str().unwrap().to_string()
 }
 
 /// `PUT /api/project` as `token`: the status.
@@ -309,14 +272,10 @@ async fn put_settings(fx: &AppFx, token: &str) -> u16 {
 #[test]
 fn update_needs_admin_token() {
     run(async {
-        let dir = larkspur();
-        let fx = AppFx::idle("ops", "settings-token")
-            .project(dir.path())
-            .start()
-            .await;
-        let runner = token(&fx, json!(["read", "run"])).await;
+        let fx = project_app("ops", "settings-token").await;
+        let runner = fx.mint_token(&["read", "run"]).await;
         assert_eq!(put_settings(&fx, &runner).await, 403);
-        let admin = token(&fx, json!(["read", "run", "admin"])).await;
+        let admin = fx.mint_token(&["read", "run", "admin"]).await;
         assert_eq!(put_settings(&fx, &admin).await, 200);
     });
 }

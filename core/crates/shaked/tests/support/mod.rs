@@ -1,5 +1,6 @@
 //! What the integration tests share: one runtime to run them on, an app served on a free port
-//! (`AppFx`), and the support modules (Postgres, packages, the live model, old records).
+//! (`AppFx`), waiting for what the app does on its own (`poll_until`), and the support modules
+//! (Postgres, packages, the live model, the worker link, the example project, old records).
 #![allow(dead_code)]
 
 pub mod app;
@@ -7,20 +8,24 @@ pub mod driven;
 pub mod fake_apis;
 pub mod fake_llm;
 pub mod legacy;
+pub mod link;
 pub mod live;
 pub mod live_world;
 pub mod packages;
 pub mod pg;
+pub mod project;
 
 use std::{
     future::Future,
     path::PathBuf,
     sync::{Arc, LazyLock},
+    time::Duration,
 };
 
-use serde_json::Value;
+use serde_json::{json, Value};
 use shaked::{
     app::{AppState, Config},
+    model::{AgentKind, AgentSpec, Event, EventKind, Team},
     providers::ProviderConfig,
 };
 
@@ -50,6 +55,75 @@ pub fn keys(payload: &Value) -> Vec<String> {
     let p = written(payload);
     p.as_object()
         .map_or(vec![], |o| o.keys().cloned().collect())
+}
+
+/// How long a test waits for the app's own background work (a branch ended, a call recorded, a
+/// driver killed): three times the 10 s these waits allowed by counting polls.
+pub const WAIT: Duration = Duration::from_secs(30);
+/// How long a test waits for a run of task 27 to start or be scored on its own hub. Those runs
+/// build the task's base and gold saves, and the builds queue behind every other test's in the
+/// process (one lock per save name, `world::standard`), so on a busy box that alone can take
+/// minutes. Such a test checks what it means in world time on the world clock.
+pub const SAVES_BUILT: Duration = Duration::from_secs(300);
+/// How late (world ms) a window's `time_up` may come after the window's end: the watch looks at
+/// the clock every 100 ms of real time, and a busy box wakes it late.
+pub const TIME_UP_LATE_MS: i64 = 3000;
+/// How often a test looks again at what it waits for.
+pub const STEP: Duration = Duration::from_millis(100);
+
+/// Polls `ready` every `step` until it gives a value, for at most `limit` of wall time (a
+/// deadline, so slow polls never stretch it): the value, or None when the time ran out.
+pub async fn poll_until<T>(
+    limit: Duration,
+    step: Duration,
+    mut ready: impl AsyncFnMut() -> Option<T>,
+) -> Option<T> {
+    let deadline = tokio::time::Instant::now() + limit;
+    loop {
+        if let Some(v) = ready().await {
+            return Some(v);
+        }
+        if tokio::time::Instant::now() >= deadline {
+            return None;
+        }
+        tokio::time::sleep(step).await;
+    }
+}
+
+/// Writes the executable `sh` script `path` running `body`. A child process writes it, never a
+/// descriptor of this one: a test thread forking meanwhile would hold that descriptor open for
+/// writing until its child execs, and running the script then fails "Text file busy" (ETXTBSY),
+/// the more often the busier the box.
+pub fn write_script(path: &std::path::Path, body: &str) {
+    let write = r#"printf '#!/bin/sh\n%s\n' "$1" > "$0" && chmod 755 "$0""#;
+    let status = std::process::Command::new("sh")
+        .args(["-c", write])
+        .arg(path)
+        .arg(body)
+        .status()
+        .unwrap();
+    assert!(status.success(), "writing the script {}", path.display());
+}
+
+/// The team `t` ("T") of `agents`.
+pub fn team_of(agents: Vec<AgentSpec>) -> Team {
+    Team {
+        id: "t".into(),
+        name: "T".into(),
+        agents,
+    }
+}
+
+/// The team `t` of one open agent `a` ("A", prompt "p"), for records no agent runs.
+pub fn team() -> Team {
+    team_of(vec![AgentSpec::new("a", AgentKind::Open)
+        .with_name("A")
+        .with_prompt("p")])
+}
+
+/// The events of `evs` of `kind`.
+pub fn of_kind(evs: &[Event], kind: EventKind) -> Vec<&Event> {
+    evs.iter().filter(|e| e.kind == kind).collect()
 }
 
 /// Runs `body` on the live model, when there is one (else the test was skipped, said why).
@@ -122,6 +196,19 @@ impl AppFx {
 
     pub async fn delete(&self, path: &str) -> (u16, Value) {
         app::send(self.http.delete(format!("{}{path}", self.base))).await
+    }
+
+    /// `POST /api/branches/{branch}/fork` with `body`.
+    pub async fn fork(&self, branch: &str, body: Value) -> (u16, Value) {
+        self.post(&format!("/api/branches/{branch}/fork"), body)
+            .await
+    }
+
+    /// An API token of `scopes`, as the person mints it.
+    pub async fn mint_token(&self, scopes: &[&str]) -> String {
+        let body = json!({"name": scopes.join(","), "scopes": scopes});
+        let (_, minted) = self.post("/api/tokens", body).await;
+        minted["token"].as_str().expect("a token").to_string()
     }
 }
 
@@ -217,25 +304,6 @@ pub fn local() -> &'static shaked::auth::Caller {
 /// `store`'s records as the person at this machine.
 pub fn records(store: &shaked::store::Store) -> shaked::store::Scoped<'_> {
     store.at(local())
-}
-
-/// The example project folder the project crate's tests use.
-pub fn project_fixture() -> std::path::PathBuf {
-    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../project/tests/fixtures/larkspur")
-}
-
-/// Copies the folder `from` into `to`, recursively.
-pub fn copy_dir(from: &std::path::Path, to: &std::path::Path) {
-    std::fs::create_dir_all(to).unwrap();
-    for entry in std::fs::read_dir(from).unwrap() {
-        let entry = entry.unwrap();
-        let target = to.join(entry.file_name());
-        if entry.file_type().unwrap().is_dir() {
-            copy_dir(&entry.path(), &target);
-        } else {
-            std::fs::copy(entry.path(), target).unwrap();
-        }
-    }
 }
 
 /// A hand-made branch recording into `store` for its caller, as `begin_run` gives every branch.

@@ -8,7 +8,9 @@ use support::records;
 
 use serde_json::{json, Value};
 use shaked::model::*;
-use support::{app::send, live, live::Live, run, run_live, AppFx};
+use support::{
+    app::send, live, live::Live, poll_until, run, AppFx, SAVES_BUILT, STEP, TIME_UP_LATE_MS,
+};
 
 async fn setup(tag: &str) -> AppFx {
     AppFx::idle("external", tag).start().await
@@ -278,19 +280,16 @@ async fn assert_reported(fx: &AppFx, branch: &str, ran: &live::ExternalRun) {
     assert_eq!(a["peak_prompt_tokens"], json!(peak.unwrap()));
 }
 
+live_test!(
+    live_an_external_system_drives_a_run_and_shakedown_records_it,
+    an_external_system_drives_a_run_and_shakedown_records_it,
+    claude
+);
+
 /// An external system drives a run with Claude Code as its agent: Shakedown records the run's start,
 /// the agent's start, each tool call it made through its endpoint (with its fields), each model
 /// call its client reported, its end, and the check when the run is finished. A read-only agent
 /// that joins later is offered no write tool.
-#[test]
-#[ignore = "live: runs Claude Code (support/live.rs)"]
-fn live_an_external_system_drives_a_run_and_shakedown_records_it() {
-    run_live(
-        Live::claude("live_an_external_system_drives_a_run_and_shakedown_records_it"),
-        an_external_system_drives_a_run_and_shakedown_records_it,
-    );
-}
-
 async fn an_external_system_drives_a_run_and_shakedown_records_it(live: Live) {
     let fx = setup("drive").await;
     let branch = start(&fx).await;
@@ -315,18 +314,15 @@ async fn an_external_system_drives_a_run_and_shakedown_records_it(live: Live) {
     );
 }
 
+live_test!(
+    live_a_fork_of_an_external_run_hands_back_each_agents_history,
+    a_fork_of_an_external_run_hands_back_each_agents_history,
+    claude
+);
+
 /// A fork of an external run hands the system each agent's history up to the fork point and its
 /// endpoints on the new branch, whose world kept what was done before it; a fork may give
 /// another team instead (not with agent changes too), whose agents have no history.
-#[test]
-#[ignore = "live: runs Claude Code (support/live.rs)"]
-fn live_a_fork_of_an_external_run_hands_back_each_agents_history() {
-    run_live(
-        Live::claude("live_a_fork_of_an_external_run_hands_back_each_agents_history"),
-        a_fork_of_an_external_run_hands_back_each_agents_history,
-    );
-}
-
 async fn a_fork_of_an_external_run_hands_back_each_agents_history(live: Live) {
     let fx = setup("fork").await;
     let branch = start(&fx).await;
@@ -408,25 +404,18 @@ async fn status_of(fx: &AppFx, branch: &str) -> Value {
     b
 }
 
-/// Waits (at most `secs`) until the branch is no longer running: its record. Scoring a run of
-/// task 27 first builds the task's gold save on the test's own hub, which can take seconds of its
-/// own beside other tests, so the waits leave room past the window.
-async fn ended_within(fx: &AppFx, branch: &str, secs: u64) -> Value {
-    let since = std::time::Instant::now();
-    loop {
-        let b = status_of(fx, branch).await;
-        if b["status"] != "running" {
-            return b;
-        }
-        if since.elapsed().as_secs() >= secs {
-            let evs = fx.events(branch).await;
-            let said: Vec<String> = (evs.iter())
-                .map(|e| format!("{:?} {} {}", e.kind, e.payload["part"], e.payload["kind"]))
-                .collect();
-            panic!("still running after {secs} s: {said:?}");
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+/// The branch's record once it is no longer running: the run builds its saves first, so the wait
+/// is [`SAVES_BUILT`], and what the window means is checked on the world clock.
+async fn ended(fx: &AppFx, branch: &str) -> Value {
+    let over = async || Some(status_of(fx, branch).await).filter(|b| b["status"] != "running");
+    if let Some(b) = poll_until(SAVES_BUILT, STEP, over).await {
+        return b;
     }
+    let evs = fx.events(branch).await;
+    let said: Vec<String> = (evs.iter())
+        .map(|e| format!("{:?} {} {}", e.kind, e.payload["part"], e.payload["kind"]))
+        .collect();
+    panic!("still running after {SAVES_BUILT:?}: {said:?}");
 }
 
 /// The payload of the branch's world event `part`/`kind`, if it has one.
@@ -438,7 +427,8 @@ async fn world_event(fx: &AppFx, branch: &str, part: &str, kind: &str) -> Option
     evs.iter().find(hit).map(|e| e.payload.clone())
 }
 
-/// The branch was scored after its window's end at clock `at_least` or later.
+/// The branch's window ended at clock `at_least`, no later than [`TIME_UP_LATE_MS`] after it, and
+/// the branch was scored after that.
 async fn scored_at_the_window(fx: &AppFx, branch: &str, at_least: i64) {
     let evs = fx.events(branch).await;
     let up = |e: &&Event| e.kind == EventKind::WorldEvent && e.payload["kind"] == "time_up";
@@ -452,6 +442,12 @@ async fn scored_at_the_window(fx: &AppFx, branch: &str, at_least: i64) {
         "{}",
         up.payload
     );
+    let late = at_least + TIME_UP_LATE_MS;
+    assert!(
+        up.payload["clock_ms"].as_i64().unwrap() <= late,
+        "{}",
+        up.payload
+    );
     assert!(check.seq > up.seq, "scored before the window ended");
 }
 
@@ -460,7 +456,7 @@ fn a_world_time_window_ends_the_run_scored_at_its_limit() {
     run(async {
         let fx = setup("window").await;
         let branch = start_with(&fx, json!({"world_minutes": 0.05})).await;
-        ended_within(&fx, &branch, 30).await;
+        ended(&fx, &branch).await;
         scored_at_the_window(&fx, &branch, 3000).await;
         let up = world_event(&fx, &branch, "window", "time_up")
             .await
@@ -486,7 +482,7 @@ fn a_driver_that_finishes_early_is_scored_at_the_limit() {
         );
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         assert_eq!(status_of(&fx, &branch).await["status"], "running");
-        ended_within(&fx, &branch, 30).await;
+        ended(&fx, &branch).await;
         scored_at_the_window(&fx, &branch, 6000).await;
     })
 }
@@ -500,7 +496,7 @@ fn a_held_finish_with_an_error_ends_failed_and_scored() {
             .finish_with(&branch, json!({"error": "driver raised X"}))
             .await;
         assert_eq!((status, &v["status"]), (200, &json!("running")), "{v}");
-        let b = ended_within(&fx, &branch, 30).await;
+        let b = ended(&fx, &branch).await;
         assert_eq!(
             (&b["status"], &b["error"]),
             (&json!("failed"), &json!("driver raised X"))
@@ -518,8 +514,9 @@ fn a_pause_holds_the_window() {
         assert_eq!(fx.on(&branch, "pause", json!({})).await.0, 200);
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
         assert_eq!(fx.on(&branch, "resume", json!({})).await.0, 200);
-        ended_within(&fx, &branch, 30).await;
+        ended(&fx, &branch).await;
         assert!(since.elapsed().as_millis() >= 5000, "{:?}", since.elapsed());
+        scored_at_the_window(&fx, &branch, 3000).await;
     })
 }
 

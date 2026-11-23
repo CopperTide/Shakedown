@@ -5,13 +5,8 @@ mod support;
 
 use serde_json::{json, Value};
 use shaked::ops::{self, OpCtx};
+use support::project::{project_app, project_copy};
 use support::{run, AppFx};
-
-fn larkspur() -> tempfile::TempDir {
-    let dir = tempfile::tempdir().unwrap();
-    support::copy_dir(&support::project_fixture(), dir.path());
-    dir
-}
 
 async fn madl(fx: &AppFx, id: &str) -> Result<Value, ops::OpError> {
     let op = ops::find("setups.madl").expect("setups.madl");
@@ -21,11 +16,7 @@ async fn madl(fx: &AppFx, id: &str) -> Result<Value, ops::OpError> {
 #[test]
 fn valid_madl_graph() {
     run(async {
-        let dir = larkspur();
-        let fx = AppFx::idle("madl", "valid")
-            .project(dir.path())
-            .start()
-            .await;
+        let fx = project_app("madl", "valid").await;
         let out = madl(&fx, "planning-team").await.unwrap();
         assert_eq!(out["valid"], true, "{out}");
         let agents: Vec<&str> = out["graph"]["agents"]
@@ -48,7 +39,7 @@ fn valid_madl_graph() {
 #[test]
 fn invalid_madl_lists_codes() {
     run(async {
-        let dir = larkspur();
+        let dir = project_copy();
         let file = dir.path().join("setups/planning-team/team.madl.yaml");
         let text = std::fs::read_to_string(&file).unwrap().replace(
             "members: [researcher, writer, editor]",
@@ -73,7 +64,7 @@ fn invalid_madl_lists_codes() {
 #[test]
 fn missing_madl_file() {
     run(async {
-        let dir = larkspur();
+        let dir = project_copy();
         std::fs::remove_file(dir.path().join("setups/planning-team/team.madl.yaml")).unwrap();
         let fx = AppFx::idle("madl", "missing")
             .project(dir.path())
@@ -93,8 +84,7 @@ fn missing_madl_file() {
 #[test]
 fn not_madl() {
     run(async {
-        let dir = larkspur();
-        let fx = AppFx::idle("madl", "not").project(dir.path()).start().await;
+        let fx = project_app("madl", "not").await;
         let err = madl(&fx, "solo-planner").await.unwrap_err();
         assert_eq!(err.status.as_u16(), 422);
         assert!(

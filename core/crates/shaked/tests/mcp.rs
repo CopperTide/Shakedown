@@ -1,5 +1,6 @@
 mod support;
 use support::records;
+use support::team_of;
 
 use std::{path::PathBuf, sync::Arc};
 
@@ -45,11 +46,7 @@ async fn new_branch(store: &Store) -> (Team, String) {
         tools: vec!["get_user_details".into()],
         ..agent("lister")
     };
-    let team = Team {
-        id: "t".into(),
-        name: "T".into(),
-        agents: vec![agent("triage"), auditor, lister, agent("resolver")],
-    };
+    let team = team_of(vec![agent("triage"), auditor, lister, agent("resolver")]);
     let run_id = records(store).create_run("task", &team).await.unwrap();
     let branch = records(store)
         .create_branch(&run_id, None, &team, &json!([]), None)

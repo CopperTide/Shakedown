@@ -134,10 +134,7 @@ fn a_fork_keeps_its_runs_epoch() {
         tokio::time::sleep(Duration::from_millis(50)).await;
         assert_eq!(fx.on(&fx.branch, "finish").await.0, 200);
         let body = json!({"at_seq": start, "changes": {}});
-        let (status, v) = fx
-            .fx
-            .post(&format!("/api/branches/{}/fork", fx.branch), body)
-            .await;
+        let (status, v) = fx.fx.fork(&fx.branch, body).await;
         assert_eq!(status, 200, "{v}");
         let starts = fx.timed_starts();
         assert_eq!(starts.len(), 2, "{starts:?}");

@@ -3,6 +3,7 @@
 //! a lookup, the worker reads the order and reports, the lead finishes; a fork at the delegation
 //! restarts both there and runs on to the end, on the world as it was at the fork point.
 mod support;
+use support::of_kind;
 use support::records;
 
 use std::sync::Arc;
@@ -123,10 +124,6 @@ async fn dispatched(tag: &str, llm: &FakeLlm, extra: Value) -> (AppFx, String) {
     (fx, branch)
 }
 
-fn of_kind(evs: &[Event], kind: EventKind) -> Vec<&Event> {
-    evs.iter().filter(|e| e.kind == kind).collect()
-}
-
 /// The order's status in the worker's reads on the branch.
 fn read_statuses(evs: &[Event]) -> Vec<Value> {
     let reads = evs
@@ -186,7 +183,7 @@ fn a_fork_of_a_dispatch_run_restarts_its_agents_at_the_delegation_and_runs_to_th
 /// Forks `branch` through the API as `body` asks and waits for the new branch to end: its events
 /// from the fork point on.
 async fn forked(fx: &AppFx, branch: &str, body: Value) -> Vec<Event> {
-    let (status, f) = fx.post(&format!("/api/branches/{branch}/fork"), body).await;
+    let (status, f) = fx.fork(branch, body).await;
     assert_eq!(status, 200, "{f}");
     let id = f["branch_id"].as_str().unwrap();
     let b = live::ended(&fx.state, id).await;

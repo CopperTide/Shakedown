@@ -2,29 +2,19 @@
 //! `shaked worker` in a sandbox would. The branch is made by `record_start`, so it has no events
 //! before the worker's first (the worker records `RunStart` itself).
 mod support;
-use support::{app::send, pg::query_text, records, run, AppFx};
+use support::link::{self, hear, heard, hello, say, ticket_for, Ws};
+use support::{app::send, pg::query_text, poll_until, records, run, team_of, AppFx, STEP};
 
 use std::{sync::Arc, time::Duration};
 
-use futures_util::{SinkExt, StreamExt};
 use serde_json::{json, Value};
 use shaked::{
-    app::{AppState, Config},
-    auth::{run_tokens::resolve_run_token, Caller, Decision},
-    launch::LaunchSpec,
+    app::Config,
+    auth::{run_tokens::resolve_run_token, Decision},
     model::*,
-    runner::{self, BranchPlan},
-    scenario::Scenario,
-    worker::{
-        frames::{ToControl, ToWorker},
-        Ticket,
-    },
+    runner::BranchPlan,
+    worker::frames::{ToControl, ToWorker},
 };
-use tokio_tungstenite::tungstenite::Message;
-use uuid::Uuid;
-
-type Ws =
-    tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
 
 async fn setup(tag: &str) -> AppFx {
     AppFx::idle("worker", tag).bench("retail").start().await
@@ -40,69 +30,12 @@ async fn impatient(tag: &str, ms: u64) -> AppFx {
     fx.start().await
 }
 
-fn team() -> Team {
-    Team {
-        id: "t".into(),
-        name: "T".into(),
-        agents: vec![AgentSpec::new("a", AgentKind::ClaudeCode).with_model("sonnet")],
-    }
-}
-
-fn ticket_for(plan: &BranchPlan) -> Ticket {
-    Ticket {
-        branch_id: plan.branch_id.clone(),
-        sandbox: Uuid::new_v4(),
-        caller: Arc::new(Caller::person()),
-    }
-}
-
 /// A branch made by `record_start`, expected on the link, and a ticket for it.
 async fn branch(fx: &AppFx) -> (BranchPlan, String) {
-    let scope = Arc::new(Caller::person());
-    let scenario = Scenario::default();
-    let spec = LaunchSpec {
-        scope: scope.clone(),
-        task_id: "27",
-        team: team(),
-        scenario: &scenario,
-        rules: Rules::new(Runner::Chain),
-        driver: None,
-        benchmark: None,
-    };
-    let plan = runner::record_start(&fx.state, &spec).await.unwrap();
-    fx.state.links.expect(plan.clone());
-    let ticket = fx.state.links.tickets.issue(ticket_for(&plan));
-    (plan, ticket)
-}
-
-async fn connect(fx: &AppFx) -> Ws {
-    connect_to(&fx.base).await
-}
-
-async fn connect_to(base: &str) -> Ws {
-    let url = format!("{}/worker", base.replace("http://", "ws://"));
-    tokio_tungstenite::connect_async(url).await.unwrap().0
-}
-
-async fn say(ws: &mut Ws, f: &ToControl) {
-    let text = serde_json::to_string(f).unwrap();
-    ws.send(Message::text(text)).await.unwrap();
-}
-
-/// The next frame the control box sends; None once it has closed the link.
-async fn heard(ws: &mut Ws) -> Option<ToWorker> {
-    loop {
-        let next = tokio::time::timeout(Duration::from_secs(10), ws.next()).await;
-        match next.expect("the control box answers within 10 s") {
-            Some(Ok(Message::Text(t))) => return Some(serde_json::from_str(&t).unwrap()),
-            Some(Ok(Message::Ping(_) | Message::Pong(_))) => continue,
-            _ => return None,
-        }
-    }
-}
-
-async fn hear(ws: &mut Ws) -> ToWorker {
-    heard(ws).await.expect("a frame, not a closed link")
+    let team = team_of(vec![
+        AgentSpec::new("a", AgentKind::ClaudeCode).with_model("sonnet")
+    ]);
+    link::ticketed(fx, "27", team, Rules::new(Runner::Chain)).await
 }
 
 /// True when the control box sends no frame (pings aside) within `ms` milliseconds.
@@ -110,13 +43,6 @@ async fn quiet_for(ws: &mut Ws, ms: u64) -> bool {
     tokio::time::timeout(Duration::from_millis(ms), heard(ws))
         .await
         .is_err()
-}
-
-fn hello(ticket: &str, resume_from: u64) -> ToControl {
-    ToControl::Hello {
-        ticket: ticket.into(),
-        resume_from,
-    }
 }
 
 fn event(n: u64) -> ToControl {
@@ -131,8 +57,7 @@ fn event(n: u64) -> ToControl {
 
 /// Says hello with `ticket`: the link and the worker token `Start` carried.
 async fn started(fx: &AppFx, plan: &BranchPlan, ticket: &str) -> (Ws, String) {
-    let mut ws = connect(fx).await;
-    say(&mut ws, &hello(ticket, 0)).await;
+    let mut ws = link::joined(&fx.base, ticket, 0).await;
     let ToWorker::Start {
         plan: got,
         token,
@@ -216,13 +141,11 @@ fn a_ticket_works_once_and_only_for_its_branch() {
         let (b, _) = branch(&fx).await;
         let (_link, token) = started(&fx, &a, &ticket).await;
 
-        let mut again = connect(&fx).await;
-        say(&mut again, &hello(&ticket, 0)).await;
+        let mut again = link::joined(&fx.base, &ticket, 0).await;
         assert!(refused(&mut again).await.contains("ticket"));
 
         let expired = (fx.state.links.tickets).issue_lasting(ticket_for(&b), Duration::ZERO);
-        let mut late = connect(&fx).await;
-        say(&mut late, &hello(&expired, 0)).await;
+        let mut late = link::joined(&fx.base, &expired, 0).await;
         assert!(refused(&mut late).await.contains("ticket"));
         assert!(!fx.state.links.connected(&b.branch_id));
 
@@ -241,8 +164,7 @@ fn a_ticket_works_once_and_only_for_its_branch() {
         assert_eq!(as_token(&fx, &token, false, "/api/runs").await, 403);
         assert!(texts(&fx, bb).await.is_empty());
 
-        let mut forged = connect(&fx).await;
-        say(&mut forged, &hello("sdw_0000", 0)).await;
+        let mut forged = link::joined(&fx.base, "sdw_0000", 0).await;
         assert!(refused(&mut forged).await.contains("token"));
     });
 }
@@ -263,8 +185,7 @@ fn a_dropped_connection_loses_and_doubles_nothing() {
         }
         drop(ws);
 
-        let mut ws = connect(&fx).await;
-        say(&mut ws, &hello(&token, 3)).await;
+        let mut ws = link::joined(&fx.base, &token, 3).await;
         for n in 4..=6 {
             say(&mut ws, &event(n)).await;
         }
@@ -274,8 +195,7 @@ fn a_dropped_connection_loses_and_doubles_nothing() {
         }
         assert_eq!(texts(&fx, &id).await, numbered(1..=6));
 
-        let mut ahead = connect(&fx).await;
-        say(&mut ahead, &hello(&token, 9)).await;
+        let mut ahead = link::joined(&fx.base, &token, 9).await;
         assert!(refused(&mut ahead).await.contains("resume_from"));
     });
 }
@@ -313,17 +233,6 @@ async fn acked(ws: &mut Ws, ns: &[(u64, i64)]) {
     }
 }
 
-/// A second control box on `fx`'s database, with nothing in memory: its base URL.
-async fn restarted(fx: &AppFx) -> (Arc<AppState>, String) {
-    let (listener, base) = support::app::bind().await;
-    let mut config = Config::new();
-    config.self_base = base.clone();
-    let store = fx.state.store.clone();
-    let state = Arc::new(AppState::new(store, fx.state.hub.clone(), config));
-    support::app::serve(listener, &state);
-    (state, base)
-}
-
 #[test]
 fn a_restarted_control_box_rejoins_without_doubling() {
     run(async {
@@ -339,10 +248,9 @@ fn a_restarted_control_box_rejoins_without_doubling() {
         acked(&mut ws, &[(4, 5), (5, 6)]).await;
         drop(ws);
 
-        let (again, base) = restarted(&fx).await;
+        let (again, base) = link::restarted(&fx, Config::new()).await;
         assert!(!again.links.connected(&id));
-        let mut ws = connect_to(&base).await;
-        say(&mut ws, &hello(&token, 3)).await;
+        let mut ws = link::joined(&base, &token, 3).await;
         acked(&mut ws, &[(4, 5), (5, 6), (6, 7)]).await;
         assert!(again.links.connected(&id));
         let mut want = numbered(1..=7);
@@ -360,7 +268,7 @@ fn two_tickets_for_one_branch_start_one_worker() {
         let fx = setup("race").await;
         let (plan, first) = branch(&fx).await;
         let second = fx.state.links.tickets.issue(ticket_for(&plan));
-        let (mut a, mut b) = (connect(&fx).await, connect(&fx).await);
+        let (mut a, mut b) = (link::connect(&fx.base).await, link::connect(&fx.base).await);
         say(&mut a, &hello(&first, 0)).await;
         say(&mut b, &hello(&second, 0)).await;
         let answers = [hear(&mut a).await, hear(&mut b).await];
@@ -384,7 +292,7 @@ fn two_tickets_for_one_branch_start_one_worker() {
 fn a_link_without_hello_in_time_is_refused() {
     run(async {
         let fx = impatient("hello", 300).await;
-        let mut ws = connect(&fx).await;
+        let mut ws = link::connect(&fx.base).await;
         assert!(refused(&mut ws).await.contains("hello"));
         assert_eq!(heard(&mut ws).await, None, "and closed");
     });
@@ -397,13 +305,9 @@ fn a_silent_link_is_closed() {
         let (plan, ticket) = branch(&fx).await;
         let (_ws, _) = started(&fx, &plan, &ticket).await;
         // The client never reads again, so it answers no ping.
-        let gone = async {
-            while fx.state.links.connected(&plan.branch_id) {
-                tokio::time::sleep(Duration::from_millis(50)).await;
-            }
-        };
-        let within = tokio::time::timeout(Duration::from_secs(5), gone).await;
-        assert!(within.is_ok(), "connected() went false");
+        let gone = async || (!fx.state.links.connected(&plan.branch_id)).then_some(());
+        let within = poll_until(Duration::from_secs(15), STEP, gone).await;
+        assert!(within.is_some(), "connected() went false");
     });
 }
 
@@ -491,9 +395,8 @@ fn a_real_restart_keeps_a_linked_branch_running() {
             "no worker: ended as before"
         );
 
-        let (_again, base) = restarted(&fx).await;
-        let mut ws = connect_to(&base).await;
-        say(&mut ws, &hello(&token, 1)).await;
+        let (_again, base) = link::restarted(&fx, Config::new()).await;
+        let mut ws = link::joined(&base, &token, 1).await;
         acked(&mut ws, &[(2, 2), (3, 3)]).await;
         assert_eq!(texts(&fx, &plan.branch_id).await, numbered(1..=3));
     });
@@ -509,9 +412,8 @@ fn a_worker_token_of_an_ended_branch_cannot_rejoin() {
         let store = records(&fx.state.store);
         let ended = store.set_status(&plan.branch_id, BranchStatus::Interrupted, None);
         ended.await.unwrap();
-        for base in [fx.base.clone(), restarted(&fx).await.1] {
-            let mut ws = connect_to(&base).await;
-            say(&mut ws, &hello(&token, 0)).await;
+        for base in [fx.base.clone(), link::restarted(&fx, Config::new()).await.1] {
+            let mut ws = link::joined(&base, &token, 0).await;
             assert!(refused(&mut ws).await.contains("ended"), "{base}");
         }
         assert!(texts(&fx, &plan.branch_id).await.is_empty());

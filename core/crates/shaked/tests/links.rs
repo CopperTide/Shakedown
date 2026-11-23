@@ -7,6 +7,7 @@
 //! clock, the setup and the links do what they do on their own.
 mod support;
 use support::records;
+use support::team_of;
 
 use std::sync::Arc;
 
@@ -17,18 +18,14 @@ use support::{
     live,
     live::Live,
     packages::{counter, package_root, toy, Package, TestHub, ToyRoot},
-    run, run_live, AppFx,
+    run, AppFx,
 };
 
 /// A team for runs that never reach an agent, and for live branches driven through MCP.
 fn idle_team() -> Team {
-    Team {
-        id: "t".into(),
-        name: "T".into(),
-        agents: vec![AgentSpec::new("solo", AgentKind::ClaudeCode)
-            .with_model("haiku")
-            .with_prompt("You are solo.")],
-    }
+    team_of(vec![AgentSpec::new("solo", AgentKind::ClaudeCode)
+        .with_model("haiku")
+        .with_prompt("You are solo.")])
 }
 
 async fn setup(tag: &str, root: ToyRoot) -> AppFx {
@@ -46,12 +43,6 @@ impl AppFx {
         let (b, evs) = live::ended_ok(&self.state, &branch).await;
         live::assert_recorded(&b, &evs, live);
         (branch, evs)
-    }
-
-    async fn fork(&self, branch: &str, at_seq: i64) -> (u16, Value) {
-        let url = format!("{}/api/branches/{branch}/fork", self.base);
-        let body = json!({"at_seq": at_seq, "changes": {}});
-        send(reqwest::Client::new().post(url).json(&body)).await
     }
 
     /// A branch of `t1` whose world is started and live, as a run's is before its agents: its
@@ -191,18 +182,14 @@ fn after_the_link(evs: &[Event]) -> Option<i64> {
     Some(start)
 }
 
+live_test!(
+    live_an_event_calls_the_linked_tool_and_a_replay_repeats_it,
+    an_event_calls_the_linked_tool_and_a_replay_repeats_it
+);
+
 /// The alarm calls `add` as a `link` step at the alarm's time, agents don't get `add`, a read
 /// after it sees what it added, and an exact fork after the link's step gets its effect from the
 /// record and calls nothing again.
-#[test]
-#[ignore = "live: runs a real model (support/live.rs)"]
-fn live_an_event_calls_the_linked_tool_and_a_replay_repeats_it() {
-    run_live(
-        Live::any("live_an_event_calls_the_linked_tool_and_a_replay_repeats_it"),
-        an_event_calls_the_linked_tool_and_a_replay_repeats_it,
-    );
-}
-
 async fn an_event_calls_the_linked_tool_and_a_replay_repeats_it(live: Live) {
     let fx = setup("alarm", alarm_world("alarm", "replay_only", json!(1000))).await;
     let tools = fx.agent_tools().await;
@@ -221,7 +208,7 @@ async fn an_event_calls_the_linked_tool_and_a_replay_repeats_it(live: Live) {
     let Some(at) = after_the_link(&evs) else {
         return;
     };
-    let (st, v) = fx.fork(&parent, at).await;
+    let (st, v) = fx.fork(&parent, json!({"at_seq": at, "changes": {}})).await;
     assert_eq!(st, 200, "{v}");
     let child = v["branch_id"].as_str().unwrap();
     let (_b, cevs) = live::ended_ok(&fx.state, child).await;
@@ -233,17 +220,13 @@ async fn an_event_calls_the_linked_tool_and_a_replay_repeats_it(live: Live) {
     );
 }
 
+live_test!(
+    live_a_linked_call_that_replays_differently_diverges,
+    a_linked_call_that_replays_differently_diverges
+);
+
 /// A link's call is an input of its part: what it gave must come out again on a replay, so a
 /// part whose answers vary can't be restored past it.
-#[test]
-#[ignore = "live: runs a real model (support/live.rs)"]
-fn live_a_linked_call_that_replays_differently_diverges() {
-    run_live(
-        Live::any("live_a_linked_call_that_replays_differently_diverges"),
-        a_linked_call_that_replays_differently_diverges,
-    );
-}
-
 async fn a_linked_call_that_replays_differently_diverges(live: Live) {
     let fx = setup("noisy", alarm_world("noisy", "nondeterministic", json!(1))).await;
     let (parent, evs) = fx.run_to_end(&live, two_readers(&live)).await;
@@ -251,22 +234,18 @@ async fn a_linked_call_that_replays_differently_diverges(live: Live) {
         return;
     };
     let seq = link_steps(&evs)[0].seq;
-    let (st, v) = fx.fork(&parent, at).await;
+    let (st, v) = fx.fork(&parent, json!({"at_seq": at, "changes": {}})).await;
     assert_eq!(st, 409, "{v}");
     let want = format!("replay of c diverged at step {seq}, so it can't be restored exactly");
     assert_eq!(v["error"], want.as_str());
 }
 
-/// An argument the event lacks: the step says so and the part is not called.
-#[test]
-#[ignore = "live: runs a real model (support/live.rs)"]
-fn live_an_argument_the_event_lacks_is_a_step_error() {
-    run_live(
-        Live::any("live_an_argument_the_event_lacks_is_a_step_error"),
-        an_argument_the_event_lacks_is_a_step_error,
-    );
-}
+live_test!(
+    live_an_argument_the_event_lacks_is_a_step_error,
+    an_argument_the_event_lacks_is_a_step_error
+);
 
+/// An argument the event lacks: the step says so and the part is not called.
 async fn an_argument_the_event_lacks_is_a_step_error(live: Live) {
     let fx = setup(
         "lacks",
@@ -310,13 +289,9 @@ fn an_event_in_a_tool_result_calls_the_link() {
     })
 }
 
-/// Links that set each other off stop at the limit, with a step that says so.
-#[test]
-#[ignore = "live: runs a real model (support/live.rs)"]
-fn live_links_in_a_loop_stop() {
-    run_live(Live::any("live_links_in_a_loop_stop"), links_in_a_loop_stop);
-}
+live_test!(live_links_in_a_loop_stop, links_in_a_loop_stop);
 
+/// Links that set each other off stop at the limit, with a step that says so.
 async fn links_in_a_loop_stop(live: Live) {
     let link = json!({"from": "a", "event": "alarm", "to": "a", "tool": "a_poke"});
     let part_args = [
@@ -414,16 +389,10 @@ fn a_gate_holds_a_tool_back_until_the_document_allows_it() {
     })
 }
 
-/// A benchmark that scores itself gets the world's end state; a branch passes when every named
-/// check does (here: the box was poked), and no gold world is made.
-#[test]
-#[ignore = "live: runs a real model (support/live.rs)"]
-fn live_a_scored_benchmark_checks_the_end_state() {
-    run_live(
-        Live::any("live_a_scored_benchmark_checks_the_end_state"),
-        a_scored_benchmark_checks_the_end_state,
-    );
-}
+live_test!(
+    live_a_scored_benchmark_checks_the_end_state,
+    a_scored_benchmark_checks_the_end_state
+);
 
 /// A world of one toy part `box` whose benchmark scores itself: `poked` once it was poked.
 fn scored_world() -> ToyRoot {
@@ -444,6 +413,8 @@ fn scored_world() -> ToyRoot {
     )
 }
 
+/// A benchmark that scores itself gets the world's end state; a branch passes when every named
+/// check does (here: the box was poked), and no gold world is made.
 async fn a_scored_benchmark_checks_the_end_state(live: Live) {
     let root = scored_world();
     let fx = setup("scored", root).await;
@@ -495,17 +466,10 @@ fn setup_world(tag: &str, a_args: &[&str], setup: &[Value], links: &[Value]) -> 
     )
 }
 
-/// A task's setup is made before any agent, as steps of the actor `setup` that save what they
-/// changed; its tool is the world's own (agents don't get it), and the events it gives set off
-/// links.
-#[test]
-#[ignore = "live: runs a real model (support/live.rs)"]
-fn live_a_tasks_setup_runs_before_the_agents() {
-    run_live(
-        Live::any("live_a_tasks_setup_runs_before_the_agents"),
-        a_tasks_setup_runs_before_the_agents,
-    );
-}
+live_test!(
+    live_a_tasks_setup_runs_before_the_agents,
+    a_tasks_setup_runs_before_the_agents
+);
 
 /// The setup's poke, then the link it set off, both before the agent, then only the agent's
 /// calls; the setup's step saved what it changed.
@@ -529,6 +493,9 @@ fn assert_setup_then_link_then_agent(evs: &[Event]) {
     assert_eq!(named(linked), (json!("b_poke"), json!("b")));
 }
 
+/// A task's setup is made before any agent, as steps of the actor `setup` that save what they
+/// changed; its tool is the world's own (agents don't get it), and the events it gives set off
+/// links.
 async fn a_tasks_setup_runs_before_the_agents(live: Live) {
     let poke = json!({"part": "a", "tool": "a_poke"});
     let link = json!({"from": "a", "event": "rung", "to": "b", "tool": "b_poke"});

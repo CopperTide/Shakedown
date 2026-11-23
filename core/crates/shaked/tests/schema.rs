@@ -8,16 +8,7 @@ use support::{legacy, pg, run};
 
 mod support;
 use support::records;
-
-fn team() -> Team {
-    Team {
-        id: "t".into(),
-        name: "T".into(),
-        agents: vec![AgentSpec::new("a", AgentKind::Open)
-            .with_name("A")
-            .with_prompt("p")],
-    }
-}
+use support::team;
 
 /// The rows of `sql` in database `db`, each as one string.
 async fn rows(db: &str, sql: &str) -> Vec<String> {

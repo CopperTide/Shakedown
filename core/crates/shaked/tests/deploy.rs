@@ -77,23 +77,10 @@ fn create_experiment_records_its_file() {
     });
 }
 
-/// A provider that accepts connections and never answers: a run on it stays running.
-async fn silent_provider() -> String {
-    let (listener, base) = app::bind().await;
-    tokio::spawn(async move {
-        let mut held = vec![];
-        while let Ok((socket, _)) = listener.accept().await {
-            held.push(socket);
-        }
-    });
-    base
-}
-
 /// The example project made deployable on the toy benchmark: its world runs on `toybench`, its
 /// scenario plays task t1 without faults, and its experiment compares the solo planner alone.
 fn runnable_project() -> tempfile::TempDir {
-    let dir = tempfile::tempdir().unwrap();
-    support::copy_dir(&support::project_fixture(), dir.path());
+    let dir = support::project::project_copy();
     let edit = |file: &str, from: &str, to: &str| {
         let path = dir.path().join(file);
         let text = std::fs::read_to_string(&path).unwrap();
@@ -138,7 +125,7 @@ async fn deploy_app_on(
     let mut setup = AppFx::idle("deploy", tag)
         .root(root)
         .bench("toybench")
-        .providers(ProviderConfig::with_upstream(&silent_provider().await))
+        .providers(ProviderConfig::with_upstream(&app::silent_provider().await))
         .project(project);
     if let Some(layer) = layer {
         setup = setup.layer(layer);
@@ -200,10 +187,7 @@ fn read_token_cannot_deploy() {
     run(async {
         let dir = runnable_project();
         let fx = deploy_app("deploy-scope", dir.path()).await;
-        let (_, minted) = fx
-            .post("/api/tokens", json!({"name": "r", "scopes": ["read"]}))
-            .await;
-        let token = minted["token"].as_str().unwrap().to_string();
+        let token = fx.mint_token(&["read"]).await;
         let url = |p: &str| format!("{}{p}", fx.base);
         let refused = fx
             .http
@@ -259,15 +243,11 @@ fn a_key_that_is_not_stored_refuses_the_deploy() {
 
 const ENDPOINT_SECRET: &str = "sk-endpoint-s3cret";
 
-/// Polls `done` for up to half a minute.
+/// Waits until `done` holds (up to a minute and a half).
 async fn wait_for(done: impl Fn() -> bool) {
-    for _ in 0..60 {
-        if done() {
-            return;
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-    }
-    panic!("it did not happen in time");
+    let limit = std::time::Duration::from_secs(90);
+    let held = support::poll_until(limit, support::STEP, async || done().then_some(())).await;
+    assert!(held.is_some(), "it did not happen in time");
 }
 
 /// An agent endpoint that records the `Authorization` header of each request and answers done.
@@ -324,7 +304,7 @@ fn an_endpoints_auth_reaches_it_and_no_record_holds_the_secret() {
         let seen = Arc::new(Mutex::new(vec![]));
         let dir = endpoint_project(&endpoint(seen.clone()).await, KEY_AUTH);
         let fx = deploy_app("deploy-auth", dir.path()).await;
-        let base = silent_provider().await;
+        let base = app::silent_provider().await;
         store_key(&fx, "planner-endpoint", "custom", &base, ENDPOINT_SECRET).await;
         let (status, detail) = fx.post(DEPLOY, json!({})).await;
         assert_eq!(status, 200, "{detail}");
@@ -348,7 +328,7 @@ fn a_stored_team_still_authenticates_without_any_kept_value() {
         let seen = Arc::new(Mutex::new(vec![]));
         let dir = endpoint_project(&endpoint(seen.clone()).await, KEY_AUTH);
         let fx = deploy_app("deploy-again", dir.path()).await;
-        let base = silent_provider().await;
+        let base = app::silent_provider().await;
         store_key(&fx, "planner-endpoint", "custom", &base, ENDPOINT_SECRET).await;
         let (_, detail) = fx.post(DEPLOY, json!({})).await;
         wait_for(|| !seen.lock().unwrap().is_empty()).await;
@@ -386,7 +366,7 @@ async fn deploy_refused(
             &fx,
             "planner-endpoint",
             kind,
-            &silent_provider().await,
+            &app::silent_provider().await,
             secret,
         )
         .await;
@@ -428,13 +408,6 @@ fn an_auth_that_may_not_be_sent_is_refused_at_deploy() {
     });
 }
 
-/// An API token with every scope: a second caller beside the person.
-async fn token_of(fx: &AppFx) -> String {
-    let body = json!({"name": "w", "scopes": ["read", "run", "admin"]});
-    let (_, minted) = fx.post("/api/tokens", body).await;
-    minted["token"].as_str().unwrap().to_string()
-}
-
 /// A colleague in the same scope (the layer gives both one prefix) citing a reference typed by
 /// the first caller gets nothing of it; the first caller's own team still works.
 #[test]
@@ -443,7 +416,8 @@ fn another_caller_cannot_use_a_reference_it_did_not_make() {
         let layer = Arc::new(shaked::harness::SpyLayer::new());
         let dir = runnable_project();
         let fx = deploy_app_on("deploy-scopes", dir.path(), Some(layer)).await;
-        let token = token_of(&fx).await;
+        // An API token with every scope: a second caller beside the person.
+        let token = fx.mint_token(&["read", "run", "admin"]).await;
         let url = endpoint(Arc::new(Mutex::new(vec![]))).await;
         let agent = json!({"kind": "http", "url": url, "headers": {"X-Key": ENDPOINT_SECRET}});
         let (status, checked) = fx.post("/api/agents/check", agent).await;

@@ -11,16 +11,7 @@ use shaked::{
 use support::{pg, records, run};
 
 mod support;
-
-fn team() -> Team {
-    Team {
-        id: "t".into(),
-        name: "T".into(),
-        agents: vec![AgentSpec::new("a", AgentKind::Open)
-            .with_name("A")
-            .with_prompt("p")],
-    }
-}
+use support::team;
 
 /// A store on a fresh database, and a branch of a new run in it.
 async fn fresh_branch(clean: &pg::Cleanup) -> (Arc<Store>, String) {

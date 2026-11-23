@@ -7,7 +7,8 @@ mod support;
 use support::fake_apis::{
     fake_apis, store_org_keys, FakeApis, COMPLETED, ORG_CLAUDE_KEY, ORG_ROUTER_KEY,
 };
-use support::{app, live, packages, records, run, AppFx};
+use support::link::{self, ws_url};
+use support::{app, live, packages, poll_until, records, run, AppFx, STEP};
 
 use std::{
     path::{Path, PathBuf},
@@ -23,24 +24,19 @@ use axum::{extract::State, routing::post, Json, Router};
 use futures_util::future::BoxFuture;
 use serde_json::{json, Value};
 use shaked::{
-    auth::Caller,
     exec::BranchRecords,
-    launch::LaunchSpec,
     model::*,
-    runner::{self, BranchPlan},
-    scenario::Scenario,
+    runner::BranchPlan,
     worker::{
         link::MAX_LINK_FRAME,
         link_records::KEPT_STRING,
         run::{open, Patience},
-        Ticket,
     },
 };
 use tokio::{
     net::{TcpListener, TcpStream},
     sync::broadcast,
 };
-use uuid::Uuid;
 
 /// What the scripted agent does between listing its tools and calling one.
 type Between = Arc<dyn Fn() -> BoxFuture<'static, ()> + Send + Sync>;
@@ -95,28 +91,9 @@ async fn control(tag: &str) -> (AppFx, PathBuf) {
     (fx.start().await, dir)
 }
 
-/// A branch made by `record_start` for `team`, expected on the link, and a ticket for it.
+/// A branch of `t1` made by `record_start` for `team`, expected on the link, and a ticket for it.
 async fn branch(fx: &AppFx, team: Team) -> (BranchPlan, String) {
-    let scope = Arc::new(Caller::person());
-    let scenario = Scenario::default();
-    let spec = LaunchSpec {
-        scope: scope.clone(),
-        task_id: "t1",
-        team,
-        scenario: &scenario,
-        rules: Rules::new(Runner::Chain),
-        driver: None,
-        benchmark: None,
-    };
-    let plan = runner::record_start(&fx.state, &spec).await;
-    let plan = plan.unwrap();
-    fx.state.links.expect(plan.clone());
-    let ticket = fx.state.links.tickets.issue(Ticket {
-        branch_id: plan.branch_id.clone(),
-        sandbox: Uuid::new_v4(),
-        caller: scope,
-    });
-    (plan, ticket)
+    link::ticketed(fx, "t1", team, Rules::new(Runner::Chain)).await
 }
 
 /// A `shaked worker` child process, killed when dropped.
@@ -154,20 +131,12 @@ impl Worker {
         Worker(child)
     }
 
-    /// Its exit code, once it exits (within a minute).
+    /// Its exit code, once it exits (within three minutes).
     async fn exit_code(&mut self) -> Option<i32> {
-        for _ in 0..600 {
-            if let Some(st) = self.0.try_wait().unwrap() {
-                return st.code();
-            }
-            tokio::time::sleep(Duration::from_millis(100)).await;
-        }
-        panic!("the worker did not exit within a minute");
+        let limit = Duration::from_secs(180);
+        let exited = poll_until(limit, STEP, async || self.0.try_wait().unwrap()).await;
+        exited.expect("the worker did not exit").code()
     }
-}
-
-fn ws_url(base: &str) -> String {
-    format!("{}/worker", base.replace("http://", "ws://"))
 }
 
 /// The kinds of `branch`'s events on the control box, and their seqs.

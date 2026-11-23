@@ -33,8 +33,7 @@ fn text(content: &str) -> (u16, Value) {
 
 /// The example project with the assistant on model `m` of provider `openai`.
 fn project() -> tempfile::TempDir {
-    let dir = tempfile::tempdir().unwrap();
-    support::copy_dir(&support::project_fixture(), dir.path());
+    let dir = support::project::project_copy();
     let config = dir.path().join("shakedown.yaml");
     let text = std::fs::read_to_string(&config).unwrap();
     std::fs::write(
@@ -183,8 +182,7 @@ fn stops_after_eight_turns() {
 #[test]
 fn no_model_is_explained() {
     run(async {
-        let dir = tempfile::tempdir().unwrap();
-        support::copy_dir(&support::project_fixture(), dir.path());
+        let dir = support::project::project_copy();
         let fx = AppFx::idle("assistant", "nomodel")
             .providers(ProviderConfig::default())
             .project(dir.path())
@@ -230,13 +228,6 @@ fn apply_diff_card_writes() {
     });
 }
 
-async fn read_token(fx: &AppFx) -> String {
-    let (_, minted) = fx
-        .post("/api/tokens", json!({"name": "r", "scopes": ["read"]}))
-        .await;
-    minted["token"].as_str().unwrap().to_string()
-}
-
 /// `method path` with `body`, as the token's bearer: the status.
 async fn as_token(fx: &AppFx, token: &str, put: bool, path: &str, body: Value) -> u16 {
     let url = format!("{}{path}", fx.base);
@@ -264,7 +255,7 @@ fn read_token_gets_cards_not_writes() {
         .await;
         let dir = project();
         let fx = app("readtoken", &llm, dir.path()).await;
-        let token = read_token(&fx).await;
+        let token = fx.mint_token(&["read"]).await;
         let chat = json!({"messages": [{"role": "user", "content": "List"}]});
         assert_eq!(
             as_token(&fx, &token, false, "/api/assistant/chat", chat).await,

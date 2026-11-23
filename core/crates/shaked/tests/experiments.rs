@@ -15,7 +15,7 @@ use shaked::{
     providers::ProviderConfig,
     store::{NewExperiment, NewSetup, NewSuite, Store},
 };
-use support::{app, packages::toy_world, pg, pg::Cleanup, run, AppFx};
+use support::{app, packages::toy_world, pg, pg::Cleanup, poll_until, run, AppFx, STEP};
 
 /// How long a poll waits for the experiment to get where the test expects.
 const WAIT: Duration = Duration::from_secs(60);
@@ -31,18 +31,6 @@ async fn setup(tag: &str, upstream: &str) -> AppFx {
         .await
 }
 
-/// A provider that accepts connections and never answers: a run on it stays running.
-async fn silent_provider() -> String {
-    let (listener, base) = app::bind().await;
-    tokio::spawn(async move {
-        let mut held = vec![];
-        while let Ok((socket, _)) = listener.accept().await {
-            held.push(socket);
-        }
-    });
-    base
-}
-
 impl AppFx {
     /// Creates an experiment: its detail.
     async fn experiment(&self, body: Value) -> Value {
@@ -53,16 +41,13 @@ impl AppFx {
 
     /// The experiment's detail once `done` holds for it.
     async fn until(&self, id: &str, done: impl Fn(&Value) -> bool) -> Value {
-        let polls = WAIT.as_millis() / 100;
-        for _ in 0..polls {
+        let there = async || {
             let (status, v) = self.get(&format!("/api/experiments/{id}")).await;
             assert_eq!(status, 200, "{v}");
-            if done(&v) {
-                return v;
-            }
-            tokio::time::sleep(Duration::from_millis(100)).await;
-        }
-        panic!("experiment {id} did not get there");
+            Some(v).filter(&done)
+        };
+        let v = poll_until(WAIT, STEP, there).await;
+        v.unwrap_or_else(|| panic!("experiment {id} did not get there"))
     }
 }
 
@@ -391,7 +376,7 @@ fn assert_nothing_else_ran(after: &Value) {
 #[test]
 fn stopping_an_experiment_stops_its_running_run() {
     run(async {
-        let fx = setup("xstop", &silent_provider().await).await;
+        let fx = setup("xstop", &app::silent_provider().await).await;
         let setups = [setup_of(None, "a"), setup_of(None, "b")];
         let v = fx
             .experiment(json!({"task": "t2", "runs": 3, "setups": setups}))
@@ -417,7 +402,7 @@ fn stopping_an_experiment_stops_its_running_run() {
 #[test]
 fn an_experiment_takes_more_than_four_setups_and_a_hundred_runs() {
     run(async {
-        let fx = setup("xmany", &silent_provider().await).await;
+        let fx = setup("xmany", &app::silent_provider().await).await;
         let setups: Vec<Value> = (0..5).map(|i| setup_of(None, &format!("t{i}"))).collect();
         let v = fx
             .experiment(json!({"task": "t2", "runs": 101, "setups": setups}))

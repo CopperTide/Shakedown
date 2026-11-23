@@ -3,7 +3,9 @@
 //! suggests, and a lead that can't reach its model. `live_`: a team on a real model (see
 //! `support/live.rs`), then a fork of its run.
 mod support;
+use support::of_kind;
 use support::records;
+use support::team_of;
 
 use std::collections::HashMap;
 
@@ -28,18 +30,6 @@ fn spec(id: &str, kind: AgentKind) -> AgentSpec {
         .with_prompt(format!("You are {id}."))
 }
 
-fn team(agents: Vec<AgentSpec>) -> Team {
-    Team {
-        id: "t".into(),
-        name: "T".into(),
-        agents,
-    }
-}
-
-fn of_kind(evs: &[Event], kind: EventKind) -> Vec<&Event> {
-    evs.iter().filter(|e| e.kind == kind).collect()
-}
-
 /// A Codex agent can't keep a session, and a team has one lead: both refused before anything
 /// runs. The teams endpoint gives each suggested team with its runner.
 #[test]
@@ -51,14 +41,14 @@ fn the_api_refuses_what_a_dispatch_run_cant_take_and_lists_the_teams() {
             let body = json!({"task_id": "27", "team": t, "runner": "dispatch"});
             send(http.post(format!("{}/api/runs", fx.base)).json(&body))
         };
-        let codex = team(vec![
+        let codex = team_of(vec![
             spec("lead", AgentKind::ClaudeCode),
             spec("x", AgentKind::Codex),
         ]);
         let (status, body) = post(codex).await;
         assert_eq!(status, 400, "{body}");
         assert!(body["error"].as_str().unwrap().contains("Codex"), "{body}");
-        let mut two = team(vec![
+        let mut two = team_of(vec![
             spec("a", AgentKind::ClaudeCode),
             spec("b", AgentKind::ClaudeCode),
         ]);
@@ -81,7 +71,7 @@ fn a_lead_that_cant_reach_its_model_ends_the_run_infra_error() {
     run(async {
         let providers = ProviderConfig::with_upstream(app::NOWHERE);
         let fx = setup("infra", Some(providers)).await;
-        let t = team(vec![
+        let t = team_of(vec![
             spec("lead", AgentKind::Open),
             spec("helper", AgentKind::Open),
         ]);

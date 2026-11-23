@@ -14,7 +14,7 @@ use support::{
     keys, live,
     live::Live,
     packages::{package_root, toy, ToyRoot},
-    run, run_live, AppFx,
+    run, AppFx,
 };
 
 /// One disruption the builder may add: `jam` on part `a`, after `{after}` calls.
@@ -106,9 +106,7 @@ impl AppFx {
     /// Forks `parent` at `at_seq` with no change; the new branch's id and events, run to its end.
     async fn fork_to_end(&self, parent: &str, at_seq: i64) -> (String, Vec<Event>) {
         let fork = json!({"at_seq": at_seq});
-        let (status, v) = self
-            .post(&format!("/api/branches/{parent}/fork"), fork)
-            .await;
+        let (status, v) = self.fork(parent, fork).await;
         assert_eq!(status, 200, "{v}");
         let child = v["branch_id"].as_str().unwrap().to_string();
         let (_b, evs) = live::ended_ok(&self.state, &child).await;
@@ -270,17 +268,13 @@ fn a_runs_overhead_goes_on_its_events() {
     })
 }
 
+live_test!(
+    live_views_follow_the_writing_steps_and_forks_inherit_them,
+    views_follow_the_writing_steps_and_forks_inherit_them
+);
+
 /// A view after the setup and after each step that wrote (not after a read), and a fork has the
 /// views before its fork point, then its own.
-#[test]
-#[ignore = "live: runs a real model (support/live.rs)"]
-fn live_views_follow_the_writing_steps_and_forks_inherit_them() {
-    run_live(
-        Live::any("live_views_follow_the_writing_steps_and_forks_inherit_them"),
-        views_follow_the_writing_steps_and_forks_inherit_them,
-    );
-}
-
 async fn views_follow_the_writing_steps_and_forks_inherit_them(live: Live) {
     let fx = setup("views", world("views", &[])).await;
     let poke = "Call b_poke once, then b_peek once, then b_poke once more, then stop.";
@@ -325,16 +319,10 @@ fn a_failing_view_records_nothing_and_fails_nothing() {
     })
 }
 
-/// A read that changes only its part's internal keys (`_peeks/n`) is saved, so a fork restores
-/// them exactly, but it is recorded as no write and gets no view.
-#[test]
-#[ignore = "live: runs a real model (support/live.rs)"]
-fn live_internal_keys_are_saved_but_make_no_write_and_no_view() {
-    run_live(
-        Live::any("live_internal_keys_are_saved_but_make_no_write_and_no_view"),
-        internal_keys_are_saved_but_make_no_write_and_no_view,
-    );
-}
+live_test!(
+    live_internal_keys_are_saved_but_make_no_write_and_no_view,
+    internal_keys_are_saved_but_make_no_write_and_no_view
+);
 
 /// Each peek changed only the internal key: no write, but a save.
 fn assert_internal_only(peeks: &[&Event]) {
@@ -349,6 +337,8 @@ fn assert_internal_only(peeks: &[&Event]) {
     }
 }
 
+/// A read that changes only its part's internal keys (`_peeks/n`) is saved, so a fork restores
+/// them exactly, but it is recorded as no write and gets no view.
 async fn internal_keys_are_saved_but_make_no_write_and_no_view(live: Live) {
     let root = world_with("internal", &[], &["--internal-peeks"]);
     let fx = setup("internal", root).await;

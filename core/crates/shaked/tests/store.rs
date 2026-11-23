@@ -4,16 +4,7 @@ use support::{pg, run};
 
 mod support;
 use support::records;
-
-fn team() -> Team {
-    Team {
-        id: "t".into(),
-        name: "T".into(),
-        agents: vec![AgentSpec::new("a", AgentKind::Open)
-            .with_name("A")
-            .with_prompt("p")],
-    }
-}
+use support::team;
 
 async fn fresh(tag: &str) -> (Admin, String, Store, pg::Cleanup) {
     let admin = pg::admin();

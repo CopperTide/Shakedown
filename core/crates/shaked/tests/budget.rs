@@ -6,9 +6,9 @@
 //!   (a failure), with the limit in `RunStart` and in `GET /api/branches/{id}`.
 mod support;
 use support::records;
+use support::team_of;
 
 use std::{
-    os::unix::fs::PermissionsExt,
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -39,19 +39,13 @@ fn fake_claude(dir: &std::path::Path) -> String {
     let call = json!({"type": "assistant", "message": {"id": "msg_1", "model": "claude-haiku-5-5",
         "usage": {"input_tokens": 10, "cache_read_input_tokens": 50_000_000, "output_tokens": 5},
         "content": [{"type": "text", "text": "thinking"}]}});
-    let script = format!("#!/bin/sh\nread line\necho '{call}'\nsleep 60\n");
-    std::fs::write(&path, script).unwrap();
-    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    support::write_script(&path, &format!("read line\necho '{call}'\nsleep 60"));
     path.to_string_lossy().into_owned()
 }
 
 /// A live branch of a retail world for one Claude Code agent, its run limited to USD 1.
 async fn claude_branch(hub: &TestHub, store: &Arc<Store>) -> (Team, Arc<BranchCtx>) {
-    let team = Team {
-        id: "t".into(),
-        name: "T".into(),
-        agents: vec![member("lead", AgentKind::ClaudeCode, "haiku")],
-    };
+    let team = team_of(vec![member("lead", AgentKind::ClaudeCode, "haiku")]);
     let run_id = records(store).create_run("task", &team).await.unwrap();
     let branch = records(store)
         .create_branch(&run_id, None, &team, &json!([]), None)
@@ -66,9 +60,9 @@ async fn claude_branch(hub: &TestHub, store: &Arc<Store>) -> (Team, Arc<BranchCt
 
 /// One turn of the fake `claude` on `ctx`: how it ended, the session's end, and how long it took.
 async fn one_turn(ctx: &Arc<BranchCtx>, spec: AgentSpec) -> (Turn, AgentResult, Duration) {
-    let dir = tempfile_dir("claude");
+    let dir = tempfile::tempdir().unwrap();
     let mut driver = ClaudeDriver::new("http://127.0.0.1:9");
-    driver.binary = fake_claude(&dir);
+    driver.binary = fake_claude(dir.path());
     let start = SessionStart {
         branch: ctx.clone(),
         spec,
@@ -78,7 +72,6 @@ async fn one_turn(ctx: &Arc<BranchCtx>, spec: AgentSpec) -> (Turn, AgentResult, 
     let turn = session.turn("go".into()).await;
     let took = since.elapsed();
     let end = session.end(true).await;
-    let _ = std::fs::remove_dir_all(dir);
     (turn, end, took)
 }
 
@@ -103,12 +96,6 @@ fn a_claude_turn_over_the_limit_is_stopped_at_once_and_its_estimate_is_its_cost(
         assert!(calls.iter().any(|e| e.kind == EventKind::ModelCall));
         ctx.world.stop().await;
     });
-}
-
-fn tempfile_dir(tag: &str) -> std::path::PathBuf {
-    let d = std::env::temp_dir().join(format!("shaked-budget-{tag}-{}", std::process::id()));
-    std::fs::create_dir_all(&d).unwrap();
-    d
 }
 
 /// An `http` agent that does nothing and reports USD 0.25.

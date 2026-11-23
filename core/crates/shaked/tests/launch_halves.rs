@@ -1,6 +1,7 @@
 //! A run begun in two halves, `record_start` then `stand_up`, records what `begin_run` records.
 mod support;
 use support::records;
+use support::team_of;
 
 use std::sync::Arc;
 
@@ -16,11 +17,9 @@ use shaked::{
 use support::{run, AppFx};
 
 fn team() -> Team {
-    Team {
-        id: "t".into(),
-        name: "T".into(),
-        agents: vec![AgentSpec::new("a", AgentKind::ClaudeCode).with_model("sonnet")],
-    }
+    team_of(vec![
+        AgentSpec::new("a", AgentKind::ClaudeCode).with_model("sonnet")
+    ])
 }
 
 /// Each event's kind and payload, without what changes from run to run (its ids, times and

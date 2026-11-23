@@ -5,6 +5,7 @@
 //! on the loop's own functions in `src/agents/open.rs`.
 mod support;
 use support::records;
+use support::team_of;
 
 use std::sync::Arc;
 
@@ -19,7 +20,7 @@ use shaked::{
 use support::live::Live;
 use support::packages::TestHub;
 use support::pg::Cleanup;
-use support::{app, live, run, run_live};
+use support::{app, live, run};
 
 /// An open agent on the default provider that names `model`.
 fn agent(id: &str, model: Option<&str>) -> AgentSpec {
@@ -40,11 +41,7 @@ struct Fx {
 async fn setup(tag: &str, agents: Vec<AgentSpec>, providers: ProviderConfig) -> Fx {
     let hub = TestHub::new(&[]);
     let (store, clean) = app::meta_store("open", tag).await;
-    let team = Team {
-        id: "t".into(),
-        name: "T".into(),
-        agents,
-    };
+    let team = team_of(agents);
     let run_id = records(&store).create_run("task", &team).await.unwrap();
     let branch = records(&store)
         .create_branch(&run_id, None, &team, &json!([]), None)
@@ -284,17 +281,11 @@ fn assert_first_request(evs: &[Event], prompt: &str, input: &str) {
     assert!(!tools.iter().any(|t| t == "handoff"), "{tools:?}");
 }
 
-/// The loop on a real model: every model call is recorded with the agent's model and provider
-/// and its usage, every tool call answers the model call that chose it and goes back to it, and
-/// the totals are the sum of the calls.
-#[test]
-#[ignore = "live: runs a real model (support/live.rs)"]
-fn live_open_agent_records_every_model_and_tool_call() {
-    run_live(
-        Live::api("live_open_agent_records_every_model_and_tool_call"),
-        open_agent_records_every_model_and_tool_call,
-    );
-}
+live_test!(
+    live_open_agent_records_every_model_and_tool_call,
+    open_agent_records_every_model_and_tool_call,
+    api
+);
 
 /// Every model call is the solo agent's, with its model and provider and its usage.
 fn assert_model_calls_named(evs: &[Event], live: &Live) {
@@ -308,6 +299,9 @@ fn assert_model_calls_named(evs: &[Event], live: &Live) {
     }
 }
 
+/// The loop on a real model: every model call is recorded with the agent's model and provider
+/// and its usage, every tool call answers the model call that chose it and goes back to it, and
+/// the totals are the sum of the calls.
 async fn open_agent_records_every_model_and_tool_call(live: Live) {
     let prompt = "You are a retail support agent. Use the tools to answer.";
     let input = "What is the status of order #W7181492? Look it up with get_order_details.";
@@ -329,16 +323,11 @@ async fn open_agent_records_every_model_and_tool_call(live: Live) {
     teardown(fx).await;
 }
 
-/// A resumed agent gets its new system prompt over the recorded conversation, an agent before
-/// the last is offered `handoff`, and when it hands off the loop stops there with its note.
-#[test]
-#[ignore = "live: runs a real model (support/live.rs)"]
-fn live_resume_replaces_the_system_prompt_and_a_handoff_stops_the_loop() {
-    run_live(
-        Live::api("live_resume_replaces_the_system_prompt_and_a_handoff_stops_the_loop"),
-        resume_replaces_the_system_prompt_and_a_handoff_stops_the_loop,
-    );
-}
+live_test!(
+    live_resume_replaces_the_system_prompt_and_a_handoff_stops_the_loop,
+    resume_replaces_the_system_prompt_and_a_handoff_stops_the_loop,
+    api
+);
 
 /// When the agent handed off, it ended well right there, its note kept.
 fn assert_handoff_stopped_the_loop(fx: &Fx, evs: &[Event], ok: bool) {
@@ -370,6 +359,8 @@ fn assert_resumed_request(evs: &[Event], prompt: &str) {
     assert_eq!(request.get("usage"), None);
 }
 
+/// A resumed agent gets its new system prompt over the recorded conversation, an agent before
+/// the last is offered `handoff`, and when it hands off the loop stops there with its note.
 async fn resume_replaces_the_system_prompt_and_a_handoff_stops_the_loop(live: Live) {
     let prompt = "You are triage. Do not call any other tool: call handoff at once with a short note for the resolver.";
     let agents = vec![live.agent("triage", prompt), live.agent("resolver", "r")];

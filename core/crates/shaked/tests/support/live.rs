@@ -25,6 +25,39 @@ use std::{process::Command, sync::Arc, time::Duration};
 use serde_json::{json, Value};
 use shaked::{app::AppState, model::*};
 
+/// A live test: `#[test] #[ignore]` `fn $name` running `$body` on the model `Live::$on` gives
+/// (`any` unless named), `$why` its ignore reason (by default the one for `any` and `api`, or
+/// for `claude`). It skips, saying why, when there is no such model.
+#[macro_export]
+macro_rules! live_test {
+    ($name:ident, $body:ident) => {
+        $crate::live_test!($name, $body, any);
+    };
+    ($name:ident, $body:ident, claude) => {
+        $crate::live_test!(
+            $name,
+            $body,
+            claude,
+            "live: runs Claude Code (support/live.rs)"
+        );
+    };
+    ($name:ident, $body:ident, $on:ident) => {
+        $crate::live_test!(
+            $name,
+            $body,
+            $on,
+            "live: runs a real model (support/live.rs)"
+        );
+    };
+    ($name:ident, $body:ident, $on:ident, $why:literal) => {
+        #[test]
+        #[ignore = $why]
+        fn $name() {
+            $crate::support::run_live($crate::support::live::Live::$on(stringify!($name)), $body);
+        }
+    };
+}
+
 /// The model a live test's agents run on.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Live {
@@ -211,18 +244,12 @@ pub const BRANCH_TIMEOUT: Duration = Duration::from_secs(20 * 60);
 
 /// The branch once it has ended (any status but `running`).
 pub async fn ended(state: &AppState, branch: &str) -> Branch {
-    let polls = BRANCH_TIMEOUT.as_millis() / 500;
-    for _ in 0..polls {
-        let b = crate::support::records(&state.store)
-            .branch(branch)
-            .await
-            .unwrap();
-        if b.status != BranchStatus::Running {
-            return b;
-        }
-        tokio::time::sleep(Duration::from_millis(500)).await;
-    }
-    panic!("branch {branch} still running after {BRANCH_TIMEOUT:?}");
+    let over = async || {
+        let b = crate::support::records(&state.store).branch(branch).await;
+        Some(b.unwrap()).filter(|b| b.status != BranchStatus::Running)
+    };
+    let b = crate::support::poll_until(BRANCH_TIMEOUT, Duration::from_millis(500), over).await;
+    b.unwrap_or_else(|| panic!("branch {branch} still running after {BRANCH_TIMEOUT:?}"))
 }
 
 /// The branch once it has ended, asserting it ended for a reason of the task (passed or failed,

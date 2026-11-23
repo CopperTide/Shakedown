@@ -4,27 +4,26 @@
 //! worker with its worker token; a scripted upstream stands in for the providers. The control
 //! box, not the sandbox, keeps such a run to its spend limit and to a pause.
 mod support;
-use support::{app, records, run, AppFx};
+use support::link::{hear, joined, restarted, say, started, ticketed, Ws};
+use support::{app, poll_until, records, run, team_of, AppFx, STEP, WAIT};
 
 use std::{sync::Arc, time::Duration};
 
-use futures_util::{SinkExt, StreamExt};
+use futures_util::StreamExt;
 use serde_json::{json, Value};
 use shaked::{
     app::{AppState, Config},
-    auth::{run_tokens::resolve_run_token, Caller},
+    auth::run_tokens::resolve_run_token,
     exec::BranchCtx,
     gateway::ForwardTo,
     jobs::EndIf,
-    launch::LaunchSpec,
     model::*,
     providers::Secret,
-    runner::{self, BranchPlan},
-    scenario::Scenario,
+    runner::BranchPlan,
     store::Linked,
     worker::{
         frames::{ToControl, ToWorker, REFUSED_ENDED},
-        holds, Ticket,
+        holds,
     },
     world::{World, WorldFrom},
 };
@@ -33,10 +32,6 @@ use support::fake_apis::{
     CREATED, MESSAGE_REST, MESSAGE_START, ORG_CLAUDE_KEY, ORG_ROUTER_KEY,
 };
 use tokio_tungstenite::tungstenite::Message;
-use uuid::Uuid;
-
-type Ws =
-    tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
 
 /// A control box whose Anthropic and OpenAI endpoints are `up` (no keys in its environment),
 /// with the org's keys stored for both.
@@ -55,34 +50,18 @@ async fn control_with(tag: &str, up: &FakeApis, grace: Duration) -> AppFx {
     fx
 }
 
-/// The control box restarted: a new one on the same store (no links in memory, no timers),
-/// giving a worker told to stop `grace`, served at its base.
-async fn restarted(fx: &AppFx, up: &FakeApis, grace: Duration) -> (Arc<AppState>, String) {
-    let (listener, base) = app::bind().await;
+/// The control box restarted on the same store (no links in memory, no timers), giving a worker
+/// told to stop `grace`.
+async fn restarted_with(fx: &AppFx, up: &FakeApis, grace: Duration) -> (Arc<AppState>, String) {
     let mut config = Config::with_providers(up.providers());
-    config.self_base = base.clone();
     config.link_end_grace = grace;
-    let state = AppState::new(fx.state.store.clone(), fx.state.hub.clone(), config);
-    let state = Arc::new(state);
+    let (state, base) = restarted(fx, config).await;
     let _ = state.vault.set(test_vault());
-    app::serve(listener, &state);
     (state, base)
 }
 
-/// A worker rejoining the control box at `base` with its worker `token`, its last event `n`.
-async fn rejoined(base: &str, token: &str, n: u64) -> Ws {
-    let url = format!("{}/worker", base.replace("http://", "ws://"));
-    let mut ws = tokio_tungstenite::connect_async(url).await.unwrap().0;
-    let hello = ToControl::Hello {
-        ticket: token.into(),
-        resume_from: n,
-    };
-    say(&mut ws, &hello).await;
-    ws
-}
-
 fn team() -> Team {
-    let agents = vec![
+    team_of(vec![
         AgentSpec::new("a", AgentKind::ClaudeCode).with_model("claude-sonnet-5-5"),
         AgentSpec::new("c", AgentKind::Codex)
             .with_provider("openrouter")
@@ -94,79 +73,34 @@ fn team() -> Team {
         AgentSpec::new("k", AgentKind::ClaudeCode)
             .with_provider("key:nope")
             .with_model("claude-sonnet-5-5"),
-    ];
-    Team {
-        id: "t".into(),
-        name: "T".into(),
-        agents,
-    }
+    ])
 }
 
-async fn say(ws: &mut Ws, f: &ToControl) {
-    let text = serde_json::to_string(f).unwrap();
-    ws.send(Message::text(text)).await.unwrap();
+/// A branch run by a worker under `rules`: its plan, the worker token its link's `Start`
+/// carried, and the link (kept open by the caller).
+async fn worker_branch_under(fx: &AppFx, rules: Rules) -> (BranchPlan, String, Ws) {
+    let (plan, ticket) = ticketed(fx, "27", team(), rules).await;
+    let (ws, token) = started(fx, &ticket).await;
+    (plan, token, ws)
 }
 
-/// A branch made by `record_start` for the team under `rules`, and a ticket for its worker.
-async fn ticketed(fx: &AppFx, rules: Rules) -> (BranchPlan, String) {
-    let scope = Arc::new(Caller::person());
-    let scenario = Scenario::default();
-    let spec = LaunchSpec {
-        scope: scope.clone(),
-        task_id: "27",
-        team: team(),
-        scenario: &scenario,
-        rules,
-        driver: None,
-        benchmark: None,
-    };
-    let plan = runner::record_start(&fx.state, &spec).await;
-    let plan = plan.unwrap();
-    fx.state.links.expect(plan.clone());
-    let ticket = Ticket {
-        branch_id: plan.branch_id.clone(),
-        sandbox: Uuid::new_v4(),
-        caller: scope,
-    };
-    (plan, fx.state.links.tickets.issue(ticket))
-}
-
-/// A branch run by a worker: its plan, the worker token its link's `Start` carried, and the
-/// link (kept open by the caller).
+/// [`worker_branch_under`] the plain chain rules.
 async fn worker_branch(fx: &AppFx) -> (BranchPlan, String, Ws) {
     worker_branch_under(fx, Rules::new(Runner::Chain)).await
 }
 
-/// [`worker_branch`] under `rules`.
-async fn worker_branch_under(fx: &AppFx, rules: Rules) -> (BranchPlan, String, Ws) {
-    let (plan, ticket) = ticketed(fx, rules).await;
-    let (token, ws) = started(fx, &ticket).await;
-    (plan, token, ws)
+/// A scripted upstream, a control box on it, and a branch run by a worker on that box under
+/// `rules` (see [`worker_branch`]).
+async fn linked_under(tag: &str, rules: Rules) -> (FakeApis, AppFx, BranchPlan, String, Ws) {
+    let up = fake_apis().await;
+    let fx = control(tag, &up).await;
+    let (plan, token, link) = worker_branch_under(&fx, rules).await;
+    (up, fx, plan, token, link)
 }
 
-/// The next frame the control box sends on the link, pings aside (within 10 s).
-async fn next_frame(ws: &mut Ws) -> ToWorker {
-    loop {
-        let next = tokio::time::timeout(Duration::from_secs(10), ws.next()).await;
-        if let Some(Ok(Message::Text(t))) = next.expect("a frame within 10 s") {
-            return serde_json::from_str(&t).unwrap();
-        }
-    }
-}
-
-/// Says hello with `ticket`: the worker token of the `Start` it got, and the link.
-async fn started(fx: &AppFx, ticket: &str) -> (String, Ws) {
-    let url = format!("{}/worker", fx.base.replace("http://", "ws://"));
-    let mut ws = tokio_tungstenite::connect_async(url).await.unwrap().0;
-    let hello = ToControl::Hello {
-        ticket: ticket.into(),
-        resume_from: 0,
-    };
-    say(&mut ws, &hello).await;
-    match next_frame(&mut ws).await {
-        ToWorker::Start { token, .. } => (token, ws),
-        other => panic!("start, not {other:?}"),
-    }
+/// [`linked_under`] the plain chain rules.
+async fn linked(tag: &str) -> (FakeApis, AppFx, BranchPlan, String, Ws) {
+    linked_under(tag, Rules::new(Runner::Chain)).await
 }
 
 /// A call of `body` to `api` on `agent`'s gateway route, with `token` as the bearer.
@@ -199,14 +133,10 @@ async fn model_calls(fx: &AppFx, branch: &str) -> Vec<Event> {
     calls.collect()
 }
 
-/// The branch's model calls once there are `n` (within 10 s), and still `n` a moment later.
+/// The branch's model calls once there are `n`, and still `n` a moment later.
 async fn exactly(fx: &AppFx, branch: &str, n: usize) -> Vec<Event> {
-    for _ in 0..100 {
-        if model_calls(fx, branch).await.len() >= n {
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(100)).await;
-    }
+    let some = async || (model_calls(fx, branch).await.len() >= n).then_some(());
+    poll_until(WAIT, STEP, some).await;
     tokio::time::sleep(Duration::from_millis(200)).await;
     let calls = model_calls(fx, branch).await;
     assert_eq!(calls.len(), n, "one model_call per call");
@@ -235,9 +165,7 @@ fn upstream_got_the_orgs_key(seen: &[Seen], ask: &Value, token: &str) {
 #[test]
 fn messages_pass_through_with_the_orgs_key_and_are_recorded() {
     run(async {
-        let up = fake_apis().await;
-        let fx = control("messages", &up).await;
-        let (plan, token, _link) = worker_branch(&fx).await;
+        let (up, fx, plan, token, _link) = linked("messages").await;
         let ask = json!({"model": "claude-sonnet-5-5", "max_tokens": 64,
                          "messages": [{"role": "user", "content": "hi"}]});
         let r = call(&fx, (&plan.branch_id, "a", "messages"), &token, &ask).await;
@@ -295,9 +223,7 @@ fn recorded_whole(p: &Value) {
 #[test]
 fn responses_pass_through_streaming() {
     run(async {
-        let up = fake_apis().await;
-        let fx = control("responses", &up).await;
-        let (plan, token, _link) = worker_branch(&fx).await;
+        let (up, fx, plan, token, _link) = linked("responses").await;
         let ask = json!({"model": "gpt-x", "stream": true, "input": "hi"});
         let mut r = call(&fx, (&plan.branch_id, "c", "responses"), &token, &ask).await;
         assert_eq!(r.status(), 200);
@@ -347,9 +273,7 @@ fn a_worker_token_reaches_only_its_branch() {
 #[test]
 fn chat_completions_take_a_worker_token_too() {
     run(async {
-        let up = fake_apis().await;
-        let fx = control("chat", &up).await;
-        let (plan, token, _link) = worker_branch(&fx).await;
+        let (up, fx, plan, token, _link) = linked("chat").await;
         let ask = json!({"model": "gpt-x", "messages": [{"role": "user", "content": "hi"}]});
         let r = call(
             &fx,
@@ -384,9 +308,7 @@ async fn first_chunk(r: &mut reqwest::Response) -> String {
 #[test]
 fn messages_pass_through_streaming() {
     run(async {
-        let up = fake_apis().await;
-        let fx = control("mstream", &up).await;
-        let (plan, token, _link) = worker_branch(&fx).await;
+        let (up, fx, plan, token, _link) = linked("mstream").await;
         let ask = json!({"model": "claude-sonnet-5-5", "max_tokens": 64, "stream": true,
                          "messages": [{"role": "user", "content": "hi"}]});
         let mut r = call(&fx, (&plan.branch_id, "a", "messages"), &token, &ask).await;
@@ -418,9 +340,7 @@ fn messages_pass_through_streaming() {
 #[test]
 fn a_stream_its_caller_left_is_recorded_whole() {
     run(async {
-        let up = fake_apis().await;
-        let fx = control("left", &up).await;
-        let (plan, token, _link) = worker_branch(&fx).await;
+        let (up, fx, plan, token, _link) = linked("left").await;
         let ask = json!({"model": "gpt-x", "stream": true, "input": "hi"});
         let mut r = call(&fx, (&plan.branch_id, "c", "responses"), &token, &ask).await;
         assert!(first_chunk(&mut r).await.contains("response.created"));
@@ -440,9 +360,7 @@ fn a_stream_its_caller_left_is_recorded_whole() {
 #[test]
 fn a_cut_stream_is_recorded_as_interrupted() {
     run(async {
-        let up = fake_apis().await;
-        let fx = control("cut", &up).await;
-        let (plan, token, _link) = worker_branch(&fx).await;
+        let (up, fx, plan, token, _link) = linked("cut").await;
         let ask = json!({"model": "cut", "stream": true, "input": "hi"});
         let mut r = call(&fx, (&plan.branch_id, "c", "responses"), &token, &ask).await;
         assert!(first_chunk(&mut r).await.contains("response.created"));
@@ -456,21 +374,14 @@ fn a_cut_stream_is_recorded_as_interrupted() {
     })
 }
 
-/// What the control box sends the link next, once it has something to say.
-async fn told(ws: &mut Ws) -> ToWorker {
-    next_frame(ws).await
-}
-
 /// The control box keeps a linked run to its limit: each call is charged with what it cost, and
 /// once over, every call is refused (402) before it reaches a provider, the limit is recorded
 /// once and the worker is told to stop.
 #[test]
 fn a_linked_run_is_refused_past_its_spend_limit() {
     run(async {
-        let up = fake_apis().await;
-        let fx = control("limit", &up).await;
         let rules = Rules::new(Runner::Chain).with_max_cost(Some(0.01));
-        let (plan, token, mut link) = worker_branch_under(&fx, rules).await;
+        let (up, fx, plan, token, mut link) = linked_under("limit", rules).await;
         let ask = json!({"model": "gpt-x", "messages": [{"role": "user", "content": "hi"}]});
         let chat = (plan.branch_id.as_str(), "o", "chat/completions");
         for _ in 0..3 {
@@ -485,7 +396,7 @@ fn a_linked_run_is_refused_past_its_spend_limit() {
             3,
             "no call past the limit reached the provider"
         );
-        assert!(matches!(told(&mut link).await, ToWorker::OverBudget { .. }));
+        assert!(matches!(hear(&mut link).await, ToWorker::OverBudget { .. }));
         let evs = records(&fx.state.store)
             .events(&plan.branch_id)
             .await
@@ -502,15 +413,13 @@ fn a_linked_run_is_refused_past_its_spend_limit() {
 #[test]
 fn a_paused_linked_branch_refuses_its_calls() {
     run(async {
-        let up = fake_apis().await;
-        let fx = control("paused", &up).await;
-        let (plan, token, mut link) = worker_branch(&fx).await;
+        let (up, fx, plan, token, mut link) = linked("paused").await;
         let id = &plan.branch_id;
         let (status, v) = fx
             .post(&format!("/api/branches/{id}/pause"), json!({}))
             .await;
         assert_eq!(status, 200, "{v}");
-        assert_eq!(told(&mut link).await, ToWorker::Pause);
+        assert_eq!(hear(&mut link).await, ToWorker::Pause);
         let ask = json!({"model": "claude-sonnet-5-5", "max_tokens": 8, "messages": []});
         let r = call(&fx, (id, "a", "messages"), &token, &ask).await;
         assert_eq!(r.status(), 409);
@@ -531,9 +440,7 @@ fn a_paused_linked_branch_refuses_its_calls() {
 #[test]
 fn a_linked_branch_refuses_strangers_unpriced_models_and_records_unreached_providers() {
     run(async {
-        let up = fake_apis().await;
-        let fx = control("refusals", &up).await;
-        let (plan, token, _link) = worker_branch(&fx).await;
+        let (up, fx, plan, token, _link) = linked("refusals").await;
         let id = plan.branch_id.as_str();
         let ask = json!({"model": "claude-sonnet-5-5", "max_tokens": 8, "messages": []});
         let r = call(&fx, (id, "stranger", "messages"), &token, &ask).await;
@@ -556,9 +463,7 @@ fn a_linked_branch_refuses_strangers_unpriced_models_and_records_unreached_provi
 #[test]
 fn count_tokens_passes_through_unrecorded() {
     run(async {
-        let up = fake_apis().await;
-        let fx = control("count", &up).await;
-        let (plan, token, _link) = worker_branch(&fx).await;
+        let (up, fx, plan, token, _link) = linked("count").await;
         let ask = json!({"model": "claude-sonnet-5-5", "messages": []});
         let route = (plan.branch_id.as_str(), "a", "messages/count_tokens");
         let r = call(&fx, route, &token, &ask).await;
@@ -586,7 +491,7 @@ fn run_start(extra: Value) -> ToControl {
 /// Sends the worker's `RunStart` `extra` over `link` and waits for its ack.
 async fn wrote_run_start(link: &mut Ws, extra: Value) {
     say(link, &run_start(extra)).await;
-    assert!(matches!(next_frame(link).await, ToWorker::Ack { n: 1, .. }));
+    assert!(matches!(hear(link).await, ToWorker::Ack { n: 1, .. }));
 }
 
 fn chat_ask() -> Value {
@@ -612,9 +517,7 @@ fn limited(usd: f64) -> Rules {
 #[test]
 fn a_worker_written_limit_counts_for_nothing() {
     run(async {
-        let up = fake_apis().await;
-        let fx = control("tampered", &up).await;
-        let (plan, token, mut link) = worker_branch_under(&fx, limited(0.01)).await;
+        let (up, fx, plan, token, mut link) = linked_under("tampered", limited(0.01)).await;
         wrote_run_start(&mut link, json!({"max_cost_usd": 1_000_000.0})).await;
         chats(&fx.base, &plan.branch_id, &token, 3, 200).await;
         chats(&fx.base, &plan.branch_id, &token, 1, 402).await;
@@ -627,15 +530,13 @@ fn a_worker_written_limit_counts_for_nothing() {
 #[test]
 fn a_restarted_control_box_keeps_the_limit_and_the_spend() {
     run(async {
-        let up = fake_apis().await;
-        let fx = control("restart", &up).await;
-        let (plan, token, mut link) = worker_branch_under(&fx, limited(0.01)).await;
+        let (up, fx, plan, token, mut link) = linked_under("restart", limited(0.01)).await;
         wrote_run_start(&mut link, json!({"max_cost_usd": 1_000_000.0})).await;
         let id = plan.branch_id.as_str();
         chats(&fx.base, id, &token, 2, 200).await;
         drop(link);
-        let (_again, base) = restarted(&fx, &up, LONG).await;
-        let _link = rejoined(&base, &token, 1).await;
+        let (_again, base) = restarted_with(&fx, &up, LONG).await;
+        let _link = joined(&base, &token, 1).await;
         tokio::time::sleep(Duration::from_millis(300)).await;
         chats(&base, id, &token, 1, 200).await;
         chats(&base, id, &token, 1, 402).await;
@@ -647,15 +548,13 @@ fn a_restarted_control_box_keeps_the_limit_and_the_spend() {
 #[test]
 fn a_linked_branch_without_rules_on_record_is_refused() {
     run(async {
-        let up = fake_apis().await;
-        let fx = control("norules", &up).await;
-        let (plan, token, link) = worker_branch(&fx).await;
+        let (up, fx, plan, token, link) = linked("norules").await;
         let id = plan.branch_id.as_str();
         let sql = format!("UPDATE shakedown.branches SET rules = NULL WHERE id = '{id}'");
         support::pg::execute(&fx.db, &sql).await;
         drop(link);
-        let (_again, base) = restarted(&fx, &up, LONG).await;
-        let _link = rejoined(&base, &token, 0).await;
+        let (_again, base) = restarted_with(&fx, &up, LONG).await;
+        let _link = joined(&base, &token, 0).await;
         tokio::time::sleep(Duration::from_millis(300)).await;
         let r = call_on(&base, (id, "o", "chat/completions"), &token, &chat_ask()).await;
         assert_eq!(r.status(), 503);
@@ -671,27 +570,18 @@ async fn status(fx: &AppFx, id: &str) -> BranchStatus {
     b.unwrap().status
 }
 
-/// Branch `id`'s status once it is no longer running (within 10 s).
+/// Branch `id`'s status once it is no longer running.
 async fn ended(fx: &AppFx, id: &str) -> BranchStatus {
-    for _ in 0..100 {
-        let now = status(fx, id).await;
-        if now != BranchStatus::Running {
-            return now;
-        }
-        tokio::time::sleep(Duration::from_millis(100)).await;
-    }
-    panic!("branch {id} is still running after 10 s");
+    let over = async || Some(status(fx, id).await).filter(|s| *s != BranchStatus::Running);
+    let ended = poll_until(WAIT, STEP, over).await;
+    ended.unwrap_or_else(|| panic!("branch {id} is still running after {WAIT:?}"))
 }
 
-/// Waits until `fx` sees the worker of `id` gone (within 5 s).
+/// Waits until `fx` sees the worker of `id` gone.
 async fn disconnected(fx: &AppFx, id: &str) {
-    for _ in 0..50 {
-        if !fx.state.links.connected(id) {
-            return;
-        }
-        tokio::time::sleep(Duration::from_millis(100)).await;
-    }
-    panic!("the worker of {id} is still connected");
+    let gone = async || (!fx.state.links.connected(id)).then_some(());
+    let gone = poll_until(Duration::from_secs(15), STEP, gone).await;
+    assert!(gone.is_some(), "the worker of {id} is still connected");
 }
 
 /// A pause pressed while the worker is away is kept, enforced on its calls, and told to the
@@ -699,9 +589,7 @@ async fn disconnected(fx: &AppFx, id: &str) {
 #[test]
 fn a_pause_while_the_worker_is_away_is_enforced_and_sent_again_on_rejoin() {
     run(async {
-        let up = fake_apis().await;
-        let fx = control("away", &up).await;
-        let (plan, token, link) = worker_branch(&fx).await;
+        let (up, fx, plan, token, link) = linked("away").await;
         let id = plan.branch_id.as_str();
         drop(link);
         disconnected(&fx, id).await;
@@ -711,8 +599,8 @@ fn a_pause_while_the_worker_is_away_is_enforced_and_sent_again_on_rejoin() {
         assert_eq!((code, v), (200, json!({"paused": true, "changed": true})));
         let r = call(&fx, (id, "o", "chat/completions"), &token, &chat_ask()).await;
         assert_eq!(r.status(), 409);
-        let mut link = rejoined(&fx.base, &token, 0).await;
-        assert_eq!(next_frame(&mut link).await, ToWorker::Pause);
+        let mut link = joined(&fx.base, &token, 0).await;
+        assert_eq!(hear(&mut link).await, ToWorker::Pause);
         assert!(up.seen().is_empty());
     })
 }
@@ -722,9 +610,7 @@ fn a_pause_while_the_worker_is_away_is_enforced_and_sent_again_on_rejoin() {
 #[test]
 fn a_stop_while_no_worker_is_connected_ends_the_branch_at_once() {
     run(async {
-        let up = fake_apis().await;
-        let fx = control("gone", &up).await;
-        let (plan, token, link) = worker_branch(&fx).await;
+        let (_up, fx, plan, token, link) = linked("gone").await;
         let id = plan.branch_id.as_str();
         drop(link);
         disconnected(&fx, id).await;
@@ -750,10 +636,7 @@ fn a_worker_that_ignores_over_budget_still_ends_budget_exceeded() {
         let id = plan.branch_id.as_str();
         chats(&fx.base, id, &token, 2, 200).await;
         chats(&fx.base, id, &token, 1, 402).await;
-        assert!(matches!(
-            next_frame(&mut link).await,
-            ToWorker::OverBudget { .. }
-        ));
+        assert!(matches!(hear(&mut link).await, ToWorker::OverBudget { .. }));
         assert_eq!(ended(&fx, id).await, BranchStatus::BudgetExceeded);
         refused_and_closed(&mut link).await;
         chats(&fx.base, id, &token, 1, 401).await;
@@ -763,7 +646,7 @@ fn a_worker_that_ignores_over_budget_still_ends_budget_exceeded() {
 
 /// The link is told its branch ended (`Refused`), then closed.
 async fn refused_and_closed(link: &mut Ws) {
-    match next_frame(link).await {
+    match hear(link).await {
         ToWorker::Refused { why } => assert!(why.starts_with(REFUSED_ENDED), "{why}"),
         other => panic!("refused, not {other:?}"),
     }
@@ -797,15 +680,13 @@ async fn no_more_events(fx: &AppFx, id: &str) {
 #[test]
 fn a_worker_that_reports_passed_after_a_stop_ends_stopped() {
     run(async {
-        let up = fake_apis().await;
-        let fx = control("overruled", &up).await;
-        let (plan, token, mut link) = worker_branch(&fx).await;
+        let (_up, fx, plan, token, mut link) = linked("overruled").await;
         let id = plan.branch_id.as_str();
         let (code, _) = fx
             .post(&format!("/api/branches/{id}/stop"), json!({}))
             .await;
         assert_eq!(code, 200);
-        assert_eq!(next_frame(&mut link).await, ToWorker::Stop);
+        assert_eq!(hear(&mut link).await, ToWorker::Stop);
         chats(&fx.base, id, &token, 1, 409).await;
         let passed = ToControl::Ended {
             status: BranchStatus::Passed,
@@ -856,17 +737,15 @@ fn asked_openrouter_for_its_cost(seen: &[Seen]) {
 #[test]
 fn a_stop_a_restart_interrupted_still_ends_the_branch() {
     run(async {
-        let up = fake_apis().await;
-        let fx = control("restop", &up).await;
-        let (plan, _token, mut link) = worker_branch(&fx).await;
+        let (up, fx, plan, _token, mut link) = linked("restop").await;
         let id = plan.branch_id.as_str();
         let (code, _) = fx
             .post(&format!("/api/branches/{id}/stop"), json!({}))
             .await;
         assert_eq!(code, 200);
-        assert_eq!(next_frame(&mut link).await, ToWorker::Stop);
+        assert_eq!(hear(&mut link).await, ToWorker::Stop);
         drop(link);
-        let (again, _base) = restarted(&fx, &up, Duration::from_millis(300)).await;
+        let (again, _base) = restarted_with(&fx, &up, Duration::from_millis(300)).await;
         holds::sweep(&again).await.unwrap();
         assert_eq!(ended(&fx, id).await, BranchStatus::Stopped);
     })
@@ -883,9 +762,7 @@ async fn hold_on_record(fx: &AppFx, id: &str) -> Option<String> {
 #[test]
 fn a_restart_restores_a_limit_recorded_reached() {
     run(async {
-        let up = fake_apis().await;
-        let fx = control("refused", &up).await;
-        let (plan, token, link) = worker_branch_under(&fx, limited(0.005)).await;
+        let (up, fx, plan, token, link) = linked_under("refused", limited(0.005)).await;
         let id = plan.branch_id.as_str();
         chats(&fx.base, id, &token, 2, 200).await;
         assert_eq!(
@@ -895,12 +772,9 @@ fn a_restart_restores_a_limit_recorded_reached() {
         let lost = format!("UPDATE shakedown.branches SET hold = NULL WHERE id = '{id}'");
         support::pg::execute(&fx.db, &lost).await;
         drop(link);
-        let (_again, base) = restarted(&fx, &up, Duration::from_millis(300)).await;
-        let mut link = rejoined(&base, &token, 0).await;
-        assert!(matches!(
-            next_frame(&mut link).await,
-            ToWorker::OverBudget { .. }
-        ));
+        let (_again, base) = restarted_with(&fx, &up, Duration::from_millis(300)).await;
+        let mut link = joined(&base, &token, 0).await;
+        assert!(matches!(hear(&mut link).await, ToWorker::OverBudget { .. }));
         assert_eq!(
             hold_on_record(&fx, id).await.as_deref(),
             Some("budget_exceeded")
@@ -917,10 +791,8 @@ fn a_restart_restores_a_limit_recorded_reached() {
 #[test]
 fn a_messages_stream_that_errs_is_charged_the_ceiling() {
     run(async {
-        let up = fake_apis().await;
+        let (up, fx, plan, token, _link) = linked("errs").await;
         up.gate.add_permits(1);
-        let fx = control("errs", &up).await;
-        let (plan, token, _link) = worker_branch(&fx).await;
         let ask = json!({"model": "claude-sonnet-5-5", "max_tokens": 64, "stream": true,
                          "metadata": {"fake": "error"}, "messages": []});
         let mut r = call(&fx, (&plan.branch_id, "a", "messages"), &token, &ask).await;
@@ -945,16 +817,11 @@ fn a_messages_stream_that_errs_is_charged_the_ceiling() {
 #[test]
 fn a_cut_stream_without_a_bound_puts_a_limited_run_over() {
     run(async {
-        let up = fake_apis().await;
+        let (up, fx, plan, token, mut link) = linked_under("short", limited(10.0)).await;
         up.gate.add_permits(1);
-        let fx = control("short", &up).await;
-        let (plan, token, mut link) = worker_branch_under(&fx, limited(10.0)).await;
         let id = plan.branch_id.as_str();
         short_stream(&fx, id, &token).await;
-        assert!(matches!(
-            next_frame(&mut link).await,
-            ToWorker::OverBudget { .. }
-        ));
+        assert!(matches!(hear(&mut link).await, ToWorker::OverBudget { .. }));
         assert_eq!(
             hold_on_record(&fx, id).await.as_deref(),
             Some("budget_exceeded")
@@ -967,10 +834,8 @@ fn a_cut_stream_without_a_bound_puts_a_limited_run_over() {
 #[test]
 fn a_cut_stream_without_a_bound_leaves_an_unlimited_run_alone() {
     run(async {
-        let up = fake_apis().await;
+        let (up, fx, plan, token, _link) = linked("unlimited").await;
         up.gate.add_permits(1);
-        let fx = control("unlimited", &up).await;
-        let (plan, token, _link) = worker_branch(&fx).await;
         let id = plan.branch_id.as_str();
         short_stream(&fx, id, &token).await;
         assert_eq!(hold_on_record(&fx, id).await, None);
@@ -993,9 +858,7 @@ async fn short_stream(fx: &AppFx, id: &str, token: &str) {
 #[test]
 fn the_sweep_ends_a_branch_whose_worker_token_died() {
     run(async {
-        let up = fake_apis().await;
-        let fx = control("died", &up).await;
-        let (plan, _token, _link) = worker_branch(&fx).await;
+        let (_up, fx, plan, _token, _link) = linked("died").await;
         let id = plan.branch_id.as_str();
         expire_worker_token(&fx, id, "1 hour").await;
         holds::sweep(&fx.state).await.unwrap();
@@ -1038,28 +901,26 @@ async fn paused_past_its_token(fx: &AppFx, id: &str) {
 #[test]
 fn a_long_pause_survives_a_restart_and_its_worker_rejoins() {
     run(async {
-        let up = fake_apis().await;
-        let fx = control("longpause", &up).await;
-        let (plan, token, link) = worker_branch(&fx).await;
+        let (up, fx, plan, token, link) = linked("longpause").await;
         let id = plan.branch_id.as_str();
         paused_past_its_token(&fx, id).await;
         drop(link);
         shaked::jobs::interrupt_at_start(&fx.state.store)
             .await
             .unwrap();
-        let (again, base) = restarted(&fx, &up, LONG).await;
+        let (again, base) = restarted_with(&fx, &up, LONG).await;
         holds::sweep(&again).await.unwrap();
         assert_eq!(status(&fx, id).await, BranchStatus::Running);
-        let mut link = rejoined(&base, &token, 0).await;
+        let mut link = joined(&base, &token, 0).await;
         assert_eq!(
-            next_frame(&mut link).await,
+            hear(&mut link).await,
             ToWorker::Pause,
             "rejoined, still paused"
         );
         let resume = reqwest::Client::new().post(format!("{base}/api/branches/{id}/resume"));
         let (code, v) = app::send(resume.json(&json!({}))).await;
         assert_eq!((code, v), (200, json!({"paused": false, "changed": true})));
-        assert_eq!(next_frame(&mut link).await, ToWorker::Resume);
+        assert_eq!(hear(&mut link).await, ToWorker::Resume);
         let live = resolve_run_token(&fx.state.store, &token).await.unwrap();
         assert!(live.is_some(), "the resume extended the token by the pause");
         chats(&base, id, &token, 1, 200).await;
@@ -1071,9 +932,7 @@ fn a_long_pause_survives_a_restart_and_its_worker_rejoins() {
 #[test]
 fn an_append_racing_an_end_never_lands_after_it() {
     run(async {
-        let up = fake_apis().await;
-        let fx = control("race", &up).await;
-        let (plan, _token, _link) = worker_branch(&fx).await;
+        let (_up, fx, plan, _token, _link) = linked("race").await;
         let id = plan.branch_id.clone();
         let lock = fx.state.store.branch_lock(&id);
         let held = lock.lock().await;
@@ -1134,9 +993,7 @@ async fn sent_to_router(
 #[test]
 fn a_body_is_read_only_once_the_call_is_let_through() {
     run(async {
-        let up = fake_apis().await;
-        let fx = control("bodies", &up).await;
-        let (plan, token, _link) = worker_branch(&fx).await;
+        let (up, fx, plan, token, _link) = linked("bodies").await;
         let read = Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let route = (plan.branch_id.as_str(), "a", "messages");
         let body = counted_body(40, read.clone());

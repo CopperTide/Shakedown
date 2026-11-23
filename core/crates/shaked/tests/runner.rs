@@ -3,6 +3,7 @@
 //! branches' worlds on one program. `live_`: teams on a real model (see `support/live.rs`).
 mod support;
 use support::records;
+use support::team_of;
 
 use std::{path::PathBuf, sync::Arc};
 
@@ -13,7 +14,7 @@ use shaked::{
     providers::ProviderConfig,
     runner::{self, StartPoint},
 };
-use support::{app, app::send, keys, live, live::Live, packages, run, run_live, written, AppFx};
+use support::{app, app::send, keys, live, live::Live, packages, run, written, AppFx};
 
 /// An app with the real drivers whose benchmark is `bench` (on the packages plus `extra`);
 /// `providers` replaces the environment's when given.
@@ -41,11 +42,7 @@ fn unreachable_team() -> Team {
             .with_model("m")
             .with_prompt(format!("You are {id}."))
     };
-    Team {
-        id: "t".into(),
-        name: "T".into(),
-        agents: vec![agent("triage"), agent("resolver")],
-    }
+    team_of(vec![agent("triage"), agent("resolver")])
 }
 
 /// The kinds of `evs` but model and tool calls.
@@ -330,18 +327,14 @@ fn assert_resolver_input(evs: &[Event]) {
     }
 }
 
+live_test!(
+    live_a_team_runs_task_27_and_shakedown_records_and_scores_it,
+    a_team_runs_task_27_and_shakedown_records_and_scores_it
+);
+
 /// The retail benchmark's own team on task 27: the run starts, each agent runs once in order,
 /// every step is recorded, the Shakedown's overhead is timed, the check is computed against the
 /// gold world, and the branch is no longer live.
-#[test]
-#[ignore = "live: runs a real model (support/live.rs)"]
-fn live_a_team_runs_task_27_and_shakedown_records_and_scores_it() {
-    run_live(
-        Live::any("live_a_team_runs_task_27_and_shakedown_records_and_scores_it"),
-        a_team_runs_task_27_and_shakedown_records_and_scores_it,
-    );
-}
-
 async fn a_team_runs_task_27_and_shakedown_records_and_scores_it(live: Live) {
     let fx = setup("live27", &[], "retail", None).await;
     let bench = fx.state.hub.bench_describe("retail").await.unwrap();
@@ -368,16 +361,10 @@ async fn a_team_runs_task_27_and_shakedown_records_and_scores_it(live: Live) {
     assert!(fx.state.live.is_empty());
 }
 
-/// A branch under the old rules (a fork of a run recorded before runners) fails when an agent
-/// but the last ends without its handoff; one that hands off goes on to the next.
-#[test]
-#[ignore = "live: runs a real model (support/live.rs)"]
-fn live_a_legacy_branch_still_needs_its_handoff() {
-    run_live(
-        Live::any("live_a_legacy_branch_still_needs_its_handoff"),
-        a_legacy_branch_still_needs_its_handoff,
-    );
-}
+live_test!(
+    live_a_legacy_branch_still_needs_its_handoff,
+    a_legacy_branch_still_needs_its_handoff
+);
 
 /// A triage and a resolver told to call no tool.
 fn quiet_team(live: &Live) -> Team {
@@ -388,6 +375,8 @@ fn quiet_team(live: &Live) -> Team {
     ])
 }
 
+/// A branch under the old rules (a fork of a run recorded before runners) fails when an agent
+/// but the last ends without its handoff; one that hands off goes on to the next.
 async fn a_legacy_branch_still_needs_its_handoff(live: Live) {
     let fx = setup("legacyhandoff", &[], "retail", None).await;
     let (branch, ctx) = live_branch(&fx, quiet_team(&live), "retail", "27").await;
@@ -416,17 +405,13 @@ async fn a_legacy_branch_still_needs_its_handoff(live: Live) {
     }
 }
 
+live_test!(
+    live_a_run_goes_on_without_handoffs,
+    a_run_goes_on_without_handoffs
+);
+
 /// A new run never needs a handoff: an agent that leaves none ends normally, the next one starts
 /// anyway, and every agent may message the others.
-#[test]
-#[ignore = "live: runs a real model (support/live.rs)"]
-fn live_a_run_goes_on_without_handoffs() {
-    run_live(
-        Live::any("live_a_run_goes_on_without_handoffs"),
-        a_run_goes_on_without_handoffs,
-    );
-}
-
 async fn a_run_goes_on_without_handoffs(live: Live) {
     let fx = setup("nohandoff", &[], "retail", None).await;
     let (_run, branch) = runner::start_run(&fx.state, "27", quiet_team(&live))
@@ -452,16 +437,10 @@ async fn a_run_goes_on_without_handoffs(live: Live) {
     assert_resolver_input(&evs);
 }
 
-/// The concurrent runner starts every agent before any ends; what one sends the other is
-/// recorded as a message to it, and an inbox read after it holds it.
-#[test]
-#[ignore = "live: runs a real model (support/live.rs)"]
-fn live_the_concurrent_runner_runs_every_agent_at_once() {
-    run_live(
-        Live::any("live_the_concurrent_runner_runs_every_agent_at_once"),
-        the_concurrent_runner_runs_every_agent_at_once,
-    );
-}
+live_test!(
+    live_the_concurrent_runner_runs_every_agent_at_once,
+    the_concurrent_runner_runs_every_agent_at_once
+);
 
 /// Each message went to the other agent, and an inbox read of it after holds it.
 fn assert_messages_delivered(evs: &[Event]) {
@@ -484,6 +463,8 @@ fn assert_messages_delivered(evs: &[Event]) {
     }
 }
 
+/// The concurrent runner starts every agent before any ends; what one sends the other is
+/// recorded as a message to it, and an inbox read after it holds it.
 async fn the_concurrent_runner_runs_every_agent_at_once(live: Live) {
     let fx = setup("concurrent", &[], "retail", None).await;
     let say = |other: &str| {
@@ -504,17 +485,13 @@ async fn the_concurrent_runner_runs_every_agent_at_once(live: Live) {
     assert_eq!(k.last(), Some(&EventKind::Check));
 }
 
+live_test!(
+    live_run_branch_can_start_mid_chain_from_recorded_notes,
+    run_branch_can_start_mid_chain_from_recorded_notes
+);
+
 /// A branch can start mid-chain: the agent at the start point runs with the notes recorded
 /// before it, and only it.
-#[test]
-#[ignore = "live: runs a real model (support/live.rs)"]
-fn live_run_branch_can_start_mid_chain_from_recorded_notes() {
-    run_live(
-        Live::any("live_run_branch_can_start_mid_chain_from_recorded_notes"),
-        run_branch_can_start_mid_chain_from_recorded_notes,
-    );
-}
-
 async fn run_branch_can_start_mid_chain_from_recorded_notes(live: Live) {
     let fx = setup("mid", &[], "retail", None).await;
     let bench = fx.state.hub.bench_describe("retail").await.unwrap();
@@ -560,16 +537,10 @@ fn crashy_world() -> (packages::ToyRoot, PathBuf) {
     (packages::toy_world("crashy", &args, &[]), log)
 }
 
-/// A part that stops mid-run ends the branch `infra_error` with why, the agent stops there, the
-/// crashed instance is stopped by the restarted program, and the next run uses that program.
-#[test]
-#[ignore = "live: runs a real model (support/live.rs)"]
-fn live_part_crash_ends_branch_infra_error() {
-    run_live(
-        Live::any("live_part_crash_ends_branch_infra_error"),
-        part_crash_ends_branch_infra_error,
-    );
-}
+live_test!(
+    live_part_crash_ends_branch_infra_error,
+    part_crash_ends_branch_infra_error
+);
 
 /// The branch ended `infra_error` at the crash, the agent stopped there, and the crashed
 /// instance was stopped (by the restarted program).
@@ -587,6 +558,8 @@ fn assert_crashed(b: &Branch, evs: &[Event], pokes: &[&Event], log: &std::path::
     assert!(std::fs::read_to_string(log).unwrap().contains(&stop));
 }
 
+/// A part that stops mid-run ends the branch `infra_error` with why, the agent stops there, the
+/// crashed instance is stopped by the restarted program, and the next run uses that program.
 async fn part_crash_ends_branch_infra_error(live: Live) {
     let (root, log) = crashy_world();
     let fx = toy_fx("crash", &root, None).await;
@@ -609,17 +582,13 @@ async fn part_crash_ends_branch_infra_error(live: Live) {
     assert_ne!(b.status, BranchStatus::InfraError, "{:?}", b.error);
 }
 
+live_test!(
+    live_malformed_diff_is_infra_error_not_passed,
+    malformed_diff_is_infra_error_not_passed
+);
+
 /// A part whose `diff` answers nonsense ends the branch `infra_error`, never passed, whatever the
 /// agent did; the toy benchmark's instructions have no title, so the input uses the generic one.
-#[test]
-#[ignore = "live: runs a real model (support/live.rs)"]
-fn live_malformed_diff_is_infra_error_not_passed() {
-    run_live(
-        Live::any("live_malformed_diff_is_infra_error_not_passed"),
-        malformed_diff_is_infra_error_not_passed,
-    );
-}
-
 async fn malformed_diff_is_infra_error_not_passed(live: Live) {
     let root = packages::toy_world("baddiff", &["--bad-diff"], &[]);
     let fx = toy_fx("baddiff", &root, None).await;
@@ -647,17 +616,14 @@ async fn malformed_diff_is_infra_error_not_passed(live: Live) {
     }
 }
 
+live_test!(
+    live_a_cut_off_answer_fails_the_branch_not_infra_error,
+    a_cut_off_answer_fails_the_branch_not_infra_error,
+    api
+);
+
 /// A real Claude model whose output budget is one token: its answer is cut off, which is the
 /// model's failure (the branch `failed`, no check), not the infrastructure's.
-#[test]
-#[ignore = "live: runs a real model (support/live.rs)"]
-fn live_a_cut_off_answer_fails_the_branch_not_infra_error() {
-    run_live(
-        Live::api("live_a_cut_off_answer_fails_the_branch_not_infra_error"),
-        a_cut_off_answer_fails_the_branch_not_infra_error,
-    );
-}
-
 async fn a_cut_off_answer_fails_the_branch_not_infra_error(live: Live) {
     if live.provider() != Some("anthropic") {
         eprintln!("skipped: needs ANTHROPIC_API_KEY (its output budget is set per call by shaked)");

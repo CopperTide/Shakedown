@@ -4,6 +4,7 @@
 //! limit. Without a model: the runs never get to an agent.
 mod support;
 use support::records;
+use support::team_of;
 
 use std::time::Duration;
 
@@ -22,11 +23,9 @@ async fn stored_suite(
     (task, repeats): (&str, i32),
     max_cost_usd: Option<f64>,
 ) -> suite::Suite {
-    let team = Team {
-        id: "t".into(),
-        name: "T".into(),
-        agents: vec![AgentSpec::new("a", AgentKind::ClaudeCode).with_model("sonnet")],
-    };
+    let team = team_of(vec![
+        AgentSpec::new("a", AgentKind::ClaudeCode).with_model("sonnet")
+    ]);
     let (tasks, scenario) = (vec![task.to_string()], Default::default());
     let new = NewSuite {
         name: "s",

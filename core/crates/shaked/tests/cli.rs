@@ -1,5 +1,6 @@
 mod support;
 use support::records;
+use support::team_of;
 
 use std::{path::Path, sync::Arc};
 
@@ -168,10 +169,8 @@ fn assert_secrets_scrubbed(c: &std::process::Command) {
 // ---- driver behaviour with fake binaries ----
 
 fn fake(script: &str) -> String {
-    use std::os::unix::fs::PermissionsExt;
     let p = std::env::temp_dir().join(format!("fakecli-{}.sh", uuid::Uuid::new_v4().simple()));
-    std::fs::write(&p, format!("#!/bin/sh\n{script}\n")).unwrap();
-    std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
+    support::write_script(&p, script);
     p.to_string_lossy().into_owned()
 }
 
@@ -194,11 +193,7 @@ async fn toy_world(tag: &str) -> ToyWorld {
 }
 
 fn bare_run(toy: &ToyWorld, resume: Option<Vec<serde_json::Value>>) -> AgentRun {
-    let team = Team {
-        id: "t".into(),
-        name: "T".into(),
-        agents: vec![spec(None)],
-    };
+    let team = team_of(vec![spec(None)]);
     let branch = BranchCtx::new("b1".into(), toy.world.clone(), team, "task".into());
     AgentRun {
         branch: Arc::new(branch),
@@ -363,11 +358,7 @@ fn agent_spec(id: &str, kind: AgentKind, prompt: &str) -> AgentSpec {
 
 fn live_team() -> Team {
     let a = |id: &str| agent_spec(id, AgentKind::ClaudeCode, "p");
-    Team {
-        id: "t".into(),
-        name: "T".into(),
-        agents: vec![a("triage"), a("resolver")],
-    }
+    team_of(vec![a("triage"), a("resolver")])
 }
 
 /// Binds a free local port and returns the listener with its base URL.
@@ -422,11 +413,7 @@ async fn live(tag: &str, mk: impl FnOnce(String) -> Box<dyn Driver>) {
 
 /// A context for `branch` whose team has no agents.
 fn agentless_ctx(branch: &str, world: &Arc<World>) -> Arc<BranchCtx> {
-    let team = Team {
-        id: "t".into(),
-        name: "T".into(),
-        agents: vec![],
-    };
+    let team = team_of(vec![]);
     Arc::new(BranchCtx::new(
         branch.into(),
         world.clone(),

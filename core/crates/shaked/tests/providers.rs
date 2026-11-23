@@ -9,6 +9,7 @@
 
 mod support;
 use support::records;
+use support::team_of;
 
 use std::time::{Duration, Instant};
 
@@ -22,21 +23,13 @@ use shaked::{
         KEY_REJECTED, NOT_CHECKED, OPENAI_BASE,
     },
 };
-use support::{app, live, live::Live, run, run_live, AppFx};
+use support::{app, live, live::Live, run, AppFx};
 
 fn agent(id: &str, provider: Option<&str>, model: Option<&str>) -> AgentSpec {
     AgentSpec {
         model: model.map(str::to_string),
         provider: provider.map(str::to_string),
         ..AgentSpec::new(id, AgentKind::Open).with_prompt(format!("You are {id}."))
-    }
-}
-
-fn team(agents: Vec<AgentSpec>) -> Team {
-    Team {
-        id: "t".into(),
-        name: "T".into(),
-        agents,
     }
 }
 
@@ -221,11 +214,11 @@ fn runs_are_refused_on_providers_that_cannot_take_them() {
         };
         let fx = setup("refuse", providers).await;
         for (provider, model, why) in REFUSED {
-            let (st, v) = fx.start(&team(vec![agent("a", provider, model)])).await;
+            let (st, v) = fx.start(&team_of(vec![agent("a", provider, model)])).await;
             assert_eq!((st, v["error"].as_str()), (400, Some(why)), "{provider:?}");
         }
         let (st, v) = fx
-            .start(&team(vec![agent("a", Some("local:nope"), Some("m"))]))
+            .start(&team_of(vec![agent("a", Some("local:nope"), Some("m"))]))
             .await;
         assert_eq!(st, 400);
         let error = v["error"].as_str().unwrap();
@@ -263,7 +256,7 @@ fn a_fork_is_refused_on_a_provider_that_cannot_take_it() {
         let mut providers = ProviderConfig::with_upstream(app::NOWHERE);
         providers.locals.push(local("box", app::NOWHERE, None));
         let fx = setup("forkrefuse", providers).await;
-        let b = finished_by_hand(&fx, &team(vec![agent("solo", None, Some("m1"))])).await;
+        let b = finished_by_hand(&fx, &team_of(vec![agent("solo", None, Some("m1"))])).await;
         let url = format!("/api/branches/{b}/fork");
         let no_default = |p: &str| format!("provider {p} has no default model: name one");
         let refused = [
@@ -342,24 +335,21 @@ fn assert_cost(provider: &str, mc: &ModelCallPayload) {
     }
 }
 
+live_test!(
+    live_an_agent_calls_its_own_provider_and_records_its_cost,
+    an_agent_calls_its_own_provider_and_records_its_cost,
+    api
+);
+
 /// An agent on the real provider whose key is set: each model call names the provider and
 /// carries its cost label; the canonical request is recorded (no provider-only fields), Claude's
 /// own answer beside it; the agent's end sums them; and no key is in the record or in what
 /// `Debug` prints of the configuration.
-#[test]
-#[ignore = "live: runs a real model (support/live.rs)"]
-fn live_an_agent_calls_its_own_provider_and_records_its_cost() {
-    run_live(
-        Live::api("live_an_agent_calls_its_own_provider_and_records_its_cost"),
-        an_agent_calls_its_own_provider_and_records_its_cost,
-    );
-}
-
 async fn an_agent_calls_its_own_provider_and_records_its_cost(live: Live) {
     let providers = Config::new().providers;
     let fx = setup("route", providers).await;
     let solo = live.agent("solo", "You are a retail support agent. Look up order #W7181492 with get_order_details, then answer in one sentence.");
-    let b = fx.run_to_end(&team(vec![solo])).await;
+    let b = fx.run_to_end(&team_of(vec![solo])).await;
     assert_ne!(b["status"], "infra_error", "{b}");
     let provider = live.provider().unwrap();
     let calls = payloads(&b, "model_call", "solo");
@@ -393,16 +383,14 @@ fn assert_no_key_in(record: &Value, config: &Config) {
     }
 }
 
-/// The real provider's model list is read with its key: available, with its models.
-#[test]
-#[ignore = "live: calls a real provider (support/live.rs)"]
-fn live_a_providers_models_are_listed_with_its_key() {
-    run_live(
-        Live::api("live_a_providers_models_are_listed_with_its_key"),
-        a_providers_models_are_listed_with_its_key,
-    );
-}
+live_test!(
+    live_a_providers_models_are_listed_with_its_key,
+    a_providers_models_are_listed_with_its_key,
+    api,
+    "live: calls a real provider (support/live.rs)"
+);
 
+/// The real provider's model list is read with its key: available, with its models.
 async fn a_providers_models_are_listed_with_its_key(live: Live) {
     let fx = setup("models", Config::new().providers).await;
     let (st, list) = fx.get("/api/providers").await;
@@ -449,7 +437,7 @@ fn live_a_rejected_key_is_reported_and_its_message_not_recorded() {
             ("anthropic", "claude-haiku-4-5"),
         ] {
             let a = agent("solo", Some(provider), Some(model));
-            let b = fx.run_to_end(&team(vec![a])).await;
+            let b = fx.run_to_end(&team_of(vec![a])).await;
             let call = &payloads(&b, "model_call", "solo")[0];
             assert_eq!(call["response"]["status"], 401, "{call}");
             let message = &call["response"]["body"]["error"]["message"];
