@@ -96,7 +96,7 @@ pub async fn fork_with(
     reschedule(state, &ctx, &schedule).await?;
     if ctx.rules.runner == Runner::External {
         let conn = ctx.rules.connection.clone();
-        let mut res = live_child(state, ctx, rerun.plan, &events).await;
+        let mut res = live_child(state, ctx, &rerun.plan, &events).await;
         crate::window::watch(state, &res.branch_id);
         if let Some(conn) = conn {
             let ids = (parent.run_id.as_str(), parent.id.as_str(), task_id.as_str());
@@ -193,21 +193,19 @@ pub(super) fn new_team(
 async fn live_child(
     state: &AppState,
     ctx: BranchCtx,
-    plan: ForkPlan,
+    plan: &ForkPlan,
     events: &[Event],
 ) -> ForkResponse {
     let (branch_id, base) = (ctx.branch_id.clone(), state.config.public_base());
     let mut agents =
         external::resumables(base, &branch_id, &ctx.roster.team, events, plan.start_seq);
     for a in &mut agents {
-        let env = crate::proxy::env::env_for(state, &ctx, Some(&a.spec.id));
-        a.endpoints = external::endpoints(base, &branch_id, &a.spec.id, env)
-            .with_token(ctx.agent_token(&a.spec.id));
+        a.endpoints = external::agent_endpoints(state, &ctx, &a.spec.id);
     }
     runner::go_live(state, Arc::new(ctx)).await;
     ForkResponse {
         agents: Some(agents),
-        ..ForkResponse::new(branch_id, &plan)
+        ..ForkResponse::new(branch_id, plan)
     }
 }
 

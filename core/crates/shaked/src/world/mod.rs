@@ -7,6 +7,7 @@ mod gates;
 mod hosts;
 mod ids;
 mod links;
+mod part;
 mod plan;
 mod saving;
 mod scoring;
@@ -19,20 +20,17 @@ use std::{
     sync::{Arc, Mutex, RwLock},
 };
 
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, Result};
 use parts::{
     proto::{
-        BenchCallTool, BenchDescribe, BenchToolOutput, CallToolParams, Describe, Effect, ExactKind,
-        FromSave, Gate, HttpRoute, HttpRoutes, Link, Mode, StartParams, Target, ToolOutput,
-        ToolSchema, ViewInfo, WorldPart, WorldTimeParams,
+        BenchCallTool, BenchDescribe, BenchToolOutput, Effect, ExactKind, FromSave, Gate, Link,
+        Mode, ToolOutput, ToolSchema, ViewInfo, WorldTimeParams,
     },
-    request::{Connect, GetHttpRoutes, Stop},
-    CallError, Client, Hub, Request,
+    Client, Hub,
 };
-use serde::de::DeserializeOwned;
 use serde_json::{Map, Value};
 
-use crate::restore::{in_shared_saves, keeps_saves};
+use part::{http_routes, request, start_part, stop_instances, Instance, Part, StartedPart};
 
 pub use clocked::PartEvent;
 pub use hosts::{HostRoute, Hosts, HTTP_TOOL};
@@ -147,56 +145,6 @@ fn failed(message: String) -> ToolOutput {
     }
 }
 
-struct Part {
-    name: String,
-    integration: String,
-    instance: String,
-    client: Arc<Client>,
-    describe: Describe,
-    /// True when the instance serves hosts through the proxy: its routes are asked again after
-    /// each of its saves (a save that restarts a service may move it to a new port).
-    serves_http: bool,
-}
-
-impl Part {
-    fn label(&self) -> String {
-        format!("the {} integration", self.name)
-    }
-
-    /// The part's live instance, as `inspect` and `diff` name it.
-    fn target(&self) -> Target {
-        Target::Instance {
-            instance: self.instance.clone(),
-        }
-    }
-
-    /// True when the part keeps saves (a part with only replay is never saved).
-    fn keeps_saves(&self) -> bool {
-        keeps_saves(&self.describe.restore)
-    }
-
-    /// True when the part is in the shared base and gold saves (so it can be checked).
-    fn in_shared_saves(&self) -> bool {
-        in_shared_saves(&self.describe.restore)
-    }
-
-    /// `call_tool` on the part's instance.
-    async fn call_tool(
-        &self,
-        name: &str,
-        args: Value,
-        clock_ms: i64,
-    ) -> Result<ToolOutput, WorldError> {
-        let params = CallToolParams {
-            instance: self.instance.clone(),
-            name: name.to_string(),
-            args,
-            clock_ms,
-        };
-        request(&self.client, &self.label(), &params).await
-    }
-}
-
 #[derive(Default)]
 struct Track {
     /// The save that holds each part's current state.
@@ -206,84 +154,6 @@ struct Track {
     /// Clock parts whose `advance` reported a change since their last save.
     changed: BTreeSet<String>,
     stopped: bool,
-}
-
-/// What starting one part came to: the part when it started (with its save and connection info),
-/// and the error when starting or connecting it failed.
-struct StartedPart {
-    part: Option<Part>,
-    save: Option<String>,
-    connection: Option<Value>,
-    /// The hosts the part's instance serves through the proxy.
-    routes: Vec<HttpRoute>,
-    error: Option<anyhow::Error>,
-}
-
-impl StartedPart {
-    fn failed(part: Option<Part>, save: Option<String>, e: anyhow::Error) -> StartedPart {
-        StartedPart {
-            part,
-            save,
-            connection: None,
-            routes: vec![],
-            error: Some(e),
-        }
-    }
-}
-
-/// Starts `p`'s instance for `branch_id` (from its save in `from`, if any) and connects it when a
-/// benchmark may reach it.
-async fn start_part(
-    hub: &Hub,
-    p: PlannedPart,
-    branch_id: &str,
-    seed: u64,
-    from: Option<&StartSaves>,
-    world_time: Option<WorldTimeParams>,
-) -> StartedPart {
-    let (part, save) = match begin_part(hub, p, branch_id, seed, from, world_time).await {
-        Ok(begun) => begun,
-        Err(e) => return StartedPart::failed(None, None, e),
-    };
-    let connected = match connect(&part).await {
-        Ok(connection) => connection,
-        Err(e) => return StartedPart::failed(Some(part), save, e),
-    };
-    match http_routes(&part).await {
-        Ok(routes) => StartedPart {
-            part: Some(part),
-            save,
-            connection: connected,
-            routes,
-            error: None,
-        },
-        Err(e) => StartedPart::failed(Some(part), save, e),
-    }
-}
-
-/// The part's instance started: the part, and the save it started from.
-async fn begin_part(
-    hub: &Hub,
-    p: PlannedPart,
-    branch_id: &str,
-    seed: u64,
-    from: Option<&StartSaves>,
-    world_time: Option<WorldTimeParams>,
-) -> Result<(Part, Option<String>)> {
-    let instance = instance_id(branch_id, &p.part.part);
-    let (mut params, save) = start_params(&p, &instance, seed, from)?;
-    params.world_time = world_time;
-    let part = Part {
-        client: hub.client(&p.part.integration).await?,
-        name: p.part.part,
-        integration: p.part.integration,
-        instance,
-        describe: p.describe,
-        serves_http: false,
-    };
-    let started: Result<Value, WorldError> = request(&part.client, &part.label(), &params).await;
-    started.map_err(|e| anyhow::Error::from(e).context(StartingPart(part.name.clone())))?;
-    Ok((part, save))
 }
 
 pub struct World {
@@ -302,34 +172,6 @@ pub struct World {
     /// The hosts its parts serve through the proxy (asked again after a routed part's save).
     hosts: RwLock<Hosts>,
     track: Mutex<Track>,
-}
-
-fn stopped_message(what: &str, tail: &str) -> String {
-    match tail.trim() {
-        "" => format!("{what} stopped"),
-        tail => format!("{what} stopped: {tail}"),
-    }
-}
-
-/// A request to a program; a stopped program is a fatal `WorldError` naming `what`.
-async fn request<T: DeserializeOwned, R: Request>(
-    client: &Client,
-    what: &str,
-    r: &R,
-) -> Result<T, WorldError> {
-    let method = R::METHOD;
-    client.request(r).await.map_err(|e| match e {
-        CallError::Stopped(tail) => WorldError {
-            message: stopped_message(what, &tail),
-            fatal: true,
-            code: None,
-        },
-        CallError::Part { code, .. } => WorldError {
-            code: Some(code),
-            ..WorldError::other(format!("{what}: {method} failed: {e}"))
-        },
-        other => WorldError::other(format!("{what}: {method} failed: {other}")),
-    })
 }
 
 impl World {
@@ -361,6 +203,22 @@ impl World {
             WorldFrom::Saves(m) => m,
         };
         World::start_parts(hub, bench, planned, branch_id, seed, Some(&from)).await
+    }
+
+    /// `start_planned` for a branch: its parts' world time has clock 0 at `epoch_ms` and runs at
+    /// the speed branch clocks run at.
+    pub async fn start_branch(
+        hub: Arc<Hub>,
+        bench: &BenchDescribe,
+        mut planned: Plan,
+        branch_id: &str,
+        seed: u64,
+        from: WorldFrom,
+        epoch_ms: i64,
+    ) -> Result<World> {
+        let speed = crate::clock::speed_from_env();
+        planned.world_time = Some(WorldTimeParams { epoch_ms, speed });
+        World::start_planned(hub, bench, planned, branch_id, seed, from).await
     }
 
     fn new(hub: Arc<Hub>, bench: &str, bench_client: Option<Arc<Client>>, plan: Plan) -> World {
@@ -651,98 +509,6 @@ impl World {
     /// crashed part's instance is still cleaned up. Failures are logged.
     pub async fn stop(&self) {
         stop_instances(&self.hub, self.take_instances()).await;
-    }
-}
-
-/// How `p` starts given `from` (None: every part empty). A part that is not in the shared saves
-/// and isn't named starts fresh; any other part must be named.
-fn part_start<'a>(p: &PlannedPart, from: Option<&'a StartSaves>) -> Result<Option<&'a FromSave>> {
-    let Some(from) = from else {
-        return Ok(None);
-    };
-    let name = &p.part.part;
-    match from.get(name) {
-        Some(PartStart::Save(f)) => Ok(Some(f)),
-        Some(PartStart::Fresh) => Ok(None),
-        None if !in_shared_saves(&p.describe.restore) => Ok(None),
-        None => Err(anyhow!("there is no save to start the part {name} from")),
-    }
-}
-
-/// `start` params of a part, and the save it starts from (None for an empty start).
-fn start_params(
-    p: &PlannedPart,
-    instance: &str,
-    seed: u64,
-    from: Option<&StartSaves>,
-) -> Result<(StartParams, Option<String>)> {
-    let part: &WorldPart = &p.part;
-    let mut params = StartParams {
-        instance: instance.to_string(),
-        config: part.config.clone(),
-        seed,
-        clock_ms: 0,
-        from: None,
-        world_time: None,
-    };
-    let Some(f) = part_start(p, from)? else {
-        return Ok((params, None));
-    };
-    params.from = Some(f.clone());
-    Ok((params, Some(f.save.clone())))
-}
-
-/// `connect` info of a part a benchmark may reach (exact saves only); None when it has none.
-async fn connect(part: &Part) -> Result<Option<Value>> {
-    if part.describe.restore.exact != ExactKind::Save {
-        return Ok(None);
-    }
-    match part
-        .client
-        .request::<Value>(&Connect::instance(&part.instance))
-        .await
-    {
-        Ok(info) => Ok(Some(info)),
-        Err(CallError::Part { code: -32601, .. }) => Ok(None),
-        Err(CallError::Stopped(tail)) => bail!(stopped_message(&part.label(), &tail)),
-        Err(e) => bail!("connecting to the part {}: {e}", part.name),
-    }
-}
-
-/// The hosts a part's instance serves through the proxy; none when it doesn't answer
-/// `http_routes`.
-async fn http_routes(part: &Part) -> Result<Vec<HttpRoute>> {
-    let asked = GetHttpRoutes::instance(&part.instance);
-    match part.client.request::<HttpRoutes>(&asked).await {
-        Ok(served) => Ok(served.routes),
-        Err(CallError::Part { code: -32601, .. }) => Ok(vec![]),
-        Err(CallError::Stopped(tail)) => bail!(stopped_message(&part.label(), &tail)),
-        Err(e) => bail!("asking the part {} which hosts it serves: {e}", part.name),
-    }
-}
-
-/// A running instance and the integration that runs it.
-struct Instance {
-    integration: String,
-    id: String,
-}
-
-async fn stop_instances(hub: &Hub, instances: Vec<Instance>) {
-    for Instance {
-        integration,
-        id: instance,
-    } in instances
-    {
-        let r = async {
-            hub.client(&integration)
-                .await?
-                .request::<Value>(&Stop::instance(&instance))
-                .await
-                .map_err(anyhow::Error::from)
-        };
-        if let Err(e) = r.await {
-            eprintln!("world: could not stop {instance} ({integration}): {e:#}");
-        }
     }
 }
 

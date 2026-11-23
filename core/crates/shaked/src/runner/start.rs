@@ -4,7 +4,7 @@
 use std::{future::Future, sync::Arc, time::Instant};
 
 use anyhow::{anyhow, Result};
-use parts::proto::{BenchDescribe, WorldTimeParams};
+use parts::proto::BenchDescribe;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
@@ -317,18 +317,16 @@ async fn start_world(
     crate::mode::local_only(state.store.layer().policy(), "starting a world's parts")
         .map_err(anyhow::Error::msg)?;
     let bench = state.bench_named(&plan.benchmark).await?;
-    let mut planned = world::plan(&state.hub, &bench).await?;
-    let branch_id = plan.branch_id.as_str();
+    let planned = world::plan(&state.hub, &bench).await?;
+    let (branch_id, hub) = (plan.branch_id.as_str(), state.hub.clone());
     let seed = plan.scenario.seed.unwrap_or_else(new_seed);
-    let world_time = world_time_of(&bench, &plan.task_id);
-    planned.world_time = Some(world_time);
+    let epoch_ms = epoch_of(&bench, &plan.task_id);
     let since = Instant::now();
-    let hub = state.hub.clone();
-    let world =
-        World::start_planned(hub, &bench, planned, branch_id, seed, WorldFrom::Base).await?;
+    let from = WorldFrom::Base;
+    let world = World::start_branch(hub, &bench, planned, branch_id, seed, from, epoch_ms).await?;
     let restored = Overhead::of(Cat::Restore, overhead::ms_since(since));
     let mut start = run_start(&bench, &world, seed, plan);
-    start.world_epoch_ms = Some(world_time.epoch_ms);
+    start.world_epoch_ms = Some(epoch_ms);
     let since = Instant::now();
     let payload = serde_json::to_value(&start)?;
     match records
@@ -343,15 +341,11 @@ async fn start_world(
     }
 }
 
-/// A new run's world time: its epoch (the task's `clock_start` as UTC, else now) and the clock
-/// speed its branches run at.
-fn world_time_of(bench: &BenchDescribe, task_id: &str) -> WorldTimeParams {
+/// A new run's world epoch: the task's `clock_start` as UTC, else now.
+fn epoch_of(bench: &BenchDescribe, task_id: &str) -> i64 {
     let task = bench.tasks.iter().find(|t| t.id == task_id);
     let start = task.and_then(|t| t.clock_start.as_deref());
-    WorldTimeParams {
-        epoch_ms: crate::world_clock::WorldClock::epoch_ms(start, chrono::Utc::now()),
-        speed: crate::clock::speed_from_env(),
-    }
+    crate::world_clock::WorldClock::epoch_ms(start, chrono::Utc::now())
 }
 
 /// The payload of `RunStart` (see `start_world`).

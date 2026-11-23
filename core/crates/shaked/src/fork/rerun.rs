@@ -317,17 +317,14 @@ pub async fn start_world(
     events: &[Event],
     new_id: &str,
     rerun: &Rerun,
-    mut planned: Plan,
+    planned: Plan,
 ) -> Result<World, ForkError> {
     crate::mode::local_only(state.store.layer().policy(), "starting a world's parts")
         .map_err(|e| ForkError::Internal(anyhow::Error::msg(e)))?;
     let from = WorldFrom::Saves(start_saves(rerun)?);
     let (hub, seed) = (state.hub.clone(), rerun.run.seed);
-    planned.world_time = Some(parts::proto::WorldTimeParams {
-        epoch_ms: crate::recorded::world_epoch_ms(events),
-        speed: crate::clock::speed_from_env(),
-    });
-    let world = World::start_planned(hub, &rerun.bench, planned, new_id, seed, from)
+    let epoch_ms = crate::recorded::world_epoch_ms(events);
+    let world = World::start_branch(hub, &rerun.bench, planned, new_id, seed, from, epoch_ms)
         .await
         .map_err(start_error)?;
     let ready = async {
