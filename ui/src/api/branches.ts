@@ -4,6 +4,7 @@ import type {
 } from '@/model/types';
 import { get, path, post, qs } from './client';
 import { api } from './core';
+import { tracked } from '@/lib/productAnalytics';
 
 export const branch = (id: string) => get<BranchDetail>(path`/api/branches/${id}`);
 
@@ -12,7 +13,7 @@ export const rows = (id: string, seq: number, keys: string[]) =>
 
 /** Forks at `at_seq` with agent `changes`, or with another `team` (a run an external system drives only). */
 export const fork = (id: string, at_seq: number, changes: Record<string, Change> = {}, restore: RestoreMode = 'exact', team?: Team) =>
-  post<ForkResponse>(path`/api/branches/${id}/fork`, team ? { at_seq, restore, team } : { at_seq, changes, restore });
+  post<ForkResponse>(path`/api/branches/${id}/fork`, team ? { at_seq, restore, team } : { at_seq, changes, restore }).then(tracked('fork made'));
 
 /** How each part of a fork at `at_seq` would be restored; a 409 names the part that can't be. */
 export const restorePlan = (id: string, at_seq: number, restore: RestoreMode) =>

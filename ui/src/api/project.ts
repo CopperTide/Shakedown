@@ -1,12 +1,14 @@
 // The project folder: its status and its worlds, scenarios, setups and experiments (plan 1).
 import type { Experiment } from '@/model/experiment';
 import type { DeletePreview, Deleted, Dependent, Item, ItemKind, ItemSummary, LastDelete, ProjectSettings, ProjectStatus, Proposed } from '@/model/project';
+import { tracked } from '@/lib/productAnalytics';
 import { get, path, post, request } from './client';
 
 export const projectStatus = () => get<ProjectStatus>('/api/project');
 
 export const createProject = (name: string, git: boolean) =>
-  request<ProjectStatus>('/api/project', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name, git }) });
+  request<ProjectStatus>('/api/project', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name, git }) })
+    .then(tracked('project created'));
 
 export const listItems = (kind: ItemKind) => get<{ items: ItemSummary[] }>(`/api/project/${kind}`);
 
@@ -47,7 +49,7 @@ export const renameGroup = (from: string, to: string | null) =>
   post<{ moved: string[] } | Proposed>('/api/project/world-groups/rename', { from, to, confirm: true });
 
 /** Deploys a file experiment: the engine experiment it started. */
-export const deployExperiment = (id: string) => post<Experiment>(path`/api/project/experiments/${id}/deploy`, {});
+export const deployExperiment = (id: string) => post<Experiment>(path`/api/project/experiments/${id}/deploy`, {}).then(tracked('experiment deployed'));
 
 /** A file experiment's deployments, newest first. */
 export const experimentRuns = (id: string) => get<{ deployments: Experiment[] }>(path`/api/project/experiments/${id}/runs`);

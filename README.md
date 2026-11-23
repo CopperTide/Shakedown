@@ -49,6 +49,7 @@ Shakedown is a product of [CopperTide](https://coppertide.ai). This repository h
 | Sign-in | Google or GitHub | None: one person at one machine |
 | Projects | Built and edited in the app | A folder on your disk |
 | Runs, rewind, fork | Arrive with the cloud sandbox runner, in progress | Work today |
+| Usage analytics | PostHog, with all text and inputs masked ([privacy](https://docs.coppertide.ai/privacy)) | None: the UI never loads PostHog |
 
 ## Quick start
 

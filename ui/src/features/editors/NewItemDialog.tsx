@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogActions, DialogContent } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { errorMessage } from '@/lib/errors';
+import { CREATED, track } from '@/lib/productAnalytics';
 import type { ItemKind } from '@/model/project';
 import { ID_RULE, idFor, isValidId } from './idRule';
 import { KINDS } from './kinds';
@@ -28,6 +29,7 @@ export default function NewItemDialog({ kind, taken, onCreated }: { kind: ItemKi
     if (problem) { setError(problem); return; }
     try {
       await putItem(kind, id, TEMPLATES[kind](label), true);
+      track(CREATED[kind]);
       setOpen(false);
       onCreated(id);
     } catch (e) {

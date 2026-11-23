@@ -155,6 +155,8 @@ These are shadcn-style components: the code is ours, built on Radix primitives w
 - `features/<name>/`: one folder per screen (`experiments`, `runs`, `run`, `process`, `world`, `compare`,
   `connect`, `team`, `start`, `review`, `scenario`) with its page, components, hooks and logic.
   `app/` is the shell: top bar, status bar, palette and theme.
+- `lib/productAnalytics.ts`: PostHog for hosted Shakedown only (see
+  [architecture](../../docs/internals/architecture.md)); the API calls of the core flow count their step with `tracked`.
 - Imports name `@/…` across folders and `./…` within one.
 
 Logic lives in pure modules with tests, and components only render. For example: `lib/keys.ts`

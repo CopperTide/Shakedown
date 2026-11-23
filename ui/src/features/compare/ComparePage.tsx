@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { branch as fetchBranch, views as fetchViews } from '@/api/branches';
 import { compare } from '@/api/compare';
+import { track } from '@/lib/productAnalytics';
 import { ApproximateMark, StatusChip } from '@/components/marks';
 import { Button } from '@/components/ui/button';
 import { CodeBlock } from '@/components/ui/code-block';
@@ -116,6 +117,7 @@ const lastOf = (raw: BranchView[] | undefined): TwinView | null | undefined =>
 
 async function loadCompare(a: string, b: string): Promise<Loaded> {
   const [data, x, y, rx, ry] = await Promise.all([compare(a, b), fetchBranch(a), fetchBranch(b), endView(a), endView(b)]);
+  track('compare opened', { of: 'runs' });
   return { data, a: x, b: y, va: lastOf(rx), vb: lastOf(ry) };
 }
 

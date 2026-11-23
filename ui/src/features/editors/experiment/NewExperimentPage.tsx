@@ -9,6 +9,7 @@ import { PageBody, PageHeader } from '@/components/ui/page';
 import { ErrorState } from '@/components/ui/state';
 import { useQuery } from '@/hooks/useQuery';
 import { errorMessage } from '@/lib/errors';
+import { track } from '@/lib/productAnalytics';
 import type { ExperimentBody } from '@/model/project';
 import { idFor } from '../idRule';
 import { loadChoices } from './choices';
@@ -24,7 +25,11 @@ export default function NewExperimentPage() {
   const ready = body.label.trim() && body.world && body.scenario && body.setups.length > 0;
   const create = async () => {
     const id = idFor(body.label);
-    try { await putItem('experiments', id, body, true); navigate(`/experiments/file/${id}`); } catch (e) { setError(errorMessage(e)); }
+    try {
+      await putItem('experiments', id, body, true);
+      track('experiment created');
+      navigate(`/experiments/file/${id}`);
+    } catch (e) { setError(errorMessage(e)); }
   };
   return (
     <>

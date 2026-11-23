@@ -8,6 +8,7 @@ import { withCsrf } from '@/api/csrf';
 import { type AccountItem, fetchMe, type Me } from '@/api/me';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { startIfHosted, stopProductAnalytics } from '@/lib/productAnalytics';
 
 interface Deps { fetch: (url: string, init: RequestInit) => Promise<Response>; reload: () => void }
 
@@ -19,6 +20,7 @@ export const itemUrl = (post: string, core: string = CORE) => (/^https?:\/\//.te
 /** Does what choosing `item` means: POSTs its body where it says, then reloads; nothing for the current one. */
 export async function choose(item: AccountItem, deps: Deps = browser): Promise<void> {
   if (!item.post) return;
+  if (/\/logout$/.test(item.post)) stopProductAnalytics(); // product analytics forget who this browser was
   await deps.fetch(itemUrl(item.post), withCsrf({
     method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' }, body: JSON.stringify(item.body ?? {}),
   })!);
@@ -44,12 +46,12 @@ export function AccountMenu({ me }: { me: Me | null }) {
   );
 }
 
-/** `/api/me`, read once; null until it answers (or when it fails). */
+/** `/api/me`, read once; null until it answers (or when it fails). Hosted, it also starts product analytics. */
 export function useMe(): Me | null {
   const [me, setMe] = useState<Me | null>(null);
   useEffect(() => {
     let live = true;
-    fetchMe().then((m) => { if (live) setMe(m); }, () => {});
+    fetchMe().then((m) => { if (live) setMe(m); void startIfHosted(m); }, () => {});
     return () => { live = false; };
   }, []);
   return me;

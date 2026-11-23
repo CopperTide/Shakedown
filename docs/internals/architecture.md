@@ -83,6 +83,14 @@ What each box is:
 - **The hosted layer** is CopperTide Cloud's crate `shaked-hosted`. It implements the `Layer` trait
   (`src/layer.rs`) and starts shaked with `serve::run` ([embedding](../embedding.md)). The engine has no
   code for orgs or tenants. `tests/no_orgs.rs` checks that.
+- **Product analytics (UI, hosted only):** when `/api/me` says `mode: hosted`, the UI reads the signed-in
+  person, their org and a PostHog key from the gateway's `/gw/api/me` and starts PostHog
+  (`ui/src/lib/productAnalytics.ts`): masked autocapture and replay, page addresses reduced to route
+  templates, and a few named steps of the core flow (project, world, scenario, setup and experiment
+  created; run and experiment run started; experiment deployed; fork made; compare opened). posthog-js is
+  loaded only then, so a local shaked never loads it, and never with Global Privacy Control or Do Not
+  Track on; in an EU or EEA time zone it stores nothing in the browser and records no replay. `ui/src/lib/posthogShared.ts` is kept identical to
+  CopperTide's `web/src/hosted/posthogShared.ts`.
 - **E2B workers** are the next step. The engine side is built: `shaked worker`, the link, the
   gateway forwarding and the control box's holds (see [sandbox runs](sandbox-runs.md)). What starts a sandbox
   for a branch (`Hosting`, M2a Task 7 onward) is not in the engine yet. Today only tests hand a worker its

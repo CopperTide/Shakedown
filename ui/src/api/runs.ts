@@ -1,5 +1,6 @@
 import type { ScenarioChoice } from '@/model/scenario';
 import type { NewRunResponse, RunSummary, Runner, Team } from '@/model/types';
+import { tracked } from '@/lib/productAnalytics';
 import { del, get, path, post } from './client';
 
 export const runs = () => get<RunSummary[]>('/api/runs');
@@ -17,6 +18,6 @@ export const startRun = (task_id: string, team: Team, { runner = 'chain', scenar
   post<NewRunResponse>('/api/runs', {
     task_id, team, runner: connection ? 'external' : runner, ...(scenario ? { scenario } : {}), ...(connection ? { connection } : {}),
     ...(benchmark ? { benchmark } : {}),
-  });
+  }).then(tracked('run started'));
 
 export const deleteRun = (id: string) => del<{ dropped: number }>(path`/api/runs/${id}`);

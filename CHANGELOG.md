@@ -21,6 +21,10 @@
 
 ### Added
 
+- **Product analytics in hosted Shakedown.** Served under `/sd/` by CopperTide's gateway with a PostHog key,
+  the UI starts PostHog: the person by id, their org as a group, masked autocapture and session replay,
+  page addresses as route templates, and named steps of the core flow (never names or content). A local
+  shaked never loads PostHog, nor does a browser with Global Privacy Control or Do Not Track on.
 - Delete for worlds, scenarios, setups and experiments in the app, on each editor page and list
   row: the dialog lists what uses the item, then deletes it only if unused or with everything that
   uses it. `<kind>.dependents` previews the same over HTTP, MCP and the assistant.
@@ -35,7 +39,6 @@
 - The Worlds page opens each world onto its scenarios and their experiments; a world's page lists
   its scenarios, a scenario's page its experiments, and an experiment's page shows
   World › Scenario › Experiment.
-
 - API tokens (`sd_`), capped by read, run or admin; made in Settings, in the API, or with
   `shaked token create`. The SDK reads one from `SHAKEDOWN_TOKEN`.
 - A layer interface for embedding shaked (`docs/embedding.md`). Every way a run starts (a run, a
