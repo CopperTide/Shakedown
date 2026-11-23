@@ -26,7 +26,7 @@ and `drop_save`. It prints a JSON report and exits 0 if all passed, 1 if not, 2 
 
 Install a package by putting its folder under one of the `SHAKEDOWN_PACKAGES` roots. A `command` run is for
 programs you trust; it runs in the package folder with only `PATH`, `HOME`, `SHAKEDOWN_PG_URL`, `UV_CACHE_DIR`,
-`XDG_CACHE_HOME`, `RUST_LOG` and `SHAKEDOWN_SAVES` in its environment. An `image` run is boxed in a container: no
+`XDG_CACHE_HOME`, `RUST_LOG`, `SHAKEDOWN_SAVES` and, when it is set, `SHAKEDOWN_TEMPLATES` in its environment. An `image` run is boxed in a container: no
 network unless the manifest asks for host networking (`needs.network = "host"`), no environment from shaked,
 and only its own saves folder, mounted at `/saves`.
 

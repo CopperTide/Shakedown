@@ -206,6 +206,8 @@ Tests that need Docker services, real servers or real models are `#[ignore]`d wi
 or marked `live` (Python), and CI skips them. [CONTRIBUTING.md](CONTRIBUTING.md) has the full checklist, how
 to write an integration or a benchmark, and the code rules.
 
+How the engine is built, with diagrams, invariants and where each is enforced: [docs/internals](docs/internals/README.md).
+
 <details>
 <summary><b>Renamed settings</b></summary>
 
