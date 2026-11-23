@@ -5496,6 +5496,7 @@ openai-agents = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "pydantic" },
     { name = "pytest" },
 ]
 
@@ -5511,7 +5512,10 @@ requires-dist = [
 provides-extras = ["langgraph", "crewai", "openai-agents"]
 
 [package.metadata.requires-dev]
-dev = [{ name = "pytest", specifier = ">=8" }]
+dev = [
+    { name = "pydantic", specifier = ">=2" },
+    { name = "pytest", specifier = ">=8" },
+]
 
 [[package]]
 name = "shellingham"
