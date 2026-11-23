@@ -137,9 +137,12 @@ events (`claude_session.rs`, `usage.rs`). In a worker they go through the gatewa
 them, so the client records none.
 
 The CLI environment is scrubbed first, then the gateway route is set (`src/agents/cli.rs`, `scrub_env`,
-`ModelRoute`). The test `a_routed_cli_gets_the_gateway_route_after_the_scrub` in that file pins the order.
-Known gap, in the bug batch: the scrub list does not cover AWS credentials, the object-store secret,
-`ANTHROPIC_AUTH_TOKEN` or `CLAUDE_CODE_OAUTH_TOKEN`.
+`ModelRoute`). The test `a_routed_cli_keeps_no_parent_secret_and_gets_only_the_route` in that file pins the
+order. The scrub is a pattern rule (`is_secret_env`) over a short fixed list: database settings, local model
+keys, every AWS credential (`AWS_*` naming a key, secret, token or credentials) and anything ending in
+`_API_KEY`, `_PG_URL`, `_SECRET_ACCESS_KEY`, `_AUTH_TOKEN` or `_OAUTH_TOKEN`; only the CLI's own vendor key is
+kept, and on a routed run the route replaces it. `no_parent_credential_reaches_a_cli_child` sets those
+credentials in a child test process and checks that neither CLI's command keeps one.
 
 ## The world MCP endpoint and the proxy
 

@@ -175,15 +175,32 @@ const SECRET_ENV: [&str; 7] = [
     LOCAL_MODELS_ENV,
 ];
 
-/// True for the name of an env var a CLI child must not see: the secrets above, and any database
-/// URL, local model key or provider key under another prefix (a stale variable from an older
-/// setup is removed too).
+/// The endings of secrets under any prefix: database URLs, provider keys, secret access keys (an
+/// object store's, AWS's) and bearer or OAuth tokens (`ANTHROPIC_AUTH_TOKEN`,
+/// `CLAUDE_CODE_OAUTH_TOKEN`).
+const SECRET_SUFFIXES: [&str; 5] = [
+    "_PG_URL",
+    "_API_KEY",
+    "_SECRET_ACCESS_KEY",
+    "_AUTH_TOKEN",
+    "_OAUTH_TOKEN",
+];
+
+/// The words that make an `AWS_*` variable a credential: `AWS_ACCESS_KEY_ID`,
+/// `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`, `AWS_BEARER_TOKEN_BEDROCK`, and where the
+/// credentials are kept (`AWS_SHARED_CREDENTIALS_FILE`, `AWS_CONTAINER_CREDENTIALS_*`).
+const AWS_CREDENTIAL_WORDS: [&str; 4] = ["KEY", "SECRET", "TOKEN", "CREDENTIALS"];
+
+/// True for the name of an env var a CLI child must not see: the secrets above, any AWS
+/// credential, and any database URL, local model key, provider key, secret access key or token
+/// under another prefix (a stale variable from an older setup is removed too).
 fn is_secret_env(name: &str) -> bool {
+    let aws = name.strip_prefix("AWS_");
     name.starts_with("PG")
         || name.starts_with(LOCAL_KEY_PREFIX)
         || name.contains("LOCAL_KEY_")
-        || name.ends_with("_PG_URL")
-        || name.ends_with("_API_KEY")
+        || SECRET_SUFFIXES.iter().any(|s| name.ends_with(s))
+        || aws.is_some_and(|rest| AWS_CREDENTIAL_WORDS.iter().any(|w| rest.contains(w)))
         || SECRET_ENV.contains(&name)
 }
 
@@ -220,6 +237,7 @@ mod tests {
             "OLD_PG_URL",
             "MISTRAL_API_KEY",
             "OLD_PORT",
+            "AWS_REGION",
         ]
         .map(String::from);
         let gone = scrubbed(present.into_iter(), "ANTHROPIC_API_KEY");
@@ -231,7 +249,9 @@ mod tests {
         ] {
             assert!(gone.iter().any(|g| g == k), "{k} kept");
         }
-        assert!(!gone.iter().any(|g| g == "OLD_PORT"));
+        for k in ["OLD_PORT", "AWS_REGION"] {
+            assert!(!gone.iter().any(|g| g == k), "{k} removed");
+        }
         assert!(
             !gone.iter().any(|g| g == "ANTHROPIC_API_KEY"),
             "the CLI's own key stays"
@@ -395,6 +415,54 @@ mod tests {
         let dir = std::path::Path::new("/w");
         contained(&jail.docker_run(&c, dir, "c"), &c, "claude");
         contained(&jail.docker_run(&x, dir, "c"), &x, "codex");
+    }
+
+    /// Credentials a parent shaked may hold that no CLI child may see: AWS's (Bedrock and the
+    /// object store), an object store's own secret key, and Claude's bearer and OAuth tokens.
+    const PARENT_CREDENTIALS: [&str; 8] = [
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_SESSION_TOKEN",
+        "AWS_BEARER_TOKEN_BEDROCK",
+        "SHAKEDOWN_OBJECT_STORE_R2_SECRET_ACCESS_KEY",
+        "ANTHROPIC_AUTH_TOKEN",
+        "CLAUDE_CODE_OAUTH_TOKEN",
+        "MY_SERVICE_AUTH_TOKEN",
+    ];
+
+    /// Set only in the child test process [`no_parent_credential_reaches_a_cli_child`] starts.
+    const PROBE: &str = "SHAKEDOWN_TEST_SCRUB_PROBE";
+
+    /// In a test process whose environment holds [`PARENT_CREDENTIALS`], Claude Code's and
+    /// Codex's commands remove every one (run by the test below; without it, nothing to check).
+    #[test]
+    #[ignore = "run by no_parent_credential_reaches_a_cli_child, with the credentials set"]
+    fn probe_the_scrub_of_parent_credentials() {
+        if std::env::var_os(PROBE).is_none() {
+            return;
+        }
+        let (c, x) = routed_commands("http://127.0.0.1:7/gateway/b/a");
+        for (cli, cmd) in [("claude", &c), ("codex", &x)] {
+            let env = env_changes(cmd);
+            for k in PARENT_CREDENTIALS {
+                assert_eq!(env.get(k), Some(&None), "{k} reaches {cli}");
+            }
+        }
+    }
+
+    /// Credentials set in the parent are absent in a Claude Code or Codex child: checked in a
+    /// child test process, so this one's environment (which other tests read) stays as it is.
+    #[test]
+    fn no_parent_credential_reaches_a_cli_child() {
+        let name = "agents::cli::tests::probe_the_scrub_of_parent_credentials";
+        let mut probe = Command::new(std::env::current_exe().unwrap());
+        probe.args(["--exact", name, "--ignored", "--test-threads=1"]);
+        for k in PARENT_CREDENTIALS.into_iter().chain([PROBE]) {
+            probe.env(k, "from-the-parent");
+        }
+        let out = probe.output().unwrap();
+        let text = String::from_utf8_lossy(&out.stdout);
+        assert!(out.status.success() && text.contains("1 passed"), "{text}");
     }
 
     #[test]

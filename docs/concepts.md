@@ -299,8 +299,12 @@ Isolation of the CLI agents (`core/crates/shaked/src/agents/`; checked live by t
   sandbox could not open a socket, not even to the loopback Postgres port (`Operation not permitted`). Codex
   still listed its sub-agent tools (`collaboration.*`) in the live checks; they run under the same restrictions.
 - Both CLIs run in a fresh temporary working directory, with `PG*`, `SHAKEDOWN_PG_URL`, `DATABASE_URL`,
-  `OPENROUTER_API_KEY`, `SHAKEDOWN_LOCAL_MODELS` and every `SHAKEDOWN_LOCAL_KEY_*` removed from their environment. Each
-  keeps only its own vendor's key, which it may sign in with: Claude Code keeps `ANTHROPIC_API_KEY` and loses
+  `OPENROUTER_API_KEY`, `SHAKEDOWN_LOCAL_MODELS` and every `SHAKEDOWN_LOCAL_KEY_*` removed from their environment,
+  and with them every AWS credential (an `AWS_*` variable naming a key, secret, token or credentials, such as
+  `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN` and `AWS_BEARER_TOKEN_BEDROCK`) and every
+  variable ending in `_API_KEY`, `_PG_URL`, `_SECRET_ACCESS_KEY` (an object store's
+  `SHAKEDOWN_OBJECT_STORE_<NAME>_SECRET_ACCESS_KEY`), `_AUTH_TOKEN` or `_OAUTH_TOKEN` (`ANTHROPIC_AUTH_TOKEN`,
+  `CLAUDE_CODE_OAUTH_TOKEN`). Each keeps only its own vendor's key, which it may sign in with: Claude Code keeps `ANTHROPIC_API_KEY` and loses
   `OPENAI_API_KEY`; Codex keeps `OPENAI_API_KEY` and loses `ANTHROPIC_API_KEY`. The `provider` of API mode does
   not apply to them on this machine.
 - In a sandbox (`shaked worker`), which holds no model key, their model calls go through the worker's gateway

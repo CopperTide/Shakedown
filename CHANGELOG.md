@@ -43,3 +43,12 @@
   `shaked token create`. The SDK reads one from `SHAKEDOWN_TOKEN`.
 - A layer interface for embedding shaked (`docs/embedding.md`). Every way a run starts (a run, a
   suite, an experiment, a suite's claim) is admitted and metered through it.
+
+### Fixed
+
+- **Claude Code and Codex no longer inherit cloud credentials or Claude tokens.** Their
+  environment now loses every AWS credential (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`,
+  `AWS_SESSION_TOKEN`, `AWS_BEARER_TOKEN_BEDROCK` and the like), object-store secret keys, and any
+  variable ending in `_AUTH_TOKEN` or `_OAUTH_TOKEN` (`ANTHROPIC_AUTH_TOKEN`,
+  `CLAUDE_CODE_OAUTH_TOKEN`), so a parent `ANTHROPIC_AUTH_TOKEN` no longer reaches the gateway as a
+  bearer token on routed runs either.
