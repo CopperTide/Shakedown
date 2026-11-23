@@ -1,10 +1,11 @@
 //! The saves every run shares: the benchmark's base save (empty instances plus its `seed`) and
 //! one gold save per task (the base plus the task's gold actions). Each is made once, under a
-//! per-name lock, and an existing save counts as made. They are made with seed 0 and name only
-//! the parts that keep saves (a part with only replay starts fresh instead).
+//! lock per hub saves folder and name, and an existing save counts as made. They are made with
+//! seed 0 and name only the parts that keep saves (a part with only replay starts fresh instead).
 
 use std::{
     collections::HashMap,
+    path::{Path, PathBuf},
     sync::{Arc, LazyLock, Mutex},
 };
 
@@ -24,16 +25,15 @@ use super::{
     request, Saves, StartSaves, World,
 };
 
-/// One lock per name for this process: a save is made once even when two runs start together.
-async fn name_lock(name: &str) -> tokio::sync::OwnedMutexGuard<()> {
-    static LOCKS: LazyLock<Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>> =
-        LazyLock::new(Default::default);
-    let l = LOCKS
-        .lock()
-        .unwrap()
-        .entry(name.to_string())
-        .or_default()
-        .clone();
+/// The locks of [`name_lock`], one per saves folder and name.
+type NameLocks = HashMap<(PathBuf, String), Arc<tokio::sync::Mutex<()>>>;
+
+/// One lock per name in the saves folder `saves` (a hub's): a save is made once even when two
+/// runs start together, and hubs on other folders never wait for each other.
+async fn name_lock(saves: &Path, name: &str) -> tokio::sync::OwnedMutexGuard<()> {
+    static LOCKS: LazyLock<Mutex<NameLocks>> = LazyLock::new(Default::default);
+    let key = (saves.to_path_buf(), name.to_string());
+    let l = LOCKS.lock().unwrap().entry(key).or_default().clone();
     l.lock_owned().await
 }
 
@@ -73,7 +73,8 @@ async fn ensure_saves(
 ) -> Result<Saves> {
     let planned = plan(hub, bench).await?;
     let names = kept_names(&planned, names);
-    let _g = name_lock(&names.values().cloned().collect::<Vec<_>>().join(",")).await;
+    let joined = names.values().cloned().collect::<Vec<_>>().join(",");
+    let _g = name_lock(hub.saves_root(), &joined).await;
     if saves_exist(hub, &planned, &names).await? {
         return Ok(names);
     }
@@ -174,4 +175,33 @@ async fn apply_gold(world: &World, task: &str) -> Result<()> {
         bail!("task {task}: no gold write succeeded");
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{path::Path, time::Duration};
+
+    use super::name_lock;
+
+    /// True when `name_lock(saves, name)` is had within a moment.
+    async fn had_at_once(saves: &str, name: &str) -> bool {
+        let soon = Duration::from_millis(200);
+        tokio::time::timeout(soon, name_lock(Path::new(saves), name))
+            .await
+            .is_ok()
+    }
+
+    #[tokio::test]
+    async fn two_hubs_making_saves_of_one_name_do_not_wait_for_each_other() {
+        let _held = name_lock(Path::new("/saves/hub-a"), "base-retail").await;
+        assert!(had_at_once("/saves/hub-b", "base-retail").await);
+    }
+
+    #[tokio::test]
+    async fn one_hub_makes_saves_of_one_name_one_at_a_time() {
+        let held = name_lock(Path::new("/saves/hub-c"), "base-retail").await;
+        assert!(!had_at_once("/saves/hub-c", "base-retail").await);
+        drop(held);
+        assert!(had_at_once("/saves/hub-c", "base-retail").await);
+    }
 }

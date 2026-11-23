@@ -144,6 +144,11 @@ impl Hub {
         }
     }
 
+    /// The folder every package's saves are kept under.
+    pub fn saves_root(&self) -> &Path {
+        &self.saves_root
+    }
+
     /// `<saves_root>/<package>/<save>`, created.
     pub fn save_dir(&self, package: &str, save: &str) -> PathBuf {
         let d = self.saves_root.join(package).join(save);

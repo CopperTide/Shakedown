@@ -52,3 +52,6 @@
   variable ending in `_AUTH_TOKEN` or `_OAUTH_TOKEN` (`ANTHROPIC_AUTH_TOKEN`,
   `CLAUDE_CODE_OAUTH_TOKEN`), so a parent `ANTHROPIC_AUTH_TOKEN` no longer reaches the gateway as a
   bearer token on routed runs either.
+- **Shared saves of unrelated hubs are no longer made one at a time.** The lock that makes each
+  base and gold save once is now per hub saves folder and name, so runs on different hubs stop
+  queueing behind each other.

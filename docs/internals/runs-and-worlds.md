@@ -256,9 +256,8 @@ object store (`src/objects/`) and the `saves` table exist for uploads, which com
 | Setup and link calls are recorded as tool calls of actors `setup` and `link`, so a replay repeats them. | `src/exec/setup.rs`, `src/exec/links.rs` |
 | A shaked whose packages run only in sandboxes never starts a world's parts itself. | `src/bind.rs`, `local_only`, called by `src/runner/start.rs` and `src/fork/rerun.rs` |
 
-Known gaps, in the bug batch: `fork::prepare` calls `world::plan` before `local_only`, so a sandbox-only shaked
-starts integration programs before it refuses a fork. `world/standard.rs`'s `name_lock` keys on save names
-without the hub, so unrelated hubs queue behind one process-wide lock.
+`world/standard.rs`'s `name_lock` keys on the hub's saves folder and the save names, so each shared save is
+made once per hub while unrelated hubs never wait for each other.
 
 ## Extension points
 

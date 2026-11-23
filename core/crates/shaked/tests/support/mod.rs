@@ -61,9 +61,8 @@ pub fn keys(payload: &Value) -> Vec<String> {
 /// driver killed): three times the 10 s these waits allowed by counting polls.
 pub const WAIT: Duration = Duration::from_secs(30);
 /// How long a test waits for a run of task 27 to start or be scored on its own hub. Those runs
-/// build the task's base and gold saves, and the builds queue behind every other test's in the
-/// process (one lock per save name, `world::standard`), so on a busy box that alone can take
-/// minutes. Such a test checks what it means in world time on the world clock.
+/// build the task's base and gold saves (each hub its own, `world::standard`), so on a busy box
+/// that alone can take minutes. Such a test checks what it means in world time on the world clock.
 pub const SAVES_BUILT: Duration = Duration::from_secs(300);
 /// How late (world ms) a window's `time_up` may come after the window's end: the watch looks at
 /// the clock every 100 ms of real time, and a busy box wakes it late.
