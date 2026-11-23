@@ -5,10 +5,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use serde_json::Value;
 
-use super::{
-    agents::drive,
-    score::{check, freeze},
-};
+use super::{agents::drive, score::score_now};
 use crate::{app::AppState, exec::BranchCtx, model::*};
 
 /// Where a branch's work starts. `notes[j]` is the recorded handoff note of agent `j`
@@ -56,8 +53,7 @@ pub async fn finish(state: &AppState, ctx: &BranchCtx) -> Option<Ending> {
     if !ctx.lifecycle.claim_end() {
         return None;
     }
-    freeze(ctx).await;
-    let outcome = check(state, ctx).await;
+    let outcome = score_now(state, ctx).await;
     Some(conclude(state, ctx, outcome).await)
 }
 
@@ -69,11 +65,12 @@ pub async fn finish_failed(state: &AppState, ctx: &BranchCtx, why: String) -> Op
     if !ctx.lifecycle.claim_end() {
         return None;
     }
-    freeze(ctx).await;
-    let outcome = check(state, ctx).await.map(|ending| match ending.status {
-        BranchStatus::InfraError => ending,
-        _ => Ending::failed(why),
-    });
+    let outcome = score_now(state, ctx)
+        .await
+        .map(|ending| match ending.status {
+            BranchStatus::InfraError => ending,
+            _ => Ending::failed(why),
+        });
     Some(conclude(state, ctx, outcome).await)
 }
 

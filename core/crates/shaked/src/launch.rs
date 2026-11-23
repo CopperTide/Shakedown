@@ -97,33 +97,26 @@ async fn run_token_of(
     ))
 }
 
-/// The run's driver started, when it has one.
-async fn launch_driver_of(
-    state: &Arc<AppState>,
-    driver: Option<&Connection>,
-    ids: RunIds<'_>,
-) -> Option<driver::Launched> {
-    driver::launch_or_fail(state, driver?, ids).await
-}
-
 /// Starts the run `spec` describes. shaked's own runners run its team on a spawned task, one
 /// agent after another (or as the runner says); a run an external system drives goes live, its
 /// team's agents (there may be none yet) started, and then its driver is launched, if it has one.
 /// The layer admits the run first (a refusal starts nothing) and meters it once it has begun, so
 /// every way a run starts (`POST /api/runs`, suites, experiments, a suite's claim) is counted.
 pub async fn launch(state: &Arc<AppState>, spec: LaunchSpec<'_>) -> Result<Launched, RunError> {
-    let (task_id, driver) = (spec.task_id, spec.driver);
-    let (warning, run_id, ctx) = admitted_begin(state, spec).await?;
+    let (warning, run_id, ctx) = admitted_begin(state, &spec).await?;
     let branch_id = ctx.branch_id.clone();
     let run_token = run_token_of(state, &ctx, &run_id).await?;
     let agents = go(state, Arc::new(ctx)).await?;
     let ids = RunIds {
         run_id: &run_id,
         branch_id: &branch_id,
-        task_id,
+        task_id: spec.task_id,
         fork_of: None,
     };
-    let driver = launch_driver_of(state, driver, ids).await;
+    let driver = match spec.driver {
+        Some(conn) => driver::launch_or_fail(state, conn, ids).await,
+        None => None,
+    };
     Ok(Launched {
         run_id,
         branch_id,
@@ -138,20 +131,11 @@ pub async fn launch(state: &Arc<AppState>, spec: LaunchSpec<'_>) -> Result<Launc
 /// the layer's warning, the run and its first branch.
 async fn admitted_begin(
     state: &Arc<AppState>,
-    spec: LaunchSpec<'_>,
+    spec: &LaunchSpec<'_>,
 ) -> Result<(Option<String>, RunId, BranchCtx), RunError> {
     let costly = crate::layer::Costly::StartRun;
     let warning = crate::layer::admit(&state.store, &spec.scope, costly).await?;
-    let begun = runner::begin_run(
-        state,
-        &spec.scope,
-        spec.benchmark,
-        spec.task_id,
-        spec.team,
-        spec.rules,
-        spec.scenario,
-    );
-    let (run_id, ctx) = begun.await?;
+    let (run_id, ctx) = runner::begin_run(state, spec).await?;
     let usage = runs_usage(&run_id, &ctx.branch_id);
     crate::layer::meter(&state.store, &spec.scope, usage).await;
     Ok((warning, run_id, ctx))

@@ -97,11 +97,17 @@ pub(crate) async fn go(state: &AppState, ctx: &Arc<BranchCtx>) -> anyhow::Result
     let mut agents = vec![];
     for spec in &ctx.roster.team.agents {
         ctx.record(Some(&spec.id), &start_payload(spec)).await?;
-        let env = env_for(state, ctx, Some(&spec.id));
-        let ends = endpoints(state.config.public_base(), &ctx.branch_id, &spec.id, env);
-        agents.push(ends.with_token(ctx.agent_token(&spec.id)));
+        agents.push(agent_endpoints(state, ctx, &spec.id));
     }
     Ok(agents)
+}
+
+/// `agent`'s endpoints on the live branch `ctx`: its proxy variables (a proxy ticket is issued)
+/// and its token.
+pub(crate) fn agent_endpoints(state: &AppState, ctx: &BranchCtx, agent: &str) -> Endpoints {
+    let env = env_for(state, ctx, Some(agent));
+    let ends = endpoints(state.config.public_base(), &ctx.branch_id, agent, env);
+    ends.with_token(ctx.agent_token(agent))
 }
 
 /// An agent an external system registers. Only `id` is needed; `kind` defaults to `external`.
@@ -280,7 +286,7 @@ impl UsageReport {
 
     /// What the call costs at `provider`'s list price for its model, when the table has it.
     pub fn list_price(&self, provider: &str) -> Option<f64> {
-        crate::budget::price(provider, self.model.as_deref(), &self.tokens())
+        (self.model.as_deref()).and_then(|m| crate::prices::call_cost(provider, m, &self.tokens()))
     }
 
     /// The `ModelCall` payload, with no request or response.
@@ -320,7 +326,9 @@ pub struct Resumable {
     pub history: Vec<Event>,
 }
 
-/// True when `e` belongs to `agent`'s history: its own step, or a note or message for it.
+/// True when `e` belongs to `agent`'s history: its own event, or a note or message for it or for
+/// [`EVERYONE`]. Unlike the live mailbox (`exec::talk`), a handoff with no `to` is left out, a
+/// handoff to everyone is kept, and its own events are in.
 fn in_history(e: &Event, agent: &str) -> bool {
     let to = e.payload.get("to").and_then(Value::as_str);
     let sent_to_it = matches!(e.kind, EventKind::Handoff | EventKind::Message)

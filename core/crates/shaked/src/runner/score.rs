@@ -9,14 +9,20 @@ use crate::{app::AppState, exec::BranchCtx, model::*, overhead::Cat, world};
 
 /// Once the agents are done the world stands still: no tick and no clock while it is scored.
 /// Freezing twice is freezing once.
-pub(crate) async fn freeze(ctx: &BranchCtx) {
+pub(super) async fn freeze(ctx: &BranchCtx) {
     ctx.stop_ticker().await;
     ctx.clock.freeze();
 }
 
+/// The world scored as it stands: frozen, then checked.
+pub(crate) async fn score_now(state: &AppState, ctx: &BranchCtx) -> Result<Ending> {
+    freeze(ctx).await;
+    check(state, ctx).await
+}
+
 /// Scores the world and records the Check. A branch on which an agent broke a rule fails with it,
 /// whatever the checks say.
-pub(crate) async fn check(state: &AppState, ctx: &BranchCtx) -> Result<Ending> {
+async fn check(state: &AppState, ctx: &BranchCtx) -> Result<Ending> {
     let since = Instant::now();
     let check = score(state, ctx).await?;
     ctx.overhead.add_since(Cat::Score, since);

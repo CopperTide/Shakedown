@@ -56,7 +56,7 @@ async fn in_halves(
     scenario: &Scenario,
 ) -> (BranchPlan, BranchCtx) {
     let spec = spec(scope, "27", scenario);
-    let plan = runner::record_start(&fx.state, scope, &spec).await.unwrap();
+    let plan = runner::record_start(&fx.state, &spec).await.unwrap();
     let sink = StoreRecords::new(
         fx.state.store.clone(),
         scope.clone(),
@@ -80,10 +80,8 @@ fn halves_record_the_same_events_as_begin_run() {
             seed: Some(7),
             ..Default::default()
         };
-        let rules = Rules::new(Runner::Chain);
-        let args = (None, "27", team(), rules, &scenario);
-        let whole = runner::begin_run(&fx.state, &scope, args.0, args.1, args.2, args.3, args.4);
-        let (_, whole) = whole.await.unwrap();
+        let whole = spec(&scope, "27", &scenario);
+        let (_, whole) = runner::begin_run(&fx.state, &whole).await.unwrap();
         let (plan, ctx) = in_halves(&fx, &scope, &scenario).await;
         assert_eq!((plan.benchmark.as_str(), plan.clock_from_ms), ("retail", 0));
         let json = serde_json::to_string(&plan).unwrap();
@@ -110,7 +108,7 @@ fn record_start_refuses_an_unknown_task() {
         let scope = Arc::new(Caller::person());
         let scenario = Scenario::default();
         let spec = spec(&scope, "nope", &scenario);
-        let err = runner::record_start(&fx.state, &scope, &spec).await;
+        let err = runner::record_start(&fx.state, &spec).await;
         assert!(matches!(err, Err(RunError::UnknownTask(t)) if t == "nope"));
     });
 }

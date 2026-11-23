@@ -8,7 +8,7 @@ use serde_json::Value;
 
 use super::{
     lifecycle::{Ending, StartPoint},
-    score::{check, freeze},
+    score::{freeze, score_now},
 };
 use crate::{
     agents::{AgentResult, AgentRun, Driver, FailureKind},
@@ -23,11 +23,22 @@ use crate::{
 /// under their title.
 #[derive(Debug, Clone)]
 pub(crate) struct Brief {
-    pub(crate) ticket: String,
-    pub(crate) title: String,
-    pub(crate) instructions: String,
+    ticket: String,
+    title: String,
+    instructions: String,
     /// The world's own clock, when the task's world keeps a calendar of its own.
     pub(crate) clock: Option<WorldClock>,
+}
+
+impl Brief {
+    /// The start of an agent's first input at world time `now_ms`: the world's date and time
+    /// (when it keeps a calendar), the ticket, and the instructions under their title.
+    pub(crate) fn opening(&self, now_ms: i64) -> String {
+        let mut text = self.clock.map_or_else(String::new, |c| c.brief(now_ms));
+        let (ticket, title, instructions) = (&self.ticket, &self.title, &self.instructions);
+        text.push_str(&format!("{ticket}\n# {title}\n\n{instructions}\n"));
+        text
+    }
 }
 
 pub(super) async fn drive(
@@ -53,13 +64,11 @@ pub(super) async fn drive(
     if let Some(end) = ended {
         // Over its spend limit, a run is scored as it stands (a failure).
         if end.status == BranchStatus::BudgetExceeded {
-            freeze(ctx).await;
-            check(state, ctx).await?;
+            score_now(state, ctx).await?;
         }
         return Ok(end);
     }
-    freeze(ctx).await;
-    check(state, ctx).await
+    score_now(state, ctx).await
 }
 
 /// How a stopped branch ends: `stopped`, or `budget_exceeded`, scored as it stands, when the
@@ -68,8 +77,7 @@ async fn stopped(state: &Arc<AppState>, ctx: &Arc<BranchCtx>) -> Result<Ending> 
     let Some(why) = ctx.budget.forced() else {
         return Ok(Ending::STOPPED);
     };
-    freeze(ctx).await;
-    check(state, ctx).await?;
+    score_now(state, ctx).await?;
     Ok(Ending::because(BranchStatus::BudgetExceeded, why))
 }
 
@@ -149,14 +157,7 @@ fn restore_notes(ctx: &BranchCtx, from: &StartPoint) -> Result<()> {
 /// The ticket, the instructions, and the handoff notes left for the agent: in a legacy run the
 /// previous agent's (which must exist), otherwise every note recorded so far for it.
 async fn agent_input(ctx: &BranchCtx, idx: usize, brief: &Brief) -> Result<String> {
-    let Brief {
-        ticket,
-        title,
-        instructions,
-        clock,
-    } = brief;
-    let mut input = clock.map_or_else(String::new, |c| c.brief(ctx.clock.now_ms()));
-    input.push_str(&format!("{ticket}\n# {title}\n\n{instructions}\n"));
+    let mut input = brief.opening(ctx.clock.now_ms());
     let notes = match ctx.rules.handoff_required {
         true => legacy_note(ctx, idx)?.into_iter().collect(),
         false => notes_for(ctx, &ctx.roster.team.agents[idx].id).await?,

@@ -2,6 +2,7 @@
 //! doing (idle, working, failed), the mail waiting for it, and the guard rails. It takes what
 //! happened (an agent said something, a turn ended, time passed, a pause) and answers what to do
 //! (wake an agent with its mail, pass on what an agent said at the end of a turn, end the run).
+//! The guard rails' settings ([`Limits::from_env`]) are read once, before the board starts.
 
 use std::time::Duration;
 
@@ -24,6 +25,27 @@ impl Default for Limits {
             max_run: Duration::from_secs(60 * 60),
             idle_grace: Duration::from_secs(20),
             max_idle_wakes: 3,
+        }
+    }
+}
+
+impl Limits {
+    /// The limits `SHAKEDOWN_DISPATCH_MAX_MINUTES`, `SHAKEDOWN_DISPATCH_IDLE_SECS` and
+    /// `SHAKEDOWN_DISPATCH_IDLE_WAKES` set, else the defaults (60 min, 20 s, 3).
+    pub fn from_env() -> Limits {
+        let num = |k: &str| {
+            parts::settings::var(k)
+                .ok()
+                .and_then(|v| v.trim().parse::<u64>().ok())
+        };
+        let d = Limits::default();
+        Limits {
+            max_run: num("SHAKEDOWN_DISPATCH_MAX_MINUTES")
+                .map_or(d.max_run, |m| Duration::from_secs(m * 60)),
+            idle_grace: num("SHAKEDOWN_DISPATCH_IDLE_SECS")
+                .map_or(d.idle_grace, Duration::from_secs),
+            max_idle_wakes: num("SHAKEDOWN_DISPATCH_IDLE_WAKES")
+                .map_or(d.max_idle_wakes, |n| n as u32),
         }
     }
 }

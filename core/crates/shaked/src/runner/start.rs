@@ -1,8 +1,7 @@
 //! Starting a run: its first branch, its world from the base save, its `RunStart` and the
 //! task's setup.
 
-use crate::{auth::Caller, store::Scoped};
-use std::{sync::Arc, time::Instant};
+use std::{future::Future, sync::Arc, time::Instant};
 
 use anyhow::{anyhow, Result};
 use parts::proto::{BenchDescribe, WorldTimeParams};
@@ -11,11 +10,13 @@ use serde_json::json;
 
 use crate::{
     app::AppState,
+    auth::Caller,
     exec::{BranchCtx, BranchRecords, StoreRecords, ToolExec},
+    launch::LaunchSpec,
     model::*,
     overhead::{self, Cat, Overhead},
     scenario::{self, Scenario},
-    store::{BranchId, RunId},
+    store::{BranchId, RunId, Scoped},
     world::{self, World, WorldFrom},
 };
 
@@ -24,7 +25,7 @@ pub const MAX_SEED: u64 = (1 << 53) - 1;
 
 /// A new branch seed: random, below 2^53 so every JSON reader keeps it exact.
 pub fn new_seed() -> u64 {
-    (uuid::Uuid::new_v4().as_u128() as u64) & ((1 << 53) - 1)
+    (uuid::Uuid::new_v4().as_u128() as u64) & MAX_SEED
 }
 
 /// Why a run did not start: the benchmark has no such task, or something failed on the way.
@@ -128,9 +129,9 @@ impl<'a> RunOptions<'a> {
         let none = Scenario::default();
         let scope = match self.scope {
             Some(s) => s.clone(),
-            None => Arc::new(crate::auth::Caller::person()),
+            None => Arc::new(Caller::person()),
         };
-        let spec = crate::launch::LaunchSpec {
+        let spec = LaunchSpec {
             scope,
             task_id,
             team,
@@ -177,43 +178,27 @@ pub struct BranchPlan {
 
 /// Creates a run and its first branch, starts its world from the base save, records `RunStart`
 /// with `rules` and `scenario`, and makes the task's setup (with the scenario's disruptions): the
-/// branch, ready to be driven. `record_start`, then `stand_up` into the store.
+/// branch, ready to be driven. `record_start`, then `stand_up` into the store. (`spec.driver`
+/// is the launcher's business, not this.)
 pub async fn begin_run(
     state: &AppState,
-    scope: &Arc<Caller>,
-    benchmark: Option<&str>,
-    task_id: &str,
-    team: Team,
-    rules: Rules,
-    scenario: &Scenario,
+    spec: &LaunchSpec<'_>,
 ) -> Result<(RunId, BranchCtx), RunError> {
-    let spec = crate::launch::LaunchSpec {
-        scope: scope.clone(),
-        task_id,
-        team,
-        scenario,
-        rules,
-        driver: None,
-        benchmark,
-    };
-    let plan = record_start(state, scope, &spec).await?;
+    let plan = record_start(state, spec).await?;
+    let scope = &spec.scope;
     let store = StoreRecords::new(state.store.clone(), scope.clone(), plan.branch_id.clone());
     let ctx = stand_up(state, &plan, Arc::new(store)).await?;
     Ok((plan.run_id, ctx.with_caller(scope.clone())))
 }
 
-/// The first half of beginning a run: creates the run and its first branch for `scope`, after
-/// checking the benchmark has the task. The plan to stand the branch up from (`RunStart` waits
-/// for the world, which it records, so `stand_up` writes it first of the branch's events).
-pub async fn record_start(
-    state: &AppState,
-    scope: &Arc<Caller>,
-    spec: &crate::launch::LaunchSpec<'_>,
-) -> Result<BranchPlan, RunError> {
+/// The first half of beginning a run: creates the run and its first branch for `spec.scope`,
+/// after checking the benchmark has the task. The plan to stand the branch up from (`RunStart`
+/// waits for the world, which it records, so `stand_up` writes it first of the branch's events).
+pub async fn record_start(state: &AppState, spec: &LaunchSpec<'_>) -> Result<BranchPlan, RunError> {
     let bench = bench_with_task(state, spec.benchmark, spec.task_id).await?;
     // A world whose tools clash is refused before anything is recorded.
     world::plan(&state.hub, &bench).await?;
-    let records = state.store.at(scope);
+    let records = state.store.at(&spec.scope);
     let run_id = records.create_run(spec.task_id, &spec.team).await?;
     let none = json!([]);
     let created = records.create_branch(&run_id, None, &spec.team, &none, None);
@@ -244,7 +229,8 @@ pub async fn stand_up(
     let (bench, world, start_seq, record_ms) = match started {
         Ok(s) => s,
         Err(e) => {
-            log_setup_failure(&plan.branch_id, fail_branch(&*records, &e).await);
+            let set = records.set_status(BranchStatus::InfraError, Some(format!("{e:#}")));
+            note_failed_setup(&plan.branch_id, set).await;
             return Err(e.into());
         }
     };
@@ -259,12 +245,6 @@ pub async fn stand_up(
     ctx.overhead.add(Cat::Record, record_ms);
     set_up_task(state, &bench, &ctx, &plan.scenario, start_seq).await?;
     Ok(ctx)
-}
-
-/// Ends a branch `infra_error` with `e`'s message.
-async fn fail_branch(records: &dyn BranchRecords, e: &anyhow::Error) -> Result<()> {
-    let status = BranchStatus::InfraError;
-    records.set_status(status, Some(format!("{e:#}"))).await
 }
 
 /// Makes the task's setup calls (with `scenario`'s disruptions) on a new run's world, then records
@@ -294,7 +274,10 @@ async fn set_up_task(
         Err(e) => e,
     };
     ctx.world.stop().await;
-    ctx_setup_failed(ctx, e.clone()).await;
+    let set = ctx
+        .records()
+        .set_status(BranchStatus::InfraError, Some(e.clone()));
+    note_failed_setup(&ctx.branch_id, set).await;
     Err(anyhow!(e))
 }
 
@@ -306,34 +289,15 @@ async fn save_after_setup(exec: &ToolExec, ctx: &BranchCtx) {
     }
 }
 
-/// A new branch's setup result; a failed setup ends the branch `infra_error` with its message.
-pub async fn setup_or_infra_error<T>(
-    records: Scoped<'_>,
-    branch_id: &str,
-    r: Result<T>,
-) -> Result<T> {
-    if let Err(e) = &r {
-        setup_failed(records, branch_id, format!("{e:#}")).await;
-    }
-    r
-}
-
 /// Ends a branch whose setup failed `infra_error` with `error`; a store failure is logged.
 pub async fn setup_failed(records: Scoped<'_>, branch_id: &str, error: String) {
     let set = records.set_status(branch_id, BranchStatus::InfraError, Some(error));
-    log_setup_failure(branch_id, set.await);
+    note_failed_setup(branch_id, set).await;
 }
 
-/// `setup_failed` for a branch that has its context: its own records end it.
-async fn ctx_setup_failed(ctx: &BranchCtx, error: String) {
-    let set = ctx
-        .records()
-        .set_status(BranchStatus::InfraError, Some(error));
-    log_setup_failure(&ctx.branch_id, set.await);
-}
-
-fn log_setup_failure(branch_id: &str, set: Result<()>) {
-    if let Err(e) = set {
+/// Waits for `set`, a failed setup's `infra_error` being recorded; a store failure is logged.
+async fn note_failed_setup(branch_id: &str, set: impl Future<Output = Result<()>>) {
+    if let Err(e) = set.await {
         eprintln!("branch {branch_id}: could not record its failed setup: {e:#}");
     }
 }

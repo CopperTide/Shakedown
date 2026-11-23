@@ -69,9 +69,7 @@ async fn branch(fx: &AppFx) -> (BranchPlan, String) {
         driver: None,
         benchmark: None,
     };
-    let plan = runner::record_start(&fx.state, &scope, &spec)
-        .await
-        .unwrap();
+    let plan = runner::record_start(&fx.state, &spec).await.unwrap();
     fx.state.links.expect(plan.clone());
     let ticket = fx.state.links.tickets.issue(ticket_for(&plan));
     (plan, ticket)
