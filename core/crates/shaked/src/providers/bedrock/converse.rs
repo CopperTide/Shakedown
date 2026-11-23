@@ -128,10 +128,9 @@ fn tool_call(block: &Value) -> Value {
 
 fn usage(u: &Value) -> Value {
     let n = |k: &str| u[k].as_i64().unwrap_or(0);
-    let prompt = n("inputTokens") + n("cacheReadInputTokens") + n("cacheWriteInputTokens");
-    let completion = n("outputTokens");
-    json!({"prompt_tokens": prompt, "completion_tokens": completion,
-           "total_tokens": prompt + completion})
+    let (fresh, written) = (n("inputTokens"), n("cacheWriteInputTokens"));
+    let (read, output) = (n("cacheReadInputTokens"), n("outputTokens"));
+    canonical::cached_usage(fresh, written, read, output)
 }
 
 /// The canonical response for Converse answer `raw` to a call to `model`.
@@ -221,10 +220,29 @@ mod tests {
         );
         assert_eq!(
             r["usage"],
-            json!({"prompt_tokens": 100, "completion_tokens": 20, "total_tokens": 120})
+            json!({"prompt_tokens": 100, "completion_tokens": 20, "total_tokens": 120,
+                   "input_tokens": 100, "cache_creation_input_tokens": 0,
+                   "cache_read_input_tokens": 0})
         );
         let cut = response(&json!({"stopReason": "max_tokens"}), "m");
         assert_eq!(cut["choices"][0]["finish_reason"], "length");
+    }
+
+    #[test]
+    fn a_converse_answer_keeps_its_cache_counts_for_pricing() {
+        let raw = json!({"usage": {"inputTokens": 10, "cacheReadInputTokens": 300,
+                                   "cacheWriteInputTokens": 20, "outputTokens": 5}});
+        let r = response(&raw, "m");
+        let u = &r["usage"];
+        let counts = [
+            "prompt_tokens",
+            "cache_read_input_tokens",
+            "cache_creation_input_tokens",
+        ];
+        assert_eq!(
+            counts.map(|k| &u[k]),
+            [&json!(330), &json!(300), &json!(20)]
+        );
     }
 
     #[test]

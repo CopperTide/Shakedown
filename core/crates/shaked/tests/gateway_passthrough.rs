@@ -1070,7 +1070,8 @@ fn a_worker_token_at_a_workers_own_gateway_is_refused() {
 fn a_call_over_the_limit_that_fails_to_record_still_stops_the_branch() {
     run(async {
         let (up, fx, plan, token, mut link) = linked_under("unrecorded", limited(0.001)).await;
-        let nul = json!({"model": "gpt-x", "messages": [{"role": "user", "content": "a \u{0} b"}]});
+        let said = json!([{"role": "user", "content": "a \u{0} b"}]);
+        let nul = json!({"model": "gpt-x", "messages": said});
         let chat = (plan.branch_id.as_str(), "o", "chat/completions");
         assert_eq!(call(&fx, chat, &token, &nul).await.status(), 500);
         assert_eq!(up.seen().len(), 1);
@@ -1081,5 +1082,34 @@ fn a_call_over_the_limit_that_fails_to_record_still_stops_the_branch() {
             "the limit is recorded at once"
         );
         assert!(matches!(hear(&mut link).await, ToWorker::OverBudget { .. }));
+    })
+}
+
+/// A chat call to Claude (an open agent's) is priced with its cache reads at the cache rate, as a
+/// Messages call is: the answer's 12 fresh and 30 cache-read input tokens, 5 output.
+#[test]
+fn a_chat_call_to_claude_prices_cache_reads_at_the_cache_rate() {
+    run(async {
+        let up = fake_apis().await;
+        let fx = control("cached", &up).await;
+        let claude = AgentSpec::new("open-claude", AgentKind::Open)
+            .with_provider("anthropic")
+            .with_model("claude-sonnet-5-5");
+        let rules = Rules::new(Runner::Chain);
+        let (plan, ticket) = ticketed(&fx, "27", team_of(vec![claude]), rules).await;
+        let (_link, token) = started(&fx, &ticket).await;
+        let hi = json!([{"role": "user", "content": "hi"}]);
+        let ask = json!({"model": "claude-sonnet-5-5", "messages": hi});
+        let chat = (plan.branch_id.as_str(), "open-claude", "chat/completions");
+        assert_eq!(call(&fx, chat, &token, &ask).await.status(), 200);
+        let calls = exactly(&fx, &plan.branch_id, 1).await;
+        let t = shaked::prices::CallTokens {
+            input: 12,
+            cache_write: 0,
+            cache_read: 30,
+            output: 5,
+        };
+        let want = shaked::prices::call_cost("anthropic", "claude-sonnet-5-5", &t);
+        assert_eq!(calls[0].payload["charged_usd"].as_f64(), want);
     })
 }

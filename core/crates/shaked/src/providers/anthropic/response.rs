@@ -78,15 +78,10 @@ fn kept_blocks(blocks: &[Value], finish: &str) -> Vec<Value> {
 
 /// Prompt tokens count the cached input too: read from the cache, and written to it.
 fn usage(u: &Value) -> Value {
-    let n = |k: &str| u[k].as_u64().unwrap_or(0);
-    let prompt =
-        n("input_tokens") + n("cache_read_input_tokens") + n("cache_creation_input_tokens");
-    let completion = n("output_tokens");
-    json!({
-        "prompt_tokens": prompt,
-        "completion_tokens": completion,
-        "total_tokens": prompt + completion,
-    })
+    let n = |k: &str| u[k].as_i64().unwrap_or(0);
+    let (fresh, written) = (n("input_tokens"), n("cache_creation_input_tokens"));
+    let (read, output) = (n("cache_read_input_tokens"), n("output_tokens"));
+    canonical::cached_usage(fresh, written, read, output)
 }
 
 #[cfg(test)]
@@ -135,11 +130,13 @@ mod tests {
     }
 
     #[test]
-    fn usage_counts_cached_input_as_prompt_tokens() {
+    fn usage_counts_cached_input_as_prompt_tokens_and_keeps_the_cache_counts() {
         let v = translate(&raw(json!([]), "end_turn"), "c");
         assert_eq!(
             v["usage"],
-            json!({"prompt_tokens": 135, "completion_tokens": 20, "total_tokens": 155})
+            json!({"prompt_tokens": 135, "completion_tokens": 20, "total_tokens": 155,
+                   "input_tokens": 100, "cache_creation_input_tokens": 5,
+                   "cache_read_input_tokens": 30})
         );
         let bare = json!({"type": "message", "content": [], "usage": {"input_tokens": 3, "output_tokens": 1}});
         assert_eq!(translate(&bare, "c")["usage"]["total_tokens"], 4);

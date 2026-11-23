@@ -61,3 +61,6 @@
 - **A sandbox's chat call that takes its run past the limit stops the branch even when the call
   can't be recorded.** The gateway used to answer 500 without stopping it, so the branch ran on
   until its next call.
+- **Open agents' chat calls to Claude and Bedrock are priced at the cache rates.** Their canonical
+  usage now keeps the cache-write and cache-read counts, so a cache hit is no longer charged (and
+  metered) as fresh input, about 10 times its price.

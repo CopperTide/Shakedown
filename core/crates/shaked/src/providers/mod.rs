@@ -6,7 +6,7 @@
 
 mod anthropic;
 pub(crate) mod bedrock;
-mod canonical;
+pub(crate) mod canonical;
 mod config;
 mod key_check;
 pub mod keys;

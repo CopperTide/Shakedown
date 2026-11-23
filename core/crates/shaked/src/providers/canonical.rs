@@ -1,6 +1,6 @@
 //! The canonical (OpenAI chat-completions) format as the Claude and Bedrock adapters read and
 //! write it: a request's messages, their text and tool calls, the alternating turns both native
-//! APIs want, and the one-choice `chat.completion` answer. Pure.
+//! APIs want, and the one-choice `chat.completion` answer with its usage. Pure.
 
 use serde_json::{json, Value};
 
@@ -62,6 +62,17 @@ pub(super) fn assistant(content: Value, calls: Vec<Value>) -> Value {
         m["tool_calls"] = json!(calls);
     }
     m
+}
+
+/// The canonical usage of an answer whose input is `fresh`, cache-`written` and cache-`read`
+/// tokens: `prompt_tokens` is the whole input, and the three counts are kept beside it
+/// (`input_tokens`, `cache_creation_input_tokens`, `cache_read_input_tokens`), so the call is
+/// priced at the cache rates.
+pub(crate) fn cached_usage(fresh: i64, written: i64, read: i64, output: i64) -> Value {
+    let prompt = fresh + written + read;
+    json!({"prompt_tokens": prompt, "completion_tokens": output,
+           "total_tokens": prompt + output, "input_tokens": fresh,
+           "cache_creation_input_tokens": written, "cache_read_input_tokens": read})
 }
 
 /// The canonical answer of `model`: one choice, `message`, ended by `finish`, and its `usage`.

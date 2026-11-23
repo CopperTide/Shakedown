@@ -113,7 +113,11 @@ charged. It takes no in-flight permit on a linked branch.
 
 ### Pricing and the spend limit
 
-- `book::call_cost`: the provider's reported cost when it gives one, else list price from `prices.rs`.
+- `book::call_cost`: the provider's reported cost when it gives one, else list price from `prices.rs`, cache
+  writes and cache reads at their own rates. Every route's usage carries those counts: the Claude and Bedrock
+  adapters' canonical usage and a Messages call's both come from `providers::canonical::cached_usage`
+  (`input_tokens`, `cache_creation_input_tokens`, `cache_read_input_tokens`), a Responses call's as
+  `prompt_tokens_details.cached_tokens`.
 - `Budget` (`src/budget.rs`) keeps a per-agent running estimate. A turn's reported cost replaces that agent's
   estimate (`settle`). `over()` says why once the estimate passes `max_cost_usd`.
 - shaked's own runners stop the agent and end the branch `budget_exceeded`, scored as it stands. On an external

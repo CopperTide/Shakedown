@@ -4,6 +4,7 @@
 use serde_json::{json, Value};
 
 use super::Api;
+use crate::providers::canonical::cached_usage;
 
 /// The `type`s of the event that ends a Responses stream with the whole response.
 const FINAL: [&str; 3] = [
@@ -151,10 +152,7 @@ pub(super) fn usage(api: Api, response: &Value) -> Value {
         Api::Messages => {
             let (fresh, written) = (n("input_tokens"), n("cache_creation_input_tokens"));
             let (read, output) = (n("cache_read_input_tokens"), n("output_tokens"));
-            let prompt = fresh + written + read;
-            json!({"prompt_tokens": prompt, "completion_tokens": output,
-                   "total_tokens": prompt + output, "input_tokens": fresh,
-                   "cache_creation_input_tokens": written, "cache_read_input_tokens": read})
+            cached_usage(fresh, written, read, output)
         }
         Api::Responses | Api::Chat | Api::CountTokens => {
             let (input, output) = (n("input_tokens"), n("output_tokens"));

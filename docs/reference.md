@@ -363,7 +363,9 @@ What the gateway does per provider:
   `tool_result` blocks, and `max_tokens` is the request's own or `SHAKEDOWN_ANTHROPIC_MAX_TOKENS`. Nothing else is
   carried over, so sampling fields such as `temperature` are dropped, and a forced tool choice becomes `auto`. The
   answer is translated back: `stop_reason` `end_turn` is `stop`, `tool_use` is `tool_calls`, `max_tokens` is
-  `length` and `refusal` is `content_filter`; usage becomes prompt, completion and total tokens.
+  `length` and `refusal` is `content_filter`; usage becomes prompt (the whole input), completion and total
+  tokens, with `input_tokens`, `cache_creation_input_tokens` and `cache_read_input_tokens` kept beside them (Bedrock's
+  Converse counts under the same names), so cache writes and cache hits are priced at their own rates.
 - CLI agents' calls through `messages` and `responses` (see "HTTP API" above) are not translated: they go to a
   provider that speaks that API as they came, and are recorded raw.
 - Every call is recorded in the canonical (OpenAI) form, with `provider` (the id that answered) and, when the
