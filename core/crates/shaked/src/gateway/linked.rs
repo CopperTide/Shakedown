@@ -17,10 +17,7 @@ use tokio::sync::OwnedSemaphorePermit;
 use super::{error_response, target::Kind, Refused};
 use crate::{
     app::AppState,
-    auth::{
-        engine_check, run_tokens::resolve_run_token, Action, Caller, CallerKind, Decision,
-        RunTokenKind,
-    },
+    auth::{run_tokens::worker_caller, Action, Caller},
     model::*,
     providers::Provider,
     worker::{holds, links::Link},
@@ -103,23 +100,11 @@ async fn in_flight(link: &Link) -> Result<OwnedSemaphorePermit, Refused> {
 
 /// Ok when `token` is the live worker token of `branch`.
 async fn worker_token_opens(state: &AppState, token: &str, branch: &str) -> Result<(), Refused> {
-    let refused = (StatusCode::UNAUTHORIZED, WORKER_TOKEN_WANTED);
-    let found = resolve_run_token(&state.store, token).await;
-    let c = found.map_err(|e| internal("resolving a worker token", e))?;
-    let c = c.ok_or(refused)?;
-    let CallerKind::RunToken {
-        run,
-        kind: RunTokenKind::Worker,
-        ..
-    } = &c.kind
-    else {
-        return Err(refused);
-    };
-    let on = crate::auth::Target::Branch { run, branch };
-    match engine_check(&c, &Action::CallModel, &on) {
-        Decision::Allow => Ok(()),
-        _ => Err(refused),
-    }
+    let found = worker_caller(&state.store, token, Action::CallModel, Some(branch)).await;
+    let found = found.map_err(|e| internal("resolving a worker token", e))?;
+    found
+        .map(drop)
+        .ok_or((StatusCode::UNAUTHORIZED, WORKER_TOKEN_WANTED))
 }
 
 /// `agent` of the running `branch` as the store has it (the control box wrote its team).

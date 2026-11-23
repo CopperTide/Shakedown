@@ -33,17 +33,17 @@ const SPENT_BEFORE: &str = "(before the restart)";
 /// What the control box holds a link's branch to, whatever its worker does: the run's spend
 /// estimate and limit, the hold, whether its limits are on record at all, and how many agents its
 /// team has (its pool of calls in flight is [`INFLIGHT_PER_AGENT`] times that).
-pub struct Held {
+pub struct HoldState {
     pub budget: Budget,
     pub hold: Hold,
     pub limits_known: bool,
     pub agents: usize,
 }
 
-impl Held {
+impl HoldState {
     /// What `plan`'s branch starts held to: the control box's own rules.
-    pub fn of_plan(plan: &BranchPlan) -> Held {
-        Held {
+    pub fn of_plan(plan: &BranchPlan) -> HoldState {
+        HoldState {
             budget: Budget::new(plan.rules.max_cost_usd),
             hold: Hold::Running,
             limits_known: true,
@@ -53,13 +53,13 @@ impl Held {
 
     /// What a branch is held to after a restart, from what the store kept (never from the
     /// worker's own records).
-    pub fn of_record(c: &Controlled) -> Held {
+    pub fn of_record(c: &Controlled) -> HoldState {
         let budget = Budget::new(c.limit.flatten());
         budget.add(SPENT_BEFORE, c.spent);
         if c.refused {
             budget.first_refusal();
         }
-        Held {
+        HoldState {
             budget,
             hold: c.hold,
             limits_known: c.limit.is_some(),
@@ -158,7 +158,7 @@ impl Appended {
 impl Links {
     /// A worker for `plan`'s branch will say hello: its ticket's `Start` carries `plan`.
     pub fn expect(&self, plan: BranchPlan) {
-        let held = Held::of_plan(&plan);
+        let held = HoldState::of_plan(&plan);
         let mut link = Link::new((&plan.run_id, &plan.branch_id), Wire::default(), 0, held);
         link.plan = Some(plan);
         let id = link.branch_id.clone();
@@ -173,7 +173,7 @@ impl Links {
         (run, branch): (&str, &str),
         caller: Arc<Caller>,
         last_n: u64,
-        held: Held,
+        held: HoldState,
     ) -> Arc<Link> {
         let mut branches = self.branches.lock().unwrap();
         let wire = Wire {
@@ -256,7 +256,7 @@ impl Links {
 }
 
 impl Link {
-    fn new((run, branch): (&str, &str), wire: Wire, last_n: u64, held: Held) -> Link {
+    fn new((run, branch): (&str, &str), wire: Wire, last_n: u64, held: HoldState) -> Link {
         let appended = Appended {
             last_n,
             recent: VecDeque::new(),

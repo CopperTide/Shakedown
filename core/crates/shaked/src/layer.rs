@@ -80,9 +80,33 @@ pub trait Layer: Send + Sync + 'static {
     }
 }
 
+/// A deployment on personal use's hooks (everything allowed, nothing metered), told apart only by
+/// its policy and whether it keeps secrets: [`LocalLayer`] and a sandbox's [`WorkerLayer`].
+pub trait PersonalUse: Send + Sync + 'static {
+    const POLICY: &'static Policy;
+    /// See [`Layer::keeps_secrets`].
+    const KEEPS_SECRETS: bool;
+}
+
 /// Personal use: this machine only, everything allowed, nothing metered.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct LocalLayer;
+
+impl PersonalUse for LocalLayer {
+    const POLICY: &'static Policy = &Policy::LOCAL;
+    const KEEPS_SECRETS: bool = true;
+}
+
+/// The layer a `shaked worker` runs on: personal use's in everything but its secrets. A sandbox
+/// holds no secret but its worker token, so the worker never reads or makes a vault key, and never
+/// serves an agent with model keys from its environment.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct WorkerLayer;
+
+impl PersonalUse for WorkerLayer {
+    const POLICY: &'static Policy = &WORKER_POLICY;
+    const KEEPS_SECRETS: bool = false;
+}
 
 impl Policy {
     /// Personal use: this machine only, private model servers fine, packages run here.
@@ -94,9 +118,19 @@ impl Policy {
     };
 }
 
-impl Layer for LocalLayer {
+/// What a worker's shaked is: this sandbox only, packages run here, no keys of the environment.
+pub const WORKER_POLICY: Policy = Policy {
+    environment_keys: false,
+    ..Policy::LOCAL
+};
+
+impl<L: PersonalUse> Layer for L {
     fn policy(&self) -> &Policy {
-        &Policy::LOCAL
+        L::POLICY
+    }
+
+    fn keeps_secrets(&self) -> bool {
+        L::KEEPS_SECRETS
     }
 
     /// The person, or an API token's holder: each token is told apart from the person and from

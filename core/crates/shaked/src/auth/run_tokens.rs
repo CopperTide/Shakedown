@@ -5,7 +5,9 @@
 use anyhow::Result;
 use uuid::Uuid;
 
-use super::{Caller, RunTokenKind, SystemScope};
+use super::{
+    engine_check, Action, Caller, CallerKind, Decision, RunTokenKind, SystemScope, Target,
+};
 use crate::store::Store;
 
 /// How long a token lives: a day, longer than a run is expected to take (a local shaked sets no
@@ -70,4 +72,32 @@ pub async fn resolve_run_token(store: &Store, bearer: &str) -> Result<Option<Cal
             None => c,
         })
     }))
+}
+
+/// The caller a worker token is, when it is live and may do `action` on `branch` of its run
+/// (None: the token's own branch); None for any other token, or a branch it may not.
+pub async fn worker_caller(
+    store: &Store,
+    token: &str,
+    action: Action,
+    branch: Option<&str>,
+) -> Result<Option<Caller>> {
+    let Some(c) = resolve_run_token(store, token).await? else {
+        return Ok(None);
+    };
+    let CallerKind::RunToken {
+        run,
+        branch: own,
+        kind: RunTokenKind::Worker,
+        ..
+    } = &c.kind
+    else {
+        return Ok(None);
+    };
+    let on = Target::Branch {
+        run,
+        branch: branch.unwrap_or(own),
+    };
+    let allowed = engine_check(&c, &action, &on) == Decision::Allow;
+    Ok(allowed.then_some(c))
 }

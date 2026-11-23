@@ -25,15 +25,14 @@ use tokio::{sync::mpsc::UnboundedReceiver, time::Instant};
 use super::{
     frames::{ToControl, ToWorker, REFUSED_ENDED, REFUSED_TOKEN},
     holds,
-    links::{frame_of, Held, Link},
+    links::{frame_of, HoldState, Link},
     tickets::Taken,
 };
 use crate::{
     app::AppState,
     auth::{
-        engine_check,
-        run_tokens::{prefix, resolve_run_token, DEFAULT_TOKEN_SECS},
-        Action, Caller, CallerKind, Decision, RunTokenKind, Target,
+        run_tokens::{self, prefix, DEFAULT_TOKEN_SECS},
+        Action, Caller, CallerKind, RunTokenKind,
     },
     model::{BranchStatus, Hold},
     runner::BranchPlan,
@@ -74,7 +73,7 @@ fn refused(why: impl Into<String>) -> End {
 
 /// A connection past its hello: its branch's link, its generation, who the branch records for,
 /// and the frames relayed to it.
-struct Opened {
+struct Joined {
     link: Arc<Link>,
     generation: u64,
     caller: Arc<Caller>,
@@ -85,16 +84,16 @@ async fn serve(state: Arc<AppState>, parts: Parts, mut socket: WebSocket) {
     let within = state.config.link_hello_timeout;
     let first = tokio::time::timeout(within, next_frame(&mut socket)).await;
     let first = first.unwrap_or_else(|_| Err(refused("no hello in time")));
-    let opened = match first {
+    let joined = match first {
         Ok(f) => hello(&state, &parts, &mut socket, f).await,
         Err(end) => Err(end),
     };
-    let opened = match opened {
-        Ok(o) => o,
+    let joined = match joined {
+        Ok(j) => j,
         Err(end) => return finish(&mut socket, end).await,
     };
-    let (link, generation) = (opened.link.clone(), opened.generation);
-    let end = pump(&state, &mut socket, opened).await;
+    let (link, generation) = (joined.link.clone(), joined.generation);
+    let end = pump(&state, &mut socket, joined).await;
     link.detach(generation);
     finish(&mut socket, end).await;
 }
@@ -142,7 +141,7 @@ async fn hello(
     parts: &Parts,
     socket: &mut WebSocket,
     first: ToControl,
-) -> Result<Opened, End> {
+) -> Result<Joined, End> {
     let ToControl::Hello {
         ticket,
         resume_from,
@@ -160,7 +159,7 @@ async fn hello(
         say(socket, &start).await?;
     }
     tell_hold(socket, &link).await?;
-    Ok(Opened {
+    Ok(Joined {
         link,
         generation,
         caller,
@@ -263,24 +262,9 @@ fn logged(branch: &str, doing: &str, e: anyhow::Error) -> End {
 
 /// The worker token `secret` names, when it is one for a branch's link: its caller.
 async fn worker_caller(state: &AppState, secret: &str) -> Result<Caller, End> {
-    let found = resolve_run_token(&state.store, secret).await;
+    let found = run_tokens::worker_caller(&state.store, secret, Action::WorkerLink, None).await;
     let found = found.map_err(|e| logged("?", "resolving a worker token", e))?;
-    let unknown = || refused(REFUSED_TOKEN);
-    let c = found.ok_or_else(unknown)?;
-    let CallerKind::RunToken {
-        run,
-        branch,
-        kind: RunTokenKind::Worker,
-        ..
-    } = &c.kind
-    else {
-        return Err(unknown());
-    };
-    let on = Target::Branch { run, branch };
-    match engine_check(&c, &Action::WorkerLink, &on) {
-        Decision::Allow => Ok(c),
-        _ => Err(unknown()),
-    }
+    found.ok_or_else(|| refused(REFUSED_TOKEN))
 }
 
 /// The link a worker token reconnects to: its own branch's, rebuilt when this control box lost
@@ -345,7 +329,11 @@ async fn rebuilt(
 
 /// What the store kept of `branch` for its rebuilt link: its worker's last `n`, and what it is
 /// held to. A limit recorded reached whose hold was lost is put on that hold again.
-async fn on_record(state: &AppState, acting: &Caller, branch: &str) -> Result<(u64, Held), End> {
+async fn on_record(
+    state: &AppState,
+    acting: &Caller,
+    branch: &str,
+) -> Result<(u64, HoldState), End> {
     let at = state.store.at(acting);
     let last = at.last_link_n(branch).await;
     let last = last.map_err(|e| logged(branch, "reading its last event", e))?;
@@ -357,7 +345,7 @@ async fn on_record(state: &AppState, acting: &Caller, branch: &str) -> Result<(u
         repaired.map_err(|e| logged(branch, "holding it for its limit", e))?;
         kept.hold = Hold::OVER_BUDGET;
     }
-    Ok((last, Held::of_record(&kept)))
+    Ok((last, HoldState::of_record(&kept)))
 }
 
 /// What the connection waits on next: a frame relayed from the API, what the worker sent, or
@@ -376,7 +364,7 @@ struct Keepalive {
 
 /// Answers the worker's frames and relays the API's until the connection ends: it is pinged
 /// every third of the idle timeout and closed once it was silent for all of it.
-async fn pump(state: &AppState, socket: &mut WebSocket, mut o: Opened) -> End {
+async fn pump(state: &AppState, socket: &mut WebSocket, mut o: Joined) -> End {
     let idle = state.config.link_idle_timeout;
     let every = (idle / 3).max(std::time::Duration::from_millis(10));
     let mut tick = tokio::time::interval(every);
@@ -399,7 +387,7 @@ async fn pump(state: &AppState, socket: &mut WebSocket, mut o: Opened) -> End {
 async fn step(
     state: &AppState,
     socket: &mut WebSocket,
-    o: &Opened,
+    o: &Joined,
     got: Got,
     keep: &mut Keepalive,
 ) -> Result<(), End> {
@@ -425,7 +413,7 @@ async fn step(
 async fn answer(
     state: &AppState,
     socket: &mut WebSocket,
-    o: &Opened,
+    o: &Joined,
     f: ToControl,
 ) -> Result<(), End> {
     match f {
@@ -461,7 +449,7 @@ fn linked(f: ToControl) -> Option<Linked> {
 
 /// Appends event `n` when it is the next one, or acks it again when it was appended already
 /// (known here, or found in the store).
-async fn append(state: &AppState, o: &Opened, f: ToControl) -> Result<ToWorker, End> {
+async fn append(state: &AppState, o: &Joined, f: ToControl) -> Result<ToWorker, End> {
     let ev = linked(f).ok_or(End::Close)?;
     let n = ev.n;
     let mut done = o.link.appended.lock().await;
@@ -483,7 +471,7 @@ async fn append(state: &AppState, o: &Opened, f: ToControl) -> Result<ToWorker, 
 /// closes. A branch the control box was stopping ends as its hold says (`stopped`, or
 /// `budget_exceeded`), whatever the worker reports; one it ended already is not changed. The hold
 /// is read, and the end recorded, under the branch's lock.
-async fn ended(state: &AppState, o: &Opened, status: BranchStatus, error: Option<String>) -> End {
+async fn ended(state: &AppState, o: &Joined, status: BranchStatus, error: Option<String>) -> End {
     if status == BranchStatus::Running {
         return refused("a branch does not end running");
     }
