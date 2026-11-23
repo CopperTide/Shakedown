@@ -116,7 +116,7 @@ pub fn decide(
 /// Why `m` can't review here: no `claude` on the PATH, or its provider is unknown or lacks a key.
 pub fn availability(m: &ReviewerModel, providers: &ProviderConfig) -> Result<(), String> {
     match m {
-        ReviewerModel::ClaudeCode { .. } => match crate::api::on_path("claude") {
+        ReviewerModel::ClaudeCode { .. } => match crate::app::on_path("claude") {
             true => Ok(()),
             false => Err("the claude CLI is not on the PATH".into()),
         },

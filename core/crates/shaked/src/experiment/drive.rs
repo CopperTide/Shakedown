@@ -50,36 +50,12 @@ async fn drive(
             return Ok(());
         }
         let suite = &suites[setup];
-        next_run(state, scope, id, suite).await?;
+        suite::run_next(state, scope, suite, Some(id)).await?;
         if run + 1 == suite.repeats {
             records.end_suite(&suite.id, None).await?;
         }
     }
     Ok(())
-}
-
-/// Claims the suite's next slot, starts its run and waits for its end. A run that started just
-/// as the experiment was stopped is stopped too.
-async fn next_run(
-    state: &Arc<AppState>,
-    scope: &Arc<Caller>,
-    id: &str,
-    suite: &Suite,
-) -> Result<()> {
-    let Some(slot) = state.store.at(scope).claim_slot(&suite.id).await? else {
-        return Ok(());
-    };
-    let started = match suite.connection {
-        Some(_) => crate::driver::start_slot(state, scope, suite, &slot).await?,
-        None => suite::start_builtin(state, scope, suite, &slot).await?,
-    };
-    let Some(branch) = started else {
-        return Ok(());
-    };
-    if state.store.at(scope).experiment_ended(id).await? {
-        state.live.stop(state, &branch).await;
-    }
-    suite::wait_ended(state, scope, &branch).await
 }
 
 /// Stops the experiment: no further run starts, its suites end, and the run that is running now

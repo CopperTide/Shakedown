@@ -1,4 +1,5 @@
-//! shaked, the Shakedown service (`cargo run -p shaked` from `core`).
+//! shaked, the Shakedown service (`cargo run -p shaked` from `core`). Its other commands
+//! (`base`, `token`, `store`, `mcp`, `worker`) are in `shaked::cli`.
 //!
 //! Environment: `SHAKEDOWN_PG_URL`, `SHAKEDOWN_BIND` (`127.0.0.1:4510`; the old `SHAKEDOWN_PORT`
 //! still binds `127.0.0.1:<port>`), `SHAKEDOWN_PUBLIC_URL` (the base of every URL handed out;

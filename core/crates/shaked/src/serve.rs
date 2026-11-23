@@ -21,8 +21,6 @@ pub struct ServeOptions {
     pub pg_url: String,
     /// `SHAKEDOWN_UI_DIST`.
     pub ui_dist: Option<PathBuf>,
-    /// `shaked base`: build the benchmark's base world and exit.
-    pub build_base: bool,
 }
 
 impl ServeOptions {
@@ -32,7 +30,6 @@ impl ServeOptions {
             bind: bind(policy)?,
             pg_url: crate::pg::configured_url().await,
             ui_dist: ui_dist_from_env(),
-            build_base: std::env::args().nth(1).as_deref() == Some("base"),
         })
     }
 }
@@ -40,8 +37,7 @@ impl ServeOptions {
 /// Starts shaked over `store` (its layer with it) and serves until ctrl-c.
 pub async fn run(store: Store, opts: ServeOptions) -> anyhow::Result<()> {
     let here = store.layer().policy().runs_packages_here;
-    let objects = object_stores(store.layer().policy()).await?;
-    let state = app_state(store, &opts, objects)?;
+    let state = app_state(store, &opts).await?;
     if state.store.layer().policy().serves_others {
         // Read now: a shaked that serves others never starts without its vault key.
         state.vault().map_err(anyhow::Error::msg)?;
@@ -50,9 +46,6 @@ pub async fn run(store: Store, opts: ServeOptions) -> anyhow::Result<()> {
         true => Some(local_start(&state).await?),
         false => None,
     };
-    if let (true, Some(bench)) = (opts.build_base, &bench) {
-        return build_base(&state, bench).await;
-    }
     app::install_default_drivers(&state);
     let mut router = app::router(state.clone());
     if let Some(dist) = &opts.ui_dist {
@@ -140,12 +133,9 @@ pub async fn object_stores(
     Ok(Some(Arc::new(stores)))
 }
 
-/// The state over `store` and the hub.
-fn app_state(
-    store: Store,
-    opts: &ServeOptions,
-    objects: Option<Arc<crate::objects::ObjectStores>>,
-) -> anyhow::Result<Arc<AppState>> {
+/// The state over `store`, its object stores and the hub.
+async fn app_state(store: Store, opts: &ServeOptions) -> anyhow::Result<Arc<AppState>> {
+    let objects = object_stores(store.layer().policy()).await?;
     let (url, bind) = (&opts.pg_url, &opts.bind);
     let store = Arc::new(store);
     let worlds = worlds_dir()?;
@@ -180,8 +170,8 @@ fn bind(policy: &Policy) -> anyhow::Result<Bind> {
 /// The modes this machine can run, for the startup line.
 fn available_modes(state: &AppState) -> Vec<&'static str> {
     [
-        ("claude-code", crate::api::on_path("claude")),
-        ("codex", crate::api::on_path("codex")),
+        ("claude-code", app::on_path("claude")),
+        ("codex", app::on_path("codex")),
         ("open", state.config.open_available()),
     ]
     .into_iter()
@@ -202,9 +192,11 @@ async fn shutdown_on_ctrl_c(state: Arc<AppState>) {
 }
 
 /// `shaked base`: makes the benchmark's base world, the saves every run starts from, unless it
-/// exists, and exits.
-async fn build_base(state: &AppState, bench: &BenchDescribe) -> anyhow::Result<()> {
-    let saves = crate::world::ensure_base(&state.hub, bench).await?;
+/// exists. `store`'s layer runs packages here and serves no one else.
+pub(crate) async fn build_base(store: Store, opts: &ServeOptions) -> anyhow::Result<()> {
+    let state = app_state(store, opts).await?;
+    let bench = local_start(&state).await?;
+    let saves = crate::world::ensure_base(&state.hub, &bench).await?;
     println!(
         "shaked: base of {} {}: {saves:?}",
         bench.name, bench.version

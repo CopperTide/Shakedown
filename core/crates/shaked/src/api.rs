@@ -20,6 +20,8 @@ use crate::{
     runner,
 };
 
+pub use crate::app::on_path;
+
 mod assistant;
 mod branches;
 mod compare;
@@ -191,25 +193,6 @@ fn world_minutes(asked: Option<f64>) -> Result<Option<f64>, ApiError> {
 }
 
 // ---------------------------------------------------------------- simple routes
-
-pub fn on_path(name: &str) -> bool {
-    std::env::var_os("PATH").is_some_and(|p| {
-        std::env::split_paths(&p).any(|d| {
-            let f = d.join(name);
-            f.is_file() && {
-                #[cfg(unix)]
-                {
-                    use std::os::unix::fs::PermissionsExt;
-                    std::fs::metadata(&f).is_ok_and(|m| m.permissions().mode() & 0o111 != 0)
-                }
-                #[cfg(not(unix))]
-                {
-                    true
-                }
-            }
-        })
-    })
-}
 
 async fn health(State(state): State<Arc<AppState>>) -> ApiResult<Value> {
     let bytes = gc::usage(&state.hub, &state.benchmark()).await?;

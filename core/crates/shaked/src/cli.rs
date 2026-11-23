@@ -1,23 +1,36 @@
-//! shaked's commands besides serving: `shaked token create`, `shaked store copy`, `shaked mcp`
-//! and `shaked worker` (see [`crate::worker::run`]).
+//! shaked's commands besides serving: `shaked base`, `shaked token create`, `shaked store copy`,
+//! `shaked mcp` and `shaked worker` (see [`crate::worker::run`]).
+
+use std::sync::Arc;
 
 use anyhow::{bail, Context, Result};
 
 use crate::{
     auth::{Caller, TokenScope},
+    layer::{LocalLayer, Policy},
     pg::Admin,
+    serve::ServeOptions,
     store::Store,
 };
 
 /// Runs the command `args` (after the program name) names: Some(exit code) when it was one.
 pub async fn run(args: &[String]) -> Option<Result<()>> {
     match args.first().map(String::as_str) {
+        Some("base") => Some(base().await),
         Some("token") => Some(token(&args[1..]).await),
         Some("store") => Some(store_copy(&args[1..]).await),
         Some("mcp") => Some(mcp(&args[1..]).await),
         Some("worker") => Some(crate::worker::run::command(&args[1..]).await),
         _ => None,
     }
+}
+
+/// `base`: opens the store as `shaked` does and builds the benchmark's base world
+/// ([`crate::serve::build_base`]).
+async fn base() -> Result<()> {
+    let opts = ServeOptions::from_env(&Policy::LOCAL).await?;
+    let store = Store::open(&Admin::lazy(&opts.pg_url)).await?;
+    crate::serve::build_base(store.with_layer(Arc::new(LocalLayer)), &opts).await
 }
 
 /// `mcp [--project <dir>]`: the control MCP server over stdio for the project folder `dir`
