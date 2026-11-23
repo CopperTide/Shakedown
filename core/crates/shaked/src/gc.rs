@@ -14,7 +14,7 @@ use serde::Serialize;
 use crate::{
     model::Event,
     recorded::{named_saves, NamedSave},
-    saves::{self, integration_of, integrations, world_of},
+    save_calls::{self, integration_of, integrations, world_of},
     store::Store,
     world::instance_id,
 };
@@ -29,7 +29,7 @@ pub async fn usage(hub: &Hub, benchmark: &str) -> Result<u64> {
     }
     let world = integrations(hub, benchmark).await?;
     for i in world.iter().filter(|i| hub.registry().get(i).is_some()) {
-        bytes += saves::usage(hub, i).await?;
+        bytes += save_calls::usage(hub, i).await?;
     }
     Ok(bytes)
 }
@@ -94,7 +94,7 @@ async fn drop_doomed(hub: &Hub, doomed: &Doomed, run_id: &str) -> usize {
     let mut dropped = 0;
     for (integration, list) in &doomed.saves {
         for save in list {
-            match saves::drop_save(hub, integration, save).await {
+            match save_calls::drop_save(hub, integration, save).await {
                 Ok(existed) => dropped += usize::from(existed),
                 Err(e) => eprintln!("delete run {run_id}: could not drop {save}: {e:#}"),
             }
@@ -102,7 +102,7 @@ async fn drop_doomed(hub: &Hub, doomed: &Doomed, run_id: &str) -> usize {
     }
     for (integration, list) in &doomed.instances {
         for instance in list {
-            if let Err(e) = saves::stop(hub, integration, instance).await {
+            if let Err(e) = save_calls::stop(hub, integration, instance).await {
                 eprintln!("delete run {run_id}: could not stop {instance}: {e:#}");
             }
         }
@@ -153,7 +153,7 @@ pub async fn run_gc(store: &Store, hub: &Hub, benchmark: &str) -> Result<GcRepor
     let mut removed = BTreeSet::new();
     for i in integrations(hub, benchmark).await? {
         let before = hub.save_dirs(&i);
-        match saves::gc(hub, &i, &keep).await {
+        match save_calls::gc(hub, &i, &keep).await {
             Ok(Some(r)) => {
                 report.result.dropped += r.dropped;
                 report.result.bytes += r.bytes;

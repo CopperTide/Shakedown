@@ -2,13 +2,13 @@
 
 use std::collections::BTreeMap;
 
-use shaked::{app::Config, mode::bind_from};
+use shaked::{app::Config, bind::bind_from};
 use support::{run, AppFx};
 
 mod support;
 
 /// `bind_from` over the given settings only.
-fn bind(vars: &[(&str, &str)], serves_others: bool) -> Result<shaked::mode::Bind, String> {
+fn bind(vars: &[(&str, &str)], serves_others: bool) -> Result<shaked::bind::Bind, String> {
     let vars: BTreeMap<String, String> = vars
         .iter()
         .map(|(k, v)| (k.to_string(), v.to_string()))
@@ -65,7 +65,7 @@ fn me_is_personal() {
 #[test]
 fn agent_urls_derive_from_the_public_url() {
     let b = bind(&[("SHAKEDOWN_PUBLIC_URL", "https://sd.example")], false).unwrap();
-    assert_eq!(b.allowed_hosts, shaked::mode::loopback_hosts(), "URLs only");
+    assert_eq!(b.allowed_hosts, shaked::bind::loopback_hosts(), "URLs only");
     let mut c = Config::new();
     c.self_base = "http://127.0.0.1:4510".into();
     c.agent_base = String::new();
@@ -113,7 +113,7 @@ const REFUSED: &[&str] = &[
 
 #[test]
 fn allowed_hosts_keep_the_dns_rebinding_guard() {
-    use shaked::mode::host_allowed as ok;
+    use shaked::bind::host_allowed as ok;
     let b = bind(
         &[("SHAKEDOWN_ALLOWED_HOSTS", "sd.example, Other.Example ")],
         true,

@@ -223,7 +223,7 @@ fn agent_tokens(ctx: &crate::exec::BranchCtx) -> BTreeMap<String, String> {
 
 /// Starts `conn`'s command for the run `ids` and watches it (see the module's notes).
 pub async fn launch(state: &Arc<AppState>, conn: &Connection, ids: RunIds<'_>) -> Result<Launched> {
-    crate::mode::local_only(state.store.layer().policy(), "a Code connection's driver")
+    crate::bind::local_only(state.store.layer().policy(), "a Code connection's driver")
         .map_err(anyhow::Error::msg)?;
     if let Some(ctx) = state.live.get(ids.branch_id) {
         let team = ctx.roster.team.agents.iter().map(|a| a.id.as_str());

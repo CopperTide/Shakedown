@@ -4,7 +4,7 @@
 //! Environment: `SHAKEDOWN_PG_URL`, `SHAKEDOWN_BIND` (`127.0.0.1:4510`; the old `SHAKEDOWN_PORT`
 //! still binds `127.0.0.1:<port>`), `SHAKEDOWN_PUBLIC_URL` (the base of every URL handed out;
 //! default `http://<bind>`), `SHAKEDOWN_ALLOWED_HOSTS` (more Host names `/api` answers; see
-//! `shaked::mode`; a bind beyond loopback is refused), `SHAKEDOWN_PROXY_PORT` (the recording proxy,
+//! `shaked::bind`; a bind beyond loopback is refused), `SHAKEDOWN_PROXY_PORT` (the recording proxy,
 //! on 127.0.0.1; default: a free port), `SHAKEDOWN_PROXY_TIMEOUT_SECS` (300: how long a proxied
 //! request may take before it is answered 504),
 //! the model providers of open agents (`OPENROUTER_API_KEY`, `OPENAI_API_KEY`,

@@ -188,7 +188,7 @@ impl Config {
     /// The Host names `/api` answers.
     pub fn hosts(&self) -> Vec<String> {
         match self.allowed_hosts.is_empty() {
-            true => crate::mode::loopback_hosts(),
+            true => crate::bind::loopback_hosts(),
             false => self.allowed_hosts.clone(),
         }
     }
@@ -211,7 +211,7 @@ pub struct AppState {
     /// start); changed by [`AppState::use_benchmark`].
     current: std::sync::RwLock<String>,
     /// Built worlds whose base is being prepared, or was since shaked started.
-    pub builds: crate::worlds::Builds,
+    pub builds: crate::world_builds::Builds,
     /// Branches currently running, by branch id.
     pub live: LiveBranches,
     pub config: Config,
@@ -271,7 +271,7 @@ fn shared_client(policy: &crate::layer::Policy) -> reqwest::Client {
 fn start_benchmarks(hub: &Hub, config: &Config) -> (String, String) {
     let named = config.start_benchmark.clone();
     let benchmark = named.clone().unwrap_or_else(|| only_benchmark(hub));
-    let remembered = || crate::worlds::remembered(hub, config.worlds_dir.as_deref());
+    let remembered = || crate::world_builds::remembered(hub, config.worlds_dir.as_deref());
     let current = named
         .or_else(remembered)
         .unwrap_or_else(|| benchmark.clone());
@@ -350,7 +350,7 @@ impl AppState {
             return Ok(false);
         }
         *current = name.to_string();
-        crate::worlds::remember(self.config.worlds_dir.as_deref(), name);
+        crate::world_builds::remember(self.config.worlds_dir.as_deref(), name);
         Ok(true)
     }
 }

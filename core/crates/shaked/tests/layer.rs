@@ -354,8 +354,8 @@ fn token_changes_are_audited_through_the_layer_without_the_secret() {
 #[test]
 fn a_public_bind_needs_a_layer_that_serves_others() {
     let get = |k: &str| (k == "SHAKEDOWN_BIND").then(|| "0.0.0.0:4510".to_string());
-    assert!(shaked::mode::bind_from(get, false).is_err());
-    assert!(shaked::mode::bind_from(get, true).is_ok());
+    assert!(shaked::bind::bind_from(get, false).is_err());
+    assert!(shaked::bind::bind_from(get, true).is_ok());
     let refusal = Refusal::new(StatusCode::UNAUTHORIZED, "x");
     assert_eq!(refusal.status, 401);
 }

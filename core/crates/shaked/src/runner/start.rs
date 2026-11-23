@@ -314,7 +314,7 @@ async fn start_world(
     plan: &BranchPlan,
     records: &dyn BranchRecords,
 ) -> Result<(BenchDescribe, World, i64, f64)> {
-    crate::mode::local_only(state.store.layer().policy(), "starting a world's parts")
+    crate::bind::local_only(state.store.layer().policy(), "starting a world's parts")
         .map_err(anyhow::Error::msg)?;
     let bench = state.bench_named(&plan.benchmark).await?;
     let planned = world::plan(&state.hub, &bench).await?;

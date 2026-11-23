@@ -8,8 +8,8 @@ use parts::{proto::BenchDescribe, Hub, Registry};
 
 use crate::{
     app::{self, AppState, Config},
+    bind::Bind,
     layer::Policy,
-    mode::Bind,
     store::Store,
 };
 
@@ -79,7 +79,7 @@ fn env_path(key: &str, default: PathBuf) -> PathBuf {
 fn worlds_dir() -> anyhow::Result<PathBuf> {
     let dir = env_path("SHAKEDOWN_WORLDS", repo_dir().join("core/worlds"));
     std::fs::create_dir_all(&dir)?;
-    crate::worlds::remove_leftovers(&dir);
+    crate::world_builds::remove_leftovers(&dir);
     Ok(dir)
 }
 
@@ -164,7 +164,7 @@ fn loopback_of(addr: std::net::SocketAddr) -> std::net::SocketAddr {
 /// Where to listen: beyond this machine only for a layer that serves others.
 fn bind(policy: &Policy) -> anyhow::Result<Bind> {
     let get = |k: &str| parts::settings::var(k).ok();
-    crate::mode::bind_from(get, policy.serves_others).map_err(anyhow::Error::msg)
+    crate::bind::bind_from(get, policy.serves_others).map_err(anyhow::Error::msg)
 }
 
 /// The modes this machine can run, for the startup line.

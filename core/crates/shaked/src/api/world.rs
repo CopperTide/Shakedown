@@ -10,7 +10,7 @@ use serde::Serialize;
 use serde_json::{json, Value};
 
 use super::{detached, extract::CLEANING_UP, ApiError, ApiResult};
-use crate::{app::AppState, gc, saves};
+use crate::{app::AppState, gc, save_calls};
 
 /// How long one integration gets to answer `describe` or `usage` before the page shows it as not
 /// answering. A late answer is dropped by the client, so the integration is not harmed.
@@ -18,7 +18,7 @@ const DESCRIBE_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// `f` within `DESCRIBE_TIMEOUT`.
 async fn bounded<T>(f: impl Future<Output = Result<T>>) -> Result<T, String> {
-    saves::bounded(DESCRIBE_TIMEOUT, "answer", f).await
+    save_calls::bounded(DESCRIBE_TIMEOUT, "answer", f).await
 }
 
 #[derive(Debug, Serialize)]
@@ -94,7 +94,7 @@ pub async fn world(State(state): State<Arc<AppState>>) -> ApiResult<Value> {
 
 /// What one integration keeps: its own bytes plus its save folders; or why it can't say.
 async fn integration_bytes(state: &AppState, integration: &str) -> Result<u64, String> {
-    let own = bounded(saves::usage(&state.hub, integration)).await?;
+    let own = bounded(save_calls::usage(&state.hub, integration)).await?;
     Ok(own + state.hub.package_saves_bytes(integration))
 }
 

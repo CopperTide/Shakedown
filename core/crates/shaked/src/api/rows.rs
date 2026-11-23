@@ -15,7 +15,7 @@ use crate::{
     app::AppState,
     model::*,
     recorded::{run_info, saves_at},
-    saves::{self, part_named, part_refusal, world_of},
+    save_calls::{self, part_named, part_refusal, world_of},
 };
 
 const MAX_KEYS: usize = 50;
@@ -96,7 +96,7 @@ async fn read_rows(state: &AppState, events: &[Event], q: &RowsQuery) -> Result<
     let save = saves
         .get(&part.part)
         .ok_or_else(|| ApiError::bad(format!("there is no save of the part {}", part.part)))?;
-    let docs = saves::inspect(&state.hub, &part.integration, save, &q.keys)
+    let docs = save_calls::inspect(&state.hub, &part.integration, save, &q.keys)
         .await
         .map_err(rows_error)?;
     Ok(json!({"seq": q.seq, "rows": docs}))

@@ -41,7 +41,7 @@ async fn allowed_host(
         .headers()
         .get(axum::http::header::HOST)
         .and_then(|h| h.to_str().ok())
-        .is_some_and(|h| crate::mode::host_allowed(h, &hosts));
+        .is_some_and(|h| crate::bind::host_allowed(h, &hosts));
     if !ok {
         return (
             axum::http::StatusCode::FORBIDDEN,
@@ -130,7 +130,7 @@ pub fn router(state: Arc<AppState>) -> Router {
     // whatever the config says (a tunnel's Host never does).
     let hosts = Arc::new(match state.store.layer().policy().serves_others {
         true => state.config.hosts(),
-        false => crate::mode::loopback_hosts(),
+        false => crate::bind::loopback_hosts(),
     });
     let authorize =
         axum::middleware::from_fn_with_state(state.clone(), crate::api::routes::authorize_route);
@@ -206,7 +206,7 @@ mod tests {
     /// `[::1]`, with an optional port.
     #[test]
     fn loopback_hosts() {
-        let ok = |h| crate::mode::host_allowed(h, &crate::mode::loopback_hosts());
+        let ok = |h| crate::bind::host_allowed(h, &crate::bind::loopback_hosts());
         for h in [
             "127.0.0.1",
             "127.0.0.1:4510",
