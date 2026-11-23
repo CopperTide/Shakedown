@@ -34,6 +34,19 @@ pub struct ForkRequest {
     pub disruptions: super::DisruptionChange,
 }
 
+impl ForkRequest {
+    /// A fork at `at_seq` that changes nothing, restoring as `restore` asks.
+    pub fn at(at_seq: i64, restore: RestoreMode) -> ForkRequest {
+        ForkRequest {
+            at_seq,
+            changes: HashMap::new(),
+            restore,
+            team: None,
+            disruptions: Default::default(),
+        }
+    }
+}
+
 /// How one part of the new world is restored.
 pub struct PartRestore {
     pub part: String,
@@ -44,14 +57,12 @@ pub struct PartRestore {
     pub declares_replay: bool,
 }
 
-/// Everything a rerun needs before it starts: the run, its benchmark and world as they are now,
-/// the fork plan, each part's restore (in world order), the step the world is restored before
-/// and the clock to start at.
+/// Everything a rerun needs before it starts but the world's plan: the run, its benchmark as it
+/// is now, the fork plan, each part's restore (in world order), the step the world is restored
+/// before and the clock to start at.
 pub struct Rerun {
     pub run: RunInfo,
     pub bench: BenchDescribe,
-    /// The world's plan, until the world is started from it.
-    world: Option<Plan>,
     pub plan: ForkPlan,
     pub parts: Vec<PartRestore>,
     /// The world is as it was just before this seq: the fork's start, or past the parent's last
@@ -73,10 +84,6 @@ fn replayed_names(parts: &[PartRestore]) -> BTreeSet<String> {
 }
 
 impl Rerun {
-    fn replayed(&self) -> impl Iterator<Item = &PartRestore> {
-        replayed(&self.parts)
-    }
-
     /// Each part and how it is restored, by part name.
     pub fn hows(&self) -> BTreeMap<String, How> {
         self.parts.iter().map(|p| (p.part.clone(), p.how)).collect()
@@ -96,8 +103,13 @@ impl Rerun {
     /// Refuses a rerun that can't be what it claims: in an exact one, a part whose world changed
     /// since the run or that was restored approximately on the way; in any, a world that would
     /// come through the steps of a fork that left its world unrestored, or a replayed part whose
-    /// integration's fingerprint changed.
-    async fn check(&self, records: Scoped<'_>, branch: &Branch) -> Result<(), ForkError> {
+    /// integration's fingerprint changed (in `world`, the world's plan).
+    async fn check(
+        &self,
+        records: Scoped<'_>,
+        branch: &Branch,
+        world: &Plan,
+    ) -> Result<(), ForkError> {
         let replayed = replayed_names(&self.parts);
         let forks = ancestry(records, branch).await?;
         unrestored_on_the_way(&forks, self.world_until).map_err(ForkError::Refused)?;
@@ -107,10 +119,6 @@ impl Rerun {
             approximate_on_the_way(&forks, &replayed, self.plan.start_seq)
                 .map_err(ForkError::Refused)?;
         }
-        let world = self
-            .world
-            .as_ref()
-            .expect("checked before the world starts");
         check_fingerprints(&self.run, world, &replayed)
     }
 }
@@ -162,14 +170,15 @@ fn known_tools(world: &Plan, changes: &HashMap<String, Change>) -> Result<(), Fo
     }
 }
 
-/// Plans a rerun of `branch` (its `events`) for `req`.
+/// Plans a rerun of `branch` (its `events`) for `req`: the rerun, and the plan of the world it
+/// starts.
 pub async fn prepare(
     state: &AppState,
     records: Scoped<'_>,
     branch: &Branch,
     events: &[Event],
     req: &ForkRequest,
-) -> Result<Rerun, ForkError> {
+) -> Result<(Rerun, Plan), ForkError> {
     if !events.iter().any(|e| e.seq == req.at_seq) {
         return Err(ForkError::UnknownSeq);
     }
@@ -184,14 +193,13 @@ pub async fn prepare(
         clock_ms: clock_at(events, world_until),
         run,
         bench,
-        world: Some(world),
         plan,
         parts,
         world_until,
         mode: req.restore,
     };
-    rerun.check(records, branch).await?;
-    Ok(rerun)
+    rerun.check(records, branch, &world).await?;
+    Ok((rerun, world))
 }
 
 /// The fork plan, and the seq the world is restored before: the fork's start, or past the
@@ -302,22 +310,19 @@ fn start_error(e: anyhow::Error) -> ForkError {
 }
 
 /// Starts the new branch's world: each part from its save and moved to the fork point's clock,
-/// or fresh and then replayed from the branch's recorded `events` up to the fork point. On a
-/// failure every instance is stopped.
+/// or fresh and then replayed from the branch's recorded `events` up to the fork point, as
+/// `planned`. On a failure every instance is stopped.
 pub async fn start_world(
     state: &AppState,
     events: &[Event],
     new_id: &str,
-    rerun: &mut Rerun,
+    rerun: &Rerun,
+    mut planned: Plan,
 ) -> Result<World, ForkError> {
     crate::mode::local_only(state.store.layer().policy(), "starting a world's parts")
         .map_err(|e| ForkError::Internal(anyhow::Error::msg(e)))?;
     let from = WorldFrom::Saves(start_saves(rerun)?);
     let (hub, seed) = (state.hub.clone(), rerun.run.seed);
-    let mut planned = match rerun.world.take() {
-        Some(p) => p,
-        None => world::plan(&hub, &rerun.bench).await?,
-    };
     planned.world_time = Some(parts::proto::WorldTimeParams {
         epoch_ms: crate::recorded::world_epoch_ms(events),
         speed: crate::clock::speed_from_env(),
@@ -349,7 +354,7 @@ async fn catch_up_saved(world: &World, rerun: &Rerun) -> Result<(), ForkError> {
 
 /// Replays every replayed part of a started world up to the fork point.
 async fn replay_parts(world: &World, events: &[Event], rerun: &Rerun) -> Result<(), ForkError> {
-    for p in rerun.replayed() {
+    for p in replayed(&rerun.parts) {
         let inputs = replay::inputs(events, &p.part, &p.tools, rerun.world_until);
         replay::replay(world, &p.part, &inputs, rerun.clock_ms)
             .await

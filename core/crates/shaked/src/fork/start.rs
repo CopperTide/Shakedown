@@ -19,6 +19,7 @@ use crate::{
     overhead::{self, Cat},
     recorded,
     runner::{self, StartPoint},
+    world::{Plan, World},
 };
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -38,6 +39,20 @@ pub struct ForkResponse {
     pub driver: Option<&'static str>,
 }
 
+impl ForkResponse {
+    /// The response for the new branch `branch_id`, started where `plan` says.
+    fn new(branch_id: String, plan: &ForkPlan) -> ForkResponse {
+        ForkResponse {
+            branch_id,
+            start_seq: plan.start_seq,
+            moved_from: plan.moved_from,
+            reason: plan.reason.clone(),
+            agents: None,
+            driver: None,
+        }
+    }
+}
+
 /// Forks `branch_id` at `at_seq` with `changes`, restoring exactly, and starts the new branch,
 /// for the local owner.
 pub async fn fork(
@@ -46,15 +61,11 @@ pub async fn fork(
     at_seq: i64,
     changes: HashMap<String, Change>,
 ) -> Result<ForkResponse, ForkError> {
-    let restore = RestoreMode::Exact;
     let req = ForkRequest {
-        at_seq,
         changes,
-        restore,
-        team: None,
-        disruptions: Default::default(),
+        ..ForkRequest::at(at_seq, RestoreMode::Exact)
     };
-    let local = Arc::new(crate::auth::Caller::person());
+    let local = Arc::new(Caller::person());
     fork_with(state, &local, branch_id, req).await
 }
 
@@ -70,15 +81,16 @@ pub async fn fork_with(
     let parent = finished_branch(records, branch_id).await?;
     settle_changes(&parent.team, &mut req.changes, &state.config.providers);
     let events = records.events(branch_id).await?;
-    let mut rerun = prepare(state, records, &parent, &events, &req).await?;
+    let (rerun, world) = prepare(state, records, &parent, &events, &req).await?;
     let start = rerun.plan.start_seq;
     let schedule = disruptions::calls(&req.disruptions, &rerun.bench, &events, start);
     let schedule = schedule.map_err(ForkError::Disruptions)?;
     let task_id = task_of(records, &events, &parent).await?;
     let team = new_team(&parent.team, &events, &req)?;
     let new_id = create_child(records, &parent, &rerun, &team, &req).await?;
+    let child = (parent.id.as_str(), new_id.as_str());
     let (world, restore_ms) =
-        start_child_world(state, records, &events, &parent.id, &new_id, &mut rerun).await?;
+        start_child_world(state, records, &events, child, &rerun, world).await?;
     let ctx = BranchCtx::new(new_id, Arc::new(world), team, task_id.clone());
     let ctx = child_ctx(state, ctx, &events, &rerun, scope, restore_ms);
     reschedule(state, &ctx, &schedule).await?;
@@ -194,12 +206,8 @@ async fn live_child(
     }
     runner::go_live(state, Arc::new(ctx)).await;
     ForkResponse {
-        branch_id,
-        start_seq: plan.start_seq,
-        moved_from: plan.moved_from,
-        reason: plan.reason,
         agents: Some(agents),
-        driver: None,
+        ..ForkResponse::new(branch_id, &plan)
     }
 }
 
@@ -218,46 +226,21 @@ pub async fn restore_preview(
         .await?
         .ok_or_else(|| ForkError::UnknownBranch(branch_id.to_string()))?;
     let events = records.events(branch_id).await?;
-    let req = ForkRequest {
-        at_seq,
-        changes: HashMap::new(),
-        restore,
-        team: None,
-        disruptions: Default::default(),
-    };
-    let rerun = prepare(state, records, &branch, &events, &req).await?;
+    let req = ForkRequest::at(at_seq, restore);
+    let (rerun, _) = prepare(state, records, &branch, &events, &req).await?;
     Ok(part_plans(&rerun, &events))
 }
 
 /// Runs the new branch from the plan's start point; the response names where it started.
 fn spawn_child(state: &Arc<AppState>, ctx: BranchCtx, plan: ForkPlan) -> ForkResponse {
-    let ForkPlan {
-        start_seq,
-        moved_from,
-        reason,
-        agent_index,
-        resume,
-        notes,
-        ..
-    } = plan;
-    let branch_id = ctx.branch_id.clone();
-    runner::spawn_branch(
-        state,
-        Arc::new(ctx),
-        StartPoint {
-            agent_index,
-            resume,
-            notes,
-        },
-    );
-    ForkResponse {
-        branch_id,
-        start_seq,
-        moved_from,
-        reason,
-        agents: None,
-        driver: None,
-    }
+    let res = ForkResponse::new(ctx.branch_id.clone(), &plan);
+    let start = StartPoint {
+        agent_index: plan.agent_index,
+        resume: plan.resume,
+        notes: plan.notes,
+    };
+    runner::spawn_branch(state, Arc::new(ctx), start);
+    res
 }
 
 /// The branch to fork: it must exist and have finished.
@@ -319,22 +302,23 @@ async fn task_of(records: Scoped<'_>, events: &[Event], parent: &Branch) -> anyh
         .ok_or_else(|| anyhow::anyhow!("no run {} for branch {}", parent.run_id, parent.id))
 }
 
-/// Copies the parent's events before the fork point and starts the new branch's world as the
-/// rerun plans it, with the run's benchmark and seed: the world, and how long restoring it took.
-/// A failure ends the new branch `infra_error` with its message.
+/// Copies the parent's events before the fork point to the new branch (`(parent, new_id)`) and
+/// starts its world from `planned` as the rerun plans it, with the run's benchmark and seed: the
+/// world, and how long restoring it took. A failure ends the new branch `infra_error` with its
+/// message.
 async fn start_child_world(
     state: &AppState,
     records: Scoped<'_>,
     events: &[Event],
-    parent: &str,
-    new_id: &str,
-    rerun: &mut Rerun,
-) -> Result<(crate::world::World, f64), ForkError> {
+    (parent, new_id): (&str, &str),
+    rerun: &Rerun,
+    planned: Plan,
+) -> Result<(World, f64), ForkError> {
     let started = async {
         let start = rerun.plan.start_seq;
         records.copy_prefix(parent, new_id, start).await?;
         let since = std::time::Instant::now();
-        let world = rerun::start_world(state, events, new_id, rerun).await?;
+        let world = rerun::start_world(state, events, new_id, rerun, planned).await?;
         Ok((world, overhead::ms_since(since)))
     }
     .await;

@@ -1,37 +1,29 @@
-//! Where a fork starts and what it carries over (the fork plan), and the agent changes it
-//! applies.
+//! Where a fork starts and what it carries over (the fork plan).
 
 use std::collections::{BTreeSet, HashMap};
 
 use serde_json::Value;
 
+use super::changes::changes_kind;
+pub(super) use super::changes::is_change;
 use super::ForkError;
 use crate::{
     model::*,
-    providers::ProviderConfig,
     recorded::{self, run_info, saves_at_except},
     world::Saves,
 };
 
+// Why a fork starts elsewhere than asked (`ForkPlan::reason`).
 pub const REASON_EARLIER: &str = "a change targets an agent that finished earlier";
-
 pub const REASON_CLI: &str = "Claude Code and Codex sessions restart from the agent's start";
-
 pub const REASON_KIND: &str = "the agent's mode changes";
-
 pub const REASON_TOOL: &str = "a tool call is redone from the model call that chose it";
-
 pub const REASON_CONCURRENT: &str = "agents that ran at once all restart from the run's start";
-
 pub const REASON_RUN_START: &str = "the run restarts from the first agent's start";
-
 pub const REASON_FINISHED: &str = "the lead had finished the run: the fork starts at its finish";
-
 pub const REASON_AGENT_RESTART: &str = "the agent restarts from its first start";
-
 pub const REASON_LAST_MODEL_CALL: &str =
     "the step is redone from the agent's last model call before it";
-
 /// The world was not saved where the fork was asked (a part that saves at points changed since).
 pub const REASON_SAVED: &str =
     "the world was last saved before an earlier step, so the fork starts there";
@@ -54,84 +46,24 @@ pub struct ForkPlan {
     pub notes: Vec<String>,
 }
 
-/// True when `c` changes the agent's mode (a kind equal to the current one is no change).
-fn changes_kind(c: &Change, spec: &AgentSpec) -> bool {
-    c.kind.is_some_and(|k| k != spec.kind)
-}
-
-/// A text a change sets: `Some(None)` clears it (empty or blank text), `Some(Some(t))` sets it.
-fn new_text(text: Option<&String>) -> Option<Option<String>> {
-    text.map(|t| trimmed(t))
-}
-
-/// The model a change sets (see `new_text`).
-fn new_model(c: &Change) -> Option<Option<String>> {
-    new_text(c.model.as_ref())
-}
-
-/// True when `c` changes the agent's model (the same model, or clearing an unset one, is no change).
-fn changes_model(c: &Change, spec: &AgentSpec) -> bool {
-    new_model(c).is_some_and(|m| m != spec.model)
-}
-
-/// The provider a change sets (see `new_text`; cleared is back to the default one).
-fn new_provider(c: &Change) -> Option<Option<String>> {
-    new_text(c.provider.as_ref())
-}
-
-/// True when `c` names another provider than the agent's. Changes are settled first
-/// ([`settle_changes`]), so a name for the agent's own provider is no longer there.
-fn changes_provider(c: &Change, spec: &AgentSpec) -> bool {
-    new_provider(c).is_some_and(|p| p != spec.provider)
-}
-
-/// Drops each provider change that names the agent's own provider (as `providers` resolves
-/// both: absent is the default one), so the fork rules see only real ones.
-pub fn settle_changes(
-    team: &Team,
-    changes: &mut HashMap<String, Change>,
-    providers: &ProviderConfig,
-) {
-    for spec in &team.agents {
-        let Some(c) = changes.get_mut(&spec.id) else {
-            continue;
-        };
-        let same = new_provider(c).is_some_and(|p| {
-            providers.id_of(p.as_deref()) == providers.id_of(spec.provider.as_deref())
-        });
-        if same {
-            c.provider = None;
-        }
-    }
-}
-
-/// True when `c` makes the agent read-only or lets it write again.
-fn changes_read_only(c: &Change, spec: &AgentSpec) -> bool {
-    c.read_only.is_some_and(|r| r != spec.read_only)
-}
-
-/// True when `c` gives the agent another list of world tools.
-fn changes_tools(c: &Change, spec: &AgentSpec) -> bool {
-    c.tools.as_ref().is_some_and(|t| *t != spec.tools)
-}
-
-/// A provider change is a model change: the fork rules treat both alike. A read-only or tools
-/// change is treated like a prompt change.
-pub(super) fn is_change(c: &Change, spec: &AgentSpec) -> bool {
-    c.prompt.is_some()
-        || changes_read_only(c, spec)
-        || changes_tools(c, spec)
-        || changes_model(c, spec)
-        || changes_provider(c, spec)
-        || changes_kind(c, spec)
-}
-
 /// Where the new branch starts, and the resume messages it carries (open agents only).
 struct Start {
     seq: i64,
     reason: Option<&'static str>,
     agent: usize,
     resume: Option<Vec<Value>>,
+}
+
+impl Start {
+    /// A start at `seq` of agent `agent`, with no resume.
+    fn at(seq: i64, reason: Option<&'static str>, agent: usize) -> Start {
+        Start {
+            seq,
+            reason,
+            agent,
+            resume: None,
+        }
+    }
 }
 
 /// What a plan reads: the branch's events and team, and the fork point.
@@ -147,7 +79,19 @@ fn index_of(team: &Team, id: &str) -> Option<usize> {
     team.agents.iter().position(|a| a.id == id)
 }
 
-impl Planner<'_> {
+impl<'a> Planner<'a> {
+    /// The planner of a fork at `at_seq` of `events`.
+    fn at(events: &'a [Event], team: &'a Team, at_seq: i64) -> Result<Planner<'a>, ForkError> {
+        let at = events.iter().find(|e| e.seq == at_seq);
+        let at = at.ok_or(ForkError::UnknownSeq)?;
+        Ok(Planner {
+            events,
+            team,
+            at_seq,
+            at,
+        })
+    }
+
     /// An agent's real start: its first AgentStart (a resumed agent has a second one).
     fn first_start(&self, i: usize) -> Result<i64, ForkError> {
         let id = self.team.agents[i].id.as_str();
@@ -156,6 +100,12 @@ impl Planner<'_> {
             .find(|e| e.kind == EventKind::AgentStart && e.agent.as_deref() == Some(id))
             .map(|e| e.seq)
             .ok_or(ForkError::UnknownSeq)
+    }
+
+    /// The first AgentStart of any agent, or right after `RunStart` if none began.
+    fn first_agent_start(&self) -> i64 {
+        let first = self.events.iter().find(|e| e.kind == EventKind::AgentStart);
+        first.map_or(self.at_seq + 1, |e| e.seq)
     }
 
     /// An agent has finished at `at_seq` once its AgentEnd is at or before it.
@@ -182,7 +132,22 @@ impl Planner<'_> {
         }
     }
 
-    /// Where the fork starts under the run's runner.
+    /// Where the fork starts under `rules`, with no resume when that is the agent's first start.
+    fn start_with(
+        &self,
+        rules: Rules,
+        changes: &HashMap<String, Change>,
+        changed: &[usize],
+    ) -> Result<Start, ForkError> {
+        let mut start = self.start_under(rules, changes, changed)?;
+        if start.seq == self.first_start(start.agent).unwrap_or(i64::MIN) {
+            start.resume = None;
+        }
+        Ok(start)
+    }
+
+    /// Where the fork starts under the run's runner. A concurrent run's agents all restart,
+    /// from the first agent's start.
     fn start_under(
         &self,
         rules: Rules,
@@ -190,23 +155,11 @@ impl Planner<'_> {
         changed: &[usize],
     ) -> Result<Start, ForkError> {
         Ok(match rules.runner {
-            Runner::Concurrent => self.restart_all(),
+            Runner::Concurrent => Start::at(self.first_agent_start(), Some(REASON_CONCURRENT), 0),
             Runner::External => self.at_point(),
             Runner::Dispatch => self.dispatch_point(),
             Runner::Chain => self.start_for(changes, changed, self.active_agent()?)?,
         })
-    }
-
-    /// A concurrent run's agents all restart, from the first agent's start (or right after
-    /// `RunStart` if none began).
-    fn restart_all(&self) -> Start {
-        let first = self.events.iter().find(|e| e.kind == EventKind::AgentStart);
-        Start {
-            seq: first.map_or(self.at_seq + 1, |e| e.seq),
-            reason: Some(REASON_CONCURRENT),
-            agent: 0,
-            resume: None,
-        }
     }
 
     /// A dispatch run forks where asked: every agent restarts there in a new session with its
@@ -214,46 +167,27 @@ impl Planner<'_> {
     /// agent's start; asked for a step after the lead's finish, at the finish.
     fn dispatch_point(&self) -> Start {
         if self.at.kind == EventKind::RunStart {
-            let first = self.events.iter().find(|e| e.kind == EventKind::AgentStart);
-            return Start {
-                seq: first.map_or(self.at_seq + 1, |e| e.seq),
-                reason: Some(REASON_RUN_START),
-                agent: 0,
-                resume: None,
-            };
+            return Start::at(self.first_agent_start(), Some(REASON_RUN_START), 0);
         }
         let finish = self
             .events
             .iter()
             .find(|e| e.kind == EventKind::Finish && e.seq < self.at_seq);
-        Start {
-            seq: finish.map_or(self.at_seq, |f| f.seq),
-            reason: finish.map(|_| REASON_FINISHED),
-            agent: 0,
-            resume: None,
-        }
+        let seq = finish.map_or(self.at_seq, |f| f.seq);
+        Start::at(seq, finish.map(|_| REASON_FINISHED), 0)
     }
 
     /// A run an external system drives forks where asked (right after `RunStart` when asked for
     /// it): how its agents resume is the system's choice.
     fn at_point(&self) -> Start {
         let after_start = self.at.kind == EventKind::RunStart;
-        Start {
-            seq: self.at_seq + i64::from(after_start),
-            reason: after_start.then_some(REASON_RUN_START),
-            agent: 0,
-            resume: None,
-        }
+        let seq = self.at_seq + i64::from(after_start);
+        Start::at(seq, after_start.then_some(REASON_RUN_START), 0)
     }
 
     /// Restart agent `i` from its first start, for `reason`.
     fn restart(&self, i: usize, reason: &'static str) -> Result<Start, ForkError> {
-        Ok(Start {
-            seq: self.first_start(i)?,
-            reason: Some(reason),
-            agent: i,
-            resume: None,
-        })
+        Ok(Start::at(self.first_start(i)?, Some(reason), i))
     }
 
     /// 2 to 4. Where the fork starts, given the agents `changed` and the active agent `a`.
@@ -282,12 +216,10 @@ impl Planner<'_> {
         }
         match self.at.kind {
             // Begin with the first agent (or right after RunStart if it never began).
-            EventKind::RunStart => Ok(Start {
-                seq: self.first_start(0).unwrap_or(self.at_seq + 1),
-                reason: Some(REASON_RUN_START),
-                agent: a,
-                resume: None,
-            }),
+            EventKind::RunStart => {
+                let seq = self.first_start(0).unwrap_or(self.at_seq + 1);
+                Ok(Start::at(seq, Some(REASON_RUN_START), a))
+            }
             EventKind::AgentStart => self.restart(a, REASON_AGENT_RESTART),
             _ => self.resume_from_model_call(a),
         }
@@ -308,28 +240,23 @@ impl Planner<'_> {
         })
     }
 
-    /// 4. Open agent: resume from a model call.
+    /// 4. Open agent: resume from a model call (its request's messages), else restart.
     fn resume_from_model_call(&self, a: usize) -> Result<Start, ForkError> {
         let agent_start = self.first_start(a)?;
         let model_call = self.model_call_before(a, agent_start);
-        let messages =
-            model_call.and_then(|m| m.payload["request"]["messages"].as_array().cloned());
-        let (seq, reason, resume) = match (model_call, messages) {
-            (Some(m), Some(msgs)) => {
-                let why = match self.at.kind {
-                    EventKind::ModelCall => None,
-                    EventKind::ToolCall | EventKind::Handoff => Some(REASON_TOOL),
-                    _ => Some(REASON_LAST_MODEL_CALL),
-                };
-                (m.seq, why, Some(msgs))
-            }
-            _ => (agent_start, Some(REASON_NO_MODEL_CALL), None),
+        let resumable = model_call
+            .and_then(|m| Some((m.seq, m.payload["request"]["messages"].as_array()?.clone())));
+        let Some((seq, messages)) = resumable else {
+            return Ok(Start::at(agent_start, Some(REASON_NO_MODEL_CALL), a));
+        };
+        let why = match self.at.kind {
+            EventKind::ModelCall => None,
+            EventKind::ToolCall | EventKind::Handoff => Some(REASON_TOOL),
+            _ => Some(REASON_LAST_MODEL_CALL),
         };
         Ok(Start {
-            seq,
-            reason,
-            agent: a,
-            resume,
+            resume: Some(messages),
+            ..Start::at(seq, why, a)
         })
     }
 
@@ -433,34 +360,6 @@ fn saved_point_before(events: &[Event], seq: i64, asked: i64) -> Result<i64, For
     found.ok_or(ForkError::NoRestorePoint { seq })
 }
 
-impl<'a> Planner<'a> {
-    /// The planner of a fork at `at_seq` of `events`.
-    fn at(events: &'a [Event], team: &'a Team, at_seq: i64) -> Result<Planner<'a>, ForkError> {
-        let at = events.iter().find(|e| e.seq == at_seq);
-        let at = at.ok_or(ForkError::UnknownSeq)?;
-        Ok(Planner {
-            events,
-            team,
-            at_seq,
-            at,
-        })
-    }
-
-    /// Where the fork starts under `rules`, with no resume when that is the agent's first start.
-    fn start_with(
-        &self,
-        rules: Rules,
-        changes: &HashMap<String, Change>,
-        changed: &[usize],
-    ) -> Result<Start, ForkError> {
-        let mut start = self.start_under(rules, changes, changed)?;
-        if start.seq == self.first_start(start.agent).unwrap_or(i64::MIN) {
-            start.resume = None;
-        }
-        Ok(start)
-    }
-}
-
 /// The plan of a fork asked at `at_seq` that starts at `start`; `saved` overrides the reason it
 /// moved (it moved back to a save).
 fn finish_plan(
@@ -479,62 +378,5 @@ fn finish_plan(
         restore,
         resume: start.resume,
         notes,
-    }
-}
-
-/// For each agent whose setup lists its tools, the tools `changes` give it beyond that list (by
-/// agent id, sorted).
-pub fn tools_added(team: &Team, changes: &HashMap<String, Change>) -> Vec<(String, Vec<String>)> {
-    let mut out: Vec<(String, Vec<String>)> = team
-        .agents
-        .iter()
-        .filter(|spec| !spec.tools.is_empty())
-        .filter_map(|spec| {
-            let listed = changes.get(&spec.id)?.tools.as_ref()?;
-            let added: Vec<String> = (listed.iter())
-                .filter(|t| !spec.tools.contains(t))
-                .cloned()
-                .collect();
-            (!added.is_empty()).then(|| (spec.id.clone(), added))
-        })
-        .collect();
-    out.sort();
-    out
-}
-
-/// `team` with each agent's prompt/model/kind/provider/read_only/tools replaced where `changes`
-/// sets them.
-pub fn apply_changes(team: &Team, changes: &HashMap<String, Change>) -> Team {
-    let mut t = team.clone();
-    for spec in &mut t.agents {
-        if let Some(c) = changes.get(&spec.id) {
-            apply_change(spec, c);
-        }
-    }
-    t
-}
-
-fn apply_change(spec: &mut AgentSpec, c: &Change) {
-    if let Some(p) = &c.prompt {
-        spec.prompt = p.clone();
-    }
-    if changes_kind(c, spec) || changes_provider(c, spec) {
-        // The old model belongs to the old driver or provider: the new one's default applies.
-        spec.model = None;
-    }
-    if let Some(m) = new_model(c) {
-        spec.model = m;
-    }
-    if let Some(p) = new_provider(c) {
-        spec.provider = p;
-    }
-    if let Some(k) = c.kind {
-        spec.kind = k;
-    }
-    if let Some(r) = c.read_only {
-        spec.read_only = r;
-    }
-    if let Some(t) = &c.tools {
-        spec.tools = t.clone();
     }
 }
