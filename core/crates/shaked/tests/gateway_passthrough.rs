@@ -15,10 +15,10 @@ use shaked::{
     app::{AppState, Config},
     auth::run_tokens::resolve_run_token,
     exec::BranchCtx,
-    gateway::ForwardTo,
+    gateway::{ForwardTo, COST_HEADER},
     jobs::EndIf,
     model::*,
-    providers::Secret,
+    providers::{Endpoint, ProviderConfig, Secret},
     runner::BranchPlan,
     store::Linked,
     worker::{
@@ -1111,5 +1111,38 @@ fn a_chat_call_to_claude_prices_cache_reads_at_the_cache_rate() {
         };
         let want = shaked::prices::call_cost("anthropic", "claude-sonnet-5-5", &t);
         assert_eq!(calls[0].payload["charged_usd"].as_f64(), want);
+    })
+}
+
+/// Anthropic, OpenAI and OpenRouter where nothing answers.
+fn nowhere() -> ProviderConfig {
+    let base = format!("{}/v1", app::NOWHERE);
+    ProviderConfig {
+        anthropic: Endpoint::new(&base, None),
+        openai: Endpoint::new(&base, None),
+        openrouter: Endpoint::new(&base, None),
+        ..ProviderConfig::default()
+    }
+}
+
+/// A call that failed answers no cost (its cost is unknown, not 0), on the chat route and on a
+/// pass-through route alike: here no provider answers.
+#[test]
+fn a_failed_call_answers_no_cost_on_any_route() {
+    run(async {
+        let fx = AppFx::idle("passthrough", "nocost").bench("retail");
+        let fx = fx.providers(nowhere()).start().await;
+        store_org_keys(&fx).await;
+        let (plan, token, _link) = worker_branch(&fx).await;
+        let message = json!({"model": "claude-sonnet-5-5", "max_tokens": 8, "messages": []});
+        let calls = [
+            ("o", "chat/completions", chat_ask()),
+            ("a", "messages", message),
+        ];
+        for (agent, api, ask) in calls {
+            let r = call(&fx, (plan.branch_id.as_str(), agent, api), &token, &ask).await;
+            assert_eq!(r.status(), 502, "{api}");
+            assert!(r.headers().get(COST_HEADER).is_none(), "{api}");
+        }
     })
 }

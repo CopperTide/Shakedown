@@ -84,7 +84,7 @@ sequenceDiagram
     C->>B: bill: cost, budget.add
     C->>B: book: append model_call, reasoning events, meter usd and tokens
     C->>T: settle (linked branches only)
-    C-->>A: answer + retry-after + x-shakedown-cost-usd
+    C-->>A: answer + retry-after + x-shakedown-cost-usd (none for a failed call)
 ```
 
 A failed record answers 500 and skips the meters. On a linked branch `settle` still runs first, as in

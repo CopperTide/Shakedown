@@ -163,10 +163,16 @@ fn onward(
 
 /// Adds what the control box says the call cost to the run's estimate.
 fn charge(ctx: &BranchCtx, agent: &str, headers: &reqwest::header::HeaderMap) {
-    let cost = headers.get(COST_HEADER).and_then(|v| v.to_str().ok());
-    if let Some(usd) = cost.and_then(|c| c.trim().parse::<f64>().ok()) {
+    if let Some(usd) = said_cost(headers) {
         let _ = ctx.budget.add(agent, usd);
     }
+}
+
+/// What the control box says a call cost ([`COST_HEADER`]): nothing for a call it sends none
+/// for (a failed one, or one whose cost is unknown) or one it can't be read from.
+fn said_cost(headers: &reqwest::header::HeaderMap) -> Option<f64> {
+    let cost = headers.get(COST_HEADER)?.to_str().ok()?;
+    cost.trim().parse().ok()
 }
 
 /// The control box's answer, passed back as it comes: its status, content type, `retry-after`
@@ -194,6 +200,16 @@ fn relayed(answer: reqwest::Response) -> Response {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_worker_reads_a_cost_only_where_the_control_box_said_one() {
+        let mut h = reqwest::header::HeaderMap::new();
+        assert_eq!(said_cost(&h), None, "a failed call says none");
+        h.insert(COST_HEADER, "0.004".parse().unwrap());
+        assert_eq!(said_cost(&h), Some(0.004));
+        h.insert(COST_HEADER, "unknown".parse().unwrap());
+        assert_eq!(said_cost(&h), None);
+    }
 
     /// Nothing the agent sent as a credential goes on: only the worker token.
     #[test]

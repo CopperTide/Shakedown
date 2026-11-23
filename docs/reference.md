@@ -115,7 +115,8 @@ canonical counts (`prompt_tokens` is the whole input; Messages also keeps `input
 provider's stream broke off, stayed silent for 5 minutes (a stream has no limit on its whole length), said `error`
 on the way, or ended without its final event (`message_stop` or a `message_delta` with its stop reason;
 `response.completed` or `response.incomplete`); it is
-priced and metered as a `chat/completions` call is. A call whose cost is known answers `x-shakedown-cost-usd`. A
+priced and metered as a `chat/completions` call is. A call whose cost is known answers `x-shakedown-cost-usd`, on
+every route; a failed call, whose cost is unknown, answers none (never 0). A
 provider that can't be found is a 502, recorded as a failed call. `messages/count_tokens` goes to the provider the
 same way and is neither recorded nor charged, but refused like a model call while its branch is held. With a worker
 token the control box holds the branch itself, whatever its worker does and whether it is connected or not:
