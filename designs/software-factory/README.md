@@ -5,20 +5,28 @@ Two agent designs for Shakedown's software-factory world, compared on what reach
 - **A**, a hierarchical LangGraph team: a read-only planner, a coder, a reviewer and release (`team_a/`).
 - **B**, one OpenAI Agents SDK engineer whose pushes wait for passing tests (`solo_b/`).
 
-Both are customer-style agent code: each is a driver (`python -m factory_designs.team_a`,
+Both are written the way a customer writes agent code. Each is a driver (`python -m factory_designs.team_a`,
 `python -m factory_designs.solo_b`) that joins the run Shakedown started for it through
-`shakedown.driver`, and builds its framework's model and tools with part 1's adapters
-(`shakedown.adapters.langgraph`, `shakedown.adapters.openai_agents`) unchanged.
+`shakedown.driver`, and builds its framework's model and tools with the SDK's adapters
+(`shakedown.adapters.langgraph`, `shakedown.adapters.openai_agents`), unchanged.
+
+## What it needs
+
+- [uv](https://docs.astral.sh/uv/). The project pins LangGraph, the OpenAI Agents SDK and their clients, and
+  installs the SDK from `sdk/python`.
+- Docker and the workbench image (below), for every tool command.
+- A running shaked with the software-factory world, and a model provider it can reach (`shared.yaml` names
+  the provider and model. The [RunPod pod](../../deploy/runpod) serves `local:runpod`).
 
 ## What the designs share, and only that
 
 - `shared.yaml`: provider, model, reasoning effort, output cap, temperature, tool output size, command timeout
-  and workbench image. `FACTORY_PROVIDER` and `FACTORY_MODEL` override the provider and model; nothing else is
+  and workbench image. `FACTORY_PROVIDER` and `FACTORY_MODEL` override the provider and model. Nothing else is
   overridable.
 - The tools in `factory_designs/toolbox.py`: `shell`, `read_file`, `write_file`, `run_tests`, `wait_minutes`,
   with the same descriptions and schemas for both. A design picks which of them each of its agents gets, in its
   `design.yaml`.
-- Prompts and roles are data: each design's `design.yaml` and `*.md` files. Placeholders are `{name}`; any
+- Prompts and roles are data: each design's `design.yaml` and `*.md` files. Placeholders are `{name}`. Any
   other brace (a JSON example) is kept as written.
 - `run_design`: a stop from the world (the spend limit's 402, the run's end, a model that keeps failing after
   the client's retries) ends a design quietly with a `stopped: …` step, and Shakedown scores the run at its
@@ -57,30 +65,32 @@ world's base image (`shakedown-sf/base:1.0.0`, its `images.yaml`).
 $1.50 spend cap per run. `key_steps.yaml` says which recorded steps matter (merge, approval, revert, deploy,
 incident) by GitHub's own API shapes and the world's events.
 
-```sh
-uv run --project designs/software-factory python -m factory_designs.experiment create \
-    [--provider local:runpod] [--runs N] [--world-minutes M] [--task T] [--benchmark W] [--url http://127.0.0.1:4510]
-uv run --project designs/software-factory python -m factory_designs.experiment export <id> \
+```bash
+uv run --project designs/software-factory python -m factory_designs.experiment [--url http://127.0.0.1:4510] create \
+    [--provider local:runpod] [--runs N] [--world-minutes M] [--task T] [--benchmark W]
+uv run --project designs/software-factory python -m factory_designs.experiment [--url http://127.0.0.1:4510] export <id> \
     [--ledger deploy/runpod/ledger.jsonl] [--out comparison.json]
 ```
 
+`--url` comes before the command (default `SHAKEDOWN_URL`, else `http://127.0.0.1:4510`).
+
 `create` makes each design a Code connection (`<setup> · <model> on <provider>`, reused by name; the driver is
 `uv run --project designs/software-factory python -m factory_designs.<design>` from the repository root, with
-`FACTORY_PROVIDER` and `FACTORY_MODEL`) and posts the experiment. `export` writes `comparison.json`, what stage 6's
-page reads: per design and run the checks as scored, what reached production (each service's version against its
+`FACTORY_PROVIDER` and `FACTORY_MODEL`) and posts the experiment. `export` writes `comparison.json`: per design and run the checks as scored, what reached production (each service's version against its
 main, the error rate, open incidents, failed contracts), tokens, hosted-equivalent cost, wall and world minutes,
 GPU minutes and dollars (the ledger's pod session open at the run's start), the key steps with the reasoning
 their agent recorded just before, and why a run stopped; each design's pass rates and medians; and whether the
 runs shared one world, paired seeds and the same caps.
 
-`python tests/fake_model.py --port N` serves the scripted model (every conversation looks once with
-`gh api user`, then answers with JSON every role parses) as an OpenAI-compatible server, so the designs run end to
-end against a real world with no real model: start shaked with `SHAKEDOWN_LOCAL_MODELS=runpod=http://127.0.0.1:N/v1`.
+For testing the plumbing only, `python tests/fake_model.py --port N` serves a scripted test model (every
+conversation looks once with `gh api user`, then answers with JSON every role parses) as an OpenAI-compatible
+server. Start shaked with `SHAKEDOWN_LOCAL_MODELS=runpod=http://127.0.0.1:N/v1` to run the designs end to end
+against a real world with no real model. It measures nothing about the designs.
 
 ## Tests
 
-```sh
-uv run --with pytest pytest -q
+```bash
+cd designs/software-factory && uv run --with pytest pytest -q
 ```
 
 No test calls a model, and only the `live` one runs Docker. The others run against `tests/fake_model.py`, a scripted server in the shape
@@ -90,5 +100,8 @@ Verified on 2026-11-19, on Linux with Python 3.14 and Docker: the test suite; th
 the clients import); and `tests/test_live_workbench.py` (marked `live`, skipped without Docker or the image),
 where a command in the container reaches a stand-in proxy through the bridge with the agent's ticket as
 `Proxy-Authorization`, cannot reach the network directly, and cannot write its root. `curl` reads only the
-lower-case `http_proxy`; shaked gives both forms. Not yet verified: a run against a live shaked, and the
-designs on a real model.
+lower-case `http_proxy`, and shaked gives both forms.
+
+## Limits
+
+Not yet verified: a run against a live shaked, and the designs on a real model.
