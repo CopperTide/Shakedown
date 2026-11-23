@@ -113,8 +113,9 @@ charged. It takes no in-flight permit on a linked branch.
 
 ### Pricing and the spend limit
 
-- `book::call_cost`: the provider's reported cost when it gives one, else list price from `prices.rs`, cache
-  writes and cache reads at their own rates. Every route's usage carries those counts: the Claude and Bedrock
+- `book::call_cost` and an open agent's end (`open::Totals`) price a call the same way, `Provider::call_cost`:
+  the provider's reported cost when it gives one, else list price from `prices.rs`, cache writes and cache reads
+  at their own rates (`CallTokens::of_usage`). Every route's usage carries those counts: the Claude and Bedrock
   adapters' canonical usage and a Messages call's both come from `providers::canonical::cached_usage`
   (`input_tokens`, `cache_creation_input_tokens`, `cache_read_input_tokens`), a Responses call's as
   `prompt_tokens_details.cached_tokens`.

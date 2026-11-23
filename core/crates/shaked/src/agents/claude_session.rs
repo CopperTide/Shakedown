@@ -385,7 +385,7 @@ impl ClaudeSession {
                 Some(c + live),
                 Some("api_equivalent_estimate+list_price_estimate"),
             ),
-            (None, true) => (Some(live), Some("list_price_estimate")),
+            (None, true) => (Some(live), Some(crate::prices::LIST_PRICE_ESTIMATE)),
         };
         AgentResult {
             ok: error.is_none(),

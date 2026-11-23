@@ -19,6 +19,8 @@ mod transport;
 use serde::Serialize;
 use serde_json::Value;
 
+use crate::prices;
+
 pub use config::{
     is_openrouter_url, local_key_env, local_price_env, Endpoint, LocalEndpoint, ProviderConfig,
     Rate, Secret, ANTHROPIC_BASE, ANTHROPIC_MAX_TOKENS_ENV, DEFAULT_ANTHROPIC_MAX_TOKENS,
@@ -227,14 +229,29 @@ impl Provider {
         }
     }
 
-    /// The cost of a successful call with `usage`: what OpenRouter reports, a local server's
-    /// declared rate (else 0), unknown otherwise (no price table is kept).
+    /// The cost of a successful call with `usage` as the provider makes it known: what OpenRouter
+    /// reports, a local server's declared rate (else 0), unknown otherwise (see
+    /// [`Provider::call_cost`] for the list price).
     pub fn cost(&self, usage: &Value) -> Option<f64> {
         match self.kind {
             ProviderKind::OpenRouter => usage.get("cost").and_then(Value::as_f64),
             ProviderKind::Local => Some(self.rate.map_or(0.0, |r| r.cost(usage))),
             ProviderKind::OpenAi | ProviderKind::Anthropic | ProviderKind::Bedrock => None,
         }
+    }
+
+    /// What a successful call of `model` with the canonical `usage` cost: what the provider
+    /// reports ([`Provider::cost`]), else its list price (`docs/prices.toml`), cache writes and
+    /// cache hits at their own rates; `None` when neither is known.
+    pub fn call_cost(&self, model: &str, usage: &Value) -> Option<f64> {
+        let listed = || prices::call_cost(&self.id, model, &prices::CallTokens::of_usage(usage));
+        self.cost(usage).or_else(listed)
+    }
+
+    /// The label of what [`Provider::call_cost`] gives: the provider's own cost's, else a
+    /// list-price estimate.
+    pub fn call_cost_source(&self) -> &'static str {
+        self.cost_source().unwrap_or(prices::LIST_PRICE_ESTIMATE)
     }
 
     /// The label of a cost [`Provider::cost`] knows; `None` where it never knows one.

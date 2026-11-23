@@ -367,7 +367,9 @@ async fn an_agent_calls_its_own_provider_and_records_its_cost(live: Live) {
     assert_eq!(start["provider"], provider);
     let end = &payloads(&b, "agent_end", "solo")[0];
     if provider != "openrouter" {
-        assert_eq!(end["cost_source"], calls[0]["cost_source"]);
+        // The end prices what the provider left unpriced at the list price, as the gateway does.
+        let same = end["cost_source"] == calls[0]["cost_source"];
+        assert!(same || end["cost_source"] == "list_price_estimate", "{end}");
     }
     assert_no_key_in(&b, &fx.state.config);
 }

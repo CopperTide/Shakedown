@@ -560,14 +560,17 @@ citation against the record and stores the review. Details in [reference.md](ref
 
 - `openrouter`: the cost OpenRouter reports (API mode on OpenRouter).
 - `local (no API charge)`: API mode on a local server; the cost is 0 and the UI shows `no API charge`.
-- No provider label on API mode with OpenAI or Anthropic: they report no price, so the cost is the list-price
-  estimate of `docs/prices.toml` for the models it lists, else `unknown`.
+- API mode with OpenAI, Anthropic or Bedrock: they report no price, so each call is priced at `docs/prices.toml`
+  (cache writes and cache hits at their own rates, as the gateway charges them) for the models it lists, and the
+  agent's end is labelled `list_price_estimate`; a model it doesn't list leaves the cost `unknown`. The model calls
+  themselves keep no provider label.
 - These labels are the providers' own. The metrics above also estimate a cost from `docs/prices.toml` where no
   provider reported one.
 - `api_equivalent_estimate`: Claude Code's own `total_cost_usd`. It is what the same tokens would cost at API
   prices, not what a subscription pays.
-- `list_price_estimate`: shaked's own estimate of an agent's calls at `docs/prices.toml` prices, for a turn stopped
-  before Claude Code reported its cost (a spend limit, a time limit); `api_equivalent_estimate+list_price_estimate`
+- `list_price_estimate`: shaked's own estimate of an agent's calls at `docs/prices.toml` prices: an API-mode agent's
+  on a provider that reports no price, and a turn stopped before Claude Code reported its cost (a spend limit, a
+  time limit); `api_equivalent_estimate+list_price_estimate`
   when earlier turns had reported theirs. See [Spend limits](#spend-limits).
 - No label and no dollar figure: Codex reports tokens only.
 - Dollars are shown only when every agent in the branch has a dollar figure; otherwise only tokens are shown,

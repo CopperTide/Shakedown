@@ -167,7 +167,7 @@ struct Totals {
     tokens: [i64; 3],
     /// `None` once a call's cost is unknown.
     cost: Option<f64>,
-    /// The label of the cost: the provider's, once the provider is known.
+    /// The label of the cost: the provider's, once a call was made.
     source: Option<&'static str>,
 }
 
@@ -180,7 +180,8 @@ impl Totals {
         }
     }
 
-    fn add(&mut self, provider: &Provider, usage: &Value) {
+    /// Adds a call of `model` on `provider` with `usage`, at the price the gateway charges it.
+    fn add(&mut self, provider: &Provider, model: &str, usage: &Value) {
         for (total, k) in
             self.tokens
                 .iter_mut()
@@ -188,7 +189,8 @@ impl Totals {
         {
             *total += usage[k].as_i64().unwrap_or(0);
         }
-        self.cost = add_cost(self.cost, provider.cost(usage));
+        self.cost = add_cost(self.cost, provider.call_cost(model, usage));
+        self.source = Some(provider.call_cost_source());
     }
 
     /// The agent's result: these totals, with `error` and `failure`, over `seconds`.
@@ -354,13 +356,12 @@ impl Loop {
         messages: &mut Vec<Value>,
         totals: &mut Totals,
     ) -> Result<String, Fault> {
-        totals.source = self.provider.cost_source();
         let exec = ToolExec::new(self.state.store.clone());
         let base = self.state.config.retry_base;
         for _ in 0..MAX_MODEL_CALLS {
             let body = json!({"messages": messages, "tools": self.tools, "model": self.model});
             let v = model_call(&self.state.http, &self.gateway, &body, base).await?;
-            totals.add(&self.provider, &v["usage"]);
+            totals.add(&self.provider, &self.model, &v["usage"]);
             // The gateway priced the call into the run's estimate: stop once it is over.
             if let Some(why) = self.branch.budget.over() {
                 return Err(Fault::Budget(why));
@@ -484,6 +485,29 @@ async fn run_calls(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// An open agent's end counts each call at the price the gateway charges it: on Claude, whose
+    /// answers say no cost, the list price with cache reads at the cache rate.
+    #[test]
+    fn an_open_claude_agents_cost_prices_cache_reads_at_the_cache_rate() {
+        let claude = ProviderConfig::default()
+            .resolve(Some("anthropic"))
+            .unwrap();
+        let usage = crate::providers::canonical::cached_usage(12, 0, 30, 5);
+        let mut totals = Totals::new();
+        totals.add(&claude, "claude-sonnet-5-5", &usage);
+        let r = totals.result(None, None, 1.0);
+        let t = crate::prices::CallTokens {
+            input: 12,
+            cache_write: 0,
+            cache_read: 30,
+            output: 5,
+        };
+        let want = crate::prices::call_cost("anthropic", "claude-sonnet-5-5", &t);
+        assert!(want.is_some(), "the table prices claude-sonnet-5-5");
+        assert_eq!(r.cost_usd, want);
+        assert_eq!(r.cost_source.as_deref(), Some("list_price_estimate"));
+    }
 
     #[test]
     fn retries_wait_as_asked_else_twice_as_long_each_time() {

@@ -4,6 +4,7 @@
 use std::sync::LazyLock;
 
 use serde::Deserialize;
+use serde_json::Value;
 
 use crate::model::AgentKind;
 
@@ -94,7 +95,26 @@ pub struct CallTokens {
     pub output: i64,
 }
 
+/// The label of a cost shaked worked out at these list prices.
+pub const LIST_PRICE_ESTIMATE: &str = "list_price_estimate";
+
 impl CallTokens {
+    /// The tokens of a call's canonical `usage`: `prompt_tokens` is the whole input, of which the
+    /// cache hits (`cache_read_input_tokens`, or `prompt_tokens_details.cached_tokens`) and the
+    /// cache writes (`cache_creation_input_tokens`) are priced apart.
+    pub fn of_usage(u: &Value) -> CallTokens {
+        let n = |v: &Value| v.as_i64().unwrap_or(0);
+        let read = n(&u["prompt_tokens_details"]["cached_tokens"]);
+        let read = read.max(n(&u["cache_read_input_tokens"]));
+        let written = n(&u["cache_creation_input_tokens"]);
+        CallTokens {
+            input: (n(&u["prompt_tokens"]) - read - written).max(0),
+            cache_read: read,
+            cache_write: written,
+            output: n(&u["completion_tokens"]),
+        }
+    }
+
     /// The whole prompt the call was sent with.
     pub fn prompt(&self) -> i64 {
         self.input + self.cache_write + self.cache_read

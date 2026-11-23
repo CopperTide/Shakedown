@@ -11,7 +11,6 @@ use crate::{
     app::AppState,
     layer::{KeySource, Meter, Usage},
     model::*,
-    prices::CallTokens,
     providers::Provider,
     reasoning::ReasoningItem,
 };
@@ -37,23 +36,10 @@ impl Outcome {
 }
 
 /// What a call cost: the provider's figure, else its list price for the model it asked for
-/// (cached prompt tokens priced as cache hits, cache writes as writes).
+/// ([`Provider::call_cost`]).
 fn call_cost(provider: &Provider, p: &ModelCallPayload) -> Option<f64> {
-    if p.cost_usd.is_some() {
-        return p.cost_usd;
-    }
-    let n = |v: &Value| v.as_i64().unwrap_or(0);
-    let u = &p.usage;
-    let cached =
-        n(&u["prompt_tokens_details"]["cached_tokens"]).max(n(&u["cache_read_input_tokens"]));
-    let written = n(&u["cache_creation_input_tokens"]);
-    let t = CallTokens {
-        input: (n(&u["prompt_tokens"]) - cached - written).max(0),
-        cache_read: cached,
-        cache_write: written,
-        output: n(&u["completion_tokens"]),
-    };
-    crate::prices::call_cost(&provider.id, p.request["model"].as_str()?, &t)
+    let listed = || provider.call_cost(p.request["model"].as_str()?, &p.usage);
+    p.cost_usd.or_else(listed)
 }
 
 impl CallFor {

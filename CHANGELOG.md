@@ -66,3 +66,6 @@
   metered) as fresh input, about 10 times its price.
 - **A dispatch run's open agents can name your stored keys (`key:<name>`).** Their sessions now
   resolve providers with the caller's keys, as other runs do, instead of the environment's only.
+- **An open agent on Claude, Bedrock or OpenAI ends with a known cost.** Its end now sums its calls
+  at the list price the gateway charges them (cache rates included), labelled
+  `list_price_estimate`, instead of `unknown`.
