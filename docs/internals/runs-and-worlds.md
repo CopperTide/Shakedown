@@ -173,12 +173,12 @@ exits while the run is live, the run is scored and ends `failed` with the exit c
 flowchart TD
     A["fork_with(scope, branch, ForkRequest)"] --> B["finished_branch: exists, not running"]
     B --> C["settle_changes: drop provider changes that resolve to the same provider"]
-    C --> D["rerun::prepare: run info, world plan, restore per part, fork plan, checks"]
+    C --> D["rerun::prepare: bind::local_only first, then run info, world plan,<br/>restore per part, fork plan, checks"]
     D --> E["disruptions::calls: scenario edits from the start on"]
     E --> F["task_of, new_team"]
     F --> G["create_child: branches row, set_restore, inherit_rules"]
     G --> H["start_child_world: copy_prefix (seq < start_seq),<br/>then rerun::start_world"]
-    H --> H1["bind::local_only, World::start_branch(WorldFrom::Saves),<br/>epoch from RunStart"]
+    H --> H1["World::start_branch(WorldFrom::Saves),<br/>epoch from RunStart"]
     H1 --> H2["catch_up_saved: advance saved clock parts"]
     H2 --> H3["replay_parts: repeat recorded inputs on replayed parts"]
     H3 --> I["child_ctx: recorded rules, clock from clock_at(world_until)"]
@@ -254,7 +254,7 @@ object store (`src/objects/`) and the `saves` table exist for uploads, which com
 | A fork's events are the parent's prefix with the same seqs. | `src/store/events.rs`, `copy_prefix` |
 | The rules on record are the control box's, and a fork inherits them. | `src/runner/start.rs`, `record_start`. `src/fork/start.rs`, `create_child` |
 | Setup and link calls are recorded as tool calls of actors `setup` and `link`, so a replay repeats them. | `src/exec/setup.rs`, `src/exec/links.rs` |
-| A shaked whose packages run only in sandboxes never starts a world's parts itself. | `src/bind.rs`, `local_only`, called by `src/runner/start.rs` and `src/fork/rerun.rs` |
+| A shaked whose packages run only in sandboxes never starts a world's parts itself: a run and a fork are refused before anything asks the hub for a program. | `src/bind.rs`, `local_only`, called by `src/runner/start.rs` and first in `src/fork/rerun.rs`, `prepare` |
 
 `world/standard.rs`'s `name_lock` keys on the hub's saves folder and the save names, so each shared save is
 made once per hub while unrelated hubs never wait for each other.

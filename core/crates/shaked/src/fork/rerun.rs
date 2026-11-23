@@ -170,8 +170,16 @@ fn known_tools(world: &Plan, changes: &HashMap<String, Change>) -> Result<(), Fo
     }
 }
 
+/// Refuses a fork where packages run only in sandboxes: planning its world would start the
+/// world's package programs here.
+fn runs_packages_here(state: &AppState) -> Result<(), ForkError> {
+    let policy = state.store.layer().policy();
+    let refused = crate::bind::local_only(policy, "starting a world's parts");
+    refused.map_err(|e| ForkError::Internal(anyhow::Error::msg(e)))
+}
+
 /// Plans a rerun of `branch` (its `events`) for `req`: the rerun, and the plan of the world it
-/// starts.
+/// starts (refused first where packages run only in sandboxes).
 pub async fn prepare(
     state: &AppState,
     records: Scoped<'_>,
@@ -179,6 +187,7 @@ pub async fn prepare(
     events: &[Event],
     req: &ForkRequest,
 ) -> Result<(Rerun, Plan), ForkError> {
+    runs_packages_here(state)?;
     if !events.iter().any(|e| e.seq == req.at_seq) {
         return Err(ForkError::UnknownSeq);
     }
@@ -319,8 +328,6 @@ pub async fn start_world(
     rerun: &Rerun,
     planned: Plan,
 ) -> Result<World, ForkError> {
-    crate::bind::local_only(state.store.layer().policy(), "starting a world's parts")
-        .map_err(|e| ForkError::Internal(anyhow::Error::msg(e)))?;
     let from = WorldFrom::Saves(start_saves(rerun)?);
     let (hub, seed) = (state.hub.clone(), rerun.run.seed);
     let epoch_ms = crate::recorded::world_epoch_ms(events);

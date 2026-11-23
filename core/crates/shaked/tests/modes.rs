@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 
 use shaked::{app::Config, bind::bind_from};
-use support::{run, AppFx};
+use support::{poll_until, run, AppFx, SAVES_BUILT, STEP};
 
 mod support;
 
@@ -185,19 +185,19 @@ async fn post_run(fx: &AppFx) -> (u16, serde_json::Value) {
     .await
 }
 
-/// [`post_run`], ended: its branch.
+/// [`post_run`], ended: its branch. Its saves may be built first, which on a busy box takes a
+/// while ([`SAVES_BUILT`]).
 async fn ended_run(fx: &AppFx) -> String {
     let (status, v) = post_run(fx).await;
     assert_eq!(status, 200, "{v}");
     let branch = v["branch_id"].as_str().unwrap().to_string();
-    for _ in 0..100 {
+    let ended = async || {
         let (_, b) = fx.get(&format!("/api/branches/{branch}")).await;
-        if b["branch"]["status"] != "running" && b["status"] != "running" {
-            return branch;
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-    }
-    panic!("the run never ended");
+        (b["branch"]["status"] != "running" && b["status"] != "running").then_some(())
+    };
+    let ended = poll_until(SAVES_BUILT, STEP, ended).await;
+    assert!(ended.is_some(), "the run never ended");
+    branch
 }
 
 const SANDBOXES: &str = "this shaked runs packages only in sandboxes";
@@ -239,5 +239,36 @@ fn a_layer_that_runs_no_packages_here_starts_no_world_driver_or_fork() {
         assert_ne!(status, 200, "{v}");
         assert!(v["error"].as_str().unwrap_or("").contains(SANDBOXES), "{v}");
         fork_and_driver_are_refused(&fx, &parent).await;
+    })
+}
+
+/// Another app on `fx`'s store (and so its layer) whose hub has no package: anything that asks
+/// it for a package program fails, so a refusal naming the sandboxes came before any was asked.
+fn without_packages(fx: &AppFx) -> std::sync::Arc<shaked::app::AppState> {
+    let registry = parts::Registry::scan(&[]).unwrap();
+    let nowhere = std::env::temp_dir().join("shakedown-no-packages");
+    let hub = parts::Hub::new(registry, nowhere.clone(), nowhere);
+    let state = shaked::app::AppState::new(fx.state.store.clone(), hub.into(), Config::new());
+    std::sync::Arc::new(state)
+}
+
+/// A fork under a layer whose packages run only in sandboxes is refused before any package
+/// program is started (planning the fork's world would start them).
+#[test]
+fn a_sandboxed_fork_is_refused_before_any_package_program_starts() {
+    run(async {
+        let spy = shaked::harness::SpyLayer::new();
+        let fx = AppFx::idle("modes", "sandfork")
+            .layer(std::sync::Arc::new(spy.clone()))
+            .start()
+            .await;
+        let parent = ended_run(&fx).await;
+        spy.sandbox_packages();
+        let state = without_packages(&fx);
+        let events = support::records(&state.store).events(&parent).await;
+        let at = events.unwrap().last().unwrap().seq;
+        let forked = shaked::fork::fork(&state, &parent, at, Default::default()).await;
+        let e = forked.expect_err("a fork started a world here");
+        assert!(format!("{e:#}").contains(SANDBOXES), "{e:#}");
     })
 }

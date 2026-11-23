@@ -55,3 +55,6 @@
 - **Shared saves of unrelated hubs are no longer made one at a time.** The lock that makes each
   base and gold save once is now per hub saves folder and name, so runs on different hubs stop
   queueing behind each other.
+- **A shaked that runs packages only in sandboxes refuses a fork before starting anything.**
+  The check now comes before the fork's world is planned (which started its package programs),
+  as it already did for new runs, and before the new branch is recorded.
