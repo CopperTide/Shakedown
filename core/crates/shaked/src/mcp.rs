@@ -46,28 +46,23 @@ async fn reply_to(
     })
 }
 
-/// The live branch whose `agent` may call: 404 when there is no such branch or agent, 401 when
-/// the agent was given a token and the call doesn't carry it.
+/// The live branch whose `agent` may call, checked as the gateway checks it: 404 when there is
+/// no such branch or agent, 401 when the call doesn't carry the agent's token (as a bearer).
 fn admitted(
     state: &AppState,
     branch: &str,
     agent: &str,
     headers: &HeaderMap,
 ) -> Result<Arc<BranchCtx>, (StatusCode, Json<Value>)> {
-    let refuse = |status, code, msg| (status, Json(rpc_error(Value::Null, code, msg)));
-    let Some(ctx) = state.live.agent(branch, agent) else {
-        return Err(refuse(
-            StatusCode::NOT_FOUND,
-            -32000,
-            "unknown branch or agent",
-        ));
-    };
     let authorization = headers.get(AUTHORIZATION).and_then(|v| v.to_str().ok());
-    if !ctx.roster.token_ok(agent, authorization) {
-        let why = crate::external::TOKEN_WANTED;
-        return Err(refuse(StatusCode::UNAUTHORIZED, -32001, why));
-    }
-    Ok(ctx)
+    let found = crate::gateway::live_agent(state, branch, agent, authorization);
+    found.map(|(ctx, _)| ctx).map_err(|(status, why)| {
+        let code = match status {
+            StatusCode::NOT_FOUND => -32000,
+            _ => -32001,
+        };
+        (status, Json(rpc_error(Value::Null, code, why)))
+    })
 }
 
 async fn handle(

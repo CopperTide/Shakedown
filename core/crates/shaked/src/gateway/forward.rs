@@ -21,7 +21,7 @@ use axum::{
 };
 
 use super::{
-    error_response,
+    admit, error_response,
     linked::HELD_HEADER,
     passthrough::api_headers,
     routes,
@@ -55,14 +55,14 @@ async fn forward(state: Arc<AppState>, route: Route, headers: HeaderMap, body: B
         let why = "this gateway has no control box to send model calls to";
         return error_response(StatusCode::INTERNAL_SERVER_ERROR, why);
     };
-    let (target, _) = match target::let_through(&state, &headers, &route).await {
+    let (target, _) = match admit::let_through(&state, &headers, &route).await {
         Ok(found) => found,
         Err(refused) => return *refused,
     };
     let ctx = target
         .live()
         .expect("a worker's gateway lets through its own agents' calls only");
-    let body = match target::read_body(body, &route).await {
+    let body = match admit::read_body(body, &route).await {
         Ok(body) => body,
         Err(refused) => return *refused,
     };
@@ -112,7 +112,7 @@ impl Onward<'_> {
                 return self.answered(answer).await;
             }
             tokio::time::sleep(PAUSE_POLL).await;
-            if let Some(refused) = super::held_back(self.ctx).await {
+            if let Some(refused) = target::held_back(self.ctx).await {
                 return refused;
             }
         }

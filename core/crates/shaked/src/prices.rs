@@ -235,4 +235,13 @@ as_of = "2026-11-04""#,
         assert!(close(p.call_cost(&tokens(0, 0, 200_000, 1_000)), want));
         assert!(table().find_flat("anthropic", "claude-haiku-5-5").is_none());
     }
+
+    #[test]
+    fn a_haiku_call_is_priced_from_the_table() {
+        let t = CallTokens {
+            cache_read: 1_000_000,
+            ..CallTokens::default()
+        };
+        assert!(call_cost("anthropic", "claude-haiku-5-5", &t).unwrap() > 0.0);
+    }
 }

@@ -16,13 +16,7 @@ use axum::{
 };
 use serde_json::json;
 
-use super::{
-    answer, error_response,
-    raw_call::Call,
-    redact_message,
-    target::{self, Route},
-    Api,
-};
+use super::{admit, answer, error_response, raw_call::Call, redact, target::Route, Api};
 use crate::app::AppState;
 
 /// The caller's headers that go on to the provider: the API's version and betas.
@@ -46,14 +40,14 @@ pub(super) async fn pass(
     headers: HeaderMap,
     body: Body,
 ) -> Response {
-    let a = match target::prepared(&state, &headers, &route, body).await {
+    let prepared = match admit::prepared(&state, &headers, &route, body).await {
         Ok(a) => a,
         Err(refused) => return *refused,
     };
     let call = Call {
         state,
         route,
-        prepared: a,
+        prepared,
     };
     call.send(&headers).await
 }
@@ -66,7 +60,7 @@ pub(super) async fn count(
     headers: HeaderMap,
     body: Body,
 ) -> Response {
-    let a = match target::prepared(&state, &headers, &route, body).await {
+    let a = match admit::prepared(&state, &headers, &route, body).await {
         Ok(a) => a,
         Err(refused) => return *refused,
     };
@@ -81,8 +75,6 @@ pub(super) async fn count(
     };
     let status = r.status().as_u16();
     let mut body = r.json().await.unwrap_or_else(|_| json!({}));
-    if matches!(status, 401 | 403) {
-        redact_message(&mut body);
-    }
+    redact(status, &mut body);
     answer(status, body, None)
 }

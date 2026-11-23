@@ -454,3 +454,25 @@ fn a_tokenless_call_is_told_to_send_the_agents_token() {
         teardown(fx).await;
     })
 }
+
+/// A refused call says why in JSON-RPC's terms: -32000 for no such branch or agent, -32001
+/// without the agent's token.
+#[test]
+fn refusals_carry_their_json_rpc_codes() {
+    run(async {
+        let fx = setup("codes").await;
+        let list = json!({"jsonrpc": "2.0", "id": 1, "method": "tools/list"});
+        let (s, v) = rpc(&fx, "nobody", list.clone()).await;
+        assert_eq!((s, &v["error"]["code"]), (404, &json!(-32000)), "{v}");
+        assert_eq!(v["error"]["message"], "unknown branch or agent");
+        let url = format!("{}/{}/triage", fx.url, fx.branch);
+        let r = reqwest::Client::new().post(url).bearer_auth("sda_wrong");
+        let r = r.json(&list).send().await.unwrap();
+        assert_eq!(r.status(), 401);
+        let v: Value = r.json().await.unwrap();
+        let (code, id) = (&v["error"]["code"], &v["id"]);
+        assert_eq!((code, id), (&json!(-32001), &Value::Null));
+        assert_eq!(v["error"]["message"], shaked::external::TOKEN_WANTED);
+        teardown(fx).await;
+    })
+}

@@ -153,15 +153,25 @@ pub async fn record(
     source: &str,
     seq: Option<i64>,
 ) {
-    for mut item in items {
-        item.model_call_seq = item.model_call_seq.or(seq);
-        let Some(p) = payload(&item, source) else {
-            continue;
-        };
+    for p in payloads(items, source, seq) {
         if let Err(e) = ctx.record(Some(agent), &p).await {
             eprintln!("branch {}: recording reasoning: {e:#}", ctx.branch_id);
         }
     }
+}
+
+/// The events of `items` from `source` worth recording (an empty one is not), each tied to the
+/// model call `seq` unless it names its own.
+pub fn payloads(
+    items: Vec<ReasoningItem>,
+    source: &str,
+    seq: Option<i64>,
+) -> Vec<ReasoningPayload> {
+    let tied = items.into_iter().map(|mut item| {
+        item.model_call_seq = item.model_call_seq.or(seq);
+        item
+    });
+    tied.filter_map(|item| payload(&item, source)).collect()
 }
 
 #[cfg(test)]

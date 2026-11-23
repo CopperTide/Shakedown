@@ -15,11 +15,8 @@ use serde_json::{json, Value};
 use tokio::sync::mpsc;
 
 use super::{
-    answer, error_response, meter_call,
-    passthrough::api_headers,
-    redact_message, sse,
-    target::{Outcome, Prepared, Route},
-    with_cost, Api,
+    admit::Prepared, answer, book::Outcome, error_response, passthrough::api_headers, redact, sse,
+    target::Route, with_cost, Api,
 };
 use crate::{app::AppState, model::*, overhead::ms_since};
 
@@ -88,9 +85,7 @@ impl Call {
             Err(e) => format!("upstream response unreadable: {}", e.without_url()),
         };
         let mut body = serde_json::from_str(&text).unwrap_or_else(|_| json!({ "raw": text }));
-        if matches!(status, 401 | 403) {
-            redact_message(&mut body);
-        }
+        redact(status, &mut body);
         let response = body.clone();
         let answered = Answered {
             status,
@@ -134,17 +129,17 @@ impl Call {
         let outcome = Outcome::of(a.status, a.interrupted.as_deref());
         let interrupted = a.interrupted.clone();
         let payload = self.payload(outcome != Outcome::Failed, a);
-        let Prepared {
-            target,
-            provider,
-            since,
-            ..
-        } = &self.prepared;
-        let (charge, mut v) = target.bill(&self.route.agent, (provider, &payload), outcome);
+        let (agent, p) = (&self.route.agent, &self.prepared);
+        let (charge, mut v) = p.target.bill(agent, (&p.provider, &payload), outcome);
         marked(&mut v, self.route.api, interrupted.as_deref());
-        target.overhead(*since, ms_since(sent_at));
-        self.record(v, &payload.usage, charge.usd).await;
-        target.settle(&self.state).await;
+        p.target.overhead(p.since, ms_since(sent_at));
+        let metered = (charge.usd, &payload.usage, p.paid_by);
+        let booked = p.target.book(&self.state, agent, (v, Vec::new()), metered);
+        if let Err(e) = booked.await {
+            let branch = &self.route.branch;
+            eprintln!("gateway: recording a model call on {branch}: {e}");
+        }
+        p.target.settle(&self.state).await;
         charge.usd
     }
 
@@ -164,23 +159,6 @@ impl Call {
             cost_source: cost_usd.and(p.cost_source()).map(str::to_string),
             provider: Some(p.id.clone()),
             provider_response: None,
-        }
-    }
-
-    /// Appends the call's `model_call` event `v` and meters the call.
-    async fn record(&self, v: Value, usage: &Value, cost: Option<f64>) {
-        let agent = &self.route.agent;
-        let target = &self.prepared.target;
-        let appended = target.append(&self.state, agent, EventKind::ModelCall, v);
-        match appended.await {
-            Ok(ev) => {
-                let paid = (ev.seq, self.prepared.paid_by);
-                meter_call(&self.state, target, cost, usage, paid).await;
-            }
-            Err(e) => {
-                let branch = &self.route.branch;
-                eprintln!("gateway: recording a model call on {branch}: {e:#}");
-            }
         }
     }
 }

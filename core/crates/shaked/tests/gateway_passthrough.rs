@@ -13,9 +13,12 @@ use serde_json::{json, Value};
 use shaked::{
     app::{AppState, Config},
     auth::{run_tokens::resolve_run_token, Caller},
+    exec::BranchCtx,
+    gateway::ForwardTo,
     jobs::EndIf,
     launch::LaunchSpec,
     model::*,
+    providers::Secret,
     runner::{self, BranchPlan},
     scenario::Scenario,
     store::Linked,
@@ -23,6 +26,7 @@ use shaked::{
         frames::{ToControl, ToWorker, REFUSED_ENDED},
         holds, Ticket,
     },
+    world::{World, WorldFrom},
 };
 use support::fake_apis::{
     chat_answer, claude_message, fake_apis, store_org_keys, test_vault, FakeApis, Seen, COMPLETED,
@@ -1149,5 +1153,56 @@ fn a_body_is_read_only_once_the_call_is_let_through() {
         let why = r.json::<Value>().await.unwrap()["error"].to_string();
         assert!(why.contains("32 MiB"), "{why}");
         assert!(up.seen().is_empty());
+    })
+}
+
+/// A worker's own gateway for `plan`'s branch (agent `a`'s token issued), sending its agents'
+/// calls on to `fx` with the worker `token`: its base, `a`'s token, and its world.
+async fn workers_gateway(
+    fx: &AppFx,
+    plan: &BranchPlan,
+    token: &str,
+) -> (String, String, Arc<World>) {
+    let mut config = Config::new();
+    config.forward_to = Some(ForwardTo {
+        gateway: format!("{}/gateway", fx.base),
+        token: Secret::new(token),
+    });
+    let hub = fx.state.hub.clone();
+    let state = Arc::new(AppState::new(fx.state.store.clone(), hub.clone(), config));
+    let described = hub.bench_describe("retail").await.unwrap();
+    let world = World::start(hub, &described, &plan.branch_id, 1, WorldFrom::Base).await;
+    let world = Arc::new(world.unwrap());
+    let ctx = BranchCtx::new(plan.branch_id.clone(), world.clone(), team(), "27".into());
+    let agent_token = ctx.agent_token("a");
+    state.live.insert(Arc::new(ctx));
+    let (listener, base) = app::bind().await;
+    let gateway = shaked::gateway::worker_router().with_state(state);
+    tokio::spawn(async move { axum::serve(listener, gateway).await.unwrap() });
+    (base, agent_token, world)
+}
+
+/// A worker's own gateway takes only its agents' tokens: the branch's worker token there is
+/// no one's (401, sent nowhere), while the agent's own goes on to the control box.
+#[test]
+fn a_worker_token_at_a_workers_own_gateway_is_refused() {
+    run(async {
+        let up = fake_apis().await;
+        let fx = control("own-gateway", &up).await;
+        let (plan, token, _link) = worker_branch(&fx).await;
+        let (base, agent_token, world) = workers_gateway(&fx, &plan, &token).await;
+        let ask = json!({"model": "claude-sonnet-5-5", "max_tokens": 8, "messages": []});
+        let route = |api| (plan.branch_id.as_str(), "a", api);
+        let r = call_on(&base, route("messages"), &agent_token, &ask).await;
+        assert_eq!(r.status(), 200, "the agent's token goes on");
+        for api in ["messages", "responses", "chat/completions"] {
+            let r = call_on(&base, route(api), &token, &ask).await;
+            assert_eq!(r.status(), 401, "{api}");
+            let v: Value = r.json().await.unwrap();
+            assert_eq!(v["error"], shaked::external::TOKEN_WANTED, "{api}");
+        }
+        assert_eq!(up.seen().len(), 1, "only the agent's call went upstream");
+        exactly(&fx, &plan.branch_id, 1).await;
+        world.stop().await;
     })
 }

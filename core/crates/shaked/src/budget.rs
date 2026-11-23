@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
-use crate::prices::{self, CallTokens};
+use serde_json::{json, Value};
 
 /// Env default for a run that names no `max_cost_usd`.
 pub const ENV: &str = "SHAKEDOWN_MAX_COST_USD";
@@ -119,9 +119,10 @@ impl Budget {
     }
 }
 
-/// What one call of `model` costs at list price on `provider`, when the table has the model.
-pub fn price(provider: &str, model: Option<&str>, t: &CallTokens) -> Option<f64> {
-    prices::call_cost(provider, model?, t)
+/// The world event that records a run's limit reached (`why`) at the world clock `clock_ms`.
+pub fn limit_reached(why: &str, clock_ms: i64) -> Value {
+    json!({"part": "budget", "kind": "limit_reached", "text": why, "data": null,
+           "clock_ms": clock_ms})
 }
 
 #[cfg(test)]
@@ -177,15 +178,5 @@ mod tests {
         assert_eq!(Budget::new(Some(0.0)).limit(), None);
         assert_eq!(Budget::new(Some(f64::NAN)).limit(), None);
         assert_eq!(positive(-1.0), None);
-    }
-
-    #[test]
-    fn a_haiku_call_is_priced_from_the_table() {
-        let t = CallTokens {
-            cache_read: 1_000_000,
-            ..CallTokens::default()
-        };
-        assert!(price("anthropic", Some("claude-haiku-5-5"), &t).unwrap() > 0.0);
-        assert_eq!(price("anthropic", None, &t), None);
     }
 }

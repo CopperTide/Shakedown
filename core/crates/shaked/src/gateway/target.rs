@@ -1,36 +1,30 @@
-//! Whom a model call through the gateway is for, and what lets it through: a branch this shaked
-//! runs (the call carries its agent's token), or one a sandbox's worker runs (the call carries
-//! that branch's worker token, and the branch must still be running). Every route admits a call
-//! the same way ([`admitted`]), finds its provider the same way ([`provider`]) and bills it the
-//! same way ([`CallFor::bill`]). A linked branch's events are appended straight to the store,
-//! under the same per-branch lock as the worker's own, so the two interleave in one seq order.
+//! Whom a model call through the gateway is for: a branch this shaked runs (the call carries its
+//! agent's token, [`live_agent`]), or one a sandbox's worker runs (the call carries that branch's
+//! worker token, and the branch must still be running, [`super::linked`]). [`CallFor`] does each
+//! per-branch step of a call the way its branch wants: the hold, the save point, the record. A
+//! linked branch's events are appended straight to the store, under the same per-branch lock as
+//! the worker's own, so the two interleave in one seq order.
 
 use std::{sync::Arc, time::Instant};
 
 use axum::{
-    body::{Body, Bytes},
     http::{header::AUTHORIZATION, HeaderMap, StatusCode},
     response::Response,
 };
-use serde_json::{json, Value};
+use serde_json::Value;
 
 use super::{
-    call_cost,
-    charge::{self, Charge},
-    error_response, held_back,
+    error_response,
     linked::{self, Linked},
-    live_agent, model_call,
-    raw_call::marked,
-    save_before_model_call, Api,
+    Api, Refused,
 };
 use crate::{
     app::AppState,
     auth::{run_tokens::prefix, Caller, RunTokenKind},
     exec::BranchCtx,
-    layer::KeySource,
     model::*,
     overhead::Cat,
-    providers::{Provider, ProviderKind},
+    providers::Provider,
     reasoning::{self, ReasoningItem},
 };
 
@@ -66,29 +60,9 @@ pub(super) enum CallFor {
     Linked(Linked),
 }
 
-/// How a call to a provider ended, for its bill: it failed (nothing is charged), answered, or
-/// its stream was cut before it said what it used.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum Outcome {
-    Failed,
-    Answered,
-    Cut,
-}
-
-impl Outcome {
-    /// The outcome of an answer with `status`, cut for the reason `interrupted` when given.
-    pub(super) fn of(status: u16, interrupted: Option<&str>) -> Outcome {
-        match ((200..300).contains(&status), interrupted) {
-            (false, _) => Outcome::Failed,
-            (true, None) => Outcome::Answered,
-            (true, Some(_)) => Outcome::Cut,
-        }
-    }
-}
-
 /// The credential a call carries: its bearer token, else its `x-api-key` (Claude Code sends
 /// its key that way).
-pub(super) fn credential(headers: &HeaderMap) -> Option<String> {
+fn credential(headers: &HeaderMap) -> Option<String> {
     let header = |name| headers.get(name).and_then(|v| v.to_str().ok());
     let bearer = header(AUTHORIZATION.as_str()).and_then(|a| a.strip_prefix("Bearer "));
     let given = bearer.or_else(|| header("x-api-key"))?;
@@ -97,7 +71,7 @@ pub(super) fn credential(headers: &HeaderMap) -> Option<String> {
 
 /// Whom the call on `route` is for, and the agent's provider (None: the default). A worker's
 /// gateway serves only its own agents: a worker token there is no one's (401).
-async fn resolve(
+pub(super) async fn resolve(
     state: &AppState,
     headers: &HeaderMap,
     route: &Route,
@@ -112,172 +86,61 @@ async fn resolve(
             let (l, provider) = opened.map_err(refused)?;
             Ok((CallFor::Linked(l), provider))
         }
-        _ => {
-            let (ctx, provider) = live_agent(state, branch, agent, headers).map_err(refused)?;
+        given => {
+            let bearer = given.map(|t| format!("Bearer {t}"));
+            let found = live_agent(state, branch, agent, bearer.as_deref());
+            let (ctx, provider) = found.map_err(refused)?;
             Ok((CallFor::Live(ctx), provider))
         }
     }
 }
 
-/// The call on `route`, let through to its body: whom it is for, not held back by its branch,
-/// and (a model call) saved before and noted. Its body is read only then: a call nobody may make
-/// never has it read.
-pub(super) async fn let_through(
-    state: &Arc<AppState>,
-    headers: &HeaderMap,
-    route: &Route,
-) -> Result<(CallFor, Option<String>), Box<Response>> {
-    let (target, provider) = resolve(state, headers, route).await?;
-    if let Some(refused) = target.held_back(state).await {
-        return Err(Box::new(refused));
-    }
-    if route.kind() == Kind::ModelCall {
-        target.save_point(state).await;
-        target.note_model_call(&route.agent);
-    }
-    Ok((target, provider))
-}
-
-/// The body of a call on `route`, up to its API's limit (413 past it).
-pub(super) async fn read_body(body: Body, route: &Route) -> Result<Bytes, Box<Response>> {
-    let limit = route.api.max_body();
-    let read = axum::body::to_bytes(body, limit).await;
-    read.map_err(|_| {
-        let why = format!("request body over {} MiB, or unreadable", limit >> 20);
-        Box::new(error_response(StatusCode::PAYLOAD_TOO_LARGE, why))
-    })
-}
-
-/// A call ready to go to its provider: for whom, since when, the provider, whose key pays, and
-/// the call as it is sent.
-pub(super) struct Prepared {
-    pub target: CallFor,
-    pub since: Instant,
-    pub provider: Provider,
-    pub paid_by: KeySource,
-    pub request: Value,
-}
-
-/// The call on `route` [`let_through`], its body a JSON object, (a model call) admitted by the
-/// layer, and its provider found ([`provider`]).
-pub(super) async fn prepared(
-    state: &Arc<AppState>,
-    headers: &HeaderMap,
-    route: &Route,
-    body: Body,
-) -> Result<Prepared, Box<Response>> {
-    let (target, provider) = let_through(state, headers, route).await?;
-    let since = Instant::now();
-    let bytes = read_body(body, route).await?;
-    let request = serde_json::from_slice::<Value>(&bytes)
-        .ok()
-        .filter(Value::is_object);
-    let why = "request body must be a JSON object";
-    let request = request.ok_or_else(|| error_response(StatusCode::BAD_REQUEST, why))?;
-    let asked = provider.or_else(|| route.api.default_provider().map(str::to_string));
-    if route.kind() == Kind::ModelCall {
-        layer_admits(state, &target, route, (asked.as_deref(), &request)).await?;
-    }
-    let (provider, paid_by, request) =
-        self::provider(state, &target, route, asked.as_deref(), request).await?;
-    Ok(Prepared {
-        target,
-        since,
-        provider,
-        paid_by,
-        request,
-    })
-}
-
-/// Ok when the layer admits the model call `request` to the provider `asked` (its quotas).
-async fn layer_admits(
+/// The live `branch` and the provider of its `agent` (`None`: the default one): 404 when the
+/// branch isn't live or has no such agent, 401 when `authorization` (the header's value,
+/// `Bearer …`) isn't the agent's token. The gateway's and the agent's MCP endpoint's check.
+pub(crate) fn live_agent(
     state: &AppState,
-    target: &CallFor,
-    route: &Route,
-    (asked, request): (Option<&str>, &Value),
-) -> Result<(), Box<Response>> {
-    let op = model_call(&route.branch, asked.unwrap_or_default(), request);
-    let admitted = crate::layer::admit(&state.store, target.caller(), op).await;
-    admitted
-        .map(drop)
-        .map_err(|r| Box::new(error_response(r.status, r.message)))
+    branch: &str,
+    agent: &str,
+    authorization: Option<&str>,
+) -> Result<(Arc<BranchCtx>, Option<String>), Refused> {
+    let unknown = (StatusCode::NOT_FOUND, "unknown branch or agent");
+    let ctx = state.live.get(branch).ok_or(unknown)?;
+    let provider = ctx.roster.provider_of(agent).ok_or(unknown)?;
+    if !ctx.roster.token_ok(agent, authorization) {
+        let why = crate::external::TOKEN_WANTED;
+        return Err((StatusCode::UNAUTHORIZED, why));
+    }
+    Ok((ctx, provider))
 }
 
-/// The provider `asked` names for `request` on `route`, with the key chosen for the branch's
-/// caller: 502 when it can't be found (a model call is recorded as failed), 400 when it doesn't
-/// speak the route's API or (on a linked branch) its cost could not be known. A model call is held
-/// to a lent provider's cap, and OpenRouter is asked to report its cost.
-async fn provider(
-    state: &AppState,
-    target: &CallFor,
-    route: &Route,
-    asked: Option<&str>,
-    request: Value,
-) -> Result<(Provider, KeySource, Value), Box<Response>> {
-    let model = request["model"].as_str().unwrap_or_default().to_string();
-    let keys = crate::providers::keys::provider_for(state, target.caller(), asked, &model);
-    let (found, paid_by) = keys.await;
-    let found = match found {
-        Ok(p) => p,
-        Err(why) => return Err(unreached(state, target, route, request, why).await),
-    };
-    let refused = |why| Box::new(error_response(StatusCode::BAD_REQUEST, why));
-    let provider = route.api.speaking(found).map_err(refused)?;
-    if let Some(why) = target.unpriced(&provider, &model) {
-        return Err(refused(why));
+/// Why the call can't go on once the live branch lets it: 409 when the branch stopped (a paused
+/// one holds the call until it resumes, a wait that is no part of the gateway's), 402 past the
+/// spend limit of a run an external system drives.
+pub(super) async fn held_back(ctx: &BranchCtx) -> Option<Response> {
+    if ctx.flow.go().await.is_err() {
+        return Some(error_response(StatusCode::CONFLICT, crate::flow::STOPPED));
     }
-    let request = match route.kind() {
-        Kind::ModelCall => capped(route.api, &provider, request),
-        Kind::TokenCount => request,
-    };
-    Ok((provider, paid_by, request))
+    let why = over_the_limit(ctx).await?;
+    Some(error_response(StatusCode::PAYMENT_REQUIRED, why))
 }
 
-/// `request` as it goes to `p`: OpenRouter's Responses are asked to report their cost (its chat
-/// adapter asks itself), and a lent provider's limits (its `cap`) hold: `max_tokens`, or
-/// Responses' `max_output_tokens`.
-fn capped(api: Api, p: &Provider, mut request: Value) -> Value {
-    if p.kind == ProviderKind::OpenRouter && api == Api::Responses {
-        request["usage"] = json!({"include": true});
+/// Why a run an external system drives may make no more model calls: its spend estimate passed
+/// its limit (shaked's own runners end such a run themselves). The first refusal is recorded as
+/// `budget/limit_reached`; nothing is sent upstream.
+async fn over_the_limit(ctx: &BranchCtx) -> Option<String> {
+    if ctx.rules.runner != Runner::External {
+        return None;
     }
-    let Some(cap) = p.cap else {
-        return request;
-    };
-    if api != Api::Responses {
-        return cap.apply(p.kind, request);
-    }
-    let asked = request["max_output_tokens"].as_u64();
-    request["max_output_tokens"] = json!(asked.map_or(cap.max_tokens, |n| n.min(cap.max_tokens)));
-    request
-}
-
-/// The 502 of a call whose provider could not be found (`why`); a model call is recorded as a
-/// failed call, as one the provider turned down is.
-async fn unreached(
-    state: &AppState,
-    target: &CallFor,
-    route: &Route,
-    request: Value,
-    why: String,
-) -> Box<Response> {
-    if route.kind() == Kind::ModelCall {
-        let payload = ModelCallPayload {
-            request,
-            response: json!({ "error": why }),
-            usage: json!({}),
-            cost_usd: None,
-            cost_source: None,
-            provider: None,
-            provider_response: None,
-        };
-        let mut v = serde_json::to_value(&payload).unwrap_or_default();
-        marked(&mut v, route.api, None);
-        let recorded = target.append(state, &route.agent, EventKind::ModelCall, v);
-        if let Err(e) = recorded.await {
-            eprintln!("gateway: recording a model call on {}: {e:#}", route.branch);
+    let why = ctx.budget.over()?;
+    if ctx.budget.first_refusal() {
+        let ev = crate::budget::limit_reached(&why, ctx.clock.now_ms());
+        if let Err(e) = ctx.append_now(None, EventKind::WorldEvent, ev).await {
+            let branch = &ctx.branch_id;
+            eprintln!("gateway: recording the spend limit on {branch}: {e:#}");
         }
     }
-    Box::new(error_response(StatusCode::BAD_GATEWAY, why))
+    Some(why)
 }
 
 impl CallFor {
@@ -315,17 +178,23 @@ impl CallFor {
 
     /// Why a call of `model` on `p` may not be made for this branch: on a linked branch, its
     /// cost could not be known (refused 400).
-    fn unpriced(&self, p: &Provider, model: &str) -> Option<String> {
+    pub(super) fn unpriced(&self, p: &Provider, model: &str) -> Option<String> {
         let CallFor::Linked(_) = self else {
             return None;
         };
         linked::unpriced(p, model)
     }
 
-    /// A save point before the call, on a live branch (a linked branch's worker makes its own).
-    async fn save_point(&self, state: &AppState) {
-        if let Some(ctx) = self.live() {
-            save_before_model_call(state, ctx).await;
+    /// A save point before the call on a live branch, when a part that saves at points changed:
+    /// the world is then restorable where a fork at this call starts (a linked branch's worker
+    /// makes its own). A failure is logged; the call goes on.
+    pub(super) async fn save_point(&self, state: &AppState) {
+        let Some(ctx) = self.live() else {
+            return;
+        };
+        let exec = crate::exec::ToolExec::new(state.store.clone());
+        if let Err(e) = exec.save_point(ctx, SAVE_BEFORE_MODEL_CALL).await {
+            eprintln!("gateway: save point on {}: {e}", ctx.branch_id);
         }
     }
 
@@ -340,44 +209,6 @@ impl CallFor {
         if let Some(ctx) = self.live() {
             ctx.overhead.add_besides(Cat::Gateway, since, upstream_ms);
         }
-    }
-
-    /// Bills `agent`'s call `p` to `provider` that ended `outcome`: what it is charged (its cost;
-    /// on a linked branch a conservative estimate when that can't be known, [`charge::linked`]),
-    /// added to the run's spend estimate, and the call's event, which on a linked branch keeps
-    /// what was charged (`charged_usd`, `estimated`) for a restarted control box to rebuild the
-    /// estimate from.
-    pub(super) fn bill(
-        &self,
-        agent: &str,
-        (provider, p): (&Provider, &ModelCallPayload),
-        outcome: Outcome,
-    ) -> (Charge, Value) {
-        let cost = (outcome != Outcome::Failed)
-            .then(|| call_cost(provider, p))
-            .flatten();
-        let cut = outcome == Outcome::Cut;
-        let charge = match (self, outcome) {
-            (CallFor::Linked(l), Outcome::Answered | Outcome::Cut) => {
-                charge::linked(&l.link.budget, (provider, p), cost, cut)
-            }
-            _ => Charge::of(cost),
-        };
-        let mut v = serde_json::to_value(p).unwrap_or_default();
-        let Some(usd) = charge.usd else {
-            return (charge, v);
-        };
-        let _ = match self {
-            CallFor::Live(ctx) => ctx.budget.add(agent, usd),
-            CallFor::Linked(l) => l.link.budget.add(agent, usd),
-        };
-        if let CallFor::Linked(_) = self {
-            v["charged_usd"] = json!(usd);
-            if charge.estimated {
-                v["estimated"] = json!(true);
-            }
-        }
-        (charge, v)
     }
 
     /// Stops a linked branch for its limit as soon as a charge put it over.
@@ -412,15 +243,7 @@ impl CallFor {
         items: Vec<ReasoningItem>,
         seq: i64,
     ) {
-        if let CallFor::Live(ctx) = self {
-            return reasoning::record(ctx, agent, items, reasoning::SOURCE_GATEWAY, Some(seq))
-                .await;
-        }
-        for mut item in items {
-            item.model_call_seq = item.model_call_seq.or(Some(seq));
-            let Some(p) = reasoning::payload(&item, reasoning::SOURCE_GATEWAY) else {
-                continue;
-            };
+        for p in reasoning::payloads(items, reasoning::SOURCE_GATEWAY, Some(seq)) {
             let v = serde_json::to_value(p).unwrap_or_default();
             if let Err(e) = self.append(state, agent, EventKind::Reasoning, v).await {
                 eprintln!("branch {}: recording reasoning: {e:#}", self.branch_id());
