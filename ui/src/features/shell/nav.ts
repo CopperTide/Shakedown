@@ -6,6 +6,8 @@ export interface NavItem {
   icon: 'home' | 'flask' | 'globe' | 'film' | 'users' | 'plug' | 'gear' | 'rocket' | 'code' | 'book';
   /** Which addresses belong to it (default: the address and everything under it). */
   match?: RegExp;
+  /** The project's items listed under it: its worlds, under their groups. */
+  sub?: 'worlds';
 }
 
 export interface NavGroup {
@@ -23,7 +25,7 @@ export const NAV: NavGroup[] = [
   {
     label: 'Build',
     items: [
-      { to: '/worlds', label: 'Worlds', icon: 'globe' },
+      { to: '/worlds', label: 'Worlds', icon: 'globe', sub: 'worlds' },
       { to: '/scenarios', label: 'Scenarios', icon: 'film' },
       { to: '/setups', label: 'Agent setups', icon: 'users', match: /^\/(setups|team)(\/|$)/ },
     ],

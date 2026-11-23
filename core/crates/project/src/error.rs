@@ -2,7 +2,7 @@
 
 use crate::format::Kind;
 use crate::item::kind_name;
-use crate::Id;
+use crate::{Dependent, Id};
 
 /// A file that could not be read as its format, with where in the file the problem is.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -25,6 +25,15 @@ impl FormatError {
             message: message.into(),
         }
     }
+}
+
+/// `scenario a, experiment b`.
+fn names(by: &[Dependent]) -> String {
+    let named: Vec<String> = by
+        .iter()
+        .map(|d| format!("{} {}", kind_name(d.kind), d.id))
+        .collect();
+    named.join(", ")
 }
 
 fn at(pointer: &str) -> String {
@@ -55,6 +64,44 @@ pub enum ProjectError {
         /// The id asked for.
         id: String,
     },
+    /// The item is named by others; deleting it alone would break them.
+    #[error(
+        "the {kind} {id} is used by {}: delete it with cascade to delete those too",
+        names(by)
+    )]
+    InUse {
+        /// The kind, e.g. `world`.
+        kind: &'static str,
+        /// The item's id.
+        id: String,
+        /// What uses it, and what a cascading delete would do to each.
+        by: Vec<Dependent>,
+    },
+    /// What uses the item is not what the caller was shown: nothing was deleted.
+    #[error(
+        "what uses the {kind} {id} changed since it was shown ({}): look again before deleting",
+        names(by)
+    )]
+    Stale {
+        /// The kind, e.g. `world`.
+        kind: &'static str,
+        /// The item's id.
+        id: String,
+        /// What uses it now.
+        by: Vec<Dependent>,
+    },
+    /// Undoing a delete would overwrite a file made since.
+    #[error("{file} exists again: move or delete it before undoing the delete")]
+    Occupied {
+        /// The file, relative to the project folder.
+        file: String,
+    },
+    /// Undoing a delete would overwrite files edited since the delete rewrote them.
+    #[error("undoing the delete would overwrite later edits to {}: undo by hand from the trash, or edit them back", files.join(", "))]
+    EditedSince {
+        /// The files, relative to the project folder.
+        files: Vec<String>,
+    },
     /// The body given is not of the kind asked for.
     #[error("expected a {expected}, got a {got}")]
     WrongKind {
@@ -79,6 +126,14 @@ pub enum ProjectError {
 }
 
 impl ProjectError {
+    /// No world is in the group named `name`.
+    pub fn no_group(name: &str) -> ProjectError {
+        ProjectError::NotFound {
+            kind: "world group",
+            id: name.to_string(),
+        }
+    }
+
     /// No item of `kind` named `id`.
     pub fn not_found(kind: Kind, id: &Id) -> ProjectError {
         ProjectError::NotFound {

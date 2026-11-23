@@ -101,6 +101,44 @@ fn world_package_round_trips() {
     assert_eq!(world, again);
 }
 
+/// A world file without a group loads with none and saves without one, the same bytes every time.
+#[test]
+fn world_without_group_saves_unchanged() {
+    let (file, text) = fixture("worlds/larkspur-plant/world.yaml");
+    let world: WorldFile = parse(&file, &text).unwrap();
+    assert_eq!(world.group, None);
+    let written = to_yaml(&world).unwrap();
+    assert!(!written.contains("group"), "{written}");
+    let again: WorldFile = parse(&file, &written).unwrap();
+    assert_eq!(
+        to_yaml(&again).unwrap(),
+        written,
+        "a second save changed the bytes"
+    );
+}
+
+#[test]
+fn world_group_round_trips() {
+    let text = "format: shakedown-world/3\ngroup: Acme Foods\nlabel: W\n";
+    let world = parse::<WorldFile>("w.yaml", text).expect("group parses");
+    assert_eq!(world.group.as_deref(), Some("Acme Foods"));
+    assert_eq!(to_yaml(&world).unwrap(), text);
+}
+
+#[test]
+fn padded_group_rejected() {
+    let text = "format: shakedown-world/3\nlabel: W\ngroup: \" Acme\"\n";
+    let err = parse::<WorldFile>("w.yaml", text).unwrap_err();
+    assert_eq!(err.pointer, "/group", "{err}");
+}
+
+#[test]
+fn blank_group_rejected() {
+    let text = "format: shakedown-world/3\nlabel: W\ngroup: \"  \"\n";
+    let err = parse::<WorldFile>("w.yaml", text).unwrap_err();
+    assert_eq!(err.pointer, "/group", "{err}");
+}
+
 #[test]
 fn scenario_preset_round_trips() {
     let text = "format: shakedown-scenario/1\nlabel: S\nworld: w\ntask: T\npreset: t1\n";

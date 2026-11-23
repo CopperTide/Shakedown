@@ -1,5 +1,5 @@
-// Project settings: its name, the assistant's model, what agents may do without asking, and how to
-// use Shakedown from an agent.
+// Project settings: its name, the assistant's model, what agents may do without asking, how to
+// use Shakedown from an agent, and undoing the last delete.
 import { useEffect, useState } from 'react';
 import { updateSettings } from '@/api/project';
 import { Card } from '@/components/ui/card';
@@ -12,9 +12,10 @@ import { SectionHead } from '@/features/editors/fields';
 import { useProject } from '@/hooks/useProject';
 import { errorMessage } from '@/lib/errors';
 import { type SettingsForm, formFrom, settingsFrom } from './project';
+import LastDelete from './LastDelete';
 import UseFromAgent from './UseFromAgent';
 
-const SECTIONS = [{ id: 'project', label: 'Project' }, { id: 'assistant', label: 'Assistant' }, { id: 'permissions', label: 'What agents may do' }, { id: 'mcp', label: 'Use from an agent' }];
+const SECTIONS = [{ id: 'project', label: 'Project' }, { id: 'assistant', label: 'Assistant' }, { id: 'permissions', label: 'What agents may do' }, { id: 'mcp', label: 'Use from an agent' }, { id: 'trash', label: 'Deleted files' }];
 
 function Permissions({ f, set }: { f: SettingsForm; set: (p: Partial<SettingsForm>) => void }) {
   return (
@@ -36,6 +37,7 @@ function Permissions({ f, set }: { f: SettingsForm; set: (p: Partial<SettingsFor
 function Section({ id, f, set }: { id: string; f: SettingsForm; set: (p: Partial<SettingsForm>) => void }) {
   if (id === 'permissions') return <><SectionHead title="What agents may do without asking" about="Applies to the assistant and to every MCP client." /><Permissions f={f} set={set} /></>;
   if (id === 'mcp') return <UseFromAgent />;
+  if (id === 'trash') return <LastDelete />;
   if (id === 'assistant') return (
     <><SectionHead title="Assistant" about="The chat on every page, on your own model key." />
       <Card><div className="px-[18px]">

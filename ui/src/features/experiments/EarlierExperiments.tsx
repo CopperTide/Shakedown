@@ -7,7 +7,7 @@ import MoveIntoProject from './MoveIntoProject';
 export default function EarlierExperiments({ list, onMoved }: { list: ListedExperiment[]; onMoved: () => void }) {
   if (!list.length) return null;
   return (
-    <Card title="Earlier experiments" description="Made before the project folder. They stay readable here." actions={<MoveIntoProject onMoved={onMoved} />}>
+    <Card title="Earlier experiments" description="Made before the project folder, or left by a deleted experiment file. They stay readable here." actions={<MoveIntoProject onMoved={onMoved} />}>
       <ul className="divide-y divide-line">
         {list.map((e) => (
           <li key={e.id}>

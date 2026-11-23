@@ -13,15 +13,13 @@ let puts: { url: string; body: Record<string, unknown> }[] = [];
 
 function mockFetch() {
   puts = [];
-  const items = (list: { id: string; label: string }[]) => new Response(JSON.stringify({ items: list.map((i) => ({ ...i, problems: [] })) }));
+  const items = (list: { id: string; label: string; world?: string }[]) => new Response(JSON.stringify({ items: list.map((i) => ({ ...i, problems: [] })) }));
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
     const u = String(url);
     if (init?.method === 'PUT') { const sent = JSON.parse(String(init.body)); puts.push({ url: u, body: sent.body }); return new Response(JSON.stringify({ kind: 'experiment', id: 'x', label: 'x', hash: 'h', problems: [], body: sent.body })); }
     if (u.endsWith('/api/project/worlds')) return items([{ id: 'plant', label: 'Plant' }]);
     if (u.endsWith('/api/project/setups')) return items([{ id: 'solo', label: 'Solo' }, { id: 'team', label: 'Team' }]);
-    if (u.endsWith('/api/project/scenarios')) return items([{ id: 'slip', label: 'Slip' }, { id: 'other', label: 'Other' }]);
-    if (u.endsWith('/api/project/scenarios/slip')) return new Response(JSON.stringify({ id: 'slip', label: 'Slip', problems: [], body: { world: 'plant' } }));
-    if (u.endsWith('/api/project/scenarios/other')) return new Response(JSON.stringify({ id: 'other', label: 'Other', problems: [], body: { world: 'elsewhere' } }));
+    if (u.endsWith('/api/project/scenarios')) return items([{ id: 'slip', label: 'Slip', world: 'plant' }, { id: 'other', label: 'Other', world: 'elsewhere' }]);
     return new Response(JSON.stringify({ error: 'not found' }), { status: 404 });
   }));
 }

@@ -120,37 +120,40 @@ impl Project {
 
     /// Writes `body` as item `id` of `kind`, creating or replacing its file.
     pub fn put(&mut self, kind: Kind, id: &Id, body: ItemBody) -> Result<Item, ProjectError> {
-        if body.kind() != kind {
-            return Err(ProjectError::WrongKind {
-                expected: kind_name(kind),
-                got: kind_name(body.kind()),
-            });
-        }
-        let file = item_file(kind, id);
-        let yaml = body.to_yaml()?;
-        if ItemBody::parse(kind, &file, &yaml)? != body {
-            return Err(crate::FormatError::new(
-                &file,
-                "",
-                "some values cannot be written faithfully (e.g. NaN)",
-            )
-            .into());
-        }
-        write_atomic(&self.root, &file, &yaml)?;
+        let yaml = checked_yaml(kind, id, &body)?;
+        write_atomic(&self.root, &item_file(kind, id), &yaml)?;
         self.reload()?;
         self.get(kind, id)
             .cloned()
             .ok_or_else(|| ProjectError::not_found(kind, id))
     }
 
-    /// Deletes item `id` of `kind`. A world's data folder is kept; only its `world.yaml` goes.
+    /// Deletes item `id` of `kind` whatever uses it (see [`Project::delete`] for the safe way).
+    /// A world's data folder is kept; only its `world.yaml` goes.
     pub fn remove(&mut self, kind: Kind, id: &Id) -> Result<(), ProjectError> {
         if self.get(kind, id).is_none() {
             return Err(ProjectError::not_found(kind, id));
         }
-        let file = item_file(kind, id);
-        std::fs::remove_file(self.root.join(&file)).map_err(|e| io("deleting", &file, e))?;
+        self.delete_file(kind, id)?;
         self.reload()
+    }
+
+    /// The folder that stays when item `id` of `kind` is deleted: a world's data folder, and a
+    /// setup's own folder (a MADL setup's team file) when it has one.
+    pub fn kept_folder(&self, kind: Kind, id: &Id) -> Option<String> {
+        let folder = format!("{}/{id}/", kind.dir());
+        let kept = match kind {
+            Kind::World => true,
+            Kind::Setup => self.root.join(&folder).is_dir(),
+            Kind::Scenario | Kind::Experiment => false,
+        };
+        kept.then_some(folder)
+    }
+
+    /// Deletes the file of item `id` of `kind`, without re-reading the project.
+    fn delete_file(&self, kind: Kind, id: &Id) -> Result<(), ProjectError> {
+        let file = item_file(kind, id);
+        std::fs::remove_file(self.root.join(&file)).map_err(|e| io("deleting", &file, e))
     }
 
     /// Re-reads every item from disk and re-checks references.
@@ -161,6 +164,23 @@ impl Project {
         self.problems = problems;
         Ok(())
     }
+}
+
+/// `body` as the YAML of item `id` of `kind`, checked exactly as it would be read back.
+pub(crate) fn checked_yaml(kind: Kind, id: &Id, body: &ItemBody) -> Result<String, ProjectError> {
+    if body.kind() != kind {
+        return Err(ProjectError::WrongKind {
+            expected: kind_name(kind),
+            got: kind_name(body.kind()),
+        });
+    }
+    let file = item_file(kind, id);
+    let yaml = body.to_yaml()?;
+    if ItemBody::parse(kind, &file, &yaml)? != *body {
+        let why = "some values cannot be written faithfully (e.g. NaN)";
+        return Err(crate::FormatError::new(&file, "", why).into());
+    }
+    Ok(yaml)
 }
 
 fn git_init(root: &Path) -> Result<(), ProjectError> {

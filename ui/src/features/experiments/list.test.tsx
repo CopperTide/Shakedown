@@ -13,8 +13,6 @@ function mockFetch(items: Record<string, unknown>[], db: unknown[] = []) {
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     const u = String(url);
     if (u.endsWith('/api/project/experiments')) return new Response(JSON.stringify({ items }));
-    const one = items.find((i) => u.endsWith(`/api/project/experiments/${i.id}`));
-    if (one) return new Response(JSON.stringify(one));
     if (u.endsWith('/api/experiments')) return new Response(JSON.stringify(db));
     return new Response(JSON.stringify({ error: 'not found' }), { status: 404 });
   }));
@@ -38,7 +36,7 @@ describe('experiments list', () => {
   it('lists_problem_badge', async () => {
     const problem = { pointer: '/world', message: 'no world named gone' };
     mockFetch([{ id: 'exp', label: 'Supplier slip', hash: 'h', problems: [problem], kind: 'experiment',
-      body: { scenario: 'supplier-slip', setups: ['a'], world: 'gone', repeats: { per_setup: 1 } } }]);
+      scenario: 'supplier-slip', setups: 1, world: 'gone', parent: null }]);
     render(<MemoryRouter><ExperimentsListPage /></MemoryRouter>);
     const badge = await screen.findByText('1 problem');
     expect(badge.getAttribute('title')).toBe('no world named gone');

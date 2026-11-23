@@ -109,9 +109,11 @@ All three end in `launch::launch` ([runs and worlds](runs-and-worlds.md)).
 
 ```mermaid
 flowchart LR
-    subgraph registry["ops::all(): 23 operations"]
+    subgraph registry["ops::all(): 30 operations"]
       P["project_ops<br/>status, init, update"]
-      I["item_ops<br/>worlds, scenarios, setups, experiments<br/>x list, get, put, delete"]
+      I["item_ops<br/>worlds, scenarios, setups, experiments<br/>x list, get, put, delete, dependents<br/>(delete and dependents in delete_ops)"]
+      G["group_ops<br/>worlds.rename_group"]
+      R["restore_ops<br/>project.deleted, project.restore"]
       D["deploy_ops<br/>experiments.deploy, experiments.runs"]
       M["madl_ops<br/>setups.madl"]
       X["import_ops<br/>project.import"]
@@ -126,8 +128,8 @@ flowchart LR
     AS --> AL
     AL --> RUN["(op.run)(OpCtx, op, input)"]
     AS -->|"Access::Read"| RUN
-    AS -->|"Edit named *.put"| PROP["run with confirm: false<br/>diff card"]
-    AS -->|"other Edit, Spend, Delete"| HOLD["confirm card, not run"]
+    AS -->|"Edit taking confirm"| PROP["run with confirm: false<br/>diff card"]
+    AS -->|"other Edit, Spend, Delete"| HOLD["confirm card, not run<br/>(a delete card drops cascade)"]
     D -.->|calls| CE["api::experiments::create_experiment<br/>(also POST /api/experiments)"]
 ```
 
@@ -136,8 +138,12 @@ An `Operation` (`src/ops/mod.rs`) has a name (`<area>.<verb>`), area, summary, `
 `schemars`) and a handler. `OpCtx` carries the caller's project, the running shaked when there is one, and
 the caller. Over stdio there is no shaked, and an operation that needs one answers 409.
 
-Edits follow the project's `EditPolicy`. With `diff_first`, a put answers `{proposed: true, diff}` and writes
-nothing until it is sent again with `confirm: true` (`ops::diff_first`).
+Edits follow the project's `EditPolicy`. With `diff_first`, every operation taking `confirm` (a put,
+`project.update`, `project.import`, `project.restore`, `worlds.rename_group`, a cascading delete) answers
+`{proposed: true, …}` and writes nothing until it is sent again with `confirm: true` (`ops::diff_first`); a
+restore's proposal carries the `trash` it is pinned to, and the assistant copies it into the card. Deletes go
+through `Project::delete` (`core/crates/project/src/dependents.rs`: one reference walk, a plan checked before
+any change, leaves first) and the trash (`trash.rs`); see [concepts](../concepts.md#project-files).
 
 What the registry does not cover yet: runs, forks, branches, suites, engine experiments, reviews,
 connections, keys and tokens are HTTP routes only. MCP clients and the assistant cannot use them. This is the

@@ -11,11 +11,15 @@ import ProjectSettingsPage from './ProjectSettingsPage';
 
 const SETTINGS: ProjectSettings = { format: 'shakedown-project/1', name: 'Larkspur Ops', permissions: { edit: 'diff_first', spend: 'always_ask' } };
 let puts: { body: Record<string, unknown> }[] = [];
+let posts: { url: string; body: unknown }[] = [];
 
 function mockFetch() {
   puts = [];
+  posts = [];
   forgetShared();
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    if (init?.method === 'POST') { posts.push({ url: String(url), body: JSON.parse(String(init.body)) }); return new Response(JSON.stringify({ restored: 'world mill', files: [] })); }
+    if (String(url).endsWith('/api/project/trash')) return new Response(JSON.stringify({ trash: '1763900000000', label: 'world mill', files: ['worlds/mill/world.yaml'] }));
     if (init?.method === 'PUT') { const sent = JSON.parse(String(init.body)); puts.push(sent); return new Response(JSON.stringify({ name: 'L', counts: {}, problems: [], settings: sent.body })); }
     if (String(url).endsWith('/api/project')) return new Response(JSON.stringify({ name: 'Larkspur Ops', counts: {}, problems: [], settings: SETTINGS }));
     return new Response(JSON.stringify({ error: 'not found' }), { status: 404 });
@@ -53,5 +57,17 @@ describe('project settings', () => {
     await section('Use from an agent');
     const code = await screen.findByText(/claude mcp add shakedown/);
     expect(code.textContent).toBe('claude mcp add shakedown -- shaked mcp');
+  });
+
+  it('undo_last_delete_restores_that_delete', async () => {
+    mockFetch();
+    render(<MemoryRouter><ProjectSettingsPage /></MemoryRouter>);
+    await section('Deleted files');
+    expect(await screen.findByText('world mill')).toBeTruthy();
+    expect(screen.getByText('worlds/mill/world.yaml')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Undo last delete' }));
+    await waitFor(() => expect(posts).toHaveLength(1));
+    expect(posts[0].url.endsWith('/api/project/trash/restore')).toBe(true);
+    expect(posts[0].body).toEqual({ trash: '1763900000000', confirm: true });
   });
 });

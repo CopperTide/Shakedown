@@ -2,9 +2,11 @@
 //! class and input schema. The HTTP routes and the control MCP server are both generated from it,
 //! so the buttons, the API, the assistant and any agent can do the same things.
 
+mod delete_ops;
 mod deploy;
 mod deploy_ops;
 mod error;
+mod group_ops;
 pub mod http;
 mod import_ops;
 mod item_ops;
@@ -12,6 +14,7 @@ mod madl_ops;
 pub mod mcp;
 mod migrate;
 mod project_ops;
+mod restore_ops;
 pub mod stdio;
 mod view;
 
@@ -123,6 +126,8 @@ pub fn all() -> &'static [Operation] {
     ALL.get_or_init(|| {
         let mut ops = project_ops::ops();
         ops.extend(item_ops::ops());
+        ops.extend(group_ops::ops());
+        ops.extend(restore_ops::ops());
         ops.extend(deploy_ops::ops());
         ops.extend(madl_ops::ops());
         ops.extend(import_ops::ops());
@@ -145,6 +150,24 @@ struct IdInput {
 /// Reads an operation's input; a malformed input is 400.
 fn input<T: DeserializeOwned>(value: Value) -> Result<T, OpError> {
     serde_json::from_value(value).map_err(|e| OpError::bad_request(e.to_string()))
+}
+
+/// A yes-or-no input, as JSON's `true`/`false` or, from a query string, `"true"`/`"false"`.
+fn flag<'de, D: serde::Deserializer<'de>>(d: D) -> Result<bool, D::Error> {
+    #[derive(serde::Deserialize)]
+    #[serde(untagged)]
+    enum Flag {
+        Bool(bool),
+        Text(String),
+    }
+    match <Flag as serde::Deserialize>::deserialize(d)? {
+        Flag::Bool(b) => Ok(b),
+        Flag::Text(t) if t == "true" => Ok(true),
+        Flag::Text(t) if t == "false" => Ok(false),
+        Flag::Text(t) => Err(serde::de::Error::custom(format!(
+            "expected true or false, got {t:?}"
+        ))),
+    }
 }
 
 /// The JSON Schema of `T`, as a value.

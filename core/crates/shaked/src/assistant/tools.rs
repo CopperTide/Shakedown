@@ -66,7 +66,7 @@ async fn outcome(
     });
     match op.access {
         Access::Read => run(ctx, op, args).await,
-        Access::Edit if op.name.ends_with(".put") => propose(ctx, op, args, answer).await,
+        Access::Edit if takes_confirm(op) => propose(ctx, op, args, answer).await,
         _ => hold(op, args, answer),
     }
 }
@@ -76,6 +76,11 @@ async fn run(ctx: &OpCtx<'_>, op: &'static Operation, args: Value) -> String {
         Ok(v) => v.to_string(),
         Err(e) => format!("failed: {}", e.message),
     }
+}
+
+/// Whether an operation shows what it would change until sent with `confirm: true`.
+fn takes_confirm(op: &Operation) -> bool {
+    (op.input_schema)()["properties"].get("confirm").is_some()
 }
 
 /// An edit: written only if the project allows it without asking, else a diff card.
@@ -90,8 +95,15 @@ async fn propose(
         Ok(v) if v["proposed"] == true => {
             if let Some(map) = args.as_object_mut() {
                 map.remove("confirm");
+                // What the proposal is pinned to (a restore's delete), so Apply does that.
+                if let Some(trash) = v.get("trash") {
+                    map.insert("trash".into(), trash.clone());
+                }
             }
-            let diff = v["diff"].as_str().unwrap_or_default().to_string();
+            let diff = match v["diff"].as_str() {
+                Some(diff) => diff.to_string(),
+                None => serde_json::to_string_pretty(&v).unwrap_or_default(),
+            };
             answer.cards.push(Card::Diff {
                 tool: mcp::tool_name(op),
                 arguments: args,
@@ -104,8 +116,14 @@ async fn propose(
     }
 }
 
-/// Runs, spending or deleting: never run here; the person confirms the card.
-fn hold(op: &'static Operation, args: Value, answer: &mut ChatAnswer) -> String {
+/// Runs, spending or deleting: never run here; the person confirms the card. A delete card
+/// carries only what to delete: the person picks alone or with what uses it, in the card.
+fn hold(op: &'static Operation, mut args: Value, answer: &mut ChatAnswer) -> String {
+    if let (Access::Delete, Some(map)) = (op.access, args.as_object_mut()) {
+        for chosen in ["cascade", "expect", "confirm"] {
+            map.remove(chosen);
+        }
+    }
     let access = match op.access {
         Access::Spend => "spend",
         Access::Delete => "delete",

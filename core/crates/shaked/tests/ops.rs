@@ -5,8 +5,8 @@ mod support;
 
 use serde_json::{json, Value};
 use shaked::ops::{self, Access};
-use support::project::project_app;
-use support::{run, AppFx};
+use support::project::{project_app, ProjectFx};
+use support::{records, run, AppFx};
 
 async fn call(fx: &AppFx, name: &str, input: Value) -> Result<Value, ops::OpError> {
     let op = ops::find(name).unwrap_or_else(|| panic!("no operation {name}"));
@@ -54,7 +54,7 @@ fn schemas_are_objects() {
 fn access_classes_follow_the_verb() {
     for op in ops::all() {
         let want = match op.name.rsplit('.').next().unwrap() {
-            "list" | "get" | "status" | "runs" | "madl" => Access::Read,
+            "list" | "get" | "status" | "runs" | "madl" | "dependents" | "deleted" => Access::Read,
             "delete" => Access::Delete,
             "deploy" => Access::Spend,
             _ => Access::Edit,
@@ -277,5 +277,328 @@ fn update_needs_admin_token() {
         assert_eq!(put_settings(&fx, &runner).await, 403);
         let admin = fx.mint_token(&["read", "run", "admin"]).await;
         assert_eq!(put_settings(&fx, &admin).await, 200);
+    });
+}
+
+const EXPERIMENT: &str = "supplier-slip-solo-vs-team";
+
+#[test]
+fn delete_in_use_is_409_listing_dependents() {
+    run(async {
+        let fx = project_app("ops", "inuse").await;
+        let url = format!("{}/api/project/scenarios/supplier-slip", fx.base);
+        let res = fx.http.delete(&url).send().await.unwrap();
+        assert_eq!(res.status().as_u16(), 409);
+        let body: Value = res.json().await.unwrap();
+        let want = json!([{"kind": "experiment", "id": EXPERIMENT,
+                           "label": "Supplier slip: solo vs team", "fate": "deleted",
+                           "fates": ["deleted"]}]);
+        assert_eq!(body["dependents"], want, "{body}");
+        assert!(
+            body["error"].as_str().unwrap().contains(EXPERIMENT),
+            "{body}"
+        );
+        assert!(fx.dir.path().join("scenarios/supplier-slip.yaml").is_file());
+    });
+}
+
+#[test]
+fn delete_cascade_over_http_takes_dependents_too() {
+    run(async {
+        let fx = project_app("ops", "cascade").await;
+        let url = format!("{}/api/project/worlds/larkspur-plant", fx.base);
+        let res = fx
+            .http
+            .delete(&url)
+            .json(&json!({"cascade": true, "confirm": true}))
+            .send()
+            .await;
+        let res = res.unwrap();
+        assert_eq!(res.status().as_u16(), 200);
+        let out: Value = res.json().await.unwrap();
+        assert_eq!(out["deleted"], "larkspur-plant");
+        assert_eq!(out["with"].as_array().unwrap().len(), 2, "{out}");
+        assert!(!fx.dir.path().join("scenarios/supplier-slip.yaml").exists());
+        assert!(
+            fx.dir.path().join("worlds/larkspur-plant").is_dir(),
+            "the data folder stays"
+        );
+        let status = call(&fx, "project.status", json!({})).await.unwrap();
+        assert_eq!(status["problems"], json!([]));
+    });
+}
+
+#[test]
+fn dependents_preview_names_each_fate() {
+    run(async {
+        let fx = project_app("ops", "dependents").await;
+        let out = call(&fx, "setups.dependents", json!({"id": "solo-planner"}))
+            .await
+            .unwrap();
+        assert_eq!(out["dependents"][0]["fate"], "setup_dropped", "{out}");
+        let (status, out) = fx
+            .get("/api/project/worlds/larkspur-plant/dependents")
+            .await;
+        assert_eq!(status, 200, "{out}");
+        let kinds: Vec<&str> = out["dependents"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|d| d["kind"].as_str().unwrap())
+            .collect();
+        assert_eq!(kinds, ["scenario", "experiment"]);
+        let none = call(&fx, "experiments.dependents", json!({"id": EXPERIMENT})).await;
+        assert_eq!(none.unwrap()["dependents"], json!([]));
+    });
+}
+
+#[test]
+fn list_summaries_say_where_items_belong() {
+    run(async {
+        let fx = project_app("ops", "belong").await;
+        let worlds = call(&fx, "worlds.list", json!({})).await.unwrap();
+        assert_eq!(worlds["items"][0]["group"], Value::Null);
+        let scenarios = call(&fx, "scenarios.list", json!({})).await.unwrap();
+        assert_eq!(scenarios["items"][0]["world"], "larkspur-plant");
+        let experiments = call(&fx, "experiments.list", json!({})).await.unwrap();
+        assert_eq!(experiments["items"][0]["scenario"], "supplier-slip");
+        assert_eq!(experiments["items"][0]["world"], "larkspur-plant");
+    });
+}
+
+/// Adds worlds `ids`, each in `group`.
+async fn put_worlds_in(fx: &AppFx, group: &str, ids: &[&str]) {
+    for id in ids {
+        let body = json!({"format": "shakedown-world/3", "label": id, "group": group});
+        let input = json!({"id": id, "body": body, "confirm": true});
+        call(fx, "worlds.put", input).await.unwrap();
+    }
+}
+
+/// The `group` of each world, in id order.
+async fn groups(fx: &AppFx) -> Vec<Value> {
+    let worlds = call(fx, "worlds.list", json!({})).await.unwrap();
+    let items = worlds["items"].as_array().unwrap();
+    items.iter().map(|w| w["group"].clone()).collect()
+}
+
+#[test]
+fn rename_group_shows_a_diff_then_moves_every_world() {
+    run(async {
+        let fx = project_app("ops", "group").await;
+        put_worlds_in(&fx, "Acme", &["acme-east", "acme-west"]).await;
+        let ask = json!({"from": "Acme", "to": "Acme Foods"});
+        let proposed = call(&fx, "worlds.rename_group", ask.clone()).await.unwrap();
+        assert_eq!(proposed["proposed"], true);
+        let diff = proposed["diff"].as_str().unwrap();
+        assert!(diff.contains("+group: Acme Foods"), "{proposed}");
+        assert_eq!(groups(&fx).await[0], "Acme", "a proposal writes nothing");
+        let mut confirmed = ask;
+        confirmed["confirm"] = json!(true);
+        let out = call(&fx, "worlds.rename_group", confirmed).await.unwrap();
+        assert_eq!(out["moved"], json!(["acme-east", "acme-west"]));
+        let foods = json!("Acme Foods");
+        assert_eq!(groups(&fx).await, [foods.clone(), foods, Value::Null]);
+        let missing = json!({"from": "Nobody", "to": "X", "confirm": true});
+        let err = call(&fx, "worlds.rename_group", missing).await.unwrap_err();
+        assert_eq!(err.status.as_u16(), 404);
+    });
+}
+
+/// Sends a delete over HTTP: its status and answer.
+async fn http_delete(fx: &AppFx, path: &str, body: Value) -> (u16, Value) {
+    let url = format!("{}{path}", fx.base);
+    let res = fx.http.delete(&url).json(&body).send().await.unwrap();
+    (res.status().as_u16(), res.json().await.unwrap())
+}
+
+#[test]
+fn a_stale_preview_is_409_with_the_fresh_dependents() {
+    run(async {
+        let fx = project_app("ops", "stale").await;
+        let shown = call(&fx, "setups.dependents", json!({"id": "solo-planner"}))
+            .await
+            .unwrap();
+        let body = json!({"id": "solo-only", "body": {"format": "shakedown-experiment/1",
+            "label": "Solo only", "world": "larkspur-plant", "scenario": "supplier-slip",
+            "setups": ["solo-planner"], "repeats": {"per_setup": 1}}, "confirm": true});
+        call(&fx, "experiments.put", body).await.unwrap();
+        let ask = json!({"cascade": true, "confirm": true, "expect": shown["dependents"]});
+        let (status, out) = http_delete(&fx, "/api/project/setups/solo-planner", ask).await;
+        assert_eq!(status, 409, "{out}");
+        assert_eq!(out["dependents"].as_array().unwrap().len(), 2, "{out}");
+        assert!(fx.dir.path().join("setups/solo-planner.yaml").is_file());
+        let fresh = json!({"cascade": true, "confirm": true, "expect": out["dependents"]});
+        let (status, out) = http_delete(&fx, "/api/project/setups/solo-planner", fresh).await;
+        assert_eq!(status, 200, "{out}");
+    });
+}
+
+#[test]
+fn diff_first_holds_a_cascade_until_confirmed() {
+    run(async {
+        let fx = project_app("ops", "hold").await;
+        let path = "/api/project/scenarios/supplier-slip";
+        let (status, out) = http_delete(&fx, path, json!({"cascade": true})).await;
+        assert_eq!(status, 200, "{out}");
+        assert_eq!(out["proposed"], true);
+        assert_eq!(out["dependents"][0]["id"], EXPERIMENT);
+        assert!(fx.dir.path().join("scenarios/supplier-slip.yaml").is_file());
+    });
+}
+
+#[test]
+fn cascade_reads_from_the_query_string() {
+    run(async {
+        let fx = project_app("ops", "query").await;
+        let url = format!(
+            "{}/api/project/scenarios/supplier-slip?cascade=true&confirm=true",
+            fx.base
+        );
+        let res = fx.http.delete(&url).send().await.unwrap();
+        assert_eq!(res.status().as_u16(), 200);
+        assert!(!fx.dir.path().join("scenarios/supplier-slip.yaml").exists());
+        let url = format!("{}/api/project/experiments/x?cascade=maybe", fx.base);
+        assert_eq!(
+            fx.http.delete(&url).send().await.unwrap().status().as_u16(),
+            400
+        );
+    });
+}
+
+/// Deletes the example world with everything that uses it: the trash its files went to.
+async fn trashed_world(fx: &ProjectFx) -> String {
+    let ask = json!({"id": "larkspur-plant", "cascade": true, "confirm": true});
+    let out = call(fx, "worlds.delete", ask).await.unwrap();
+    let trash = out["trash"].as_str().unwrap().to_string();
+    let bin = fx.dir.path().join(".shakedown/trash").join(&trash);
+    assert!(bin.join("worlds/larkspur-plant/world.yaml").is_file());
+    trash
+}
+
+#[test]
+fn undo_puts_a_delete_back() {
+    run(async {
+        let fx = project_app("ops", "undo").await;
+        let trash = trashed_world(&fx).await;
+        let proposed = call(&fx, "project.restore", json!({})).await.unwrap();
+        let diff = proposed["diff"].as_str().unwrap();
+        assert!(
+            diff.contains("+worlds/larkspur-plant/world.yaml"),
+            "{proposed}"
+        );
+        let ask = json!({"trash": trash, "confirm": true});
+        let out = call(&fx, "project.restore", ask).await.unwrap();
+        assert_eq!(out["restored"], "world larkspur-plant");
+        let status = call(&fx, "project.status", json!({})).await.unwrap();
+        assert_eq!(status["counts"]["scenarios"], 1);
+        assert_eq!(status["counts"]["experiments"], 1);
+        let again = call(&fx, "project.restore", json!({"confirm": true})).await;
+        assert_eq!(again.unwrap_err().status.as_u16(), 404);
+    });
+}
+
+/// An engine experiment deployed from project experiment `of`: its id.
+async fn deployment_of(fx: &AppFx, of: &str) -> String {
+    let team: shaked::model::Team = serde_json::from_value(json!({"id": "t", "name": "T",
+        "agents": [{"id": "a", "name": "A", "kind": "open", "model": "m", "prompt": "p"}]}))
+    .unwrap();
+    let setups = [shaked::store::NewSetup {
+        name: "A",
+        team: &team,
+        runner: shaked::model::Runner::Chain,
+        connection: None,
+    }];
+    let scenario = Default::default();
+    let new = shaked::store::NewExperiment {
+        name: "Old",
+        task: "t1",
+        runs: 1,
+        benchmark: "toybench",
+        scenario: &scenario,
+        setups: &setups,
+        max_cost_usd: None,
+        seed: 1,
+        world_minutes: None,
+        project_experiment: Some(of),
+    };
+    records(&fx.state.store)
+        .create_experiment(new)
+        .await
+        .unwrap()
+        .0
+        .id
+}
+
+#[test]
+fn a_deleted_experiment_lets_go_of_its_runs() {
+    run(async {
+        let fx = project_app("ops", "unlink").await;
+        let deployed = deployment_of(&fx, EXPERIMENT).await;
+        let ask = json!({"id": EXPERIMENT});
+        let out = call(&fx, "experiments.delete", ask).await.unwrap();
+        assert_eq!(out["runs_unlinked"], true);
+        let store = records(&fx.state.store);
+        assert!(store.deployments_of(EXPERIMENT).await.unwrap().is_empty());
+        assert!(store
+            .unlinked_experiments()
+            .await
+            .unwrap()
+            .contains(&deployed));
+        let ask = json!({"trash": out["trash"], "confirm": true});
+        let back = call(&fx, "project.restore", ask).await.unwrap();
+        assert_eq!(back["runs_relinked"], true);
+        let linked = store.deployments_of(EXPERIMENT).await.unwrap();
+        assert_eq!(linked, [deployed], "undo links the runs again");
+    });
+}
+
+#[test]
+fn a_restore_proposal_restores_its_own_delete() {
+    run(async {
+        let fx = project_app("ops", "pinned").await;
+        call(&fx, "experiments.delete", json!({"id": EXPERIMENT}))
+            .await
+            .unwrap();
+        let last = call(&fx, "project.deleted", json!({})).await.unwrap();
+        assert_eq!(last["label"], format!("experiment {EXPERIMENT}"));
+        let proposal = call(&fx, "project.restore", json!({})).await.unwrap();
+        assert_eq!(proposal["trash"], last["trash"]);
+        call(&fx, "setups.delete", json!({"id": "planner-with-rules"}))
+            .await
+            .unwrap();
+        let ask = json!({"trash": proposal["trash"], "confirm": true});
+        let out = call(&fx, "project.restore", ask).await.unwrap();
+        assert_eq!(out["restored"], format!("experiment {EXPERIMENT}"));
+        assert!(!fx
+            .dir
+            .path()
+            .join("setups/planner-with-rules.yaml")
+            .exists());
+    });
+}
+
+#[test]
+fn undo_after_a_later_edit_is_409() {
+    run(async {
+        let fx = project_app("ops", "edited").await;
+        let ask = json!({"id": "solo-planner", "cascade": true, "confirm": true});
+        call(&fx, "setups.delete", ask).await.unwrap();
+        let mut item = call(&fx, "experiments.get", json!({"id": EXPERIMENT}))
+            .await
+            .unwrap();
+        item["body"]["label"] = json!("Edited since");
+        let put = json!({"id": EXPERIMENT, "body": item["body"], "confirm": true});
+        call(&fx, "experiments.put", put).await.unwrap();
+        let err = call(&fx, "project.restore", json!({"confirm": true}))
+            .await
+            .unwrap_err();
+        assert_eq!(err.status.as_u16(), 409);
+        let file = format!("experiments/{EXPERIMENT}.yaml");
+        assert!(err.message.contains(&file), "{}", err.message);
+        let now = call(&fx, "experiments.get", json!({"id": EXPERIMENT}))
+            .await
+            .unwrap();
+        assert_eq!(now["label"], "Edited since");
     });
 }

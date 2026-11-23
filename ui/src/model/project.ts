@@ -23,6 +23,52 @@ export interface ItemSummary {
   label: string;
   hash: string;
   problems: Problem[];
+  /** A world's group, when it has one. */
+  group?: string | null;
+  /** The world a scenario or an experiment is in. */
+  world?: string;
+  /** The scenario an experiment plays. */
+  scenario?: string;
+  /** The experiment an experiment was branched from. */
+  parent?: string | null;
+  /** How many setups an experiment compares. */
+  setups?: number;
+}
+
+/** An item that uses another, and what deleting the other with everything that uses it does to it. */
+export interface Dependent {
+  kind: 'world' | 'scenario' | 'setup' | 'experiment';
+  id: string;
+  label: string;
+  /**
+   * `setup_dropped`: an experiment comparing other setups only loses the deleted one.
+   * `parent_cleared`: a sub-experiment of a deleted experiment becomes a top-level one.
+   */
+  fate: Fate;
+  /** Every fate that applies: an experiment can lose a setup and its parent at once. */
+  fates?: Fate[];
+}
+
+export type Fate = 'deleted' | 'setup_dropped' | 'parent_cleared';
+
+/** The most recent delete that can be undone. */
+export interface LastDelete {
+  trash: string;
+  label: string;
+  files: string[];
+}
+
+/** What uses an item, and the folder that stays when it is deleted. */
+export interface DeletePreview {
+  dependents: Dependent[];
+  kept: string | null;
+}
+
+/** A delete: what happened to what used the item, and the trash its files went to (for Undo). */
+export interface Deleted {
+  deleted: string;
+  with: Dependent[];
+  trash: string;
 }
 
 /** An item with its file's contents. */
@@ -84,6 +130,8 @@ export interface Person { id: string; label: string; role?: string }
 export interface WorldBody {
   format: string;
   label: string;
+  /** The group lists show the world under, e.g. the customer it is for. */
+  group?: string;
   package?: string;
   connectors?: Connector[];
   flows?: Flow[];

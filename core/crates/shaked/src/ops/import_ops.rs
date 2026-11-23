@@ -8,7 +8,7 @@ use serde_json::{json, Value};
 use shakedown_project::kind_name;
 
 use super::migrate::{plan, OldExperiment, Plan};
-use super::{input, schema, Access, OpCtx, OpError, OpFuture, Operation};
+use super::{flag, input, schema, Access, OpCtx, OpError, OpFuture, Operation};
 use crate::app::AppState;
 use crate::auth::Caller;
 
@@ -30,7 +30,8 @@ pub(super) fn ops() -> Vec<Operation> {
 #[derive(Deserialize, JsonSchema)]
 struct ImportInput {
     /// Write now; without it, nothing is written and the plan is answered.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "flag")]
+    #[schemars(with = "bool")]
     confirm: bool,
 }
 

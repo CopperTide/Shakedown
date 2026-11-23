@@ -24,7 +24,7 @@ Scenarios, Agent setups, Experiments), through the control MCP server, or by han
 | Item | File | `format:` | Holds |
 |---|---|---|---|
 | Project | `shakedown.yaml` | `shakedown-project/1` | name, defaults, `permissions` (`edit: diff_first \| apply_then_tell`, `spend`), the assistant's model |
-| World | `worlds/<id>/world.yaml` | `shakedown-world/3` | `label`, `package` (its runtime), `connectors`, `flows`, `data`, `people`, `observability` |
+| World | `worlds/<id>/world.yaml` | `shakedown-world/3` | `label`, `group` (optional, e.g. the customer it is for), `package` (its runtime), `connectors`, `flows`, `data`, `people`, `observability` |
 | Scenario | `scenarios/<id>.yaml` | `shakedown-scenario/1` | `world`, `task` (the ticket), `preset` (the package's task it plays), `changes`, `events`, `gates`, `checks` |
 | Agent setup | `setups/<id>.yaml` | `shakedown-setup/1` | `team`: `builtin` agents, `claude-code`, `codex`, `http`, `code` or `madl` |
 | Experiment | `experiments/<id>.yaml` | `shakedown-experiment/1` | `world`, `scenario`, `setups`, `repeats`, `budget`, `parent` |
@@ -35,6 +35,47 @@ of the project from loading. Broken references (a scenario's world, an experimen
 parent, and an experiment whose world is not its scenario's) are problems of the item that holds them. Ids are 1–64
 lowercase letters, digits and dashes. Writes are atomic; with `edit: diff_first` a put answers a diff and writes only
 when confirmed.
+
+**Groups.** A world's optional `group` is the name lists show it under, so the worlds of one customer sit together:
+the Worlds page and the sidebar list groups A to Z, the worlds in no group last, and worlds by label within each (the
+sidebar opens only the group of the world on screen). A file without `group` loads and saves exactly as before (the
+field is written only when set); a blank name, or one with spaces at either end, is a problem at `/group`. Set it in
+the world's Overview (a choice of the project's groups or a new one), drag a world onto a group's header (a toast
+offers Undo), or rename a group from its header, which rewrites every world in it, each file checked before any is
+written (`worlds.rename_group`, `core/crates/project/src/groups.rs`; an empty new name takes them out of any group,
+and an existing name merges the two). Moving or renaming writes `world.yaml` again from its parsed form, so comments
+and key order in the file are not kept.
+
+**What uses what, and deleting.** References are walked in one place (`references` in
+`core/crates/project/src/validate.rs`, used by the cross-check too): a scenario names its world; an experiment its
+world, scenario, setups and `parent`. Deleting an item takes with it every scenario and experiment that names it or a
+deleted item through a world or scenario, and an experiment left comparing no setup; an experiment that compares other
+setups too only loses the deleted one (`setup_dropped`), and a sub-experiment of a deleted experiment loses its
+`parent` and stands on its own (`parent_cleared`); an experiment can do both, and the preview lists every `fates`
+that applies (`Project::dependents` and `Project::fallout`,
+`core/crates/project/src/dependents.rs`). A delete is refused while anything uses the item (409 with the
+`dependents`); "Delete only if unused" in the app is then off. With `cascade: true` the whole delete is planned and
+every rewritten file checked before anything changes, then carried out from the leaves in (rewritten experiments,
+deleted experiments, deleted scenarios, the item), so a failure part way leaves no reference to a missing item. A
+cascade sent with `expect` (what the preview showed) is refused with 409 and the fresh `dependents` if they have
+changed; under `edit: diff_first` an unconfirmed cascade answers `{proposed, dependents}` and deletes nothing.
+
+Deleted files are not unlinked: they move to `.shakedown/trash/<stamp>/` at their paths in the project, with copies of
+the files the delete rewrote and a `manifest.json` holding a SHA-256 of what the delete wrote to each
+(`core/crates/project/src/trash.rs`). `.shakedown/` holds a `.gitignore` of `*`, so a project never commits its trash;
+every delete of the last 30 days is kept, and always the last 20. `project.restore` puts the most recent delete (or
+the one named by `trash`) back, refusing with 409 while a removed file's path is taken again or a rewritten file was
+edited since (a missing one is put back); unconfirmed under `diff_first` it answers the files and the `trash` it would
+restore, so confirming restores that delete even if another delete came in between. The app offers Undo in the toast
+after a delete and under Project settings → Deleted files (`project.deleted` names the most recent delete). A world's
+data folder and a setup's own folder (a MADL team file) stay where they are: only the item's YAML file goes. The
+deployments of a deleted experiment are unlinked from it (`project_experiment` set to null) and noted in the delete's
+trash (`runs.json`), so its runs list under Earlier experiments, a new file with the same id starts with none, and
+undoing the delete links them again (`runs_relinked`). The files have moved by then, so a database failure answers
+`runs_unlinked: false` (or `runs_relinked: false`) and is logged rather than failing the request. The delete
+dialog, and the assistant's delete card, show all of this before anything is deleted. The Worlds page opens each world
+onto its scenarios and each scenario onto its experiments; a world's page lists its scenarios, a scenario's page its
+experiments, and an experiment's page shows World › Scenario › Experiment.
 
 **Deploying** a project experiment (`POST /api/project/experiments/{id}/deploy`, `core/crates/shaked/src/ops/deploy.rs`)
 maps the files onto an engine experiment: the world's `package` is the benchmark it runs on, the scenario's `preset` is

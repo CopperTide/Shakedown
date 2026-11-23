@@ -22,13 +22,23 @@ impl From<FormatError> for OpError {
 }
 
 impl From<ProjectError> for OpError {
+    /// An item still in use, or whose dependents changed since they were shown, is 409 with its
+    /// `dependents` as the dependents preview lists them.
     fn from(e: ProjectError) -> OpError {
         let status = match &e {
+            ProjectError::InUse { by, .. } | ProjectError::Stale { by, .. } => {
+                let dependents = super::view::dependents(by);
+                return OpError::new(StatusCode::CONFLICT, e.to_string())
+                    .with("dependents", dependents);
+            }
             ProjectError::NotFound { .. } => StatusCode::NOT_FOUND,
             ProjectError::InvalidId(_)
             | ProjectError::Format(_)
             | ProjectError::WrongKind { .. } => StatusCode::UNPROCESSABLE_ENTITY,
-            ProjectError::NotAProject | ProjectError::AlreadyAProject => StatusCode::CONFLICT,
+            ProjectError::NotAProject
+            | ProjectError::AlreadyAProject
+            | ProjectError::Occupied { .. }
+            | ProjectError::EditedSince { .. } => StatusCode::CONFLICT,
             ProjectError::Io { .. } => StatusCode::INTERNAL_SERVER_ERROR,
         };
         OpError::new(status, e.to_string())

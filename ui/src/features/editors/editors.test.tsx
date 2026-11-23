@@ -3,7 +3,8 @@
 // save, discards back to the file, and new items that check their id first.
 import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { forgetShared } from '@/hooks/query';
 import ItemListPage from './ItemListPage';
 import { useItemEditor } from './useItemEditor';
 
@@ -21,6 +22,7 @@ function mockFetch({ put = { status: 200, body: WORLD as unknown }, items = [WOR
   }));
 }
 
+beforeEach(() => forgetShared());
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 async function editor() {
@@ -65,7 +67,7 @@ describe('editing layer', () => {
     const link = await screen.findByRole('link', { name: /^Plant/ });
     expect(link.getAttribute('href')).toBe('/worlds/plant');
     expect(link.textContent).toContain('1 problem');
-    expect(link.className).toContain('hover:bg-hover');
+    expect(link.closest('li')?.className).toContain('hover:bg-hover');
   });
 
   it('new_item_bad_id', async () => {

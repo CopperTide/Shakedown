@@ -1,6 +1,7 @@
 import { AlertTriangle, CornerDownRight } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Table, Td, Th } from '@/components/ui/table';
+import DeleteItemDialog from '@/features/editors/DeleteItemDialog';
 import type { OrderedRow } from './list';
 
 function ProblemBadge({ row }: { row: OrderedRow }) {
@@ -14,11 +15,11 @@ function ProblemBadge({ row }: { row: OrderedRow }) {
 }
 
 /** The file experiments, sub-experiments indented under their parent. A click anywhere on a row opens it. */
-export default function ExperimentRows({ rows }: { rows: OrderedRow[] }) {
+export default function ExperimentRows({ rows, onDeleted }: { rows: OrderedRow[]; onDeleted: () => void }) {
   const navigate = useNavigate();
   return (
     <Table>
-      <thead><tr><Th>Experiment</Th><Th>Scenario</Th><Th className="text-right">Setups</Th></tr></thead>
+      <thead><tr><Th>Experiment</Th><Th>Scenario</Th><Th className="text-right">Setups</Th><Th><span className="sr-only">Actions</span></Th></tr></thead>
       <tbody>
         {rows.map((r) => (
           <tr key={r.id} onClick={() => navigate(`/experiments/file/${r.id}`)} className="cursor-pointer transition-colors hover:bg-hover">
@@ -31,6 +32,10 @@ export default function ExperimentRows({ rows }: { rows: OrderedRow[] }) {
             </Td>
             <Td className="text-muted">{r.scenario}</Td>
             <Td className="text-right tabular-nums">{r.setups}</Td>
+            <Td className="w-10 text-right">
+              {/* Clicks in the dialog would otherwise reach the row and open the experiment. */}
+              <span onClick={(e) => e.stopPropagation()}><DeleteItemDialog compact kind="experiments" id={r.id} label={r.label} onDeleted={onDeleted} /></span>
+            </Td>
           </tr>
         ))}
       </tbody>

@@ -8,7 +8,7 @@ use serde_json::{json, Value};
 use shakedown_project::format::{parse, to_yaml, Kind, ProjectFile};
 use shakedown_project::Project;
 
-use super::{as_yaml, diff_first, input, schema, view, Access, OpCtx, OpFuture, Operation};
+use super::{as_yaml, diff_first, flag, input, schema, view, Access, OpCtx, OpFuture, Operation};
 use crate::project_state::NoProject;
 
 pub(super) fn ops() -> Vec<Operation> {
@@ -48,7 +48,7 @@ fn project_op(
 #[derive(Deserialize)]
 struct UpdateInput {
     body: Value,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "flag")]
     confirm: bool,
 }
 

@@ -4,6 +4,7 @@ import { Mark } from '@/components/brand/Mark';
 import { useProject } from '@/hooks/useProject';
 import { cn } from '@/lib/cn';
 import { NavIcon } from './icons';
+import WorldNav from './WorldNav';
 import { FOOTER, NAV, type NavItem, isActive } from './nav';
 
 function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
@@ -44,7 +45,12 @@ export default function Sidebar() {
         {NAV.map((group, i) => (
           <div key={group.label ?? i} className="flex flex-col gap-0.5">
             {group.label && <div className="mt-4 px-2 pb-1 text-2xs font-medium text-faint">{group.label}</div>}
-            {group.items.map((item) => <NavLink key={item.to} item={item} pathname={pathname} />)}
+            {group.items.map((item) => (
+              <div key={item.to} className="flex flex-col gap-0.5">
+                <NavLink item={item} pathname={pathname} />
+                {item.sub === 'worlds' && <WorldNav pathname={pathname} />}
+              </div>
+            ))}
           </div>
         ))}
       </nav>

@@ -1,7 +1,7 @@
 // The project folder: its status and its worlds, scenarios, setups and experiments (plan 1).
 import type { Experiment } from '@/model/experiment';
-import type { Item, ItemKind, ItemSummary, ProjectSettings, ProjectStatus, Proposed } from '@/model/project';
-import { del, get, path, post, request } from './client';
+import type { DeletePreview, Deleted, Dependent, Item, ItemKind, ItemSummary, LastDelete, ProjectSettings, ProjectStatus, Proposed } from '@/model/project';
+import { get, path, post, request } from './client';
 
 export const projectStatus = () => get<ProjectStatus>('/api/project');
 
@@ -21,7 +21,30 @@ export const putItem = <B>(kind: ItemKind, id: string, body: B, confirm = true) 
     body: JSON.stringify({ body, confirm }),
   });
 
-export const deleteItem = (kind: ItemKind, id: string) => del<{ deleted: string }>(path`/api/project/${kind}/${id}`);
+/**
+ * Deletes an item, confirmed (the person deciding is the confirmation). Refused (409, with
+ * `dependents`) while anything uses it unless `cascade`, and when what uses it is no longer `expect`.
+ */
+export const deleteItem = (kind: ItemKind, id: string, cascade = false, expect?: Dependent[]) =>
+  request<Deleted>(path`/api/project/${kind}/${id}`, {
+    method: 'DELETE',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ cascade, confirm: true, ...(expect ? { expect } : {}) }),
+  });
+
+/** What uses an item, what deleting it with everything that uses it does to each, and the folder that stays. */
+export const dependentsOf = (kind: ItemKind, id: string) => get<DeletePreview>(path`/api/project/${kind}/${id}/dependents`);
+
+/** The most recent delete that can be undone (404 when there is none). */
+export const lastDelete = () => get<LastDelete>('/api/project/trash');
+
+/** Undoes the delete whose files went to `trash` (the most recent when missing). */
+export const restoreDeleted = (trash?: string) =>
+  post<{ restored: string; files: string[] } | Proposed>('/api/project/trash/restore', { trash, confirm: true });
+
+/** Renames a world group, moving every world in it; a null `to` takes them out of any group. */
+export const renameGroup = (from: string, to: string | null) =>
+  post<{ moved: string[] } | Proposed>('/api/project/world-groups/rename', { from, to, confirm: true });
 
 /** Deploys a file experiment: the engine experiment it started. */
 export const deployExperiment = (id: string) => post<Experiment>(path`/api/project/experiments/${id}/deploy`, {});

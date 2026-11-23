@@ -98,6 +98,7 @@ fn add_world(p: &mut Plan, project: &Project, name: &str, title: &str) {
         } else {
             title.into()
         },
+        group: None,
         package: Some(name.into()),
         connectors: vec![],
         flows: vec![],

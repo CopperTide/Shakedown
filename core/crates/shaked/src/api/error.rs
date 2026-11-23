@@ -24,6 +24,8 @@ pub struct ApiError {
     pub status: StatusCode,
     /// What went wrong. Never contains a secret.
     pub message: String,
+    /// More of the answer beside `error`, e.g. `{dependents}` for a refused delete.
+    pub details: Option<serde_json::Map<String, serde_json::Value>>,
 }
 
 /// A route's answer: JSON, or the error.
@@ -35,7 +37,15 @@ impl ApiError {
         ApiError {
             status,
             message: message.into(),
+            details: None,
         }
+    }
+
+    /// The same failure, answering `value` as `key` beside `error`.
+    pub fn with(mut self, key: &str, value: serde_json::Value) -> ApiError {
+        let details = self.details.get_or_insert_with(Default::default);
+        details.insert(key.to_string(), value);
+        self
     }
 
     /// What went wrong, as the caller sees it.
@@ -172,6 +182,8 @@ impl From<ForkError> for ApiError {
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
-        (self.status, Json(json!({"error": self.message}))).into_response()
+        let mut body = self.details.unwrap_or_default();
+        body.insert("error".into(), json!(self.message));
+        (self.status, Json(body)).into_response()
     }
 }

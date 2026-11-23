@@ -5,7 +5,8 @@ import { CardView } from './Cards';
 
 export interface Turn { role: 'user' | 'assistant'; text: string; tools?: ToolUse[]; cards?: Card[] }
 
-export default function Message({ turn }: { turn: Turn }) {
+/** `onSettle(i, outcome)`: the person applied or dismissed the turn's `i`th card. */
+export default function Message({ turn, onSettle }: { turn: Turn; onSettle: (card: number, outcome: 'done' | 'dismissed') => void }) {
   if (turn.role === 'user') return <div className="max-w-[88%] self-end rounded-xl rounded-br-sm bg-sunken px-3 py-2 text-sm">{turn.text}</div>;
   const n = turn.tools?.length ?? 0;
   return (
@@ -17,7 +18,7 @@ export default function Message({ turn }: { turn: Turn }) {
         </details>
       )}
       <p className="whitespace-pre-wrap">{turn.text}</p>
-      {turn.cards?.map((c, i) => <CardView key={i} card={c} />)}
+      {turn.cards?.map((c, i) => <CardView key={i} card={c} onSettle={(outcome) => onSettle(i, outcome)} />)}
     </div>
   );
 }

@@ -34,6 +34,24 @@ describe('shell', () => {
     expect(screen.getByRole('link', { name: 'Home' }).getAttribute('aria-current')).toBeNull();
   });
 
+  it('sidebar_lists_worlds_under_their_groups', async () => {
+    const world = (id: string, label: string, group?: string) => ({ kind: 'world', id, label, hash: 'h', problems: [], group: group ?? null });
+    mockFetch({
+      '/api/project': { name: 'Larkspur Ops', counts: {}, problems: [] },
+      '/api/project/worlds': { items: [world('solo', 'Larkspur'), world('b', 'West plant', 'Rebolt'), world('a', 'East plant', 'Rebolt'), world('m', 'Mill', 'Arden')] },
+    });
+    render(<MemoryRouter initialEntries={['/worlds/a']}><Sidebar /></MemoryRouter>);
+    const tree = await screen.findByRole('list', { name: 'Worlds by group' });
+    expect(tree.textContent).toBe('ArdenReboltEast plantWest plantUngrouped');
+    const east = screen.getByRole('link', { name: 'East plant' });
+    expect(east.getAttribute('href')).toBe('/worlds/a');
+    expect(east.getAttribute('aria-current')).toBe('page');
+    fireEvent.click(screen.getByRole('button', { name: 'Arden' }));
+    expect(screen.getByRole('link', { name: 'Mill' }).getAttribute('href')).toBe('/worlds/m');
+    fireEvent.click(screen.getByRole('button', { name: 'Rebolt' }));
+    expect(screen.queryByRole('link', { name: 'East plant' })).toBeNull();
+  });
+
   it('shows_project_name', async () => {
     mockFetch({ '/api/project': { name: 'Larkspur Ops', counts: {}, problems: [] } });
     render(<MemoryRouter><Sidebar /></MemoryRouter>);

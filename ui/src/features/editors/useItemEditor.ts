@@ -1,6 +1,7 @@
 // An editor's state: the item as saved, the draft being edited, and saving it back to its file.
 import { useCallback, useEffect, useState } from 'react';
 import { getItem, putItem } from '@/api/project';
+import { projectChanged } from '@/hooks/useProjectItems';
 import { errorMessage } from '@/lib/errors';
 import type { Item, ItemKind, Problem } from '@/model/project';
 
@@ -30,7 +31,7 @@ export function useItemEditor<B>(kind: ItemKind, id: string) {
     setSaving(true);
     try {
       const saved = await putItem<B>(kind, id, draft, true);
-      if ('body' in saved) { setItem(saved); setDraft(saved.body); }
+      if ('body' in saved) { setItem(saved); setDraft(saved.body); projectChanged(); }
       setError(null);
     } catch (e) {
       const message = errorMessage(e);
