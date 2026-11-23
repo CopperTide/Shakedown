@@ -25,14 +25,23 @@ pub fn new_secret(prefix: &'static str) -> String {
     SystemRandom::new()
         .fill(&mut bytes)
         .expect("the system's random source works");
-    let hex: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
-    format!("{prefix}{hex}")
+    format!("{prefix}{}", hex(&bytes))
 }
 
 /// The sha256 of `token`, in hex: what the database keeps.
 pub fn hash(token: &str) -> String {
-    let d = ring::digest::digest(&ring::digest::SHA256, token.as_bytes());
-    d.as_ref().iter().map(|b| format!("{b:02x}")).collect()
+    hex(&sha256(token.as_bytes()))
+}
+
+/// The sha256 of `bytes`.
+pub fn sha256(bytes: &[u8]) -> [u8; 32] {
+    let d = ring::digest::digest(&ring::digest::SHA256, bytes);
+    d.as_ref().try_into().expect("a sha256 digest is 32 bytes")
+}
+
+/// `bytes` in lower-case hex.
+pub fn hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
 /// The first 8 characters, shown in lists.

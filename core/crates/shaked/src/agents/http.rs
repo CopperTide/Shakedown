@@ -77,13 +77,7 @@ async fn read_bearer(
 /// The URL's host (and port), the only part of it an error names: a URL may carry a credential
 /// in its query.
 pub fn host_of(url: &str) -> String {
-    reqwest::Url::parse(url)
-        .ok()
-        .and_then(|u| {
-            u.host_str()
-                .map(|h| u.port().map_or(h.to_string(), |p| format!("{h}:{p}")))
-        })
-        .unwrap_or_else(|| "the agent".into())
+    crate::providers::reach::host_of(url, "the agent")
 }
 
 /// Why `url` can't be an agent's address, if it can't.
@@ -144,10 +138,11 @@ struct Usage {
     output_tokens: i64,
 }
 
-fn failure(error: String, failure: Option<FailureKind>) -> AgentResult {
+/// A failure of the agent's own doing (`FailureKind::Model`).
+fn agent_failed(error: String) -> AgentResult {
     AgentResult {
-        failure,
-        ..super::fail(error)
+        failure: Some(FailureKind::Model),
+        ..AgentResult::failed(error)
     }
 }
 
@@ -159,10 +154,7 @@ fn done(body: &str) -> AgentResult {
         let why = d.error.unwrap_or_else(|| "no reason given".into());
         return AgentResult {
             tokens,
-            ..failure(
-                format!("the agent says it failed: {why}"),
-                Some(FailureKind::Model),
-            )
+            ..agent_failed(format!("the agent says it failed: {why}"))
         };
     }
     AgentResult {
@@ -182,10 +174,9 @@ fn answered(host: &str, status: u16, body: &str) -> AgentResult {
         return done(body);
     }
     let tail: String = body.trim().chars().take(300).collect();
-    failure(
-        format!("the agent at {host} answered HTTP {status}: {tail}"),
-        None,
-    )
+    AgentResult::failed(format!(
+        "the agent at {host} answered HTTP {status}: {tail}"
+    ))
 }
 
 /// What the reach checks call an agent.
@@ -292,7 +283,7 @@ impl HttpDriver {
 
     async fn run_agent(&self, run: &AgentRun) -> AgentResult {
         if run.resume.is_some() {
-            return super::fail("an http agent can't resume in the middle of its run".into());
+            return AgentResult::failed("an http agent can't resume in the middle of its run");
         }
         let token = run
             .branch
@@ -337,7 +328,7 @@ impl HttpDriver {
     async fn call(&self, run: &AgentRun, token: &str) -> AgentResult {
         let body = match self.run_body(run, token).await {
             Ok(b) => b,
-            Err(e) => return super::fail(format!("{e:#}")),
+            Err(e) => return AgentResult::failed(format!("{e:#}")),
         };
         let host = host_of(run.spec.url.as_deref().unwrap_or_default());
         let started = std::time::Instant::now();
@@ -345,12 +336,11 @@ impl HttpDriver {
         let mut r = match waited {
             None => {
                 let secs = self.timeout.as_secs();
-                failure(
-                    format!("the agent at {host} did not answer within {secs} s"),
-                    Some(FailureKind::Model),
-                )
+                agent_failed(format!(
+                    "the agent at {host} did not answer within {secs} s"
+                ))
             }
-            Some(Err(e)) => super::fail(e),
+            Some(Err(e)) => AgentResult::failed(e),
             Some(Ok((status, text))) => answered(&host, status, &text),
         };
         r.seconds = started.elapsed().as_secs_f64();

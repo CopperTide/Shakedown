@@ -14,6 +14,7 @@ use super::{
 use crate::{
     app::AppState,
     exec::{tool_schemas, BranchCtx, ToolExec, FINISH, HANDOFF},
+    gateway::Api,
     model::{add_cost, AgentSpec, TokenUsage},
     providers::{Provider, ProviderConfig},
 };
@@ -143,24 +144,6 @@ impl OpenSession {
         }
         turn
     }
-
-    fn result(self, cut: bool) -> AgentResult {
-        let error = end_error(self.error, cut);
-        let [prompt, completion, total] = self.totals.tokens;
-        AgentResult {
-            ok: error.is_none(),
-            error,
-            failure: None,
-            tokens: TokenUsage {
-                prompt_tokens: prompt,
-                completion_tokens: completion,
-                total_tokens: total,
-            },
-            cost_source: self.totals.cost.and(self.totals.source).map(str::to_string),
-            cost_usd: self.totals.cost,
-            seconds: self.busy.as_secs_f64(),
-        }
-    }
 }
 
 impl Session for OpenSession {
@@ -169,7 +152,8 @@ impl Session for OpenSession {
     }
 
     fn end(self: Box<Self>, cut: bool) -> BoxFuture<'static, AgentResult> {
-        let result = self.result(cut);
+        let error = end_error(self.error, cut);
+        let result = self.totals.result(error, None, self.busy.as_secs_f64());
         Box::pin(async move { result })
     }
 }
@@ -202,6 +186,29 @@ impl Totals {
         }
         self.cost = add_cost(self.cost, provider.cost(usage));
     }
+
+    /// The agent's result: these totals, with `error` and `failure`, over `seconds`.
+    fn result(
+        self,
+        error: Option<String>,
+        failure: Option<FailureKind>,
+        seconds: f64,
+    ) -> AgentResult {
+        let [prompt_tokens, completion_tokens, total_tokens] = self.tokens;
+        AgentResult {
+            ok: error.is_none(),
+            error,
+            failure,
+            tokens: TokenUsage {
+                prompt_tokens,
+                completion_tokens,
+                total_tokens,
+            },
+            cost_source: self.cost.and(self.source).map(str::to_string),
+            cost_usd: self.cost,
+            seconds,
+        }
+    }
 }
 
 /// The arguments of a tool call: `{}` for none, `None` when they are not a JSON object.
@@ -219,7 +226,7 @@ fn tool_message(id: &str, content: String) -> Value {
 }
 
 /// What the gateway answered: its status, the `retry-after` seconds it passed on, its body.
-struct Answer {
+struct GatewayAnswer {
     status: reqwest::StatusCode,
     retry_after: Option<u64>,
     text: String,
@@ -231,7 +238,7 @@ struct Gateway {
     token: String,
 }
 
-async fn post(http: &reqwest::Client, gw: &Gateway, body: &Value) -> Result<Answer, Fault> {
+async fn post(http: &reqwest::Client, gw: &Gateway, body: &Value) -> Result<GatewayAnswer, Fault> {
     let resp = http
         .post(&gw.url)
         .bearer_auth(&gw.token)
@@ -248,7 +255,7 @@ async fn post(http: &reqwest::Client, gw: &Gateway, body: &Value) -> Result<Answ
         .text()
         .await
         .map_err(|e| format!("gateway response unreadable: {e}"))?;
-    Ok(Answer {
+    Ok(GatewayAnswer {
         status,
         retry_after,
         text,
@@ -259,13 +266,13 @@ async fn post(http: &reqwest::Client, gw: &Gateway, body: &Value) -> Result<Answ
 /// [`retry_wait`]) while the provider is overloaded or rate-limiting; the parsed response.
 async fn model_call(
     http: &reqwest::Client,
-    url: &Gateway,
+    gw: &Gateway,
     body: &Value,
     retry_base: Duration,
 ) -> Result<Value, Fault> {
     let mut retries = 0;
     loop {
-        let a = post(http, url, body).await?;
+        let a = post(http, gw, body).await?;
         if a.status.is_success() {
             return Ok(
                 serde_json::from_str(&a.text).map_err(|e| format!("bad model response: {e}"))?
@@ -297,14 +304,10 @@ fn failure(status: reqwest::StatusCode, text: &str) -> String {
     format!("model call failed ({}): {detail}", status.as_u16())
 }
 
-/// The recording gateway's address for `agent` on `branch`.
+/// The recording gateway's chat address for `agent` on `branch`.
 fn gateway_url(state: &AppState, branch: &str, agent: &str) -> String {
-    format!(
-        "{}/gateway/{}/{}/v1/chat/completions",
-        state.config.self_base.trim_end_matches('/'),
-        branch,
-        agent
-    )
+    let base = super::endpoint(&state.config.self_base, "gateway", branch, agent);
+    format!("{base}/v1/{}", Api::Chat.path())
 }
 
 /// What an agent's loop talks to: the gateway to its provider and model, and its tools.
@@ -312,7 +315,7 @@ struct Loop {
     state: Arc<AppState>,
     provider: Provider,
     model: String,
-    url: Gateway,
+    gateway: Gateway,
     tools: Vec<Value>,
     branch: Arc<BranchCtx>,
     agent: String,
@@ -327,7 +330,7 @@ impl Loop {
     ) -> Result<Loop, Fault> {
         let (provider, model) = provider_and_model(providers, spec)?;
         Ok(Loop {
-            url: Gateway {
+            gateway: Gateway {
                 url: gateway_url(&state, &branch.branch_id, &spec.id),
                 token: branch.agent_token(&spec.id),
             },
@@ -352,7 +355,7 @@ impl Loop {
         let base = self.state.config.retry_base;
         for _ in 0..MAX_MODEL_CALLS {
             let body = json!({"messages": messages, "tools": self.tools, "model": self.model});
-            let v = model_call(&self.state.http, &self.url, &body, base).await?;
+            let v = model_call(&self.state.http, &self.gateway, &body, base).await?;
             totals.add(&self.provider, &v["usage"]);
             // The gateway priced the call into the run's estimate: stop once it is over.
             if let Some(why) = self.branch.budget.over() {
@@ -387,20 +390,7 @@ impl OpenDriver {
             Ok(()) => (None, None),
             Err((e, failure)) => (Some(e), failure),
         };
-        let [prompt, completion, total] = totals.tokens;
-        AgentResult {
-            ok: error.is_none(),
-            error,
-            failure,
-            tokens: TokenUsage {
-                prompt_tokens: prompt,
-                completion_tokens: completion,
-                total_tokens: total,
-            },
-            cost_source: totals.cost.and(totals.source).map(str::to_string),
-            cost_usd: totals.cost,
-            seconds: start.elapsed().as_secs_f64(),
-        }
+        totals.result(error, failure, start.elapsed().as_secs_f64())
     }
 
     async fn drive(&self, run: &AgentRun, totals: &mut Totals) -> Result<(), Fault> {

@@ -102,9 +102,7 @@ async fn digested(
         let too_large = StatusCode::PAYLOAD_TOO_LARGE;
         return Err(Box::new(refuse(too_large, "the request body is too large")));
     };
-    let sum = ring::digest::digest(&ring::digest::SHA256, &bytes);
-    let mut digest = [0u8; 32];
-    digest.copy_from_slice(sum.as_ref());
+    let digest = super::tokens::sha256(&bytes);
     parts.extensions.insert(crate::layer::BodySha256(digest));
     Ok(axum::body::Body::from(bytes))
 }

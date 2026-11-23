@@ -39,12 +39,9 @@ impl ClaudeDriver {
     }
 }
 
+/// The one-shot command with the MCP config inline (no token).
 pub fn command(spec: &AgentSpec, mcp: &Mcp, prompt: &str) -> Command {
-    command_with("claude", spec, mcp, prompt)
-}
-
-fn command_with(binary: &str, spec: &AgentSpec, mcp: &Mcp, prompt: &str) -> Command {
-    command_for(binary, spec, mcp, &inline_config(mcp), prompt)
+    command_for("claude", spec, mcp, &inline_config(mcp), prompt)
 }
 
 /// The command for a run in `dir`: an agent with a token gets its MCP config in a 0600 file there
@@ -171,7 +168,7 @@ pub fn session_command(
 /// Parse `--output-format json` stdout. `seconds` is left 0 for the caller.
 pub fn parse(stdout: &str) -> AgentResult {
     let Ok(v) = serde_json::from_str::<Value>(stdout.trim()) else {
-        return super::fail(format!(
+        return AgentResult::failed(format!(
             "unparseable claude output: {}",
             super::tail(stdout)
         ));
