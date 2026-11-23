@@ -205,8 +205,8 @@ flowchart TB
 | API token `sd_` | by scope: `read` reads, `run` also starts, forks, stops, records and drives a run, `admin` everything. Changing model keys or project files needs `admin`. No API token calls tools, models or a worker link. |
 | Run token `sdr_` | `RegisterAgent`, `Report`, `Finish` on its own branch |
 | Worker token `sdw_` | `WorkerLink`, `CallModel` on its own branch |
-| Ticket `sdt_` | `WorkerLink` |
-| Agent token `sda_` | `CallTools`, `CallModel`. In practice agent tokens are checked only by `roster.token_ok`, and that `engine_check` arm is not reached (F18, in the bug batch). |
+| Ticket `sdt_` | nothing here: a ticket is checked in memory when a worker trades it for its worker token (`src/worker/tickets.rs`) and never becomes a `Caller`. |
+| Agent token `sda_` | nothing here: agent tokens are checked only by their branch's roster (`roster.token_ok`) and never become a `Caller`. |
 
 Another branch than its own is `NotFound` for a run token, so it learns nothing about other branches.
 

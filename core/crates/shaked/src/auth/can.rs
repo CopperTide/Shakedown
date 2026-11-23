@@ -125,11 +125,11 @@ fn in_run(own: &str, kind: RunTokenKind, a: &Action, t: &Target<'_>) -> Decision
     use Action::*;
     let fits = match kind {
         RunTokenKind::Run => matches!(a, RegisterAgent | Report | Finish),
-        RunTokenKind::Agent => matches!(a, CallTools | CallModel),
         // A sandbox's worker appends its branch's events and ends it over the link, and calls
         // the model gateway for its branch's agents.
         RunTokenKind::Worker => matches!(a, WorkerLink | CallModel),
-        RunTokenKind::Ticket => matches!(a, WorkerLink),
+        // Never a caller: an agent token is checked by its branch's roster, a ticket in memory.
+        RunTokenKind::Agent | RunTokenKind::Ticket => false,
     };
     match t {
         Target::Branch { branch, .. } if fits && *branch == own => Decision::Allow,
@@ -217,32 +217,6 @@ mod tests {
         assert_eq!(engine_check(&c, &Action::Finish, &b2), Decision::NotFound);
         assert!(matches!(
             engine_check(&c, &Action::Read, &kind()),
-            Decision::Forbidden(_)
-        ));
-    }
-
-    #[test]
-    fn an_agent_token_calls_tools_and_models_only() {
-        let c = Caller::run_token("r", "b1", RunTokenKind::Agent, Some("a"));
-        let b1 = Target::Branch {
-            run: "r",
-            branch: "b1",
-        };
-        assert_eq!(engine_check(&c, &Action::CallTools, &b1), Decision::Allow);
-        assert_eq!(engine_check(&c, &Action::CallModel, &b1), Decision::Allow);
-        for a in [Action::Finish, Action::RegisterAgent, Action::WorkerLink] {
-            assert!(
-                matches!(engine_check(&c, &a, &b1), Decision::Forbidden(_)),
-                "{a:?}"
-            );
-        }
-        let worker = Caller::run_token("r", "b1", RunTokenKind::Worker, None);
-        assert_eq!(
-            engine_check(&worker, &Action::WorkerLink, &b1),
-            Decision::Allow
-        );
-        assert!(matches!(
-            engine_check(&worker, &Action::CallTools, &b1),
             Decision::Forbidden(_)
         ));
     }
