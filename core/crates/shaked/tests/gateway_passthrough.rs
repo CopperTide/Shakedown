@@ -1063,3 +1063,23 @@ fn a_worker_token_at_a_workers_own_gateway_is_refused() {
         world.stop().await;
     })
 }
+
+/// A chat call that puts a linked run over its limit stops the branch even when the call can't
+/// be recorded (its request holds a NUL, which Postgres won't keep): the 500 comes after the stop.
+#[test]
+fn a_call_over_the_limit_that_fails_to_record_still_stops_the_branch() {
+    run(async {
+        let (up, fx, plan, token, mut link) = linked_under("unrecorded", limited(0.001)).await;
+        let nul = json!({"model": "gpt-x", "messages": [{"role": "user", "content": "a \u{0} b"}]});
+        let chat = (plan.branch_id.as_str(), "o", "chat/completions");
+        assert_eq!(call(&fx, chat, &token, &nul).await.status(), 500);
+        assert_eq!(up.seen().len(), 1);
+        let evs = records(&fx.state.store).events(&plan.branch_id).await;
+        let limit = |e: &Event| e.payload["kind"] == "limit_reached";
+        assert!(
+            evs.unwrap().iter().any(limit),
+            "the limit is recorded at once"
+        );
+        assert!(matches!(hear(&mut link).await, ToWorker::OverBudget { .. }));
+    })
+}

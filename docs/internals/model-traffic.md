@@ -87,8 +87,8 @@ sequenceDiagram
     C-->>A: answer + retry-after + x-shakedown-cost-usd
 ```
 
-A failed record answers 500 and skips the meters. On a linked branch `settle` is also skipped in that case,
-which is in the bug batch (`chat.rs` should settle before the 500, as `raw_call.rs` does).
+A failed record answers 500 and skips the meters. On a linked branch `settle` still runs first, as in
+`raw_call.rs`: a call that took the run over its limit stops the branch whether or not it was recorded.
 
 ### A CLI agent's call (`messages`, `responses`)
 

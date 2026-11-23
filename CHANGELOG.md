@@ -58,3 +58,6 @@
 - **A shaked that runs packages only in sandboxes refuses a fork before starting anything.**
   The check now comes before the fork's world is planned (which started its package programs),
   as it already did for new runs, and before the new branch is recorded.
+- **A sandbox's chat call that takes its run past the limit stops the branch even when the call
+  can't be recorded.** The gateway used to answer 500 without stopping it, so the branch ran on
+  until its next call.

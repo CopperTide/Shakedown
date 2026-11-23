@@ -36,11 +36,13 @@ pub(super) async fn chat(
     let items =
         reasoning::from_chat_response(&payload.response, payload.provider_response.as_ref());
     let metered = (charge.usd, &payload.usage, a.paid_by);
-    if let Err(e) = target.book(&state, agent, (v, items), metered).await {
+    let booked = target.book(&state, agent, (v, items), metered).await;
+    // Charged either way: a call that put the run over its limit stops it now, recorded or not.
+    target.settle(&state).await;
+    if let Err(e) = booked {
         let why = format!("recording model call: {e}");
         return error_response(StatusCode::INTERNAL_SERVER_ERROR, why);
     }
-    target.settle(&state).await;
     let reply = answer(status, payload.response, retry_after(&upstream));
     with_cost(reply, charge.usd)
 }
