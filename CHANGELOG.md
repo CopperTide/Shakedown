@@ -63,6 +63,8 @@
 - **A sandbox's chat call that takes its run past the limit stops the branch even when the call
   can't be recorded.** The gateway used to answer 500 without stopping it, so the branch ran on
   until its next call.
+- **Claude Sonnet 5.5's cache reads are listed at $0.10 per million tokens**, its list price,
+  not $0.20.
 - **Open agents' chat calls to Claude and Bedrock are priced at the cache rates.** Their canonical
   usage now keeps the cache-write and cache-read counts, so a cache hit is no longer charged (and
   metered) as fresh input, about 10 times its price.
