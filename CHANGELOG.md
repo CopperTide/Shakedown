@@ -57,9 +57,10 @@
 - **Shared saves of unrelated hubs are no longer made one at a time.** The lock that makes each
   base and gold save once is now per hub saves folder and name, so runs on different hubs stop
   queueing behind each other.
-- **A shaked that runs packages only in sandboxes refuses a fork before starting anything.**
-  The check now comes before the fork's world is planned (which started its package programs),
-  as it already did for new runs, and before the new branch is recorded.
+- **A shaked that runs packages only in sandboxes refuses a run or a fork before starting
+  anything**, with 403 and the reason (a fork answered 500). The check now comes before the
+  benchmark is described and the world planned (which started their package programs), and
+  before the run or branch is recorded.
 - **A sandbox's chat call that takes its run past the limit stops the branch even when the call
   can't be recorded.** The gateway used to answer 500 without stopping it, so the branch ran on
   until its next call.

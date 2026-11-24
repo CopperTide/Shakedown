@@ -162,6 +162,7 @@ impl From<ForkError> for ApiError {
     fn from(e: ForkError) -> ApiError {
         let status = match &e {
             ForkError::UnknownBranch(_) => StatusCode::NOT_FOUND,
+            ForkError::SandboxOnly(_) => StatusCode::FORBIDDEN,
             ForkError::BranchRunning
             | ForkError::Refused(_)
             | ForkError::ReplayDiverged { .. }

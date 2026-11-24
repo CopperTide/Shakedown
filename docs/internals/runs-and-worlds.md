@@ -55,10 +55,10 @@ sequenceDiagram
     C->>L: LaunchSpec {scope, task, team, scenario, rules, driver?}
     L->>L: layer::admit(StartRun)
     L->>RS: begin_run
-    RS->>RS: bench_with_task, world::plan (clashing tools refused)
+    RS->>RS: packages_here (bind::local_only, 403), bench_with_task, world::plan (clashing tools refused)
     RS->>R: create_run, create_branch, set_rules
     RS-->>SU: BranchPlan
-    SU->>W: bind::local_only, then World::start_branch(WorldFrom::Base)
+    SU->>W: bind::local_only again (stand_up is also a worker's entry), then World::start_branch(WorldFrom::Base)
     SU->>R: append RunStart (seq 1, overhead = restore)
     SU->>W: ToolExec::setup (task setup + scenario, actor "setup")
     SU->>R: tool_call per setup step, save point "setup", world_view
@@ -254,7 +254,7 @@ object store (`src/objects/`) and the `saves` table exist for uploads, which com
 | A fork's events are the parent's prefix with the same seqs. | `src/store/events.rs`, `copy_prefix` |
 | The rules on record are the control box's, and a fork inherits them. | `src/runner/start.rs`, `record_start`. `src/fork/start.rs`, `create_child` |
 | Setup and link calls are recorded as tool calls of actors `setup` and `link`, so a replay repeats them. | `src/exec/setup.rs`, `src/exec/links.rs` |
-| A shaked whose packages run only in sandboxes never starts a world's parts itself: a run and a fork are refused before anything asks the hub for a program. | `src/bind.rs`, `local_only`, called by `src/runner/start.rs` and first in `src/fork/rerun.rs`, `prepare` |
+| A shaked whose packages run only in sandboxes never starts a world's parts itself: a run and a fork are refused (403) before anything asks the hub for a program or records a run or branch. | `src/bind.rs`, `local_only`, called first in `src/runner/start.rs`, `record_start` (and again in `stand_up`) and first in `src/fork/rerun.rs`, `prepare` (`ForkError::SandboxOnly`) |
 
 `world/standard.rs`'s `name_lock` keys on the hub's saves folder and the save names, so each shared save is
 made once per hub while unrelated hubs never wait for each other.

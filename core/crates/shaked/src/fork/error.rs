@@ -52,6 +52,9 @@ pub enum ForkError {
     /// A team change the run can't take (see [`ForkRequest::team`]).
     #[error("{0}")]
     TeamChange(&'static str),
+    /// Packages run only in sandboxes here, so no fork's world can start (403).
+    #[error("{0}")]
+    SandboxOnly(String),
     /// Storage or database failure.
     #[error("fork failed: {0:#}")]
     Internal(anyhow::Error),

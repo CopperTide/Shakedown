@@ -270,5 +270,37 @@ fn a_sandboxed_fork_is_refused_before_any_package_program_starts() {
         let forked = shaked::fork::fork(&state, &parent, at, Default::default()).await;
         let e = forked.expect_err("a fork started a world here");
         assert!(format!("{e:#}").contains(SANDBOXES), "{e:#}");
+        let (status, v) = fx.fork(&parent, serde_json::json!({"at_seq": at})).await;
+        let why = v["error"].as_str().unwrap_or_default();
+        assert_eq!((status, why.contains(SANDBOXES)), (403, true), "{v}");
+    })
+}
+
+/// A run under a layer whose packages run only in sandboxes is refused (403) before anything:
+/// no run is recorded and no package program is asked for (the hub has none, so asking would fail
+/// another way); planning the run's world would start them.
+#[test]
+fn a_sandboxed_run_is_refused_before_any_plan_record_or_program() {
+    run(async {
+        let spy = shaked::harness::SpyLayer::new();
+        let fx = AppFx::idle("modes", "sandrun")
+            .layer(std::sync::Arc::new(spy.clone()))
+            .start()
+            .await;
+        spy.sandbox_packages();
+        let state = without_packages(&fx);
+        let agent = shaked::model::AgentSpec::new("a", shaked::model::AgentKind::Open);
+        let options = shaked::runner::RunOptions::new(shaked::model::Runner::Chain);
+        let team = support::team_of(vec![agent]);
+        let started = options.start(&state, "27", team).await;
+        match started {
+            Err(shaked::runner::RunError::Refused(r)) => {
+                let why = r.message.contains(SANDBOXES);
+                assert_eq!((r.status.as_u16(), why), (403, true), "{}", r.message);
+            }
+            other => panic!("a run started a world here: {other:?}"),
+        }
+        let runs = support::records(&state.store).runs().await.unwrap();
+        assert!(runs.is_empty(), "a run was recorded");
     })
 }

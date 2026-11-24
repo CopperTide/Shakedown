@@ -175,7 +175,7 @@ fn known_tools(world: &Plan, changes: &HashMap<String, Change>) -> Result<(), Fo
 fn runs_packages_here(state: &AppState) -> Result<(), ForkError> {
     let policy = state.store.layer().policy();
     let refused = crate::bind::local_only(policy, "starting a world's parts");
-    refused.map_err(|e| ForkError::Internal(anyhow::Error::msg(e)))
+    refused.map_err(ForkError::SandboxOnly)
 }
 
 /// Plans a rerun of `branch` (its `events`) for `req`: the rerun, and the plan of the world it

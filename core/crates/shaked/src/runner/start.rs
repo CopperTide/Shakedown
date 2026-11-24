@@ -28,12 +28,14 @@ pub fn new_seed() -> u64 {
     (uuid::Uuid::new_v4().as_u128() as u64) & MAX_SEED
 }
 
-/// Why a run did not start: the benchmark has no such task, or something failed on the way.
+/// Why a run did not start: the benchmark has no such task, it was refused, or something failed on
+/// the way.
 #[derive(Debug, thiserror::Error)]
 pub enum RunError {
     #[error("unknown task {0}")]
     UnknownTask(String),
-    /// The layer refused to admit the run (a quota reached).
+    /// The run was refused: by the layer (a quota reached), or because packages run only in
+    /// sandboxes here (403).
     #[error("{}", .0.message)]
     Refused(crate::layer::Refusal),
     #[error(transparent)]
@@ -191,10 +193,20 @@ pub async fn begin_run(
     Ok((plan.run_id, ctx.with_caller(scope.clone())))
 }
 
+/// Refuses a run where packages run only in sandboxes (403): describing its benchmark and
+/// planning its world would start the world's package programs here.
+fn packages_here(state: &AppState) -> Result<(), RunError> {
+    let policy = state.store.layer().policy();
+    let refused = crate::bind::local_only(policy, "starting a world's parts");
+    let status = axum::http::StatusCode::FORBIDDEN;
+    refused.map_err(|why| RunError::Refused(crate::layer::Refusal::new(status, why)))
+}
+
 /// The first half of beginning a run: creates the run and its first branch for `spec.scope`,
-/// after checking the benchmark has the task. The plan to stand the branch up from (`RunStart`
+/// after checking packages run here and the benchmark has the task. The plan to stand the branch up from (`RunStart`
 /// waits for the world, which it records, so `stand_up` writes it first of the branch's events).
 pub async fn record_start(state: &AppState, spec: &LaunchSpec<'_>) -> Result<BranchPlan, RunError> {
+    packages_here(state)?;
     let bench = bench_with_task(state, spec.benchmark, spec.task_id).await?;
     // A world whose tools clash is refused before anything is recorded.
     world::plan(&state.hub, &bench).await?;
