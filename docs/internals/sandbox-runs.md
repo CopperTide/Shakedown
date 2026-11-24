@@ -270,8 +270,9 @@ reconnect.
 ## In the sandbox
 
 The template (`deploy/sandbox`, built by `build-template.sh`) holds Ubuntu 24.04 with Docker, `shaked` and the
-package programs, the packages with their Python environments synced, Python with `uv`, Node 22, the agent
-image (Claude Code and Codex) and the world images of `images.txt`. Its start command, `start.sh`, runs while
+package programs, the packages with their Python environments synced, Python with `uv`, Node 22, PostgreSQL
+on `127.0.0.1:5544` (`SHAKEDOWN_PG_URL`), the agent image (Claude Code and Codex) and every world image:
+`images.txt`, the world templates' `images.yaml` and what software-factory builds. Its start command, `start.sh`, runs while
 E2B builds the template, so every sandbox starts from a snapshot in which the worker already waits for its
 ticket.
 
@@ -291,7 +292,7 @@ flowchart LR
     W -.->|"SD-AGENTS: dropped"| WK
 ```
 
-- **Start.** `start.sh` makes sure `docker.service` runs (the VM boots systemd), runs `agent-network.sh`, then
+- **Start.** `start.sh` makes sure `docker.service` and `postgresql.service` run (the VM boots systemd), runs `agent-network.sh`, then
   `shaked worker --link "$SHAKED_LINK" --ticket-file /run/shaked/ticket`. The ready command is `docker info`.
   Settings come from `/etc/shaked/worker.env`; `SHAKED_LINK` and `SHAKED_AGENT_IMAGE` are baked in per
   template.
@@ -301,7 +302,8 @@ flowchart LR
   that address.
 - **The jail.** `Jail::contain` gives the work folder to uid 1000, then wraps the CLI's command as
   `docker run --rm -i --name shaked-agent-<id> --user 1000:1000 --network shaked-agents --cap-drop ALL
-  --security-opt no-new-privileges -v <dir>:<dir> -w <dir> -e NAME … <image> <command>`. Each variable the
+  --security-opt no-new-privileges --memory 1g --pids-limit 256 --read-only --tmpfs /tmp --tmpfs
+  /home/agent:… --mount type=bind,src=<dir>,dst=<dir> -w <dir> -e NAME … <image> <command>`. Each variable the
   command sets is passed by name, its value in the `docker` process's environment. The variables the scrub
   removes are removed from `docker`'s environment as well. A killed `docker run` leaves its container
   running, so `Container`'s drop runs `docker rm -f` (one-shot runs in `run_in_workdir`, sessions in

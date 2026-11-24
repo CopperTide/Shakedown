@@ -365,7 +365,9 @@ mod tests {
         assert_eq!(run.get_program(), "docker");
         let args = text_args(run);
         let head = "run --rm -i --name c --user 1000:1000 --network net --cap-drop ALL \
-                    --security-opt no-new-privileges -v /w:/w -w /w";
+                    --security-opt no-new-privileges --memory 1g --pids-limit 256 --read-only \
+                    --tmpfs /tmp --tmpfs /home/agent:uid=1000,gid=1000,mode=0700 \
+                    --mount type=bind,src=/w,dst=/w -w /w";
         let head: Vec<&str> = head.split_whitespace().collect();
         assert_eq!(args[..head.len()], head[..]);
         let at = args.iter().position(|a| a == "t").expect("the image");

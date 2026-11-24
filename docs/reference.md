@@ -279,7 +279,7 @@ from. The retail example reads its data from `data/retail` (relative to its pack
   agent's token as its key (`ANTHROPIC_API_KEY`; `OPENAI_API_KEY` and `CODEX_API_KEY`). In a cloud sandbox
   (`SHAKED_AGENT_NETWORK`, `SHAKED_AGENT_IMAGE` and `SHAKED_AGENT_LISTEN` set, by the template in
   `deploy/sandbox`), each Claude Code or Codex process runs in a throwaway container of the agent image, as uid
-  1000 with no capabilities, on a Docker network that reaches only the worker's MCP endpoint and gateway at
+  1000 with no capabilities, 1 GiB and 256 processes at most and a read-only root, on a Docker network that reaches only the worker's MCP endpoint and gateway at
   `SHAKED_AGENT_LISTEN`; it sees only its work folder and the variables above. An event too large for one frame is cut down first: strings over 16 KiB are cut to 16 KiB and the payload
   gets `truncated: true`; when that is still too large, the payload becomes `{truncated: true, bytes, head}` (its
   size and its first 64 KiB as JSON). A dropped link is tried again at once, then every 2 s, resending what was

@@ -11,8 +11,13 @@ control box talk is in [docs/internals/sandbox-runs.md](../../docs/internals/san
   (`integrations/`, `benchmarks/`, `kits/python`) in `/opt/shakedown`. Each Python package's
   environment is synced at build time, so `uv` runs offline.
 - Python 3.12 with `uv`, and Node 22.
-- The agent image (`agent/Dockerfile`), with Claude Code and Codex, and the world images listed in
-  `images.txt`. All are in the template, so a run pulls nothing from a registry.
+- PostgreSQL 16 on `127.0.0.1:5544`, the server packages reach at `SHAKEDOWN_PG_URL` (retail's
+  parts use it). Its login is a local one: nothing outside the sandbox reaches it.
+- The agent image (`agent/Dockerfile`), with Claude Code and Codex, and every image a world starts:
+  those listed in `images.txt`, those each world template's `images.yaml` pulls, the images
+  software-factory builds (`images/build.sh all`: `shakedown-sf/base`, the three app images and the
+  workbench) and the world-time gateway's (`tools/worldclock-gateway`). All are in the template, so a
+  run pulls nothing from a registry.
 
 It holds no key. The sandbox's only credential is its branch's worker token, which the worker gets
 for the one-use ticket that hosted `shaked` writes to `/run/shaked/ticket`. The control box adds the
@@ -38,11 +43,15 @@ In a sandbox, each Claude Code or Codex process runs in a throwaway container of
 
 ```
 docker run --rm -i --name shaked-agent-<id> --user 1000:1000 --network shaked-agents \
-  --cap-drop ALL --security-opt no-new-privileges -v <workdir>:<workdir> -w <workdir> \
+  --cap-drop ALL --security-opt no-new-privileges --memory 1g --pids-limit 256 \
+  --read-only --tmpfs /tmp --tmpfs /home/agent:uid=1000,gid=1000,mode=0700 \
+  --mount type=bind,src=<workdir>,dst=<workdir> -w <workdir> \
   -e ANTHROPIC_BASE_URL -e ANTHROPIC_API_KEY … shakedown-agent:<rev> claude -p …
 ```
 
-- It runs as `agent` (uid 1000) with no capabilities. It sees only its own work folder.
+- It runs as `agent` (uid 1000) with no capabilities, at most 1 GiB of memory and 256 processes.
+- Its root is read-only. It writes only to its own work folder and to a fresh `/tmp` and home, both
+  in memory and gone with the container.
 - It gets only the variables its command sets: its routes to the worker and its agent token. They
   are passed by name, so no token shows in argv.
 - The container is removed when its process ends, or when the worker kills it (time limit, session
@@ -78,18 +87,20 @@ template and its id. It takes these variables:
 | `SHAKED_BIN_DIR` | `core/target/release` | Where the release builds are. |
 | `SHAKED_LINK` | `wss://sd.coppertide.ai/worker` | The control box's `/worker`. A test template names a tunnel. |
 | `TEMPLATE` | `shakedown-worker-<rev>` | The template's name. `<rev>` is the commit, `-dirty` with uncommitted changes. |
-| `CPU_COUNT`, `MEMORY_MB` | `2`, `2048` | Each sandbox's size. |
+| `CPU_COUNT`, `MEMORY_MB` | `2`, `4096` | Each sandbox's size. software-factory takes about 3 GiB (`platform/budget.yaml`). |
 
 The build takes about two and a half minutes. Unchanged layers come from E2B's cache.
 
 `check-template.sh [template]` is the template's live check. It makes a sandbox from the template
-and checks that dockerd answers, that the agent and world images are there, that the worker is
+and checks that dockerd answers, that the agent and world images are there (software-factory's
+included), that retail's Postgres answers, that the worker is
 waiting for its ticket, and that a container on the agent network, as uid 1000, reaches the agent
 port and nothing else. Then it kills the sandbox, also on failure.
 
 ## Change it
 
-- **A world needs an image:** add it to `images.txt`.
+- **A world needs an image:** a world template lists it in its `images.yaml` (built ones in its
+  `images/build.sh`), which bake.sh reads. Add any other to `images.txt`.
 - **A newer Claude Code or Codex:** change the versions in `agent/Dockerfile`.
 - **Another setting for the worker:** add it to `worker.env`. Never add a key: no provider, vault,
   E2B or R2 key may enter a sandbox.

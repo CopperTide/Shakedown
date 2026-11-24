@@ -5,7 +5,7 @@
 #   SHAKED_BIN_DIR       where those builds are (default core/target/release)
 #   SHAKED_LINK          the control box's /worker (default wss://sd.coppertide.ai/worker)
 #   TEMPLATE             the template's name (default shakedown-worker-<rev>)
-#   CPU_COUNT MEMORY_MB  a sandbox's size (default 2 and 2048)
+#   CPU_COUNT MEMORY_MB  a sandbox's size (default 2 and 4096: software-factory takes about 3 GB)
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/../.." && pwd)
@@ -24,12 +24,17 @@ template=${TEMPLATE:-shakedown-worker-$rev}
 ctx=$(mktemp -d)
 trap 'rm -rf "$ctx"' EXIT
 mkdir -p "$ctx/bin" "$ctx/shakedown/kits"
-find "$bin" -maxdepth 1 -type f -perm -u+x \( -name shaked -o -name 'shakedown-*' \) \
+find "$bin" -maxdepth 1 -type f -perm -u+x \
+  \( -name shaked -o -name 'shakedown-*' -o -name worldclock-gateway \) \
   -exec cp {} "$ctx/bin/" \;
+# Each package's own tests stay out (`/*/*/tests/`); a world template's repositories keep theirs.
 skip=(--exclude .venv --exclude __pycache__ --exclude .pytest_cache --exclude target
-  --exclude node_modules --exclude tests)
+  --exclude node_modules --exclude '/*/*/tests/')
 rsync -a "${skip[@]}" "$repo/integrations" "$repo/benchmarks" "$ctx/shakedown/"
 rsync -a "${skip[@]}" "$repo/kits/python" "$ctx/shakedown/kits/"
+mkdir -p "$ctx/shakedown/designs" "$ctx/shakedown/tools/worldclock-gateway"
+rsync -a "$repo/designs/software-factory" "$ctx/shakedown/designs/"
+cp "$repo/tools/worldclock-gateway/Dockerfile" "$ctx/shakedown/tools/worldclock-gateway/"
 rsync -a --exclude /README.md --exclude /Dockerfile --exclude /build-template.sh \
   --exclude /check-template.sh "$here/" "$ctx/sandbox/"
 cp "$here/Dockerfile" "$ctx/Dockerfile"
@@ -38,5 +43,5 @@ printf 'SHAKED_LINK=%s\nSHAKED_AGENT_IMAGE=shakedown-agent:%s\n' "$link" "$rev" 
 echo "building $template ($(ls "$ctx/bin" | wc -l) programs, link $link)"
 e2b template create "$template" -p "$ctx" -d Dockerfile \
   -c /opt/shakedown/sandbox/start.sh --ready-cmd "docker info" \
-  --cpu-count "${CPU_COUNT:-2}" --memory-mb "${MEMORY_MB:-2048}"
+  --cpu-count "${CPU_COUNT:-2}" --memory-mb "${MEMORY_MB:-4096}"
 e2b template list | grep -E "/$template +" || { echo "$template is not listed" >&2; exit 1; }

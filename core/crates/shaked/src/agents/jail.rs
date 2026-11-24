@@ -15,6 +15,10 @@ use std::{
 /// The uid and gid CLI agents run as in their container: `agent` in the agent image.
 pub const AGENT_UID: u32 = 1000;
 
+/// What one agent container may hold: memory, and processes and threads.
+const AGENT_MEMORY: &str = "1g";
+const AGENT_PIDS: &str = "256";
+
 /// The variables a sandbox template sets to jail its worker's CLI agents: all three, or none.
 const JAIL_ENV: [&str; 3] = [
     "SHAKED_AGENT_NETWORK",
@@ -73,17 +77,22 @@ impl Jail {
         Ok((self.docker_run(inner, workdir, &container.name), container))
     }
 
-    /// `docker run` of `inner` in a container named `name`: as `agent`, with no capabilities, on
-    /// the agent network, in `workdir` (mounted at its own path). The variables `inner` sets are
-    /// passed in by name; those it removes are removed from `docker`'s environment too.
+    /// `docker run` of `inner` in a container named `name`: as `agent`, with no capabilities and
+    /// capped memory and processes, on the agent network, on a read-only root with a fresh `/tmp`
+    /// and home, in `workdir` (mounted at its own path). The variables `inner` sets are passed in
+    /// by name; those it removes are removed from `docker`'s environment too.
     pub(crate) fn docker_run(&self, inner: &Command, workdir: &Path, name: &str) -> Command {
         let mut c = Command::new("docker");
         let user = format!("{AGENT_UID}:{AGENT_UID}");
+        let home = format!("/home/agent:uid={AGENT_UID},gid={AGENT_UID},mode=0700");
+        let dir = workdir.display();
         c.args(["run", "--rm", "-i", "--name", name, "--user", &user])
             .args(["--network", &self.network, "--cap-drop", "ALL"])
             .args(["--security-opt", "no-new-privileges"])
-            .arg("-v")
-            .arg(format!("{0}:{0}", workdir.display()))
+            .args(["--memory", AGENT_MEMORY, "--pids-limit", AGENT_PIDS])
+            .args(["--read-only", "--tmpfs", "/tmp", "--tmpfs", &home])
+            .arg("--mount")
+            .arg(format!("type=bind,src={dir},dst={dir}"))
             .arg("-w")
             .arg(workdir);
         for (k, v) in inner.get_envs() {
