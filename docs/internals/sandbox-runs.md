@@ -10,8 +10,9 @@ the rules and the final word. The two talk over one outbound WebSocket from the 
 `GET /worker`, and the sandbox's model calls go to the control box's gateway with a worker token.
 
 What exists in the engine today: `shaked worker`, the link on both ends, gateway forwarding, linked-branch
-enforcement on the control box, holds and the sweep, and the E2B sandbox backend (`src/hosting/e2b.rs`:
-create, write a file, kill, state). What does not exist yet: `Hosting`, the code that creates a sandbox for a
+enforcement on the control box, holds and the sweep, the E2B sandbox backend (`src/hosting/e2b.rs`:
+create, write a file, kill, state), and the E2B template a sandbox starts from, in `deploy/sandbox` (see
+[In the sandbox](#in-the-sandbox)). What does not exist yet: `Hosting`, the code that creates a sandbox for a
 branch and hands it its ticket, and the reconciler (M2a Tasks 7, 8 and 12 in the Cloud plan
 `docs/superpowers/plans/2026-11-21-hosted-shakedown-m2a-sandbox-runner.md`). Until then the tests play that
 part (`tests/support/link.rs`, `ticketed`: `record_start`, `links.expect(plan)`, `links.tickets.issue`).
@@ -20,6 +21,7 @@ part (`tests/support/link.rs`, `ticketed`: `record_start`, `links.expect(plan)`,
 
 | Module | Job |
 |---|---|
+| `src/agents/jail.rs` | `Jail`: in a sandbox, each CLI agent process runs in a throwaway container on the agent network (`docker run`, the `Container` guard). |
 | `src/worker/run.rs` | `shaked worker --link <ws-url> --ticket-file <path>`: waits for the ticket file, opens the link, builds the worker's own shaked, stands the branch up and drives it, obeys controls. |
 | `src/worker/client.rs` | The worker's end of the link: hello, `Start`, reconnect, resend, give up (`Patience`, `LinkClient`). |
 | `src/worker/link_records.rs` | `LinkRecords`: `BranchRecords` over the link. The outbox, the window, frame cutting. |
@@ -80,7 +82,8 @@ sequenceDiagram
 2. **Open.** `client::open` says hello with the ticket and waits up to 60 s for `Start`.
 3. **Worker app.** `worker_app` builds a shaked with `Store::detached` (no database: any query fails at once),
    `WorkerLayer`, `ProviderConfig::without_environment()` and `forward_to` set. Its world MCP endpoint, gateway
-   and proxy listen on 127.0.0.1 only.
+   and proxy listen on 127.0.0.1. With a jail (`Jail::from_env`), the MCP endpoint and gateway listen on the
+   jail's address too, and the CLI drivers hand out URLs on it.
 4. **Drive.** `runner::stand_up(plan, LinkRecords)`, then `run_branch`. `obey` applies `Pause`, `Resume`,
    `Stop` and `OverBudget` from the control box.
 5. **End.** `until_end` waits for the branch and for the link. A link lost for good stops the flow and the
@@ -253,7 +256,7 @@ reconnect.
 
 | Invariant | Enforced in |
 |---|---|
-| The sandbox holds no key but its worker token. | `src/layer.rs`, `WorkerLayer`. `src/worker/run.rs`, `worker_app`. `src/gateway/forward.rs`, `onward`. `tests/worker_run.rs`, `a_workers_model_calls_carry_no_model_key_and_are_recorded_once` |
+| The sandbox holds no key but its worker token. | `deploy/sandbox/worker.env`. `src/layer.rs`, `WorkerLayer`. `src/worker/run.rs`, `worker_app`. `src/gateway/forward.rs`, `onward`. `tests/worker_run.rs`, `a_workers_model_calls_carry_no_model_key_and_are_recorded_once` |
 | A worker token opens only its own branch, and a worker's own gateway refuses one (401). | `src/auth/can.rs`, `in_run`. `src/gateway/target.rs`, `resolve`. `tests/gateway_passthrough.rs`, `a_worker_token_reaches_only_its_branch`, `a_worker_token_at_a_workers_own_gateway_is_refused` |
 | `seq` is assigned only on the control box, under the same lock as its own events. | `src/store/linked.rs`, `append_linked`. `src/gateway/target.rs`, `CallFor::append` |
 | An event is appended once per `n`, also across reconnects and restarts. | `core/crates/shakedown-schema/migrations/shakedown/0004_event_link_n.sql`. `src/worker/links.rs`, `Appended::resent` |
@@ -261,7 +264,50 @@ reconnect.
 | The rules, the hold and the spend estimate are the control box's, and survive a restart. | `src/store/control.rs`. `src/worker/link.rs`, `on_record`. `tests/gateway_passthrough.rs`, `a_restarted_control_box_keeps_the_limit_and_the_spend`, `a_worker_written_limit_counts_for_nothing` |
 | A stop pressed on the control box ends the branch with the hold's status, whatever the worker reports. | `src/worker/link.rs`, `ended`. `src/worker/holds.rs`, `tell`, `arm` |
 | Every end holds the branch lock over the status and the revoke, so no worker event lands after it. | `src/worker/holds.rs`, `end`, `end_locked` |
+| In a sandbox, a CLI agent runs as uid 1000 with no capabilities, gets only its own variables (none in argv), and reaches only the worker's agent port. | `src/agents/jail.rs`, `docker_run`. `deploy/sandbox/agent-network.sh`. `src/agents/cli.rs`, `in_a_worker_cli_agents_run_unprivileged_on_the_agent_network`. `deploy/sandbox/check-template.sh` |
 | One `model_call` per call, recorded on the control box. The worker records none. | `src/gateway/forward.rs`. `src/agents/claude_session.rs` |
+
+## In the sandbox
+
+The template (`deploy/sandbox`, built by `build-template.sh`) holds Ubuntu 24.04 with Docker, `shaked` and the
+package programs, the packages with their Python environments synced, Python with `uv`, Node 22, the agent
+image (Claude Code and Codex) and the world images of `images.txt`. Its start command, `start.sh`, runs while
+E2B builds the template, so every sandbox starts from a snapshot in which the worker already waits for its
+ticket.
+
+```mermaid
+flowchart LR
+    subgraph SB[E2B sandbox]
+        WK["shaked worker (root)<br/>world programs"]
+        subgraph AN["shaked-agents, 10.250.0.0/24, --internal"]
+            C1["claude, uid 1000<br/>container"]
+            C2["codex, uid 1000<br/>container"]
+        end
+        C1 -->|"10.250.0.1:4610<br/>MCP and gateway"| WK
+        C2 --> WK
+        W["world containers"]
+    end
+    WK -->|"wss /worker, worker token"| CB[control box]
+    W -.->|"SD-AGENTS: dropped"| WK
+```
+
+- **Start.** `start.sh` makes sure `docker.service` runs (the VM boots systemd), runs `agent-network.sh`, then
+  `shaked worker --link "$SHAKED_LINK" --ticket-file /run/shaked/ticket`. The ready command is `docker info`.
+  Settings come from `/etc/shaked/worker.env`; `SHAKED_LINK` and `SHAKED_AGENT_IMAGE` are baked in per
+  template.
+- **The agent network.** `shaked-agents` is `--internal`: nothing on it is routed off it. The `SD-AGENTS`
+  iptables chain takes every packet that comes in from the network's bridge or is for its gateway address,
+  and accepts only TCP from the bridge to the agent port. World containers and local programs cannot reach
+  that address.
+- **The jail.** `Jail::contain` gives the work folder to uid 1000, then wraps the CLI's command as
+  `docker run --rm -i --name shaked-agent-<id> --user 1000:1000 --network shaked-agents --cap-drop ALL
+  --security-opt no-new-privileges -v <dir>:<dir> -w <dir> -e NAME … <image> <command>`. Each variable the
+  command sets is passed by name, its value in the `docker` process's environment. The variables the scrub
+  removes are removed from `docker`'s environment as well. A killed `docker run` leaves its container
+  running, so `Container`'s drop runs `docker rm -f` (one-shot runs in `run_in_workdir`, sessions in
+  `claude_session::Process`).
+- **No key.** `worker.env` holds no secret. The sandbox's only credential is the worker token its ticket
+  becomes.
 
 ## Extension points
 
@@ -283,3 +329,5 @@ reconnect.
 | `tests/support/link.rs` | Shared link plumbing: `ticketed`, `started`, `restarted`, `hear`. |
 | `src/hosting/e2b.rs` unit tests | The E2B calls against a local mock of E2B's API and envd: the create body, 404s on kill and state, the envd token and no E2B key on a write. |
 | `tests/hosting.rs` | `live_e2b_create_write_kill` (`#[ignore]`, needs `E2B_API_KEY`): a real sandbox from E2B's `base` template is running, takes a ticket at `TICKET_PATH` and reads it back, is killed, then is `Gone`. Its timeout is 2 minutes in case the kill fails. |
+| `src/agents/cli.rs`, `src/agents/jail.rs` unit tests | The jailed command line, the jail's variables. |
+| `deploy/sandbox/check-template.sh` (live, real E2B) | A sandbox from the template: dockerd, the images, the worker waiting for its ticket, the agent network reaching the agent port and nothing else. |

@@ -83,6 +83,9 @@ pub struct Config {
     /// A `shaked worker`'s only: the control box's gateway its agents' model calls go on to,
     /// with its worker token. None: the gateway calls the providers itself.
     pub forward_to: Option<crate::gateway::ForwardTo>,
+    /// A sandbox's `shaked worker`'s only: its CLI agents run in containers on the agent network
+    /// and reach it at the jail's address. None: they run as processes here.
+    pub jail: Option<crate::agents::jail::Jail>,
 }
 
 pub const DEFAULT_DRIVER_GRACE: Duration = Duration::from_secs(30);
@@ -165,6 +168,7 @@ impl Config {
             link_end_grace: DEFAULT_LINK_END_GRACE,
             link_sweep_every: DEFAULT_LINK_SWEEP_EVERY,
             forward_to: None,
+            jail: None,
         }
     }
 
@@ -451,22 +455,32 @@ fn only_benchmark(hub: &Hub) -> String {
 /// The real drivers for every agent kind. Call once, after `config.self_base` and
 /// `config.public_url` are final: the agents get URLs on the public base.
 pub fn install_default_drivers(state: &Arc<AppState>) -> bool {
-    let base = state.config.public_base().to_string();
-    // In a worker, the CLI agents' model calls go through its gateway too.
-    let routed = state.config.forward_to.is_some();
     let mut m: Drivers = HashMap::new();
     m.insert(AgentKind::Open, Arc::new(OpenDriver::new(state.clone())));
-    let mut claude = ClaudeDriver::new(base.clone());
-    claude.via_gateway = routed;
-    m.insert(AgentKind::ClaudeCode, Arc::new(claude));
     let http = HttpDriver::new(
         state,
         state.config.http_agent_base(),
         state.config.http_agent_timeout,
     );
     m.insert(AgentKind::Http, Arc::new(http));
-    let mut codex = CodexDriver::new(base);
-    codex.via_gateway = routed;
+    let (claude, codex) = cli_drivers(&state.config);
+    m.insert(AgentKind::ClaudeCode, Arc::new(claude));
     m.insert(AgentKind::Codex, Arc::new(codex));
     state.install_drivers(m)
+}
+
+/// Claude Code's and Codex's drivers. In a worker their model calls go through its gateway too;
+/// in a sandbox's worker they run in containers ([`Config::jail`]) and reach it at the jail's
+/// address.
+fn cli_drivers(config: &Config) -> (ClaudeDriver, CodexDriver) {
+    let jail = config.jail.clone().map(Arc::new);
+    let base = jail
+        .as_ref()
+        .map_or_else(|| config.public_base().to_string(), |j| j.base());
+    let routed = config.forward_to.is_some();
+    let mut claude = ClaudeDriver::new(base.clone());
+    (claude.via_gateway, claude.jail) = (routed, jail.clone());
+    let mut codex = CodexDriver::new(base);
+    (codex.via_gateway, codex.jail) = (routed, jail);
+    (claude, codex)
 }

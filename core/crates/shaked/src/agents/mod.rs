@@ -13,6 +13,7 @@ mod cli;
 pub mod codex;
 pub mod endpoint_auth;
 pub mod http;
+pub mod jail;
 pub mod open;
 pub mod session;
 mod usage;

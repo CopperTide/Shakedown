@@ -9,10 +9,12 @@
 //! plan and worker token; the worker stands the world up and drives the agents, recording every
 //! event through the link ([`LinkRecords`](super::LinkRecords)). It holds no database.
 //!
-//! The agents reach the worker's MCP endpoint, gateway and proxy on `127.0.0.1` only. The gateway
+//! The agents reach the worker's MCP endpoint, gateway and proxy on `127.0.0.1`. The gateway
 //! sends every model call on to `Start.gateway` with the worker token
 //! ([`crate::gateway::ForwardTo`]): the control box adds the run's key and records the call. CLI
-//! agents get that gateway as their API's base URL, their agent token as the key.
+//! agents get that gateway as their API's base URL, their agent token as the key. In a sandbox
+//! (`deploy/sandbox`) the CLI agents run in containers ([`Jail`]): the MCP endpoint and gateway
+//! are served on the jail's address too, the only port their network reaches.
 //!
 //! The link itself, and how it rejoins after a drop, is [`client`](super::client).
 //!
@@ -26,6 +28,7 @@ use tokio::{sync::mpsc::UnboundedReceiver, task::JoinHandle};
 pub use super::client::{open, Opened, Patience};
 use super::frames::ToWorker;
 use crate::{
+    agents::jail::Jail,
     app::{AppState, Config},
     exec::BranchCtx,
     gateway::ForwardTo,
@@ -95,28 +98,48 @@ async fn take_ticket(path: &std::path::Path) -> Result<String> {
 
 /// The worker's own shaked on `hub`, reached at `base`: no database (its records go over the
 /// link), [`WorkerLayer`] (no vault, no keys from the environment), its model calls sent on
-/// `to` the control box.
-fn worker_app(hub: parts::Hub, base: String, to: ForwardTo) -> Result<Arc<AppState>> {
+/// `to` the control box, its CLI agents in the `jail` when there is one.
+fn worker_app(
+    hub: parts::Hub,
+    base: String,
+    to: ForwardTo,
+    jail: Option<Jail>,
+) -> Result<Arc<AppState>> {
     let store = Arc::new(Store::detached(Arc::new(WorkerLayer))?);
     let mut config = Config::with_providers(ProviderConfig::without_environment());
     config.self_base = base;
     config.forward_to = Some(to);
+    config.jail = jail;
     let state = Arc::new(AppState::new(store, Arc::new(hub), config));
     crate::app::install_default_drivers(&state);
     Ok(state)
 }
 
 /// The worker's shaked ([`worker_app`]) on the hub from the environment, serving its agents' MCP
-/// endpoint, gateway (forwarding `to` the control box) and proxy on 127.0.0.1.
+/// endpoint, gateway (forwarding `to` the control box) and proxy on 127.0.0.1; the MCP endpoint
+/// and gateway on the jail's address too, when the environment names a jail.
 async fn worker_state(to: ForwardTo) -> Result<Arc<AppState>> {
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+    let jail = Jail::from_env().map_err(anyhow::Error::msg)?;
+    let jailed = match &jail {
+        Some(j) => Some(bind(j.listen).await?),
+        None => None,
+    };
+    let listener = bind(([127, 0, 0, 1], 0).into()).await?;
     let hub = crate::serve::worker_hub().await?;
-    let state = worker_app(hub, format!("http://{}", listener.local_addr()?), to)?;
+    let state = worker_app(hub, format!("http://{}", listener.local_addr()?), to, jail)?;
     let agents = crate::mcp::router().merge(crate::gateway::worker_router());
     let agents = agents.with_state(state.clone());
-    tokio::spawn(async move { axum::serve(listener, agents).await });
+    for l in jailed.into_iter().chain([listener]) {
+        let agents = agents.clone();
+        tokio::spawn(async move { axum::serve(l, agents).await });
+    }
     crate::serve::start_proxy(&state).await?;
     Ok(state)
+}
+
+async fn bind(addr: std::net::SocketAddr) -> Result<tokio::net::TcpListener> {
+    let l = tokio::net::TcpListener::bind(addr).await;
+    l.with_context(|| format!("listening on {addr}"))
 }
 
 /// Pauses, resumes and stops the branch as the control box says; over the run's limit by the
@@ -215,7 +238,7 @@ mod tests {
             gateway: "http://127.0.0.1:9/gateway".into(),
             token: Secret::new("sdw_t"),
         };
-        let state = worker_app(hub, "http://127.0.0.1:9".into(), to).unwrap();
+        let state = worker_app(hub, "http://127.0.0.1:9".into(), to, None).unwrap();
         let Err(refused) = state.vault() else {
             panic!("no vault in a worker");
         };

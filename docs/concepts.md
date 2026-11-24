@@ -307,7 +307,8 @@ Isolation of the CLI agents (`core/crates/shaked/src/agents/`; checked live by t
   instead: Claude Code's `ANTHROPIC_BASE_URL` and Codex's `OPENAI_BASE_URL` point at it, the agent's token as the
   key, and the control box sends each call on with the run's key (an agent's `provider`, if it names one, picks
   that key) and records it. A dispatch session there prices its calls into the run's estimate but leaves their
-  `model_call` events to the control box.
+  `model_call` events to the control box. Each Claude Code or Codex process there runs in its own container as
+  an unprivileged user, on a network that reaches only the worker's MCP endpoint and gateway.
 - A CLI session cannot be resumed in the middle, which drives the fork rules below.
 
 ## Forking

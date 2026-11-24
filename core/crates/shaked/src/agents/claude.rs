@@ -10,11 +10,12 @@
 //! `--input-format stream-json --output-format stream-json --verbose` instead of `--output-format
 //! json` and the prompt (confirmed live against claude 2.1.319).
 
-use std::{future::Future, pin::Pin, process::Command};
+use std::{future::Future, pin::Pin, process::Command, sync::Arc};
 
 use serde_json::{json, Value};
 
 use super::{
+    jail::Jail,
     session::{Session, SessionStart},
     AgentResult, AgentRun, Driver, Mcp, ModelRoute, CLI_TIMEOUT_SECS,
 };
@@ -26,6 +27,8 @@ pub struct ClaudeDriver {
     pub timeout_secs: u64,
     /// The model calls go through shaked's gateway (in a `shaked worker`), not to Anthropic.
     pub via_gateway: bool,
+    /// In a sandbox's worker: each process runs in a container ([`Jail`]).
+    pub jail: Option<Arc<Jail>>,
 }
 
 impl ClaudeDriver {
@@ -35,6 +38,7 @@ impl ClaudeDriver {
             binary: "claude".into(),
             timeout_secs: CLI_TIMEOUT_SECS,
             via_gateway: false,
+            jail: None,
         }
     }
 }
@@ -213,6 +217,7 @@ impl Driver for ClaudeDriver {
             &self.binary,
             start,
             route,
+            self.jail.clone(),
         )?;
         Ok(Box::new(s))
     }
@@ -227,7 +232,14 @@ impl Driver for ClaudeDriver {
                 route.iter().for_each(|r| route_models(&mut c, r));
                 Ok(c)
             };
-            super::run_in_workdir(&run, self.timeout_secs, build, |out, _| parse(out)).await
+            super::run_in_workdir(
+                &run,
+                self.jail.as_deref(),
+                self.timeout_secs,
+                build,
+                |out, _| parse(out),
+            )
+            .await
         })
     }
 }

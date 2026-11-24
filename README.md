@@ -130,7 +130,7 @@ experiment needs a running shaked: use its `POST /mcp` with an API token instead
 | [`integrations/`](integrations) | One package per kind of system: Postgres, MariaDB, a folder, any Docker Compose project, ERPNext, Twenty CRM, simulators and more. [List and status](integrations/README.md). |
 | [`benchmarks/`](benchmarks) | Tasks, tools, seed data and checks. `retail` is the default and the others are opt-in. `world/` is the world builder. |
 | [`docs/`](docs) | Developer docs: concepts, the protocol, packages, the SDK, the reference. |
-| [`deploy/`](deploy) | The Postgres for local use (`compose.yml`), an [OpenShell sandbox](deploy/openshell) for Claude Code agents, and a [RunPod GPU pod](deploy/runpod) for a self-hosted model. |
+| [`deploy/`](deploy) | The Postgres for local use (`compose.yml`), an [OpenShell sandbox](deploy/openshell) for Claude Code agents, a [RunPod GPU pod](deploy/runpod) for a self-hosted model, and the [E2B template](deploy/sandbox) hosted runs start from. |
 | [`tools/`](tools) | [`worldclock-gateway`](tools/worldclock-gateway), which puts a simulated platform's telemetry on world time. |
 | [`designs/`](designs) | Example agent designs written as customer code ([software factory](designs/software-factory)). |
 | [`data/`](data) | Third-party data used by benchmarks (tau2-bench retail). |

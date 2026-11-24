@@ -19,6 +19,7 @@ use tokio::{
 };
 
 use super::{
+    jail::{confine, Container, Jail},
     session::{end_error, BoxFuture, Session, SessionStart, Turn},
     tail,
     usage::UsageMeter,
@@ -31,10 +32,7 @@ use crate::{
 };
 
 pub struct ClaudeSession {
-    child: Child,
-    stdin: Option<ChildStdin>,
-    lines: mpsc::UnboundedReceiver<Value>,
-    stderr: Arc<Mutex<String>>,
+    process: Process,
     /// The process has written something (it didn't die at start).
     spoke: bool,
     respawns: u32,
@@ -42,6 +40,8 @@ pub struct ClaudeSession {
     /// Where its model calls go when they go through the gateway (which records them).
     route: Option<ModelRoute>,
     binary: String,
+    /// In a sandbox's worker: the process runs in a container.
+    jail: Option<Arc<Jail>>,
     spec: crate::model::AgentSpec,
     workdir: PathBuf,
     branch: Arc<BranchCtx>,
@@ -76,8 +76,14 @@ fn command(
     Ok(c)
 }
 
-/// Starts `command` in `workdir` with its input, output and errors piped (killed on drop).
-fn spawn(command: std::process::Command, workdir: &std::path::Path) -> Result<Process, String> {
+/// Starts `command` in `workdir` with its input, output and errors piped (killed on drop), in a
+/// container when there is a `jail`.
+fn spawn(
+    command: std::process::Command,
+    workdir: &std::path::Path,
+    jail: Option<&Jail>,
+) -> Result<Process, String> {
+    let (command, container) = confine(jail, command, workdir)?;
     let mut cmd = tokio::process::Command::from(command);
     cmd.current_dir(workdir)
         .stdin(Stdio::piped())
@@ -95,6 +101,7 @@ fn spawn(command: std::process::Command, workdir: &std::path::Path) -> Result<Pr
         child,
         lines,
         stderr,
+        _container: container,
     })
 }
 
@@ -129,12 +136,15 @@ fn keep_stderr(mut stderr: tokio::process::ChildStderr) -> Arc<Mutex<String>> {
     kept
 }
 
-/// The process of one session: its input, its stdout as JSON values, and its stderr's tail.
+/// The process of one session: its input, its stdout as JSON values, its stderr's tail, and its
+/// container when it runs in one (removed with it).
 struct Process {
     child: Child,
     stdin: Option<ChildStdin>,
     lines: mpsc::UnboundedReceiver<Value>,
     stderr: Arc<Mutex<String>>,
+    /// Kept for its drop, which removes the container.
+    _container: Option<Container>,
 }
 
 /// How many times a process that dies before it says anything is started again: Claude Code
@@ -149,23 +159,22 @@ impl ClaudeSession {
         binary: &str,
         s: SessionStart,
         route: Option<ModelRoute>,
+        jail: Option<Arc<Jail>>,
     ) -> Result<ClaudeSession, String> {
         let workdir = super::fresh_workdir().map_err(|e| format!("cannot create workdir: {e}"))?;
         let mcp = Mcp::for_agent(self_base, &s.branch, &s.spec.id);
         let command = command(binary, &s.spec, &mcp, &workdir, route.as_ref())?;
-        let p = spawn(command, &workdir).inspect_err(|_| {
+        let p = spawn(command, &workdir, jail.as_deref()).inspect_err(|_| {
             let _ = std::fs::remove_dir_all(&workdir);
         })?;
         Ok(ClaudeSession {
-            stdin: p.stdin,
-            child: p.child,
-            lines: p.lines,
-            stderr: p.stderr,
+            process: p,
             spoke: false,
             respawns: 0,
             mcp,
             route,
             binary: binary.to_string(),
+            jail,
             spec: s.spec.clone(),
             workdir,
             branch: s.branch,
@@ -189,14 +198,17 @@ impl ClaudeSession {
         );
         let (spec, route) = (&self.spec, self.route.as_ref());
         let command = command(&self.binary, spec, &self.mcp, &self.workdir, route)?;
-        let p = spawn(command, &self.workdir)?;
-        (self.child, self.stdin, self.lines, self.stderr) = (p.child, p.stdin, p.lines, p.stderr);
+        self.process = spawn(command, &self.workdir, self.jail.as_deref())?;
         self.send(text).await
     }
 
     async fn send(&mut self, text: &str) -> Result<(), String> {
         let msg = json!({"type": "user", "message": {"role": "user", "content": text}});
-        let stdin = self.stdin.as_mut().ok_or("claude's input is closed")?;
+        let stdin = self
+            .process
+            .stdin
+            .as_mut()
+            .ok_or("claude's input is closed")?;
         let line = format!("{msg}\n");
         let wrote = stdin.write_all(line.as_bytes()).await;
         wrote
@@ -205,7 +217,7 @@ impl ClaudeSession {
     }
 
     fn stderr_tail(&self) -> String {
-        let k = self.stderr.lock().unwrap();
+        let k = self.process.stderr.lock().unwrap();
         match k.trim().is_empty() {
             true => String::new(),
             false => format!("\nstderr: {}", k.trim()),
@@ -274,7 +286,7 @@ impl ClaudeSession {
     /// Reads the stream until the turn's `result`; the turn it ends. `None` when the process died
     /// before it said anything, and may be started again.
     async fn until_result(&mut self) -> Option<Turn> {
-        while let Some(v) = self.lines.recv().await {
+        while let Some(v) = self.process.lines.recv().await {
             self.spoke = true;
             if v["type"] == "result" {
                 return Some(self.ended_turn(&v).await);
@@ -282,14 +294,14 @@ impl ClaudeSession {
             self.on_line(&v).await;
             // Over the run's spend limit: stop the turn now, not when it ends.
             if let Some(why) = self.over.clone().or_else(|| self.branch.budget.over()) {
-                let _ = self.child.start_kill();
+                let _ = self.process.child.start_kill();
                 return Some(Turn::failed(why, Some(super::FailureKind::Budget)));
             }
         }
         if !self.spoke && self.respawns < RESPAWNS {
             return None;
         }
-        let code = self.child.try_wait().ok().flatten();
+        let code = self.process.child.try_wait().ok().flatten();
         let how = code.map_or("".into(), |c| format!(" ({c})"));
         let why = format!(
             "claude exited{how} in the middle of the run{}",
@@ -358,10 +370,10 @@ impl ClaudeSession {
     }
 
     async fn close(mut self, cut: bool) -> AgentResult {
-        drop(self.stdin.take());
-        let exited = tokio::time::timeout(Duration::from_secs(10), self.child.wait()).await;
+        drop(self.process.stdin.take());
+        let exited = tokio::time::timeout(Duration::from_secs(10), self.process.child.wait()).await;
         if exited.is_err() {
-            let _ = self.child.kill().await;
+            let _ = self.process.child.kill().await;
         }
         let (p, c) = (self.meter.prompt_tokens, self.meter.completion_tokens);
         let error = end_error(self.error.take(), cut);

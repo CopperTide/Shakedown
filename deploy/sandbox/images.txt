@@ -1,0 +1,7 @@
+# The images worlds start containers from, pulled into the template at build time (bake.sh):
+# a sandbox's egress reaches no registry. One image per line.
+
+# The helper that copies volumes for service and live-service saves (never pulled at run time).
+redis:6.2-alpine
+# The mariadb integration's server.
+mariadb:11.8

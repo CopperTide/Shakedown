@@ -11,11 +11,11 @@
 //! policy is never"); the per-server `default_tools_approval_mode="approve"` fixes that.
 //! Codex's built-in shell cannot be disabled; `-s read-only` is the only restriction on it.
 
-use std::{future::Future, path::Path, pin::Pin, process::Command};
+use std::{future::Future, path::Path, pin::Pin, process::Command, sync::Arc};
 
 use serde_json::{json, Value};
 
-use super::{AgentResult, AgentRun, Driver, Mcp, ModelRoute, CLI_TIMEOUT_SECS};
+use super::{jail::Jail, AgentResult, AgentRun, Driver, Mcp, ModelRoute, CLI_TIMEOUT_SECS};
 use crate::model::{AgentSpec, TokenUsage};
 
 pub struct CodexDriver {
@@ -24,6 +24,8 @@ pub struct CodexDriver {
     pub timeout_secs: u64,
     /// The model calls go through shaked's gateway (in a `shaked worker`), not to OpenAI.
     pub via_gateway: bool,
+    /// In a sandbox's worker: each process runs in a container ([`Jail`]).
+    pub jail: Option<Arc<Jail>>,
 }
 
 impl CodexDriver {
@@ -33,6 +35,7 @@ impl CodexDriver {
             binary: "codex".into(),
             timeout_secs: CLI_TIMEOUT_SECS,
             via_gateway: false,
+            jail: None,
         }
     }
 }
@@ -191,7 +194,7 @@ impl Driver for CodexDriver {
                 route.iter().for_each(|r| route_models(&mut c, r));
                 Ok(c)
             };
-            super::run_in_workdir(&run, self.timeout_secs, build, parse).await
+            super::run_in_workdir(&run, self.jail.as_deref(), self.timeout_secs, build, parse).await
         })
     }
 }

@@ -8,7 +8,11 @@ use std::{
     time::{Duration, Instant},
 };
 
-use super::{endpoint, AgentResult, AgentRun};
+use super::{
+    endpoint,
+    jail::{confine, Jail},
+    AgentResult, AgentRun,
+};
 use crate::{
     exec::BranchCtx,
     flow::FlowControl,
@@ -71,10 +75,11 @@ fn finish_cli(out: &Output, parse: impl FnOnce(&str, i32) -> AgentResult) -> Age
     r
 }
 
-/// Runs a CLI agent in a fresh work folder (removed afterwards). `build` makes the command for
-/// that folder; CLI agents can't resume.
+/// Runs a CLI agent in a fresh work folder (removed afterwards), in a container when the worker
+/// has a `jail`. `build` makes the command for that folder; CLI agents can't resume.
 pub(crate) async fn run_in_workdir(
     run: &AgentRun,
+    jail: Option<&Jail>,
     timeout_secs: u64,
     build: impl FnOnce(&Path) -> Result<Command, String>,
     parse: impl FnOnce(&str, i32) -> AgentResult,
@@ -86,8 +91,9 @@ pub(crate) async fn run_in_workdir(
         Ok(d) => d,
         Err(e) => return AgentResult::failed(format!("cannot create workdir: {e}")),
     };
-    let r = match build(&workdir) {
-        Ok(cmd) => run_cli(&run.branch.flow, cmd, timeout_secs, parse).await,
+    let r = match build(&workdir).and_then(|cmd| confine(jail, cmd, &workdir)) {
+        // The container (if any) is kept until the CLI is done.
+        Ok((cmd, _container)) => run_cli(&run.branch.flow, cmd, timeout_secs, parse).await,
         Err(why) => AgentResult::failed(why),
     };
     let _ = std::fs::remove_dir_all(&workdir);
@@ -335,6 +341,58 @@ mod tests {
             (crate::agents::codex::AGENT_TOKEN_ENV, "sda_mcp"),
         ];
         only_set_after_the_scrub(&x, &codex_set);
+    }
+
+    fn text_args(c: &Command) -> Vec<String> {
+        (c.get_args())
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect()
+    }
+
+    /// The variables `docker` passes into the container: each `-e NAME`.
+    fn passed_in(c: &Command) -> Vec<String> {
+        let args = text_args(c);
+        let named = args.windows(2).filter(|w| w[0] == "-e");
+        let mut names: Vec<String> = named.map(|w| w[1].clone()).collect();
+        names.sort();
+        names
+    }
+
+    /// `run` is `inner` (`program`) in a container of image `t` as uid 1000 on network `net`, in
+    /// `/w`, passed by name exactly the variables `inner` sets, with no token in argv, and with
+    /// `inner`'s own environment (the scrub and the route) for `docker`.
+    fn contained(run: &Command, inner: &Command, program: &str) {
+        assert_eq!(run.get_program(), "docker");
+        let args = text_args(run);
+        let head = "run --rm -i --name c --user 1000:1000 --network net --cap-drop ALL \
+                    --security-opt no-new-privileges -v /w:/w -w /w";
+        let head: Vec<&str> = head.split_whitespace().collect();
+        assert_eq!(args[..head.len()], head[..]);
+        let at = args.iter().position(|a| a == "t").expect("the image");
+        assert_eq!(args[at + 1], program);
+        assert_eq!(args[at + 2..], text_args(inner)[..]);
+        assert!(!args.iter().any(|a| a.contains("sda_")), "a token in argv");
+        let set = env_changes(inner).into_iter().filter(|(_, v)| v.is_some());
+        assert_eq!(passed_in(run), set.map(|(k, _)| k).collect::<Vec<_>>());
+        assert_eq!(env_changes(run), env_changes(inner));
+    }
+
+    /// In a sandbox's worker, Claude Code and Codex run as uid 1000 in a throwaway container on
+    /// the agent network, in their work folder. The container gets by name exactly the variables
+    /// the command sets, and `docker` keeps no parent secret (see
+    /// `a_routed_cli_keeps_no_parent_secret_and_gets_only_the_route`): the only key in its
+    /// environment is the agent token.
+    #[test]
+    fn in_a_worker_cli_agents_run_unprivileged_on_the_agent_network() {
+        let jail = super::super::jail::Jail {
+            network: "net".into(),
+            image: "t".into(),
+            listen: "10.250.0.1:4610".parse().unwrap(),
+        };
+        let (c, x) = routed_commands(&format!("{}/gateway/b/a", jail.base()));
+        let dir = std::path::Path::new("/w");
+        contained(&jail.docker_run(&c, dir, "c"), &c, "claude");
+        contained(&jail.docker_run(&x, dir, "c"), &x, "codex");
     }
 
     #[test]
