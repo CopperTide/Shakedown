@@ -14,7 +14,8 @@ pub enum SystemJob {
     /// Copying stored objects between stores.
     StoreCopy,
     /// Ending the branches sandboxes' workers run that the control box stops, or whose worker
-    /// token died (at start, and now and then).
+    /// token died (at start, and now and then), and finding which branches the control box's
+    /// sandboxes run still run (the sandbox sweep).
     LinkSweep,
 }
 

@@ -40,7 +40,8 @@ never does. The link tests play `Hosting`'s part by hand (`tests/support/link.rs
 | `src/layer.rs` | `WorkerLayer`: no vault, no environment keys. |
 | `src/model/hold.rs` | `Hold`: running, paused, or stopping with the status the branch ends with. |
 | `src/hosting/mod.rs` | `Hosting` (start a branch in a sandbox), `SandboxSpec`, `ProviderRef`, `ProviderState`, the `SandboxBackend` trait, `TICKET_PATH` (`/run/shaked/ticket`), the caps. |
-| `src/hosting/watch.rs` | A sandbox's watcher: kills the sandbox once its branch has ended. |
+| `src/hosting/watch.rs` | A sandbox's watcher: kills the sandbox once its branch has ended; ends the branch `infra_error` when the sandbox vanished. |
+| `src/hosting/sweep.rs` | The sandbox sweep: kills this control box's sandboxes whose branch ended or that outlived their timeout. |
 | `src/hosting/e2b.rs` | `E2bBackend`: sandboxes on E2B. |
 | `src/hosting/fake.rs` | `FakeBackend` (tests, `harness` feature): each sandbox a folder and a local `shaked worker`. |
 | `src/launch.rs` | `hosted`: with `AppState::hosting` set, a new run is admitted, recorded (`record_start`), metered and handed to `Hosting`. |
@@ -156,8 +157,26 @@ stateDiagram-v2
    a new sandbox id) written newline-ended to `TICKET_PATH`. A sandbox that can't take its ticket is killed.
    When any of this fails the branch ends `infra_error` with `NO_SANDBOX` ("its sandbox could not start");
    the cause is logged on the control box, never shown (it may carry E2B's answer).
-4. A watcher (`src/hosting/watch.rs`) looks at the branch every 5 s and kills the sandbox once the branch no
-   longer runs, however it ended (the worker's `Ended`, a stop while booting, the link sweep).
+4. A watcher (`src/hosting/watch.rs`) looks every 5 s at the branch and at the sandbox. It kills the sandbox
+   once the branch no longer runs, however it ended (the worker's `Ended`, a stop while booting, the link
+   sweep). A sandbox the backend reports `Gone` under a running branch (killed, timed out, crashed) ends the
+   branch `infra_error` with `SANDBOX_STOPPED` ("its sandbox stopped"); its acknowledged events stay.
+
+### The sandbox sweep
+
+Watchers live in the control box's memory, so `hosting::sweep_every` (spawned by `serve::run` when hosting is
+set, at start and every `link_sweep_every`, 60 s) is their backstop: a watcher a restart lost, a sandbox whose
+create answer came back too late. It lists the backend's running sandboxes labelled `shaked=<link host>`,
+asks `jobs::running_among` (a system job of the link sweep's) which of their branches still run, and:
+
+| Sandbox | Done |
+|---|---|
+| its branch ended, or it names none | killed |
+| older than the sandbox timeout (`started` label), its branch running | branch ended `infra_error` (`SANDBOX_STOPPED`), sandbox killed |
+| otherwise | kept |
+
+E2B's own timeout ends a sandbox even when the control box is down. There is no `sandboxes` table in the
+engine (ruling R6: the hosted layer keeps `shakedown_hosted.sandboxes`); the backend's labels are the record.
 
 The spec a sandbox is created with:
 
@@ -183,6 +202,7 @@ The spec a sandbox is created with:
 | `write_file` | `POST https://49983-{sandboxID}.{domain}/files?path=<path>.partial&username=root`, `X-Access-Token`, multipart `file`; then `POST …/filesystem.Filesystem/Move` (Connect RPC, JSON `{source, destination}`, `Authorization: Basic root:`) | 200, 200 |
 | `kill` | `DELETE {api}/sandboxes/{id}`, `X-API-KEY` | 204; a 404 counts as killed |
 | `state` | `GET {api}/sandboxes/{id}`, `X-API-KEY` | 200 `state: running` is `Running`; 404 or any other state is `Gone` |
+| `list` | `GET {api}/sandboxes?metadata=<k=v&…>`, `X-API-KEY`; keys and values URL-encoded, then the whole once more | 200 `[{sandboxID, metadata}]`, running sandboxes only |
 
 The create body:
 
@@ -359,7 +379,8 @@ flowchart LR
 | `src/worker/link_records.rs`, `src/worker/frames.rs` unit tests | The window, resends in order, the end after every ack, frame cutting, frame JSON. |
 | `tests/support/link.rs` | Shared link plumbing: `ticketed`, `started`, `restarted`, `hear`. |
 | `src/hosting/e2b.rs` unit tests | The E2B calls against a local mock of E2B's API and envd: the create body, 404s on kill and state, a write as upload then rename, the envd token and no E2B key on both. |
-| `tests/hosting.rs` (fake) | `a_run_with_hosting_runs_in_a_fake_sandbox` (the branch ends `passed`, one create, one kill), `an_external_run_is_refused_on_hosting`. |
+| `tests/hosting.rs` (fake) | `a_run_with_hosting_runs_in_a_fake_sandbox` (the branch ends `passed`, one create, one kill), `an_external_run_is_refused_on_hosting`, `a_vanished_sandbox_ends_its_branch_infra_error`, `the_sweep_kills_sandboxes_whose_branch_ended_or_that_outlived_their_timeout`. |
+| `tests/hosting.rs` (live) | `live_hosting_hands_an_e2b_sandbox_its_ticket_and_kills_it` (`#[ignore]`, `E2B_API_KEY`): a run through `Hosting` on E2B's `base` template (no `shaked` in it, so it stops at the ticket): the ticket is whole at `TICKET_PATH` and its partial file gone, a stop ends the branch, the watcher kills the sandbox, and no sandbox of the test's link host is listed after. |
 | `tests/support/scripted.rs` | The scripted `http` agent the worker and hosting tests share. |
 | `tests/hosting.rs` | `live_e2b_create_write_kill` (`#[ignore]`, needs `E2B_API_KEY`): a real sandbox from E2B's `base` template is running, takes a ticket at `TICKET_PATH` and reads it back, is killed, then is `Gone`. Its timeout is 2 minutes in case the kill fails. |
 | `src/agents/cli.rs`, `src/agents/jail.rs` unit tests | The jailed command line, the jail's variables. |

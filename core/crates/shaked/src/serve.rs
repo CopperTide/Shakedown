@@ -59,6 +59,10 @@ pub async fn run(store: Store, opts: ServeOptions) -> anyhow::Result<()> {
     start_proxy(&state).await?;
     // The branches sandboxes' workers run: stops a restart interrupted, dead worker tokens.
     tokio::spawn(crate::worker::holds::sweep_every(state.clone()));
+    if state.hosting.get().is_some() {
+        // This control box's sandboxes whose branch ended or that outlived their timeout.
+        tokio::spawn(crate::hosting::sweep_every(state.clone()));
+    }
     let line = listening_line(&state, &opts.bind, bench.as_ref(), opts.ui_dist.as_deref());
     println!("{line}");
     axum::serve(listener, router)

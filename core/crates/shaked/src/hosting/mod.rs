@@ -1,13 +1,19 @@
 //! Sandboxes for hosted runs. A control box with a [`Hosting`] runs each new branch in a sandbox of
 //! its own: it records the branch, creates the sandbox, hands its `shaked worker` a ticket at
-//! [`TICKET_PATH`], and kills the sandbox once the branch has ended ([`watch`]). A backend creates
-//! a sandbox, writes a file into it, kills it and says whether it still runs: E2B (`e2b`), or
-//! processes on this machine for tests (`fake`).
+//! [`TICKET_PATH`], and kills the sandbox once the branch has ended ([`watch`]); a branch whose
+//! sandbox vanished ends `infra_error`. Every minute a [`sweep`] kills this control box's
+//! sandboxes whose branch no longer runs, or that outlived their timeout (a watcher a restart
+//! lost, a create whose answer was lost). A backend creates a sandbox, writes a file into it,
+//! kills it, says whether it still runs and lists sandboxes by label: E2B (`e2b`), or processes
+//! on this machine for tests (`fake`).
 
 pub mod e2b;
 #[cfg(any(test, feature = "harness"))]
 pub mod fake;
+mod sweep;
 mod watch;
+
+pub use sweep::{sweep, sweep_every};
 
 use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
@@ -37,6 +43,8 @@ pub const CONTROL_LABEL: &str = "shaked";
 
 /// What a branch whose sandbox could not start ends with (the cause is logged, not shown).
 pub const NO_SANDBOX: &str = "its sandbox could not start";
+/// What a branch whose sandbox vanished (killed, timed out, crashed) ends with.
+pub const SANDBOX_STOPPED: &str = "its sandbox stopped";
 
 /// What a branch's sandbox is created with.
 #[derive(Debug, Clone, PartialEq)]
@@ -55,6 +63,13 @@ pub struct SandboxSpec {
 /// The backend's name for a sandbox (E2B's `sandboxID`).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ProviderRef(pub String);
+
+/// A running sandbox and its labels.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Listed {
+    pub sb: ProviderRef,
+    pub metadata: BTreeMap<String, String>,
+}
 
 /// Whether a sandbox still runs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -78,6 +93,11 @@ pub trait SandboxBackend: Send + Sync {
     /// Kills the sandbox. A sandbox already gone counts as killed.
     fn kill<'a>(&'a self, sb: &'a ProviderRef) -> BoxFuture<'a, anyhow::Result<()>>;
     fn state<'a>(&'a self, sb: &'a ProviderRef) -> BoxFuture<'a, anyhow::Result<ProviderState>>;
+    /// The running sandboxes labelled with every one of `labels`.
+    fn list<'a>(
+        &'a self,
+        labels: &'a BTreeMap<String, String>,
+    ) -> BoxFuture<'a, anyhow::Result<Vec<Listed>>>;
 }
 
 /// Where a file bound for `path` is written before it is renamed onto `path`.
@@ -145,12 +165,17 @@ impl Hosting {
         (self.longest_run + END_GRACE).min(SANDBOX_CAP)
     }
 
+    /// The label every sandbox of this control box has.
+    fn ours(&self) -> BTreeMap<String, String> {
+        BTreeMap::from([(CONTROL_LABEL.to_string(), self.link_host.clone())])
+    }
+
     /// The sandbox for `plan`'s branch, labelled with this control box, `org`, the run, the
     /// branch, the `sandbox` its worker token names and when it started.
     fn spec(&self, plan: &BranchPlan, org: String, sandbox: Uuid) -> SandboxSpec {
         let started = chrono::Utc::now().timestamp().to_string();
-        let metadata = BTreeMap::from([
-            (CONTROL_LABEL.to_string(), self.link_host.clone()),
+        let mut metadata = self.ours();
+        metadata.extend([
             ("org".to_string(), org),
             ("run".to_string(), plan.run_id.clone()),
             ("branch".to_string(), plan.branch_id.clone()),
@@ -221,10 +246,15 @@ impl Hosting {
             return;
         };
         eprintln!("hosting: starting branch {}: {e:#}", plan.branch_id);
-        let failed = (BranchStatus::InfraError, Some(NO_SANDBOX.to_string()));
-        let ended = crate::worker::holds::end(state, &plan.branch_id, failed, EndIf::Running).await;
-        if let Err(e) = ended {
-            eprintln!("hosting: ending branch {}: {e:#}", plan.branch_id);
-        }
+        end_branch(state, &plan.branch_id, BranchStatus::InfraError, NO_SANDBOX).await;
+    }
+}
+
+/// Ends `branch` with `status` and `why` when it still runs (a failure is logged).
+async fn end_branch(state: &AppState, branch: &str, status: BranchStatus, why: &str) {
+    let ended = (status, Some(why.to_string()));
+    let ended = crate::worker::holds::end(state, branch, ended, EndIf::Running).await;
+    if let Err(e) = ended {
+        eprintln!("hosting: ending branch {branch}: {e:#}");
     }
 }

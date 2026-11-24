@@ -4,7 +4,7 @@
 //! folder. It counts the creates and kills it was asked for.
 
 use std::{
-    collections::HashMap,
+    collections::{BTreeMap, HashMap},
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicUsize, Ordering},
@@ -15,7 +15,9 @@ use std::{
 use futures_util::future::BoxFuture;
 use tokio::process::{Child, Command};
 
-use super::{partial_of, ProviderRef, ProviderState, SandboxBackend, SandboxSpec, TICKET_PATH};
+use super::{
+    partial_of, Listed, ProviderRef, ProviderState, SandboxBackend, SandboxSpec, TICKET_PATH,
+};
 
 /// Sandboxes as local `shaked worker` processes.
 pub struct FakeBackend {
@@ -34,6 +36,13 @@ pub struct FakeBackend {
 struct Fake {
     dir: PathBuf,
     worker: Child,
+    metadata: BTreeMap<String, String>,
+}
+
+impl Fake {
+    fn running(&mut self) -> bool {
+        matches!(self.worker.try_wait(), Ok(None))
+    }
 }
 
 /// Where `path` in the sandbox whose folder is `dir` is on this machine.
@@ -87,6 +96,13 @@ impl FakeBackend {
             .spawn()
     }
 
+    /// Ends `sb`'s worker as a sandbox dies under its branch (not counted as a kill).
+    pub fn vanish(&self, sb: &ProviderRef) {
+        if let Some(f) = self.sandboxes.lock().unwrap().get_mut(&sb.0) {
+            f.worker.start_kill().ok();
+        }
+    }
+
     fn dir_of(&self, sb: &ProviderRef) -> anyhow::Result<PathBuf> {
         let sandboxes = self.sandboxes.lock().unwrap();
         let found = sandboxes.get(&sb.0).map(|f| f.dir.clone());
@@ -95,14 +111,19 @@ impl FakeBackend {
 }
 
 impl SandboxBackend for FakeBackend {
-    fn create<'a>(&'a self, _spec: &'a SandboxSpec) -> BoxFuture<'a, anyhow::Result<ProviderRef>> {
+    fn create<'a>(&'a self, spec: &'a SandboxSpec) -> BoxFuture<'a, anyhow::Result<ProviderRef>> {
         Box::pin(async move {
             self.created.fetch_add(1, Ordering::SeqCst);
             let id = format!("fake-{}", uuid::Uuid::new_v4().simple());
             let dir = std::env::temp_dir().join(format!("shaked-{id}"));
             std::fs::create_dir_all(&dir)?;
             let worker = self.worker(&dir)?;
-            let fake = Fake { dir, worker };
+            let metadata = spec.metadata.clone();
+            let fake = Fake {
+                dir,
+                worker,
+                metadata,
+            };
             self.sandboxes.lock().unwrap().insert(id.clone(), fake);
             Ok(ProviderRef(id))
         })
@@ -132,14 +153,29 @@ impl SandboxBackend for FakeBackend {
     fn state<'a>(&'a self, sb: &'a ProviderRef) -> BoxFuture<'a, anyhow::Result<ProviderState>> {
         Box::pin(async move {
             let mut sandboxes = self.sandboxes.lock().unwrap();
-            let running = match sandboxes.get_mut(&sb.0) {
-                Some(f) => f.worker.try_wait()?.is_none(),
-                None => false,
-            };
+            let running = sandboxes.get_mut(&sb.0).is_some_and(Fake::running);
             Ok(match running {
                 true => ProviderState::Running,
                 false => ProviderState::Gone,
             })
+        })
+    }
+
+    fn list<'a>(
+        &'a self,
+        labels: &'a BTreeMap<String, String>,
+    ) -> BoxFuture<'a, anyhow::Result<Vec<Listed>>> {
+        Box::pin(async move {
+            let mut sandboxes = self.sandboxes.lock().unwrap();
+            let labelled = |f: &Fake| labels.iter().all(|(k, v)| f.metadata.get(k) == Some(v));
+            let listed = sandboxes.iter_mut().filter(|(_, f)| labelled(f));
+            let listed = listed.filter_map(|(id, f)| {
+                f.running().then(|| Listed {
+                    sb: ProviderRef(id.clone()),
+                    metadata: f.metadata.clone(),
+                })
+            });
+            Ok(listed.collect())
         })
     }
 }

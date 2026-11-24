@@ -10,6 +10,7 @@
 //! |---|---|---|
 //! | create | `POST {api}/sandboxes` | 201 `{sandboxID, envdAccessToken, domain}` |
 //! | state | `GET {api}/sandboxes/{id}` | 200 `{state: running \| paused}`, 404 gone |
+//! | list | `GET {api}/sandboxes?metadata=<k=v&…, encoded>` | 200 `[{sandboxID, metadata}]`, running only |
 //! | kill | `DELETE {api}/sandboxes/{id}` | 204, 404 already gone |
 //! | write | `POST https://49983-{id}.{domain}/files?path=….partial&username=root`, multipart `file` | 200 |
 //! | rename | `POST https://49983-{id}.{domain}/filesystem.Filesystem/Move`, `{source, destination}` | 200 |
@@ -17,7 +18,11 @@
 //! A write is two calls: the file is uploaded beside its path, then moved onto it (envd's Connect
 //! RPC, JSON, as root by `Authorization: Basic root:`), so a reader never sees half a file.
 
-use std::{collections::HashMap, sync::Mutex, time::Duration};
+use std::{
+    collections::{BTreeMap, HashMap},
+    sync::Mutex,
+    time::Duration,
+};
 
 use anyhow::Context;
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
@@ -30,7 +35,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use uuid::Uuid;
 
-use super::{partial_of, ProviderRef, ProviderState, SandboxBackend, SandboxSpec};
+use super::{partial_of, Listed, ProviderRef, ProviderState, SandboxBackend, SandboxSpec};
 use crate::providers::Secret;
 
 /// E2B's API.
@@ -179,6 +184,32 @@ impl E2bBackend {
     }
 }
 
+/// A sandbox as E2B lists it.
+#[derive(Deserialize)]
+struct Running {
+    #[serde(rename = "sandboxID")]
+    sandbox_id: String,
+    #[serde(default)]
+    metadata: Option<BTreeMap<String, String>>,
+}
+
+impl From<Running> for Listed {
+    fn from(r: Running) -> Listed {
+        Listed {
+            sb: ProviderRef(r.sandbox_id),
+            metadata: r.metadata.unwrap_or_default(),
+        }
+    }
+}
+
+/// `labels` as E2B's `metadata` filter: `k=v&…`, each key and value URL-encoded (the whole is
+/// encoded once more as the query's value).
+fn metadata_filter(labels: &BTreeMap<String, String>) -> String {
+    let mut url = Url::parse("http://labels/").expect("a URL");
+    url.query_pairs_mut().extend_pairs(labels);
+    url.query().unwrap_or_default().to_string()
+}
+
 /// The create body: the template, the timeout, and egress only to `allow_out`.
 fn create_body(spec: &SandboxSpec) -> Value {
     json!({
@@ -278,6 +309,21 @@ impl SandboxBackend for E2bBackend {
                 Some("running") => ProviderState::Running,
                 _ => ProviderState::Gone,
             })
+        })
+    }
+
+    fn list<'a>(
+        &'a self,
+        labels: &'a BTreeMap<String, String>,
+    ) -> BoxFuture<'a, anyhow::Result<Vec<Listed>>> {
+        Box::pin(async move {
+            let filter = [("metadata", metadata_filter(labels))];
+            let req = self.api_call(reqwest::Method::GET, None).query(&filter);
+            let found: Vec<Running> = answered(req.send().await?, "list sandboxes")
+                .await?
+                .json()
+                .await?;
+            Ok(found.into_iter().map(Listed::from).collect())
         })
     }
 }
@@ -406,6 +452,26 @@ mod tests {
         let up = e2b.state(&ProviderRef("up1".into())).await.unwrap();
         assert_eq!((gone, up), (ProviderState::Gone, ProviderState::Running));
         assert_eq!(seen.lock().unwrap()[0].headers["x-api-key"], KEY);
+    }
+
+    #[tokio::test]
+    async fn list_filters_by_labels() {
+        let one = json!([{"sandboxID": "sbx1", "templateID": "t", "metadata": {"branch": "b1"}},
+                         {"sandboxID": "sbx2", "templateID": "t", "metadata": null}]);
+        let (base, seen) = mock(HashMap::from([((Method::GET, "/sandboxes"), (200, one))])).await;
+        let labels = BTreeMap::from([
+            ("shaked".into(), "sd.example".into()),
+            ("a b".into(), "c&d".into()),
+        ]);
+        let found = backend(&base).list(&labels).await.unwrap();
+        let ids: Vec<&str> = found.iter().map(|l| l.sb.0.as_str()).collect();
+        assert_eq!(ids, ["sbx1", "sbx2"]);
+        assert_eq!(found[0].metadata["branch"], "b1");
+        assert!(found[1].metadata.is_empty());
+        let seen = seen.lock().unwrap();
+        let query = Some("metadata=a%2Bb%3Dc%2526d%26shaked%3Dsd.example");
+        assert_eq!(seen[0].uri.query(), query);
+        assert_eq!(seen[0].headers["x-api-key"], KEY);
     }
 
     /// `req` carries `bytes` as its one multipart `file` field.

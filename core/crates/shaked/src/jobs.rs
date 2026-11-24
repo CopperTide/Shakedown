@@ -71,6 +71,21 @@ pub async fn linked_branches(store: &Store) -> Result<Vec<Linked>> {
     Ok(linked.collect())
 }
 
+/// Which of the branches `$1` still run.
+const RUNNING_AMONG: &str = "SELECT id FROM branches WHERE id = ANY($1) AND status = 'running'";
+
+/// Which of `branches` still run (a system job of the link sweep's: every owner's). The sandbox
+/// sweep asks it for the branches its sandboxes name.
+pub async fn running_among(
+    store: &Store,
+    branches: &[String],
+) -> Result<std::collections::HashSet<String>> {
+    let tx = store.system_tx(SystemScope::link_sweep()).await?;
+    let rows = tx.query(RUNNING_AMONG, &[&branches]).await?;
+    tx.commit().await?;
+    Ok(rows.iter().map(|r| r.get(0)).collect())
+}
+
 /// Ends branch `$1` with status `$2` and error `$3` when it still runs (and, when `$4`, only if it
 /// is unpaused and no worker token of it is live): its status after.
 const END_RUNNING: &str = concat!(
