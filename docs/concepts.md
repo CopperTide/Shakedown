@@ -560,8 +560,9 @@ citation against the record and stores the review. Details in [reference.md](ref
 - `local (no API charge)`: API mode on a local server; the cost is 0 and the UI shows `no API charge`.
 - API mode with OpenAI, Anthropic or Bedrock: they report no price, so each call is priced at `docs/prices.toml`
   (cache writes and cache hits at their own rates, as the gateway charges them) for the models it lists, and the
-  agent's end is labelled `list_price_estimate`; a model it doesn't list leaves the cost `unknown`. The model calls
-  themselves keep no provider label.
+  agent's end is labelled `list_price_estimate`; a model it doesn't list leaves the cost `unknown`. The table lists
+  Anthropic's models only for now, so OpenAI and Bedrock calls stay `unknown`. The model calls themselves keep no
+  provider label.
 - These labels are the providers' own. The metrics above also estimate a cost from `docs/prices.toml` where no
   provider reported one.
 - `api_equivalent_estimate`: Claude Code's own `total_cost_usd`. It is what the same tokens would cost at API

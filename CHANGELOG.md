@@ -65,11 +65,13 @@
   until its next call.
 - **Claude Sonnet 5.5's cache reads are listed at $0.10 per million tokens**, its list price,
   not $0.20.
-- **Open agents' chat calls to Claude and Bedrock are priced at the cache rates.** Their canonical
-  usage now keeps the cache-write and cache-read counts, so a cache hit is no longer charged (and
-  metered) as fresh input, about 10 times its price.
+- **Open agents' chat calls to Claude are priced at the cache rates.** The Claude adapter's
+  canonical usage now keeps the cache-write and cache-read counts, so a cache hit is no longer
+  charged (and metered) as fresh input, 10 to 40 times its price. The Bedrock adapter keeps them
+  too, but `docs/prices.toml` lists no Bedrock prices yet, so Bedrock calls stay unpriced.
 - **A dispatch run's open agents can name your stored keys (`key:<name>`).** Their sessions now
   resolve providers with the caller's keys, as other runs do, instead of the environment's only.
-- **An open agent on Claude, Bedrock or OpenAI ends with a known cost.** Its end now sums its calls
-  at the list price the gateway charges them (cache rates included), labelled
-  `list_price_estimate`, instead of `unknown`.
+- **An open agent on Claude ends with a known cost.** Its end now sums its calls at the list price
+  the gateway charges them (cache rates included), labelled `list_price_estimate`, instead of
+  `unknown`. On a provider `docs/prices.toml` lists no prices for (Bedrock and OpenAI, for now)
+  the cost stays `unknown`.
