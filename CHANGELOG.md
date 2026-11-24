@@ -75,4 +75,5 @@
 - **An open agent on Claude ends with a known cost.** Its end now sums its calls at the list price
   the gateway charges them (cache rates included), labelled `list_price_estimate`, instead of
   `unknown`. On a provider `docs/prices.toml` lists no prices for (Bedrock and OpenAI, for now)
-  the cost stays `unknown`.
+  the cost stays `unknown`. A branch's metrics label such a cost `list-price estimate`, not
+  `reported`.

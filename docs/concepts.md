@@ -541,7 +541,9 @@ start_seq`), as compare does:
   context one was sent with (`peak_prompt_tokens`), the compactions its client reported, and the overhead recorded
   on its own events (`overhead_s`; when agents run at once, an event's overhead may have held up others too);
 - **cost** per agent: the cost the provider reported (`reported`; Claude Code's own figure is an API-equivalent
-  estimate); `no API charge` for a local model; otherwise tokens times the list price in `docs/prices.toml`,
+  estimate); `no API charge` for a local model; `list-price estimate` when shaked worked the agent's cost out at list
+  prices itself (cost source `list_price_estimate`: an API-mode agent on a provider that reports no price, or a turn
+  stopped before Claude Code said its cost); otherwise tokens times the list price in `docs/prices.toml`,
   labelled `list-price estimate` with the price's source and date (cache and long-context rates included where the
   table lists them; batch discounts are not modelled); otherwise `unknown`. Shakedown never makes up a price. The branch's
   cost is the sum when every agent's is known (labelled `mixed` when their labels differ), else `unknown`.
