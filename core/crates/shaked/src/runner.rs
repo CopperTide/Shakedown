@@ -13,6 +13,6 @@ pub use lifecycle::{
 pub(crate) use score::score_now;
 pub use score::NOTHING_CHECKED;
 pub use start::{
-    begin_run, new_seed, record_start, setup_failed, stand_up, start_run, BranchPlan, RunError,
-    RunOptions, MAX_SEED,
+    begin_run, new_seed, record_start, record_unplanned, setup_failed, stand_up, start_run,
+    BranchPlan, RunError, RunOptions, MAX_SEED, NO_BENCHMARK,
 };

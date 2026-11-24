@@ -1,11 +1,14 @@
 //! A sandbox's watcher: every poll it looks at the sandbox's branch and at the sandbox. It kills
-//! the sandbox once the branch no longer runs, and ends the branch `infra_error`
-//! ([`SANDBOX_STOPPED`]) when the sandbox vanished under it. What can't be read is looked at again
+//! the sandbox once the branch no longer runs, ends the branch `stopped` ([`LONGEST_REACHED`])
+//! at its deadline, and `infra_error` ([`SANDBOX_STOPPED`]) when the sandbox vanished under it.
+//! It holds its scope's slot until the sandbox is killed. What can't be read is looked at again
 //! next time (the sweep and the sandbox's own timeout are the backstops).
 
 use std::{sync::Arc, time::Duration};
 
-use super::{end_branch, ProviderRef, ProviderState, SandboxBackend, SANDBOX_STOPPED};
+use super::{
+    end_branch, ProviderRef, ProviderState, SandboxBackend, Slot, LONGEST_REACHED, SANDBOX_STOPPED,
+};
 use crate::{app::AppState, auth::Caller, model::BranchStatus, store::BranchId};
 
 /// What one sandbox's watcher looks after.
@@ -16,6 +19,10 @@ pub(super) struct Watch {
     /// Who the branch records for (its records are read as them).
     pub caller: Arc<Caller>,
     pub poll: Duration,
+    /// When the branch has gone the longest a run may.
+    pub deadline: tokio::time::Instant,
+    /// Its scope's slot, given back when the watcher ends.
+    pub _slot: Slot,
 }
 
 /// What a watcher does next.
@@ -51,6 +58,9 @@ impl Watch {
     async fn next(&self, state: &AppState) -> Next {
         if !self.running(state).await {
             return Next::Kill;
+        }
+        if tokio::time::Instant::now() >= self.deadline {
+            return Next::End(BranchStatus::Stopped, LONGEST_REACHED);
         }
         match self.backend.state(&self.sb).await {
             Ok(ProviderState::Gone) => Next::End(BranchStatus::InfraError, SANDBOX_STOPPED),

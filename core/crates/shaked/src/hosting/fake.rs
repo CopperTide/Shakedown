@@ -1,7 +1,7 @@
 //! A sandbox backend on this machine, for tests. A "sandbox" is a folder of its own and a
 //! `shaked worker` process linked to the control box, waiting on the folder's [`TICKET_PATH`];
-//! its saves and worlds are kept in the folder. Killing it ends the process and removes the
-//! folder. It counts the creates and kills it was asked for.
+//! its saves and worlds ([`SANDBOX_WORLDS`]) are kept in the folder. Killing it ends the process
+//! and removes the folder. It counts the creates and kills it was asked for.
 
 use std::{
     collections::{BTreeMap, HashMap},
@@ -16,7 +16,8 @@ use futures_util::future::BoxFuture;
 use tokio::process::{Child, Command};
 
 use super::{
-    partial_of, Listed, ProviderRef, ProviderState, SandboxBackend, SandboxSpec, TICKET_PATH,
+    partial_of, Listed, ProviderRef, ProviderState, SandboxBackend, SandboxSpec, SANDBOX_WORLDS,
+    TICKET_PATH,
 };
 
 /// Sandboxes as local `shaked worker` processes.
@@ -90,7 +91,7 @@ impl FakeBackend {
             .args(["worker", "--link", &self.link, "--ticket-file"])
             .arg(local(dir, TICKET_PATH))
             .env("SHAKEDOWN_SAVES", dir.join("saves"))
-            .env("SHAKEDOWN_WORLDS", dir.join("worlds"))
+            .env("SHAKEDOWN_WORLDS", local(dir, SANDBOX_WORLDS))
             .envs(self.env.iter().map(|(k, v)| (k, v)))
             .kill_on_drop(true)
             .spawn()

@@ -203,13 +203,47 @@ fn packages_here(state: &AppState) -> Result<(), RunError> {
 }
 
 /// The first half of beginning a run: creates the run and its first branch for `spec.scope`,
-/// after checking packages run here and the benchmark has the task. The plan to stand the branch up from (`RunStart`
-/// waits for the world, which it records, so `stand_up` writes it first of the branch's events).
+/// after checking packages run here and the benchmark has the task. The plan to stand the branch
+/// up from (`RunStart` waits for the world, which it records, so `stand_up` writes it first of the
+/// branch's events).
 pub async fn record_start(state: &AppState, spec: &LaunchSpec<'_>) -> Result<BranchPlan, RunError> {
     packages_here(state)?;
     let bench = bench_with_task(state, spec.benchmark, spec.task_id).await?;
     // A world whose tools clash is refused before anything is recorded.
     world::plan(&state.hub, &bench).await?;
+    record(state, spec, bench.name).await
+}
+
+/// Why a run on a control box whose branches run in sandboxes is refused when it names no
+/// benchmark and none is chosen.
+pub const NO_BENCHMARK: &str = "no benchmark is chosen for this run";
+
+/// [`record_start`] for a control box whose branches run in sandboxes: the run and its first
+/// branch recorded without describing the benchmark or planning its world, so no package
+/// program starts here. The sandbox's worker describes and plans it (`stand_up`): a task the
+/// benchmark lacks, or tools that clash, end the branch there, saying why.
+pub async fn record_unplanned(
+    state: &AppState,
+    spec: &LaunchSpec<'_>,
+) -> Result<BranchPlan, RunError> {
+    let named = spec.benchmark.map(str::to_string);
+    let benchmark = named.unwrap_or_else(|| state.benchmark());
+    if benchmark.is_empty() {
+        let status = axum::http::StatusCode::UNPROCESSABLE_ENTITY;
+        return Err(RunError::Refused(crate::layer::Refusal::new(
+            status,
+            NO_BENCHMARK,
+        )));
+    }
+    record(state, spec, benchmark).await
+}
+
+/// Records the run `spec` describes of `benchmark` and its first branch, the rules on record.
+async fn record(
+    state: &AppState,
+    spec: &LaunchSpec<'_>,
+    benchmark: String,
+) -> Result<BranchPlan, RunError> {
     let records = state.store.at(&spec.scope);
     let run_id = records.create_run(spec.task_id, &spec.team).await?;
     let none = json!([]);
@@ -221,7 +255,7 @@ pub async fn record_start(state: &AppState, spec: &LaunchSpec<'_>) -> Result<Bra
         run_id,
         branch_id,
         task_id: spec.task_id.to_string(),
-        benchmark: bench.name,
+        benchmark,
         team: spec.team.clone(),
         rules: spec.rules.clone(),
         scenario: spec.scenario.clone(),

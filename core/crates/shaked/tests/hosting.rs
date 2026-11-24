@@ -10,13 +10,14 @@ use support::{live, packages, poll_until, records, run, AppFx, STEP, WAIT};
 
 use std::{collections::BTreeMap, path::PathBuf, sync::Arc, time::Duration};
 
+use anyhow::Context;
 use serde_json::{json, Value};
 use shaked::{
     hosting::{
         e2b::{E2bBackend, API},
         fake::FakeBackend,
-        partial_of, Hosting, ProviderRef, ProviderState, SandboxBackend, SandboxSpec,
-        SANDBOX_STOPPED, TICKET_PATH,
+        partial_of, Hosting, ProviderRef, ProviderState, SandboxBackend, SandboxSpec, BUSY,
+        LONGEST_REACHED, SANDBOX_STOPPED, SANDBOX_WORLDS, TICKET_PATH,
     },
     model::*,
 };
@@ -35,25 +36,71 @@ async fn control(tag: &str) -> (AppFx, PathBuf) {
     (fx.start().await, toys)
 }
 
-/// Runs `fx`'s branches in sandboxes from `backend` linking to `link`, its `Hosting` `tweak`ed.
-fn host(fx: &AppFx, backend: Arc<dyn SandboxBackend>, link: &str, tweak: Tweak) {
-    let hosting = Hosting::new(backend, link, TEMPLATE).unwrap();
+/// [`control`], its toy world built here: its worlds folder is the toy packages' folder.
+async fn control_built(tag: &str) -> (AppFx, PathBuf) {
+    let root = packages::toy_world(&format!("host-{tag}"), &[], &["--scored"]);
+    let toys = root.0.clone();
+    let worlds = toys.clone();
+    let fx = AppFx::idle("hosting", tag).root(root).bench("toybench");
+    let fx = fx
+        .config(move |c| c.worlds_dir = Some(worlds))
+        .start()
+        .await;
+    (fx, toys)
+}
+
+/// Runs `fx`'s branches in sandboxes of `template` from `backend` linking to `link`, its
+/// `Hosting` `tweak`ed.
+fn host(
+    fx: &AppFx,
+    backend: Arc<dyn SandboxBackend>,
+    (link, template): (&str, &str),
+    tweak: Tweak,
+) {
+    let hosting = Hosting::new(backend, link, template).unwrap();
     let hosting = tweak(hosting.with_poll(Duration::from_millis(200)));
     assert!(fx.state.hosting.set(Arc::new(hosting)).is_ok());
 }
 
 type Tweak = fn(Hosting) -> Hosting;
 
+/// Runs `fx`'s branches in fake sandboxes, its `Hosting` `tweak`ed, whose workers find their
+/// packages in `packages`: the backend.
+fn fake_host(fx: &AppFx, packages: &std::path::Path, tweak: Tweak) -> Arc<FakeBackend> {
+    let link = ws_url(&fx.base);
+    let packages = packages.to_str().unwrap();
+    let env = [
+        ("SHAKEDOWN_TEST_GUARD", "1"),
+        ("SHAKEDOWN_PACKAGES", packages),
+    ];
+    let fake = Arc::new(FakeBackend::new(env!("CARGO_BIN_EXE_shaked"), &link, &env));
+    host(fx, fake.clone(), (&link, TEMPLATE), tweak);
+    fake
+}
+
 /// A control box whose branches run in fake sandboxes, its `Hosting` `tweak`ed: the app and
 /// the backend.
 async fn hosted(tag: &str, tweak: Tweak) -> (AppFx, Arc<FakeBackend>) {
     let (fx, toys) = control(tag).await;
-    let link = ws_url(&fx.base);
-    let toys = toys.to_str().unwrap();
-    let env = [("SHAKEDOWN_TEST_GUARD", "1"), ("SHAKEDOWN_PACKAGES", toys)];
-    let fake = Arc::new(FakeBackend::new(env!("CARGO_BIN_EXE_shaked"), &link, &env));
-    host(&fx, fake.clone(), &link, tweak);
+    let fake = fake_host(&fx, &toys, tweak);
     (fx, fake)
+}
+
+#[test]
+fn a_sandbox_only_control_box_runs_a_branch_without_a_package_program_here() {
+    run(async {
+        let spy = shaked::harness::SpyLayer::new();
+        let root = packages::toy_world("host-sandonly", &[], &["--scored"]);
+        let toys = root.0.clone();
+        let fx = AppFx::idle("hosting", "sandonly").layer(Arc::new(spy.clone()));
+        let fx = fx.root(root).bench("toybench").start().await;
+        spy.sandbox_packages();
+        let fake = fake_host(&fx, &toys, |h| h);
+        let id = start(&fx, &scripted_team(nothing()).await).await;
+        let b = live::ended(&fx.state, &id).await;
+        assert_eq!(b.status, BranchStatus::Passed, "{:?}", b.error);
+        killed(&fake, 1).await;
+    });
 }
 
 /// `POST /api/runs` of `t1` for `team`: the status and the answer.
@@ -184,6 +231,72 @@ fn the_sweep_kills_sandboxes_whose_branch_ended_or_that_outlived_their_timeout()
     });
 }
 
+#[test]
+fn a_second_run_for_the_org_is_refused_until_the_first_ends() {
+    run(async {
+        let (fx, fake) = hosted("busy", |h| h).await;
+        let gate = Arc::new(Semaphore::new(0));
+        let team = scripted_team(gated(&gate)).await;
+        let first = start(&fx, &team).await;
+        let (status, v) = post_run(&fx, &team).await;
+        assert_eq!(status, 429, "{v}");
+        assert!(v.to_string().contains(BUSY), "{v}");
+        assert_eq!(fake.created(), 1, "nothing started for the refused run");
+        gate.add_permits(1);
+        let b = live::ended(&fx.state, &first).await;
+        assert_eq!(b.status, BranchStatus::Passed, "{:?}", b.error);
+        gate.add_permits(1);
+        // Its slot is given back once its sandbox has been killed.
+        let free = async || {
+            let (status, v) = post_run(&fx, &team).await;
+            (status == 200).then(|| v["branch_id"].as_str().unwrap().to_string())
+        };
+        let next = poll_until(WAIT, STEP, free).await.expect("a slot again");
+        assert_eq!(
+            live::ended(&fx.state, &next).await.status,
+            BranchStatus::Passed
+        );
+        killed(&fake, 2).await;
+    });
+}
+
+#[test]
+fn a_run_past_its_longest_is_stopped_and_its_sandbox_killed() {
+    run(async {
+        let (fx, fake) = hosted("longest", |h| h.with_longest_run(Duration::from_secs(1))).await;
+        let gate = Arc::new(Semaphore::new(0));
+        let id = start(&fx, &scripted_team(gated(&gate)).await).await;
+        let b = live::ended(&fx.state, &id).await;
+        let ended = (b.status, b.error.as_deref());
+        assert_eq!(ended, (BranchStatus::Stopped, Some(LONGEST_REACHED)));
+        killed(&fake, 1).await;
+        gate.add_permits(1);
+    });
+}
+
+/// A control box whose toy world is built here (its worlds folder is the toy packages' folder),
+/// its branches run in fake sandboxes that have the toy integration only: the app and the
+/// backend.
+async fn built_world_hosted(tag: &str) -> (AppFx, Arc<FakeBackend>, tempfile::TempDir) {
+    let (fx, toys) = control_built(tag).await;
+    let parts = tempfile::tempdir().unwrap();
+    let part = format!("toy-host-{tag}");
+    std::os::unix::fs::symlink(toys.join(&part), parts.path().join(&part)).unwrap();
+    let fake = fake_host(&fx, parts.path(), |h| h);
+    (fx, fake, parts)
+}
+
+#[test]
+fn a_world_built_here_is_copied_into_its_sandbox() {
+    run(async {
+        let (fx, fake, _parts) = built_world_hosted("built").await;
+        let id = start(&fx, &scripted_team(nothing()).await).await;
+        let b = live::ended(&fx.state, &id).await;
+        assert_eq!(b.status, BranchStatus::Passed, "{:?}", b.error);
+        killed(&fake, 1).await;
+    });
+}
+
 /// What the live check writes and reads back.
 const TICKET: &[u8] = b"sdt_live_check\n";
 
@@ -234,15 +347,47 @@ async fn live_e2b_create_write_kill() {
     assert_eq!(e2b.state(&sb).await.unwrap(), ProviderState::Gone);
 }
 
-/// A link host no worker answers on: E2B's base template has no `shaked`, so the live check
-/// through `Hosting` stops at the ticket.
+/// A link host the sandbox may reach and no worker answers on: the check stops at the ticket.
 const LIVE_LINK: &str = "wss://example.com/worker";
 
-/// The ticket in `sb`, and whether its partial file is gone (renamed onto it).
-async fn handed_ticket(e2b: &E2bBackend, sb: &ProviderRef) -> (anyhow::Result<Vec<u8>>, bool) {
-    let ticket = e2b.read_file(sb, TICKET_PATH).await;
-    let partial = e2b.read_file(sb, &partial_of(TICKET_PATH)).await;
-    (ticket, partial.is_err())
+/// The template the live check boots: `SHAKEDOWN_E2B_TEMPLATE` (a `shakedown-worker-…` one,
+/// whose worker takes the ticket), else E2B's `base` (no worker: the ticket stays), and which.
+fn live_template() -> (String, bool) {
+    match std::env::var("SHAKEDOWN_E2B_TEMPLATE") {
+        Ok(t) if !t.is_empty() => (t, true),
+        _ => (TEMPLATE.to_string(), false),
+    }
+}
+
+/// Whether `sb` got the built toy world and its ticket whole: with a worker, the worker took
+/// the ticket (it and its partial file gone); without, the ticket is there, newline-ended.
+async fn handed_over(e2b: &E2bBackend, sb: &ProviderRef, worker: bool) -> anyhow::Result<()> {
+    let world = format!("{SANDBOX_WORLDS}/toybench/shakedown-package.toml");
+    let manifest = String::from_utf8(e2b.read_file(sb, &world).await?)?;
+    anyhow::ensure!(
+        manifest.contains("toybench"),
+        "the world's manifest: {manifest}"
+    );
+    let partial = partial_of(TICKET_PATH);
+    if worker {
+        let taken = async || {
+            let gone = e2b.read_file(sb, TICKET_PATH).await.is_err();
+            (gone && e2b.read_file(sb, &partial).await.is_err()).then_some(())
+        };
+        return poll_until(WAIT, STEP, taken)
+            .await
+            .context("the worker took no ticket");
+    }
+    let ticket = String::from_utf8(e2b.read_file(sb, TICKET_PATH).await?)?;
+    anyhow::ensure!(
+        ticket.starts_with("sdt_") && ticket.ends_with('\n'),
+        "not a whole ticket"
+    );
+    anyhow::ensure!(
+        e2b.read_file(sb, &partial).await.is_err(),
+        "the partial file stayed"
+    );
+    Ok(())
 }
 
 /// Stops `branch` on `fx` and waits for its watcher to kill `sb` (killed here if it doesn't):
@@ -260,39 +405,33 @@ async fn stopped_and_killed(fx: &AppFx, e2b: &E2bBackend, branch: &str, sb: &Pro
     killed
 }
 
-/// The ticket was handed over whole (newline-ended, its partial file renamed), and the
-/// watcher killed the sandbox.
-fn assert_handed_and_killed(ticket: anyhow::Result<Vec<u8>>, renamed: bool, killed: bool) {
-    let ticket = String::from_utf8(ticket.unwrap()).unwrap();
-    assert!(ticket.starts_with("sdt_") && ticket.ends_with('\n'));
-    assert!(renamed, "written beside its path, then renamed");
-    assert!(killed, "killed by its watcher");
-}
-
 #[test]
 #[ignore = "live: creates a real E2B sandbox through Hosting (needs E2B_API_KEY)"]
-fn live_hosting_hands_an_e2b_sandbox_its_ticket_and_kills_it() {
+fn live_hosting_hands_an_e2b_sandbox_its_world_and_ticket_and_kills_it() {
     let Ok(key) = std::env::var("E2B_API_KEY") else {
         println!("skipped: E2B_API_KEY is not set");
         return;
     };
     run(async {
-        let (fx, _) = control("live").await;
+        let (fx, _) = control_built("live").await;
         let e2b = Arc::new(E2bBackend::new(key, API.parse().unwrap()));
-        host(&fx, e2b.clone(), LIVE_LINK, |h| {
-            h.with_longest_run(Duration::from_secs(60))
-        });
+        let (template, worker) = live_template();
+        let longest = |h: Hosting| h.with_longest_run(Duration::from_secs(60));
+        host(&fx, e2b.clone(), (LIVE_LINK, &template), longest);
         let id = start(&fx, &scripted_team(nothing()).await).await;
         let sb = linked_live(&e2b, &id).await;
-        println!("created E2B sandbox {} for branch {id}", sb.0);
-        let (ticket, renamed) = handed_ticket(&e2b, &sb).await;
+        println!("created E2B sandbox {} of {template} for branch {id}", sb.0);
+        let handed = handed_over(&e2b, &sb, worker).await;
         let killed = stopped_and_killed(&fx, &e2b, &id, &sb).await;
         println!("killed E2B sandbox {} (by the watcher: {killed})", sb.0);
-        assert_handed_and_killed(ticket, renamed, killed);
-        let ours = labels(&[("shaked", "example.com")]);
-        let left = e2b.list(&ours).await.unwrap();
+        handed.unwrap();
+        assert!(killed, "killed by its watcher");
+        let left = e2b
+            .list(&labels(&[("shaked", "example.com")]))
+            .await
+            .unwrap();
         assert!(left.is_empty(), "{left:?}");
-        println!("ticket handed over whole at {TICKET_PATH}; no sandbox of ours left");
+        println!("world and ticket handed over whole (worker took it: {worker}); none left");
     });
 }
 

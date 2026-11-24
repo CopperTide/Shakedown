@@ -59,7 +59,7 @@ flowchart LR
   end
   HL -. "embeds shaked<br/>through the Layer trait" .-> sd
 
-  subgraph e2b["E2B sandbox (next step)"]
+  subgraph e2b["E2B sandbox"]
     WK["shaked worker<br/>world + agents"]
   end
   WK -. "WebSocket frames" .-> WL
@@ -91,11 +91,12 @@ What each box is:
   loaded only then, so a local shaked never loads it, and never with Global Privacy Control or Do Not
   Track on; in an EU or EEA time zone it stores nothing in the browser and records no replay. `ui/src/lib/posthogShared.ts` is kept identical to
   CopperTide's `web/src/hosted/posthogShared.ts`.
-- **E2B workers** are the next step. The engine side is built: `shaked worker`, the link, the
-  gateway forwarding, the control box's holds, the E2B backend that creates, writes into and kills a
-  sandbox (`src/hosting/e2b.rs`), and the E2B template a sandbox starts from (`deploy/sandbox`), with CLI
-  agents jailed in containers (see [sandbox runs](sandbox-runs.md)). What starts a sandbox for a branch
-  (`Hosting`, M2a Task 7 onward) is not in the engine yet. Today only tests hand a worker its ticket.
+- **E2B workers.** The engine side is built: `shaked worker`, the link, the gateway forwarding, the control
+  box's holds, the E2B backend, the E2B template a sandbox starts from (`deploy/sandbox`), with CLI agents
+  jailed in containers, and `Hosting` (`src/hosting/`), which runs each new branch in a sandbox of its own,
+  kills it when the branch ends, caps a run's wall time and an org's sandboxes, and sweeps leftovers (see
+  [sandbox runs](sandbox-runs.md)). A control box uses it only when the embedding binary sets
+  `ServeOptions::hosting`; the hosted layer's wiring is the next step (M2a Task 12).
 
 ## Crates
 
@@ -181,6 +182,7 @@ One line per module of `src/lib.rs`, grouped by area. The area pages go one leve
 | Module | Job |
 |---|---|
 | `worker` | `shaked worker` (the engine in a sandbox) and the control box's end of its link: frames, tickets, links, holds, the sweep. |
+| `hosting` | Sandboxes for a control box's branches: `Hosting`, the backend trait, E2B and the fake, the watcher, the sandbox sweep, the per-org slots. |
 
 ### Auth and layer
 
@@ -235,7 +237,8 @@ flowchart TD
 ```
 
 One `shaked` process holds everything in memory that is live: `AppState.live` (branches running here),
-`AppState.links` (sandbox links and tickets), `AppState.proxy` (proxy tickets and CAs). Everything durable is in
+`AppState.links` (sandbox links and tickets), `AppState.hosting` (sandbox watchers and org slots),
+`AppState.proxy` (proxy tickets and CAs). Everything durable is in
 Postgres. On start, `jobs::interrupt_at_start` marks what was running as `interrupted`
 (`src/jobs.rs`), because a local branch cannot survive its process. A branch a sandbox's worker runs is the
 exception: its link is rebuilt from the store when the worker rejoins (`src/worker/link.rs`, `rebuilt`).

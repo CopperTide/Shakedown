@@ -138,8 +138,9 @@ pub const NOT_IN_A_SANDBOX: &str =
     "runs an external system or a Code connection drives don't run in the cloud yet";
 
 /// [`launch`] on a control box with [`Hosting`](crate::hosting::Hosting): the run admitted,
-/// recorded here (`record_start`) and metered, its branch run in a sandbox. When the sandbox
-/// can't start, the branch ends `infra_error`.
+/// given a sandbox slot of its scope (refused 429 beyond [`PER_SCOPE`](crate::hosting::PER_SCOPE)),
+/// recorded here without starting a package program (`record_unplanned`) and metered, its
+/// branch run in a sandbox. When the sandbox can't start, the branch ends `infra_error`.
 async fn hosted(
     state: &Arc<AppState>,
     hosting: &crate::hosting::Hosting,
@@ -151,9 +152,11 @@ async fn hosted(
         return Err(RunError::Refused(refusal));
     }
     let warning = admit_run(state, spec).await?;
-    let plan = runner::record_start(state, spec).await?;
+    let slot = hosting.reserve(state, &spec.scope)?;
+    // No package program starts here: the sandbox's worker describes and plans the world.
+    let plan = runner::record_unplanned(state, spec).await?;
     meter_run(state, spec, &plan.run_id, &plan.branch_id).await;
-    hosting.start_or_fail(state, &plan, &spec.scope).await;
+    hosting.start_or_fail(state, &plan, &spec.scope, slot).await;
     Ok(Launched {
         run_id: plan.run_id,
         branch_id: plan.branch_id,

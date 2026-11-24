@@ -41,6 +41,8 @@ never does. The link tests play `Hosting`'s part by hand (`tests/support/link.rs
 | `src/model/hold.rs` | `Hold`: running, paused, or stopping with the status the branch ends with. |
 | `src/hosting/mod.rs` | `Hosting` (start a branch in a sandbox), `SandboxSpec`, `ProviderRef`, `ProviderState`, the `SandboxBackend` trait, `TICKET_PATH` (`/run/shaked/ticket`), the caps. |
 | `src/hosting/watch.rs` | A sandbox's watcher: kills the sandbox once its branch has ended; ends the branch `infra_error` when the sandbox vanished. |
+| `src/hosting/worlds.rs` | A world built on the control box, copied into the branch's sandbox before the ticket. |
+| `src/hosting/slots.rs` | At most `PER_SCOPE` (1) sandboxes per scope (`object_prefix`: an org on hosted) at a time, counted on this control box. |
 | `src/hosting/sweep.rs` | The sandbox sweep: kills this control box's sandboxes whose branch ended or that outlived their timeout. |
 | `src/hosting/e2b.rs` | `E2bBackend`: sandboxes on E2B. |
 | `src/hosting/fake.rs` | `FakeBackend` (tests, `harness` feature): each sandbox a folder and a local `shaked worker`. |
@@ -152,15 +154,30 @@ stateDiagram-v2
 
 1. A run an external system or a Code connection drives is refused 422 (`NOT_IN_A_SANDBOX`): those agents
    run on a person's machine, not in a sandbox (not yet).
-2. The layer admits the run, `record_start` records the run, its branch and its rules, and the run is metered.
-3. `Hosting::start`: `links.expect(plan)`, then `backend.create(spec)`, then a ticket (bound to the branch and
-   a new sandbox id) written newline-ended to `TICKET_PATH`. A sandbox that can't take its ticket is killed.
+2. The layer admits the run, and `Hosting::reserve` takes a slot of the caller's scope (the layer's
+   `object_prefix`, an org on hosted). A scope runs at most `PER_SCOPE` (1) sandboxes at a time: a run beyond
+   that is refused 429 with `BUSY` ("a cloud run of yours is already going (one at a time for now): start
+   this one when it ends") before anything is recorded. The watcher gives the slot back once it has killed the sandbox. Then
+   `runner::record_unplanned` records the run, its branch and its rules, and the run is metered. Unlike
+   `record_start` (which a sandbox-only layer refuses 403), it neither describes the benchmark nor plans
+   its world, so no package program starts on the control box: the sandbox's worker does both in
+   `stand_up`, and a task the benchmark lacks, or tools that clash, end the branch there, saying why. A run
+   that names no benchmark when none is chosen is refused 422 (`NO_BENCHMARK`).
+3. `Hosting::start`: `links.expect(plan)`, then `backend.create(spec)`. A world built on this control box (the
+   benchmark's folder is in `Config::worlds_dir`, as the world builder makes it; the template has only the
+   installed packages) is copied into the sandbox's `SANDBOX_WORLDS` (`/var/lib/shakedown/worlds`, the
+   template's `SHAKEDOWN_WORLDS`), file by file through `write_file`, leaving out hidden entries,
+   `__pycache__`, `node_modules` and symbolic links, at most 64 MiB (`src/hosting/worlds.rs`). The worker
+   scans that folder once `Start` comes. Then a ticket (bound to the branch and a new sandbox id) is written
+   newline-ended to `TICKET_PATH`. A sandbox that can't take its world or ticket is killed.
    When any of this fails the branch ends `infra_error` with `NO_SANDBOX` ("its sandbox could not start");
    the cause is logged on the control box, never shown (it may carry E2B's answer).
 4. A watcher (`src/hosting/watch.rs`) looks every 5 s at the branch and at the sandbox. It kills the sandbox
    once the branch no longer runs, however it ended (the worker's `Ended`, a stop while booting, the link
    sweep). A sandbox the backend reports `Gone` under a running branch (killed, timed out, crashed) ends the
-   branch `infra_error` with `SANDBOX_STOPPED` ("its sandbox stopped"); its acknowledged events stay.
+   branch `infra_error` with `SANDBOX_STOPPED` ("its sandbox stopped"); its acknowledged events stay. A branch
+   still running at the longest run (`LONGEST_RUN`, or `with_longest_run`) ends `stopped` with
+   `LONGEST_REACHED`, and its sandbox is killed: the hard wall-clock cap of a cloud run.
 
 ### The sandbox sweep
 
@@ -175,7 +192,14 @@ asks `jobs::running_among` (a system job of the link sweep's) which of their bra
 | older than the sandbox timeout (`started` label), its branch running | branch ended `infra_error` (`SANDBOX_STOPPED`), sandbox killed |
 | otherwise | kept |
 
-E2B's own timeout ends a sandbox even when the control box is down. There is no `sandboxes` table in the
+E2B's own timeout ends a sandbox even when the control box is down.
+
+**Not built yet (lean M2a):** runs beyond the scope's slot are refused, not queued (`Admission::Queue`, Task 10's
+queue); slots and deadlines live in memory, so a restarted control box counts no sandboxes and arms no
+deadline for branches already running (the sweep and E2B's timeout still end their sandboxes, and the link
+sweep ends their branches when the worker token dies); a running branch whose sandbox vanished while no
+watcher ran ends only by that token sweep; quotas from `quotas.toml` (sandbox-hours per month, a global
+ceiling, `SHAKED_CLOUD=off`) and the sealed envd token (R2) are the hosted layer's to add. There is no `sandboxes` table in the
 engine (ruling R6: the hosted layer keeps `shakedown_hosted.sandboxes`); the backend's labels are the record.
 
 The spec a sandbox is created with:
@@ -185,7 +209,7 @@ The spec a sandbox is created with:
 | `template` | The `Hosting`'s template (the hosted layer's `shakedown-worker-<rev>`, Task 11). |
 | `allow_out` | The link host only. Model calls go through the control box's gateway, so no provider host is needed. |
 | `timeout` | The longest run (`LONGEST_RUN`, 55 min, or less with `with_longest_run`) plus `END_GRACE` (5 min), never past `SANDBOX_CAP` (60 min, E2B Hobby's continuous runtime). Never unbounded. |
-| `metadata` | `shaked` (the link host: which control box it runs for), `org` (the layer's `object_prefix`), `run`, `branch`, `sandbox` (the id the worker token names), `started` (unix seconds). Never secrets. |
+| `metadata` | `shaked` (the link host: which control box it runs for), `scope` (the layer's `object_prefix`), `run`, `branch`, `sandbox` (the id the worker token names), `started` (unix seconds). Never secrets. |
 
 **Writes are whole.** `SandboxBackend::write_file` writes to `<path>.partial` (`partial_of`) and renames it onto
 `path`, so the worker, which polls `TICKET_PATH`, never reads half a ticket.
@@ -379,8 +403,8 @@ flowchart LR
 | `src/worker/link_records.rs`, `src/worker/frames.rs` unit tests | The window, resends in order, the end after every ack, frame cutting, frame JSON. |
 | `tests/support/link.rs` | Shared link plumbing: `ticketed`, `started`, `restarted`, `hear`. |
 | `src/hosting/e2b.rs` unit tests | The E2B calls against a local mock of E2B's API and envd: the create body, 404s on kill and state, a write as upload then rename, the envd token and no E2B key on both. |
-| `tests/hosting.rs` (fake) | `a_run_with_hosting_runs_in_a_fake_sandbox` (the branch ends `passed`, one create, one kill), `an_external_run_is_refused_on_hosting`, `a_vanished_sandbox_ends_its_branch_infra_error`, `the_sweep_kills_sandboxes_whose_branch_ended_or_that_outlived_their_timeout`. |
-| `tests/hosting.rs` (live) | `live_hosting_hands_an_e2b_sandbox_its_ticket_and_kills_it` (`#[ignore]`, `E2B_API_KEY`): a run through `Hosting` on E2B's `base` template (no `shaked` in it, so it stops at the ticket): the ticket is whole at `TICKET_PATH` and its partial file gone, a stop ends the branch, the watcher kills the sandbox, and no sandbox of the test's link host is listed after. |
+| `tests/hosting.rs` (fake) | `a_run_with_hosting_runs_in_a_fake_sandbox` (the branch ends `passed`, one create, one kill), `an_external_run_is_refused_on_hosting`, `a_vanished_sandbox_ends_its_branch_infra_error`, `the_sweep_kills_sandboxes_whose_branch_ended_or_that_outlived_their_timeout`, `a_second_run_for_the_org_is_refused_until_the_first_ends`, `a_run_past_its_longest_is_stopped_and_its_sandbox_killed`, `a_world_built_here_is_copied_into_its_sandbox` (the fake sandbox has the toy integration only), `a_sandbox_only_control_box_runs_a_branch_without_a_package_program_here` (a layer whose packages run only in sandboxes). |
+| `tests/hosting.rs` (live) | `live_hosting_hands_an_e2b_sandbox_its_world_and_ticket_and_kills_it` (`#[ignore]`, `E2B_API_KEY`; `SHAKEDOWN_E2B_TEMPLATE` names a `shakedown-worker-…` template, else E2B's `base`): a run of a world built on the test control box through `Hosting`, its link host one no worker answers on: the world's manifest is in `SANDBOX_WORLDS`, the worker took the whole ticket (on `base`: the ticket is whole at `TICKET_PATH`) and no partial file stayed, a stop ends the branch, the watcher kills the sandbox, and no sandbox of the test's link host is listed after. |
 | `tests/support/scripted.rs` | The scripted `http` agent the worker and hosting tests share. |
 | `tests/hosting.rs` | `live_e2b_create_write_kill` (`#[ignore]`, needs `E2B_API_KEY`): a real sandbox from E2B's `base` template is running, takes a ticket at `TICKET_PATH` and reads it back, is killed, then is `Gone`. Its timeout is 2 minutes in case the kill fails. |
 | `src/agents/cli.rs`, `src/agents/jail.rs` unit tests | The jailed command line, the jail's variables. |
