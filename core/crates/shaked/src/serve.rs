@@ -21,6 +21,9 @@ pub struct ServeOptions {
     pub pg_url: String,
     /// `SHAKEDOWN_UI_DIST`.
     pub ui_dist: Option<PathBuf>,
+    /// Where new runs' branches run, for a control box that runs them in sandboxes (never from
+    /// the environment: the embedding binary sets it).
+    pub hosting: Option<Arc<crate::hosting::Hosting>>,
 }
 
 impl ServeOptions {
@@ -30,6 +33,7 @@ impl ServeOptions {
             bind: bind(policy)?,
             pg_url: crate::pg::configured_url().await,
             ui_dist: ui_dist_from_env(),
+            hosting: None,
         })
     }
 }
@@ -150,6 +154,9 @@ async fn app_state(store: Store, opts: &ServeOptions) -> anyhow::Result<Arc<AppS
         .map(PathBuf::from);
     let mut state = AppState::new(store, hub, config);
     state.objects = objects;
+    if let Some(hosting) = &opts.hosting {
+        let _ = state.hosting.set(hosting.clone());
+    }
     Ok(Arc::new(state))
 }
 

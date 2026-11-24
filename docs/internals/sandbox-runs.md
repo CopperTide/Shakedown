@@ -11,11 +11,12 @@ the rules and the final word. The two talk over one outbound WebSocket from the 
 
 What exists in the engine today: `shaked worker`, the link on both ends, gateway forwarding, linked-branch
 enforcement on the control box, holds and the sweep, the E2B sandbox backend (`src/hosting/e2b.rs`:
-create, write a file, kill, state), and the E2B template a sandbox starts from, in `deploy/sandbox` (see
-[In the sandbox](#in-the-sandbox)). What does not exist yet: `Hosting`, the code that creates a sandbox for a
-branch and hands it its ticket, and the reconciler (M2a Tasks 7, 8 and 12 in the Cloud plan
-`docs/superpowers/plans/2026-11-21-hosted-shakedown-m2a-sandbox-runner.md`). Until then the tests play that
-part (`tests/support/link.rs`, `ticketed`: `record_start`, `links.expect(plan)`, `links.tickets.issue`).
+create, write a file, kill, state), the E2B template a sandbox starts from, in `deploy/sandbox` (see
+[In the sandbox](#in-the-sandbox)), and `Hosting` (`src/hosting/mod.rs`), which runs each new branch of a
+control box in a sandbox of its own and kills the sandbox when the branch ends. A control box runs branches
+in sandboxes only when the binary embedding shaked sets `ServeOptions::hosting` (the hosted layer, M2a Task 12
+in the Cloud plan `docs/superpowers/plans/2026-11-21-hosted-shakedown-m2a-sandbox-runner.md`); personal use
+never does. The link tests play `Hosting`'s part by hand (`tests/support/link.rs`, `ticketed`).
 
 ## Modules
 
@@ -38,20 +39,23 @@ part (`tests/support/link.rs`, `ticketed`: `record_start`, `links.expect(plan)`,
 | `src/jobs.rs` | `linked_branches`, `end_linked`, `EndIf`: system jobs for the sweep and ends. |
 | `src/layer.rs` | `WorkerLayer`: no vault, no environment keys. |
 | `src/model/hold.rs` | `Hold`: running, paused, or stopping with the status the branch ends with. |
-| `src/hosting/mod.rs` | `SandboxSpec`, `ProviderRef`, `ProviderState`, the `SandboxBackend` trait, `TICKET_PATH` (`/run/shaked/ticket`). |
+| `src/hosting/mod.rs` | `Hosting` (start a branch in a sandbox), `SandboxSpec`, `ProviderRef`, `ProviderState`, the `SandboxBackend` trait, `TICKET_PATH` (`/run/shaked/ticket`), the caps. |
+| `src/hosting/watch.rs` | A sandbox's watcher: kills the sandbox once its branch has ended. |
 | `src/hosting/e2b.rs` | `E2bBackend`: sandboxes on E2B. |
+| `src/hosting/fake.rs` | `FakeBackend` (tests, `harness` feature): each sandbox a folder and a local `shaked worker`. |
+| `src/launch.rs` | `hosted`: with `AppState::hosting` set, a new run is admitted, recorded (`record_start`), metered and handed to `Hosting`. |
 
 ## The whole flow
 
 ```mermaid
 sequenceDiagram
-    participant H as Hosting (Task 7, next step)
+    participant H as Hosting
     participant CB as control box
     participant WK as shaked worker (sandbox)
     participant P as provider
     H->>CB: record_start(spec): run, branch, rules on record
     H->>CB: links.expect(plan), tickets.issue(branch, sandbox)
-    H->>WK: start the sandbox, write the ticket file
+    H->>WK: create the sandbox (its worker starts), write the ticket file whole
     WK->>CB: WS /worker, Hello {ticket sdt_, resume_from 0}
     CB->>CB: take_ticket, start_for(caller), mint worker token sdw_
     CB-->>WK: Start {plan, token, gateway}, then the current hold if any
@@ -141,6 +145,32 @@ stateDiagram-v2
   `last_n + 1`) is refused. Tests: `a_dropped_connection_loses_and_doubles_nothing`,
   `a_restarted_control_box_rejoins_without_doubling` in `tests/worker_link.rs`.
 
+## Hosting
+
+`launch` on a control box with `AppState::hosting` set goes through `launch::hosted`:
+
+1. A run an external system or a Code connection drives is refused 422 (`NOT_IN_A_SANDBOX`): those agents
+   run on a person's machine, not in a sandbox (not yet).
+2. The layer admits the run, `record_start` records the run, its branch and its rules, and the run is metered.
+3. `Hosting::start`: `links.expect(plan)`, then `backend.create(spec)`, then a ticket (bound to the branch and
+   a new sandbox id) written newline-ended to `TICKET_PATH`. A sandbox that can't take its ticket is killed.
+   When any of this fails the branch ends `infra_error` with `NO_SANDBOX` ("its sandbox could not start");
+   the cause is logged on the control box, never shown (it may carry E2B's answer).
+4. A watcher (`src/hosting/watch.rs`) looks at the branch every 5 s and kills the sandbox once the branch no
+   longer runs, however it ended (the worker's `Ended`, a stop while booting, the link sweep).
+
+The spec a sandbox is created with:
+
+| Field | Value |
+|---|---|
+| `template` | The `Hosting`'s template (the hosted layer's `shakedown-worker-<rev>`, Task 11). |
+| `allow_out` | The link host only. Model calls go through the control box's gateway, so no provider host is needed. |
+| `timeout` | The longest run (`LONGEST_RUN`, 55 min, or less with `with_longest_run`) plus `END_GRACE` (5 min), never past `SANDBOX_CAP` (60 min, E2B Hobby's continuous runtime). Never unbounded. |
+| `metadata` | `shaked` (the link host: which control box it runs for), `org` (the layer's `object_prefix`), `run`, `branch`, `sandbox` (the id the worker token names), `started` (unix seconds). Never secrets. |
+
+**Writes are whole.** `SandboxBackend::write_file` writes to `<path>.partial` (`partial_of`) and renames it onto
+`path`, so the worker, which polls `TICKET_PATH`, never reads half a ticket.
+
 ## The E2B backend
 
 `E2bBackend::new(api_key, api)` (`src/hosting/e2b.rs`, `api` is `https://api.e2b.app`) implements
@@ -150,7 +180,7 @@ stateDiagram-v2
 | Call | Request | Answer |
 |---|---|---|
 | `create` | `POST {api}/sandboxes`, `X-API-KEY`, body below | 201 `{sandboxID, envdAccessToken, domain}` |
-| `write_file` | `POST https://49983-{sandboxID}.{domain}/files?path=<path>&username=root`, `X-Access-Token`, multipart `file` | 200 |
+| `write_file` | `POST https://49983-{sandboxID}.{domain}/files?path=<path>.partial&username=root`, `X-Access-Token`, multipart `file`; then `POST …/filesystem.Filesystem/Move` (Connect RPC, JSON `{source, destination}`, `Authorization: Basic root:`) | 200, 200 |
 | `kill` | `DELETE {api}/sandboxes/{id}`, `X-API-KEY` | 204; a 404 counts as killed |
 | `state` | `GET {api}/sandboxes/{id}`, `X-API-KEY` | 200 `state: running` is `Running`; 404 or any other state is `Gone` |
 
@@ -313,9 +343,8 @@ flowchart LR
 
 ## Extension points
 
-- **A sandbox backend.** Implement `SandboxBackend` (`src/hosting/mod.rs`) as `E2bBackend` does. The planned
-  `Hosting` (M2a Task 7) creates the sandbox, calls `links.expect(plan)`, issues a ticket and writes it to
-  `TICKET_PATH`. Nothing in the link changes for it.
+- **A sandbox backend.** Implement `SandboxBackend` (`src/hosting/mod.rs`) as `E2bBackend` does; `write_file`
+  must make the file appear whole. `Hosting` and the link need no change for it.
 - **A new control frame.** Add it to `ToWorker`, handle it in `worker::run::obey` and pin its JSON in
   `src/worker/frames.rs` tests.
 
@@ -329,7 +358,9 @@ flowchart LR
 | `tests/run_tokens.rs` | Worker and ticket tokens, a worker token needing its sandbox, pauses extending tokens. |
 | `src/worker/link_records.rs`, `src/worker/frames.rs` unit tests | The window, resends in order, the end after every ack, frame cutting, frame JSON. |
 | `tests/support/link.rs` | Shared link plumbing: `ticketed`, `started`, `restarted`, `hear`. |
-| `src/hosting/e2b.rs` unit tests | The E2B calls against a local mock of E2B's API and envd: the create body, 404s on kill and state, the envd token and no E2B key on a write. |
+| `src/hosting/e2b.rs` unit tests | The E2B calls against a local mock of E2B's API and envd: the create body, 404s on kill and state, a write as upload then rename, the envd token and no E2B key on both. |
+| `tests/hosting.rs` (fake) | `a_run_with_hosting_runs_in_a_fake_sandbox` (the branch ends `passed`, one create, one kill), `an_external_run_is_refused_on_hosting`. |
+| `tests/support/scripted.rs` | The scripted `http` agent the worker and hosting tests share. |
 | `tests/hosting.rs` | `live_e2b_create_write_kill` (`#[ignore]`, needs `E2B_API_KEY`): a real sandbox from E2B's `base` template is running, takes a ticket at `TICKET_PATH` and reads it back, is killed, then is `Gone`. Its timeout is 2 minutes in case the kill fails. |
 | `src/agents/cli.rs`, `src/agents/jail.rs` unit tests | The jailed command line, the jail's variables. |
 | `deploy/sandbox/check-template.sh` (live, real E2B) | A sandbox from the template: dockerd, the images, the worker waiting for its ticket, the agent network reaching the agent port and nothing else. |

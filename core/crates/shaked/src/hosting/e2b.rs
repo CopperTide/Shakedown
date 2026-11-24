@@ -11,17 +11,26 @@
 //! | create | `POST {api}/sandboxes` | 201 `{sandboxID, envdAccessToken, domain}` |
 //! | state | `GET {api}/sandboxes/{id}` | 200 `{state: running \| paused}`, 404 gone |
 //! | kill | `DELETE {api}/sandboxes/{id}` | 204, 404 already gone |
-//! | write | `POST https://49983-{id}.{domain}/files?path=…&username=root`, multipart `file` | 200 |
+//! | write | `POST https://49983-{id}.{domain}/files?path=….partial&username=root`, multipart `file` | 200 |
+//! | rename | `POST https://49983-{id}.{domain}/filesystem.Filesystem/Move`, `{source, destination}` | 200 |
+//!
+//! A write is two calls: the file is uploaded beside its path, then moved onto it (envd's Connect
+//! RPC, JSON, as root by `Authorization: Basic root:`), so a reader never sees half a file.
 
 use std::{collections::HashMap, sync::Mutex, time::Duration};
 
+use anyhow::Context;
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use futures_util::future::BoxFuture;
-use reqwest::{header::CONTENT_TYPE, Response, StatusCode, Url};
+use reqwest::{
+    header::{AUTHORIZATION, CONTENT_TYPE},
+    Response, StatusCode, Url,
+};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use uuid::Uuid;
 
-use super::{ProviderRef, ProviderState, SandboxBackend, SandboxSpec};
+use super::{partial_of, ProviderRef, ProviderState, SandboxBackend, SandboxSpec};
 use crate::providers::Secret;
 
 /// E2B's API.
@@ -31,6 +40,8 @@ const DOMAIN: &str = "e2b.app";
 const ENVD_PORT: u16 = 49983;
 /// Files are written as root: the ticket's folder is the system's.
 const FILE_USER: &str = "root";
+/// envd's rename (Connect RPC, JSON).
+const MOVE: &str = "filesystem.Filesystem/Move";
 
 /// Sandboxes on E2B.
 pub struct E2bBackend {
@@ -101,20 +112,49 @@ impl E2bBackend {
         url
     }
 
-    /// The envd files URL for `path` in `sb`, and the token it takes.
-    fn files(&self, sb: &ProviderRef, path: &str) -> anyhow::Result<(Url, Secret)> {
+    /// How to reach `sb`'s envd.
+    fn envd_of(&self, sb: &ProviderRef) -> anyhow::Result<Envd> {
         let envd = self.envd.lock().unwrap().get(&sb.0).cloned();
-        let Some(envd) = envd else {
-            anyhow::bail!(
+        envd.with_context(|| {
+            format!(
                 "no envd access token for sandbox {}: this control box did not create it",
                 sb.0
-            );
-        };
+            )
+        })
+    }
+
+    /// The envd files URL for `path` in `sb`, and the token it takes.
+    fn files(&self, sb: &ProviderRef, path: &str) -> anyhow::Result<(Url, Secret)> {
+        let envd = self.envd_of(sb)?;
         let mut url = Url::parse(&format!("{}/files", envd.base))?;
         url.query_pairs_mut()
             .append_pair("path", path)
             .append_pair("username", FILE_USER);
         Ok((url, envd.token))
+    }
+
+    /// Writes `bytes` to `path` in `sb` (envd's `/files`).
+    async fn upload(&self, sb: &ProviderRef, path: &str, bytes: Vec<u8>) -> anyhow::Result<()> {
+        let (url, token) = self.files(sb, path)?;
+        let (kind, body) = multipart(bytes);
+        let req = self.http.post(url).header("X-Access-Token", token.expose());
+        let req = req.header(CONTENT_TYPE, kind).body(body);
+        answered(req.send().await?, "write a file").await?;
+        Ok(())
+    }
+
+    /// Renames `from` onto `to` in `sb` (envd's `Filesystem/Move`, as [`FILE_USER`]).
+    async fn rename(&self, sb: &ProviderRef, from: &str, to: &str) -> anyhow::Result<()> {
+        let envd = self.envd_of(sb)?;
+        let user = format!("Basic {}", BASE64.encode(format!("{FILE_USER}:")));
+        let req = self.http.post(format!("{}/{MOVE}", envd.base));
+        let req = req.header("X-Access-Token", envd.token.expose());
+        let req = req
+            .header(AUTHORIZATION, user)
+            .header("Connect-Protocol-Version", "1");
+        let req = req.json(&json!({"source": from, "destination": to}));
+        answered(req.send().await?, "rename a file").await?;
+        Ok(())
     }
 
     fn keep(&self, made: Created) -> ProviderRef {
@@ -204,12 +244,9 @@ impl SandboxBackend for E2bBackend {
         bytes: Vec<u8>,
     ) -> BoxFuture<'a, anyhow::Result<()>> {
         Box::pin(async move {
-            let (url, token) = self.files(sb, path)?;
-            let (kind, body) = multipart(bytes);
-            let req = self.http.post(url).header("X-Access-Token", token.expose());
-            let req = req.header(CONTENT_TYPE, kind).body(body);
-            answered(req.send().await?, "write a file").await?;
-            Ok(())
+            let partial = partial_of(path);
+            self.upload(sb, &partial, bytes).await?;
+            self.rename(sb, &partial, path).await
         })
     }
 
@@ -383,12 +420,28 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn write_file_sends_the_access_token() {
+    /// A sandbox created, taking uploads and renames.
+    fn writes() -> Answers {
         let mut answers = created();
-        let wrote = (200, json!([{"path": TICKET_PATH}]));
+        let wrote = (200, json!([{"path": "/run/shaked/ticket.partial"}]));
         answers.insert((Method::POST, "/files"), wrote);
-        let (base, seen) = mock(answers).await;
+        let moved = (200, json!({}));
+        answers.insert((Method::POST, "/filesystem.Filesystem/Move"), moved);
+        answers
+    }
+
+    /// `req` renames the partial ticket onto [`TICKET_PATH`], as root (`root:` in base64).
+    fn assert_renamed_onto_the_ticket(req: &Seen) {
+        assert_eq!(req.uri.path(), "/filesystem.Filesystem/Move");
+        let moved: Value = serde_json::from_slice(&req.body).unwrap();
+        let onto = json!({"source": "/run/shaked/ticket.partial", "destination": TICKET_PATH});
+        assert_eq!(moved, onto);
+        assert_eq!(req.headers["authorization"], "Basic cm9vdDo=");
+    }
+
+    #[tokio::test]
+    async fn write_file_uploads_beside_the_path_then_renames_with_the_access_token() {
+        let (base, seen) = mock(writes()).await;
         let e2b = backend(&base);
         let sb = e2b.create(&spec()).await.unwrap();
         let ticket = "sdt_abc\n";
@@ -398,13 +451,19 @@ mod tests {
         let unknown = ProviderRef("other".into());
         assert!(e2b.write_file(&unknown, TICKET_PATH, vec![]).await.is_err());
         let seen = seen.lock().unwrap();
-        let req = &seen[1];
-        assert_eq!((&req.method, req.uri.path()), (&Method::POST, "/files"));
-        let query = Some("path=%2Frun%2Fshaked%2Fticket&username=root");
-        assert_eq!(req.uri.query(), query);
-        assert_eq!(req.headers["x-access-token"], "envd-tok-1");
-        let no_key = req.headers.get("x-api-key").is_none();
-        assert!(no_key, "the E2B key never goes to a sandbox");
-        assert_multipart(req, ticket);
+        let (upload, rename) = (&seen[1], &seen[2]);
+        assert_eq!(
+            (&upload.method, upload.uri.path()),
+            (&Method::POST, "/files")
+        );
+        let query = Some("path=%2Frun%2Fshaked%2Fticket.partial&username=root");
+        assert_eq!(upload.uri.query(), query);
+        assert_multipart(upload, ticket);
+        assert_renamed_onto_the_ticket(rename);
+        for req in [upload, rename] {
+            assert_eq!(req.headers["x-access-token"], "envd-tok-1");
+            let no_key = req.headers.get("x-api-key").is_none();
+            assert!(no_key, "the E2B key never goes to a sandbox");
+        }
     }
 }

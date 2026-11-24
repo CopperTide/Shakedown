@@ -1,7 +1,9 @@
 //! Starting a new run, whoever drives it: shaked's own runners, an external system, or a Code
 //! connection's driver that shaked launches. Every path that makes a new run goes through
 //! [`launch`]: the run and its first branch, its world, its `RunStart` and its setup
-//! ([`runner::begin_run`]), then the branch started the way its runner says.
+//! ([`runner::begin_run`]), then the branch started the way its runner says. On a control box
+//! with [`Hosting`](crate::hosting::Hosting) the run and its branch are recorded here and the
+//! branch runs in a sandbox instead.
 
 use std::sync::Arc;
 
@@ -103,6 +105,9 @@ async fn run_token_of(
 /// The layer admits the run first (a refusal starts nothing) and meters it once it has begun, so
 /// every way a run starts (`POST /api/runs`, suites, experiments, a suite's claim) is counted.
 pub async fn launch(state: &Arc<AppState>, spec: LaunchSpec<'_>) -> Result<Launched, RunError> {
+    if let Some(hosting) = state.hosting.get() {
+        return hosted(state, hosting, &spec).await;
+    }
     let (warning, run_id, ctx) = admitted_begin(state, &spec).await?;
     let branch_id = ctx.branch_id.clone();
     let run_token = run_token_of(state, &ctx, &run_id).await?;
@@ -127,18 +132,60 @@ pub async fn launch(state: &Arc<AppState>, spec: LaunchSpec<'_>) -> Result<Launc
     })
 }
 
+/// Why a control box that runs branches in sandboxes refuses a run an external system or a
+/// Code connection drives.
+pub const NOT_IN_A_SANDBOX: &str =
+    "runs an external system or a Code connection drives don't run in the cloud yet";
+
+/// [`launch`] on a control box with [`Hosting`](crate::hosting::Hosting): the run admitted,
+/// recorded here (`record_start`) and metered, its branch run in a sandbox. When the sandbox
+/// can't start, the branch ends `infra_error`.
+async fn hosted(
+    state: &Arc<AppState>,
+    hosting: &crate::hosting::Hosting,
+    spec: &LaunchSpec<'_>,
+) -> Result<Launched, RunError> {
+    if spec.rules.runner == Runner::External || spec.driver.is_some() {
+        let status = axum::http::StatusCode::UNPROCESSABLE_ENTITY;
+        let refusal = crate::layer::Refusal::new(status, NOT_IN_A_SANDBOX);
+        return Err(RunError::Refused(refusal));
+    }
+    let warning = admit_run(state, spec).await?;
+    let plan = runner::record_start(state, spec).await?;
+    meter_run(state, spec, &plan.run_id, &plan.branch_id).await;
+    hosting.start_or_fail(state, &plan, &spec.scope).await;
+    Ok(Launched {
+        run_id: plan.run_id,
+        branch_id: plan.branch_id,
+        agents: vec![],
+        driver: None,
+        run_token: None,
+        warning,
+    })
+}
+
 /// The run `spec` describes admitted by the layer, begun ([`runner::begin_run`]) and metered:
 /// the layer's warning, the run and its first branch.
 async fn admitted_begin(
     state: &Arc<AppState>,
     spec: &LaunchSpec<'_>,
 ) -> Result<(Option<String>, RunId, BranchCtx), RunError> {
-    let costly = crate::layer::Costly::StartRun;
-    let warning = crate::layer::admit(&state.store, &spec.scope, costly).await?;
+    let warning = admit_run(state, spec).await?;
     let (run_id, ctx) = runner::begin_run(state, spec).await?;
-    let usage = runs_usage(&run_id, &ctx.branch_id);
-    crate::layer::meter(&state.store, &spec.scope, usage).await;
+    meter_run(state, spec, &run_id, &ctx.branch_id).await;
     Ok((warning, run_id, ctx))
+}
+
+/// The layer's admission of a new run: its warning, if any.
+async fn admit_run(state: &AppState, spec: &LaunchSpec<'_>) -> Result<Option<String>, RunError> {
+    let costly = crate::layer::Costly::StartRun;
+    Ok(crate::layer::admit(&state.store, &spec.scope, costly).await?)
+}
+
+/// Meters a run begun.
+async fn meter_run(state: &AppState, spec: &LaunchSpec<'_>, run_id: &str, branch_id: &str) {
+    let usage = runs_usage(run_id, branch_id);
+    crate::layer::meter(&state.store, &spec.scope, usage).await;
 }
 
 /// One run started, for the layer's `runs` meter (keyed by the run, so it counts once).

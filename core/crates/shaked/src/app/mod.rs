@@ -245,6 +245,9 @@ pub struct AppState {
     pub objects: Option<Arc<crate::objects::ObjectStores>>,
     /// The branches workers in sandboxes run for this control box, and their tickets.
     pub links: crate::worker::Links,
+    /// Set once, at start: new runs' branches run in sandboxes from it. Unset (personal use),
+    /// they run here.
+    pub hosting: OnceLock<Arc<crate::hosting::Hosting>>,
 }
 
 /// How long a streamed answer may stay silent before the gateway gives it up.
@@ -311,6 +314,7 @@ impl AppState {
             vault: OnceLock::new(),
             objects: None,
             links: Default::default(),
+            hosting: OnceLock::new(),
         }
     }
 

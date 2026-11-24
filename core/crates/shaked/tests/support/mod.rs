@@ -14,6 +14,7 @@ pub mod live_world;
 pub mod packages;
 pub mod pg;
 pub mod project;
+pub mod scripted;
 
 use std::{
     future::Future,
