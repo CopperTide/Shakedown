@@ -76,3 +76,11 @@ export interface ImportPlan { proposed?: true; files?: { kind: string; id: strin
 
 /** Moves earlier work into the project; without `confirm`, only what it would write. */
 export const importProject = (confirm: boolean) => post<ImportPlan>('/api/project/import', { confirm });
+
+/** The files in a world's data folder, relative to it. */
+export const worldDataFiles = (id: string) =>
+  get<{ files: { path: string; size: number }[]; truncated: boolean }>(path`/api/project/worlds/${id}/data`);
+
+/** One data file: its text (cut at 1 MiB, then `truncated`), or `binary` with its size. */
+export const worldDataFile = (id: string, file: string) =>
+  get<{ path: string; size: number; text?: string; truncated?: boolean; binary?: boolean }>(path`/api/project/worlds/${id}/data?path=${file}`);

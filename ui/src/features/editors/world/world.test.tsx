@@ -19,6 +19,8 @@ function mockFetch(body: Record<string, unknown> = BODY) {
       return new Response(JSON.stringify({ kind: 'world', id: 'plant', label: 'L', hash: 'h2', problems: [], body: sent.body }));
     }
     if (u.endsWith('/api/project/worlds/plant')) return new Response(JSON.stringify({ kind: 'world', id: 'plant', label: 'L', hash: 'h', problems: [], body }));
+    if (u.includes('/api/project/worlds/plant/data?path=')) return new Response(JSON.stringify(u.endsWith('b.bin') ? { path: 'b.bin', size: 2048, binary: true } : { path: 'a.csv', size: 9, text: 'id,name\n1,x', truncated: true }));
+    if (u.endsWith('/api/project/worlds/plant/data')) return new Response(JSON.stringify({ files: [{ path: 'a.csv', size: 9 }, { path: 'b.bin', size: 2048 }], truncated: false }));
     if (u.endsWith('/api/worlds')) return new Response(JSON.stringify([{ name: 'toybench', title: 'Toy bench', built: false }]));
     return new Response(JSON.stringify({ error: 'not found' }), { status: 404 });
   }));
@@ -75,6 +77,18 @@ describe('world editor', () => {
     expect(masked.hasAttribute('data-on')).toBe(false);
     fireEvent.click(masked);
     expect(screen.getByRole('switch', { name: 'Masked' }).hasAttribute('data-on')).toBe(true);
+  });
+
+  it('view_a_data_file_and_a_binary_one', async () => {
+    mockFetch({ ...BODY, data: [{ file: 'a.csv' }, { file: 'b.bin' }] });
+    show();
+    await section('Data');
+    fireEvent.click((await screen.findAllByRole('button', { name: 'View' }))[0]);
+    expect((await screen.findByLabelText('Contents of a.csv')).textContent).toBe('id,name\n1,x');
+    expect(screen.getByText(/Truncated/)).toBeTruthy();
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+    fireEvent.click((await screen.findAllByRole('button', { name: 'View' }))[1]);
+    expect(await screen.findByText('Binary file · 2 KB')).toBeTruthy();
   });
 
   it('runtime_lists_packages', async () => {

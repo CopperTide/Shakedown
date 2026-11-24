@@ -54,7 +54,9 @@ fn schemas_are_objects() {
 fn access_classes_follow_the_verb() {
     for op in ops::all() {
         let want = match op.name.rsplit('.').next().unwrap() {
-            "list" | "get" | "status" | "runs" | "madl" | "dependents" | "deleted" => Access::Read,
+            "list" | "get" | "status" | "runs" | "madl" | "dependents" | "deleted" | "data" => {
+                Access::Read
+            }
             "delete" => Access::Delete,
             "deploy" => Access::Spend,
             _ => Access::Edit,
@@ -600,5 +602,67 @@ fn undo_after_a_later_edit_is_409() {
             .await
             .unwrap();
         assert_eq!(now["label"], "Edited since");
+    });
+}
+
+/// `worlds.data` on the example world, after `files` (path, bytes) were put in its data folder.
+async fn world_data(files: &[(&str, &[u8])], input: Value) -> Result<Value, ops::OpError> {
+    let fx = project_app("ops", "data").await;
+    let folder = fx.dir.path().join("worlds/larkspur-plant");
+    for (path, bytes) in files {
+        std::fs::create_dir_all(folder.join(path).parent().unwrap()).unwrap();
+        std::fs::write(folder.join(path), bytes).unwrap();
+    }
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(fx.dir.path().join("shakedown.yaml"), folder.join("out")).unwrap();
+    let mut input = input;
+    input["id"] = json!("larkspur-plant");
+    call(&fx, "worlds.data", input).await
+}
+
+#[test]
+fn world_data_lists_files_recursively() {
+    run(async {
+        let files: [(&str, &[u8]); 2] = [("b.csv", b"x"), ("imports/a.txt", b"hello")];
+        let out = world_data(&files, json!({})).await.unwrap();
+        let paths: Vec<&str> = out["files"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|f| f["path"].as_str().unwrap())
+            .collect();
+        assert_eq!(paths, ["b.csv", "imports/a.txt", "world.yaml"], "{out}");
+    });
+}
+
+#[test]
+fn world_data_reads_text_binary_and_truncates() {
+    run(async {
+        let big = vec![b'a'; (1 << 20) + 10];
+        let files: [(&str, &[u8]); 3] = [("t.txt", b"hi"), ("b.bin", b"a\0b"), ("big.txt", &big)];
+        let read = |p: &str| world_data(&files, json!({ "path": p }));
+        let text = read("t.txt").await.unwrap();
+        assert_eq!(
+            text,
+            json!({"path": "t.txt", "size": 2, "text": "hi", "truncated": false})
+        );
+        let bin = read("b.bin").await.unwrap();
+        assert_eq!(bin, json!({"path": "b.bin", "size": 3, "binary": true}));
+        let cut = read("big.txt").await.unwrap();
+        assert_eq!(cut["truncated"], true);
+        assert_eq!(cut["text"].as_str().unwrap().len(), 1 << 20);
+        assert_eq!(read("missing.txt").await.unwrap_err().status.as_u16(), 404);
+    });
+}
+
+#[test]
+fn world_data_refuses_paths_outside_the_folder() {
+    run(async {
+        for path in ["../../shakedown.yaml", "/etc/hostname", "out"] {
+            let err = world_data(&[("t.txt", b"hi")], json!({ "path": path }))
+                .await
+                .unwrap_err();
+            assert_eq!(err.status.as_u16(), 400, "{path}");
+        }
     });
 }

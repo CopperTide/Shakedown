@@ -36,6 +36,10 @@ parent, and an experiment whose world is not its scenario's) are problems of the
 lowercase letters, digits and dashes. Writes are atomic; with `edit: diff_first` a put answers a diff and writes only
 when confirmed.
 
+**World data.** A file source in a world's `data` is a path in its data folder, `worlds/<id>/`. The world editor's Data
+section has a View button on each file source that shows the file (or the files of a folder) read-only: text up to
+1 MiB, or the size of a binary file. The same is `worlds.data` for MCP, the assistant and the API.
+
 **Groups.** A world's optional `group` is the name lists show it under, so the worlds of one customer sit together:
 the Worlds page and the sidebar list groups A to Z, the worlds in no group last, and worlds by label within each (the
 sidebar opens only the group of the world on screen). A file without `group` loads and saves exactly as before (the

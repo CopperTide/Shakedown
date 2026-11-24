@@ -23,11 +23,11 @@ const SECTIONS = [
 
 interface Around { groups: string[]; scenarios: ItemSummary[] }
 
-function Section({ id, world, onChange, onOpen, around }: { id: string; world: WorldBody; onChange: (w: WorldBody) => void; onOpen: (s: string) => void; around: Around }) {
+function Section({ id, worldId, world, onChange, onOpen, around }: { id: string; worldId: string; world: WorldBody; onChange: (w: WorldBody) => void; onOpen: (s: string) => void; around: Around }) {
   switch (id) {
     case 'connectors': return <ConnectorsSection world={world} onChange={onChange} />;
     case 'flows': return <FlowsSection world={world} onChange={onChange} />;
-    case 'data': return <DataSection world={world} onChange={onChange} />;
+    case 'data': return <DataSection id={worldId} world={world} onChange={onChange} />;
     case 'people': return <PeopleSection world={world} onChange={onChange} />;
     case 'observability': return <ObservabilitySection world={world} onChange={onChange} />;
     case 'runtime': return <RuntimeSection world={world} onChange={onChange} />;
@@ -49,7 +49,7 @@ export default function WorldEditor() {
     <EditorFrame title={ed.draft.label} meta="The production systems before any agent." sections={sections}
       actions={<DeleteItemDialog kind="worlds" id={id} label={ed.draft.label} onDeleted={() => navigate('/worlds')} />} active={active} onSelect={setActive}
       dirty={ed.dirty} onSave={() => { void ed.save(); }} onDiscard={ed.discard} saving={ed.saving} error={ed.error}>
-      <Section id={active} world={ed.draft} onChange={ed.setDraft} onOpen={setActive} around={around} />
+      <Section id={active} worldId={id} world={ed.draft} onChange={ed.setDraft} onOpen={setActive} around={around} />
     </EditorFrame>
   );
 }

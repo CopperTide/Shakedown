@@ -111,7 +111,7 @@ All three end in `launch::launch` ([runs and worlds](runs-and-worlds.md)).
 flowchart LR
     subgraph registry["ops::all(): 30 operations"]
       P["project_ops<br/>status, init, update"]
-      I["item_ops<br/>worlds, scenarios, setups, experiments<br/>x list, get, put, delete, dependents<br/>(delete and dependents in delete_ops)"]
+      I["item_ops<br/>worlds, scenarios, setups, experiments<br/>x list, get, put, delete, dependents<br/>(delete and dependents in delete_ops)<br/>data_ops: worlds.data"]
       G["group_ops<br/>worlds.rename_group"]
       R["restore_ops<br/>project.deleted, project.restore"]
       D["deploy_ops<br/>experiments.deploy, experiments.runs"]
@@ -144,6 +144,11 @@ Edits follow the project's `EditPolicy`. With `diff_first`, every operation taki
 restore's proposal carries the `trash` it is pinned to, and the assistant copies it into the card. Deletes go
 through `Project::delete` (`core/crates/project/src/dependents.rs`: one reference walk, a plan checked before
 any change, leaves first) and the trash (`trash.rs`); see [concepts](../concepts.md#project-files).
+
+`worlds.data` (`GET /api/project/worlds/{id}/data`, read) lists the files in a world's data folder, `worlds/<id>/` (as `Project::kept_folder`)
+(relative path and size, up to 500), or with `path` reads one: `{path, size, text, truncated}` for UTF-8 text (cut at
+1 MiB), `{path, size, binary: true}` otherwise. A `path` that leaves the folder (`..`, absolute, or a symlink pointing
+out) is 400 (`core/crates/shaked/src/ops/data_ops.rs`).
 
 What the registry does not cover yet: runs, forks, branches, suites, engine experiments, reviews,
 connections, keys and tokens are HTTP routes only. MCP clients and the assistant cannot use them. This is the
