@@ -209,13 +209,15 @@ mod tests {
         assert_eq!(at("--system-prompt"), Some(p.system.as_str()));
         // The digest goes on stdin, not on the command line.
         assert!(!args.iter().any(|a| a.contains("The digest of")));
-        let removed: Vec<String> = c
-            .get_envs()
-            .filter(|(_, v)| v.is_none())
-            .map(|(k, _)| k.to_string_lossy().into_owned())
-            .collect();
-        assert!(removed.contains(&"OPENROUTER_API_KEY".to_string()));
-        assert!(!removed.contains(&"ANTHROPIC_API_KEY".to_string()));
+        // Of this process's environment it passes on no other key (and no database URL): each
+        // one present is removed, and none is set.
+        let env: std::collections::BTreeMap<_, _> = c.get_envs().collect();
+        for k in ["OPENROUTER_API_KEY", "OPENAI_API_KEY", "SHAKEDOWN_PG_URL"] {
+            let k = std::ffi::OsStr::new(k);
+            let absent = std::env::var_os(k).is_none() && !env.contains_key(k);
+            let removed = env.get(k) == Some(&None);
+            assert!(removed || absent, "{k:?} reaches the reviewer");
+        }
     }
 
     #[test]

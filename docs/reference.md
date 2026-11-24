@@ -402,7 +402,7 @@ Optional. A real model reads a compact digest of the record and answers in JSON,
   example runs where it passed and failed.
 - **The reviewer.** Claude Code is run as `claude -p --output-format json --tools "" --strict-mcp-config
   --setting-sources "" --no-session-persistence`, with the reviewer's system prompt, the answer's JSON schema
-  (`--json-schema`) and the digest on stdin, in a fresh folder, with the same environment scrubbing as the CLI
+  (`--json-schema`) and the digest on stdin, in a fresh folder, with the same allowlisted environment as the CLI
   agents. A provider gets one chat-completions call. The cost is Claude Code's own (API-equivalent) figure, the
   provider's, or the list price of `docs/prices.toml`.
 - **What is kept.** The answer is validated (unknown enum values read leniently and said in `issues`, lists

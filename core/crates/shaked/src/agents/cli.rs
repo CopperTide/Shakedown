@@ -1,6 +1,6 @@
 //! What a CLI agent (Claude Code, Codex) runs with: the world's MCP endpoint, the gateway route of
-//! its model calls in a `shaked worker`, an environment scrubbed of secrets, and the process run
-//! with a time limit in a fresh work folder.
+//! its model calls in a `shaked worker`, only a small allowlisted part of shaked's environment,
+//! and the process run with a time limit in a fresh work folder.
 
 use std::{
     path::{Path, PathBuf},
@@ -13,11 +13,7 @@ use super::{
     jail::{confine, Jail},
     AgentResult, AgentRun,
 };
-use crate::{
-    exec::BranchCtx,
-    flow::FlowControl,
-    providers::{LOCAL_KEY_PREFIX, LOCAL_MODELS_ENV},
-};
+use crate::{exec::BranchCtx, flow::FlowControl};
 
 pub const CLI_TIMEOUT_SECS: u64 = 900;
 const STDERR_TAIL: usize = 2048;
@@ -163,162 +159,131 @@ pub fn server_name(benchmark: &str) -> String {
         .collect()
 }
 
-/// The secrets a CLI child doesn't get (except its own vendor's key): database credentials,
-/// every model provider's key, and the local model servers.
-const SECRET_ENV: [&str; 7] = [
-    "SHAKEDOWN_PG_URL",
-    "DATABASE_URL",
-    "PGPASSWORD",
-    "OPENROUTER_API_KEY",
-    "OPENAI_API_KEY",
-    "ANTHROPIC_API_KEY",
-    LOCAL_MODELS_ENV,
+/// All of shaked's environment a CLI child gets besides its own vendor's key: what a CLI needs to
+/// run (paths, the user, locale, terminal, time zone, temp and XDG folders, extra CA
+/// certificates). An entry ending in `*` names every variable with that prefix. Nothing else gets
+/// through: no key, token, password or database URL, and no proxy setting (one can carry
+/// credentials).
+const CLI_ENV: [&str; 14] = [
+    "PATH",
+    "HOME",
+    "USER",
+    "LOGNAME",
+    "SHELL",
+    "LANG",
+    "LC_*",
+    "TERM",
+    "TZ",
+    "TMPDIR",
+    "XDG_*",
+    "SSL_CERT_FILE",
+    "SSL_CERT_DIR",
+    "NODE_EXTRA_CA_CERTS",
 ];
 
-/// The endings of secrets under any prefix: database URLs, provider keys, secret access keys (an
-/// object store's, AWS's) and bearer or OAuth tokens (`ANTHROPIC_AUTH_TOKEN`,
-/// `CLAUDE_CODE_OAUTH_TOKEN`).
-const SECRET_SUFFIXES: [&str; 5] = [
-    "_PG_URL",
-    "_API_KEY",
-    "_SECRET_ACCESS_KEY",
-    "_AUTH_TOKEN",
-    "_OAUTH_TOKEN",
-];
-
-/// The words that make an `AWS_*` variable a credential: `AWS_ACCESS_KEY_ID`,
-/// `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`, `AWS_BEARER_TOKEN_BEDROCK`, and where the
-/// credentials are kept (`AWS_SHARED_CREDENTIALS_FILE`, `AWS_CONTAINER_CREDENTIALS_*`).
-const AWS_CREDENTIAL_WORDS: [&str; 4] = ["KEY", "SECRET", "TOKEN", "CREDENTIALS"];
-
-/// True for the name of an env var a CLI child must not see: the secrets above, any AWS
-/// credential, and any database URL, local model key, provider key, secret access key or token
-/// under another prefix (a stale variable from an older setup is removed too).
-fn is_secret_env(name: &str) -> bool {
-    let aws = name.strip_prefix("AWS_");
-    name.starts_with("PG")
-        || name.starts_with(LOCAL_KEY_PREFIX)
-        || name.contains("LOCAL_KEY_")
-        || SECRET_SUFFIXES.iter().any(|s| name.ends_with(s))
-        || aws.is_some_and(|rest| AWS_CREDENTIAL_WORDS.iter().any(|w| rest.contains(w)))
-        || SECRET_ENV.contains(&name)
+/// True when a CLI child gets shaked's variable `name`: [`CLI_ENV`] names it, or it is `keep`,
+/// the key of the CLI's own vendor (Claude Code signs in with `ANTHROPIC_API_KEY`, Codex with
+/// `OPENAI_API_KEY`).
+fn passed(name: &str, keep: &str) -> bool {
+    let named = |entry: &&str| match entry.strip_suffix('*') {
+        Some(prefix) => name.starts_with(prefix),
+        None => name == *entry,
+    };
+    name == keep || CLI_ENV.iter().any(named)
 }
 
-/// The env vars to remove from a CLI child, of those named in `present`: every secret but
-/// `keep`, the key of the CLI's own vendor (Claude Code signs in with `ANTHROPIC_API_KEY`,
-/// Codex with `OPENAI_API_KEY`).
-fn scrubbed(present: impl Iterator<Item = String>, keep: &str) -> Vec<String> {
-    let mut out: Vec<String> = present.filter(|k| is_secret_env(k)).collect();
-    out.extend(SECRET_ENV.iter().map(|k| k.to_string()));
-    out.retain(|k| k != keep);
-    out.sort();
-    out.dedup();
-    out
-}
-
-/// Removes database and API secrets from a CLI child's environment, all but `keep`.
+/// Removes from a CLI child's environment every variable of shaked's that [`passed`] doesn't let
+/// through, by name: the child inherits only those, and a jail's container (which gets only what
+/// the command sets) none of them. What the caller sets afterwards (the gateway route, the
+/// agent's token) comes on top.
 pub(crate) fn scrub_env(c: &mut Command, keep: &str) {
-    let present = std::env::vars_os().map(|(k, _)| k.to_string_lossy().into_owned());
-    for k in scrubbed(present, keep) {
-        c.env_remove(k);
+    for (k, _) in std::env::vars_os() {
+        if !k.to_str().is_some_and(|k| passed(k, keep)) {
+            c.env_remove(k);
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::process::Command;
+    use std::{collections::BTreeMap, process::Command};
 
-    use super::{scrubbed, server_name, Mcp, ModelRoute};
+    use super::{passed, server_name, Mcp, ModelRoute};
+
+    /// Every name the base lets through (two of each prefix), as a parent shaked may have them.
+    const PARENT_BASE: [&str; 16] = [
+        "PATH",
+        "HOME",
+        "USER",
+        "LOGNAME",
+        "SHELL",
+        "LANG",
+        "LC_ALL",
+        "LC_CTYPE",
+        "TERM",
+        "TZ",
+        "TMPDIR",
+        "XDG_CONFIG_HOME",
+        "XDG_CACHE_HOME",
+        "SSL_CERT_FILE",
+        "SSL_CERT_DIR",
+        "NODE_EXTRA_CA_CERTS",
+    ];
+
+    /// Names a parent shaked may hold that no CLI child may see: the vault's key, endpoint
+    /// credentials, tokens, secrets and passwords of any service, cloud and database credentials,
+    /// both vendors' keys, proxies (one can carry credentials), and `FOO_BAR_SECRET` for any name
+    /// no list thought of.
+    const PARENT_SECRETS: [&str; 27] = [
+        "SHAKEDOWN_VAULT_KEY",
+        "SHAKEDOWN_VAULT_KEY_FILE",
+        "SHAKEDOWN_AGENT_TOKEN",
+        "SHAKEDOWN_AGENT_AUTH",
+        "GH_TOKEN",
+        "GITHUB_TOKEN",
+        "HF_TOKEN",
+        "NPM_TOKEN",
+        "CLOUDFLARE_API_TOKEN",
+        "MY_SERVICE_TOKEN",
+        "MY_SERVICE_SECRET",
+        "MY_SERVICE_PASSWORD",
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_SESSION_TOKEN",
+        "AWS_BEARER_TOKEN_BEDROCK",
+        "SHAKEDOWN_OBJECT_STORE_R2_SECRET_ACCESS_KEY",
+        "ANTHROPIC_AUTH_TOKEN",
+        "CLAUDE_CODE_OAUTH_TOKEN",
+        "ANTHROPIC_API_KEY",
+        "OPENAI_API_KEY",
+        "SHAKEDOWN_PG_URL",
+        "DATABASE_URL",
+        "PGPASSWORD",
+        "HTTPS_PROXY",
+        "https_proxy",
+        "FOO_BAR_SECRET",
+    ];
 
     #[test]
-    fn secrets_under_any_prefix_are_removed() {
-        let present = [
-            "OLD_LOCAL_KEY_OLLAMA",
-            "OLD_PG_URL",
-            "MISTRAL_API_KEY",
-            "OLD_PORT",
-            "AWS_REGION",
-        ]
-        .map(String::from);
-        let gone = scrubbed(present.into_iter(), "ANTHROPIC_API_KEY");
-        for k in [
-            "OLD_LOCAL_KEY_OLLAMA",
-            "OLD_PG_URL",
-            "MISTRAL_API_KEY",
-            "SHAKEDOWN_PG_URL",
-        ] {
-            assert!(gone.iter().any(|g| g == k), "{k} kept");
-        }
-        for k in ["OLD_PORT", "AWS_REGION"] {
-            assert!(!gone.iter().any(|g| g == k), "{k} removed");
-        }
-        assert!(
-            !gone.iter().any(|g| g == "ANTHROPIC_API_KEY"),
-            "the CLI's own key stays"
-        );
-    }
-
-    #[test]
-    fn each_cli_keeps_only_its_own_vendor_key() {
-        let present = [
-            "PATH",
-            "HOME",
-            "SHAKEDOWN_PORT",
-            "SHAKEDOWN_LOCAL_KEY_OLLAMA",
-            "PGUSER",
-        ];
+    fn only_the_base_and_the_clis_own_vendor_key_pass() {
         for (keep, other) in [
             ("ANTHROPIC_API_KEY", "OPENAI_API_KEY"),
             ("OPENAI_API_KEY", "ANTHROPIC_API_KEY"),
         ] {
-            let gone = scrubbed(present.iter().map(|k| k.to_string()), keep);
-            for k in [
-                other,
-                "OPENROUTER_API_KEY",
-                "SHAKEDOWN_LOCAL_KEY_OLLAMA",
-                "SHAKEDOWN_LOCAL_MODELS",
-                "PGUSER",
-                "PGPASSWORD",
-                "SHAKEDOWN_PG_URL",
-                "DATABASE_URL",
-            ] {
-                assert!(gone.iter().any(|g| g == k), "{k} kept with {keep}");
+            assert!(passed(keep, keep), "{keep}");
+            assert!(!passed(other, keep), "{other} with {keep}");
+            for k in PARENT_BASE {
+                assert!(passed(k, keep), "{k} with {keep}");
             }
-            for k in [keep, "PATH", "HOME", "SHAKEDOWN_PORT"] {
-                assert!(!gone.iter().any(|g| g == k), "{k} removed with {keep}");
+            for k in PARENT_SECRETS.iter().filter(|k| **k != keep) {
+                assert!(!passed(k, keep), "{k} with {keep}");
             }
         }
     }
 
-    /// The env changes `c` makes: a var set (`Some`) or removed (`None`), the last change winning.
-    fn env_changes(c: &Command) -> std::collections::BTreeMap<String, Option<String>> {
-        let text = |s: &std::ffi::OsStr| s.to_string_lossy().into_owned();
-        c.get_envs().map(|(k, v)| (text(k), v.map(text))).collect()
-    }
-
-    /// `c` removes every secret (the fixed ones and those this process has) and then sets exactly
-    /// `set`: no key from the environment survives into a routed CLI agent.
-    fn only_set_after_the_scrub(c: &Command, set: &[(&str, &str)]) {
-        let env = env_changes(c);
-        let present = std::env::vars_os().map(|(k, _)| k.to_string_lossy().into_owned());
-        let secrets = present.filter(|k| super::is_secret_env(k));
-        for k in secrets.chain(super::SECRET_ENV.map(String::from)) {
-            if !set.iter().any(|(s, _)| *s == k) {
-                assert_eq!(env.get(&k), Some(&None), "{k} survives");
-            }
-        }
-        let kept: Vec<(&str, Option<&str>)> = (env.iter())
-            .filter(|(_, v)| v.is_some())
-            .map(|(k, v)| (k.as_str(), v.as_deref()))
-            .collect();
-        let mut want: Vec<(&str, Option<&str>)> = set.iter().map(|(k, v)| (*k, Some(*v))).collect();
-        want.sort();
-        assert_eq!(kept, want);
-    }
-
-    /// Claude Code's and Codex's commands as a worker builds them: MCP token `sda_mcp`, routed to
-    /// `base` with token `sda_route`.
-    fn routed_commands(base: &str) -> (Command, Command) {
+    /// Claude Code's and Codex's commands as a worker builds them, on the programs `claude_bin`
+    /// and `codex_bin`: MCP token `sda_mcp`, routed to `base` with token `sda_route`.
+    fn routed_commands((claude_bin, codex_bin): (&str, &str), base: &str) -> (Command, Command) {
         use crate::agents::{claude, codex};
         use crate::model::{AgentKind, AgentSpec};
         let dir = super::fresh_workdir().unwrap();
@@ -332,35 +297,109 @@ mod tests {
             base: base.into(),
             token: "sda_route".into(),
         };
-        let mut c = claude::command_in("claude", &spec, &mcp, "go", &dir).unwrap();
+        let mut c = claude::command_in(claude_bin, &spec, &mcp, "go", &dir).unwrap();
         claude::route_models(&mut c, &route);
-        let mut x = codex::command_with("codex", &spec, &mcp, &dir, "go");
+        let mut x = codex::command_with(codex_bin, &spec, &mcp, &dir, "go");
         codex::route_models(&mut x, &route);
         std::fs::remove_dir_all(&dir).unwrap();
         (c, x)
     }
 
-    /// In a worker, Claude Code and Codex keep no secret of the parent's environment and get only
-    /// the gateway route, their agent token as every vendor key. The order is kept by
-    /// construction (`route_models` runs after `command_*`, which scrubs); the vendor key the
-    /// route sets is the scrub's `keep`.
+    /// The environment `c`'s process started with: it runs `c` (a stand-in that says it is ready,
+    /// then waits on its stdin, so it stays the process shaked started), reads its
+    /// `/proc/<pid>/environ` once it is ready (before, the new program's environment may not be
+    /// set up yet) and kills it.
+    fn started_env(mut c: Command) -> BTreeMap<String, String> {
+        use std::{io::BufRead, process::Stdio};
+        c.stdin(Stdio::piped()).stdout(Stdio::piped());
+        let mut child = c.spawn().unwrap();
+        let out = std::io::BufReader::new(child.stdout.take().unwrap());
+        out.lines().next().unwrap().unwrap();
+        let raw = std::fs::read(format!("/proc/{}/environ", child.id())).unwrap();
+        let _ = child.kill();
+        let _ = child.wait();
+        let pairs = raw.split(|b| *b == 0).filter(|p| !p.is_empty());
+        let text = |p: &[u8]| String::from_utf8_lossy(p).into_owned();
+        let split = |p: &[u8]| text(p).split_once('=').map(|(k, v)| (k.into(), v.into()));
+        pairs.filter_map(split).collect()
+    }
+
+    /// A program that says `ready`, waits for a line on its stdin and does nothing else, in a fresh
+    /// folder.
+    fn waiting_program() -> (tempfile::TempDir, String) {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("cli");
+        std::fs::write(&path, "#!/bin/sh\necho ready\nread line\n").unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let path = path.to_string_lossy().into_owned();
+        (dir, path)
+    }
+
+    /// Set only in the child test process [`a_cli_child_gets_only_the_base_and_its_route`] starts.
+    const PROBE: &str = "SHAKEDOWN_TEST_SCRUB_PROBE";
+
+    /// In a test process whose environment is exactly [`PARENT_BASE`] and [`PARENT_SECRETS`],
+    /// Claude Code's and Codex's routed children start with exactly the base and their route (run
+    /// by the test below; without it, nothing to check).
     #[test]
-    fn a_routed_cli_keeps_no_parent_secret_and_gets_only_the_route() {
+    #[ignore = "run by a_cli_child_gets_only_the_base_and_its_route, in a set environment"]
+    fn probe_a_cli_childs_environment() {
+        if std::env::var_os(PROBE).is_none() {
+            return;
+        }
+        let (_dir, program) = waiting_program();
         let base = "http://127.0.0.1:7/gateway/b/a";
-        let (c, x) = routed_commands(base);
-        let claude_set = [
+        let v1 = format!("{base}/v1");
+        let (c, x) = routed_commands((&program, &program), base);
+        let claude = [
             ("ANTHROPIC_BASE_URL", base),
             ("ANTHROPIC_API_KEY", "sda_route"),
         ];
-        only_set_after_the_scrub(&c, &claude_set);
-        let v1 = format!("{base}/v1");
-        let codex_set = [
+        let codex = [
             ("OPENAI_BASE_URL", v1.as_str()),
             ("OPENAI_API_KEY", "sda_route"),
             ("CODEX_API_KEY", "sda_route"),
             (crate::agents::codex::AGENT_TOKEN_ENV, "sda_mcp"),
         ];
-        only_set_after_the_scrub(&x, &codex_set);
+        for (cmd, route) in [(c, &claude[..]), (x, &codex[..])] {
+            let env = started_env(cmd);
+            let names = route.iter().map(|r| r.0);
+            let mut want: Vec<&str> = PARENT_BASE.into_iter().chain(names).collect();
+            want.sort();
+            assert_eq!(env.keys().map(String::as_str).collect::<Vec<_>>(), want);
+            for (k, v) in route {
+                assert_eq!(env[*k], *v, "{k}");
+            }
+        }
+    }
+
+    /// A CLI child gets exactly the base of the parent's environment and its gateway route,
+    /// whatever else the parent holds. Checked in a child test process whose environment is set
+    /// whole, so this one's (which other tests read) stays as it is.
+    #[test]
+    fn a_cli_child_gets_only_the_base_and_its_route() {
+        let name = "agents::cli::tests::probe_a_cli_childs_environment";
+        let mut probe = Command::new(std::env::current_exe().unwrap());
+        probe.args(["--exact", name, "--ignored", "--test-threads=1"]);
+        probe.env_clear();
+        for k in PARENT_BASE {
+            let value = std::env::var(k).unwrap_or_else(|_| "from-the-parent".into());
+            probe.env(k, value);
+        }
+        probe.env("TMPDIR", std::env::temp_dir());
+        for k in PARENT_SECRETS.into_iter().chain([PROBE]) {
+            probe.env(k, "from-the-parent");
+        }
+        let out = probe.output().unwrap();
+        let text = String::from_utf8_lossy(&out.stdout);
+        assert!(out.status.success() && text.contains("1 passed"), "{text}");
+    }
+
+    /// The env changes `c` makes: a var set (`Some`) or removed (`None`), the last change winning.
+    fn env_changes(c: &Command) -> BTreeMap<String, Option<String>> {
+        let text = |s: &std::ffi::OsStr| s.to_string_lossy().into_owned();
+        c.get_envs().map(|(k, v)| (text(k), v.map(text))).collect()
     }
 
     fn text_args(c: &Command) -> Vec<String> {
@@ -401,9 +440,8 @@ mod tests {
 
     /// In a sandbox's worker, Claude Code and Codex run as uid 1000 in a throwaway container on
     /// the agent network, in their work folder. The container gets by name exactly the variables
-    /// the command sets, and `docker` keeps no parent secret (see
-    /// `a_routed_cli_keeps_no_parent_secret_and_gets_only_the_route`): the only key in its
-    /// environment is the agent token.
+    /// the command sets (its route and agent token, none of shaked's own), and `docker` the same
+    /// environment as the command (see `a_cli_child_gets_only_the_base_and_its_route`).
     #[test]
     fn in_a_worker_cli_agents_run_unprivileged_on_the_agent_network() {
         let jail = super::super::jail::Jail {
@@ -411,58 +449,11 @@ mod tests {
             image: "t".into(),
             listen: "10.250.0.1:4610".parse().unwrap(),
         };
-        let (c, x) = routed_commands(&format!("{}/gateway/b/a", jail.base()));
+        let base = format!("{}/gateway/b/a", jail.base());
+        let (c, x) = routed_commands(("claude", "codex"), &base);
         let dir = std::path::Path::new("/w");
         contained(&jail.docker_run(&c, dir, "c"), &c, "claude");
         contained(&jail.docker_run(&x, dir, "c"), &x, "codex");
-    }
-
-    /// Credentials a parent shaked may hold that no CLI child may see: AWS's (Bedrock and the
-    /// object store), an object store's own secret key, and Claude's bearer and OAuth tokens.
-    const PARENT_CREDENTIALS: [&str; 8] = [
-        "AWS_ACCESS_KEY_ID",
-        "AWS_SECRET_ACCESS_KEY",
-        "AWS_SESSION_TOKEN",
-        "AWS_BEARER_TOKEN_BEDROCK",
-        "SHAKEDOWN_OBJECT_STORE_R2_SECRET_ACCESS_KEY",
-        "ANTHROPIC_AUTH_TOKEN",
-        "CLAUDE_CODE_OAUTH_TOKEN",
-        "MY_SERVICE_AUTH_TOKEN",
-    ];
-
-    /// Set only in the child test process [`no_parent_credential_reaches_a_cli_child`] starts.
-    const PROBE: &str = "SHAKEDOWN_TEST_SCRUB_PROBE";
-
-    /// In a test process whose environment holds [`PARENT_CREDENTIALS`], Claude Code's and
-    /// Codex's commands remove every one (run by the test below; without it, nothing to check).
-    #[test]
-    #[ignore = "run by no_parent_credential_reaches_a_cli_child, with the credentials set"]
-    fn probe_the_scrub_of_parent_credentials() {
-        if std::env::var_os(PROBE).is_none() {
-            return;
-        }
-        let (c, x) = routed_commands("http://127.0.0.1:7/gateway/b/a");
-        for (cli, cmd) in [("claude", &c), ("codex", &x)] {
-            let env = env_changes(cmd);
-            for k in PARENT_CREDENTIALS {
-                assert_eq!(env.get(k), Some(&None), "{k} reaches {cli}");
-            }
-        }
-    }
-
-    /// Credentials set in the parent are absent in a Claude Code or Codex child: checked in a
-    /// child test process, so this one's environment (which other tests read) stays as it is.
-    #[test]
-    fn no_parent_credential_reaches_a_cli_child() {
-        let name = "agents::cli::tests::probe_the_scrub_of_parent_credentials";
-        let mut probe = Command::new(std::env::current_exe().unwrap());
-        probe.args(["--exact", name, "--ignored", "--test-threads=1"]);
-        for k in PARENT_CREDENTIALS.into_iter().chain([PROBE]) {
-            probe.env(k, "from-the-parent");
-        }
-        let out = probe.output().unwrap();
-        let text = String::from_utf8_lossy(&out.stdout);
-        assert!(out.status.success() && text.contains("1 passed"), "{text}");
     }
 
     #[test]

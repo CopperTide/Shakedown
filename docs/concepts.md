@@ -298,15 +298,13 @@ Isolation of the CLI agents (`core/crates/shaked/src/agents/`; checked live by t
   web search off; read-only sandbox. Codex's built-in shell cannot be turned off. A probe from inside the
   sandbox could not open a socket, not even to the loopback Postgres port (`Operation not permitted`). Codex
   still listed its sub-agent tools (`collaboration.*`) in the live checks; they run under the same restrictions.
-- Both CLIs run in a fresh temporary working directory, with `PG*`, `SHAKEDOWN_PG_URL`, `DATABASE_URL`,
-  `OPENROUTER_API_KEY`, `SHAKEDOWN_LOCAL_MODELS` and every `SHAKEDOWN_LOCAL_KEY_*` removed from their environment,
-  and with them every AWS credential (an `AWS_*` variable naming a key, secret, token or credentials, such as
-  `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN` and `AWS_BEARER_TOKEN_BEDROCK`) and every
-  variable ending in `_API_KEY`, `_PG_URL`, `_SECRET_ACCESS_KEY` (an object store's
-  `SHAKEDOWN_OBJECT_STORE_<NAME>_SECRET_ACCESS_KEY`), `_AUTH_TOKEN` or `_OAUTH_TOKEN` (`ANTHROPIC_AUTH_TOKEN`,
-  `CLAUDE_CODE_OAUTH_TOKEN`). Each keeps only its own vendor's key, which it may sign in with: Claude Code keeps `ANTHROPIC_API_KEY` and loses
-  `OPENAI_API_KEY`; Codex keeps `OPENAI_API_KEY` and loses `ANTHROPIC_API_KEY`. The `provider` of API mode does
-  not apply to them on this machine.
+- Both CLIs run in a fresh temporary working directory, and of shaked's environment they get only `PATH`, `HOME`,
+  `USER`, `LOGNAME`, `SHELL`, `LANG`, every `LC_*`, `TERM`, `TZ`, `TMPDIR`, every `XDG_*`, `SSL_CERT_FILE`,
+  `SSL_CERT_DIR` and `NODE_EXTRA_CA_CERTS`. Nothing else reaches them: no key, token, secret or password of any
+  service, no database or vault setting, and no proxy setting (`HTTPS_PROXY` and the like, which can carry
+  credentials). Besides that base each keeps only its own vendor's key, which it may sign in with: Claude Code
+  gets `ANTHROPIC_API_KEY`, Codex `OPENAI_API_KEY`. The `provider` of API mode does not apply to them on this
+  machine.
 - In a sandbox (`shaked worker`), which holds no model key, their model calls go through the worker's gateway
   instead: Claude Code's `ANTHROPIC_BASE_URL` and Codex's `OPENAI_BASE_URL` point at it, the agent's token as the
   key, and the control box sends each call on with the run's key (an agent's `provider`, if it names one, picks

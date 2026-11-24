@@ -76,11 +76,7 @@ fn claude_command_has_only_the_world_mcp() {
     assert_eq!(a[0], "-p");
     assert_eq!(a[a.len() - 2..], ["--", "do it"]);
     assert!(a.contains(&"--no-session-persistence".to_string()));
-    // Claude Code keeps its own vendor's key, and loses the others.
-    for key in ["PGPASSWORD", "OPENAI_API_KEY", "OPENROUTER_API_KEY"] {
-        assert!(c.get_envs().any(|(k, v)| k == key && v.is_none()), "{key}");
-    }
-    assert!(!c.get_envs().any(|(k, _)| k == "ANTHROPIC_API_KEY"));
+    assert_secrets_scrubbed(&c, "OPENAI_API_KEY");
     let c = claude::command(&spec(Some("opus")), &mcp(), "x");
     assert!(args(&c).contains(&"opus".to_string()));
 }
@@ -140,30 +136,28 @@ fn codex_command_sets_mcp_url() {
     assert!(a.windows(2).any(|w| w == ["--disable", "hooks"]));
     assert!(a.contains(&"web_search=\"disabled\"".to_string()));
     assert!(a.windows(2).any(|w| w == ["-m", "gpt-x"]));
-    assert_secrets_scrubbed(&c);
+    assert_secrets_scrubbed(&c, "ANTHROPIC_API_KEY");
     assert!(a.windows(2).any(|w| w == ["-C", "/tmp/w"]));
     assert_eq!(a.last().unwrap(), "do it");
 }
 
-/// Every secret the driver must not hand to the agent is removed from the command's environment.
-fn assert_secrets_scrubbed(c: &std::process::Command) {
-    let removed: Vec<_> = c
-        .get_envs()
-        .filter(|(_, v)| v.is_none())
-        .map(|(k, _)| k.to_string_lossy().into_owned())
-        .collect();
+/// The command hands the agent no secret of this process's environment (which holds
+/// `SHAKEDOWN_PG_URL` in these tests), nor `other`, the other vendor's key: each one present is
+/// removed, and none is set (`agents::cli`'s tests check a started child's environment whole).
+fn assert_secrets_scrubbed(c: &std::process::Command, other: &str) {
+    let env: std::collections::BTreeMap<_, _> = c.get_envs().collect();
     for k in [
         "SHAKEDOWN_PG_URL",
         "DATABASE_URL",
         "PGPASSWORD",
         "OPENROUTER_API_KEY",
-        "ANTHROPIC_API_KEY",
         "SHAKEDOWN_LOCAL_MODELS",
+        other,
     ] {
-        assert!(removed.contains(&k.to_string()), "{k} not scrubbed");
+        let removed = env.get(std::ffi::OsStr::new(k)) == Some(&None);
+        let absent = std::env::var_os(k).is_none() && !env.contains_key(std::ffi::OsStr::new(k));
+        assert!(removed || absent, "{k} reaches the agent");
     }
-    // Codex keeps its own vendor's key.
-    assert!(!c.get_envs().any(|(k, _)| k == "OPENAI_API_KEY"));
 }
 
 // ---- driver behaviour with fake binaries ----

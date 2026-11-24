@@ -37,7 +37,7 @@ shaked holds the model keys. An agent never sees one: the gateway adds the key c
 | `src/agents/mod.rs` | `Driver` trait, `AgentRun`, `AgentResult`, the endpoint URL builder. |
 | `src/agents/open.rs` | shaked's own agent loop (`OpenDriver`, `OpenSession`): chat calls through the gateway, then tool calls. |
 | `src/agents/{claude,codex,claude_session,usage}.rs` | CLI drivers: commands, MCP config, stream-json usage. |
-| `src/agents/cli.rs` | What a CLI agent runs with: MCP endpoint, gateway route in a worker, scrubbed env, time limit, fresh work folder. |
+| `src/agents/cli.rs` | What a CLI agent runs with: MCP endpoint, gateway route in a worker, allowlisted env, time limit, fresh work folder. |
 | `src/agents/{http,endpoint_auth}.rs` | `http` agents behind a URL (`shakedown-agent/1`), credentials read per request. |
 | `src/agents/session.rs` | Agents that stay alive across turns (dispatch). |
 | `src/mcp.rs`, `src/jsonrpc.rs` | The world MCP endpoint: `initialize`, `tools/list`, `tools/call` → `ToolExec::run_outcome`. |
@@ -141,13 +141,17 @@ Outside a worker, Claude Code's model calls are recorded from its stream-json as
 events (`claude_session.rs`, `usage.rs`). In a worker they go through the gateway and the control box records
 them, so the client records none.
 
-The CLI environment is scrubbed first, then the gateway route is set (`src/agents/cli.rs`, `scrub_env`,
-`ModelRoute`). The test `a_routed_cli_keeps_no_parent_secret_and_gets_only_the_route` in that file pins the
-order. The scrub is a pattern rule (`is_secret_env`) over a short fixed list: database settings, local model
-keys, every AWS credential (`AWS_*` naming a key, secret, token or credentials) and anything ending in
-`_API_KEY`, `_PG_URL`, `_SECRET_ACCESS_KEY`, `_AUTH_TOKEN` or `_OAUTH_TOKEN`; only the CLI's own vendor key is
-kept, and on a routed run the route replaces it. `no_parent_credential_reaches_a_cli_child` sets those
-credentials in a child test process and checks that neither CLI's command keeps one.
+A CLI child's environment is an allowlist, applied first; the gateway route and the agent's token are set
+after (`src/agents/cli.rs`, `scrub_env`, `ModelRoute`). `scrub_env` removes, by name, every variable of shaked's
+that is not on `CLI_ENV` and is not the CLI's own vendor key (`keep`, which the route replaces on a routed run).
+`CLI_ENV` is one data list of what a CLI needs to run (paths, user, locale, terminal, time zone, temp and XDG
+folders, extra CA certificates; `LC_*` and `XDG_*` by prefix). No proxy variable passes, because one can carry
+credentials. The AI reviewer's `claude` gets the same. Removing rather than clearing keeps the base out of what
+the command sets, so in a worker's jail (`agents/jail.rs`) the container gets only the route and the token by
+name, never the worker's own `HOME` or `PATH`. `a_cli_child_gets_only_the_base_and_its_route` starts a child test
+process with a set environment (the base, plus vault, cloud, database, token, secret, password and proxy
+variables and a made-up `FOO_BAR_SECRET`). It really starts both routed CLIs' commands there, on a stand-in
+program, and checks from `/proc/<pid>/environ` that each started with exactly the base and its route.
 
 ## The world MCP endpoint and the proxy
 

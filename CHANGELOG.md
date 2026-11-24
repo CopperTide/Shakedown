@@ -46,12 +46,14 @@
 
 ### Fixed
 
-- **Claude Code and Codex no longer inherit cloud credentials or Claude tokens.** Their
-  environment now loses every AWS credential (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`,
-  `AWS_SESSION_TOKEN`, `AWS_BEARER_TOKEN_BEDROCK` and the like), object-store secret keys, and any
-  variable ending in `_AUTH_TOKEN` or `_OAUTH_TOKEN` (`ANTHROPIC_AUTH_TOKEN`,
-  `CLAUDE_CODE_OAUTH_TOKEN`), so a parent `ANTHROPIC_AUTH_TOKEN` no longer reaches the gateway as a
-  bearer token on routed runs either.
+- **Claude Code, Codex and the AI reviewer get an allowlisted environment.** Of shaked's
+  environment they now get only `PATH`, `HOME`, `USER`, `LOGNAME`, `SHELL`, `LANG`, `LC_*`, `TERM`,
+  `TZ`, `TMPDIR`, `XDG_*`, `SSL_CERT_FILE`, `SSL_CERT_DIR`, `NODE_EXTRA_CA_CERTS` and their own
+  vendor's key. Before, a denylist let through the vault key, endpoint credentials
+  (`SHAKEDOWN_AGENT_*`), AWS credentials, object-store secret keys, `GH_TOKEN`, `HF_TOKEN` and any
+  other token, secret or password, and a parent `ANTHROPIC_AUTH_TOKEN` reached the gateway as a
+  bearer token on routed runs. Proxy settings (`HTTPS_PROXY` and the like) no longer reach them
+  either.
 - **Shared saves of unrelated hubs are no longer made one at a time.** The lock that makes each
   base and gold save once is now per hub saves folder and name, so runs on different hubs stop
   queueing behind each other.
