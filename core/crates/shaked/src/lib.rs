@@ -19,6 +19,7 @@ pub mod gateway;
 pub mod gc;
 #[cfg(feature = "harness")]
 pub mod harness;
+pub mod hosting;
 pub mod jobs;
 pub mod jsonrpc;
 pub mod launch;

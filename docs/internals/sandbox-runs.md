@@ -10,8 +10,9 @@ the rules and the final word. The two talk over one outbound WebSocket from the 
 `GET /worker`, and the sandbox's model calls go to the control box's gateway with a worker token.
 
 What exists in the engine today: `shaked worker`, the link on both ends, gateway forwarding, linked-branch
-enforcement on the control box, holds and the sweep. What does not exist yet: the code that creates a sandbox
-for a branch and hands it its ticket (`Hosting` and the E2B backend, M2a Tasks 7 to 12 in the Cloud plan
+enforcement on the control box, holds and the sweep, and the E2B sandbox backend (`src/hosting/e2b.rs`:
+create, write a file, kill, state). What does not exist yet: `Hosting`, the code that creates a sandbox for a
+branch and hands it its ticket, and the reconciler (M2a Tasks 7, 8 and 12 in the Cloud plan
 `docs/superpowers/plans/2026-11-21-hosted-shakedown-m2a-sandbox-runner.md`). Until then the tests play that
 part (`tests/support/link.rs`, `ticketed`: `record_start`, `links.expect(plan)`, `links.tickets.issue`).
 
@@ -35,12 +36,14 @@ part (`tests/support/link.rs`, `ticketed`: `record_start`, `links.expect(plan)`,
 | `src/jobs.rs` | `linked_branches`, `end_linked`, `EndIf`: system jobs for the sweep and ends. |
 | `src/layer.rs` | `WorkerLayer`: no vault, no environment keys. |
 | `src/model/hold.rs` | `Hold`: running, paused, or stopping with the status the branch ends with. |
+| `src/hosting/mod.rs` | `SandboxSpec`, `ProviderRef`, `ProviderState`, the `SandboxBackend` trait, `TICKET_PATH` (`/run/shaked/ticket`). |
+| `src/hosting/e2b.rs` | `E2bBackend`: sandboxes on E2B. |
 
 ## The whole flow
 
 ```mermaid
 sequenceDiagram
-    participant H as Hosting (next step)
+    participant H as Hosting (Task 7, next step)
     participant CB as control box
     participant WK as shaked worker (sandbox)
     participant P as provider
@@ -135,6 +138,40 @@ stateDiagram-v2
   `last_n + 1`) is refused. Tests: `a_dropped_connection_loses_and_doubles_nothing`,
   `a_restarted_control_box_rejoins_without_doubling` in `tests/worker_link.rs`.
 
+## The E2B backend
+
+`E2bBackend::new(api_key, api)` (`src/hosting/e2b.rs`, `api` is `https://api.e2b.app`) implements
+`SandboxBackend` over E2B's REST API and each sandbox's envd. Endpoints as in E2B's `spec/openapi.yml` and
+`spec/envd/envd.yaml`:
+
+| Call | Request | Answer |
+|---|---|---|
+| `create` | `POST {api}/sandboxes`, `X-API-KEY`, body below | 201 `{sandboxID, envdAccessToken, domain}` |
+| `write_file` | `POST https://49983-{sandboxID}.{domain}/files?path=<path>&username=root`, `X-Access-Token`, multipart `file` | 200 |
+| `kill` | `DELETE {api}/sandboxes/{id}`, `X-API-KEY` | 204; a 404 counts as killed |
+| `state` | `GET {api}/sandboxes/{id}`, `X-API-KEY` | 200 `state: running` is `Running`; 404 or any other state is `Gone` |
+
+The create body:
+
+```json
+{"templateID": "<spec.template>", "timeout": <spec.timeout in s>, "secure": true,
+ "metadata": {"...": "..."},
+ "network": {"allowOut": ["<spec.allow_out>"], "denyOut": ["0.0.0.0/0"], "allowPublicTraffic": false}}
+```
+
+- **Egress.** Everything is denied but `allow_out`: the control box's link host and the hosts the agent setup
+  allows. With `allowPublicTraffic: false`, E2B's spec says sandbox URLs take no traffic without the
+  sandbox's traffic token (not tested here; envd still answers with its access token, checked live).
+- **Keys.** The E2B key goes only to E2B's API, never to envd or into a sandbox
+  (`write_file_sends_the_access_token` checks the envd request carries no `X-API-KEY`). The envd access token
+  of each sandbox is kept in memory only, by sandbox id; a control box that restarts cannot write into the
+  sandboxes it made before (Task 8 keeps it sealed with the vault key).
+- **Domain.** When E2B names no `domain`, envd is on `e2b.app`.
+- **Files** are written as root, so `TICKET_PATH` under `/run` is writable; envd makes the folders.
+- **Errors** name the call, E2B's status and up to 500 characters of its answer.
+- `with_envd(base)` sends every envd call to one base instead of the sandbox's host (the unit tests' mock).
+- `read_file` reads a file back (the live check).
+
 ## The control box's end
 
 `src/worker/link.rs`:
@@ -228,8 +265,9 @@ reconnect.
 
 ## Extension points
 
-- **A sandbox backend.** The planned `Hosting` (M2a Task 7) creates the sandbox, calls `links.expect(plan)`,
-  issues a ticket and writes it to the ticket path. Nothing in the link changes for it.
+- **A sandbox backend.** Implement `SandboxBackend` (`src/hosting/mod.rs`) as `E2bBackend` does. The planned
+  `Hosting` (M2a Task 7) creates the sandbox, calls `links.expect(plan)`, issues a ticket and writes it to
+  `TICKET_PATH`. Nothing in the link changes for it.
 - **A new control frame.** Add it to `ToWorker`, handle it in `worker::run::obey` and pin its JSON in
   `src/worker/frames.rs` tests.
 
@@ -243,3 +281,5 @@ reconnect.
 | `tests/run_tokens.rs` | Worker and ticket tokens, a worker token needing its sandbox, pauses extending tokens. |
 | `src/worker/link_records.rs`, `src/worker/frames.rs` unit tests | The window, resends in order, the end after every ack, frame cutting, frame JSON. |
 | `tests/support/link.rs` | Shared link plumbing: `ticketed`, `started`, `restarted`, `hear`. |
+| `src/hosting/e2b.rs` unit tests | The E2B calls against a local mock of E2B's API and envd: the create body, 404s on kill and state, the envd token and no E2B key on a write. |
+| `tests/hosting.rs` | `live_e2b_create_write_kill` (`#[ignore]`, needs `E2B_API_KEY`): a real sandbox from E2B's `base` template is running, takes a ticket at `TICKET_PATH` and reads it back, is killed, then is `Gone`. Its timeout is 2 minutes in case the kill fails. |

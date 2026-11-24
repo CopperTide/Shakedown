@@ -92,9 +92,9 @@ What each box is:
   Track on; in an EU or EEA time zone it stores nothing in the browser and records no replay. `ui/src/lib/posthogShared.ts` is kept identical to
   CopperTide's `web/src/hosted/posthogShared.ts`.
 - **E2B workers** are the next step. The engine side is built: `shaked worker`, the link, the
-  gateway forwarding and the control box's holds (see [sandbox runs](sandbox-runs.md)). What starts a sandbox
-  for a branch (`Hosting`, M2a Task 7 onward) is not in the engine yet. Today only tests hand a worker its
-  ticket.
+  gateway forwarding, the control box's holds and the E2B backend that creates, writes into and kills a
+  sandbox (`src/hosting/e2b.rs`; see [sandbox runs](sandbox-runs.md)). What starts a sandbox for a branch
+  (`Hosting`, M2a Task 7 onward) is not in the engine yet. Today only tests hand a worker its ticket.
 
 ## Crates
 
