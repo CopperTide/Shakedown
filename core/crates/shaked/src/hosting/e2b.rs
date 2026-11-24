@@ -12,11 +12,11 @@
 //! | state | `GET {api}/sandboxes/{id}` | 200 `{state: running \| paused}`, 404 gone |
 //! | list | `GET {api}/sandboxes?metadata=<k=v&…, encoded>` | 200 `[{sandboxID, metadata}]`, running only |
 //! | kill | `DELETE {api}/sandboxes/{id}` | 204, 404 already gone |
-//! | write | `POST https://49983-{id}.{domain}/files?path=….partial&username=root`, multipart `file` | 200 |
+//! | write | `POST https://49983-{id}.{domain}/files?path=…&username=root`, multipart `file` | 200 |
 //! | rename | `POST https://49983-{id}.{domain}/filesystem.Filesystem/Move`, `{source, destination}` | 200 |
 //!
-//! A write is two calls: the file is uploaded beside its path, then moved onto it (envd's Connect
-//! RPC, JSON, as root by `Authorization: Basic root:`), so a reader never sees half a file.
+//! A rename is envd's Connect RPC (JSON, as root by `Authorization: Basic root:`); `Hosting` writes
+//! the ticket beside its path and renames it, so the worker never reads half a ticket.
 
 use std::{
     collections::{BTreeMap, HashMap},
@@ -35,7 +35,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use uuid::Uuid;
 
-use super::{partial_of, Listed, ProviderRef, ProviderState, SandboxBackend, SandboxSpec};
+use super::{Listed, ProviderRef, ProviderState, SandboxBackend, SandboxSpec};
 use crate::providers::Secret;
 
 /// E2B's API.
@@ -149,7 +149,7 @@ impl E2bBackend {
     }
 
     /// Renames `from` onto `to` in `sb` (envd's `Filesystem/Move`, as [`FILE_USER`]).
-    async fn rename(&self, sb: &ProviderRef, from: &str, to: &str) -> anyhow::Result<()> {
+    async fn move_file(&self, sb: &ProviderRef, from: &str, to: &str) -> anyhow::Result<()> {
         let envd = self.envd_of(sb)?;
         let user = format!("Basic {}", BASE64.encode(format!("{FILE_USER}:")));
         let req = self.http.post(format!("{}/{MOVE}", envd.base));
@@ -274,11 +274,16 @@ impl SandboxBackend for E2bBackend {
         path: &'a str,
         bytes: Vec<u8>,
     ) -> BoxFuture<'a, anyhow::Result<()>> {
-        Box::pin(async move {
-            let partial = partial_of(path);
-            self.upload(sb, &partial, bytes).await?;
-            self.rename(sb, &partial, path).await
-        })
+        Box::pin(self.upload(sb, path, bytes))
+    }
+
+    fn rename<'a>(
+        &'a self,
+        sb: &'a ProviderRef,
+        from: &'a str,
+        to: &'a str,
+    ) -> BoxFuture<'a, anyhow::Result<()>> {
+        Box::pin(self.move_file(sb, from, to))
     }
 
     fn kill<'a>(&'a self, sb: &'a ProviderRef) -> BoxFuture<'a, anyhow::Result<()>> {
@@ -506,22 +511,19 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn write_file_uploads_beside_the_path_then_renames_with_the_access_token() {
+    async fn a_write_and_a_rename_carry_the_access_token_only() {
         let (base, seen) = mock(writes()).await;
         let e2b = backend(&base);
         let sb = e2b.create(&spec()).await.unwrap();
-        let ticket = "sdt_abc\n";
-        e2b.write_file(&sb, TICKET_PATH, ticket.into())
-            .await
-            .unwrap();
+        let (partial, ticket) = ("/run/shaked/ticket.partial", "sdt_abc\n");
+        e2b.write_file(&sb, partial, ticket.into()).await.unwrap();
+        e2b.rename(&sb, partial, TICKET_PATH).await.unwrap();
         let unknown = ProviderRef("other".into());
         assert!(e2b.write_file(&unknown, TICKET_PATH, vec![]).await.is_err());
         let seen = seen.lock().unwrap();
         let (upload, rename) = (&seen[1], &seen[2]);
-        assert_eq!(
-            (&upload.method, upload.uri.path()),
-            (&Method::POST, "/files")
-        );
+        let to = (&upload.method, upload.uri.path());
+        assert_eq!(to, (&Method::POST, "/files"));
         let query = Some("path=%2Frun%2Fshaked%2Fticket.partial&username=root");
         assert_eq!(upload.uri.query(), query);
         assert_multipart(upload, ticket);

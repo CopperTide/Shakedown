@@ -16,8 +16,7 @@ use futures_util::future::BoxFuture;
 use tokio::process::{Child, Command};
 
 use super::{
-    partial_of, Listed, ProviderRef, ProviderState, SandboxBackend, SandboxSpec, SANDBOX_WORLDS,
-    TICKET_PATH,
+    Listed, ProviderRef, ProviderState, SandboxBackend, SandboxSpec, SANDBOX_WORLDS, TICKET_PATH,
 };
 
 /// Sandboxes as local `shaked worker` processes.
@@ -51,14 +50,12 @@ fn local(dir: &Path, path: &str) -> PathBuf {
     dir.join(path.trim_start_matches('/'))
 }
 
-/// Writes `bytes` beside `path` and renames the file onto it, making its folders.
-fn write_whole(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+/// Writes `bytes` to `path`, making its folders.
+fn write(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    let partial = PathBuf::from(partial_of(&path.to_string_lossy()));
-    std::fs::write(&partial, bytes)?;
-    std::fs::rename(&partial, path)
+    std::fs::write(path, bytes)
 }
 
 impl FakeBackend {
@@ -136,7 +133,19 @@ impl SandboxBackend for FakeBackend {
         path: &'a str,
         bytes: Vec<u8>,
     ) -> BoxFuture<'a, anyhow::Result<()>> {
-        Box::pin(async move { Ok(write_whole(&local(&self.dir_of(sb)?, path), &bytes)?) })
+        Box::pin(async move { Ok(write(&local(&self.dir_of(sb)?, path), &bytes)?) })
+    }
+
+    fn rename<'a>(
+        &'a self,
+        sb: &'a ProviderRef,
+        from: &'a str,
+        to: &'a str,
+    ) -> BoxFuture<'a, anyhow::Result<()>> {
+        Box::pin(async move {
+            let dir = self.dir_of(sb)?;
+            Ok(std::fs::rename(local(&dir, from), local(&dir, to))?)
+        })
     }
 
     fn kill<'a>(&'a self, sb: &'a ProviderRef) -> BoxFuture<'a, anyhow::Result<()>> {

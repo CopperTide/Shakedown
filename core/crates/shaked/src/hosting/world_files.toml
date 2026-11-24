@@ -1,0 +1,13 @@
+# What a world built on the control box may carry into a sandbox (src/hosting/worlds.rs). Only these
+# are copied; anything else stays on the control box. The list is what the world builder writes
+# (benchmarks/world/worldbench/install.py: world.json, shakedown-package.toml and the template's copied
+# folders, under benchmarks/world/templates).
+
+# Files with these extensions.
+extensions = ["json", "toml", "yaml", "yml", "md", "txt", "csv", "sql", "py", "sh", "diff", "in"]
+# Files with these names, whatever their extension.
+names = ["Dockerfile", ".dockerignore", ".gitignore"]
+# Never copied, though their extension is allowed: what holds or names a secret.
+never = ["secrets.json", "secrets.yaml", "secrets.yml", "secrets.toml", "credentials.json", ".env"]
+# Folders never entered.
+skip_dirs = ["__pycache__", "node_modules", ".git", ".venv"]

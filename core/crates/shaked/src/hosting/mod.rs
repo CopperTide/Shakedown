@@ -18,7 +18,7 @@ mod worlds;
 
 pub use slots::{Slot, BUSY, PER_SCOPE};
 pub use sweep::{sweep, sweep_every};
-pub use worlds::SANDBOX_WORLDS;
+pub use worlds::{WorldNotCopied, SANDBOX_WORLDS};
 
 use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
@@ -89,13 +89,20 @@ pub enum ProviderState {
 /// A place sandboxes are made.
 pub trait SandboxBackend: Send + Sync {
     fn create<'a>(&'a self, spec: &'a SandboxSpec) -> BoxFuture<'a, anyhow::Result<ProviderRef>>;
-    /// Writes `bytes` to `path` in the sandbox, making its folders. The file appears whole: it is
-    /// written to [`partial_of`] `path` and renamed onto `path`.
+    /// Writes `bytes` to `path` in the sandbox, making its folders (one call; a reader may see it
+    /// half written).
     fn write_file<'a>(
         &'a self,
         sb: &'a ProviderRef,
         path: &'a str,
         bytes: Vec<u8>,
+    ) -> BoxFuture<'a, anyhow::Result<()>>;
+    /// Renames `from` onto `to` in the sandbox (both in one folder: at once).
+    fn rename<'a>(
+        &'a self,
+        sb: &'a ProviderRef,
+        from: &'a str,
+        to: &'a str,
     ) -> BoxFuture<'a, anyhow::Result<()>>;
     /// Kills the sandbox. A sandbox already gone counts as killed.
     fn kill<'a>(&'a self, sb: &'a ProviderRef) -> BoxFuture<'a, anyhow::Result<()>>;
@@ -107,7 +114,7 @@ pub trait SandboxBackend: Send + Sync {
     ) -> BoxFuture<'a, anyhow::Result<Vec<Listed>>>;
 }
 
-/// Where a file bound for `path` is written before it is renamed onto `path`.
+/// Where the ticket bound for `path` is written before it is renamed onto `path`.
 pub fn partial_of(path: &str) -> String {
     format!("{path}.partial")
 }
@@ -235,8 +242,8 @@ impl Hosting {
         Ok(())
     }
 
-    /// Copies `world` into `sb`, then issues `ticket` and writes it, newline-ended, to the
-    /// sandbox's [`TICKET_PATH`].
+    /// Copies `world` into `sb`, then issues `ticket` and writes it, newline-ended and whole, to
+    /// the sandbox's [`TICKET_PATH`].
     async fn ready(
         &self,
         state: &AppState,
@@ -247,7 +254,10 @@ impl Hosting {
         worlds::copy(&*self.backend, sb, world).await?;
         let secret = state.links.tickets.issue(ticket);
         let bytes = format!("{secret}\n").into_bytes();
-        self.backend.write_file(sb, TICKET_PATH, bytes).await
+        // The worker polls TICKET_PATH: it appears whole, written beside it and renamed.
+        let partial = partial_of(TICKET_PATH);
+        self.backend.write_file(sb, &partial, bytes).await?;
+        self.backend.rename(sb, &partial, TICKET_PATH).await
     }
 
     /// The watcher of `sb`, running `plan`'s branch for `caller` on `slot`, until the longest run.
@@ -269,7 +279,8 @@ impl Hosting {
         }
     }
 
-    /// [`start`](Self::start), the branch ended `infra_error` ([`NO_SANDBOX`]) when it fails.
+    /// [`start`](Self::start), the branch ended `infra_error` when it fails: with why a built world
+    /// was not copied ([`WorldNotCopied`]), else [`NO_SANDBOX`].
     pub async fn start_or_fail(
         &self,
         state: &Arc<AppState>,
@@ -281,7 +292,9 @@ impl Hosting {
             return;
         };
         eprintln!("hosting: starting branch {}: {e:#}", plan.branch_id);
-        end_branch(state, &plan.branch_id, BranchStatus::InfraError, NO_SANDBOX).await;
+        let shown = e.downcast_ref::<WorldNotCopied>().map(ToString::to_string);
+        let why = shown.as_deref().unwrap_or(NO_SANDBOX);
+        end_branch(state, &plan.branch_id, BranchStatus::InfraError, why).await;
     }
 }
 

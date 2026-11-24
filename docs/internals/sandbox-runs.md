@@ -166,10 +166,15 @@ stateDiagram-v2
 3. `Hosting::start`: `links.expect(plan)`, then `backend.create(spec)`. A world built on this control box (the
    benchmark's folder is in `Config::worlds_dir`, as the world builder makes it; the template has only the
    installed packages) is copied into the sandbox's `SANDBOX_WORLDS` (`/var/lib/shakedown/worlds`, the
-   template's `SHAKEDOWN_WORLDS`), file by file through `write_file`, leaving out hidden entries,
-   `__pycache__`, `node_modules` and symbolic links, at most 64 MiB (`src/hosting/worlds.rs`). The worker
-   scans that folder once `Start` comes. Then a ticket (bound to the branch and a new sandbox id) is written
-   newline-ended to `TICKET_PATH`. A sandbox that can't take its world or ticket is killed.
+   template's `SHAKEDOWN_WORLDS`), one `write_file` per file, at most 64 MiB (`src/hosting/worlds.rs`). Only
+   what `src/hosting/world_files.toml` allows is copied: an allowlist of the extensions and names the world
+   builder writes (`benchmarks/world/worldbench/install.py` and the templates' folders), never a name that
+   holds a secret (`secrets.json`, `.env`, …), never a symbolic link, never `__pycache__`, `node_modules`,
+   `.git` or `.venv`; a `.pem` or `.key` is not on the list. A world that can't be read, or weighs too much,
+   ends the branch `infra_error` saying so (`WorldNotCopied`, e.g. "the world w is 65 MiB, over the 64 MiB
+   a sandbox takes") before any sandbox is made. The worker scans that folder once `Start` comes. Then a
+   ticket (bound to the branch and a new sandbox id) is written newline-ended to `TICKET_PATH`. A sandbox
+   that can't take its world or ticket is killed.
    When any of this fails the branch ends `infra_error` with `NO_SANDBOX` ("its sandbox could not start");
    the cause is logged on the control box, never shown (it may carry E2B's answer).
 4. A watcher (`src/hosting/watch.rs`) looks every 5 s at the branch and at the sandbox. It kills the sandbox
@@ -211,8 +216,9 @@ The spec a sandbox is created with:
 | `timeout` | The longest run (`LONGEST_RUN`, 55 min, or less with `with_longest_run`) plus `END_GRACE` (5 min), never past `SANDBOX_CAP` (60 min, E2B Hobby's continuous runtime). Never unbounded. |
 | `metadata` | `shaked` (the link host: which control box it runs for), `scope` (the layer's `object_prefix`), `run`, `branch`, `sandbox` (the id the worker token names), `started` (unix seconds). Never secrets. |
 
-**Writes are whole.** `SandboxBackend::write_file` writes to `<path>.partial` (`partial_of`) and renames it onto
-`path`, so the worker, which polls `TICKET_PATH`, never reads half a ticket.
+**The ticket appears whole.** `Hosting` writes it to `<TICKET_PATH>.partial` (`partial_of`) and renames it onto
+`TICKET_PATH` (`SandboxBackend::rename`), so the worker, which polls that path, never reads half a ticket. World
+files are written directly, one call each: the worker reads them only after it has the ticket.
 
 ## The E2B backend
 
@@ -223,7 +229,8 @@ The spec a sandbox is created with:
 | Call | Request | Answer |
 |---|---|---|
 | `create` | `POST {api}/sandboxes`, `X-API-KEY`, body below | 201 `{sandboxID, envdAccessToken, domain}` |
-| `write_file` | `POST https://49983-{sandboxID}.{domain}/files?path=<path>.partial&username=root`, `X-Access-Token`, multipart `file`; then `POST …/filesystem.Filesystem/Move` (Connect RPC, JSON `{source, destination}`, `Authorization: Basic root:`) | 200, 200 |
+| `write_file` | `POST https://49983-{sandboxID}.{domain}/files?path=<path>&username=root`, `X-Access-Token`, multipart `file` | 200 |
+| `rename` | `POST https://49983-{sandboxID}.{domain}/filesystem.Filesystem/Move`, `X-Access-Token`, Connect RPC JSON `{source, destination}`, `Authorization: Basic root:` | 200 |
 | `kill` | `DELETE {api}/sandboxes/{id}`, `X-API-KEY` | 204; a 404 counts as killed |
 | `state` | `GET {api}/sandboxes/{id}`, `X-API-KEY` | 200 `state: running` is `Running`; 404 or any other state is `Gone` |
 | `list` | `GET {api}/sandboxes?metadata=<k=v&…>`, `X-API-KEY`; keys and values URL-encoded, then the whole once more | 200 `[{sandboxID, metadata}]`, running sandboxes only |
@@ -387,8 +394,8 @@ flowchart LR
 
 ## Extension points
 
-- **A sandbox backend.** Implement `SandboxBackend` (`src/hosting/mod.rs`) as `E2bBackend` does; `write_file`
-  must make the file appear whole. `Hosting` and the link need no change for it.
+- **A sandbox backend.** Implement `SandboxBackend` (`src/hosting/mod.rs`) as `E2bBackend` does; `rename`
+  must be atomic within a folder. `Hosting` and the link need no change for it.
 - **A new control frame.** Add it to `ToWorker`, handle it in `worker::run::obey` and pin its JSON in
   `src/worker/frames.rs` tests.
 
@@ -402,8 +409,8 @@ flowchart LR
 | `tests/run_tokens.rs` | Worker and ticket tokens, a worker token needing its sandbox, pauses extending tokens. |
 | `src/worker/link_records.rs`, `src/worker/frames.rs` unit tests | The window, resends in order, the end after every ack, frame cutting, frame JSON. |
 | `tests/support/link.rs` | Shared link plumbing: `ticketed`, `started`, `restarted`, `hear`. |
-| `src/hosting/e2b.rs` unit tests | The E2B calls against a local mock of E2B's API and envd: the create body, 404s on kill and state, a write as upload then rename, the envd token and no E2B key on both. |
-| `tests/hosting.rs` (fake) | `a_run_with_hosting_runs_in_a_fake_sandbox` (the branch ends `passed`, one create, one kill), `an_external_run_is_refused_on_hosting`, `a_vanished_sandbox_ends_its_branch_infra_error`, `the_sweep_kills_sandboxes_whose_branch_ended_or_that_outlived_their_timeout`, `a_second_run_for_the_org_is_refused_until_the_first_ends`, `a_run_past_its_longest_is_stopped_and_its_sandbox_killed`, `a_world_built_here_is_copied_into_its_sandbox` (the fake sandbox has the toy integration only), `a_sandbox_only_control_box_runs_a_branch_without_a_package_program_here` (a layer whose packages run only in sandboxes). |
+| `src/hosting/e2b.rs` unit tests | The E2B calls against a local mock of E2B's API and envd: the create body, 404s on kill and state, a write and a rename, the envd token and no E2B key on both; `src/hosting/worlds.rs`: only allowed world files are copied, never secrets or keys. |
+| `tests/hosting.rs` (fake) | `a_run_with_hosting_runs_in_a_fake_sandbox` (the branch ends `passed`, one create, one kill), `an_external_run_is_refused_on_hosting`, `a_vanished_sandbox_ends_its_branch_infra_error`, `the_sweep_kills_sandboxes_whose_branch_ended_or_that_outlived_their_timeout`, `a_second_run_for_the_org_is_refused_until_the_first_ends`, `a_run_past_its_longest_is_stopped_and_its_sandbox_killed`, `a_world_built_here_is_copied_into_its_sandbox` (the fake sandbox has the toy integration only), `a_world_too_big_for_a_sandbox_ends_its_branch_saying_so`, `a_sandbox_only_control_box_runs_a_branch_without_a_package_program_here` (a layer whose packages run only in sandboxes). |
 | `tests/hosting.rs` (live) | `live_hosting_hands_an_e2b_sandbox_its_world_and_ticket_and_kills_it` (`#[ignore]`, `E2B_API_KEY`; `SHAKEDOWN_E2B_TEMPLATE` names a `shakedown-worker-…` template, else E2B's `base`): a run of a world built on the test control box through `Hosting`, its link host one no worker answers on: the world's manifest is in `SANDBOX_WORLDS`, the worker took the whole ticket (on `base`: the ticket is whole at `TICKET_PATH`) and no partial file stayed, a stop ends the branch, the watcher kills the sandbox, and no sandbox of the test's link host is listed after. |
 | `tests/support/scripted.rs` | The scripted `http` agent the worker and hosting tests share. |
 | `tests/hosting.rs` | `live_e2b_create_write_kill` (`#[ignore]`, needs `E2B_API_KEY`): a real sandbox from E2B's `base` template is running, takes a ticket at `TICKET_PATH` and reads it back, is killed, then is `Gone`. Its timeout is 2 minutes in case the kill fails. |

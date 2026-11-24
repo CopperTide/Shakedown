@@ -297,6 +297,22 @@ fn a_world_built_here_is_copied_into_its_sandbox() {
     });
 }
 
+#[test]
+fn a_world_too_big_for_a_sandbox_ends_its_branch_saying_so() {
+    run(async {
+        let (fx, toys) = control_built("big").await;
+        let big = std::fs::File::create(toys.join("toybench/rows.json")).unwrap();
+        big.set_len(65 << 20).unwrap();
+        let fake = fake_host(&fx, &toys, |h| h);
+        let id = start(&fx, &scripted_team(nothing()).await).await;
+        let b = live::ended(&fx.state, &id).await;
+        assert_eq!(b.status, BranchStatus::InfraError);
+        let why = b.error.unwrap_or_default();
+        assert!(why.contains("over the 64 MiB a sandbox takes"), "{why}");
+        assert_eq!(fake.created(), 0, "no sandbox for a world it can't take");
+    });
+}
+
 /// What the live check writes and reads back.
 const TICKET: &[u8] = b"sdt_live_check\n";
 
