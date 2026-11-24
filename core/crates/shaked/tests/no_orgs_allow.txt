@@ -7,3 +7,19 @@ core/crates/shaked/src/store/open.rs:(2026-11-20); convert it with core/scripts/
 # A layer may put its own policies under the store; these say what the engine does under one.
 core/crates/shaked/src/harness.rs:/// Who a system job's transaction runs as: the login and whether it bypasses row-level security
 core/crates/shaked/src/store.rs:/// row-level security) is not found.
+# Hosted-only product analytics (PostHog): the hosted gateway passes the signed-in person's org, sent as a
+# PostHog group. posthogShared.ts is byte-identical to the CopperTide web app's copy; local shaked never loads it.
+ui/src/lib/posthogShared.ts:const begin = async (s: PostHogSettings, person: Person, org: Org | null) => {
+ui/src/lib/posthogShared.ts:export type Org = { id: string; name: string };
+ui/src/lib/posthogShared.ts:function launch(p: PostHog, s: PostHogSettings, person: Person, org: Org | null, template: Template) {
+ui/src/lib/posthogShared.ts:if (org) p.group('organization', org.id, { name: org.name });
+ui/src/lib/posthogShared.ts:launch(p, s, person, org, template);
+ui/src/lib/posthogShared.ts:starting ??= begin(settings, person, org).catch(() => { starting = null; });
+ui/src/lib/posthogShared.ts:start(settings: PostHogSettings | null | undefined, person: Person, org: Org | null): Promise<void> {
+ui/src/lib/posthogShared.ts:/** Starts `p` for `person` in `org`: the options, consent back on after a sign-out, identify, group. */
+ui/src/lib/productAnalytics.test.ts:const signedIn = { user: person, org: { id: 'o1', name: 'Ana' }, posthog: { key: 'phc_test', host: 'https://us.i.posthog.com' } };
+ui/src/lib/productAnalytics.test.ts:it('hosted and signed in with a key: identify the user, group the org, then count the core flow', async () => {
+ui/src/lib/productAnalytics.ts:if (body?.user) await analytics.start(body.posthog, body.user, body.org ?? null);
+ui/src/lib/productAnalytics.ts:import { productAnalytics, routeTemplater, type Org, type Person, type PostHogSettings } from './posthogShared';
+ui/src/lib/productAnalytics.ts:/** Starts PostHog when this shaked is hosted: the person, their org and the settings come from the gateway. */
+ui/src/lib/productAnalytics.ts:type GatewayMe = { user?: Person; org?: Org | null; posthog?: PostHogSettings | null };
