@@ -70,18 +70,21 @@ function Harness() {
 describe('step filter on the run page', () => {
   it('opens_from_a_shared_address_lists_the_matches_and_dims_the_rest_of_the_timeline', () => {
     render(<MemoryRouter initialEntries={['/runs/r/b?outcome=refused']}><Harness /></MemoryRouter>);
-    expect(screen.getByText(`1 of ${rows.length} steps`)).toBeTruthy();
+    expect(screen.getByRole('status', { name: 'Matching steps' }).textContent).toBe(`1 of ${rows.length} steps`);
     expect(screen.getAllByRole('row')).toHaveLength(2); // the header and step 9
     expect(document.querySelector('[data-seq="9"]')?.hasAttribute('data-dim')).toBe(false);
     expect(document.querySelector('[data-seq="6"]')?.hasAttribute('data-dim')).toBe(true);
-    const lead = screen.getByRole('group', { name: 'Agent' }).querySelector('button');
-    expect(lead?.textContent).toBe('Coordinator 0');
+    fireEvent.click(screen.getByRole('button', { name: 'Agent' }));
+    const lead = screen.getByRole('checkbox', { name: /Coordinator/ });
+    expect(lead.closest('label')?.textContent).toBe('Coordinator0');
   });
 
   it('picks_chips_searches_and_clears_all_in_the_address', () => {
     render(<MemoryRouter initialEntries={['/runs/r/b?step=3']}><Harness /></MemoryRouter>);
-    fireEvent.click(screen.getByRole('button', { name: /^Filter/ }));
-    fireEvent.click(screen.getByRole('button', { name: /^Model call/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Action' }));
+    fireEvent.change(screen.getByLabelText('Find action options'), { target: { value: 'Model' } });
+    fireEvent.click(screen.getByRole('checkbox', { name: /^Model call/ }));
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
     expect(screen.getByTestId('search').textContent).toBe('?step=3&action=Model+call');
     expect(screen.getAllByRole('row')).toHaveLength(3);
     fireEvent.change(screen.getByLabelText("Search the steps' detail"), { target: { value: 'nothing like it' } });
