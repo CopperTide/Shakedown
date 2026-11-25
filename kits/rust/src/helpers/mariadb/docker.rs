@@ -14,6 +14,8 @@ use super::server::{ServerConfig, IMAGE};
 /// The label on containers this helper made; any other container is never used.
 const LABEL_KEY: &str = "shakedown.part";
 const LABEL_VALUE: &str = "mariadb";
+// Containers created before the product rename retain this ownership label.
+const LEGACY_LABEL_KEY: &str = "arena.part";
 const DATADIR: &str = "/var/lib/mysql";
 /// The server's flags: row-based binlog with full row images, kept until purged.
 const FLAGS: [&str; 6] = [
@@ -55,19 +57,33 @@ fn output(mut cmd: Command, what: &str) -> Result<String> {
 
 fn inspect(cfg: &ServerConfig) -> Result<Found> {
     let mut cmd = docker();
-    let format = format!("{{{{index .Config.Labels \"{LABEL_KEY}\"}}}} {{{{.State.Running}}}}");
+    let format = format!(
+        "{{{{index .Config.Labels \"{LABEL_KEY}\"}}}}|\
+         {{{{index .Config.Labels \"{LEGACY_LABEL_KEY}\"}}}}|{{{{.State.Running}}}}"
+    );
     cmd.args(["container", "inspect", "-f", &format, &cfg.container]);
     let out = cmd.output().context("docker inspect: cannot run docker")?;
     if !out.status.success() {
         return Ok(Found::Missing);
     }
     let text = String::from_utf8_lossy(&out.stdout);
-    Ok(match text.trim().split_once(' ') {
-        Some((LABEL_VALUE, running)) => Found::Ours {
-            running: running == "true",
-        },
+    Ok(found(&text))
+}
+
+/// A legacy label is accepted only when no current label contradicts it.
+fn found(text: &str) -> Found {
+    let fields: Vec<_> = text.trim().split('|').collect();
+    match fields.as_slice() {
+        [current, legacy, running]
+            if *current == LABEL_VALUE
+                || (matches!(*current, "" | "<no value>") && *legacy == LABEL_VALUE) =>
+        {
+            Found::Ours {
+                running: *running == "true",
+            }
+        }
         _ => Found::Foreign,
-    })
+    }
 }
 
 /// Starts the server container: creates it (never pulling the image) when it is missing,
@@ -237,6 +253,30 @@ pub fn apply_binlog(cfg: &ServerConfig, login: &Login, r: &Replay) -> Result<()>
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn existing_containers_keep_ownership_across_the_rename() {
+        assert!(matches!(
+            found("mariadb||true"),
+            Found::Ours { running: true }
+        ));
+        assert!(matches!(
+            found("|mariadb|false"),
+            Found::Ours { running: false }
+        ));
+        assert!(matches!(
+            found("<no value>|mariadb|true"),
+            Found::Ours { running: true }
+        ));
+        for foreign in [
+            "||true",
+            "|postgres|true",
+            "postgres|mariadb|true",
+            "mariadb true",
+        ] {
+            assert!(matches!(found(foreign), Found::Foreign));
+        }
+    }
 
     #[test]
     fn extra_flags_follow_the_binlog_flags() {

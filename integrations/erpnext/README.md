@@ -33,7 +33,7 @@ What the program runs, on the first `start` (or the first call that needs it):
   integration's: container `shakedown-erpnext-db`, volume `shakedown_erpnext_db`, `127.0.0.1:3308`, root password
   `shakedown`, with Frappe's flags (`--character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
   --skip-character-set-client-handshake`) after the binary-log flags. It carries the label `shakedown.part=mariadb`
-  (a container of that name without it is refused) and joins the project's network as `db`. A server of its own
+  (the pre-rename `arena.part=mariadb` label is also accepted; foreign containers are refused) and joins the project's network as `db`. A server of its own
   means neither integration's log purges remove log the other needs.
 
 The install's settings are read from the environment, else the defaults above. The config of the first start may
@@ -52,6 +52,13 @@ unless the package's run command sets them, for example with `SHAKEDOWN_RUN_ERPN
 | `SHAKEDOWN_ERPNEXT_IMAGE` | none | `frappe/erpnext:v16.53.0` | The ERPNext image. |
 | `SHAKEDOWN_ERPNEXT_COMPOSE` | none | this folder's `compose.yml`, as a path fixed when the program is built | The compose file. |
 | `SHAKEDOWN_SAVES` | none | `saves` | Where saves, the base and the sites folder go. `shaked` always passes its own. |
+
+For an existing Arena-era install, explicitly retain its container, volume, compose project, ports and
+password using the overrides above. The product rename does not rename Docker resources. Before using old
+saves with the new helper, preserve the server UUID from `arena_meta.server` in `shakedown_meta.server`;
+back up the old metadata first, and do not replace an existing, different UUID. Saved binlogs identify the
+server by that UUID. The local airline upgrade retained the original table and copied its schema and row
+into the previously absent new metadata table.
 
 The program passes `SHAKEDOWN_ERPNEXT_SITES`, `SHAKEDOWN_ERPNEXT_PORT` and `SHAKEDOWN_ERPNEXT_IMAGE` to
 `docker compose` itself, so the compose file gets them under `shaked` too.
