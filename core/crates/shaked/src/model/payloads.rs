@@ -97,6 +97,14 @@ pub struct RunStartPayload {
         skip_serializing_if = "Option::is_none"
     )]
     pub world_epoch_ms: Option<i64>,
+    /// The world's UTC offset in minutes, when its task's `clock_start` gives one
+    /// (`crate::world_clock`): world times are shown local with it.
+    #[serde(
+        default,
+        deserialize_with = "lenient",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub world_utc_offset_min: Option<i32>,
     /// The run's world time window in minutes, when it has one (`crate::window`).
     #[serde(
         default,

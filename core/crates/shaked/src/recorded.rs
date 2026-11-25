@@ -84,6 +84,12 @@ pub fn world_epoch_ms(events: &[Event]) -> i64 {
     recorded.unwrap_or_else(|| start.at.timestamp_millis())
 }
 
+/// The world's UTC offset in minutes, from `RunStart.world_utc_offset_min`: None for a run whose
+/// `clock_start` gives none (its world times read as UTC).
+pub fn world_utc_offset_min(events: &[Event]) -> Option<i32> {
+    RunStartPayload::of(events).and_then(|s| s.world_utc_offset_min)
+}
+
 /// The world time a restarted part of the run of `events` gets (a fork's, a step's scratch
 /// instance): its run's epoch, and no wall-time speed on a stepped clock.
 pub fn world_time_of(events: &[Event]) -> parts::proto::WorldTimeParams {
@@ -158,6 +164,35 @@ pub fn saves_at_except(
                 .map_err(|seq| NoSave { part, seq })
         })
         .collect()
+}
+
+/// The save holding `part`'s state just after step `seq`: its last save at or before it, else
+/// its `base` save (None: the part keeps no saves). Other parts play no part. A committed write
+/// to the part with no save after its last makes it unrestorable until its next save: the
+/// earliest such write is reported.
+pub fn part_save_at(
+    events: &[Event],
+    seq: i64,
+    base: &Saves,
+    part: &str,
+) -> Result<Option<String>, NoSave> {
+    let mut at: Result<Option<String>, i64> = Ok(base.get(part).cloned());
+    let saving = |k| matches!(k, EventKind::ToolCall | EventKind::SavePoint);
+    for e in events.iter().filter(|e| e.seq <= seq && saving(e.kind)) {
+        let saved = saves_of(&e.payload).unwrap_or_default();
+        if let Some(save) = saved.get(part) {
+            at = Ok(Some(save.clone()));
+            continue;
+        }
+        let writer = e.payload["part"].as_str().unwrap_or(LEGACY_PART);
+        if e.kind == EventKind::ToolCall && writer == part && wrote(&e.payload) && at.is_ok() {
+            at = Err(e.seq);
+        }
+    }
+    at.map_err(|seq| NoSave {
+        part: part.to_string(),
+        seq,
+    })
 }
 
 /// Per part, the save holding the branch's final state: its check's `final_saves` (empty when

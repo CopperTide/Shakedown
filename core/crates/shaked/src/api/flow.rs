@@ -113,11 +113,13 @@ async fn clock(
     Path(id): Path<String>,
 ) -> ApiResult<Value> {
     let ctx = live(&state, &caller, &id).await?;
-    let epoch = crate::recorded::world_epoch_ms(&ctx.records(&state.store).events(&id).await?);
+    let events = ctx.records(&state.store).events(&id).await?;
+    let epoch = crate::recorded::world_epoch_ms(&events);
     let clock_ms = ctx.clock.now_ms();
     Ok(Json(json!({
         "clock_ms": clock_ms, "speed": ctx.clock.speed(), "paused": ctx.clock.is_paused(),
         "world_epoch_ms": epoch, "world_ms": epoch + clock_ms,
+        "utc_offset_min": crate::recorded::world_utc_offset_min(&events),
     })))
 }
 

@@ -57,13 +57,15 @@ fn world_of_run(
     Some((world.0, views))
 }
 
+/// The branch's lean record (no model-call bodies: a view never reads them), kept in memory
+/// while it doesn't change.
 async fn branch_events(
     state: &AppState,
     caller: &Caller,
     id: &str,
-) -> Result<Vec<Event>, ApiError> {
+) -> Result<Arc<Vec<Event>>, ApiError> {
     branch_or_404(state, caller, id).await?;
-    Ok(state.store.at(caller).events(id).await?)
+    Ok(views::record(state, caller, id).await?)
 }
 
 fn view_json(id: &str, view: &ViewFile) -> Value {
@@ -142,7 +144,8 @@ fn screen_parts(view: &ViewFile, screen: &Screen) -> BTreeSet<String> {
     panels.flat_map(|p| views::parts_of(view, p)).collect()
 }
 
-/// `{view, screen, at: {point, seq, clock_ms, world_ms, speed, paused}, panels: {id: evaluated}}`.
+/// `{view, screen, at: {point, seq, clock_ms, world_ms, epoch_ms, speed, paused, utc_offset_min,
+/// fallback?: {asked, why}}, panels: {id: evaluated}}`.
 async fn evaluate(
     State(state): State<Arc<AppState>>,
     Who(caller): Who,

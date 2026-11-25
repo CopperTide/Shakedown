@@ -295,3 +295,41 @@ fn an_uncommitted_tx_never_returns_its_connection() {
         );
     })
 }
+
+/// The world's reading of a branch leaves out each model call's request and response (the bulk of
+/// a long run) and keeps every event, every other payload whole and each call's usage and cost.
+#[test]
+fn a_lean_read_leaves_out_model_call_bodies_and_keeps_the_rest() {
+    run(async {
+        let (admin, name, store, _clean) = fresh("lean").await;
+        let (_, b) = root_branch(&store).await;
+        let call = json!({"request": {"messages": ["x".repeat(1000)]}, "response": {"text": "y"},
+                          "provider_response": {"raw": 1}, "usage": {"prompt_tokens": 7}, "cost_usd": 0.5});
+        let tool =
+            json!({"part": "box", "writes": ["box/n"], "saves": {"box": "s2"}, "clock_ms": 100});
+        records(&store)
+            .append(&b, Some("a"), EventKind::ModelCall, call)
+            .await
+            .unwrap();
+        records(&store)
+            .append(&b, Some("a"), EventKind::ToolCall, tool.clone())
+            .await
+            .unwrap();
+        let lean = records(&store).events_lean(&b).await.unwrap();
+        assert_eq!(lean.len(), 2);
+        let p = &lean[0].payload;
+        assert_eq!(
+            (&p["request"], &p["response"]),
+            (&json!(null), &json!(null))
+        );
+        assert!(p.get("provider_response").is_none(), "{p}");
+        assert_eq!(
+            (&p["usage"], &p["cost_usd"]),
+            (&json!({"prompt_tokens": 7}), &json!(0.5))
+        );
+        assert_eq!(lean[1].payload, tool);
+        let version = records(&store).events_version(&b).await.unwrap();
+        assert_eq!(version, (2, 2));
+        done(admin, name, store).await;
+    })
+}

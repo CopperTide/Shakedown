@@ -1,6 +1,7 @@
-//! World time: parts get the world's epoch and clock speed at `start` (a task's `clock_start` read
-//! as UTC, else the run's start), forks keep their run's epoch, and the clock route tells a driver
-//! the world's time. The run is one an external system drives; no model answers anything here.
+//! World time: parts get the world's epoch and clock speed at `start` (a task's `clock_start`: its
+//! local time less its UTC offset, read as UTC without one; else the run's start), forks keep
+//! their run's epoch, and the clock route tells a driver the world's time. The run is one an
+//! external system drives; no model answers anything here.
 mod support;
 use support::records;
 
@@ -185,6 +186,46 @@ fn the_clock_route_tells_world_time() {
         assert_eq!(fx.fx.get(&path).await.1["paused"], true);
         assert_eq!(fx.on(&fx.branch, "finish").await.0, 200);
         assert_eq!(fx.fx.get(&path).await.0, 409);
+    })
+}
+
+/// A `clock_start` with its UTC offset gives parts the exact epoch (local less the offset), and
+/// the run records the offset that world times are shown with (its views' `at` carries it).
+#[test]
+fn a_clock_start_with_its_offset_gives_the_exact_epoch_and_records_the_offset() {
+    run(async {
+        let project = view_project("offset");
+        let (part, bench) = (
+            ["--event-every", "--clock-doc"],
+            ["--clock-start", "2026-03-10T06:00:00-04:00"],
+        );
+        let fx = TimeFx::build("offset", &part, &bench, Some(project.path().to_path_buf())).await;
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        let (_, at) = clock_figure(&fx.fx, &fx.branch, "live").await;
+        assert_eq!(at["utc_offset_min"], -240, "{at}");
+        assert_eq!(
+            fx.timed_starts()[0].1,
+            1_773_136_800_000,
+            "06:00 at UTC-4 is 10:00 UTC"
+        );
+        let evs = records(&fx.fx.state.store)
+            .events(&fx.branch)
+            .await
+            .unwrap();
+        assert_eq!(evs[0].payload["world_epoch_ms"], 1_773_136_800_000i64);
+        assert_eq!(evs[0].payload["world_utc_offset_min"], -240);
+        let (_, v) = fx
+            .fx
+            .get(&format!("/api/branches/{}/clock", fx.branch))
+            .await;
+        assert_eq!(v["utc_offset_min"], -240, "{v}");
+        let (status, lean) = fx
+            .fx
+            .get(&format!("/api/branches/{}?lean=1", fx.branch))
+            .await;
+        assert_eq!(status, 200, "{lean}");
+        assert_eq!(lean["events"][0]["payload"]["world_utc_offset_min"], -240);
+        assert_eq!(fx.on(&fx.branch, "finish").await.0, 200);
     })
 }
 

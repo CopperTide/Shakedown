@@ -628,13 +628,22 @@ async fn start_run(
     Ok(Json(v))
 }
 
+/// `GET /api/branches/{id}`: the branch, its events, budget and metrics. `?lean=1` reads each
+/// model call without its request and response bodies (`Scoped::events_lean`), for pages that
+/// show the world rather than the calls: most of a long run's record, left out.
 async fn get_branch(
     State(state): State<Arc<AppState>>,
     Who(caller): Who,
     Path(id): Path<String>,
+    Query(q): Query<HashMap<String, String>>,
 ) -> ApiResult<Value> {
     let branch = branch_or_404(&state, &caller, &id).await?;
-    let events = state.store.at(&caller).events(&id).await?;
+    let records = state.store.at(&caller);
+    let lean = q.get("lean").is_some_and(|v| v == "1" || v == "true");
+    let events = match lean {
+        true => records.events_lean(&id).await?,
+        false => records.events(&id).await?,
+    };
     let now = chrono::Utc::now();
     let m = metrics::metrics(&branch, &events, prices::table(), now);
     let mut v = serde_json::to_value(branch)?;

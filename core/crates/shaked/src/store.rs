@@ -77,6 +77,11 @@ pub async fn pick_db(admin: &Admin, name: &str, old: &str) -> Result<String> {
 const BRANCH_COLS: &str = "id, run_id, parent_id, start_seq, team, changes, fork_note, status, \
      error, created_at, ended_at, restore_mode, restored";
 const EVENT_COLS: &str = "branch_id, seq, at, agent, kind, payload";
+
+/// An event's payload without a model call's bodies (`Scoped::events_lean`).
+const LEAN_PAYLOAD: &str = "CASE WHEN kind = 'model_call'
+    THEN (payload - 'provider_response') || '{\"request\": null, \"response\": null}'::jsonb
+    ELSE payload END";
 /// `BRANCH_COLS` of `b` in [`BRANCHES_OF_RUNS`].
 const BRANCH_COLS_B: &str =
     "b.id, b.run_id, b.parent_id, b.start_seq, b.team, b.changes, b.fork_note, \
@@ -395,6 +400,37 @@ impl Scoped<'_> {
             )
             .await?;
         rows.iter().map(event_from).collect()
+    }
+
+    /// `events`, with each model call's `request` and `response` read as null and its
+    /// `provider_response` left out: the world's reading of a branch (its views, its world page),
+    /// without the bodies that are most of a long run's record. Usage and cost stay.
+    pub async fn events_lean(&self, branch_id: &str) -> Result<Vec<Event>> {
+        let rows = self
+            .query(
+                &format!(
+                    "SELECT branch_id, seq, at, agent, kind, {LEAN_PAYLOAD} AS payload FROM events
+                        WHERE branch_id = $1 AND EXISTS ({VISIBLE_BRANCH}) ORDER BY seq"
+                ),
+                &[&branch_id],
+            )
+            .await?;
+        rows.iter().map(event_from).collect()
+    }
+
+    /// `(count, last seq)` of the branch's events: a recorded branch's record is the same while
+    /// these are (events are only ever appended).
+    pub async fn events_version(&self, branch_id: &str) -> Result<(i64, i64)> {
+        let row = self
+            .query_one(
+                &format!(
+                    "SELECT count(*), coalesce(max(seq), 0) FROM events
+                        WHERE branch_id = $1 AND EXISTS ({VISIBLE_BRANCH})"
+                ),
+                &[&branch_id],
+            )
+            .await?;
+        Ok((row.get(0), row.get(1)))
     }
 
     pub async fn set_status(

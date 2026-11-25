@@ -151,17 +151,14 @@ fn scenario_req(
     Ok((req != ScenarioRequest::default()).then_some(req))
 }
 
-/// The task's clock 0 in world time, when it gives one.
+/// The task's clock 0 in world local time, when it gives one (its UTC offset plays no part:
+/// scenario times are world local times).
 struct WorldStart(Option<NaiveDateTime>);
 
 impl WorldStart {
     fn of(clock_start: Option<&str>) -> WorldStart {
-        let parse = |s: &str| {
-            NaiveDateTime::parse_from_str(s.trim(), "%Y-%m-%dT%H:%M:%S")
-                .or_else(|_| NaiveDateTime::parse_from_str(s.trim(), "%Y-%m-%dT%H:%M:%S%.f"))
-                .ok()
-        };
-        WorldStart(clock_start.and_then(parse))
+        let start = clock_start.and_then(crate::world_clock::ClockStart::parse);
+        WorldStart(start.map(|c| c.local))
     }
 
     /// `text` (`HH:MM` on the start's day, or `YYYY-MM-DDTHH:MM[:SS]`) as a world time and as

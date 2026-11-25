@@ -18,7 +18,7 @@ use serde_json::{Map, Value};
 
 use crate::{
     model::{Event, EventKind},
-    recorded::{clock_at, final_saves, run_info, saves_at, saves_of, world_time_of},
+    recorded::{clock_at, final_saves, part_save_at, run_info, saves_of, world_time_of},
     saves,
 };
 
@@ -114,17 +114,29 @@ pub fn save_at(
     }
 }
 
+/// The part's own save at the step: what other parts left unsaved doesn't matter to it.
 fn step_save(events: &[Event], part: &str, seq: i64) -> Result<SaveAt, NotThere> {
-    let saves = saves_at(events, seq, &run_info(events).base).map_err(|n| NotThere::Unsaved {
+    let base = run_info(events).base;
+    let save = part_save_at(events, seq, &base, part).map_err(|n| NotThere::Unsaved {
         seq: n.seq,
         part: n.part,
     })?;
-    let save = saves.get(part).ok_or(NotThere::NoSave(part.into()))?;
+    let save = save.ok_or(NotThere::NoSave(part.into()))?;
     Ok(SaveAt {
-        save: save.clone(),
+        save,
         saved_ms: saved_clock(events, seq, part),
         clock_ms: clock_at(events, seq + 1),
     })
+}
+
+/// The latest step a part left unsaved by `why` can be read at: the one just before its first
+/// unsaved write, where its last save still holds. None when `why` is not an unsaved write.
+pub fn restorable_before(events: &[Event], why: &NotThere) -> Option<Point> {
+    let NotThere::Unsaved { seq, .. } = why else {
+        return None;
+    };
+    let before = events.iter().rev().find(|e| e.seq < *seq);
+    before.map(|e| Point::Step(e.seq))
 }
 
 /// The docs of `keys` (every doc for none) of `part` at `point` of the branch `branch`'s
@@ -223,5 +235,62 @@ mod tests {
         assert_eq!(Point::parse("final"), Some(Point::Final));
         assert_eq!(Point::parse("12"), Some(Point::Step(12)));
         assert_eq!(Point::parse("x"), None);
+    }
+
+    /// `record` with a second part `other` written at step 3 without a save, and `box` written
+    /// at step 5 without one.
+    fn unsaved_record() -> Vec<Event> {
+        let mut evs = record()[..3].to_vec();
+        evs[0].payload["saves"] = json!({"box": "base", "other": "o1"});
+        evs.push(ev(
+            4,
+            EventKind::ToolCall,
+            json!({"part": "other", "writes": ["other/x"], "clock_ms": 500}),
+        ));
+        evs.push(ev(
+            5,
+            EventKind::ToolCall,
+            json!({"part": "box", "writes": ["box/n"], "clock_ms": 600}),
+        ));
+        evs.push(ev(
+            6,
+            EventKind::WorldEvent,
+            json!({"part": "box", "kind": "alarm", "clock_ms": 700}),
+        ));
+        evs
+    }
+
+    #[test]
+    fn a_part_reads_at_a_step_whatever_another_part_left_unsaved() {
+        let evs = unsaved_record();
+        let at = save_at("b", &evs, "box", Point::Step(4)).unwrap();
+        assert_eq!(
+            (at.save.as_str(), at.saved_ms, at.clock_ms),
+            ("s2", 100, 500)
+        );
+        assert_eq!(
+            save_at("b", &evs, "other", Point::Step(4)),
+            Err(NotThere::Unsaved {
+                seq: 4,
+                part: "other".into()
+            })
+        );
+    }
+
+    #[test]
+    fn a_part_left_unsaved_reads_at_the_step_before_its_first_unsaved_write() {
+        let evs = unsaved_record();
+        let err = save_at("b", &evs, "box", Point::Step(6)).unwrap_err();
+        assert_eq!(
+            err,
+            NotThere::Unsaved {
+                seq: 5,
+                part: "box".into()
+            }
+        );
+        assert_eq!(restorable_before(&evs, &err), Some(Point::Step(4)));
+        assert_eq!(restorable_before(&evs, &NotThere::NoFinal), None);
+        let at = save_at("b", &evs, "box", Point::Step(4)).unwrap();
+        assert_eq!(at.save, "s2");
     }
 }

@@ -8,4 +8,4 @@ pub mod query;
 pub mod source;
 
 pub use eval::{parts_of, screen, Ctx, FeedEvent};
-pub use source::{read, At, Moment, NotLive, Read};
+pub use source::{read, record, At, Fallback, Moment, NotLive, Read};

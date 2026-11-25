@@ -320,3 +320,23 @@ fn chain_refuses_stepped() {
         "stepped clock needs a team with a lead (dispatch runner)"
     );
 }
+
+#[test]
+fn an_offset_on_clock_start_moves_no_scenario_time() {
+    let (_dir, p) = project(stepped);
+    let local = request(&p, &exp(), START).unwrap().scenario.unwrap();
+    let offset = request(&p, &exp(), Some("2026-03-10T06:00:00-04:00"))
+        .unwrap()
+        .scenario
+        .unwrap();
+    let (a, b) = (&local.timed[0].disruption, &offset.timed[0].disruption);
+    assert_eq!(
+        (&a["at"], &a["at_ms"]),
+        (&b["at"], &b["at_ms"]),
+        "scenario times are world local times"
+    );
+    assert_eq!(
+        local.clock.unwrap().horizon_ms,
+        offset.clock.unwrap().horizon_ms
+    );
+}

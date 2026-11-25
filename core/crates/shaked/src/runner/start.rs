@@ -290,7 +290,8 @@ async fn start_world(
     let branch_id = of.branch_id;
     let seed = of.scenario.seed.unwrap_or_else(new_seed);
     let (hub, mut planned) = (state.hub.clone(), planned);
-    let mut world_time = world_time_of(bench, of.task_id);
+    let clock_start = task_clock_start(bench, of.task_id);
+    let mut world_time = world_time_of(clock_start);
     if of.rules.stepped.is_some() {
         world_time.speed = 0.0; // a stepped clock runs on no wall time
     }
@@ -300,6 +301,9 @@ async fn start_world(
     let restored = Overhead::of(Cat::Restore, overhead::ms_since(since));
     let mut start = run_start(bench, &world, seed, &of);
     start.world_epoch_ms = Some(world_time.epoch_ms);
+    start.world_utc_offset_min = clock_start
+        .and_then(crate::world_clock::ClockStart::parse)
+        .and_then(|c| c.utc_offset_min);
     let since = Instant::now();
     match records.record(branch_id, None, &start, restored).await {
         Ok(e) => Ok((world, e.seq, overhead::ms_since(since))),
@@ -310,13 +314,17 @@ async fn start_world(
     }
 }
 
-/// A new run's world time: its epoch (the task's `clock_start` as UTC, else now) and the clock
-/// speed its branches run at.
-fn world_time_of(bench: &BenchDescribe, task_id: &str) -> WorldTimeParams {
+/// The `clock_start` of the benchmark's task `task_id`, when it gives one.
+fn task_clock_start<'a>(bench: &'a BenchDescribe, task_id: &str) -> Option<&'a str> {
     let task = bench.tasks.iter().find(|t| t.id == task_id);
-    let start = task.and_then(|t| t.clock_start.as_deref());
+    task.and_then(|t| t.clock_start.as_deref())
+}
+
+/// A new run's world time: its epoch (the task's `clock_start`, else now) and the clock speed its
+/// branches run at.
+fn world_time_of(clock_start: Option<&str>) -> WorldTimeParams {
     WorldTimeParams {
-        epoch_ms: crate::world_clock::WorldClock::epoch_ms(start, chrono::Utc::now()),
+        epoch_ms: crate::world_clock::WorldClock::epoch_ms(clock_start, chrono::Utc::now()),
         speed: crate::clock::speed_from_env(),
     }
 }
@@ -346,6 +354,7 @@ fn run_start(
         max_cost_usd: of.rules.max_cost_usd,
         connection: of.rules.connection.clone(),
         world_epoch_ms: None,
+        world_utc_offset_min: None,
         world_minutes: of.rules.world_minutes,
     }
 }
