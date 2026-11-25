@@ -206,6 +206,8 @@ async fn health(State(state): State<Arc<AppState>>) -> ApiResult<Value> {
         "providers": providers::summary(&state.config.providers),
         "claude": on_path("claude"),
         "codex": on_path("codex"),
+        // Packages and agents run only in sandboxes: this machine's PATH says nothing of the CLIs.
+        "sandboxes": !state.store.layer().policy().runs_packages_here,
         "benchmark": benchmark,
         "disk": {"bytes": bytes, "limit_bytes": state.config.max_db_bytes},
     })))

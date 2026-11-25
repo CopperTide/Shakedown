@@ -458,8 +458,11 @@ export interface Health {
   open_available: boolean;
   /** Each provider from the configuration alone: local servers are `checked: false` (not asked). */
   providers?: ProviderStatus[];
+  /** Whether the Claude Code and Codex CLIs are on the shaked machine's PATH. */
   claude: boolean;
   codex: boolean;
+  /** Packages and agents run only in sandboxes (hosted): the CLIs run there, whatever this machine's PATH says. */
+  sandboxes?: boolean;
   disk?: DiskUsage;
   benchmark?: BenchmarkInfo;
 }

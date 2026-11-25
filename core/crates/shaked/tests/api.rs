@@ -100,6 +100,7 @@ async fn assert_health_and_tasks(fx: &AppFx) {
     assert_eq!(st, 200);
     assert!(h["open_available"].as_bool().unwrap());
     assert!(h["claude"].is_boolean() && h["codex"].is_boolean());
+    assert_eq!(h["sandboxes"], false, "{h}");
     assert_eq!(h["benchmark"]["name"], "retail", "{h}");
     assert_eq!(h["benchmark"]["world"][0]["integration"], "postgres", "{h}");
     let (_, tasks) = fx.get("/api/tasks").await;

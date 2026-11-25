@@ -148,6 +148,7 @@ async fn runs_from_its_description(bench: &str, tasks: usize) {
     let (status, health) = fx.get("/api/health").await;
     assert_eq!(status, 200, "{health}");
     assert_eq!(health["benchmark"]["tasks"], tasks, "{health}");
+    assert_eq!(health["sandboxes"], true, "{health}");
     let (status, list) = fx.get("/api/tasks").await;
     assert_eq!(status, 200, "{list}");
     // The sandbox's worker finds no packages: its branch ends there, nothing runs here.
