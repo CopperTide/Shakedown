@@ -16,10 +16,12 @@ are in [reference.md](reference.md).
 
 ## Project files
 
-What a person builds lives in a **project**: a folder (`SHAKEDOWN_PROJECT` locally; one per org in hosted
-Shakedown) with `shakedown.yaml` at its root and one YAML file per item, edited in the app's editors (Worlds,
-Scenarios, Agent setups, Experiments), through the control MCP server, or by hand. Code:
-`core/crates/project` (formats in `src/format/`); routes in [reference.md](reference.md#http-api).
+What a person builds lives in a **project**: `shakedown.yaml` at its root and one YAML file per item, edited in the
+app's editors (Worlds, Scenarios, Agent setups, Experiments), through the control MCP server, or by hand. Locally the
+project is a folder (`SHAKEDOWN_PROJECT`). Hosted Shakedown keeps each org's project in its database, one row per
+file at the same paths, so the files below and every rule about them are the same in both. Code:
+`core/crates/project` (formats in `src/format/`, where files live in `src/store/`); routes in
+[reference.md](reference.md#http-api); how a project is stored in [internals/project-store.md](internals/project-store.md).
 
 | Item | File | `format:` | Holds |
 |---|---|---|---|
@@ -33,8 +35,9 @@ Every file parses strictly: an unknown field, a wrong `format:` or a credential 
 key, or a literal `password`/`token`-like field) is a problem with a JSON pointer, and a problem never stops the rest
 of the project from loading. Broken references (a scenario's world, an experiment's world, scenario, setups and
 parent, and an experiment whose world is not its scenario's) are problems of the item that holds them. Ids are 1–64
-lowercase letters, digits and dashes. Writes are atomic; with `edit: diff_first` a put answers a diff and writes only
-when confirmed.
+lowercase letters, digits and dashes. Writes are atomic (in hosted Shakedown a change that touches several files, such
+as a cascading delete or a group rename, is saved in one transaction); with `edit: diff_first` a put answers a diff
+and writes only when confirmed.
 
 **World data.** A file source in a world's `data` is a path in its data folder, `worlds/<id>/`. The world editor's Data
 section has a View button on each file source that shows the file (or the files of a folder) read-only: text up to

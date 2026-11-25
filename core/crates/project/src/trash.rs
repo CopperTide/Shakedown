@@ -4,14 +4,15 @@
 //! all back. `.shakedown/` holds a `.gitignore` of `*`, so no project commits its trash, and the
 //! deletes of the last 30 days are kept, and always the last 20.
 
-use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
 use crate::error::ProjectError;
 use crate::load::{hash, io};
-use crate::write::write_atomic;
+use crate::project::write;
+use crate::store::Store;
 use crate::Project;
 
 const TRASH: &str = ".shakedown/trash";
@@ -59,8 +60,9 @@ impl Manifest {
 
 /// One delete's trash folder.
 pub(crate) struct Bin {
-    root: PathBuf,
-    dir: PathBuf,
+    store: Arc<dyn Store>,
+    /// `.shakedown/trash/<name>`.
+    dir: String,
     /// The folder's name, which names the delete.
     pub(crate) name: String,
 }
@@ -68,45 +70,40 @@ pub(crate) struct Bin {
 impl Bin {
     /// A new trash folder for a delete, holding its manifest before any file moves; older
     /// deletes past what is kept go.
-    pub(crate) fn open(root: &Path, manifest: &Manifest) -> Result<Bin, ProjectError> {
-        if !root.join(".shakedown/.gitignore").exists() {
-            write_atomic(root, ".shakedown/.gitignore", "*\n")?;
+    pub(crate) fn open(store: Arc<dyn Store>, manifest: &Manifest) -> Result<Bin, ProjectError> {
+        if !store.exists(".shakedown/.gitignore") {
+            write(&*store, ".shakedown/.gitignore", "*\n")?;
         }
         let now = now_millis();
-        prune(&root.join(TRASH), now);
+        prune(&*store, now);
         let stamp = format!("{now:013}");
         let mut name = stamp.clone();
         for n in 1.. {
-            if !root.join(TRASH).join(&name).exists() {
+            if !store.exists(&format!("{TRASH}/{name}")) {
                 break;
             }
             name = format!("{stamp}-{n}");
         }
         let json = serde_json::to_string_pretty(manifest).unwrap_or_default();
-        write_atomic(root, &format!("{TRASH}/{name}/{MANIFEST}"), &json)?;
-        let dir = root.join(TRASH).join(&name);
-        let root = root.to_path_buf();
-        Ok(Bin { root, dir, name })
+        write(&*store, &format!("{TRASH}/{name}/{MANIFEST}"), &json)?;
+        let dir = format!("{TRASH}/{name}");
+        Ok(Bin { store, dir, name })
     }
 
     /// Keeps a copy of `file` as it is now, before it is rewritten.
     pub(crate) fn keep_copy(&self, file: &str) -> Result<(), ProjectError> {
-        let to = self.place(file)?;
-        std::fs::copy(self.root.join(file), to).map_err(|e| io("copying to the trash", file, e))?;
-        Ok(())
+        let to = format!("{}/{file}", self.dir);
+        let copy = self
+            .store
+            .read(file)
+            .and_then(|b| self.store.write(&to, &b));
+        copy.map_err(|e| io("copying to the trash", file, e))
     }
 
     /// Moves `file` into the trash.
     pub(crate) fn take(&self, file: &str) -> Result<(), ProjectError> {
-        let to = self.place(file)?;
-        std::fs::rename(self.root.join(file), to).map_err(|e| io("moving to the trash", file, e))
-    }
-
-    fn place(&self, file: &str) -> Result<PathBuf, ProjectError> {
-        let to = self.dir.join(file);
-        let dir = to.parent().unwrap_or(&self.dir);
-        std::fs::create_dir_all(dir).map_err(|e| io("creating the trash for", file, e))?;
-        Ok(to)
+        let to = format!("{}/{file}", self.dir);
+        (self.store.rename(file, &to)).map_err(|e| io("moving to the trash", file, e))
     }
 }
 
@@ -116,10 +113,13 @@ impl Project {
         let name = match name {
             Some(n) if is_stamp(n) => n.to_string(),
             Some(n) => return Err(no_delete(n)),
-            None => latest(&self.root.join(TRASH)).ok_or_else(|| no_delete("recent"))?,
+            None => latest(&**self.store()).ok_or_else(|| no_delete("recent"))?,
         };
         let file = format!("{TRASH}/{name}/{MANIFEST}");
-        let text = std::fs::read_to_string(self.root.join(&file)).map_err(|_| no_delete(&name))?;
+        let text = self
+            .store()
+            .read_text(&file)
+            .map_err(|_| no_delete(&name))?;
         let manifest = serde_json::from_str(&text).map_err(|_| no_delete(&name))?;
         Ok((name, manifest))
     }
@@ -129,31 +129,34 @@ impl Project {
     /// is taken again, or a rewritten file was edited since. Answers what was put back.
     pub fn restore(&mut self, name: Option<&str>) -> Result<Manifest, ProjectError> {
         let (name, manifest) = self.trashed(name)?;
-        let dir = self.root.join(TRASH).join(&name);
+        let dir = format!("{TRASH}/{name}");
         self.check_restore(&dir, &manifest)?;
+        let store = self.store().clone();
         for file in manifest.files() {
-            let (from, to) = (dir.join(file), self.root.join(file));
-            if from.exists() {
-                std::fs::create_dir_all(to.parent().unwrap_or(&self.root))
-                    .map_err(|e| io("creating the folder for", file, e))?;
-                std::fs::rename(from, to).map_err(|e| io("restoring", file, e))?;
+            let from = format!("{dir}/{file}");
+            if store.exists(&from) {
+                store
+                    .rename(&from, file)
+                    .map_err(|e| io("restoring", file, e))?;
             }
         }
-        std::fs::remove_dir_all(&dir).map_err(|e| io("emptying the trash of", &name, e))?;
+        (store.remove_dir(&dir)).map_err(|e| io("emptying the trash of", &name, e))?;
         self.reload()?;
         Ok(manifest)
     }
 
     /// Refuses an undo that would overwrite a file: a removed file's path taken again, or a
     /// rewritten file that no longer holds what the delete wrote (a missing one is put back).
-    fn check_restore(&self, dir: &Path, manifest: &Manifest) -> Result<(), ProjectError> {
-        let taken = |f: &&String| dir.join(f).exists() && self.root.join(f).exists();
+    fn check_restore(&self, dir: &str, manifest: &Manifest) -> Result<(), ProjectError> {
+        let store = &**self.store();
+        let kept = |f: &str| store.exists(&format!("{dir}/{f}"));
+        let taken = |f: &&String| kept(f) && store.exists(f);
         if let Some(file) = manifest.deleted.iter().find(taken) {
             return Err(ProjectError::Occupied { file: file.clone() });
         }
         let changed = |e: &&Edited| {
-            let now = std::fs::read(self.root.join(&e.file));
-            dir.join(&e.file).exists() && now.is_ok_and(|bytes| hash(&bytes) != e.sha256)
+            let now = store.read(&e.file);
+            kept(&e.file) && now.is_ok_and(|bytes| hash(&bytes) != e.sha256)
         };
         let files: Vec<String> = manifest
             .edited
@@ -170,13 +173,13 @@ impl Project {
     /// Keeps `text` as `note` (a plain file name) in the trash of the delete named `name`.
     pub fn write_trash_note(&self, name: &str, note: &str, text: &str) -> Result<(), ProjectError> {
         let file = note_file(name, note)?;
-        write_atomic(&self.root, &file, text)
+        write(&**self.store(), &file, text)
     }
 
     /// The `note` kept in the trash of the delete named `name`, if any.
     pub fn trash_note(&self, name: &str, note: &str) -> Option<String> {
         let file = note_file(name, note).ok()?;
-        std::fs::read_to_string(self.root.join(file)).ok()
+        self.store().read_text(&file).ok()
     }
 }
 
@@ -201,22 +204,22 @@ fn now_millis() -> u128 {
 
 /// Removes the deletes older than what is kept: beyond the newest [`KEEP_AT_LEAST`], those
 /// older than [`KEEP_MILLIS`]. A folder that can't be removed stays.
-fn prune(trash: &Path, now: u128) {
-    let mut names = stamps(trash);
+fn prune(store: &dyn Store, now: u128) {
+    let mut names = stamps(store);
     names.reverse();
     for (millis, name) in names.into_iter().skip(KEEP_AT_LEAST) {
         if millis + KEEP_MILLIS < now {
-            let _ = std::fs::remove_dir_all(trash.join(name));
+            let _ = store.remove_dir(&format!("{TRASH}/{name}"));
         }
     }
 }
 
 /// The trash folders, oldest first, each with the time it was made.
-fn stamps(trash: &Path) -> Vec<(u128, String)> {
-    let Ok(entries) = std::fs::read_dir(trash) else {
+fn stamps(store: &dyn Store) -> Vec<(u128, String)> {
+    let Ok(entries) = store.list(TRASH) else {
         return Vec::new();
     };
-    let names = entries.filter_map(|e| Some(e.ok()?.file_name().to_string_lossy().to_string()));
+    let names = entries.into_iter().map(|e| e.name);
     let mut found: Vec<(u128, u32, String)> = names
         .filter(|n| is_stamp(n))
         .map(|n| {
@@ -243,8 +246,8 @@ fn is_stamp(name: &str) -> bool {
 }
 
 /// The newest trash folder's name.
-fn latest(trash: &Path) -> Option<String> {
-    stamps(trash).pop().map(|(_, name)| name)
+fn latest(store: &dyn Store) -> Option<String> {
+    stamps(store).pop().map(|(_, name)| name)
 }
 
 fn no_delete(name: &str) -> ProjectError {

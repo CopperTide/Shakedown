@@ -6,6 +6,8 @@ edition = "2021"
 [dependencies]
 parts = { path = "../parts" }
 shakedown-project = { path = "../project" }
+# The MADL view's copy of a setup folder kept in a database.
+tempfile = { workspace = true }
 schemars = { workspace = true }
 serde_yaml_ng = { workspace = true }
 similar = { workspace = true }
@@ -43,7 +45,6 @@ object_store = { version = "=0.12.5", default-features = false, features = ["aws
 harness = []
 
 [dev-dependencies]
-tempfile = { workspace = true }
 tower = { version = "0.5", features = ["util"] }
 shaked = { path = ".", features = ["harness"] }
 uuid = { workspace = true, features = ["serde"] }

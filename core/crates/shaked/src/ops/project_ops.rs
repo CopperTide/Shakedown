@@ -9,7 +9,6 @@ use shakedown_project::format::{parse, to_yaml, Kind, ProjectFile};
 use shakedown_project::Project;
 
 use super::{as_yaml, diff_first, flag, input, schema, view, Access, OpCtx, OpFuture, Operation};
-use crate::project_state::NoProject;
 
 pub(super) fn ops() -> Vec<Operation> {
     vec![
@@ -78,14 +77,13 @@ struct InitInput {
 }
 
 fn status<'a>(ctx: &'a OpCtx<'a>, _: &'static Operation, _: Value) -> OpFuture<'a> {
-    Box::pin(async move { Ok(status_of(&ctx.project.current()?)) })
+    Box::pin(async move { Ok(status_of(&ctx.project.current().await?)) })
 }
 
 fn init<'a>(ctx: &'a OpCtx<'a>, _: &'static Operation, value: Value) -> OpFuture<'a> {
     Box::pin(async move {
         let InitInput { name, git } = input(value)?;
-        let root = ctx.project.root().ok_or(NoProject::NotConfigured)?;
-        let project = Project::init(root, &name, git)?;
+        let project = ctx.project.init(&name, git).await??;
         Ok(status_of(&project))
     })
 }
@@ -94,14 +92,14 @@ fn update<'a>(ctx: &'a OpCtx<'a>, _: &'static Operation, value: Value) -> OpFutu
     Box::pin(async move {
         let UpdateInput { body, confirm } = input(value)?;
         let config: ProjectFile = parse("shakedown.yaml", &as_yaml(&body)?)?;
-        let project = ctx.project.current()?;
+        let project = ctx.project.current().await?;
         let (old, new) = (to_yaml(&project.config)?, to_yaml(&config)?);
         let policy = project.config.permissions.edit;
         if let ControlFlow::Break(proposal) = diff_first(policy, &old, &new, confirm) {
             return Ok(proposal);
         }
-        ctx.project.change(|p| p.set_config(config))??;
-        Ok(status_of(&ctx.project.current()?))
+        ctx.project.change(|p| p.set_config(config)).await??;
+        Ok(status_of(&ctx.project.current().await?))
     })
 }
 
@@ -118,6 +116,6 @@ fn status_of(project: &Project) -> Value {
         },
         "problems": problems,
         "settings": project.config,
-        "root": project.root.display().to_string(),
+        "root": project.root().map(|r| r.display().to_string()),
     })
 }

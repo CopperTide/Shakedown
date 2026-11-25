@@ -1,5 +1,5 @@
-//! Shakedown project folders: the file formats for worlds, scenarios, setups and experiments, and
-//! safe reads and writes of the folder that holds them.
+//! Shakedown projects: the file formats for worlds, scenarios, setups and experiments, and safe
+//! reads and writes of the files, in a folder or any other [`store::Store`].
 
 mod dependents;
 pub mod error;
@@ -10,9 +10,9 @@ mod item;
 mod load;
 mod project;
 pub mod secrets;
+pub mod store;
 mod trash;
 mod validate;
-mod write;
 
 pub use dependents::{Dependent, Expected, Fate, Removal};
 pub use error::{FormatError, ProjectError};

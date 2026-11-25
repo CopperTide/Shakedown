@@ -4,8 +4,7 @@ use crate::error::ProjectError;
 use crate::format::{Kind, WorldFile};
 use crate::item::{ItemBody, KindFile};
 use crate::load::item_file;
-use crate::project::checked_yaml;
-use crate::write::write_atomic;
+use crate::project::{checked_yaml, write};
 use crate::{Id, Project};
 
 impl Project {
@@ -38,7 +37,7 @@ impl Project {
             ));
         }
         for (file, yaml) in &files {
-            write_atomic(&self.root, file, yaml)?;
+            write(&**self.store(), file, yaml)?;
         }
         self.reload()?;
         Ok(moved.into_iter().map(|(id, _)| id).collect())

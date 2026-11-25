@@ -142,7 +142,7 @@ pub(super) fn kind_of(op: &Operation) -> Result<Kind, OpError> {
 
 fn list<'a>(ctx: &'a OpCtx<'a>, op: &'static Operation, _: Value) -> OpFuture<'a> {
     Box::pin(async move {
-        let (kind, project) = (kind_of(op)?, ctx.project.current()?);
+        let (kind, project) = (kind_of(op)?, ctx.project.current().await?);
         let items: Vec<Value> = project
             .list(kind)
             .into_iter()
@@ -155,7 +155,7 @@ fn list<'a>(ctx: &'a OpCtx<'a>, op: &'static Operation, _: Value) -> OpFuture<'a
 fn get<'a>(ctx: &'a OpCtx<'a>, op: &'static Operation, value: Value) -> OpFuture<'a> {
     Box::pin(async move {
         let (kind, id) = (kind_of(op)?, Id::parse(&input::<IdInput>(value)?.id)?);
-        let project = ctx.project.current()?;
+        let project = ctx.project.current().await?;
         let item = project
             .get(kind, &id)
             .ok_or_else(|| ProjectError::not_found(kind, &id))?;
@@ -170,7 +170,7 @@ fn put<'a>(ctx: &'a OpCtx<'a>, op: &'static Operation, value: Value) -> OpFuture
         let id = Id::parse(&id)?;
         // Checked exactly as the file would be checked when read back.
         let body = ItemBody::parse(kind, &item_file(kind, &id), &as_yaml(&body)?)?;
-        let project = ctx.project.current()?;
+        let project = ctx.project.current().await?;
         let old = match project.get(kind, &id) {
             Some(item) => item.body.to_yaml()?,
             None => String::new(),
@@ -180,8 +180,8 @@ fn put<'a>(ctx: &'a OpCtx<'a>, op: &'static Operation, value: Value) -> OpFuture
             ControlFlow::Continue(diff) => diff,
             ControlFlow::Break(proposal) => return Ok(proposal),
         };
-        let item = ctx.project.change(|p| p.put(kind, &id, body))??;
-        let mut out = view::item(&ctx.project.current()?, &item);
+        let item = ctx.project.change(|p| p.put(kind, &id, body)).await??;
+        let mut out = view::item(&ctx.project.current().await?, &item);
         out["diff"] = Value::String(diff);
         Ok(out)
     })

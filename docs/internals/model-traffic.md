@@ -223,7 +223,7 @@ counts only unpaused time (`token_live!` in `src/auth/run_tokens.rs`).
 
 `Layer` (`src/layer.rs`) is where the engine asks its deployment. Hooks: `policy`, `authenticate`, `begin`
 (after every `BEGIN`), `authorize`, `admit`, `meter`, `fallback_provider`, `audit`, `routes`, `me`,
-`object_prefix`, `own_keys`, `principal`, `project_dir`, `keeps_secrets`.
+`object_prefix`, `own_keys`, `principal`, `project_home`, `keeps_secrets`.
 
 | `Policy` field | `LocalLayer` | `WorkerLayer` | What it changes |
 |---|---|---|---|

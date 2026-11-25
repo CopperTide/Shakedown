@@ -42,14 +42,14 @@ fn rename<'a>(ctx: &'a OpCtx<'a>, _: &'static Operation, value: Value) -> OpFutu
     Box::pin(async move {
         let RenameInput { from, to, confirm } = input(value)?;
         let to = to.as_deref().map(str::trim).filter(|t| !t.is_empty());
-        let project = ctx.project.current()?;
+        let project = ctx.project.current().await?;
         let (old, new) = both_sides(&project, &from, to)?;
         let policy = project.config.permissions.edit;
         let diff = match diff_first(policy, &old, &new, confirm) {
             ControlFlow::Continue(diff) => diff,
             ControlFlow::Break(proposal) => return Ok(proposal),
         };
-        let moved = ctx.project.change(|p| p.rename_group(&from, to))??;
+        let moved = ctx.project.change(|p| p.rename_group(&from, to)).await??;
         let moved: Vec<&str> = moved.iter().map(|id| id.as_str()).collect();
         Ok(json!({ "moved": moved, "diff": diff }))
     })

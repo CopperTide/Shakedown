@@ -17,6 +17,7 @@ fix it in the same change. Diagrams are Mermaid, which GitHub renders.
 | 4 | [Model traffic](model-traffic.md) | The gateway, providers, agents, the world MCP endpoint, the proxy, budgets, auth and `can()`, the layer. |
 | 5 | [API and operations](api-and-ops.md) | The HTTP router, the one operation registry behind HTTP, MCP and the assistant, suites and experiments, review and metrics. |
 | 6 | [Sandbox runs](sandbox-runs.md) | `shaked worker`, link frames, the window and give-up, holds, budgets on the control box, the sweep, `Hosting`, the E2B backend. |
+| 7 | [Project store](project-store.md) | Where a project's files live: the `Store` trait, the folder and memory stores, `ProjectHome` and `ProjectDb`, caching and one-transaction saves. |
 
 Read 1 to 3 before any change. Read the area page before you touch its modules.
 

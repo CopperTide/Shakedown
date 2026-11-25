@@ -10,8 +10,13 @@ use crate::project_state::NoProject;
 pub type OpError = crate::api::ApiError;
 
 impl From<NoProject> for OpError {
+    /// No project is 409; a database's refusal has its own status; its failure is a 500.
     fn from(e: NoProject) -> OpError {
-        OpError::new(StatusCode::CONFLICT, e.to_string())
+        match e {
+            NoProject::Refused { status, message } => OpError::new(status, message),
+            NoProject::Failed(e) => OpError::internal(e),
+            e => OpError::new(StatusCode::CONFLICT, e.to_string()),
+        }
     }
 }
 

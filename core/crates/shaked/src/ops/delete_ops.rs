@@ -63,12 +63,13 @@ pub(super) fn delete<'a>(ctx: &'a OpCtx<'a>, op: &'static Operation, value: Valu
             confirm,
         } = input(value)?;
         let (kind, id, expect) = (kind_of(op)?, Id::parse(&id)?, shown(expect)?);
-        if let Some(proposal) = held(ctx, kind, &id, cascade && !confirm)? {
+        if let Some(proposal) = held(ctx, kind, &id, cascade && !confirm).await? {
             return Ok(proposal);
         }
         let removal = ctx
             .project
-            .change(|p| p.delete(kind, &id, cascade, expect.as_deref()))??;
+            .change(|p| p.delete(kind, &id, cascade, expect.as_deref()))
+            .await??;
         let runs_unlinked = unlink_runs(ctx, kind, &id, &removal).await;
         let with = view::dependents(&removal.fallout);
         let trash = removal.trash;
@@ -85,7 +86,7 @@ pub(super) fn dependents<'a>(
 ) -> OpFuture<'a> {
     Box::pin(async move {
         let (kind, id) = (kind_of(op)?, Id::parse(&input::<IdInput>(value)?.id)?);
-        let project = ctx.project.current()?;
+        let project = ctx.project.current().await?;
         if project.get(kind, &id).is_none() {
             return Err(shakedown_project::ProjectError::not_found(kind, &id).into());
         }
@@ -113,11 +114,16 @@ fn shown(list: Option<Vec<Shown>>) -> Result<Option<Vec<Expected>>, OpError> {
 }
 
 /// Under "show a diff first", what an unconfirmed cascade would take; nothing is written.
-fn held(ctx: &OpCtx<'_>, kind: Kind, id: &Id, unconfirmed: bool) -> Result<Option<Value>, OpError> {
+async fn held(
+    ctx: &OpCtx<'_>,
+    kind: Kind,
+    id: &Id,
+    unconfirmed: bool,
+) -> Result<Option<Value>, OpError> {
     if !unconfirmed {
         return Ok(None);
     }
-    let project = ctx.project.current()?;
+    let project = ctx.project.current().await?;
     let fallout = project.fallout(kind, id);
     if project.config.permissions.edit != EditPolicy::DiffFirst || fallout.is_empty() {
         return Ok(None);
@@ -148,10 +154,12 @@ async fn unlink_runs(ctx: &OpCtx<'_>, kind: Kind, id: &Id, removal: &Removal) ->
     let note = serde_json::to_string(&unlinked).unwrap_or_default();
     let kept = ctx
         .project
-        .current()
-        .map(|p| p.write_trash_note(&removal.trash, RUNS_NOTE, &note));
-    if let Ok(Err(e)) = kept {
-        eprintln!("shaked: noting the unlinked runs of a delete: {e}");
+        .change(|p| p.write_trash_note(&removal.trash, RUNS_NOTE, &note))
+        .await;
+    match kept {
+        Ok(Ok(())) => {}
+        Ok(Err(e)) => eprintln!("shaked: noting the unlinked runs of a delete: {e}"),
+        Err(e) => eprintln!("shaked: noting the unlinked runs of a delete: {e}"),
     }
     true
 }

@@ -40,7 +40,7 @@ fn import<'a>(ctx: &'a OpCtx<'a>, _: &'static Operation, value: Value) -> OpFutu
         let ImportInput { confirm } = input(value)?;
         let app = ctx.app("moving earlier work")?;
         let old = earlier(app, &ctx.caller).await?;
-        let moved = plan(&ctx.project.current()?, &benchmarks(app), &old);
+        let moved = plan(&ctx.project.current().await?, &benchmarks(app), &old);
         let files: Vec<Value> = moved
             .files
             .iter()
@@ -67,7 +67,7 @@ async fn write(
         skipped,
     } = moved;
     for (kind, id, body) in files {
-        ctx.project.change(|p| p.put(kind, &id, body))??;
+        ctx.project.change(|p| p.put(kind, &id, body)).await??;
     }
     let mut linked = 0;
     for (old, id) in links {

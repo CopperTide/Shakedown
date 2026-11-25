@@ -4,6 +4,10 @@
 
 ### Breaking
 
+- **`Layer::project_dir` is now `Layer::project_home`**, answering a `ProjectHome`: a folder as before, or a
+  `ProjectDb` the layer keeps projects in (every file read into memory, each change saved in one transaction).
+  `ProjectState::current` and `change` are async, and `shakedown_project::Project` reads and writes through a
+  `Store` (`open_in`, `init_in`; `open` and `init` still take a folder). Local projects are unchanged.
 - **Agents must send their token to MCP and the model gateway.** Each agent's endpoints (from
   `POST /api/runs`, a suite's claim, or registering an agent) carry a `token`. Every call to that
   agent's `/mcp/...` and `/gateway/...` URLs must send it as `Authorization: Bearer <token>`; a call

@@ -104,7 +104,7 @@ What each box is:
 |---|---|---|
 | `shaked` | `core/crates/shaked` | The engine: HTTP API, runners, gateway, proxy, store, worker. A library plus the `shaked` binary. |
 | `parts` | `core/crates/parts` | Package manifests and registry, the JSON-RPC client to part programs, the `Hub`, and the `shakedown-part-check` conformance checker. |
-| `shakedown-project` | `core/crates/project` | Project folder formats (world, scenario, setup, experiment, `shakedown.yaml`), load, validate, write. |
+| `shakedown-project` | `core/crates/project` | Project formats (world, scenario, setup, experiment, `shakedown.yaml`), load, validate, write, over a `Store` (a folder or memory). |
 | `shakedown-schema` | `core/crates/shakedown-schema` | The SQL migrations as files and a generic migrator with checksums. |
 | `shakedown-part` | `kits/rust` | The kit integrations and benchmarks are written with. `parts` re-exports its `proto` wire types. Core crates never depend on an integration or benchmark (`core/crates/parts/tests/isolation.rs`). |
 
@@ -197,7 +197,7 @@ One line per module of `src/lib.rs`, grouped by area. The area pages go one leve
 |---|---|
 | `ops` | The operation registry: each project operation defined once and served as HTTP route, MCP tool and assistant tool. |
 | `assistant` | The Ask chat on the user's own model, with the registry as its tools. |
-| `project_state` | The project folder shaked serves, re-read when its files change. |
+| `project_state` | Each caller's project where the layer keeps it (a folder, or a `ProjectDb`), cached until it changes. |
 | `suite` | Suites: slots of task × variant × repeat, the drive loop, outcomes, reports, comparison. |
 | `experiment` | Experiments: N setups of one task, each stored as a suite, run interleaved. |
 | `review` | AI review of a run, a pair of runs or a pair of suites, with citations checked against the record. |

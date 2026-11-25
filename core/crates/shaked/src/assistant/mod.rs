@@ -49,7 +49,7 @@ pub async fn run_chat(
     model: &str,
     req: ChatRequest,
 ) -> Result<ChatAnswer, OpError> {
-    let mut convo = vec![prompt::system(ctx, req.page.as_deref())];
+    let mut convo = vec![prompt::system(ctx, req.page.as_deref()).await];
     convo.extend(req.messages);
     let mut answer = ChatAnswer::default();
     for _ in 0..MAX_TURNS {

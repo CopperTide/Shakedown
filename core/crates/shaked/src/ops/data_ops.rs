@@ -2,13 +2,11 @@
 //! Paths are relative to that folder; anything that leaves it (`..`, an absolute path, a symlink
 //! pointing out) is refused with 400.
 
-use std::io::Read;
-use std::path::{Component, Path, PathBuf};
-
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use shakedown_project::format::Kind;
+use shakedown_project::store::{check_path, Store};
 use shakedown_project::{Id, ProjectError};
 
 use super::{input, schema, Access, OpCtx, OpError, OpFuture, Operation};
@@ -45,37 +43,21 @@ struct DataInput {
 fn data<'a>(ctx: &'a OpCtx<'a>, _: &'static Operation, value: Value) -> OpFuture<'a> {
     Box::pin(async move {
         let DataInput { id, path } = input(value)?;
-        let (id, project) = (Id::parse(&id)?, ctx.project.current()?);
+        let (id, project) = (Id::parse(&id)?, ctx.project.current().await?);
         if project.get(Kind::World, &id).is_none() {
             return Err(ProjectError::not_found(Kind::World, &id).into());
         }
-        let kept = project.kept_folder(Kind::World, &id);
-        let folder = project.root.join(kept.unwrap_or_default());
+        let folder = format!("{}/{id}", Kind::World.dir());
         match path {
-            None => list(&folder),
-            Some(rel) => read(&folder, &rel),
+            None => Ok(list(&**project.store(), &folder)),
+            Some(rel) => read(&**project.store(), &folder, &rel),
         }
     })
 }
 
 /// The files under `folder` (relative path and size), sorted, up to [`MAX_FILES`].
-fn list(folder: &Path) -> Result<Value, OpError> {
-    let mut files = Vec::new();
-    let mut todo = vec![folder.to_path_buf()];
-    while let Some(dir) = todo.pop() {
-        for entry in std::fs::read_dir(&dir).into_iter().flatten().flatten() {
-            let Ok(kind) = entry.file_type() else {
-                continue;
-            };
-            if kind.is_dir() {
-                todo.push(entry.path());
-            } else if kind.is_file() {
-                let rel = entry.path().strip_prefix(folder).map(Path::to_path_buf);
-                let size = entry.metadata().map_or(0, |m| m.len());
-                files.extend(rel.map(|r| (r.to_string_lossy().replace('\\', "/"), size)));
-            }
-        }
-    }
+fn list(store: &dyn Store, folder: &str) -> Value {
+    let mut files = files_under(store, folder);
     files.sort();
     let truncated = files.len() > MAX_FILES;
     files.truncate(MAX_FILES);
@@ -83,43 +65,53 @@ fn list(folder: &Path) -> Result<Value, OpError> {
         .into_iter()
         .map(|(path, size)| json!({ "path": path, "size": size }))
         .collect();
-    Ok(json!({ "files": files, "truncated": truncated }))
+    json!({ "files": files, "truncated": truncated })
 }
 
-/// The file `rel` under `folder`, canonical, or 400 if it leaves the folder, 404 if absent.
-fn resolve(folder: &Path, rel: &str) -> Result<PathBuf, OpError> {
-    let plain = Path::new(rel)
-        .components()
-        .all(|c| matches!(c, Component::Normal(_) | Component::CurDir));
-    if !plain {
-        return Err(OpError::bad_request(format!(
-            "{rel:?} is outside the data folder"
-        )));
+/// Every file under `folder`, by path in it, with its size; links are left out.
+fn files_under(store: &dyn Store, folder: &str) -> Vec<(String, u64)> {
+    let (mut files, mut todo) = (Vec::new(), vec![String::new()]);
+    while let Some(rel) = todo.pop() {
+        let join = |a: &str, b: &str| match (a.is_empty(), b.is_empty()) {
+            (true, _) => b.to_string(),
+            (_, true) => a.to_string(),
+            _ => format!("{a}/{b}"),
+        };
+        for entry in store.list(&join(folder, &rel)).into_iter().flatten() {
+            let path = join(&rel, &entry.name);
+            match (entry.link, entry.dir) {
+                (true, _) => {}
+                (false, true) => todo.push(path),
+                (false, false) => files.push((path, entry.size)),
+            }
+        }
     }
+    files
+}
+
+/// `{path, size, text, truncated}` for a text file, `{path, size, binary: true}` otherwise; 400
+/// for a path that leaves the folder, 404 for a missing file.
+fn read(store: &dyn Store, folder: &str, rel: &str) -> Result<Value, OpError> {
+    let plain = rel
+        .split('/')
+        .filter(|s| *s != ".")
+        .collect::<Vec<_>>()
+        .join("/");
+    let outside = || OpError::bad_request(format!("{rel:?} is outside the data folder"));
+    check_path(&plain).map_err(|_| outside())?;
     let not_found = || {
         OpError::new(
             axum::http::StatusCode::NOT_FOUND,
             format!("no data file {rel}"),
         )
     };
-    let base = folder.canonicalize().map_err(|_| not_found())?;
-    let file = base.join(rel).canonicalize().map_err(|_| not_found())?;
-    if !file.starts_with(&base) {
-        return Err(OpError::bad_request(format!(
-            "{rel:?} is outside the data folder"
-        )));
-    }
-    Ok(file)
-}
-
-/// `{path, size, text, truncated}` for a text file, `{path, size, binary: true}` otherwise.
-fn read(folder: &Path, rel: &str) -> Result<Value, OpError> {
-    let file = resolve(folder, rel)?;
-    let io = |e: std::io::Error| OpError::internal(e.into());
-    let size = file.metadata().map_err(io)?.len();
-    let mut bytes = Vec::new();
-    let opened = std::fs::File::open(&file).map_err(io)?;
-    opened.take(MAX_BYTES).read_to_end(&mut bytes).map_err(io)?;
+    let (bytes, size) = match store.read_head(folder, &plain, MAX_BYTES) {
+        Ok(read) => read,
+        Err(e) if e.kind() == std::io::ErrorKind::InvalidInput => return Err(outside()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Err(not_found()),
+        Err(_) if store.is_dir(&format!("{folder}/{plain}")) => return Err(not_found()),
+        Err(e) => return Err(OpError::internal(e.into())),
+    };
     let truncated = size > MAX_BYTES;
     match text_of(&bytes, truncated) {
         Some(text) => {

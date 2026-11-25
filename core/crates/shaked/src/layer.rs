@@ -3,7 +3,7 @@
 //! keys). The open-source binary passes [`LocalLayer`], every hook a personal-use default; a hosting
 //! layer (CopperTide Cloud's) implements the same trait.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 
 use axum::{http::request::Parts, Router};
@@ -16,6 +16,7 @@ use crate::{
 };
 
 mod types;
+pub use crate::project_state::{Change, Files, NoProject, ProjectDb, ProjectHome};
 pub use types::*;
 
 /// A deployment's hooks. Async hooks return boxed futures.
@@ -68,10 +69,11 @@ pub trait Layer: Send + Sync + 'static {
     /// a colleague in the same scope cannot cite them. Required, with no default, so that a layer
     /// serving several users cannot forget to tell them apart.
     fn principal(&self, c: &Caller) -> String;
-    /// The project folder `c` works in; `configured` is `SHAKEDOWN_PROJECT`. Personal use has the
-    /// one folder; a hosting layer may give callers folders of their own.
-    fn project_dir(&self, _c: &Caller, configured: Option<&Path>) -> Option<PathBuf> {
-        configured.map(Path::to_path_buf)
+    /// Where `c`'s project lives; `configured` is `SHAKEDOWN_PROJECT`. Personal use has the one
+    /// folder; a hosting layer may give callers folders of their own, or keep their projects in
+    /// its database ([`ProjectHome::Db`]).
+    fn project_home(&self, _c: &Caller, configured: Option<&Path>) -> Option<ProjectHome> {
+        configured.map(|dir| ProjectHome::Folder(dir.to_path_buf()))
     }
     /// False where no secret may be decrypted, such as a sandbox's worker: the vault is refused
     /// and its key never read or made.

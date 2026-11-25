@@ -43,7 +43,7 @@ fn deploy_one<'a>(ctx: &'a OpCtx<'a>, _: &'static Operation, value: Value) -> Op
     Box::pin(async move {
         let id = Id::parse(&input::<IdInput>(value)?.id)?;
         let app = ctx.app("deploying")?;
-        let project = ctx.project.current()?;
+        let project = ctx.project.current().await?;
         let creds = credentials(app, &ctx.caller, &deploy::needs(&project, &id)?).await?;
         let req = deploy::request(&project, &id, &creds)?;
         let detail = create_experiment(app, &ctx.caller, None, req).await?;

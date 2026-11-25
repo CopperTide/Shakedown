@@ -5,10 +5,11 @@ use serde_json::{json, Value};
 use crate::ops::OpCtx;
 
 /// The system message: who the assistant is, where the person is, and how it may act.
-pub(super) fn system(ctx: &OpCtx<'_>, page: Option<&str>) -> Value {
+pub(super) async fn system(ctx: &OpCtx<'_>, page: Option<&str>) -> Value {
     let project = ctx
         .project
         .current()
+        .await
         .map(|p| p.config.name)
         .unwrap_or_else(|_| "no project open".into());
     let page = page.unwrap_or("the app");

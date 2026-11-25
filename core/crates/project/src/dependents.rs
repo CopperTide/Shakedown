@@ -9,10 +9,9 @@ use crate::error::ProjectError;
 use crate::format::{ExperimentFile, Kind};
 use crate::item::{kind_name, Item, ItemBody};
 use crate::load::item_file;
-use crate::project::checked_yaml;
+use crate::project::{checked_yaml, write};
 use crate::trash::{Bin, Manifest};
 use crate::validate::references;
-use crate::write::write_atomic;
 use crate::{Id, Project};
 
 /// What deleting an item with cascade does to one item that uses it.
@@ -86,10 +85,10 @@ impl Project {
         let edits = self.edits(&fallout, &doomed)?;
         let deletes = deletions(kind, id, &fallout);
         let manifest = Manifest::new(format!("{} {id}", kind_name(kind)), &deletes, &edits);
-        let bin = Bin::open(&self.root, &manifest)?;
+        let bin = Bin::open(self.store().clone(), &manifest)?;
         for (file, yaml) in &edits {
             bin.keep_copy(file)?;
-            write_atomic(&self.root, file, yaml)?;
+            write(&**self.store(), file, yaml)?;
         }
         for file in &deletes {
             bin.take(file)?;

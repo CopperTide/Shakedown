@@ -2,13 +2,13 @@
 //! never stops the rest of the project from loading.
 
 use std::collections::BTreeMap;
-use std::path::Path;
 
 use sha2::{Digest, Sha256};
 
 use crate::error::ProjectError;
 use crate::format::Kind;
 use crate::item::{Item, ItemBody, Problem};
+use crate::store::Store;
 use crate::Id;
 
 /// Items keyed by kind and id.
@@ -22,13 +22,13 @@ pub fn item_file(kind: Kind, id: &Id) -> String {
     }
 }
 
-/// Loads every item of every kind under `root`.
-pub(crate) fn load_all(root: &Path) -> Result<(Items, Vec<Problem>), ProjectError> {
+/// Loads every item of every kind in `store`.
+pub(crate) fn load_all(store: &dyn Store) -> Result<(Items, Vec<Problem>), ProjectError> {
     let mut items = Items::new();
     let mut problems = Vec::new();
     for kind in Kind::ALL {
-        for name in names(root, kind, &mut problems)? {
-            match read_item(root, kind, &name) {
+        for name in names(store, kind, &mut problems)? {
+            match read_item(store, kind, &name) {
                 Ok(item) => {
                     items.insert((kind, item.id.clone()), item);
                 }
@@ -41,21 +41,19 @@ pub(crate) fn load_all(root: &Path) -> Result<(Items, Vec<Problem>), ProjectErro
 
 /// The item names found for `kind`, reporting loose world files as problems.
 fn names(
-    root: &Path,
+    store: &dyn Store,
     kind: Kind,
     problems: &mut Vec<Problem>,
 ) -> Result<Vec<String>, ProjectError> {
-    let dir = root.join(kind.dir());
-    let Ok(entries) = std::fs::read_dir(&dir) else {
+    let Ok(entries) = store.list(kind.dir()) else {
         return Ok(Vec::new());
     };
     let mut names = Vec::new();
     for entry in entries {
-        let entry = entry.map_err(|source| io("reading", kind.dir(), source))?;
-        let name = entry.file_name().to_string_lossy().to_string();
-        let is_dir = entry.path().is_dir();
-        match (kind, is_dir, name.strip_suffix(".yaml")) {
-            (Kind::World, true, _) if entry.path().join("world.yaml").is_file() => names.push(name),
+        let name = entry.name;
+        let world_file = || store.is_file(&format!("{}/{name}/world.yaml", kind.dir()));
+        match (kind, entry.dir, name.strip_suffix(".yaml")) {
+            (Kind::World, true, _) if world_file() => names.push(name),
             (Kind::World, false, Some(stem)) => problems.push(loose_world(stem)),
             (Kind::World, _, _) => {}
             (_, false, Some(stem)) => names.push(stem.to_string()),
@@ -76,7 +74,7 @@ fn loose_world(stem: &str) -> Problem {
 }
 
 /// Reads one item, or the problem that stopped it.
-pub(crate) fn read_item(root: &Path, kind: Kind, name: &str) -> Result<Item, Problem> {
+pub(crate) fn read_item(store: &dyn Store, kind: Kind, name: &str) -> Result<Item, Problem> {
     let problem = |message: String| Problem {
         kind: Some(kind),
         id: Some(name.to_string()),
@@ -85,7 +83,7 @@ pub(crate) fn read_item(root: &Path, kind: Kind, name: &str) -> Result<Item, Pro
     };
     let id = Id::parse(name).map_err(|e| problem(e.to_string()))?;
     let file = item_file(kind, &id);
-    let bytes = std::fs::read(root.join(&file)).map_err(|e| problem(e.to_string()))?;
+    let bytes = store.read(&file).map_err(|e| problem(e.to_string()))?;
     let text = String::from_utf8(bytes.clone()).map_err(|e| problem(e.to_string()))?;
     let body = ItemBody::parse(kind, &file, &text).map_err(|e| Problem {
         pointer: e.pointer.clone(),

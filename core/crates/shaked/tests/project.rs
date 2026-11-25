@@ -12,7 +12,7 @@ use support::{run, AppFx};
 fn no_project_configured() {
     run(async {
         let fx = AppFx::idle("project", "none").start().await;
-        let err = fx.state.project().unwrap_err();
+        let err = fx.state.project().await.unwrap_err();
         assert!(matches!(err, NoProject::NotConfigured), "{err}");
         assert!(err.to_string().contains("no project is open"));
     });
@@ -22,7 +22,7 @@ fn no_project_configured() {
 fn opens_the_configured_folder() {
     run(async {
         let fx = project_app("project", "open").await;
-        let project = fx.state.project().unwrap();
+        let project = fx.state.project().await.unwrap();
         assert_eq!(project.config.name, "Larkspur Ops");
         assert_eq!(project.list(Kind::Setup).len(), 3);
     });
@@ -37,7 +37,7 @@ fn broken_file_reported_others_load() {
             .project(dir.path())
             .start()
             .await;
-        let project = fx.state.project().unwrap();
+        let project = fx.state.project().await.unwrap();
         assert_eq!(project.list(Kind::World).len(), 1);
         assert_eq!(project.problems.len(), 1, "{:?}", project.problems);
     });
@@ -47,12 +47,18 @@ fn broken_file_reported_others_load() {
 fn outside_edits_are_seen() {
     run(async {
         let fx = project_app("project", "edits").await;
-        assert_eq!(fx.state.project().unwrap().list(Kind::Scenario).len(), 1);
+        assert_eq!(
+            fx.state.project().await.unwrap().list(Kind::Scenario).len(),
+            1
+        );
         let second = fx.dir.path().join("scenarios/second.yaml");
         let text =
             std::fs::read_to_string(fx.dir.path().join("scenarios/supplier-slip.yaml")).unwrap();
         std::fs::write(second, text).unwrap();
-        assert_eq!(fx.state.project().unwrap().list(Kind::Scenario).len(), 2);
+        assert_eq!(
+            fx.state.project().await.unwrap().list(Kind::Scenario).len(),
+            2
+        );
     });
 }
 
@@ -64,7 +70,7 @@ fn not_a_project_is_reported() {
             .project(dir.path())
             .start()
             .await;
-        let err = fx.state.project().unwrap_err();
+        let err = fx.state.project().await.unwrap_err();
         assert!(err.to_string().contains("not a Shakedown project"), "{err}");
     });
 }
@@ -76,10 +82,17 @@ fn writes_go_through_the_project() {
         let id = shakedown_project::Id::parse("supplier-slip").unwrap();
         fx.state
             .with_project_mut(|p| p.remove(Kind::Scenario, &id))
+            .await
             .unwrap()
             .unwrap();
         assert!(!fx.dir.path().join("scenarios/supplier-slip.yaml").exists());
-        assert!(fx.state.project().unwrap().list(Kind::Scenario).is_empty());
+        assert!(fx
+            .state
+            .project()
+            .await
+            .unwrap()
+            .list(Kind::Scenario)
+            .is_empty());
     });
 }
 
@@ -107,8 +120,8 @@ fn layer_picks_the_callers_folder() {
         let person = fx.state.project_for(&shaked::auth::Caller::person());
         let theirs = shaked::auth::Caller::api_token(token, vec![]);
         let other = fx.state.project_for(&theirs);
-        assert_eq!(other.current().unwrap().list(Kind::World).len(), 1);
-        assert_eq!(person.current().unwrap().list(Kind::World).len(), 0);
+        assert_eq!(other.current().await.unwrap().list(Kind::World).len(), 1);
+        assert_eq!(person.current().await.unwrap().list(Kind::World).len(), 0);
     });
 }
 
@@ -121,6 +134,13 @@ fn same_folder_shares_state() {
             uuid::Uuid::new_v4(),
             vec![],
         ));
-        assert!(std::sync::Arc::ptr_eq(&a, &b));
+        let id = shakedown_project::Id::parse("supplier-slip").unwrap();
+        let removed = a.change(|p| p.remove(Kind::Scenario, &id)).await;
+        removed.unwrap().unwrap();
+        let seen = b.current().await.unwrap();
+        assert!(
+            seen.list(Kind::Scenario).is_empty(),
+            "the other caller sees it"
+        );
     });
 }

@@ -36,7 +36,7 @@ pub(super) fn ops() -> Vec<Operation> {
 
 fn last<'a>(ctx: &'a OpCtx<'a>, _: &'static Operation, _: Value) -> OpFuture<'a> {
     Box::pin(async move {
-        let (name, manifest) = ctx.project.current()?.trashed(None)?;
+        let (name, manifest) = ctx.project.current().await?.trashed(None)?;
         let files: Vec<&str> = manifest.files().collect();
         Ok(json!({ "trash": name, "label": manifest.label, "files": files }))
     })
@@ -57,7 +57,7 @@ struct RestoreInput {
 fn restore<'a>(ctx: &'a OpCtx<'a>, _: &'static Operation, value: Value) -> OpFuture<'a> {
     Box::pin(async move {
         let RestoreInput { trash, confirm } = input(value)?;
-        let project = ctx.project.current()?;
+        let project = ctx.project.current().await?;
         let (name, manifest) = project.trashed(trash.as_deref())?;
         let files: Vec<&str> = manifest.files().collect();
         let listing: String = files.iter().map(|f| format!("{f}\n")).collect();
@@ -67,7 +67,7 @@ fn restore<'a>(ctx: &'a OpCtx<'a>, _: &'static Operation, value: Value) -> OpFut
             return Ok(proposal);
         }
         let runs = project.trash_note(&name, RUNS_NOTE);
-        ctx.project.change(|p| p.restore(Some(&name)))??;
+        ctx.project.change(|p| p.restore(Some(&name))).await??;
         let runs_relinked = relink(ctx, runs).await;
         let label = &manifest.label;
         Ok(
