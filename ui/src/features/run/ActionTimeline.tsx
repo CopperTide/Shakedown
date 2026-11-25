@@ -9,6 +9,7 @@ import { agentModelLine } from '@/model/providers';
 import type { Team } from '@/model/types';
 import type { Pause } from './flow';
 import { LANE_H, type Layout, type Placed, type Shape, layoutTimeline, shapeOf, shortLabel } from './timelineLayout';
+import { indexTimeline, viewportTimeline } from './timelineViewport';
 import { MAX_ZOOM, MIN_ZOOM, type View, clampScroll, endScroll, holdTimeWindow, onWheel, stepZoom, trackWidth } from './zoom';
 const RULER_H = 22;
 const NO_PAUSES: Pause[] = [];
@@ -313,6 +314,9 @@ export default function ActionTimeline({ lanes, team, span, selected, onSelect, 
     ...lane, marks: lane.marks.filter((mark) => matches.has(mark.seq)),
   })).filter((lane) => lane.marks.length > 0) : lanes, [lanes, matches]);
   const layout = useMemo(() => (span ? layoutTimeline(visibleLanes, span, t.trackW, models, pauses) : null), [visibleLanes, span, t.trackW, models, pauses]);
+  const index = useMemo(() => layout ? indexTimeline(layout) : null, [layout]);
+  const drawing = useMemo(() => index ? viewportTimeline(index, t.view.scroll, viewW || t.trackW, selected) : null,
+    [index, t.view.scroll, viewW, t.trackW, selected]);
   const mouse = useMouse(box.ref.current, labelW, t);
   useNativeScroll(box.ref.current, t);
   useShowSelected(selected, layout, t);
@@ -323,12 +327,12 @@ export default function ActionTimeline({ lanes, team, span, selected, onSelect, 
       {matches?.size === 0 && <p className="px-3 py-6 text-sm text-muted">No timeline events match the filters.</p>}
       <div ref={box.ref} className="relative flex min-w-0 cursor-grab touch-pan-y overflow-x-auto overscroll-x-contain select-none active:cursor-grabbing" {...mouse}>
         <LaneLabels lanes={visibleLanes} team={team} width={labelW} />
-        {layout && (
+        {drawing && (
           <div className="relative shrink-0" style={{ width: t.trackW, height: RULER_H + height }}>
-            <Ruler layout={layout} />
-            <Bands layout={layout} height={height} />
-            <Wires layout={layout} lanes={visibleLanes.length} width={t.trackW} selected={selected} />
-            {layout.placed.map((p) => <MarkButton key={p.mark.seq} p={p} selected={selected === p.mark.seq} onSelect={onSelect} onClear={onClear} />)}
+            <Ruler layout={drawing} />
+            <Bands layout={drawing} height={height} />
+            <Wires layout={drawing} lanes={visibleLanes.length} width={t.trackW} selected={selected} />
+            {drawing.placed.map((p) => <MarkButton key={p.mark.seq} p={p} selected={selected === p.mark.seq} onSelect={onSelect} onClear={onClear} />)}
           </div>
         )}
       </div>
