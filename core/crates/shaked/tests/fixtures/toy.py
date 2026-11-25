@@ -34,7 +34,7 @@
   toy.py bench [--name NAME] --integration NAME [--part NAME=INTEGRATION ...] [--gold TOOL [--gold-args JSON]]
                [--config PART=JSON ...] [--clash] [--bench-tool [--tool-part PART]] [--link JSON ...]
                [--gate JSON ...] [--setup JSON ...] [--scored [--two-tasks] [--safety]]
-               [--view PART [--view-fails]] [--scenario-options JSON] [--clock-start ISO]
+               [--view PART [--view-fails]] [--scenario-options JSON] [--clock-start ISO] [--group NAME]
       A benchmark (named `toybench`, or --name) with one task `t1` whose world is one part `box` of integration NAME, or the
       --part list; each part's config is `{}` or the --config given for it. Tools: none; with --clash a `poke`; with --bench-tool a `ring` that reports it
       ran on PART (default `box`). --link adds a link to the world, --gate a gate, --setup a call to `t1`'s setup. With --scored,
@@ -44,7 +44,8 @@
       makes the part's `describe` say what kind of system it is (JSON). --view PART draws the world's
       view from PART's docs: one area `box` with one item `n` whose status is box/n (abnormal above 1);
       --view-fails makes `view` an error. --scenario-options puts JSON in `describe.scenario_options`.
-      --clock-start gives `t1` a `clock_start` (the world's date and time at clock 0).
+      --clock-start gives `t1` a `clock_start` (the world's date and time at clock 0). --group puts `t1` in the
+      group NAME.
 """
 import json
 import os
@@ -318,6 +319,8 @@ def tasks():
     once["setup"] = [json.loads(call) for call in opts("--setup")]
     if opt("--clock-start", None):
         once["clock_start"] = opt("--clock-start", None)
+    if opt("--group", None):
+        once["group"] = opt("--group", None)
     twice = {"id": "t2", "reason": "poke it twice", "ticket": "# Ticket\n\nPoke the box twice.\n"}
     return [once, twice] if "--two-tasks" in ARGS else [once]
 

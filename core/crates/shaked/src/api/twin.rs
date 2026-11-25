@@ -1,22 +1,24 @@
-//! The scenario builder's and the digital twin's routes: the benchmark's scenario options
-//! (`GET /api/benchmark`), a scenario asked for checked and expanded, and a branch's recorded
-//! views (`GET /api/branches/{id}/views`).
+//! The scenario builder's and the digital twin's routes: a benchmark's tasks and scenario
+//! options (`GET /api/benchmark`), a scenario asked for checked and expanded, and a branch's
+//! recorded views (`GET /api/branches/{id}/views`).
 
-use crate::auth::Who;
+use crate::auth::{Caller, Who};
 use std::sync::Arc;
 
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     routing::get,
     Json, Router,
 };
-use parts::proto::ScenarioRequest;
+use parts::proto::{ScenarioRequest, TaskInfo};
+use serde::Deserialize;
 use serde_json::{json, Value};
 
 use super::{ApiError, ApiResult};
 use crate::{
     app::AppState,
     model::{Event, EventKind},
+    ops::OpError,
     scenario::{self, Scenario},
 };
 
@@ -26,13 +28,62 @@ pub(super) fn router() -> Router<Arc<AppState>> {
         .route("/api/branches/{id}/views", get(branch_views))
 }
 
-/// `GET /api/benchmark`: `{name, version, tasks: [{id, reason}], scenario_options}` (null when
-/// the benchmark offers no disruptions; `view`: whether it draws the world's view).
-async fn benchmark(State(state): State<Arc<AppState>>) -> ApiResult<Value> {
-    let bench = state.bench().await?;
-    let tasks: Vec<Value> = (bench.tasks.iter())
-        .map(|t| json!({"id": t.id, "reason": t.reason}))
-        .collect();
+/// Which benchmark `GET /api/benchmark` describes: the package `name`, or the package of the
+/// project world `world`; without either, the current one.
+#[derive(Deserialize)]
+struct Which {
+    name: Option<String>,
+    world: Option<String>,
+}
+
+/// A task as a list shows it: its id, reason and group (when it has one).
+pub(super) fn task_summary(t: &TaskInfo) -> Value {
+    let mut j = json!({"id": t.id, "reason": t.reason});
+    if let Some(g) = &t.group {
+        j["group"] = json!(g);
+    }
+    j
+}
+
+/// The package of the project world `world` (404 for no such world, or one without a package).
+async fn world_package(state: &AppState, caller: &Caller, world: &str) -> Result<String, ApiError> {
+    let project = state.project_for(caller).current().await;
+    let project = project.map_err(OpError::from)?;
+    // An import made by `shaked import` while shaked runs is registered before it is read.
+    crate::ops::register_imports(state, &project).await;
+    crate::ops::world_package(&project, world).map_err(|e| ApiError::not_found(e.message))
+}
+
+/// The benchmark `which` names: 404 when it is not installed.
+async fn benchmark_name(
+    state: &AppState,
+    caller: &Caller,
+    which: Which,
+) -> Result<String, ApiError> {
+    let name = match (which.name, which.world) {
+        (Some(name), _) => name,
+        (None, Some(world)) => world_package(state, caller, &world).await?,
+        (None, None) => return Ok(state.benchmark()),
+    };
+    if !state.has_benchmark(&name) {
+        return Err(ApiError::not_found(format!(
+            "no benchmark named {name} is installed"
+        )));
+    }
+    Ok(name)
+}
+
+/// `GET /api/benchmark[?name=<package>|?world=<world id>]`: `{name, version, tasks: [{id,
+/// reason, group?}], scenario_options}` (null when the benchmark offers no disruptions; `view`:
+/// whether it draws the world's view).
+async fn benchmark(
+    State(state): State<Arc<AppState>>,
+    Who(caller): Who,
+    Query(which): Query<Which>,
+) -> ApiResult<Value> {
+    let name = benchmark_name(&state, &caller, which).await?;
+    let bench = state.bench_named(&name).await?;
+    let tasks: Vec<Value> = bench.tasks.iter().map(task_summary).collect();
     Ok(Json(json!({
         "name": bench.name,
         "version": bench.version,

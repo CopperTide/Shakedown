@@ -587,9 +587,9 @@ a step touched and whether it read or wrote. A run recorded before this, or a pa
 entry: unknown, not guessed. Named checks keep their `safety` flag in the run's `check` event.
 
 A world can also ship how it is watched: view files in its folder (`views:` in `world.yaml`,
-`format: shakedown-view/1`) declare maps, boards, timelines, bars, feeds and figures over its parts' docs, and one
-generic renderer draws them on the run's World page, live while the run goes and at any step afterwards. A world
-never ships UI code ([protocol.md](protocol.md#declarative-views-world-files)).
+`format: shakedown-view/1`) declare maps, boards, timelines, bars, feeds, conversations and figures over its parts'
+docs, and one generic renderer draws them on the run's World page, live while the run goes and at any step
+afterwards. A world never ships UI code ([protocol.md](protocol.md#declarative-views-world-files)).
 
 A run's World tab draws them live while it runs, and afterwards at any recorded step. Play runs a virtual world clock
 from the step on screen, at 1× (an hour of world time in 10 s), 4× or 16×: moving things (aircraft on a map) are placed

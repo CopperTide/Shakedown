@@ -20,9 +20,9 @@ pub use scenario::{
 };
 pub use setup::{AgentRuntime, AgentSpec, Effort, Reasoning, SetupFile, Team};
 pub use view::{
-    BarValue, BarsPanel, BoardPanel, Column, Count, FeedPanel, Field, Figure, Filter, Find, Join,
-    KeyRef, KpiItem, KpisPanel, Layer, MapPanel, Panel, PathLayer, PointsLayer, Screen, Shown,
-    Since, Sort, StyleRule, TimelinePanel, Tone, ViewFile,
+    BarValue, BarsPanel, BoardPanel, ChatPanel, Column, Count, FeedPanel, Field, Figure, Filter,
+    Find, Join, KeyRef, KpiItem, KpisPanel, Layer, MapPanel, Panel, PathLayer, PointsLayer, Screen,
+    Shown, Since, Sort, StyleRule, TimelinePanel, Tone, ViewFile,
 };
 pub use world::{Auth, Connector, ConnectorMode, DataSource, Flow, Person, WorldFile};
 

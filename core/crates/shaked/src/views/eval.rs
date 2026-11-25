@@ -6,8 +6,8 @@ use std::collections::BTreeSet;
 
 use serde_json::{json, Map, Value};
 use shakedown_project::format::{
-    BarValue, BarsPanel, BoardPanel, FeedPanel, Field, Figure, Find, KpisPanel, Panel, Shown,
-    TimelinePanel, Tone, ViewFile,
+    BarValue, BarsPanel, BoardPanel, ChatPanel, FeedPanel, Field, Figure, Find, KpisPanel, Panel,
+    Shown, TimelinePanel, Tone, ViewFile,
 };
 
 use super::query::{conditions, first_of, found, matches, time_ms, WorldDocs};
@@ -74,6 +74,7 @@ pub fn panel(ctx: &Ctx, panel: &Panel) -> Value {
         Panel::Timeline(p) => ("timeline", timeline(ctx, p)),
         Panel::Bars(p) => ("bars", bars(ctx, p)),
         Panel::Feed(p) => ("feed", Ok(feed(ctx, p))),
+        Panel::Chat(p) => ("chat", chat(ctx, p)),
     };
     let mut out = done.unwrap_or_else(|error| json!({"error": error}));
     out["kind"] = json!(kind);
@@ -319,6 +320,56 @@ fn feed(ctx: &Ctx, p: &FeedPanel) -> Value {
            "rows": rows})
 }
 
+/// How two keys order with their digit runs read as numbers (`msg/2` before `msg/10`).
+fn natural_order(a: &str, b: &str) -> std::cmp::Ordering {
+    let runs = |s: &str| -> Vec<(bool, String)> {
+        let mut out: Vec<(bool, String)> = vec![];
+        for c in s.chars() {
+            let digit = c.is_ascii_digit();
+            match out.last_mut() {
+                Some((d, run)) if *d == digit => run.push(c),
+                _ => out.push((digit, c.to_string())),
+            }
+        }
+        out
+    };
+    // A number's run sorts by its length without leading zeros, then by its digits.
+    let key = |(digit, run): (bool, String)| {
+        let width = if digit {
+            run.trim_start_matches('0').len()
+        } else {
+            0
+        };
+        (width, run)
+    };
+    let (a, b) = (runs(a), runs(b));
+    a.into_iter().map(key).cmp(b.into_iter().map(key))
+}
+
+/// A conversation, oldest first: by key (or `sort`), the last `top` kept.
+fn chat(ctx: &Ctx, p: &ChatPanel) -> Result<Value, String> {
+    let mut docs = ctx.found(&p.data)?;
+    docs.sort_by(|a, b| natural_order(a.0, b.0));
+    if let Some(sort) = &p.sort {
+        let by = |d: &Value| first_of(d, &sort.field).cloned().unwrap_or(Value::Null);
+        docs.sort_by(|a, b| sort_order(&by(a.1), &by(b.1), sort.desc));
+    }
+    let total = docs.len();
+    let kept = &docs[total.saturating_sub(p.top.unwrap_or(total))..];
+    let row = |(key, doc): &(&str, &Value)| -> Result<Value, String> {
+        let mut row = vec![
+            json!(key),
+            cell(doc, &p.from, None),
+            cell(doc, &p.text, None),
+        ];
+        row.extend(toned(ctx, p.style.as_deref(), doc)?);
+        Ok(Value::Array(row))
+    };
+    let rows: Result<Vec<Value>, String> = kept.iter().map(row).collect();
+    let columns = ["key", "from", "text", "tone", "chip"];
+    Ok(json!({"columns": columns, "rows": rows?, "right": p.right, "total": total}))
+}
+
 /// The parts a panel's bindings read (the view's default part where they name none).
 pub fn parts_of(view: &ViewFile, panel: &Panel) -> BTreeSet<String> {
     let default = view.part.clone().unwrap_or_default();
@@ -338,6 +389,7 @@ pub fn parts_of(view: &ViewFile, panel: &Panel) -> BTreeSet<String> {
         Panel::Board(b) => BTreeSet::from([of(&b.data.part)]),
         Panel::Timeline(t) => BTreeSet::from([of(&t.data.part)]),
         Panel::Bars(b) => BTreeSet::from([of(&b.data.part)]),
+        Panel::Chat(c) => BTreeSet::from([of(&c.data.part)]),
         Panel::Feed(_) => BTreeSet::new(),
     }
 }

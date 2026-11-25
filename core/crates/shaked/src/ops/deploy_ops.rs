@@ -55,7 +55,7 @@ fn deploy_one<'a>(ctx: &'a OpCtx<'a>, _: &'static Operation, value: Value) -> Op
 }
 
 /// Registers an import made by `shaked import` while shaked runs, before its first run.
-async fn register_imports(app: &AppState, project: &shakedown_project::Project) {
+pub(crate) async fn register_imports(app: &AppState, project: &shakedown_project::Project) {
     let Some(root) = project.root() else { return };
     for e in crate::git_import::register(&app.hub, root).await {
         eprintln!("shaked: {e}");

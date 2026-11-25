@@ -34,6 +34,8 @@ use crate::app::AppState;
 use crate::auth::Caller;
 use crate::project_state::ProjectState;
 
+pub(crate) use deploy::world_package;
+pub(crate) use deploy_ops::register_imports;
 pub use error::OpError;
 
 /// What an operation can do, which decides who may call it without asking.

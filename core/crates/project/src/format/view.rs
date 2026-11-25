@@ -173,6 +173,7 @@ pub enum Panel {
     Timeline(TimelinePanel),
     Bars(BarsPanel),
     Feed(FeedPanel),
+    Chat(ChatPanel),
 }
 
 /// A strip of figures.
@@ -390,6 +391,30 @@ pub struct FeedPanel {
     pub top: Option<usize>,
 }
 
+/// A conversation: one message per doc, oldest first, as bubbles. Style rules see the doc.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ChatPanel {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    pub data: Find,
+    /// Who said it.
+    pub from: Field,
+    /// What was said.
+    pub text: Field,
+    /// The order (by key by default, digit runs as numbers: `msg/2` before `msg/10`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sort: Option<Sort>,
+    /// The values of `from` drawn on the right (the others on the left).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub right: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub style: Option<String>,
+    /// The last messages sent (all by default).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub top: Option<usize>,
+}
+
 impl Panel {
     /// The styles the panel names, with where each is named.
     fn styles(&self) -> Vec<(String, String)> {
@@ -411,6 +436,7 @@ impl Panel {
             Panel::Timeline(t) => named("/style", &t.style).into_iter().collect(),
             Panel::Bars(b) => named("/style", &b.style).into_iter().collect(),
             Panel::Feed(f) => named("/style", &f.style).into_iter().collect(),
+            Panel::Chat(c) => named("/style", &c.style).into_iter().collect(),
         }
     }
 }

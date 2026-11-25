@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import BarsPanel from './BarsPanel';
 import BoardPanel from './BoardPanel';
+import ChatPanel, { chatMeta } from './ChatPanel';
 import FeedPanel from './FeedPanel';
 import KpisPanel from './KpisPanel';
 import { areaNames, gridStyle, stackedStyle } from './layout';
@@ -9,7 +10,7 @@ import { PanelErrorBody, PanelFrame } from './PanelFrame';
 import TimelinePanel from './TimelinePanel';
 import { useWorldNow } from './useWorldNow';
 import {
-  type At, type BarsData, type BoardData, type FeedData, type KpisData, type MapData, type PanelData, type PanelDef, type PanelError,
+  type At, type BarsData, type BoardData, type ChatData, type FeedData, type KpisData, type MapData, type PanelData, type PanelDef, type PanelError,
   type ScreenData, type ScreenDef, type TimelineData, type TimelineDef, type ViewDef, isPanelError,
 } from './types';
 
@@ -34,6 +35,7 @@ export function PanelBody({ id, def, data, at, fetchedAt }: PanelProps) {
     case 'map': return <MapPanel id={id} def={def} data={data as MapData} at={at} fetchedAt={fetchedAt} />;
     case 'kpis': return <PanelFrame id={id} title={def.title}><KpisPanel def={def} data={data as KpisData} /></PanelFrame>;
     case 'bars': return <PanelFrame id={id} title={def.title} meta={(data as BarsData).rows.length}><BarsPanel def={def} data={data as BarsData} /></PanelFrame>;
+    case 'chat': return <PanelFrame id={id} title={def.title} meta={chatMeta(data as ChatData)}><ChatPanel def={def} data={data as ChatData} /></PanelFrame>;
     case 'feed': return <PanelFrame id={id} title={def.title} meta={(data as FeedData).rows.length}><FeedPanel data={data as FeedData} at={at} /></PanelFrame>;
     default: return <PanelFrame id={id} title={(def as PanelDef).title}><PanelErrorBody error={`This renderer draws no ${(def as { kind: string }).kind} panels.`} /></PanelFrame>;
   }

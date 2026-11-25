@@ -117,7 +117,7 @@ A benchmark program speaks the same transport.
 
 | Method | Params | Result |
 |---|---|---|
-| `describe` | `{}` | `{name, version, protocol, world: [{part, integration, config}], tasks: [{id, reason, ticket, setup?: [{part, tool, args}], clock_start?}], instructions, instructions_title?, team?, teams?, tools: [ToolSchema], links?: [Link], gates?: [Gate], scored?: bool, scenario_options?: ScenarioOptions, view?: {docs: [part]}}` |
+| `describe` | `{}` | `{name, version, protocol, world: [{part, integration, config}], tasks: [{id, reason, ticket, setup?: [{part, tool, args}], clock_start?, group?}], instructions, instructions_title?, team?, teams?, tools: [ToolSchema], links?: [Link], gates?: [Gate], scored?: bool, scenario_options?: ScenarioOptions, view?: {docs: [part]}}` |
 | `seed` | `{connections: {part: info}}` | `{}` (loads the starting data into fresh instances) |
 | `call_tool` | `{name, args, connections}` | `{result?, error?, part, reads, writes, events?: [{kind, text, data}]}` (`events` as a part's `call_tool` gives them) |
 | `gold_actions` | `{task}` | `{actions: [{name, args}]}` |
@@ -126,6 +126,8 @@ A benchmark program speaks the same transport.
 
 - `instructions_title` is the heading over `instructions` in each agent's input; shaked uses
   `Instructions` when it is absent.
+- A task's `group` is the group it is listed under (a benchmark's split, such as `test` or `train`); the scenario
+  editor's task picker groups the tasks by it.
 - `team` is the team the benchmark suggests, `{id, name, agents: [{id, name, prompt, read_only?, tools?}]}` (ids
   match `^[a-z0-9_-]+$`; the order is the order shaked's chain runner runs them in). Every agent may use
   every tool unless `read_only` is true, which keeps it to read tools, or `tools` lists the world tools it gets; no agent has to hand off. shaked
@@ -341,8 +343,12 @@ at a point of the branch.
   style?`, and `depart`/`arrive` time fields for `moving`), `board` (`data, columns: [{field, label, format?}], sort?:
   {field, desc?}, style?, filters?: [{id, label, where}], top?`), `timeline` (`data, lane, start, end, label?, style?,
   lane_label?`), `bars` (`data, label, value: <field> | {since: <time field>}, limit, unit?, style?, top?`; its style
-  rules also see `value`, `limit`, `ratio`) and `feed` (`kinds, parts?, style?, top?`; rules see `{part, kind, text,
-  data}`). Formats: `text int number percent ratio_pct usd minutes time chip`.
+  rules also see `value`, `limit`, `ratio`), `feed` (`kinds, parts?, style?, top?`; rules see `{part, kind, text,
+  data}`) and `chat` (`data, from, text, sort?: {field, desc?}, right?: [values of from], style?, top?`): a
+  conversation, one message per doc, oldest first, by key with digit runs read as numbers (`msg/2` before `msg/10`)
+  unless `sort` says otherwise; `top` keeps the last N. Each message is a bubble under its sender, its whitespace
+  kept, on the right when its `from` is one of `right`. Formats: `text int number percent ratio_pct usd minutes time
+  chip`.
 - **Screens** lay panels out as a grid of named areas: `screens: [{id, label, areas: ["kpis kpis", "map feed"],
   columns?, rows?}]` (CSS `grid-template-areas`, `-columns`, `-rows`).
 - **Evaluation**: `GET /api/branches/{id}/world-views/{view}?screen=&at=live|final|<seq>` reads the docs of the parts
@@ -355,7 +361,8 @@ at a point of the branch.
   The record is read without model-call bodies and kept in memory while it doesn't change, and the last few points'
   docs are kept too, so a step reads in well under a second. Each panel is `{kind, columns, rows, ...}` with only the
   fields the view names, times as epoch ms, and per row a `tone` and `chip` from its style (a board row also carries
-  `filters`, a bitmask of the filters it passes); a panel that can't be evaluated is `{kind, error}` alone.
+  `filters`, a bitmask of the filters it passes; a chat is `{columns: [key, from, text, tone, chip], rows, right,
+  total}`, `total` counting the messages before `top`); a panel that can't be evaluated is `{kind, error}` alone.
   `docs/examples/airline-occ-view.yaml` is a whole operations-centre view.
 
 ### Gates on tools

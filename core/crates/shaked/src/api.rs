@@ -227,14 +227,15 @@ async fn list_providers(
     Json(providers::statuses(&config, &state.http).await)
 }
 
-/// The benchmark's tasks: `[{id, reason, ticket, instructions, clock_start?}]`; an external design
-/// gives its agents the ticket, the instructions and the world's date (`clock_start` plus the
-/// branch clock) as shaked's own runners do.
+/// The benchmark's tasks: `[{id, reason, group?, ticket, instructions, clock_start?}]`; an
+/// external design gives its agents the ticket, the instructions and the world's date
+/// (`clock_start` plus the branch clock) as shaked's own runners do.
 async fn tasks(State(state): State<Arc<AppState>>) -> ApiResult<Value> {
     let bench = state.bench().await?;
     let task = |t: &parts::proto::TaskInfo| {
-        let mut j = json!({"id": t.id, "reason": t.reason, "ticket": t.ticket,
-                           "instructions": bench.instructions});
+        let mut j = twin::task_summary(t);
+        j["ticket"] = json!(t.ticket);
+        j["instructions"] = json!(bench.instructions);
         if let Some(c) = &t.clock_start {
             j["clock_start"] = json!(c);
         }

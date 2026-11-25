@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { fillOf } from './BarsPanel';
+import { chatText } from './ChatPanel';
 import { feedTime } from './FeedPanel';
 import { zoneOf } from './format';
 import type { ScreenData, ViewDef } from './types';
@@ -18,8 +19,9 @@ const view: ViewDef = {
     r1: { kind: 'bars', title: 'Limits', unit: 'h' },
     f1: { kind: 'feed', title: 'Events' },
     e1: { kind: 'board', title: 'Broken', columns: [] },
+    c1: { kind: 'chat', title: 'Talk', right: ['agent'] },
   },
-  screens: [{ id: 's1', label: 'S1', areas: ['k1 k1', 'b1 t1', 'r1 f1', 'e1 x1'] }],
+  screens: [{ id: 's1', label: 'S1', areas: ['k1 k1', 'b1 t1', 'r1 f1', 'e1 x1', 'c1 c1'] }],
 };
 
 const data: ScreenData = {
@@ -32,6 +34,10 @@ const data: ScreenData = {
     r1: { kind: 'bars', columns: ['key', 'label', 'value', 'limit', 'ratio', 'tone', 'chip'], rows: [['r1', 'R1', 9, 10, 0.9, 'warn', null]] },
     f1: { kind: 'feed', columns: ['seq', 'clock_ms', 'part', 'kind', 'text', 'tone', 'chip'], rows: [[11, 90 * 60_000, 'p1', 'k1', 'Something happened', 'critical', null]] },
     e1: { kind: 'board', error: 'part p9 has no doc d1' },
+    c1: {
+      kind: 'chat', columns: ['key', 'from', 'text', 'tone', 'chip'], right: ['agent'], total: 3,
+      rows: [['m/1', 'customer', 'Line one\n  line two', 'neutral', null], ['m/2', 'agent', 'Which order?', 'critical', 'Flagged']],
+    },
   },
 };
 
@@ -39,9 +45,9 @@ describe('view screen', () => {
   const html = renderToStaticMarkup(<ViewScreen view={view} screen={view.screens[0]} data={data} fetchedAt={0} />);
 
   it('places_each_panel_in_its_grid_area', () => {
-    for (const id of ['k1', 'b1', 't1', 'r1', 'f1', 'e1', 'x1']) expect(html).toContain(`data-panel="${id}"`);
+    for (const id of ['k1', 'b1', 't1', 'r1', 'f1', 'e1', 'x1', 'c1']) expect(html).toContain(`data-panel="${id}"`);
     expect(html).toContain('grid-area:k1');
-    expect(html).toContain('grid-template-areas:&quot;k1 k1&quot; &quot;b1 t1&quot; &quot;r1 f1&quot; &quot;e1 x1&quot;');
+    expect(html).toContain('grid-template-areas:&quot;k1 k1&quot; &quot;b1 t1&quot; &quot;r1 f1&quot; &quot;e1 x1&quot; &quot;c1 c1&quot;');
   });
 
   it('draws_kpis_in_file_order_with_formats_and_chips', () => {
@@ -64,6 +70,16 @@ describe('view screen', () => {
     expect(html).toContain('90%');
     expect(html).toContain('01:30Z');
     expect(html).toContain('Something happened');
+  });
+
+  it('draws_chat_bubbles_left_and_right_with_their_senders_and_whitespace', () => {
+    const chat = html.slice(html.indexOf('data-panel="c1"'));
+    expect(chat).toContain('2 of 3');
+    expect(chat.indexOf('customer')).toBeLessThan(chat.indexOf('agent'));
+    expect(chat).toMatch(/data-side="left"[^]*Line one\n {2}line two/);
+    expect(chat).toMatch(/data-side="right"[^]*Which order\?/);
+    expect(chat).toContain('whitespace-pre-wrap');
+    expect(chat).toContain('Flagged');
   });
 
   it('an_error_stays_in_its_panel_and_a_missing_panel_says_so', () => {
@@ -91,6 +107,13 @@ describe('panel slots and helpers', () => {
     expect(fillOf(0.5)).toBeCloseTo(0.4);
     expect(fillOf(3)).toBe(1);
     expect(fillOf(null)).toBe(0);
+  });
+
+  it('chat_text_shows_any_value', () => {
+    expect(chatText('hi')).toBe('hi');
+    expect(chatText(null)).toBe('');
+    expect(chatText(3)).toBe('3');
+    expect(chatText({ a: 1 })).toBe('{"a":1}');
   });
 
   it('feed_time_from_the_world_epoch', () => {

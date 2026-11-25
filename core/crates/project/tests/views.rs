@@ -3,7 +3,7 @@
 
 use std::path::Path;
 
-use shakedown_project::format::{parse, to_yaml, Layer, Panel, ViewFile, WorldFile};
+use shakedown_project::format::{parse, to_yaml, Field, Layer, Panel, ViewFile, WorldFile};
 use shakedown_project::{world_views, Id, Project};
 
 fn example() -> String {
@@ -56,6 +56,31 @@ fn a_view_that_names_what_it_lacks_is_refused() {
     assert_eq!(pointer, "/panels/m/layers/0/origin/layer");
     let (pointer, _) = refused(&format!("{HEAD}panels: {{}}\nscreens: []\n"));
     assert_eq!(pointer, "/screens");
+}
+
+#[test]
+fn a_chat_panel_parses_with_its_defaults_and_its_style_is_checked() {
+    let chat = "panels:\n  c: {kind: chat, data: {find: \"msg/*\"}, from: role, \
+                text: [content, text], right: [agent]}\n";
+    let view: ViewFile = parse(
+        "v.yaml",
+        &format!("{HEAD}{chat}screens: [{{id: s, label: S, areas: [c]}}]\n"),
+    )
+    .expect("parses");
+    let Some(Panel::Chat(c)) = view.panels.get("c") else {
+        panic!("a chat panel");
+    };
+    assert_eq!(c.text, Field::First(vec!["content".into(), "text".into()]));
+    assert_eq!(c.right, ["agent"]);
+    assert!(c.sort.is_none() && c.top.is_none() && c.style.is_none());
+    let again: ViewFile = parse("v.yaml", &to_yaml(&view).unwrap()).expect("re-parses");
+    assert_eq!(view, again);
+    let styled = "panels:\n  c: {kind: chat, data: {find: \"m/*\"}, from: a, text: b, \
+                  style: nope}\n";
+    let (pointer, _) = refused(&format!(
+        "{HEAD}{styled}screens: [{{id: s, label: S, areas: [c]}}]\n"
+    ));
+    assert_eq!(pointer, "/panels/c/style");
 }
 
 #[test]

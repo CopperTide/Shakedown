@@ -61,8 +61,10 @@ export interface BoardDef extends PanelBase {
 export interface TimelineDef extends PanelBase { kind: 'timeline' }
 export interface BarsDef extends PanelBase { kind: 'bars'; unit?: string; format?: Format; decimals?: number }
 export interface FeedDef extends PanelBase { kind: 'feed' }
+/** A conversation; `right` are the senders drawn on the right. */
+export interface ChatDef extends PanelBase { kind: 'chat'; right?: string[] }
 
-export type PanelDef = KpisDef | MapDef | BoardDef | TimelineDef | BarsDef | FeedDef;
+export type PanelDef = KpisDef | MapDef | BoardDef | TimelineDef | BarsDef | FeedDef | ChatDef;
 export type PanelKind = PanelDef['kind'];
 
 export interface ScreenDef {
@@ -114,9 +116,11 @@ export interface BoardData extends Rows { kind: 'board'; total?: number }
 export interface TimelineData extends Rows { kind: 'timeline'; lanes: string[]; range: [number, number] }
 export interface BarsData extends Rows { kind: 'bars' }
 export interface FeedData extends Rows { kind: 'feed' }
+/** Messages oldest first under `key from text tone chip`; `total` before `top` cut it. */
+export interface ChatData extends Rows { kind: 'chat'; right?: string[]; total?: number }
 export interface PanelError { kind: string; error: string }
 
-export type PanelData = KpisData | MapData | BoardData | TimelineData | BarsData | FeedData;
+export type PanelData = KpisData | MapData | BoardData | TimelineData | BarsData | FeedData | ChatData;
 
 export interface ScreenData {
   view: string;
