@@ -42,7 +42,7 @@ describe('ask about this step', () => {
     expect(screen.getByText('Refunds over $500 need approval.')).toBeTruthy();
     expect(screen.getByText('Speculation: inference, not in the record')).toBeTruthy();
     expect(screen.getByText('1 citation dropped: not found in the record.')).toBeTruthy();
-    expect(screen.getByText(/^You · .* · openrouter:m · \$0\.0123.* · 1,000 tokens$/)).toBeTruthy();
+    expect(screen.getByText(/^You · .* · openrouter:m · \$0\.012.* · 1,000 tokens$/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'step 3' }));
     expect(onStep).toHaveBeenCalledWith(3);
   });
