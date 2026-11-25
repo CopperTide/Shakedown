@@ -1,5 +1,5 @@
 //! The software factory's real platform (template `software-factory`, `platform/`) run by the
-//! live-service part under the lean profile: `cargo test -p arena-service --test live_platform --
+//! live-service part under the lean profile: `cargo test -p shakedown-service --test live_platform --
 //! --ignored live_`. Needs Docker, the images of the template's `images.yaml` (pulled, and built by
 //! `images/build.sh` and `tools/worldclock-gateway/build-image.sh`) and `python3` with PyYAML to
 //! read the template's YAML. It deploys a new orders image (a new tag of the seeded one), checks
@@ -323,7 +323,7 @@ async fn the_save_runs_the_deployed_image(
 #[tokio::test]
 #[ignore]
 async fn live_platform_deploys_a_new_image() {
-    let dir = std::env::temp_dir().join(format!("arena_live_platform_{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("shakedown_live_platform_{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let (id, id2) = (
         format!("lp{}", std::process::id()),

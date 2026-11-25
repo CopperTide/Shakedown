@@ -17,23 +17,3 @@ pub fn container_exists(name: &str) -> bool {
         .status()
         .is_ok_and(|s| s.success())
 }
-
-/// True when a long-lived resource renamed on 2026-11-19 keeps its `old` name: only it exists, so
-/// an install made before keeps its server and the saves in it. Else the `new` name is used.
-pub fn keep_old(new: &str, old: &str, exists: impl Fn(&str) -> bool) -> bool {
-    !exists(new) && exists(old)
-}
-
-#[cfg(test)]
-mod old_names {
-    use super::keep_old;
-
-    #[test]
-    fn the_old_resource_is_kept_only_while_there_is_no_new_one() {
-        let exists = |names: &'static [&'static str]| move |n: &str| names.contains(&n);
-        assert!(!keep_old("new", "old", exists(&[])));
-        assert!(keep_old("new", "old", exists(&["old"])));
-        assert!(!keep_old("new", "old", exists(&["new", "old"])));
-        assert!(!keep_old("new", "old", exists(&["new"])));
-    }
-}

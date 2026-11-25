@@ -19,7 +19,7 @@ use serde_json::{Map, Value};
 use crate::{
     model::{Event, EventKind},
     recorded::{clock_at, final_saves, part_save_at, run_info, saves_of, world_time_of},
-    saves,
+    save_calls,
 };
 
 /// Where in a branch's record docs are read.
@@ -153,9 +153,10 @@ pub async fn docs_at(
     let at = save_at(branch, events, &part.part, point)?;
     if at.clock_ms > at.saved_ms && moves_on(hub, part).await? {
         let start = scratch_start(events, part, &at);
-        return saves::inspect_advanced(hub, &part.integration, &start, at.clock_ms, keys).await;
+        return save_calls::inspect_advanced(hub, &part.integration, &start, at.clock_ms, keys)
+            .await;
     }
-    saves::inspect_all(hub, &part.integration, &at.save, keys).await
+    save_calls::inspect_all(hub, &part.integration, &at.save, keys).await
 }
 
 /// True for a part whose state runs on with the clock and starts exactly from a save.

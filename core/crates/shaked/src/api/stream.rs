@@ -121,7 +121,7 @@ impl Pump {
         else {
             return false;
         };
-        if b.status == BranchStatus::Running {
+        if b.status.goes_on() {
             return true;
         }
         // Events written just before the status flipped may not have been seen yet.

@@ -1,7 +1,8 @@
 //! One Claude Code agent as a long-lived headless process, for the dispatch runner: the same
 //! isolation as the one-shot driver (`claude::session_command`), taking each turn as a user
 //! message on stdin (stream-json) and ending it with the stream's `result`. Each model call the
-//! stream shows is recorded as a `model_call` reported by the client (see `usage`).
+//! stream shows is recorded as a `model_call` reported by the client (see `usage`), except in a
+//! `shaked worker`, where the calls go through the gateway and the control box records each one.
 
 use std::{
     path::PathBuf,
@@ -18,33 +19,33 @@ use tokio::{
 };
 
 use super::{
+    jail::{confine, Container, Jail},
     session::{end_error, BoxFuture, Session, SessionStart, Turn},
     tail,
     usage::UsageMeter,
-    AgentResult, Mcp, CLI_TIMEOUT_SECS,
+    AgentResult, Mcp, ModelRoute, CLI_TIMEOUT_SECS,
 };
 use crate::{
     exec::BranchCtx,
     external::UsageReport,
     model::{EventKind, TokenUsage},
-    store::Store,
 };
 
 pub struct ClaudeSession {
-    child: Child,
-    stdin: Option<ChildStdin>,
-    lines: mpsc::UnboundedReceiver<Value>,
-    stderr: Arc<Mutex<String>>,
+    process: Process,
     /// The process has written something (it didn't die at start).
     spoke: bool,
     respawns: u32,
     mcp: Mcp,
+    /// Where its model calls go when they go through the gateway (which records them).
+    route: Option<ModelRoute>,
     binary: String,
+    /// In a sandbox's worker: the process runs in a container.
+    jail: Option<Arc<Jail>>,
     spec: crate::model::AgentSpec,
     workdir: PathBuf,
     branch: Arc<BranchCtx>,
     agent: String,
-    store: Arc<Store>,
     /// The agent's prompt, sent before the first turn's input.
     prompt: Option<String>,
     meter: UsageMeter,
@@ -59,8 +60,30 @@ pub struct ClaudeSession {
     busy: Duration,
 }
 
-/// Starts `command` in `workdir` with its input, output and errors piped (killed on drop).
-fn spawn(command: std::process::Command, workdir: &std::path::Path) -> Result<Process, String> {
+/// The session's command in `workdir`, its model calls sent on `route` when given.
+fn command(
+    binary: &str,
+    spec: &crate::model::AgentSpec,
+    mcp: &Mcp,
+    workdir: &std::path::Path,
+    route: Option<&ModelRoute>,
+) -> Result<std::process::Command, String> {
+    let made = super::claude::session_command(binary, spec, mcp, workdir);
+    let mut c = made.map_err(|e| format!("writing the MCP config: {e}"))?;
+    if let Some(r) = route {
+        super::claude::route_models(&mut c, r);
+    }
+    Ok(c)
+}
+
+/// Starts `command` in `workdir` with its input, output and errors piped (killed on drop), in a
+/// container when there is a `jail`.
+fn spawn(
+    command: std::process::Command,
+    workdir: &std::path::Path,
+    jail: Option<&Jail>,
+) -> Result<Process, String> {
+    let (command, container) = confine(jail, command, workdir)?;
     let mut cmd = tokio::process::Command::from(command);
     cmd.current_dir(workdir)
         .stdin(Stdio::piped())
@@ -78,6 +101,7 @@ fn spawn(command: std::process::Command, workdir: &std::path::Path) -> Result<Pr
         child,
         lines,
         stderr,
+        _container: container,
     })
 }
 
@@ -112,12 +136,15 @@ fn keep_stderr(mut stderr: tokio::process::ChildStderr) -> Arc<Mutex<String>> {
     kept
 }
 
-/// The process of one session: its input, its stdout as JSON values, and its stderr's tail.
+/// The process of one session: its input, its stdout as JSON values, its stderr's tail, and its
+/// container when it runs in one (removed with it).
 struct Process {
     child: Child,
     stdin: Option<ChildStdin>,
     lines: mpsc::UnboundedReceiver<Value>,
     stderr: Arc<Mutex<String>>,
+    /// Kept for its drop, which removes the container.
+    _container: Option<Container>,
 }
 
 /// How many times a process that dies before it says anything is started again: Claude Code
@@ -125,29 +152,33 @@ struct Process {
 const RESPAWNS: u32 = 2;
 
 impl ClaudeSession {
-    /// Starts the process in a fresh work folder, its MCP endpoint the agent's on the branch.
-    pub fn start(self_base: &str, binary: &str, s: SessionStart) -> Result<ClaudeSession, String> {
+    /// Starts the process in a fresh work folder, its MCP endpoint the agent's on the branch, its
+    /// model calls through the gateway on `route` when given.
+    pub fn start(
+        self_base: &str,
+        binary: &str,
+        s: SessionStart,
+        route: Option<ModelRoute>,
+        jail: Option<Arc<Jail>>,
+    ) -> Result<ClaudeSession, String> {
         let workdir = super::fresh_workdir().map_err(|e| format!("cannot create workdir: {e}"))?;
         let mcp = Mcp::for_agent(self_base, &s.branch, &s.spec.id);
-        let command = super::claude::session_command(binary, &s.spec, &mcp, &workdir)
-            .map_err(|e| format!("writing the MCP config: {e}"))?;
-        let p = spawn(command, &workdir).inspect_err(|_| {
+        let command = command(binary, &s.spec, &mcp, &workdir, route.as_ref())?;
+        let p = spawn(command, &workdir, jail.as_deref()).inspect_err(|_| {
             let _ = std::fs::remove_dir_all(&workdir);
         })?;
         Ok(ClaudeSession {
-            stdin: p.stdin,
-            child: p.child,
-            lines: p.lines,
-            stderr: p.stderr,
+            process: p,
             spoke: false,
             respawns: 0,
             mcp,
+            route,
             binary: binary.to_string(),
+            jail,
             spec: s.spec.clone(),
             workdir,
             branch: s.branch,
             agent: s.spec.id,
-            store: s.store,
             prompt: Some(s.spec.prompt),
             meter: UsageMeter::default(),
             cost: None,
@@ -165,17 +196,19 @@ impl ClaudeSession {
             "branch {}: {}'s claude died before it said anything; starting it again",
             self.branch.branch_id, self.agent
         );
-        let command =
-            super::claude::session_command(&self.binary, &self.spec, &self.mcp, &self.workdir)
-                .map_err(|e| format!("writing the MCP config: {e}"))?;
-        let p = spawn(command, &self.workdir)?;
-        (self.child, self.stdin, self.lines, self.stderr) = (p.child, p.stdin, p.lines, p.stderr);
+        let (spec, route) = (&self.spec, self.route.as_ref());
+        let command = command(&self.binary, spec, &self.mcp, &self.workdir, route)?;
+        self.process = spawn(command, &self.workdir, self.jail.as_deref())?;
         self.send(text).await
     }
 
     async fn send(&mut self, text: &str) -> Result<(), String> {
         let msg = json!({"type": "user", "message": {"role": "user", "content": text}});
-        let stdin = self.stdin.as_mut().ok_or("claude's input is closed")?;
+        let stdin = self
+            .process
+            .stdin
+            .as_mut()
+            .ok_or("claude's input is closed")?;
         let line = format!("{msg}\n");
         let wrote = stdin.write_all(line.as_bytes()).await;
         wrote
@@ -184,23 +217,27 @@ impl ClaudeSession {
     }
 
     fn stderr_tail(&self) -> String {
-        let k = self.stderr.lock().unwrap();
+        let k = self.process.stderr.lock().unwrap();
         match k.trim().is_empty() {
             true => String::new(),
             false => format!("\nstderr: {}", k.trim()),
         }
     }
 
-    /// Records one model call, and prices it into the run's spend estimate: its seq.
+    /// Records one model call, and prices it into the run's spend estimate: its seq. A call
+    /// through the gateway is priced only: the control box records it.
     async fn record(&mut self, report: &UsageReport) -> Option<i64> {
         if let Some(usd) = report.list_price("anthropic") {
             if let Some(why) = self.branch.budget.add(&self.agent, usd) {
                 self.over.get_or_insert(why);
             }
         }
+        if self.route.is_some() {
+            return None;
+        }
         let p = report.payload();
         let at = Some(self.agent.as_str());
-        let appended = self.branch.append(&self.store, at, EventKind::ModelCall, p);
+        let appended = self.branch.append(at, EventKind::ModelCall, p);
         match appended.await {
             Ok(ev) => Some(ev.seq),
             Err(e) => {
@@ -228,7 +265,7 @@ impl ClaudeSession {
         let items = crate::reasoning::from_claude_message(message);
         let source = crate::reasoning::SOURCE_CLAUDE_CODE;
         let ctx = &self.branch;
-        crate::reasoning::record(ctx, &self.store, &self.agent, items, source, seq).await;
+        crate::reasoning::record(ctx, &self.agent, items, source, seq).await;
     }
 
     /// Records the model call an assistant message shows, or a compaction of the context.
@@ -249,7 +286,7 @@ impl ClaudeSession {
     /// Reads the stream until the turn's `result`; the turn it ends. `None` when the process died
     /// before it said anything, and may be started again.
     async fn until_result(&mut self) -> Option<Turn> {
-        while let Some(v) = self.lines.recv().await {
+        while let Some(v) = self.process.lines.recv().await {
             self.spoke = true;
             if v["type"] == "result" {
                 return Some(self.ended_turn(&v).await);
@@ -257,14 +294,14 @@ impl ClaudeSession {
             self.on_line(&v).await;
             // Over the run's spend limit: stop the turn now, not when it ends.
             if let Some(why) = self.over.clone().or_else(|| self.branch.budget.over()) {
-                let _ = self.child.start_kill();
+                let _ = self.process.child.start_kill();
                 return Some(Turn::failed(why, Some(super::FailureKind::Budget)));
             }
         }
         if !self.spoke && self.respawns < RESPAWNS {
             return None;
         }
-        let code = self.child.try_wait().ok().flatten();
+        let code = self.process.child.try_wait().ok().flatten();
         let how = code.map_or("".into(), |c| format!(" ({c})"));
         let why = format!(
             "claude exited{how} in the middle of the run{}",
@@ -333,10 +370,10 @@ impl ClaudeSession {
     }
 
     async fn close(mut self, cut: bool) -> AgentResult {
-        drop(self.stdin.take());
-        let exited = tokio::time::timeout(Duration::from_secs(10), self.child.wait()).await;
+        drop(self.process.stdin.take());
+        let exited = tokio::time::timeout(Duration::from_secs(10), self.process.child.wait()).await;
         if exited.is_err() {
-            let _ = self.child.kill().await;
+            let _ = self.process.child.kill().await;
         }
         let (p, c) = (self.meter.prompt_tokens, self.meter.completion_tokens);
         let error = end_error(self.error.take(), cut);
@@ -348,7 +385,7 @@ impl ClaudeSession {
                 Some(c + live),
                 Some("api_equivalent_estimate+list_price_estimate"),
             ),
-            (None, true) => (Some(live), Some("list_price_estimate")),
+            (None, true) => (Some(live), Some(crate::prices::LIST_PRICE_ESTIMATE)),
         };
         AgentResult {
             ok: error.is_none(),

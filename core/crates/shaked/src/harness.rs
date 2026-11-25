@@ -116,7 +116,7 @@ impl SpyLayer {
         self
     }
 
-    /// `project_dir` files each caller's project under `root`: `person` for the person, the token
+    /// `project_home` files each caller's project under `root`: `person` for the person, the token
     /// id for an API token.
     pub fn projects_under(self, root: std::path::PathBuf) -> SpyLayer {
         *self.0.projects.lock().unwrap() = Some(root);
@@ -250,6 +250,10 @@ impl Layer for SpyLayer {
         LocalLayer.object_prefix(c)
     }
 
+    fn principal(&self, c: &Caller) -> String {
+        LocalLayer.principal(c)
+    }
+
     fn own_keys<'a>(
         &'a self,
         _c: &'a Caller,
@@ -262,18 +266,20 @@ impl Layer for SpyLayer {
         async move { Ok(if shared { vec![] } else { keys.to_vec() }) }.boxed()
     }
 
-    fn project_dir(
+    fn project_home(
         &self,
         c: &Caller,
         configured: Option<&std::path::Path>,
-    ) -> Option<std::path::PathBuf> {
+    ) -> Option<crate::layer::ProjectHome> {
         let Some(root) = self.0.projects.lock().unwrap().clone() else {
-            return configured.map(std::path::Path::to_path_buf);
+            return configured.map(|d| crate::layer::ProjectHome::Folder(d.to_path_buf()));
         };
-        Some(root.join(match &c.kind {
-            crate::auth::CallerKind::ApiToken { id, .. } => id.to_string(),
-            _ => "person".to_string(),
-        }))
+        Some(crate::layer::ProjectHome::Folder(root.join(
+            match &c.kind {
+                crate::auth::CallerKind::ApiToken { id, .. } => id.to_string(),
+                _ => "person".to_string(),
+            },
+        )))
     }
 }
 

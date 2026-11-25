@@ -1,6 +1,6 @@
 //! The factory benchmark's world, whole: ERPNext, Twenty, the hub, the stand-in plant and
 //! Sculptured, with the benchmark's own team on a real model (see `support/live.rs`). Whatever the
-//! team does, Arena must record every step, keep the gates (a change no one proposed is never
+//! team does, Shakedown must record every step, keep the gates (a change no one proposed is never
 //! acted on), and score the end state with every named check. Which end states pass which check
 //! is tested on the benchmark's own checks (`benchmarks/factory/src/checks.rs`).
 //!
@@ -69,7 +69,7 @@ async fn app(hub: &Arc<Hub>, tag: &str) -> (Arc<AppState>, Cleanup) {
     (state, clean)
 }
 
-/// Runs the team to its end (up to `polls` × 200 ms); asserts what Arena owes any run of it, and
+/// Runs the team to its end (up to `polls` × 200 ms); asserts what Shakedown owes any run of it, and
 /// prints the checks and metrics (measured time, Shakedown's overhead, the estimate in production).
 async fn run_and_report(hub: &Arc<Hub>, live: &Live, polls: usize) {
     let bench = hub.bench_describe("factory").await.unwrap();
@@ -90,12 +90,13 @@ async fn run_and_report(hub: &Arc<Hub>, live: &Live, polls: usize) {
 /// waits up to an hour, since Isaac Sim starts and steps far slower than the stand-in.
 #[test]
 #[ignore = "live: runs a real model on a whole world (see the module doc)"]
-fn live_factory_team_runs_the_incident_and_arena_scores_it() {
+fn live_factory_team_runs_the_incident_and_shakedown_scores_it() {
     if let Some(why) = missing() {
         eprintln!("skipped: {why}");
         return;
     }
-    let Some(live) = Live::any("live_factory_team_runs_the_incident_and_arena_scores_it") else {
+    let Some(live) = Live::any("live_factory_team_runs_the_incident_and_shakedown_scores_it")
+    else {
         return;
     };
     build();

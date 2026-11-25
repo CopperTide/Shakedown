@@ -3,7 +3,7 @@ import { health } from '@/api/health';
 import type { Health } from '@/model/types';
 import { useQuery } from './useQuery';
 
-/** Pages dispatch this after they change how much disk the arena uses (e.g. delete a run). */
+/** Pages dispatch this after they change how much disk the shakedown uses (e.g. delete a run). */
 export const DISK_CHANGED = 'shakedown:disk-changed';
 
 /** shaked's health, read again by each page that shows it and after `DISK_CHANGED`; a failed read keeps the last one. */

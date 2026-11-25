@@ -20,8 +20,8 @@ build_base() {
 }
 
 build_apps() {
-    for repo in storefront orders inventory; do
-        docker build --pull=false --network none -t "$(image_of "$repo")" "$template/repos/$repo"
+    for app in storefront orders inventory; do
+        docker build --pull=false --network none -t "$(image_of "$app")" "$template/repos/$app"
     done
 }
 

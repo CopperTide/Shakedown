@@ -1,6 +1,6 @@
 //! The team whose changes the tools propose and decide: a plain CopperTide team with no agents.
 //! The tools propose its changes as an outside system (`POST /api/teams/{team}/changes`, proposer
-//! `arena`), so the team has no rules and every change waits for a person's decision
+//! `shakedown`), so the team has no rules and every change waits for a person's decision
 //! (`decide_change`), for up to a day.
 use anyhow::{bail, Result};
 use reqwest::Method;

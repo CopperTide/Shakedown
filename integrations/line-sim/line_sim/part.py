@@ -19,7 +19,7 @@ class LineSim(JsonStatePart):
     def describe_fields(self):
         return {"version": VERSION, "fingerprint": {"adapter": VERSION, **backend_for({}).fingerprint()},
                 "system": {"kind": "simulator", "product": "Discrete-event plant model (open source)",
-                           "stands_in_for": "Rockwell Arena Simulation, Emulate3D", "simulated": True}}
+                           "stands_in_for": "Rockwell Shakedown Simulation, Emulate3D", "simulated": True}}
 
     def new_state(self, config):
         missing = [k for k in ("seed", "lines", "decisions", "safety", "study") if k not in config]

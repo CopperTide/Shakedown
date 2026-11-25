@@ -9,6 +9,7 @@ import { Panel, PanelHeader } from '@/components/ui/panel';
 import { Segmented } from '@/components/ui/segmented';
 import { EmptyState, ErrorState } from '@/components/ui/state';
 import { useAction } from '@/hooks/useAction';
+import { checkProviders } from '@/hooks/useProviders';
 import { useQuery } from '@/hooks/useQuery';
 import SettingsPage from './SettingsPage';
 
@@ -112,18 +113,20 @@ export function ModelsView({ keys, form, testing, error, onChange, onAdd, onTest
 
 export default function ModelsPage() {
   const keys = useQuery('model-keys', listKeys);
+  // The provider list (status bar, agent forms) applies these keys: ask for it again.
+  const changed = () => { keys.reload(); checkProviders().catch(() => {}); };
   const [form, setForm] = useState<KeyForm>(emptyKeyForm);
   const [testing, setTesting] = useState<string | null>(null);
   const add = useAction(async () => {
     await addKey(keyBody(form));
     setForm({ ...emptyKeyForm(), kind: form.kind });
-    keys.reload();
+    changed();
   });
   const test = useAction(async (id: string) => {
     setTesting(id);
     try { await testKey(id); } finally { setTesting(null); keys.reload(); }
   });
-  const remove = useAction(async (id: string) => { await deleteKey(id); keys.reload(); });
+  const remove = useAction(async (id: string) => { await deleteKey(id); changed(); });
   const failed = keys.error ?? test.error ?? remove.error;
   return (
     <SettingsPage>

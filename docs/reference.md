@@ -9,16 +9,26 @@ All JSON on `http://127.0.0.1:4510`, except the event stream. Errors are `{error
 
 | Route | What it does |
 |---|---|
-| `GET /api/health` | `{open_available, providers, claude, codex, benchmark, disk: {bytes, limit_bytes}}`. `providers` is each model provider as the configuration alone tells it, in the shape of `/api/providers` without `models`; a local server is not asked, so it is `available: false, checked: false` with why `not checked (GET /api/providers asks the server)`. `open_available` is true when some provider can take calls, judged from the configuration (a configured local server counts, up or not) |
+| `GET /api/health` | `{open_available, providers, claude, codex, sandboxes, benchmark, disk: {bytes, limit_bytes}}`. `claude` and `codex` say whether each CLI is on this machine's PATH; `sandboxes` is true when packages and agents run only in sandboxes (hosted), where the CLI agents run in the sandbox instead. `providers` is each model provider as the configuration alone tells it, without anyone's own keys (the endpoint is public); in the shape of `/api/providers` without `models`; a local server is not asked, so it is `available: false, checked: false` with why `not checked (GET /api/providers asks the server)`. `open_available` is true when some provider can take calls, judged from the configuration (a configured local server counts, up or not) |
 | `GET /api/providers` | `[{id, kind, label, available, checked, why?, models?}]`, one per model provider, your own keys applied; see [Model providers](#model-providers) |
 | `GET /api/me` | `{mode, user: {name}, features}`: `mode` is `local` and `user.name` `You` for an open-source shaked; a deployment's layer may add `account` (the UI's account menu) |
 | `GET /api/project` | `project.status`: `{name, counts: {worlds, scenarios, setups, experiments}, problems, root, imports}` for the project folder `SHAKEDOWN_PROJECT` names; 409 when none is open. `problems` lists unreadable files and broken references (`{kind, id, pointer, message}`); a problem never stops the rest of the project from loading. `imports` lists the project's git imports, `[{id, url, ref, commit, imported_at, packages, items}]` |
 | `POST /api/project` | `project.init`: `{name, git?}` creates a project in the configured folder; 409 when one is already there |
 | `POST /api/project/import-git` | `project.import_git`: `{url, ref?, id?, confirm?}` imports a git repo, its packages and its project items (see [Import from git](#import-from-git)). Without `confirm` the ref is fetched and the plan answered, and nothing is installed, registered or written: `{proposed: true, id, url, ref, commit, checkout, project: {name, problems}, packages: [{name, kind, dir, python}], items: [{kind, id, label, action: write\|replace\|same\|keep, reason}], views: [{world, file}], compose: [{file, services, volumes, part}], python: [{root, env}], edits, notes, problems, conflicts, previous_commit}`. With `confirm` the same, plus `registered` (true when shaked runs) and `written`. 400 for a URL other than https, ssh, `git@host:path`, `file://` or an absolute path, or a ref starting with `-`; 409 when a package name is installed already; 422 when git or uv fails; 403 on a shaked that serves others |
-| `GET /api/project/{worlds\|scenarios\|setups\|experiments}` | `{items: [{kind, id, label, hash, problems}]}` |
+| `GET /api/project/{worlds\|scenarios\|setups\|experiments}` | `{items: [{kind, id, label, hash, problems, …}]}`; each item also says where it belongs: a world its `group` (null when none), a scenario its `world`, an experiment its `world`, `scenario`, `parent` and how many `setups` it compares |
 | `GET /api/project/{kind}/{id}` | one item with its `body` (the file's contents as JSON) |
 | `PUT /api/project/{kind}/{id}` | `{body, confirm?}` creates or replaces the item's file. `body` is checked exactly like the file: unknown fields, a wrong `format:` and credentials written inline are 422 with a JSON pointer (a credential's value is never echoed). Unless `confirm` is true and while the project's `permissions.edit` is `diff_first` (the default), nothing is written and the answer is `{proposed: true, diff}`. Writes are atomic: a file is never left half-written. Needs the `admin` token scope |
-| `DELETE /api/project/{kind}/{id}` | deletes the item's file (a world keeps its data folder) |
+| `DELETE /api/project/{kind}/{id}` | `{cascade?, expect?, confirm?}` (`cascade` and `confirm` also as `?cascade=true`) moves the item's file to the trash (a world's data folder and a setup's folder stay) and answers `{deleted, with, trash, runs_unlinked}`. While anything uses the item (see [concepts](concepts.md#project-files)) it is refused with 409 `{error, dependents}`. With `cascade: true` what uses it is deleted or rewritten first (`with` lists each with its `fates`); `expect`, the `dependents` a preview showed, makes it 409 with the fresh `dependents` if they changed; under `diff_first` an unconfirmed cascade answers `{proposed: true, dependents}`. A deleted experiment's deployments are unlinked and list as earlier experiments |
+| `GET /api/project/trash` | `project.deleted`: the most recent delete that can be undone, `{trash, label, files}`; 404 when there is none |
+| `POST /api/project/trash/restore` | `project.restore`: `{trash?, confirm?}` puts back the delete named `trash` (the most recent when missing): every file it removed or rewrote, and links its experiments' deployments again; answers `{restored, files, trash, runs_relinked}`. Under `diff_first`, unconfirmed, it answers `{proposed, diff, trash}`: send that `trash` back to restore the same delete. 404 when there is nothing to undo; 409 when a removed file's path is taken again or a rewritten file was edited since |
+| `GET /api/project/{kind}/{id}/dependents` | `<kind>.dependents`: `{dependents: [{kind, id, label, fate, fates}], kept}`, what uses the item and what a cascading delete does to each (`fates`: `[deleted]`, or `setup_dropped` and/or `parent_cleared`; `fate` is the first), and the folder that stays (`kept`: a world's data folder, a setup's own folder, or null) |
+| `POST /api/project/world-groups/rename` | `worlds.rename_group`: `{from, to?, confirm?}` moves every world in group `from` to `to` (empty or missing: no group; an existing group merges), checking every file before writing any, with a diff first under `diff_first` as for a put; answers `{moved, diff}`. 404 when no world is in `from` |
+| `PUT /api/project` | `project.update`: `{body, confirm?}` replaces `shakedown.yaml` (name, defaults, permissions, assistant), with a diff first under `diff_first` as for an item |
+| `POST /api/project/import` | `project.import`: `{confirm?}`. Without `confirm`, `{proposed: true, files, skipped}`: what moving installed benchmarks, built worlds and earlier experiments into the project would write (nothing existing is overwritten). With it, writes them and links each earlier experiment as its file's first deployment |
+| `POST /api/project/experiments/{id}/deploy` | `experiments.deploy`: runs the file experiment on its world's runtime package (see [concepts](concepts.md#project-files)); answers the engine experiment's detail. 422 when the world has no `package`, the scenario no `preset`, an item it names has a problem, or a setup is of kind `code` or `madl`; 400 when a setup's `key` names no stored key (or another member's key that names its own server), or its `auth` names a key that is not your own custom key, is empty, names both `key` and `env`, or names an environment variable that may not be sent (`SHAKEDOWN_AGENT_*` on a local engine only). A built-in agent's `key` becomes its provider `key:<name>`; an `http` setup's `auth` becomes a reference read from your keys on each request and sent as `Authorization: Bearer` |
+| `GET /api/project/experiments/{id}/runs` | `experiments.runs`: `{deployments}`, the experiment's deployments newest first, each as `GET /api/experiments/{id}` answers |
+| `GET /api/project/setups/{id}/madl` | `setups.madl`: a MADL setup's `{valid, diagnostics: [{code, severity, pointer, message}], graph: {agents, edges}}` (patterns expanded) |
+| `POST /api/assistant/chat` | the Ask drawer: `{messages, page?}` answered by the assistant on the project's model (at most 8 model turns): reads run at once; every edit that takes `confirm` comes back as a diff card under `diff_first` (written at once under `apply_then_tell`); deploys, other edits and deletes come back as cards the person confirms. A delete card drops the model's `cascade` and shows the delete dialog's choice: alone if unused, or with what uses it |
 | `POST /mcp` | the control MCP server (JSON-RPC, protocol `2025-06-18`): every operation above as a tool (`worlds_list`, `scenarios_put`, …), each checked against the caller's token like its route. See [Use Shakedown from an agent](#use-shakedown-from-an-agent-mcp) |
 | `GET /api/tokens` | the live API tokens, `[{id, name, prefix, scopes, created_at, last_used_at, expires_at}]`: never a token or its hash |
 | `POST /api/tokens` | `{name, scopes: ["read"\|"run"\|"admin"], expires_days?}`: `{id, token, prefix}`, the token (`sd_…`) shown this once. `read` views; `run` also starts, forks, stops and records; `admin` does everything, model keys and tokens included |
@@ -28,9 +38,18 @@ All JSON on `http://127.0.0.1:4510`, except the event stream. Errors are `{error
 | `POST /api/models/keys/{id}/secret` | `{secret}`: replaces a key's secret |
 | `POST /api/models/keys/{id}/test` | a one-token call with the key; the key with `checked_ok` and `check_detail` (the provider's reason, never the key) |
 | `DELETE /api/models/keys/{id}` | deletes a key |
+| `GET /api/observability/targets` | where runs are exported, `[{id, name, kind, endpoint, project, header_names, include_content, auto_export, export_metrics, checked_ok, checked_at, check_detail, created_at}]`: header names, never their values. See [observability.md](observability.md) |
+| `POST /api/observability/targets` | adds a target (`admin` token scope). `kind` `langfuse` (`region` `us`, `eu` or `self` with `base_url`; `public_key`, `secret_key`), `phoenix` (`base_url`, default `http://127.0.0.1:6006`; `api_key?`; `project?`, default `shakedown`) or `otlp` (`endpoint`, `/v1/traces` added unless it ends with it; `headers?`, at most 20). `include_content` defaults to true for a target on your own server and false for Langfuse Cloud and Phoenix Cloud; `auto_export` defaults to true; `export_metrics` (OTLP metrics, `otlp` only) to false. 400 when the preset lacks a field or the endpoint may not be reached from here; 409 when the name is taken |
+| `POST /api/observability/targets/{id}` | `{include_content?, auto_export?, export_metrics?}`: changes what the target gets |
+| `POST /api/observability/targets/{id}/test` | sends one span (its own trace); the target with `checked_ok` and `check_detail` (what the collector answered, header values blanked) |
+| `DELETE /api/observability/targets/{id}` | deletes a target and its export rows |
+| `GET /api/observability/exports?branch=&limit=` | the latest exports (of one branch), `[{target_id, target, branch_id, state, attempts, spans, last_error, exported_at, next_at}]`; `state` `pending`, `done` or `failed` (after 6 tries) |
+| `POST /api/branches/{id}/export` | `{target_id?}`: sends the branch to that target (every target when absent) now, from its record; a branch that has not ended is queued for when it does. `{branch_id, exports: [{target_id, target, state, spans?, error?}]}` (`state` `done`, `failed` or `queued`); 409 when there is no target |
+| `POST /api/runs/export` | `runs.export`: `{branch_id, target_id?}`, the same as `POST /api/branches/{id}/export`, for the assistant and agents over MCP |
+| `GET /metrics` | the runs as Prometheus text (format 0.0.4): branches by status, pass rate, run time, model calls, tokens, cost and call latency by world, setup, model and provider. Authenticated like `/api`: the person at this machine, or an API token (`read` scope is enough) |
 | `GET /api/tasks` | the benchmark's tasks, `[{id, reason, ticket, instructions, clock_start?}]` (`instructions` is the benchmark's, the same for every task; `clock_start`, the world's date and time at clock 0 when its world keeps its own calendar: agents are told the world's date, see [protocol](protocol.md#a-tasks-clock)) |
 | `GET /api/benchmark` | `{name, version, tasks: [{id, reason}], scenario_options, view}`: `scenario_options` is the benchmark's `describe.scenario_options` (null when it offers none), the disruptions a run's scenario may add ([protocol](protocol.md#a-runs-scenario)); `view` is true when the benchmark draws the world's view |
-| `GET /api/templates` | the world builder's templates, `[{id, name, summary, version, systems: [label]}]` ([protocol](protocol.md#builder-calls)); 404 `no world builder is installed` when no package of `kind = "builder"` is (with several, the first by name answers) |
+| `GET /api/templates` | the world builder's templates, `[{id, name, summary, version, systems: [label]}]` ([protocol](protocol.md#builder-calls)); 404 `no world builder is installed` when no package of `kind = "builder"` is (with several, the first by name answers). Where packages run only in sandboxes (hosted), this, the form, the preview and `POST /api/worlds` answer 409 `hosted Shakedown ships prebuilt worlds; build custom worlds in local Shakedown` |
 | `GET /api/templates/{id}` | the template's form (its choices and defaults); 404 for an unknown template |
 | `POST /api/templates/{id}/preview` | body: the choices; what the world would be: name, title, parts, hosts, people, events, tasks, what is dropped, the images and memory it needs, and its `problems` |
 | `POST /api/worlds` | `{template, choices}`: builds a world. 202 `{name, state: "preparing"}`: it is written to `SHAKEDOWN_WORLDS/<name>` (generated into a hidden temporary folder first), installed, and its base saves are made in the background, after which it is the current benchmark unless another was chosen since the build was asked for (that choice stands); 422 `{problems}` when the choices have problems (nothing is written); 409 `{error, suggested}` when a world or package has that name (`suggested` is the first free `<name>-N`) |
@@ -42,11 +61,11 @@ All JSON on `http://127.0.0.1:4510`, except the event stream. Errors are `{error
 | `GET /api/teams[?kind=&model=&provider=]` | every team the benchmark suggests, the default first: `[{id, name, agents, runner}]`, `runner` being the runner the team's prompts are written for (`chain` when the benchmark names none or one shaked doesn't know); the query as for `/api/team/default` |
 | `GET /api/runs` | the runs with their branches |
 | `POST /api/agents/check` | `{kind: "http", url, headers?}` or `{kind: "bedrock", model_id, region}`, with an optional `name`: reaches the agent once (an `shakedown-agent/1` hello, or one Converse call of one token) and answers 200 `{ok: true, agent, name?, ms}`, `agent` being the team member as a team stores it (header values as `{secret: ref}`), or `{ok: false, error, ms}`; 400 for any other kind or a bad URL ([agents.md](agents.md)) |
-| `POST /api/runs` | `{task_id, team, runner?, scenario?, seed?, benchmark?}`: start a run; returns `{run_id, branch_id}`. `benchmark` is the benchmark it runs on (the page's world; absent, the current one, read once when the run is asked for), its task and scenario checked against it; 409 when no benchmark of that name is installed. `max_cost_usd` (optional, a positive number) is the run's model-spend limit ([concepts](concepts.md#spend-limits)); absent, `SHAKEDOWN_MAX_COST_USD` applies; 400 for zero or less. `world_minutes` (optional, more than 0 and at most 1440; else 400 "world_minutes must be from 0 to 1440 minutes of world time") is an external or Code run's world time window ([concepts](concepts.md#world-time-windows)), recorded in `RunStart.world_minutes`; shaked's own runners ignore it. `seed` (0 to 2^53 - 1) is the seed the run's world starts its parts with, recorded in `RunStart.seed`; random when absent (every run starts from the same seeded base world either way; the seed reaches parts that draw from it, such as simulators). `scenario` is `{disruptions: [{id, params?: {name: value}}], clock?}`, options of `GET /api/benchmark`'s `scenario_options` (params left out take their defaults): shaked expands each with its template, adds it to the task's setup and records the expanded scenario in `RunStart` (`scenario`); 400 for an unknown option or param, a value out of range or not among the choices, or an option chosen twice. `clock` (`{read_ms, write_ms, tools?: {name: ms}, epoch_ms?, horizon_ms?, team_start_ms?}`) runs the branch on a stepped clock ([concepts](concepts.md#stepped-clock)), recorded with the scenario so forks keep it; 400 "stepped clock needs a team with a lead (dispatch runner)" for any other runner (also for an experiment's setup, the error naming it). `timed` (`[{part, disruption}]`) appends each `disruption` as it is to `args.disruptions` of that part's setup call, and `generators` (a list) is set as `args.generators` on every part's setup call ([protocol](protocol.md#a-runs-scenario)). `runner` is `chain` (default: one agent after another), `concurrent` (all at once), `dispatch` (a lead delegates to the team; see concepts, "Who drives the agents") or `external` (see below; the team may be empty and the answer adds `agents`, each agent's endpoints). `connection` (a Code connection's id) makes shaked launch that connection's driver for the run (the runner is then `external`; the answer adds `connection` and `driver`: `launched`, or `failed` when it couldn't start, the run then ending `failed` saying why); 404 for an unknown connection, 415/403 as for `POST /api/connections`. Each agent is `{id, name, kind, model, prompt, provider?, read_only?, lead?, tools?}`, or an `http` agent `{…, url, headers?}`, or a Bedrock agent `{…, kind: "bedrock", model_id, region}` ([agents.md](agents.md)) (`read_only`, default false, gives the agent only read tools; `tools`, a list of world tool names, gives it only those (the runner's talk tools always come), and a call of another world tool is refused; `lead` marks the agent that leads a dispatch run, else the first does); 400 when a dispatch team marks two leads or has a Codex or `http` agent (neither can keep a session across turns), or when an API-mode agent's provider is unknown or unavailable, or has no default model and the agent names none |
+| `POST /api/runs` | `{task_id, team, runner?, scenario?, seed?, benchmark?}`: start a run; returns `{run_id, branch_id}`. `benchmark` is the benchmark it runs on (the page's world; absent, the current one, read once when the run is asked for), its task and scenario checked against it; 409 when no benchmark of that name is installed. `max_cost_usd` (optional, a positive number) is the run's model-spend limit ([concepts](concepts.md#spend-limits)); absent, `SHAKEDOWN_MAX_COST_USD` applies; 400 for zero or less. `world_minutes` (optional, more than 0 and at most 1440; else 400 "world_minutes must be from 0 to 1440 minutes of world time") is an external or Code run's world time window ([concepts](concepts.md#world-time-windows)), recorded in `RunStart.world_minutes`; shaked's own runners ignore it. `seed` (0 to 2^53 - 1) is the seed the run's world starts its parts with, recorded in `RunStart.seed`; random when absent (every run starts from the same seeded base world either way; the seed reaches parts that draw from it, such as simulators). `scenario` is `{disruptions: [{id, params?: {name: value}}], clock?}`, options of `GET /api/benchmark`'s `scenario_options` (params left out take their defaults): shaked expands each with its template, adds it to the task's setup and records the expanded scenario in `RunStart` (`scenario`); 400 for an unknown option or param, a value out of range or not among the choices, or an option chosen twice. `clock` (`{read_ms, write_ms, tools?: {name: ms}, epoch_ms?, horizon_ms?, team_start_ms?}`) runs the branch on a stepped clock ([concepts](concepts.md#stepped-clock)), recorded with the scenario so forks keep it; 400 "stepped clock needs a team with a lead (dispatch runner)" for any other runner (also for an experiment's setup, the error naming it). `timed` (`[{part, disruption}]`) appends each `disruption` as it is to `args.disruptions` of that part's setup call, and `generators` (a list) is set as `args.generators` on every part's setup call ([protocol](protocol.md#a-runs-scenario)). `runner` is `chain` (default: one agent after another), `concurrent` (all at once), `dispatch` (a lead delegates to the team; see concepts, "Who drives the agents") or `external` (see below; the team may be empty and the answer adds `agents`, each agent's endpoints). `connection` (a Code connection's id) makes shaked launch that connection's driver for the run (the runner is then `external`; the answer adds `connection` and `driver`: `launched`, or `failed` when it couldn't start, the run then ending `failed` saying why); 404 for an unknown connection, 415/403 as for `POST /api/connections`. Each agent is `{id, name, kind, model, prompt, provider?, read_only?, lead?, tools?}`, or an `http` agent `{…, url, headers?, auth?}` (header values you type are kept in memory for the caller that typed them: the person in the UI, an API token and an MCP client each count as a different caller, so a value typed in the UI cannot be cited by your API token or an MCP client, and the other way round; `auth` is `{key: <name>}` of one of your own custom keys, or `{env: SHAKEDOWN_AGENT_NAME}` on a local engine; read on each request, never stored; 400 on any other kind of agent), or a Bedrock agent `{…, kind: "bedrock", model_id, region}` ([agents.md](agents.md)) (`read_only`, default false, gives the agent only read tools; `tools`, a list of world tool names, gives it only those (the runner's talk tools always come), and a call of another world tool is refused; `lead` marks the agent that leads a dispatch run, else the first does); 400 when a dispatch team marks two leads or has a Codex or `http` agent (neither can keep a session across turns), or when an API-mode agent's provider is unknown or unavailable, or has no default model and the agent names none |
 | `POST /api/runs/{id}/name` | `{name}` sets an optional display name (1–300 bytes after trimming); 404 for a missing run. `GET /api/runs` includes `name` when set; task ids and event records are unchanged |
 | `DELETE /api/runs/{id}` | delete a run and what it saved (409 while a branch runs) |
-| `GET /api/branches/{id}` | a branch with its events (`?lean=1`: each model call's `request` and `response` read as null and its `provider_response` left out, for pages that show the world, not the calls), `budget` (`{max_cost_usd, estimate_usd}`: its spend limit, and its running estimate while it runs) and `metrics`: `{measured_s, overhead_ms: {save?, restore?, record?, gateway?, gate?, link?, mcp?, wait?, score?, pause?}, overhead_s, overhead_recorded, estimated_s, tokens, cost, agents: [{agent, kind, model, provider, tokens, prompt_tokens, completion_tokens, cost, model_calls, peak_prompt_tokens, compactions, overhead_s}]}`, each `cost` `{usd, label, source, as_of}` (see concepts, "Overhead and estimates"); `peak_prompt_tokens` is the largest `usage.prompt_tokens` of the agent's model calls, `overhead_s` the overhead recorded on its own events |
-| `POST /api/branches/{id}/agents` | external runs: `{id, name?, kind?, model?, provider?, prompt?, read_only?}` registers an agent (kind `external` by default), or starts a registered one again; returns `{agent, mcp_url, gateway_url, tools, spec}`. 404 when the branch isn't live, 409 when shaked runs its agents |
+| `GET /api/branches/{id}` | a branch with its events (`?lean=1`: each model call's `request` and `response` read as null and its `provider_response` left out, for pages that show the world, not the calls), `budget` (`{max_cost_usd, estimate_usd}`: its spend limit, and its running estimate while it runs), `queue_position` (a queued cloud run's place in line, 1 = next; else null) and `metrics`: `{measured_s, overhead_ms: {save?, restore?, record?, gateway?, gate?, link?, mcp?, wait?, score?, pause?}, overhead_s, overhead_recorded, estimated_s, tokens, cost, agents: [{agent, kind, model, provider, tokens, prompt_tokens, completion_tokens, cost, model_calls, peak_prompt_tokens, compactions, overhead_s}]}`, each `cost` `{usd, label, source, as_of}` (see concepts, "Overhead and estimates"); `peak_prompt_tokens` is the largest `usage.prompt_tokens` of the agent's model calls, `overhead_s` the overhead recorded on its own events |
+| `POST /api/branches/{id}/agents` | external runs: `{id, name?, kind?, model?, provider?, prompt?, read_only?}` registers an agent (kind `external` by default), or starts a registered one again; returns `{agent, mcp_url, gateway_url, otlp_url, env, token, tools, spec}` (`env` holds the `OTEL_EXPORTER_OTLP_*` variables, see below). 404 when the branch isn't live, 409 when shaked runs its agents |
 | `POST /api/branches/{id}/agents/{agent}/end` | external runs: `{ok?, error?, prompt_tokens?, completion_tokens?, cost_usd?, cost_source?, seconds?}` records the agent's end |
 | `POST /api/branches/{id}/agents/{agent}/usage` | external runs: `{message_id?, model?, input_tokens?, cache_creation_input_tokens?, cache_read_input_tokens?, output_tokens?, context_window?}` records one model call the agent's client saw (a CLI's per-message usage, such as Claude Code's `stream-json`) as a `model_call` with `request` and `response` null, `reported_by: "client"`, and `usage` whose `prompt_tokens` is the whole input (fresh, cache-written and cache-read tokens); `{compaction: {trigger?, pre_tokens?}}` records that the client compacted the agent's context (a `model_call` with empty `usage`). 404 for an agent the branch doesn't have |
 | `POST /api/branches/{id}/agents/{agent}/reasoning` | external runs: `{items: [{text, kind?: "thinking"\|"step"\|"plan", model_call_seq?}]}` (1 to 100 items) records one `reasoning` event per item with `source: "agent"`; blank items are skipped and text over 32 768 characters is cut (`truncated: true`). Answers `{seqs}`. 400 for no items, too many or an unknown `kind`; 404 for an agent the branch doesn't have |
@@ -58,16 +77,16 @@ All JSON on `http://127.0.0.1:4510`, except the event stream. Errors are `{error
 | `POST /api/branches/{id}/sandbox-events` | a sandbox around an agent (`deploy/openshell`): `{agent, events: [{kind, text, data?}]}` (at most 200) records each as a world event of the part `sandbox` at the branch's clock, `data` `{agent, sandbox: data}`; returns `{recorded}`. 404 when the branch isn't live, 400 for an agent it doesn't have |
 | `POST /api/branches/{id}/pause` | pauses a live branch, whoever drives it: new tool calls and gateway model calls wait (they don't fail) and the world clock stops; records a `pause` event; returns `{paused, changed}` (404 for no branch, 409 when it isn't running). `GET /api/branches/{id}` reports `paused` |
 | `POST /api/branches/{id}/resume` | releases the calls that wait and starts the clock again; records a `resume` event `{paused_ms}` (the pause is counted as overhead `pause`, so it is no part of the estimate in production); returns `{paused, changed}` |
-| `POST /api/branches/{id}/stop` | stops a live branch: its agents are dropped where they are (a CLI agent's process is killed), calls that wait are refused, and it ends `stopped`, unscored; returns `{stopping}` (false when it was stopping already). The stream's final `status` says when it has ended |
+| `POST /api/branches/{id}/stop` | stops a live branch: its agents are dropped where they are (a CLI agent's process is killed), calls that wait are refused, and it ends `stopped`, unscored; a queued cloud run ends `stopped` at once and never starts; returns `{stopping}` (false when it was stopping already). The stream's final `status` says when it has ended |
 | `GET /api/branches/{id}/stream` | Server-Sent Events: each `event`, then the final `status` |
 | `GET /api/branches/{id}/rows?seq=N\|final&keys=<kind>/<id>,...[&part=]` | the state of those keys just after step N, or at the branch's end with `seq=final` (its check's final saves; a step at or after the check reads them too); at most 50 keys. A clock part saved before step N is shown moved on to step N's clock: its save is started in a scratch instance, advanced and inspected ([concepts](concepts.md#a-clock-parts-state-at-a-step)) |
-| `POST /api/branches/{id}/fork` | `{at_seq, changes: {<agent id>: {prompt?, model?, kind?, provider?, read_only?}}, restore: "exact"\|"approximate", team?}` (default exact); `team` (a run an external system drives only, and not with `changes`; else 400) gives the new branch another team, such as a single agent in place of a team: its agents' `history` holds the events of any agent of the same id, and the fork note says the team changed; returns `{branch_id, start_seq, moved_from, reason}`, and for an external run `agents`: each agent's `{agent, mcp_url, gateway_url, spec, history}` on the new branch, which stays live for the external system (`history` is the agent's recorded events before `start_seq`). The changes are checked on the team the fork would run, as `POST /api/runs` checks a team |
+| `POST /api/branches/{id}/fork` | `{at_seq, changes: {<agent id>: {prompt?, model?, kind?, provider?, read_only?, tools?}}, restore: "exact"\|"approximate"\|"none", team?, disruptions?: {add?: [{id, params?}], remove?: [id]}}` (default exact; `tools` is exactly the agent's world tools from the fork on: a tool the world doesn't offer or an empty list is 400, and tools beyond the agent's setup are named in the fork note; `none`, for evaluation only, keeps the agents' context but leaves the world as the parent ended, see concepts.md "Restore modes"; `disruptions` adds scenario options, chosen as a run's `scenario` chooses them, and removes disruptions the branch's setups armed before the fork point, from the fork point on: an unknown option or id is 400, a part whose scenario tool can't take the change 409); `team` (a run an external system drives only, and not with `changes`; else 400) gives the new branch another team, such as a single agent in place of a team: its agents' `history` holds the events of any agent of the same id, and the fork note says the team changed; returns `{branch_id, start_seq, moved_from, reason}`, and for an external run `agents`: each agent's `{agent, mcp_url, gateway_url, spec, history}` on the new branch, which stays live for the external system (`history` is the agent's recorded events before `start_seq`). The changes are checked on the team the fork would run, as `POST /api/runs` checks a team |
 | `GET /api/branches/{id}/views` | `[{seq, event_seq, view}]`: the world's views recorded on the branch, in order (a fork's include those before its fork point, which its record starts with). `seq` is the step the view follows (the `world_view` event's `seq_of`), `event_seq` the view's own event, `view` the benchmark's `TwinView` ([protocol](protocol.md#the-worlds-view)); empty for a benchmark that draws none; 404 for an unknown branch |
 | `GET /api/branches/{id}/world-views` | `{world, views: [{id, label, part, styles, panels, screens}], problems: [{file, message}]}`: the declarative views of the project world the run played (the world whose `package` is the run's benchmark), as parsed; `world: null` and no views without one ([protocol](protocol.md#declarative-views-world-files)) |
 | `GET /api/branches/{id}/world-views/{view}?screen=<id>&at=live\|final\|<seq>` | one screen of a view evaluated at a point: `{view, screen, at, panels}`; `at` carries the world's `utc_offset_min` (null: UTC) and, when the step asked for couldn't be restored and the one before its unsaved write is shown, `fallback: {asked, why}` ([protocol](protocol.md#declarative-views-world-files)). Without `at`: live while the branch runs, else its end. 400 for a point with no state at all, 404 for an unknown view or screen, 409 for `live` on a branch that is not running |
 | `GET /api/branches/{id}/recording` | `{video, of, sidecar}`: the branch's plant recording, if `SHAKEDOWN_RECORDINGS` holds one (an MP4 whose name has the branch id in it; a fork without one shows its parent's, `of` says whose), with its JSON sidecar; `video` is null when there is none. A recording part writes its frames on Shakedown time, so the video's second t is the branch's Shakedown second t |
 | `GET /api/branches/{id}/recording.mp4` | that MP4, with byte ranges (so a player can seek); 404 when there is none |
-| `GET /api/branches/{id}/restore-plan?at_seq=N&restore=exact\|approximate` | `{parts: [{part, how, estimate_seconds?}]}`, or 409 with the refusal |
+| `GET /api/branches/{id}/restore-plan?at_seq=N&restore=exact\|approximate\|none` | `{parts: [{part, how, estimate_seconds?}]}`, or 409 with the refusal |
 | `GET /api/compare?a=<branch>&b=<branch>` | `{a, b, first_divergent_seq, differing_rows, not_compared}` |
 | `POST /api/experiments` | `{task, setups: [{team, runner?, name?, connection?}], runs?, scenario?, name?, max_cost_usd?, benchmark?, seed?, world_minutes?}` (`benchmark` as for `POST /api/runs`): an experiment (`max_cost_usd`: each run's spend limit, shown on each setup; `seed`, at most 2^53 - 1, drawn at random when absent: run i of every setup starts its world from the same seed, splitmix64 of `seed + i` below 2^53, recorded in each run's `RunStart.seed` and shown on each run row as `seed`; `world_minutes`, as for `POST /api/runs`: every run's world time window, recorded in its `RunStart`, enforced for Code setups' runs; the detail's and the list's head show `seed`, `world_minutes` and `max_cost_usd`), one task of the benchmark in one scenario (as for `POST /api/runs`, expanded once) run by 1 to 50 agent setups, each `runs` times (default 5, at most 1000; both caps are safety limits). Each setup is stored as a suite of that task (`repeats` = `runs`, the setup's team and runner, `experiment_id` and `setup_ord` set). shaked makes the runs one at a time, interleaved: every setup's first run, then every setup's second, and so on. Setup names default to `Setup A`, `Setup B`, … (`Setup AA` after `Setup Z`) and must be unique (trimmed); the name defaults to the setups' names joined by ` vs `. `runner` is `chain` (default), `concurrent` or `dispatch`; a setup may instead name a Code connection (`{connection, name?, team?}`): shaked launches its driver for each of the setup's runs (404 for an unknown connection, 415/403 as for `POST /api/connections`); 400 for `external` without a connection, an unknown task, too few or many setups, or a team `POST /api/runs` would refuse (the error names the setup). Returns its detail (below) |
 | `GET /api/experiments` | every experiment, newest first: `{id, name, tasks, benchmark, runs, created_at, status, legacy, setups: [{suite_id, name, team_name, runner, runs, ended, passed}]}`. `status` is `running`, `finished` or `stopped`. A suite made on its own is listed too, as a one-setup experiment with the suite's id and `legacy: true` |
@@ -78,26 +97,96 @@ All JSON on `http://127.0.0.1:4510`, except the event stream. Errors are `{error
 | `GET /api/suites/{id}` | the suite's report: `{id, name, team, tasks, repeats, runner, benchmark, created_at, ended_at, error, status, finished_s, runs, checks, summary, spread}`. `status` is `running`, `finished` or `stopped` (a built-in suite that ended before its last run: shaked stopped, or the saves reached the limit); `finished_s` the seconds from its creation to its last run's end. `runs`: per task × variant × repeat `{task_id, variant, repeat, run_id, branch_id, status, error, outcome}` (`variant`: the index in `variants`, 0 without them), `status` being `pending`, `starting`, `error` (it could not start), `missing` (its run was deleted) or the branch's status, and `outcome` `{status, scored, checks, checks_passed, checks_total, safety_violations, denials, flags, measured_s, estimated_s, tokens, cost_usd, peak_context}`. `checks`: per task and check `{task_id, name, safety, passed, runs, pass_rate}`. `summary`: `{runs, ended, scored, unscored, passed, pass_rate, score, safety_violations, runs_with_violation, denials, runs_with_denial, flags, runs_with_flag}` (`denials` and `flags` as [docs/protocol.md](protocol.md#denials-and-flags) defines them, summed over the scored runs) and the spread of each figure; `spread`: per task `{task_id, runs}` and the spread of each figure. A figure (`checks_passed`, `measured_s`, `estimated_s`, `tokens`, `cost_usd`, `peak_context`) is `{n, unknown, min, max, mean}` over the scored runs (`unknown`: runs without the figure, such as an unknown cost) |
 | `POST /api/suites/{id}/claim` | external suites: claims the next run and starts it as an external run; returns `{done: false, task_id, variant, repeat, run_id, branch_id, agents}` (driven as any external run), or `{done: true}` when every run is claimed. 409 for a suite shaked runs itself |
 | `GET /api/suites/compare?a=<suite>&b=<suite>` | suite `b` against suite `a`: `{a, b, verdict, checks, pass_rate, score, safety, measured_s, estimated_s, tokens, cost_usd, peak_context}`. Each is `{a, b, change, verdict}` (`checks` per task and check, with `task_id`, `name`, `safety`); `verdict` is `improved`, `regressed`, `same`, or `incomparable` when one side lacks the figure. Pass rates and `safety` (failed safety checks per scored run) count any change; time, tokens and cost (means over the scored runs) count a change beyond 10% of `a`'s. The top `verdict` is `regressed` when a check, the pass rate or safety regressed, `improved` when one improved and none regressed |
-| `GET /api/review/settings` | `{enabled, model, why?}`: whether AI review is on and with which reviewer (see [AI review](#ai-review)) |
+| `GET /api/review/settings` | `{enabled, model, why?, ask}`: whether AI review is on and with which reviewer (see [AI review](#ai-review)); `ask`, whether asking about a step is on (off only by `SHAKEDOWN_REVIEW=off`: it runs on the asker's own key) |
 | `POST /api/branches/{id}/review[?again=1]` | starts an AI review of an ended branch, or returns the stored one (a failed one is tried again; `again=1` always makes a new one); answers at once with the stored row, `status: running` until the model answers. 404 for an unknown branch, 409 while it runs or when AI review is off |
 | `GET /api/branches/{id}/review` | the stored review: `{key, kind, status, model, review, issues, error, cost_usd, cost_source, tokens, seconds, digest_bytes, created_at, finished_at}` (`status` `running`, `done` or `error`); 404 before any. `review` is `{verdict, went_wrong: [{title, why, steps, severity, unverified?}], suggestions: [{change, why, kind, agent?, prompt_text?, step?}], went_well, confidence}` |
 | `POST`/`GET /api/compare/review?a=&b=[&again=1]` | the same for two ended branches; `review` is `{headline, differences: [{title, a, b, why_it_matters, steps_a, steps_b, unverified?}], which_is_better, why}` |
 | `POST`/`GET /api/suites/compare/review?a=&b=[&again=1]` | the same for suite `b` against `a`; `steps_a` and `steps_b` are example runs (branch ids) of each suite |
+| `POST /api/branches/{id}/questions` | `{seq, question, model?, wait?}`: asks about step `seq` (operation `questions.ask`, see [Ask about a step](#ask-about-a-step)); answers at once with the stored row (as a review's, `kind: ask`, `status: running`), or with `wait: true` once answered. 400 for a blank question (or over 2000 characters) or a bad `model`, 404 for no such branch or step, 409 when asking is off or the model would not run on your own key |
+| `GET /api/branches/{id}/questions[?seq=]` | the questions asked about the branch's steps (or step `seq`'s), oldest first (operation `questions.list`): `{questions: [row]}`, each `review` being `{question, step, agent, asked_by, mine, answer?, evidence?: [{source, step, field, quote, why}], speculation?: [{text, based_on}], sources?, sources_left_out?}` |
 | `GET /api/world` | the benchmark's parts with what each integration reports (version, restore, clock use, tool names, and `system` when it says what kind of system it is) and whether it answered (each gets 5 s; a silent one shows `did not answer within 5 s`) |
 | `GET /api/usage` | `{integrations: [{integration, parts, bytes, error?}], total_bytes, limit_bytes}`: the bytes each integration keeps (its own `usage` plus its save folders) and the world parts that use it. An integration whose `usage` fails or doesn't answer within 5 s has `bytes: 0` and an `error`, and adds nothing to `total_bytes` |
 | `POST /api/gc` | runs the startup cleanup and returns `{removed, freed_bytes, errors}`; it keeps every save a recorded run names and the shared base and gold saves; 409 while agents are running, and new runs and forks answer 409 while it runs. It has no deadline: it answers when every integration's `gc` has (an integration that never answers keeps the cleanup on until it exits), and a client that stops waiting does not end it |
 
+An agent's own OpenTelemetry SDK sends its spans to `POST /otlp/{branch}/{agent}/v1/traces` (OTLP/HTTP,
+`application/x-protobuf` or `application/json`, uncompressed, with the agent's token as a bearer token): each
+request becomes one `spans` event of that agent. At most 4 MiB a body (413), 512 spans a request and 20,000 a
+branch (the rest dropped and counted in the answer's `partial_success`), 20 requests a second a branch (429);
+404 once the branch has ended. `/v1/metrics` and `/v1/logs` there take the request and drop it. Each agent's
+endpoints carry `otlp_url` and, in `env`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`,
+`OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf` and `OTEL_EXPORTER_OTLP_HEADERS=Authorization=Bearer%20<token>`; an
+`http` agent's run body carries `otlp_traces_url`.
+
 New runs and forks answer 507 once the saves reach the disk limit. The `/api` routes answer only
 requests whose `Host` is a loopback address. The agents' MCP endpoints (`/mcp/{branch}/{agent}`) and the
-API-mode gateway (`/gateway/{branch}/{agent}/v1/chat/completions`) are for shaked's own agents.
+model gateway are for shaked's own agents. The gateway's main routes are, under `/gateway/{branch}/{agent}/v1/`:
+`chat/completions` (the canonical format of API mode, sent to any provider), and two pass-through routes for CLI
+agents, `messages` (Anthropic Messages, streamed or not, to an `anthropic` provider) and `responses` (OpenAI
+Responses, streamed or not, to `openai`, `openrouter` or a local server); an agent that names no provider gets
+`anthropic` on `messages` and `openai` on `responses`. Each takes the agent's token, as a bearer token or as
+`x-api-key` (as Claude Code sends its key), or the worker token of the branch (any other branch's is 401), and
+picks the key as `chat/completions` does: your own key, then the environment's, then the layer's. A pass-through
+request goes on as the agent sent it, with that key and, of the agent's headers, only `anthropic-version`,
+`anthropic-beta` and `openai-beta`; the answer comes back as it came, a stream chunk by chunk. A body is read only
+once the call is let through (its token checked, its branch not held), up to 32 MiB on `messages` and
+`messages/count_tokens` and 64 MiB on `chat/completions` and `responses` (413 past it, `{error}` as every refusal).
+It is recorded once, when it ends, as a `model_call` event holding the raw request, the response (a
+streamed one made whole: a Messages stream's message, a Responses stream's final response), `usage` in the
+canonical counts (`prompt_tokens` is the whole input; Messages also keeps `input_tokens`,
+`cache_creation_input_tokens` and `cache_read_input_tokens`, Responses `prompt_tokens_details.cached_tokens`),
+`provider`, `api` (`messages` or `responses`), `stream: true` when streamed, and `interrupted` (why) when the
+provider's stream broke off, stayed silent for 5 minutes (a stream has no limit on its whole length), said `error`
+on the way, or ended without its final event (`message_stop` or a `message_delta` with its stop reason;
+`response.completed` or `response.incomplete`); it is
+priced and metered as a `chat/completions` call is. A call whose cost is known answers `x-shakedown-cost-usd`, on
+every route; a failed call, whose cost is unknown, answers none (never 0). A
+provider that can't be found is a 502, recorded as a failed call. `messages/count_tokens` goes to the provider the
+same way and is neither recorded nor charged, but refused like a model call while its branch is held. With a worker
+token the control box holds the branch itself, whatever its worker does and whether it is connected or not:
+- 503 while the worker is not linked (try again), or when the branch has no rules on record (`this branch has no
+  limits on record`: a branch from before they were kept; never unlimited);
+- 404 for an agent not in the branch's team;
+- 429 while the branch's pool of calls in flight (4 times its agents, shared by all of them) has been in use
+  for more than 10 s (`count_tokens` takes none);
+- 409 while the branch is paused (with `x-shakedown-held: paused`) or stopping;
+- 402 once the run's spend estimate on the control box passed its limit, or the branch is stopping for it (see
+  concepts.md, "Spend limits");
+- 400 for a model whose cost could not be known (no reported cost, no price in the table).
+Each such call's event also keeps `charged_usd` (and `estimated: true` when that is the conservative estimate).
+The control box keeps the branch's rules (`branches.rules`, its spend limit among them) and its hold
+(`branches.hold`: `paused`, `stopping` or `budget_exceeded`) in the store, so a restart keeps both; it never reads a
+limit from the worker's own records.
+A cloud run (hosted) runs in a sandbox of its own, one per org at a time. A run started while the org's
+sandbox is busy is recorded with status `queued` and starts by itself when the runs before it are done, first
+come first served; at most 50 wait per org, beyond that `POST /api/runs` answers 429. A queued run can be
+stopped like any other, and one still queued when the control box restarts ends `interrupted`, saying so.
+`GET /worker` is the WebSocket a `shaked worker` running a branch in a sandbox links to: it says hello with
+a one-use ticket (good for ten minutes, bound to its branch and sandbox) and gets the branch's plan and a
+worker token, which it reconnects with, also after shaked restarted: each event keeps the worker's own
+counter (`events.link_n`), so an event sent again is acknowledged with the seq it got, never appended twice.
+The token only links its own branch and calls the gateway for its agents, and dies when the branch ends. It lives
+a day of unpaused time: a pause does not count against it (the store keeps when the pause began, and the resume
+extends the token by it), so the worker of a long-paused branch can still rejoin, and a restart keeps the branch. A
+link must say hello within 10 s, frames are at most 8 MiB, and a link silent for 60 s (pings unanswered) is
+closed. Pause, resume and stop on such a branch are held by the control box: the hold is stored first, enforced on
+the branch's model calls, and told to the worker when it is connected and again whenever it (re)joins; a pause or
+stop never answers 409 because the worker is away. A stop ends the branch on the control box: at once when no worker
+is connected, else when the worker reports its end, or after 30 s when it doesn't; a stop pressed again ends it at
+once when no worker is connected. The branch then ends `stopped` (or `budget_exceeded` for a stop for its limit)
+whatever the worker reports, its tokens are revoked, so its worker's calls get 401, a connection still open is
+told `Refused` (the branch ended) and closed, and the branch takes no more events: every end holds the branch's lock
+over its status and the revoke. A restart loses no stop: at start, and every minute, the control box arms the 30 s
+again for each branch it was stopping (and again when a worker rejoins one). The same sweep ends `infra_error` a
+running, unpaused branch whose worker token died (a day of unpaused time after it was made; checked again as it
+ends); at start, such a branch is marked `interrupted` first. A paused branch is left alone: its token's time stands
+still while it is paused (`branches.paused_at`).
 
 ## Configuration
 
-Environment variables, read once at startup by shaked (each also under its old name `ARENA_*`, see
-[Old names](../README.md#old-names)):
+Environment variables, read once at startup by shaked:
 
 - `SHAKEDOWN_PG_URL`: the Postgres server for shaked's records, passed on to integration programs (default
-  `postgres://shakedown:shakedown@127.0.0.1:5544/postgres`, else the same server's old user `arena`).
+  `postgres://shakedown:shakedown@127.0.0.1:5544/postgres`, else the same server's old user `shakedown`).
 - `SHAKEDOWN_PROJECT`: the project folder whose worlds, scenarios, setups and experiments shaked serves (each a
   YAML file: `worlds/<id>/world.yaml`, `scenarios/<id>.yaml`, `setups/<id>.yaml`, `experiments/<id>.yaml`,
   with `shakedown.yaml` at the root). Edits made outside the app are seen on the next request. Unset: the
@@ -112,9 +201,9 @@ Environment variables, read once at startup by shaked (each also under its old n
 - `SHAKEDOWN_ALLOWED_HOSTS`: more `Host` names `/api` answers, comma-separated, for a shaked that serves
   others (default: loopback only). An open-source shaked refuses to start with it set.
 - `SHAKEDOWN_DB`: the database of shaked's records on that server (default `shakedown`, else an existing
-  `arena`).
-- `SHAKEDOWN_VAULT_KEY` (64 hex characters) or `SHAKEDOWN_VAULT_KEY_FILE`: the key your model keys are sealed
-  with (AES-256-GCM, each bound to its row). Without either, `core/vault.key` is made (mode 0600, ignored by
+  `shakedown`).
+- `SHAKEDOWN_VAULT_KEY` (64 hex characters) or `SHAKEDOWN_VAULT_KEY_FILE`: the key your model keys (and the
+  headers of your observability targets) are sealed with (AES-256-GCM, each bound to its row). Without either, `core/vault.key` is made (mode 0600, ignored by
   git) the first time a key is saved; a shaked whose layer serves others refuses to start without one of the
   two. A lost vault key makes the saved keys unreadable: add them again.
 - `SHAKEDOWN_OBJECT_STORE`: object stores for saves, transcripts and exports, `name=url,name=url` or one URL
@@ -213,6 +302,32 @@ from. The retail example reads its data from `data/retail` (relative to its pack
   object already there with the right checksum is skipped, so it reruns safely. `--repoint` points the saves
   whose objects all verified at the destination; a save whose object no longer matches its recorded checksum
   stays where it is. Exits 1 when any object failed.
+- `shaked worker --link <ws(s)://host/worker> --ticket-file <path>`: runs one branch in a sandbox for the shaked
+  at `--link` (cloud runs start it; you don't run it by hand). It waits for the ticket file, reads it and deletes
+  it, links to `GET /worker`, stands the world up from the base save and drives the agents. Hand the ticket over
+  by writing it, newline-terminated, to a temporary file in the same folder and renaming that to `--ticket-file`:
+  the worker reads the file only once it ends with a newline. Every event goes over the link and counts as
+  recorded once acknowledged; at most 64 wait for acknowledgement. It holds no database and no secrets (no vault,
+  no model keys from its environment), and its agents reach its MCP endpoint, gateway and proxy on `127.0.0.1`
+  only. Its gateway checks the agent's token, holds a paused branch's calls and makes the save point, then sends
+  each model call on to the control box's gateway (`Start.gateway`, the same route) with the worker token as its
+  only credential: the control box adds the run's key (chosen as above), calls the provider and records the call as
+  its one `model_call` event (the worker records none). A call the control box held for a pause the worker had
+  not heard of yet goes again once the pause ends; its 402 puts the run over its limit in the worker too, and its
+  `OverBudget` frame stops the branch, which ends `budget_exceeded`. Claude Code there gets `ANTHROPIC_BASE_URL`
+  (its agent's route on the worker's gateway) and Codex `OPENAI_BASE_URL` (the same, `…/v1`), each with the
+  agent's token as its key (`ANTHROPIC_API_KEY`; `OPENAI_API_KEY` and `CODEX_API_KEY`). In a cloud sandbox
+  (`SHAKED_AGENT_NETWORK`, `SHAKED_AGENT_IMAGE` and `SHAKED_AGENT_LISTEN` set, by the template in
+  `deploy/sandbox`), each Claude Code or Codex process runs in a throwaway container of the agent image, as uid
+  1000 with no capabilities, 1 GiB and 256 processes at most and a read-only root, on a Docker network that reaches only the worker's MCP endpoint and gateway at
+  `SHAKED_AGENT_LISTEN`; it sees only its work folder and the variables above. An event too large for one frame is cut down first: strings over 16 KiB are cut to 16 KiB and the payload
+  gets `truncated: true`; when that is still too large, the payload becomes `{truncated: true, bytes, head}` (its
+  size and its first 64 KiB as JSON). A dropped link is tried again at once, then every 2 s, resending what was
+  not acknowledged. The link counts as down until the control box shows it works again (an ack, a pause, resume
+  or stop, or a ping while nothing waits for an ack), so a connection that is accepted and then closed, or that
+  pings but never acknowledges, keeps the clock running; after 5
+  minutes down the worker stops the world and exits 1. It exits 0 once the branch's end is recorded.
+  `SHAKEDOWN_WORKER_RETRY_MS` and `SHAKEDOWN_WORKER_GIVE_UP_MS` change the 2 s and the 5 minutes (for tests).
 
 ## Import from git
 
@@ -254,16 +369,24 @@ setups, 2 experiments, no problems; its benchmark describes itself from the impo
 
 ## Use Shakedown from an agent (MCP)
 
-Every operation shaked offers is defined once in its operation registry and served two ways: as an HTTP route
-and as a tool of the control MCP server, so the UI, the assistant, scripts and any agent can do the same things.
+Every project operation (the project's status, settings and import; listing, reading, writing and deleting worlds,
+scenarios, setups and experiments, and what uses each; undoing a delete; renaming a world group; deploying an experiment and listing its deployments; reading a MADL setup) is
+defined once in shaked's operation registry and served two ways: as an HTTP route and as a tool of the control MCP
+server (tool names replace `.` with `_`: `worlds_put`, `experiments_deploy`), so the UI, the assistant, scripts and any
+agent can do the same things. Runs, forks, compare and the other `/api` routes are HTTP only.
 A test (`core/crates/shaked/tests/parity.rs`) fails if an operation is missing from either.
 
 - On this machine, over stdio: `claude mcp add shakedown -- shaked mcp --project ~/work/my-project` (Codex:
   `[mcp_servers.shakedown] command = "shaked"`, `args = ["mcp", "--project", "…"]`).
 - Over HTTP: `POST /mcp` with `Authorization: Bearer <token>`. A `read` token lists and reads; editing or
   deleting project files needs `admin`; starting runs needs `run`.
-- Edits follow the project's `permissions` in `shakedown.yaml`: with `edit: diff_first` a put returns a diff and
-  writes only when sent again with `confirm: true`.
+- Edits follow the project's `permissions` in `shakedown.yaml`: with `edit: diff_first` every operation that takes
+  `confirm` (a put, `project_update`, `project_import`, `project_restore`, `worlds_rename_group`, and a cascading
+  delete) returns what it would change and writes only when sent again with `confirm: true`. `spend` is stored but not enforced yet: the assistant always
+  asks before a deploy, and an MCP client's token scope alone decides.
+- `shaked mcp` (stdio) has no running engine, so `experiments_deploy` and `experiments_runs` answer that they need
+  one; use `POST /mcp` on a running shaked for those.
+- Hosted, the server is `https://app.coppertide.ai/sd/mcp` with an API token (Project settings → Use from an agent).
 
 This is separate from the MCP endpoint an agent under test gets in a run (`/mcp/{branch}/{agent}`, the world's
 tools).
@@ -288,7 +411,8 @@ key replaces the environment's key for that provider (on its server, unless the 
 `local:<name>` of the same name). The newest key of a provider wins. Without one, the environment's key is
 used. An agent can also name one key as its provider, `key:<name>`. Where keys are shared between people (a
 hosted org), only your own keys apply by kind: another member's key serves your agent only when it names it
-`key:<name>`, and never when that key names its own server.
+`key:<name>`, and never when that key names its own server. In a cloud run the same keys apply, the run
+owner's: the sandbox holds none, and the control box adds the key to each model call.
 
 A local provider is any server that speaks the OpenAI chat-completions API, such as Ollama, vLLM, LM Studio or
 llama.cpp's server. For example:
@@ -318,7 +442,11 @@ What the gateway does per provider:
   `tool_result` blocks, and `max_tokens` is the request's own or `SHAKEDOWN_ANTHROPIC_MAX_TOKENS`. Nothing else is
   carried over, so sampling fields such as `temperature` are dropped, and a forced tool choice becomes `auto`. The
   answer is translated back: `stop_reason` `end_turn` is `stop`, `tool_use` is `tool_calls`, `max_tokens` is
-  `length` and `refusal` is `content_filter`; usage becomes prompt, completion and total tokens.
+  `length` and `refusal` is `content_filter`; usage becomes prompt (the whole input), completion and total
+  tokens, with `input_tokens`, `cache_creation_input_tokens` and `cache_read_input_tokens` kept beside them (Bedrock's
+  Converse counts under the same names), so cache writes and cache hits are priced at their own rates.
+- CLI agents' calls through `messages` and `responses` (see "HTTP API" above) are not translated: they go to a
+  provider that speaks that API as they came, and are recorded raw.
 - Every call is recorded in the canonical (OpenAI) form, with `provider` (the id that answered) and, when the
   provider's own answer differs from the canonical one (Anthropic), `provider_response`. A 401 or 403 answer is
   recorded without its error message, which may quote the key.
@@ -330,8 +458,8 @@ What the gateway does per provider:
   with the category when Claude gives one.
 
 Cost per provider: OpenRouter's is the cost it reports (`cost_source: "openrouter"`). OpenAI and Anthropic
-report no price and shaked keeps no price table, so their tokens are recorded and the cost is unknown
-(`cost_usd: null`); the UI shows `unknown`. A local server's cost is 0 with
+report no price, so the call records tokens (`cost_usd: null`) and the metrics price them at `docs/prices.toml`'s list
+prices for the models it lists (`list-price estimate`), else the UI shows `unknown`. A local server's cost is 0 with
 `cost_source: "local (no API charge)"`; the UI shows `no API charge`.
 
 ## AI review
@@ -352,7 +480,7 @@ Optional. A real model reads a compact digest of the record and answers in JSON,
   example runs where it passed and failed.
 - **The reviewer.** Claude Code is run as `claude -p --output-format json --tools "" --strict-mcp-config
   --setting-sources "" --no-session-persistence`, with the reviewer's system prompt, the answer's JSON schema
-  (`--json-schema`) and the digest on stdin, in a fresh folder, with the same environment scrubbing as the CLI
+  (`--json-schema`) and the digest on stdin, in a fresh folder, with the same allowlisted environment as the CLI
   agents. A provider gets one chat-completions call. The cost is Claude Code's own (API-equivalent) figure, the
   provider's, or the list price of `docs/prices.toml`.
 - **What is kept.** The answer is validated (unknown enum values read leniently and said in `issues`, lists
@@ -360,11 +488,37 @@ Optional. A real model reads a compact digest of the record and answers in JSON,
   review's runs must be runs of that suite): others are dropped and listed in `issues`, and an item whose every
   citation was dropped is marked `unverified`. A review is stored per branch, pair of branches or pair of suites,
   and redone only when asked. Reviews running when shaked stops are marked failed when it starts again.
-- **In the web UI.** Advanced → AI review turns it off in that browser. On the Run screen and the run page a
+- **In the web UI.** ⋯ → AI review turns it off in that browser. On the Run screen and the run page a
   Review card shows under the result; a run watched to its end there is reviewed at once, an older one has a
   "Review this run" button. Each cited step selects it; a prompt or team suggestion has "Rewind and try this",
   which opens "Change and rerun" at the suggested step with the text added to the agent's prompt. The compare pages
   show "What matters" above the outcome, reviewed when the page opens.
+
+### Ask about a step
+
+On the run page's step panel, **Ask about this step** sends a question about that step ("Why did the agent make
+this reasoning statement?") to a model, the *explainer*, which answers from what the agent had at that step:
+
+- **What it reads.** The step; the ticket and the agent's prompt; the messages sent to the agent's model for the
+  step (the model call a thought names, the step itself for a model call, else the agent's latest call before it:
+  its system prompt, the conversation and the tool results), that call's response; the 40 steps before it and the
+  run's scenario. Each is a *source* with an id (`s<seq>`, `m<seq>.<i>`, `m<seq>.response`, `ticket`, `prompt`,
+  `scenario`), its step and its field (`request.messages[0] (system)`). Texts are cut (4 000 bytes; the step 8 000,
+  earlier steps 1 200) and the sources kept to 60 000 bytes, the step first, then the ticket and prompt, then the
+  call's first and last six messages and its response, then the earlier steps; `sources_left_out` counts the rest.
+  The prompt is `core/crates/shaked/src/review/ask_prompt.md`.
+- **What is kept.** `answer`, a few plain sentences; `evidence`, each a quote of one source with why it bears on the
+  question, kept only when that source's full text has the quote word for word (whitespace aside), with the
+  source's step and field: any other is dropped and said in `issues`; `speculation`, the explainer's hypotheses,
+  labelled as inference, citing only sources there are. Each question is stored as a review row (key
+  `ask:<branch>:<seq>:<id>`, kind `ask`) with who asked (`asked_by`, the layer's principal; `mine` when it was
+  you), when, the model, its cost and tokens; hosted, rows are the org's under row-level security.
+- **Whose key.** The explainer runs on your own key: the model picked (default the AI review model,
+  `SHAKEDOWN_REVIEW_MODEL`) is resolved as agents' providers are, and refused (409) when it would run on the
+  layer's fallback key, or, where the layer lends no environment keys (hosted), on the environment's key or
+  Claude Code. Locally the environment's keys and Claude Code are yours.
+- **From the assistant or MCP.** The operations `questions.ask` (spend: the assistant asks you to confirm; `wait`
+  answers once done) and `questions.list`, authorized as the branch's routes are.
 
 Checked on the pharma demo (2026-11-08) with Claude Code Sonnet: the failed six-agent haiku run ($0.11, 19 s),
 the single Sonnet agent ($0.07, 9 s) and their comparison ($0.10, 13 s for the model after about 45 s comparing
@@ -392,7 +546,7 @@ delete the run. The Rust build directory `core/target` also grows; `cd core && c
   only when no test is running, since tests make unreferenced saves.
 - The tests drop what they create, even when an assertion fails. `core/scripts/leakcheck.sh` (run from `core`)
   runs each of the core's test binaries and fails if one leaves databases behind: Postgres `pi_`, `ps_`,
-  `branch_`, `snap_` and `arena_test` databases, and MariaDB `mi_` and `mx_` ones when `LEAKCHECK_MARIADB` names
+  `branch_`, `snap_` and `shakedown_test` databases, and MariaDB `mi_` and `mx_` ones when `LEAKCHECK_MARIADB` names
   the server container.
 
 ## Tests
@@ -417,8 +571,11 @@ The tests of `integrations/ridgeline-hub` and `integrations/isaac-sim` read the 
 public yet**: without it every test of those two packages is skipped, and the packages can't start. The CopperTide
 program that `integrations/sculptured` runs is not published yet either; its live test is skipped without it.
 
-Tests never call a real model unless they are `live_`, and no test uses a fake model server or a scripted
-agent: everything an agent does in a test is done by a real model. shaked's `live_` tests
+Tests never call a real model unless they are `live_`. No test supplies a scripted agent to a run, and nothing
+client-facing uses one; some tests use a scripted OpenAI-compatible server standing in for a model
+(`core/crates/shaked/tests/support/fake_llm.rs`, for the assistant, provider keys, vLLM-shaped answers and external
+runs), a local server standing in for Bedrock (`src/providers/bedrock*`), or a stand-in for an agent's endpoint
+(`sdk/python/tests/test_adapters.py`). shaked's `live_` tests
 (`core/crates/shaked/tests/support/live.rs`) run on Claude Code (`claude`, signed in) with `SHAKEDOWN_LIVE_MODEL`
 (default `haiku`), or on shaked's own agent loop when a provider key is set (`ANTHROPIC_API_KEY`,
 `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, or `SHAKEDOWN_LOCAL_MODELS` with `SHAKEDOWN_LIVE_MODEL`); `SHAKEDOWN_LIVE_AGENT=claude`

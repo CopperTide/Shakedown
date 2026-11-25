@@ -46,13 +46,14 @@ function labelClass(p: Placed, shape: Shape, selected: boolean): string {
   return cn('rounded-sm px-0.5 text-2xs whitespace-nowrap', tone, selected && 'bg-raised text-fg shadow-pop ring-1 ring-accent');
 }
 
-function MarkButton({ p, selected, onSelect }: { p: Placed; selected: boolean; onSelect: (seq: number) => void }) {
+function MarkButton({ p, selected, dim, onSelect }: { p: Placed; selected: boolean; dim: boolean; onSelect: (seq: number) => void }) {
   const shape = shapeOf(p.mark);
   const text = textOf(p, selected);
   const style: CSSProperties = { left: p.x, top: RULER_H + p.lane * LANE_H + LANE_H / 2 };
   return (
     <button data-seq={p.mark.seq} title={hint(p.mark)} aria-label={hint(p.mark)} aria-pressed={selected} onClick={() => onSelect(p.mark.seq)}
-      className={cn('group absolute flex items-center gap-1 rounded-sm outline-none', p.mark.inherited && 'opacity-40', selected ? 'z-20' : 'z-10')}
+      data-dim={dim || undefined}
+      className={cn('group absolute flex items-center gap-1 rounded-sm outline-none', p.mark.inherited && 'opacity-40', dim && !selected && 'opacity-15', selected ? 'z-20' : 'z-10')}
       style={{ ...style, transform: 'translate(-6px, -50%)' }}>
       <span className="grid size-3 place-items-center">
         <span className={cn('block', SHAPE[shape], selected && 'ring-2 ring-accent ring-offset-2 ring-offset-surface')} />
@@ -143,6 +144,8 @@ export interface TimelineProps {
   live?: boolean;
   /** Pauses, drawn as bands across the lanes. */
   pauses?: Pause[];
+  /** The steps a filter keeps: the other marks are dimmed (null: none filtered). */
+  matches?: ReadonlySet<number> | null;
 }
 
 /** The track's zoom and scroll, applied to the box, and whether it follows the newest step. */
@@ -283,7 +286,7 @@ function Bands({ layout, height }: { layout: Layout; height: number }) {
 }
 
 /** Swim lanes per agent on one time axis: every action labelled by system kind and read/write, messages drawn between lanes. */
-export default function ActionTimeline({ lanes, team, span, selected, onSelect, models, onModels, live = false, pauses = [] }: TimelineProps) {
+export default function ActionTimeline({ lanes, team, span, selected, onSelect, models, onModels, live = false, pauses = [], matches = null }: TimelineProps) {
   const box = useWidth();
   const labelW = box.width && box.width < 640 ? 112 : 184;
   // A phone gets a track wider than the screen, to scroll; a desktop fits the run at 1×.
@@ -305,7 +308,7 @@ export default function ActionTimeline({ lanes, team, span, selected, onSelect, 
             <Ruler layout={layout} />
             <Bands layout={layout} height={height} />
             <Wires layout={layout} lanes={lanes.length} width={t.trackW} selected={selected} />
-            {layout.placed.map((p) => <MarkButton key={p.mark.seq} p={p} selected={selected === p.mark.seq} onSelect={onSelect} />)}
+            {layout.placed.map((p) => <MarkButton key={p.mark.seq} p={p} selected={selected === p.mark.seq} dim={!!matches && !matches.has(p.mark.seq)} onSelect={onSelect} />)}
           </div>
         )}
       </div>

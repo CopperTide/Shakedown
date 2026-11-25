@@ -1,4 +1,4 @@
-//! The real packages (`arena-postgres`, `arena-retail`, built once per test binary) behind a hub
+//! The real packages (`shakedown-postgres`, `shakedown-retail`, built once per test binary) behind a hub
 //! of the test's own: its own Postgres namespace (`?shakedown_ns=` on `SHAKEDOWN_PG_URL`) and its own save
 //! folder, both removed when the `TestHub` drops, so tests never touch each other's databases or
 //! the live shaked's.
@@ -38,7 +38,7 @@ pub fn package_roots() -> Vec<PathBuf> {
     vec![repo().join("integrations"), repo().join("benchmarks")]
 }
 
-/// `cargo build -p arena-postgres -p arena-retail` and the kit's `counter` example (debug),
+/// `cargo build -p shakedown-postgres -p shakedown-retail` and the kit's `counter` example (debug),
 /// once per test binary.
 pub fn build() {
     static ONCE: OnceLock<()> = OnceLock::new();
@@ -93,17 +93,22 @@ pub struct TestHub {
 impl TestHub {
     pub fn new(extra: &[PathBuf]) -> TestHub {
         build();
-        static N: AtomicU64 = AtomicU64::new(0);
-        let ns = format!(
-            "t7{}n{}_",
-            std::process::id(),
-            N.fetch_add(1, Ordering::Relaxed)
-        );
-        let saves = std::env::temp_dir().join(format!("shaked-saves-{ns}"));
-        let _ = std::fs::remove_dir_all(&saves);
-        std::fs::create_dir_all(&saves).unwrap();
+        let (ns, saves) = fresh_namespace();
         let hub = hub_on(&ns, &saves, extra);
         TestHub { hub, ns, saves }
+    }
+
+    /// A hub over `roots` alone that starts no package program (`with_programs(false)`), as on a
+    /// control box whose packages run only in sandboxes.
+    pub fn sandbox_only(roots: &[PathBuf]) -> TestHub {
+        let (ns, saves) = fresh_namespace();
+        let registry = Registry::scan(roots).unwrap();
+        let hub = Hub::new(registry, bin_dir(), saves.clone()).with_programs(false);
+        TestHub {
+            hub: Arc::new(hub),
+            ns,
+            saves,
+        }
     }
 
     /// Another hub on this one's namespace and save folder, over the real packages plus `extra`
@@ -147,6 +152,17 @@ impl TestHub {
             .unwrap();
         serde_json::from_value(r["differing"].clone()).unwrap()
     }
+}
+
+/// A new Postgres namespace and its empty save folder.
+fn fresh_namespace() -> (String, PathBuf) {
+    static N: AtomicU64 = AtomicU64::new(0);
+    let n = N.fetch_add(1, Ordering::Relaxed);
+    let ns = format!("t7{}n{n}_", std::process::id());
+    let saves = std::env::temp_dir().join(format!("shaked-saves-{ns}"));
+    let _ = std::fs::remove_dir_all(&saves);
+    std::fs::create_dir_all(&saves).unwrap();
+    (ns, saves)
 }
 
 /// A hub over the real packages plus `extra`, in Postgres namespace `ns`, saving under `saves`.

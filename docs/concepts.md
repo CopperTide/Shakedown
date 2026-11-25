@@ -14,6 +14,97 @@ Whatever the design does in production, it does here. Shakedown is slower than p
 writes the record at every step), so it times its own work and reports what the run would take without it. The protocol each program speaks is in [protocol.md](protocol.md); routes, settings and disk use
 are in [reference.md](reference.md).
 
+## Project files
+
+What a person builds lives in a **project**: `shakedown.yaml` at its root and one YAML file per item, edited in the
+app's editors (Worlds, Scenarios, Agent setups, Experiments), through the control MCP server, or by hand. Locally the
+project is a folder (`SHAKEDOWN_PROJECT`). Hosted Shakedown keeps each org's project in its database, one row per
+file at the same paths, so the files below and every rule about them are the same in both. Code:
+`core/crates/project` (formats in `src/format/`, where files live in `src/store/`); routes in
+[reference.md](reference.md#http-api); how a project is stored in [internals/project-store.md](internals/project-store.md).
+
+| Item | File | `format:` | Holds |
+|---|---|---|---|
+| Project | `shakedown.yaml` | `shakedown-project/1` | name, defaults, `permissions` (`edit: diff_first \| apply_then_tell`, `spend`), the assistant's model |
+| World | `worlds/<id>/world.yaml` | `shakedown-world/3` | `label`, `group` (optional, e.g. the customer it is for), `package` (its runtime), `connectors`, `flows`, `data`, `people`, `observability` |
+| Scenario | `scenarios/<id>.yaml` | `shakedown-scenario/1` | `world`, `task` (the ticket), `preset` (the package's task it plays), `changes`, `events`, `gates`, `checks` |
+| Agent setup | `setups/<id>.yaml` | `shakedown-setup/1` | `team`: `builtin` agents, `claude-code`, `codex`, `http`, `code` or `madl` |
+| Experiment | `experiments/<id>.yaml` | `shakedown-experiment/1` | `world`, `scenario`, `setups`, `repeats`, `budget`, `parent` |
+
+Every file parses strictly: an unknown field, a wrong `format:` or a credential written inline (a value shaped like a
+key, or a literal `password`/`token`-like field) is a problem with a JSON pointer, and a problem never stops the rest
+of the project from loading. Broken references (a scenario's world, an experiment's world, scenario, setups and
+parent, and an experiment whose world is not its scenario's) are problems of the item that holds them. Ids are 1–64
+lowercase letters, digits and dashes. Writes are atomic (in hosted Shakedown a change that touches several files, such
+as a cascading delete or a group rename, is saved in one transaction); with `edit: diff_first` a put answers a diff
+and writes only when confirmed.
+
+**World data.** A file source in a world's `data` is a path in its data folder, `worlds/<id>/`. The world editor's Data
+section has a View button on each file source that shows the file (or the files of a folder) read-only: text up to
+1 MiB, or the size of a binary file. The same is `worlds.data` for MCP, the assistant and the API.
+
+**Groups.** A world's optional `group` is the name lists show it under, so the worlds of one customer sit together:
+the Worlds page lists groups A to Z, the worlds in no group last, and worlds by label within each. A file without `group` loads and saves exactly as before (the
+field is written only when set); a blank name, or one with spaces at either end, is a problem at `/group`. Set it in
+the world's Overview (a choice of the project's groups or a new one), drag a world onto a group's header (a toast
+offers Undo), or rename a group from its header, which rewrites every world in it, each file checked before any is
+written (`worlds.rename_group`, `core/crates/project/src/groups.rs`; an empty new name takes them out of any group,
+and an existing name merges the two). Moving or renaming writes `world.yaml` again from its parsed form, so comments
+and key order in the file are not kept.
+
+**What uses what, and deleting.** References are walked in one place (`references` in
+`core/crates/project/src/validate.rs`, used by the cross-check too): a scenario names its world; an experiment its
+world, scenario, setups and `parent`. Deleting an item takes with it every scenario and experiment that names it or a
+deleted item through a world or scenario, and an experiment left comparing no setup; an experiment that compares other
+setups too only loses the deleted one (`setup_dropped`), and a sub-experiment of a deleted experiment loses its
+`parent` and stands on its own (`parent_cleared`); an experiment can do both, and the preview lists every `fates`
+that applies (`Project::dependents` and `Project::fallout`,
+`core/crates/project/src/dependents.rs`). A delete is refused while anything uses the item (409 with the
+`dependents`); "Delete only if unused" in the app is then off. With `cascade: true` the whole delete is planned and
+every rewritten file checked before anything changes, then carried out from the leaves in (rewritten experiments,
+deleted experiments, deleted scenarios, the item), so a failure part way leaves no reference to a missing item. A
+cascade sent with `expect` (what the preview showed) is refused with 409 and the fresh `dependents` if they have
+changed; under `edit: diff_first` an unconfirmed cascade answers `{proposed, dependents}` and deletes nothing.
+
+Deleted files are not unlinked: they move to `.shakedown/trash/<stamp>/` at their paths in the project, with copies of
+the files the delete rewrote and a `manifest.json` holding a SHA-256 of what the delete wrote to each
+(`core/crates/project/src/trash.rs`). `.shakedown/` holds a `.gitignore` of `*`, so a project never commits its trash;
+every delete of the last 30 days is kept, and always the last 20. `project.restore` puts the most recent delete (or
+the one named by `trash`) back, refusing with 409 while a removed file's path is taken again or a rewritten file was
+edited since (a missing one is put back); unconfirmed under `diff_first` it answers the files and the `trash` it would
+restore, so confirming restores that delete even if another delete came in between. The app offers Undo in the toast
+after a delete and under Project settings → Deleted files (`project.deleted` names the most recent delete). A world's
+data folder and a setup's own folder (a MADL team file) stay where they are: only the item's YAML file goes. The
+deployments of a deleted experiment are unlinked from it (`project_experiment` set to null) and noted in the delete's
+trash (`runs.json`), so its runs list under Earlier experiments, a new file with the same id starts with none, and
+undoing the delete links them again (`runs_relinked`). The files have moved by then, so a database failure answers
+`runs_unlinked: false` (or `runs_relinked: false`) and is logged rather than failing the request. The delete
+dialog, and the assistant's delete card, show all of this before anything is deleted. The Worlds page opens each world
+onto its scenarios and each scenario onto its experiments; a world's page lists its scenarios, a scenario's page its
+experiments, and an experiment's page shows World › Scenario › Experiment.
+
+**Deploying** a project experiment (`POST /api/project/experiments/{id}/deploy`, `core/crates/shaked/src/ops/deploy.rs`)
+maps the files onto an engine experiment: the world's `package` is the benchmark it runs on, the scenario's `preset` is
+the task, each event's `fault` and `params` become the package's disruptions, each setup becomes a team (runner
+`chain`; a built-in agent's `key` becomes its provider `key:<name>`, and an `http` setup's `auth` becomes a
+reference the endpoint's requests are signed from), and `repeats.per_setup` and `budget.per_run_usd` become runs per setup and each run's spend limit (see [Spend limits](#spend-limits); in the app,
+the **Spend cap per run (USD)** field of New experiment and of the experiment's Settings tab, a positive number or empty
+for no cap). Until
+worlds run from their files alone, nothing else in the files reaches a run: a world's connectors, flows, data, people
+and observability; a scenario's `task` text (runs get the preset task's ticket), `changes`, `gates`, `checks` and each
+event's `at`, `after_calls` and `effects`; an experiment's `per_deployment_usd` (seeds are always paired). A `key` that is not stored, or is another
+member's and names its own server, refuses the deploy with a 400 that names it and the setup. An `auth` is checked the
+same way: `auth.key` must name one of your own stored keys of kind `custom` (a model provider key or a key shared with
+you is refused), the secret must not be empty, and naming both `key` and `env` is refused. `auth.env` is read only where
+the layer lets environment keys serve callers (never on a hosted shaked), and only for names starting with
+`SHAKEDOWN_AGENT_`; otherwise the 400 does not say whether the variable exists. The agent keeps only the reference
+(`{key: name}` or `{env: NAME}`); the secret is read from your keys each time a request is made, under the caller the
+run is for, and appears in no event, record, fork note or log. Header values typed into a team are kept in memory for
+the caller that typed them (the scope and the principal: the person, the token's holder or the user), and another caller citing their reference, a colleague in the same scope included, gets nothing.
+Setups of kind `code` and `madl` are refused ("can't be deployed from a file yet"). Each deployment is an experiment
+linked to its file (`GET /api/project/experiments/{id}/runs`). `project.import` moves installed benchmarks and earlier
+experiments into the project as files.
+
 ## Glossary
 
 - **Integration**: a program, in any language, that puts one kind of system in the world (a database, a folder
@@ -24,7 +115,8 @@ are in [reference.md](reference.md).
 - **Import**: a git repo brought into a project at one commit (`project.import_git`): its packages installed and
   registered under the import's id, its worlds, scenarios, setups and experiments copied into the project. A world
   then runs the systems the repo already has, not a rebuilt copy (see [reference.md](reference.md#import-from-git)).
-- **World**: the list of parts a benchmark names. Tool names must be unique across a world.
+- **World**: the list of parts a benchmark names. Tool names must be unique across a world. A project's world file
+  names the benchmark (or built world) whose world it runs on (see [Project files](#project-files)).
 - **Benchmark**: a package that names a world and brings tasks, instructions for the agents, tools, the data
   that seeds the world, and for each task the gold actions that define the expected result.
 - **Run**: one task, one team, one world. A run has one or more branches; its first branch is the original.
@@ -35,7 +127,8 @@ are in [reference.md](reference.md).
 - **Fork**: a new branch of a run that starts at step N of an existing branch with a change (an agent's prompt,
   model or kind). The world is restored to how it was just before the fork point, and the branch reruns from
   there.
-- **Restore**: a fork restores the world exactly or approximately (see [Restore modes](#restore-modes)).
+- **Restore**: a fork restores the world exactly or approximately, or for evaluation leaves it as the parent
+  ended (see [Restore modes](#restore-modes)).
 - **Scoring**: when a branch ends, shaked saves every part and diffs the world with the task's gold world (the
   base world plus the task's gold actions, made once and kept). The branch passes when no key differs and at
   least one part could be checked.
@@ -77,6 +170,14 @@ A fork asks for one restore mode for the whole world. Each integration declares 
 
 The table is implemented in `core/crates/shaked/src/restore.rs`. `GET /api/branches/{id}/restore-plan` and the
 rerun panel show, per part, how it will be restored and, for a replay, an estimate of the time.
+
+**none** is for evaluation only (the snapshots-off ablation): the agents get their context up to the fork point,
+as in any fork, but the world is left as the parent branch ended, the way forks that keep no world state work.
+Each part starts from the save of its end state (the check's final saves, else its last save; a part with only
+replay repeats every recorded input) and the clock from the parent's last step. Only a fork request that says
+`restore: "none"` gets it, never a default. The branch records `restore_mode: "none"` and each part's `how` as
+`none`, so results can be filtered. Such a branch's own steps can't be forked (its world at its start isn't what
+the saves before it say; fork its parent instead), and the UI doesn't offer it.
 
 ## When the world is saved
 
@@ -245,17 +346,25 @@ Isolation of the CLI agents (`core/crates/shaked/src/agents/`; checked live by t
   web search off; read-only sandbox. Codex's built-in shell cannot be turned off. A probe from inside the
   sandbox could not open a socket, not even to the loopback Postgres port (`Operation not permitted`). Codex
   still listed its sub-agent tools (`collaboration.*`) in the live checks; they run under the same restrictions.
-- Both CLIs run in a fresh temporary working directory, with `PG*`, `SHAKEDOWN_PG_URL`, `DATABASE_URL`,
-  `OPENROUTER_API_KEY`, `SHAKEDOWN_LOCAL_MODELS` and every `SHAKEDOWN_LOCAL_KEY_*` removed from their environment. Each
-  keeps only its own vendor's key, which it may sign in with: Claude Code keeps `ANTHROPIC_API_KEY` and loses
-  `OPENAI_API_KEY`; Codex keeps `OPENAI_API_KEY` and loses `ANTHROPIC_API_KEY`. The `provider` of API mode does
-  not apply to them.
+- Both CLIs run in a fresh temporary working directory, and of shaked's environment they get only `PATH`, `HOME`,
+  `USER`, `LOGNAME`, `SHELL`, `LANG`, every `LC_*`, `TERM`, `TZ`, `TMPDIR`, every `XDG_*`, `SSL_CERT_FILE`,
+  `SSL_CERT_DIR` and `NODE_EXTRA_CA_CERTS`. Nothing else reaches them: no key, token, secret or password of any
+  service, no database or vault setting, and no proxy setting (`HTTPS_PROXY` and the like, which can carry
+  credentials). Besides that base each keeps only its own vendor's key, which it may sign in with: Claude Code
+  gets `ANTHROPIC_API_KEY`, Codex `OPENAI_API_KEY`. The `provider` of API mode does not apply to them on this
+  machine.
+- In a sandbox (`shaked worker`), which holds no model key, their model calls go through the worker's gateway
+  instead: Claude Code's `ANTHROPIC_BASE_URL` and Codex's `OPENAI_BASE_URL` point at it, the agent's token as the
+  key, and the control box sends each call on with the run's key (an agent's `provider`, if it names one, picks
+  that key) and records it. A dispatch session there prices its calls into the run's estimate but leaves their
+  `model_call` events to the control box. Each Claude Code or Codex process there runs in its own container as
+  an unprivileged user, on a network that reaches only the worker's MCP endpoint and gateway.
 - A CLI session cannot be resumed in the middle, which drives the fork rules below.
 
 ## Forking
 
-You choose a step N and a change (prompt, model, provider, kind or `read_only` of one or more agents) and a
-restore mode.
+You choose a step N and a change (prompt, model, provider, kind, `read_only` or `tools` of one or more agents) and
+a restore mode.
 
 - Each part of the world is put back as it was just before the fork point, in the restore mode you choose.
 - Agents that finished before the fork point keep their recorded output (for example the handoff note).
@@ -284,6 +393,16 @@ restore mode.
   belongs to the old provider, unless the same change sets one; only OpenRouter has a default model, so the web UI
   always sends a model with a provider. Naming the agent's own provider is no change.
 - Changing `read_only` is treated like a prompt change; setting it to what the agent already has is no change.
+- `disruptions: {add, remove}` changes the world's scheduled disruptions from the fork point on: `add` takes options
+  of the benchmark's scenario (as a run's `scenario` does), `remove` the ids of disruptions the branch's setups armed
+  before the fork point (one that already fired is dropped too, but what it changed stays). The change is one call of
+  each part's scenario tool, recorded as a setup step at the new branch's start ([protocol.md](protocol.md), "A
+  run's scenario"); a part whose tool can't take it refuses the fork. Retail's faults take it, and so do the
+  scenario tools on the Python kit's `jsonstate` (utility, OT network, roster, the pharma parts) and the hub's.
+- `tools` gives the agent exactly the world tools it lists from the fork on, like a setup's `tools`; it is treated
+  like a prompt change, and the same list as the agent's is no change. A tool the world doesn't offer agents is
+  refused (400), and so is an empty list, which would mean every tool rather than none (make the agent `read_only`
+  or list what it keeps). Tools the fork gives an agent beyond its setup's list are named in the fork note.
 
 ## External designs
 
@@ -342,6 +461,35 @@ work, not after:
   it, the gateway answers each further model call 402 `{error}` without sending it upstream, and the first refusal
   is recorded as the world event `budget/limit_reached`. The run goes on (its driver decides to stop) and is scored
   when it finishes or its window ends.
+- A run in a sandbox (`shaked worker`) is held to its limit by the control box, not by the sandbox:
+  - The limit is the one the control box planned the run with, kept in the store with the branch's rules, never
+    what the worker records; a linked branch with no rules on record makes no model calls (503).
+  - The control box's gateway prices every model call of the branch (all three routes) into its own estimate. A call
+    whose cost can't be known (output without a reported cost, a zero one, or a stream cut before it said what it
+    used: it broke off, said `error`, or ended without its final event) is charged a conservative estimate: its
+    input (as reported, else its request's size in bytes over 4) at the provider's highest listed input price times
+    1.25 (it could all have been a cache write), plus its output at the highest output price, the output being the
+    largest of every output limit the request names and the output it reported (4096 when it names none, unless it
+    used more). An OpenRouter model `vendor/model` is bounded by its vendor's prices. When even that can't be had, a
+    run with a limit is put over it at once; a run without one goes on. Models without a known cost are refused
+    (400).
+  - Once the estimate is past the limit, every further call is refused 402 before it reaches a provider,
+    `budget/limit_reached` is recorded once, and the branch is stopped for its limit: it ends `budget_exceeded`,
+    scored, whatever its worker reports, and the control box ends it itself if the worker does not within 30 s.
+  - A branch has a pool of 4 times its agents' count of calls in flight at once, shared by all its agents (Claude
+    Code makes some in parallel), so at most that many in-flight calls can finish past the limit: the overshoot is
+    bounded, not zero.
+  - The estimate, the hold and the refusal are kept in the store: a control-box restart rebuilds them (the spend
+    from the `charged_usd` of the calls it recorded).
+- The worker keeps its own estimate too, so a well-behaved one stops first. On a local run only the run's own count
+  decides: a person's stop stays `stopped`, and a failed agent's infrastructure error stays `infra_error`, over the
+  limit or not.
+
+Pausing and stopping a run in a sandbox works the same as a local one for whoever presses it: the control box keeps
+the pause or stop itself, refuses the branch's model calls while it is paused (409) or stopping, tells the worker
+when it can, and has the last word on how a stopped branch ends. A stopped run in the cloud ends even across a
+control-box restart: the restarted control box gives its worker the same 30 s to report its end, then ends it
+itself.
 
 ## World time windows
 
@@ -453,14 +601,18 @@ labelled `UTC−4`; a world without one shows UTC (`14:05Z`).
 Each tool call also records `duration_ms`, how long the tool ran in the world (gate checks and saves left out;
 absent for a call that reached no part, and in older runs).
 
-Shakedown's web UI shows a run in the same control form as CopperTide Control (`/control/{run}/{branch}`): the agents
+Shakedown's web UI shows a run in its process view (`/control/{run}/{branch}`): the agents
 as units and the world's parts as equipment, labelled with their kind, product, what they stand in for and
 whether they are simulated, with the action flows between them; a timeline with a lane per agent, each tool call
 marked by system kind and read or write (writes solid, reads hollow, approvals and refusals as interlocks, errors
 and refusals the only colour), with its duration and outcome; trends (actions per minute per system, context per
 model call, tokens and cost); and the inspector for one step. It follows a running branch over the event stream.
-Suites have an overview (`/suites/{id}`: scenarios × repeats, pass rates, safety, spread) and a comparison
-(`/suites/compare/{a}/{b}`). Checked by eye on two external suites of the retail benchmark driven by a script
+On the run page, the timeline and the event log share a filter: by action (Reasoning, Model call, a system's
+read or write…), agent and outcome, each value with its count, and a search over the detail. The event log lists
+only the matching steps and the timeline dims the others; the filter is in the address (`?action=Reasoning&agent=…
+&outcome=error&q=…`), so a filtered view can be shared.
+Suites show as experiments (`/experiments/{id}`: pass rates, safety, spread; `/suites/{id}` redirects there), and
+several side by side at `/experiments/compare?ids=a,b`. Checked by eye on two external suites of the retail benchmark driven by a script
 before scripted drivers were removed; not yet checked again with real agents.
 
 ## Built worlds
@@ -471,7 +623,7 @@ The world builder (`benchmarks/world`, a package of `kind = "builder"`) generate
 and a seed, the same way every time, and shaked writes it to `SHAKEDOWN_WORLDS` as a benchmark package, installs it,
 makes its base saves in the background and then makes it the current benchmark (new runs use it). Runs, suites
 and experiments keep the benchmark they were created with, so choosing another world never changes a run that is
-going. Run once and New experiment have a world picker; the choice is remembered across a restart (unless
+going. Run once and Experiment on a benchmark have a world picker; the choice is remembered across a restart (unless
 `SHAKEDOWN_BENCHMARK` names another). A built world is never changed or deleted: a change is a new world under another
 name. See `docs/reference.md` (`/api/worlds`)
 and `docs/packages.md` ("Templates and built worlds").
@@ -526,9 +678,11 @@ start_seq`), as compare does:
   context one was sent with (`peak_prompt_tokens`), the compactions its client reported, and the overhead recorded
   on its own events (`overhead_s`; when agents run at once, an event's overhead may have held up others too);
 - **cost** per agent: the cost the provider reported (`reported`; Claude Code's own figure is an API-equivalent
-  estimate); `no API charge` for a local model; otherwise tokens times the list price in `docs/prices.toml`,
-  labelled `list-price estimate` with the price's source and date (base input and output prices only: caching,
-  batch and long-context prices are not modelled); otherwise `unknown`. Shakedown never makes up a price. The branch's
+  estimate); `no API charge` for a local model; `list-price estimate` when shaked worked the agent's cost out at list
+  prices itself (cost source `list_price_estimate`: an API-mode agent on a provider that reports no price, or a turn
+  stopped before Claude Code said its cost); otherwise tokens times the list price in `docs/prices.toml`,
+  labelled `list-price estimate` with the price's source and date (cache and long-context rates included where the
+  table lists them; batch discounts are not modelled); otherwise `unknown`. Shakedown never makes up a price. The branch's
   cost is the sum when every agent's is known (labelled `mixed` when their labels differ), else `unknown`.
 
 ## AI review
@@ -539,18 +693,29 @@ change (a prompt, the team, a tool, the model or the process; for a prompt chang
 went well; for two runs or two suites, the few differences that matter and which did better. shaked checks every
 citation against the record and stores the review. Details in [reference.md](reference.md#ai-review).
 
+**Ask about a step.** On any step of the run page, ask a model a question about it ("why did the agent say
+this?"). It answers from what the agent actually had at that step (the messages and tool results sent to its
+model, its prompt, the ticket, the steps before), keeping *evidence*, quotes of the record checked word for word
+and each citing its step and field, apart from *speculation*, its labelled guess at how the model got there. It
+runs on your own model key, and the answers stay listed under the step with who asked, the model and the cost.
+Details in [reference.md](reference.md#ask-about-a-step).
+
 ## Cost labels
 
 - `openrouter`: the cost OpenRouter reports (API mode on OpenRouter).
 - `local (no API charge)`: API mode on a local server; the cost is 0 and the UI shows `no API charge`.
-- No label and no dollar figure on API mode with OpenAI or Anthropic: they report no price and shaked keeps no
-  price table, so only tokens are recorded; the UI shows the cost as `unknown`.
+- API mode with OpenAI, Anthropic or Bedrock: they report no price, so each call is priced at `docs/prices.toml`
+  (cache writes and cache hits at their own rates, as the gateway charges them) for the models it lists, and the
+  agent's end is labelled `list_price_estimate`; a model it doesn't list leaves the cost `unknown`. The table lists
+  Anthropic's models only for now, so OpenAI and Bedrock calls stay `unknown`. The model calls themselves keep no
+  provider label.
 - These labels are the providers' own. The metrics above also estimate a cost from `docs/prices.toml` where no
   provider reported one.
 - `api_equivalent_estimate`: Claude Code's own `total_cost_usd`. It is what the same tokens would cost at API
   prices, not what a subscription pays.
-- `list_price_estimate`: shaked's own estimate of an agent's calls at `docs/prices.toml` prices, for a turn stopped
-  before Claude Code reported its cost (a spend limit, a time limit); `api_equivalent_estimate+list_price_estimate`
+- `list_price_estimate`: shaked's own estimate of an agent's calls at `docs/prices.toml` prices: an API-mode agent's
+  on a provider that reports no price, and a turn stopped before Claude Code reported its cost (a spend limit, a
+  time limit); `api_equivalent_estimate+list_price_estimate`
   when earlier turns had reported theirs. See [Spend limits](#spend-limits).
 - No label and no dollar figure: Codex reports tokens only.
 - Dollars are shown only when every agent in the branch has a dollar figure; otherwise only tokens are shown,

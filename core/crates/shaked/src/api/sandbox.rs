@@ -87,8 +87,7 @@ async fn report(
     let n = r.events.len();
     for e in r.events {
         let p = serde_json::to_value(payload(&r.agent, e, ctx.clock.now_ms()))?;
-        ctx.append(&state.store, None, EventKind::WorldEvent, p)
-            .await?;
+        ctx.append(None, EventKind::WorldEvent, p).await?;
     }
     Ok(Json(json!({"recorded": n})))
 }

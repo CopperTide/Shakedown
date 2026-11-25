@@ -20,8 +20,8 @@ DRIVERS = Path(__file__).resolve().parents[1] / "examples" / "drivers"
 MODELS = {"openai": "gpt-4.1-mini", "openrouter": "openai/gpt-4.1-mini", "anthropic": "claude-haiku-4-5"}
 
 
-def _provider(arena) -> tuple[str, str]:
-    for p in arena.providers():
+def _provider(shakedown) -> tuple[str, str]:
+    for p in shakedown.providers():
         if p.get("available") and p["id"] in MODELS:
             return p["id"], MODELS[p["id"]]
     pytest.skip("no gateway provider: set OPENAI_API_KEY (or OPENROUTER_API_KEY, ANTHROPIC_API_KEY) "
@@ -31,21 +31,21 @@ def _provider(arena) -> tuple[str, str]:
 @pytest.mark.parametrize("framework,module", [
     ("langgraph", "langgraph"), ("crewai", "crewai"), ("openai_agents", "agents"),
 ])
-def test_example_driver_runs_a_scored_run(arena, framework, module):
+def test_example_driver_runs_a_scored_run(shakedown, framework, module):
     pytest.importorskip(module, reason=f"needs the {framework.replace('_', '-')} extra")
-    provider, model = _provider(arena)
-    before = {r.id for r in arena.runs()}
+    provider, model = _provider(shakedown)
+    before = {r.id for r in shakedown.runs()}
     env = {k: v for k, v in os.environ.items() if not k.startswith("SHAKEDOWN_")}
-    env.update(SHAKEDOWN_URL=arena.url, SHAKEDOWN_TASK=arena.tasks()[0].id, SHAKEDOWN_PROVIDER=provider,
+    env.update(SHAKEDOWN_URL=shakedown.url, SHAKEDOWN_TASK=shakedown.tasks()[0].id, SHAKEDOWN_PROVIDER=provider,
                SHAKEDOWN_MODEL=model)
     done = subprocess.run([sys.executable, str(DRIVERS / f"{framework}_driver.py")], env=env,
                           capture_output=True, text=True, timeout=900)
-    new = [r for r in arena.runs() if r.id not in before]
+    new = [r for r in shakedown.runs() if r.id not in before]
     assert len(new) == 1, f"the driver started one run: {done.stderr[-2000:]}"
     run_id = new[0].id
     try:
         assert done.returncode == 0, done.stderr[-2000:]
-        rec = arena.branch(new[0].branches[0]["id"]).record()
+        rec = shakedown.branch(new[0].branches[0]["id"]).record()
         agents = {e.agent for e in rec.events if e.kind == "agent_start"}
         assert agents, "the driver registered its agents"
         worked = {e.agent for e in rec.events if e.kind == "tool_call"}
@@ -53,4 +53,4 @@ def test_example_driver_runs_a_scored_run(arena, framework, module):
         assert any(e.kind == "check" for e in rec.events)
         assert any(e.kind == "reasoning" for e in rec.events), "no reasoning recorded"
     finally:
-        arena.delete_run(run_id)
+        shakedown.delete_run(run_id)

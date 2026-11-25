@@ -76,10 +76,10 @@ framework adapters integrated; bringing a system in takes "a few lines … not h
   endpoint and OpenAI-compatible gateway per agent, `finish`), `http` and `bedrock` agents, per-agent `tools`
   allowlists, `read_only`, the OpenShell wrapper (`deploy/openshell`, `POST /api/branches/{id}/sandbox-events`),
   named checks with `safety` and `measure`, gold-world scoring, suites/experiments/compare, AI review (digest,
-  reviewer, citation check in `core/crates/arenad/src/review/`).
+  reviewer, citation check in `core/crates/shaked/src/review/`).
 - New checks land in the existing `check` event, so suites, experiments and compare count them with no changes to
   their maths.
-- Code identifiers stay `arena*` (crate `arenad`, Python package `arena`, `ARENA_*`) until the planned rename
+- Code identifiers stay `shakedown*` (crate `shaked`, Python package `shakedown`, `SHAKEDOWN_*`) until the planned rename
   pass; every user-facing string says Shakedown.
 - Shared machine: `CARGO_BUILD_JOBS=2`, vitest one worker, no debug info.
 - Branch `any-agent` (worktree `.worktrees/any-agent`), from `ridgeline-video`, the newest engine line.
@@ -119,11 +119,11 @@ exact check).
 ### 1. Drivers and adapters (G1, G2, G3)
 
 **A driver** is a program the team writes once, next to its code. Shakedown starts it with the run's details in
-the environment (`ARENA_URL`, `ARENA_BRANCH`, a token), or the team runs it itself against a run it started.
+the environment (`SHAKEDOWN_URL`, `SHAKEDOWN_BRANCH`, a token), or the team runs it itself against a run it started.
 Shape the plan should hit (LangGraph shown; the others follow the same pattern):
 
 ```python
-from arena.adapters import langgraph as sd
+from shakedown.adapters import langgraph as sd
 from my_company.agents import build_graph        # the team's code, unchanged
 
 with sd.run() as run:                              # joins the run Shakedown started (or starts one)
@@ -137,18 +137,18 @@ MCP endpoint), a native model object pointed at the gateway, and a callback/hook
 intermediate steps. `run` ends with `finish` (scoring) when the block exits, and records a failure if it raises.
 A framework's sub-agents (a CrewAI crew's members, LangGraph nodes acting as agents, OpenAI Agents SDK handoffs)
 each register as their own Shakedown agent, so the run page shows them as separate swimlanes. The adapters ship
-as optional extras of the Python SDK (`arena[langgraph]`, `arena[crewai]`, `arena[openai-agents]`).
+as optional extras of the Python SDK (`shakedown[langgraph]`, `shakedown[crewai]`, `shakedown[openai-agents]`).
 
 **A "Code" connection** (beside HTTP and Bedrock in Connect your agent): a command (`uv run driver.py`), a working
 folder, and env vars. Test connection starts it against a throwaway run. Picking it in New experiment makes the
-setup's runner `external`; arenad launches the command per run and treats exit without `finish` as a failed run.
+setup's runner `external`; shaked launches the command per run and treats exit without `finish` as a failed run.
 Suites use the same command through the existing claim flow.
 
-**Where the driver runs, and trust** (my call). arenad launches a Code connection's command only when it listens on
+**Where the driver runs, and trust** (my call). shaked launches a Code connection's command only when it listens on
 localhost (today's single-user install), and then inside one sandbox for the driver process whose network reaches
-only arenad and the agents' gateways. When arenad is reachable from elsewhere (hosted), launching is refused and the
+only shaked and the agents' gateways. When shaked is reachable from elsewhere (hosted), launching is refused and the
 driver connects in from the team's own machine instead and claims runs, as external suites already do. Connections
-are stored by arenad (not only in browser storage) so suites can launch them.
+are stored by shaked (not only in browser storage) so suites can launch them.
 
 **Forks of Code runs** (my call). A fork relaunches the driver on the new branch against the world restored to the
 fork point. The adapters expose the agents' recorded history before that point (`run.history(agent)`); a driver that
@@ -184,7 +184,7 @@ An agent setup gains an optional `sandbox`:
   after the command, so forks, replay and end-state checks stay exact. Real outside hosts may be allowed one by one;
   runs that called one are labelled "reached outside the world" (not reproducible) on the run page, in suites and in
   compare.
-- With `shell` set, the agent gets a `shell {command}` tool on its MCP endpoint; arenad runs the command inside the
+- With `shell` set, the agent gets a `shell {command}` tool on its MCP endpoint; shaked runs the command inside the
   agent's sandbox and records it as a tool call with stdout, stderr and exit code. Commands outside the allowlist,
   and blocked hosts and paths, fail inside the sandbox; the denial is recorded (as today's sandbox events) and
   counts as a denial in suites.
@@ -192,7 +192,7 @@ An agent setup gains an optional `sandbox`:
   allowed binaries plus a network policy). The plan picks the exact mechanism; the requirement is that a live
   probe (an agent asked to run a disallowed command and reach a disallowed host) is refused and recorded.
 - One sandbox per agent per run (per branch on forks), created when the agent starts, destroyed when it ends.
-- **Sandbox programs** (`arena-sandbox/1`, documented in `docs/protocol.md` style): `describe`, `create {policy,
+- **Sandbox programs** (`shakedown-sandbox/1`, documented in `docs/protocol.md` style): `describe`, `create {policy,
   image?}`, `exec {sandbox, command, timeout}`, `events {sandbox}` (denials), `destroy`. OpenShell and Docker are
   the two built-in implementations; a user's own sandbox service is a small program implementing these five.
 - The UI: a "Tools and sandbox" section in each agent's settings: provider, image, commands, hosts, folders.
@@ -223,7 +223,7 @@ Expectations live with a task (a file in the benchmark, e.g. `data/expect/<task>
     count: 0
 ```
 
-- Evaluated by arenad over each part's `inspect` docs at the **start** (the seeded world, saved already) and the
+- Evaluated by shaked over each part's `inspect` docs at the **start** (the seeded world, saved already) and the
   **end** (the final save). Operators: `=`, `!=`, `<`, `<=`, `>`, `>=`, `in`, `contains`, `exists`, `absent`,
   `count`; `field` is a dotted path into the doc; `unchanged: true` and `change: {from, to}` compare start and
   end; `all`/`any` combine checks.
@@ -236,7 +236,7 @@ Expectations live with a task (a file in the benchmark, e.g. `data/expect/<task>
   named checks); a run passes when every check passes. A task with expectations and nothing else is scored by them
   alone. An experiment whose setups have different expectation sets shows the differing checks as `incomparable`,
   as compare already does, so past suites stay comparable on the checks they share.
-- **Where confirmed checks live** (my call): in arenad's database per benchmark task, versioned (who, when, what
+- **Where confirmed checks live** (my call): in shaked's database per benchmark task, versioned (who, when, what
   changed), picked up by every later run, suite and experiment of that task, and exportable to / importable from the
   benchmark's `data/expect/<task>.yaml`. Each run records the version of the expectations it was scored with.
 
@@ -247,7 +247,7 @@ Expectations live with a task (a file in the benchmark, e.g. `data/expect/<task>
 - After a run is scored, the judge (Claude Sonnet by default, model configurable; reuses the review pipeline's
   digest and citation check) reads: ticket and instructions, every step (tool calls with arguments and results,
   messages, handoffs), the reasoning steps, the start-to-end world diff, and the expectation results. Per criterion
-  it returns `pass | fail | cannot_tell`, a short rationale, and cited step numbers; arenad rejects uncited or
+  it returns `pass | fail | cannot_tell`, a short rationale, and cited step numbers; shaked rejects uncited or
   mis-cited verdicts and stores the judge model, prompt version and cost.
 - Judge verdicts are shown and aggregated next to the deterministic checks (per-criterion rates in suites and
   compare) but are **not** part of the score or pass rate. A setting may promote a criterion into the pass rate,
@@ -274,7 +274,7 @@ per agent with point marks (tool calls, messages, model calls, starts, ends) and
   total per agent and for the run; clicking a category highlights only it across every lane. Off by default so the
   timeline stays simple.
 - **Timing source.** Every model call and tool call records its start and duration (tool calls and gateway model
-  calls already can be timed in arenad; adapters and CLI streams report theirs). Where only an end time is known (a
+  calls already can be timed in shaked; adapters and CLI streams report theirs). Where only an end time is known (a
   CLI's reported model call), the segment is drawn as estimated (hatched) and its legend total says "estimated".
 - **Agent process panel.** Selecting a bar opens the turn in the inspector: what the agent was given, its reasoning
   (`reasoning` steps), each model call (request and response where recorded), each tool call with arguments,
@@ -309,7 +309,7 @@ judge), and docs updated in `docs/concepts.md`, `docs/agents.md`, `docs/protocol
 - Both operations experts and engineers write expectations (English drafted into exact checks).
 - Judge verdicts kept out of the pass rate unless promoted per criterion.
 - Sandbox scratch files are not saved for forks.
-- Branch from `ridgeline-video`; code names stay `arena*` until the rename pass.
+- Branch from `ridgeline-video`; code names stay `shakedown*` until the rename pass.
 
 ## Left to the builder
 

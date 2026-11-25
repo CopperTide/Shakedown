@@ -1,4 +1,4 @@
-//! Disk hygiene: the bytes the arena keeps, deleting a run's saves, and the startup cleanup of
+//! Disk hygiene: the bytes the shakedown keeps, deleting a run's saves, and the startup cleanup of
 //! saves no event names.
 
 use crate::store::Scoped;
@@ -14,18 +14,23 @@ use serde::Serialize;
 use crate::{
     model::Event,
     recorded::{named_saves, NamedSave},
-    saves::{self, integration_of, integrations, world_of},
+    save_calls::{self, integration_of, integrations, world_of},
     store::Store,
     world::instance_id,
 };
 
-/// Bytes the arena keeps: the `usage` of each integration `benchmark`'s world uses, plus the
-/// save folders. An integration that is not installed keeps nothing and is skipped.
+/// Bytes the shakedown keeps: the `usage` of each integration `benchmark`'s world uses, plus the
+/// save folders. An integration that is not installed keeps nothing and is skipped; so does a
+/// benchmark that is not. A hub that starts no program (packages run in sandboxes) counts the
+/// save folders alone: its integrations keep nothing here.
 pub async fn usage(hub: &Hub, benchmark: &str) -> Result<u64> {
     let mut bytes = hub.saves_bytes();
+    if !hub.runs_programs() || hub.registry().get(benchmark).is_none() {
+        return Ok(bytes);
+    }
     let world = integrations(hub, benchmark).await?;
     for i in world.iter().filter(|i| hub.registry().get(i).is_some()) {
-        bytes += saves::usage(hub, i).await?;
+        bytes += save_calls::usage(hub, i).await?;
     }
     Ok(bytes)
 }
@@ -90,7 +95,7 @@ async fn drop_doomed(hub: &Hub, doomed: &Doomed, run_id: &str) -> usize {
     let mut dropped = 0;
     for (integration, list) in &doomed.saves {
         for save in list {
-            match saves::drop_save(hub, integration, save).await {
+            match save_calls::drop_save(hub, integration, save).await {
                 Ok(existed) => dropped += usize::from(existed),
                 Err(e) => eprintln!("delete run {run_id}: could not drop {save}: {e:#}"),
             }
@@ -98,7 +103,7 @@ async fn drop_doomed(hub: &Hub, doomed: &Doomed, run_id: &str) -> usize {
     }
     for (integration, list) in &doomed.instances {
         for instance in list {
-            if let Err(e) = saves::stop(hub, integration, instance).await {
+            if let Err(e) = save_calls::stop(hub, integration, instance).await {
                 eprintln!("delete run {run_id}: could not stop {instance}: {e:#}");
             }
         }
@@ -149,7 +154,7 @@ pub async fn run_gc(store: &Store, hub: &Hub, benchmark: &str) -> Result<GcRepor
     let mut removed = BTreeSet::new();
     for i in integrations(hub, benchmark).await? {
         let before = hub.save_dirs(&i);
-        match saves::gc(hub, &i, &keep).await {
+        match save_calls::gc(hub, &i, &keep).await {
             Ok(Some(r)) => {
                 report.result.dropped += r.dropped;
                 report.result.bytes += r.bytes;
@@ -180,4 +185,26 @@ pub async fn run_startup_gc(store: &Store, hub: &Hub, benchmark: &str) -> Result
         total.bytes / 1_000_000
     );
     Ok(total)
+}
+
+#[cfg(test)]
+mod usage_tests {
+    use super::*;
+
+    /// A shaked with no benchmark installed (hosted: packages run in sandboxes) counts its save
+    /// folders alone, instead of failing `/api/health`.
+    #[tokio::test]
+    async fn usage_without_a_benchmark_is_the_saves_alone() {
+        let root =
+            std::env::temp_dir().join(format!("shaked-gc-{}", uuid::Uuid::new_v4().simple()));
+        let (packages, saves) = (root.join("packages"), root.join("saves"));
+        std::fs::create_dir_all(&packages).unwrap();
+        std::fs::create_dir_all(saves.join("s1")).unwrap();
+        std::fs::write(saves.join("s1/data"), [0u8; 10]).unwrap();
+        let registry = parts::Registry::scan(&[packages]).unwrap();
+        let hub = Hub::new(registry, root.join("bin"), saves);
+        let bytes = usage(&hub, "").await;
+        let _ = std::fs::remove_dir_all(&root);
+        assert!(bytes.unwrap() >= 10);
+    }
 }

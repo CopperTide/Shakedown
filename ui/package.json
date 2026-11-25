@@ -1,5 +1,5 @@
 {
-  "name": "arena-ui",
+  "name": "shakedown-ui",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -27,6 +27,7 @@
     "cmdk": "1.1.1",
     "lucide-react": "1.61.0",
     "maplibre-gl": "5.6.0",
+    "posthog-js": "1.447.6",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "react-router-dom": "7.18.4",

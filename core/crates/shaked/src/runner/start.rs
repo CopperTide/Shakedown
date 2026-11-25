@@ -1,21 +1,23 @@
 //! Starting a run: its first branch, its world from the base save, its `RunStart` and the
 //! task's setup.
 
-use crate::{auth::Caller, store::Scoped};
-use std::{sync::Arc, time::Instant};
+use std::{future::Future, sync::Arc, time::Instant};
 
 use anyhow::{anyhow, Result};
 use parts::proto::{BenchDescribe, WorldTimeParams};
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::{
     app::AppState,
-    exec::{BranchCtx, ToolExec},
+    auth::Caller,
+    exec::{BranchCtx, BranchRecords, StoreRecords, ToolExec},
+    launch::LaunchSpec,
     model::*,
     overhead::{self, Cat, Overhead},
     scenario::{self, Scenario},
-    store::{BranchId, RunId},
-    world::{self, Plan, World, WorldFrom},
+    store::{BranchId, RunId, Scoped},
+    world::{self, World, WorldFrom},
 };
 
 /// The largest seed a run may ask for: below 2^53, so every JSON reader keeps it exact.
@@ -23,15 +25,17 @@ pub const MAX_SEED: u64 = (1 << 53) - 1;
 
 /// A new branch seed: random, below 2^53 so every JSON reader keeps it exact.
 pub fn new_seed() -> u64 {
-    (uuid::Uuid::new_v4().as_u128() as u64) & ((1 << 53) - 1)
+    (uuid::Uuid::new_v4().as_u128() as u64) & MAX_SEED
 }
 
-/// Why a run did not start: the benchmark has no such task, or something failed on the way.
+/// Why a run did not start: the benchmark has no such task, it was refused, or something failed on
+/// the way.
 #[derive(Debug, thiserror::Error)]
 pub enum RunError {
     #[error("unknown task {0}")]
     UnknownTask(String),
-    /// The layer refused to admit the run (a quota reached).
+    /// The run was refused: by the layer (a quota reached), or because packages run only in
+    /// sandboxes here (403).
     #[error("{}", .0.message)]
     Refused(crate::layer::Refusal),
     #[error(transparent)]
@@ -127,9 +131,9 @@ impl<'a> RunOptions<'a> {
         let none = Scenario::default();
         let scope = match self.scope {
             Some(s) => s.clone(),
-            None => Arc::new(crate::auth::Caller::person()),
+            None => Arc::new(Caller::person()),
         };
-        let spec = crate::launch::LaunchSpec {
+        let spec = LaunchSpec {
             scope,
             task_id,
             team,
@@ -142,8 +146,16 @@ impl<'a> RunOptions<'a> {
     }
 }
 
-/// The benchmark `benchmark` (else the current one), which must have the task `task_id`.
-async fn bench_with(
+/// `rules` with `scenario`'s stepped clock; refused on another runner than dispatch.
+fn stepped_rules(rules: Rules, scenario: &Scenario) -> Result<Rules, RunError> {
+    if let Some(why) = crate::scenario::refusal(rules.runner, scenario) {
+        return Err(RunError::Other(anyhow!(why)));
+    }
+    Ok(rules.with_stepped(scenario.clock.clone()))
+}
+
+/// The benchmark `benchmark` names (else the current one), when it has the task `task_id`.
+async fn bench_with_task(
     state: &AppState,
     benchmark: Option<&str>,
     task_id: &str,
@@ -158,49 +170,137 @@ async fn bench_with(
     Ok(bench)
 }
 
-/// `rules` with `scenario`'s stepped clock; refused on another runner than dispatch.
-fn stepped_rules(rules: Rules, scenario: &Scenario) -> Result<Rules, RunError> {
-    if let Some(why) = crate::scenario::refusal(rules.runner, scenario) {
-        return Err(RunError::Other(anyhow!(why)));
-    }
-    Ok(rules.with_stepped(scenario.clock.clone()))
+/// Everything a worker needs to stand a branch up and drive it. Serialisable: it travels in the
+/// `start` frame.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct BranchPlan {
+    pub run_id: RunId,
+    pub branch_id: BranchId,
+    pub task_id: String,
+    /// The benchmark the run is of (resolved, never empty).
+    pub benchmark: String,
+    pub team: Team,
+    pub rules: Rules,
+    pub scenario: Scenario,
+    /// Where the branch's world clock starts: 0 for a run's first branch.
+    pub clock_from_ms: i64,
 }
 
 /// Creates a run and its first branch, starts its world from the base save, records `RunStart`
 /// with `rules` and `scenario`, and makes the task's setup (with the scenario's disruptions): the
-/// branch, ready to be driven.
+/// branch, ready to be driven. `record_start`, then `stand_up` into the store. (`spec.driver`
+/// is the launcher's business, not this.)
 pub async fn begin_run(
     state: &AppState,
-    scope: &Arc<Caller>,
-    benchmark: Option<&str>,
-    task_id: &str,
-    team: Team,
-    rules: Rules,
-    scenario: &Scenario,
+    spec: &LaunchSpec<'_>,
 ) -> Result<(RunId, BranchCtx), RunError> {
-    let rules = stepped_rules(rules, scenario)?;
-    let bench = bench_with(state, benchmark, task_id).await?;
-    let planned = world::plan(&state.hub, &bench).await?;
-    let records = state.store.at(scope);
-    let run_id = records.create_run(task_id, &team).await?;
-    let branch_id = records
-        .create_branch(&run_id, None, &team, &json!([]), None)
-        .await?;
-    let start = RunStartOf {
-        branch_id: &branch_id,
-        task_id,
-        team: &team,
-        rules: rules.clone(),
-        scenario,
+    let plan = record_start(state, spec).await?;
+    let scope = &spec.scope;
+    let store = StoreRecords::new(state.store.clone(), scope.clone(), plan.branch_id.clone());
+    let ctx = stand_up(state, &plan, Arc::new(store)).await?;
+    Ok((plan.run_id, ctx.with_caller(scope.clone())))
+}
+
+/// Refuses a run where packages run only in sandboxes (403): describing its benchmark and
+/// planning its world would start the world's package programs here.
+fn packages_here(state: &AppState) -> Result<(), RunError> {
+    let policy = state.store.layer().policy();
+    let refused = crate::bind::local_only(policy, "starting a world's parts");
+    let status = axum::http::StatusCode::FORBIDDEN;
+    refused.map_err(|why| RunError::Refused(crate::layer::Refusal::new(status, why)))
+}
+
+/// The first half of beginning a run: creates the run and its first branch for `spec.scope`,
+/// after checking packages run here and the benchmark has the task. The plan to stand the branch
+/// up from (`RunStart` waits for the world, which it records, so `stand_up` writes it first of the
+/// branch's events).
+pub async fn record_start(state: &AppState, spec: &LaunchSpec<'_>) -> Result<BranchPlan, RunError> {
+    packages_here(state)?;
+    let bench = bench_with_task(state, spec.benchmark, spec.task_id).await?;
+    // A world whose tools clash is refused before anything is recorded.
+    world::plan(&state.hub, &bench).await?;
+    record(state, spec, bench.name).await
+}
+
+/// Why a run on a control box whose branches run in sandboxes is refused when it names no
+/// benchmark and none is chosen.
+pub const NO_BENCHMARK: &str = "no benchmark is chosen for this run";
+
+/// [`record_start`] for a control box whose branches run in sandboxes: the run and its first
+/// branch recorded without describing the benchmark or planning its world, so no package
+/// program starts here. The sandbox's worker describes and plans it (`stand_up`): a task the
+/// benchmark lacks, or tools that clash, end the branch there, saying why.
+pub async fn record_unplanned(
+    state: &AppState,
+    spec: &LaunchSpec<'_>,
+) -> Result<BranchPlan, RunError> {
+    let named = spec.benchmark.map(str::to_string);
+    let benchmark = named.unwrap_or_else(|| state.benchmark());
+    if benchmark.is_empty() {
+        let status = axum::http::StatusCode::UNPROCESSABLE_ENTITY;
+        return Err(RunError::Refused(crate::layer::Refusal::new(
+            status,
+            NO_BENCHMARK,
+        )));
+    }
+    record(state, spec, benchmark).await
+}
+
+/// Records the run `spec` describes of `benchmark` and its first branch, the rules on record.
+async fn record(
+    state: &AppState,
+    spec: &LaunchSpec<'_>,
+    benchmark: String,
+) -> Result<BranchPlan, RunError> {
+    let rules = stepped_rules(spec.rules.clone(), spec.scenario)?;
+    let records = state.store.at(&spec.scope);
+    let run_id = records.create_run(spec.task_id, &spec.team).await?;
+    let none = json!([]);
+    let created = records.create_branch(&run_id, None, &spec.team, &none, None);
+    let branch_id = created.await?;
+    // The rules on record are the control box's: a sandbox's worker cannot change them.
+    records.set_rules(&branch_id, &rules).await?;
+    Ok(BranchPlan {
+        run_id,
+        branch_id,
+        task_id: spec.task_id.to_string(),
+        benchmark,
+        team: spec.team.clone(),
+        rules,
+        scenario: spec.scenario.clone(),
+        clock_from_ms: 0,
+    })
+}
+
+/// The second half: starts the branch's world from the base save, records `RunStart` (it holds
+/// what the world says, so it is recorded here) and makes the task's setup, recording through
+/// `records`. A failure ends the branch `infra_error` with why.
+pub async fn stand_up(
+    state: &AppState,
+    plan: &BranchPlan,
+    records: Arc<dyn BranchRecords>,
+) -> Result<BranchCtx, RunError> {
+    let started = start_world(state, plan, &*records).await;
+    let (bench, world, start_seq, record_ms) = match started {
+        Ok(s) => s,
+        Err(e) => {
+            let set = records.set_status(BranchStatus::InfraError, Some(format!("{e:#}")));
+            note_failed_setup(&plan.branch_id, set).await;
+            return Err(e.into());
+        }
     };
-    let started = start_world(state, records, &bench, planned, start).await;
-    let (world, start_seq, record_ms) = setup_or_infra_error(records, &branch_id, started).await?;
-    let ctx = BranchCtx::new(branch_id, Arc::new(world), team, task_id.to_string());
-    let clock = crate::clock::BranchClock::for_rules(&rules, 0);
-    let ctx = (ctx.with_rules(rules).with_clock(clock)).with_caller(scope.clone());
+    let ctx = BranchCtx::new(
+        plan.branch_id.clone(),
+        Arc::new(world),
+        plan.team.clone(),
+        plan.task_id.clone(),
+    );
+    let clock = crate::clock::BranchClock::for_rules(&plan.rules, plan.clock_from_ms);
+    let ctx = (ctx.with_rules(plan.rules.clone()).with_clock(clock)).with_records(records);
+    let ctx = ctx.with_run_id(plan.run_id.clone());
     ctx.overhead.add(Cat::Record, record_ms);
-    set_up_task(state, &bench, &ctx, scenario, start_seq).await?;
-    Ok((run_id, ctx))
+    set_up_task(state, &bench, &ctx, &plan.scenario, start_seq).await?;
+    Ok(ctx)
 }
 
 /// Makes the task's setup calls (with `scenario`'s disruptions) on a new run's world, then records
@@ -230,7 +330,10 @@ async fn set_up_task(
         Err(e) => e,
     };
     ctx.world.stop().await;
-    setup_failed(ctx.records(&state.store), &ctx.branch_id, e.clone()).await;
+    let set = ctx
+        .records()
+        .set_status(BranchStatus::InfraError, Some(e.clone()));
+    note_failed_setup(&ctx.branch_id, set).await;
     Err(anyhow!(e))
 }
 
@@ -242,30 +345,14 @@ async fn save_after_setup(exec: &ToolExec, ctx: &BranchCtx) {
     }
 }
 
-/// What a run's `RunStart` records besides its world.
-struct RunStartOf<'a> {
-    branch_id: &'a str,
-    task_id: &'a str,
-    team: &'a Team,
-    rules: Rules,
-    scenario: &'a Scenario,
-}
-
-/// A new branch's setup result; a failed setup ends the branch `infra_error` with its message.
-pub async fn setup_or_infra_error<T>(
-    records: Scoped<'_>,
-    branch_id: &str,
-    r: Result<T>,
-) -> Result<T> {
-    if let Err(e) = &r {
-        setup_failed(records, branch_id, format!("{e:#}")).await;
-    }
-    r
-}
-
 /// Ends a branch whose setup failed `infra_error` with `error`; a store failure is logged.
 pub async fn setup_failed(records: Scoped<'_>, branch_id: &str, error: String) {
     let set = records.set_status(branch_id, BranchStatus::InfraError, Some(error));
+    note_failed_setup(branch_id, set).await;
+}
+
+/// Waits for `set`, a failed setup's `infra_error` being recorded; a store failure is logged.
+async fn note_failed_setup(branch_id: &str, set: impl Future<Output = Result<()>>) {
     if let Err(e) = set.await {
         eprintln!("branch {branch_id}: could not record its failed setup: {e:#}");
     }
@@ -276,37 +363,36 @@ pub async fn setup_failed(records: Scoped<'_>, branch_id: &str, error: String) {
 /// systems, tools, scenario?}` (`saves` names only the parts that keep saves; `base_seed` is the
 /// seed the base save was made with; `runner` and `handoff` are the run's rules; `systems` and
 /// `tools` are what `World::systems` and `World::tool_info` say; `scenario` the expanded scenario,
-/// when the run has one), with the world's restore as its overhead. The world, `RunStart`'s seq
-/// and how long recording it took (overhead for the branch's next event).
+/// when the run has one), with the world's restore as its overhead. The benchmark, the world,
+/// `RunStart`'s seq and how long recording it took (overhead for the branch's next event).
 async fn start_world(
     state: &AppState,
-    records: Scoped<'_>,
-    bench: &BenchDescribe,
-    planned: Plan,
-    of: RunStartOf<'_>,
-) -> Result<(World, i64, f64)> {
-    crate::mode::local_only(state.store.layer().policy(), "starting a world's parts")
+    plan: &BranchPlan,
+    records: &dyn BranchRecords,
+) -> Result<(BenchDescribe, World, i64, f64)> {
+    crate::bind::local_only(state.store.layer().policy(), "starting a world's parts")
         .map_err(anyhow::Error::msg)?;
-    let branch_id = of.branch_id;
-    let seed = of.scenario.seed.unwrap_or_else(new_seed);
-    let (hub, mut planned) = (state.hub.clone(), planned);
-    let clock_start = task_clock_start(bench, of.task_id);
-    let mut world_time = world_time_of(clock_start);
-    if of.rules.stepped.is_some() {
-        world_time.speed = 0.0; // a stepped clock runs on no wall time
-    }
-    planned.world_time = Some(world_time);
+    let bench = state.bench_named(&plan.benchmark).await?;
+    let planned = world::plan(&state.hub, &bench).await?;
+    let (branch_id, hub) = (plan.branch_id.as_str(), state.hub.clone());
+    let seed = plan.scenario.seed.unwrap_or_else(new_seed);
+    let clock_start = task_clock_start(&bench, &plan.task_id);
+    let world_time = world_time_of(clock_start, &plan.rules);
     let since = Instant::now();
-    let world = World::start_planned(hub, bench, planned, branch_id, seed, WorldFrom::Base).await?;
+    let from = WorldFrom::Base;
+    let world =
+        World::start_branch(hub, &bench, planned, branch_id, seed, from, world_time).await?;
     let restored = Overhead::of(Cat::Restore, overhead::ms_since(since));
-    let mut start = run_start(bench, &world, seed, &of);
+    let mut start = run_start(&bench, &world, seed, plan);
     start.world_epoch_ms = Some(world_time.epoch_ms);
-    start.world_utc_offset_min = clock_start
-        .and_then(crate::world_clock::ClockStart::parse)
-        .and_then(|c| c.utc_offset_min);
+    start.world_utc_offset_min = utc_offset_min(clock_start);
     let since = Instant::now();
-    match records.record(branch_id, None, &start, restored).await {
-        Ok(e) => Ok((world, e.seq, overhead::ms_since(since))),
+    let payload = serde_json::to_value(&start)?;
+    match records
+        .append(None, EventKind::RunStart, payload, restored)
+        .await
+    {
+        Ok(e) => Ok((bench, world, e.seq, overhead::ms_since(since))),
         Err(e) => {
             world.stop().await;
             Err(e)
@@ -320,22 +406,27 @@ fn task_clock_start<'a>(bench: &'a BenchDescribe, task_id: &str) -> Option<&'a s
     task.and_then(|t| t.clock_start.as_deref())
 }
 
+/// The world's UTC offset in minutes, when its `clock_start` gives one.
+fn utc_offset_min(clock_start: Option<&str>) -> Option<i32> {
+    let start = clock_start.and_then(crate::world_clock::ClockStart::parse);
+    start.and_then(|c| c.utc_offset_min)
+}
+
 /// A new run's world time: its epoch (the task's `clock_start`, else now) and the clock speed its
-/// branches run at.
-fn world_time_of(clock_start: Option<&str>) -> WorldTimeParams {
+/// branches run at (none on a stepped clock, which runs on no wall time).
+fn world_time_of(clock_start: Option<&str>, rules: &Rules) -> WorldTimeParams {
+    let speed = match rules.stepped {
+        Some(_) => 0.0,
+        None => crate::clock::speed_from_env(),
+    };
     WorldTimeParams {
         epoch_ms: crate::world_clock::WorldClock::epoch_ms(clock_start, chrono::Utc::now()),
-        speed: crate::clock::speed_from_env(),
+        speed,
     }
 }
 
 /// The payload of `RunStart` (see `start_world`).
-fn run_start(
-    bench: &BenchDescribe,
-    world: &World,
-    seed: u64,
-    of: &RunStartOf<'_>,
-) -> RunStartPayload {
+fn run_start(bench: &BenchDescribe, world: &World, seed: u64, of: &BranchPlan) -> RunStartPayload {
     let scenario = (!of.scenario.is_empty()).then(|| json!(of.scenario));
     RunStartPayload {
         task_id: Some(of.task_id.to_string()),

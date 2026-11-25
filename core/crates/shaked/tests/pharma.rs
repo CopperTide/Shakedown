@@ -1,7 +1,7 @@
 //! The pharma benchmark's world, whole: ERPNext, Twenty, the simulated LIMS and carriers and
 //! Sculptured's approvals, with the benchmark's own team on a real model (see
 //! `support/live.rs`); every change is decided by the simulated QA head or supply chain director
-//! through the world's links. Whatever the team does, Arena must record every step, keep the
+//! through the world's links. Whatever the team does, Shakedown must record every step, keep the
 //! gates and score the end state with every named check; a disruption must show in the twin's
 //! views. Which end states pass which check (the gold paths, a release without approval, the
 //! held batch shipped) is tested on the benchmark's own checks
@@ -188,12 +188,12 @@ fn live_pharma_a_disruption_shows_in_the_twin() {
 
 #[test]
 #[ignore = "live: runs a real model on a whole world (see the module doc)"]
-fn live_pharma_team_runs_the_incident_and_arena_scores_it() {
+fn live_pharma_team_runs_the_incident_and_shakedown_scores_it() {
     if let Some(why) = missing() {
         eprintln!("skipped: {why}");
         return;
     }
-    let Some(live) = Live::any("live_pharma_team_runs_the_incident_and_arena_scores_it") else {
+    let Some(live) = Live::any("live_pharma_team_runs_the_incident_and_shakedown_scores_it") else {
         return;
     };
     build();

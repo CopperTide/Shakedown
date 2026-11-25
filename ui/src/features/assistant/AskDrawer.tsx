@@ -43,14 +43,17 @@ function useConversation(page: string) {
       setBusy(false);
     }
   };
-  return { turns, busy, send };
+  /** Keeps how the person settled a card with its message, so it never reopens. */
+  const settle = (turn: number, card: number, outcome: 'done' | 'dismissed') =>
+    setTurns((ts) => ts.map((t, i) => (i !== turn ? t : { ...t, cards: t.cards?.map((c, j) => (j === card ? { ...c, outcome } : c)) })));
+  return { turns, busy, send, settle };
 }
 
 export default function AskDrawer() {
   const [text, setText] = useState('');
   const [open, setOpen] = useOpen(setText);
   const page = crumbsFor(useLocation().pathname).at(-1) ?? 'Home';
-  const { turns, busy, send } = useConversation(page);
+  const { turns, busy, send, settle } = useConversation(page);
   if (!open) return null;
   const go = () => { if (text.trim()) { void send(text.trim()); setText(''); } };
   return (
@@ -62,7 +65,7 @@ export default function AskDrawer() {
       </header>
       <div className="flex flex-1 flex-col gap-4 overflow-auto px-4 py-4">
         {turns.length === 0 && <p className="text-sm text-muted">Ask about this page, or tell it what to change.</p>}
-        {turns.map((t, i) => <Message key={i} turn={t} />)}
+        {turns.map((t, i) => <Message key={i} turn={t} onSettle={(card, outcome) => settle(i, card, outcome)} />)}
         {busy && <p className="text-xs text-faint">Thinking…</p>}
       </div>
       <footer className="grid gap-2 border-t border-line p-3">

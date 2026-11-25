@@ -8,7 +8,7 @@ An engineer states a goal ("Line 2 from 77% to 85% OEE with no extra headcount")
 a team, proposes plant configurations, simulates each, reads the KPIs, iterates, and recommends one with
 evidence. The product records every candidate and simulation, and an experiment compares optimiser
 designs on the same plant and goal: best verified result, simulations used, model cost, time. Later the
-simulation runs on a commercial simulator (Rockwell Arena Simulation or Emulate3D, licensed, Windows);
+simulation runs on a commercial simulator (Rockwell Shakedown Simulation or Emulate3D, licensed, Windows);
 today it runs on an open-source discrete-event model behind the same interface.
 
 ## What is built
@@ -33,7 +33,7 @@ today it runs on an open-source discrete-event model behind the same interface.
   the safety check), a twin view, and `scripts/reference.py`.
 - **Protocol**: a named check may carry a `measure` (`{label, value, unit?, better?, target?,
   reference?}`); a tool result with `objective` is a candidate (docs/protocol.md). The core change is that
-  one optional field on `NamedCheck` (`kits/rust/src/proto.rs`); arenad stores and reports it unchanged.
+  one optional field on `NamedCheck` (`kits/rust/src/proto.rs`); shaked stores and reports it unchanged.
 - **UI**: on a run, "Best so far" (each candidate's objective by simulation number with its interval,
   the best feasible step line, the target, the verified value; a dot opens its step). On an experiment,
   each measure per setup (the best run, the mean, every run as a dot on a scale all setups share, the

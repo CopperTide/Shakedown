@@ -5,16 +5,21 @@ use serde_json::Value;
 use crate::{
     exec::BranchCtx,
     model::{AgentSpec, TokenUsage},
-    providers::{LOCAL_KEY_PREFIX, LOCAL_MODELS_ENV},
 };
 
 pub mod claude;
 mod claude_session;
+mod cli;
 pub mod codex;
+pub mod endpoint_auth;
 pub mod http;
+pub mod jail;
 pub mod open;
 pub mod session;
 mod usage;
+
+pub(crate) use cli::{fresh_workdir, run_in_workdir, scrub_env, tail};
+pub use cli::{server_name, Mcp, ModelRoute, CLI_TIMEOUT_SECS};
 
 /// One agent's turn in a branch.
 pub struct AgentRun {
@@ -51,223 +56,50 @@ pub struct AgentResult {
     pub failure: Option<FailureKind>,
 }
 
+impl AgentResult {
+    /// A failure with nothing counted, not put down to the model (`failure: None`).
+    pub(crate) fn failed(error: impl Into<String>) -> AgentResult {
+        AgentResult {
+            ok: false,
+            error: Some(error.into()),
+            tokens: TokenUsage::default(),
+            cost_usd: None,
+            cost_source: None,
+            seconds: 0.0,
+            failure: None,
+        }
+    }
+}
+
 pub trait Driver: Send + Sync {
     fn run<'a>(&'a self, ctx: AgentRun) -> Pin<Box<dyn Future<Output = AgentResult> + Send + 'a>>;
 
     /// Starts the agent as a session that stays alive across turns (for the dispatch runner);
     /// an error when this kind of agent can't keep one.
-    fn session(&self, start: session::SessionStart) -> Result<Box<dyn session::Session>, String> {
-        Err(format!(
+    fn session(&self, start: session::SessionStart) -> session::Started<'_> {
+        let why = format!(
             "a {:?} agent can't keep a session across turns, which a dispatch run needs",
             start.spec.kind
-        ))
+        );
+        Box::pin(async move { Err::<Box<dyn session::Session>, _>(why) })
     }
-}
-
-pub const CLI_TIMEOUT_SECS: u64 = 900;
-const STDERR_TAIL: usize = 2048;
-
-/// Last `STDERR_TAIL` bytes of `s`, cut on a char boundary.
-pub(crate) fn tail(s: &str) -> &str {
-    crate::text::last_bytes(s, STDERR_TAIL)
-}
-
-fn failed(error: String, seconds: f64) -> AgentResult {
-    AgentResult {
-        ok: false,
-        error: Some(error),
-        tokens: TokenUsage::default(),
-        cost_usd: None,
-        cost_source: None,
-        seconds,
-        failure: None,
-    }
-}
-
-/// Spawn `cmd` (stdin null, output captured, killed on drop) and wait up to `timeout_secs`, the
-/// time the branch is paused (`flow`) left out.
-/// `parse` maps (stdout, exit code) to a result; `seconds` is filled in here.
-pub(crate) async fn run_cli(
-    flow: &crate::flow::FlowControl,
-    cmd: std::process::Command,
-    timeout_secs: u64,
-    parse: impl FnOnce(&str, i32) -> AgentResult,
-) -> AgentResult {
-    let start = std::time::Instant::now();
-    let mut cmd = tokio::process::Command::from(cmd);
-    cmd.stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .kill_on_drop(true);
-    let child = match cmd.spawn() {
-        Ok(c) => c,
-        Err(e) => return failed(format!("failed to start CLI: {e}"), 0.0),
-    };
-    let limit = std::time::Duration::from_secs(timeout_secs);
-    // Time the branch spends paused doesn't count against the CLI's limit.
-    let waited = flow.timeout(limit, child.wait_with_output()).await;
-    let seconds = start.elapsed().as_secs_f64();
-    match waited {
-        None => failed(format!("timed out after {timeout_secs} s"), seconds),
-        Some(Err(e)) => failed(format!("CLI failed: {e}"), seconds),
-        Some(Ok(out)) => finish_cli(&out, seconds, parse),
-    }
-}
-
-/// The result of a CLI that ran to completion; a failure carries the tail of its stderr.
-fn finish_cli(
-    out: &std::process::Output,
-    seconds: f64,
-    parse: impl FnOnce(&str, i32) -> AgentResult,
-) -> AgentResult {
-    let stdout = String::from_utf8_lossy(&out.stdout);
-    let stderr = String::from_utf8_lossy(&out.stderr);
-    let code = out.status.code().unwrap_or(-1);
-    let mut r = parse(&stdout, code);
-    r.seconds = seconds;
-    if !r.ok && !stderr.trim().is_empty() {
-        let msg = r
-            .error
-            .take()
-            .unwrap_or_else(|| format!("exit code {code}"));
-        r.error = Some(format!("{msg}\nstderr: {}", tail(stderr.trim())));
-    }
-    r
-}
-
-/// Runs a CLI agent in a fresh work folder (removed afterwards). `build` makes the command for
-/// that folder; CLI agents can't resume.
-pub(crate) async fn run_in_workdir(
-    run: &AgentRun,
-    timeout_secs: u64,
-    build: impl FnOnce(&std::path::Path) -> Result<std::process::Command, String>,
-    parse: impl FnOnce(&str, i32) -> AgentResult,
-) -> AgentResult {
-    if run.resume.is_some() {
-        return resume_unsupported();
-    }
-    let workdir = match fresh_workdir() {
-        Ok(d) => d,
-        Err(e) => return fail(format!("cannot create workdir: {e}")),
-    };
-    let r = match build(&workdir) {
-        Ok(cmd) => run_cli(&run.branch.flow, cmd, timeout_secs, parse).await,
-        Err(why) => fail(why),
-    };
-    let _ = std::fs::remove_dir_all(&workdir);
-    r
-}
-
-pub(crate) fn resume_unsupported() -> AgentResult {
-    failed("CLI agents cannot resume mid-run".to_string(), 0.0)
 }
 
 pub(crate) fn prompt_of(run: &AgentRun) -> String {
     format!("{}\n\n{}", run.spec.prompt, run.input)
 }
 
-/// Where a CLI agent finds the world's tools: shaked's MCP endpoint and the name it goes by.
-pub struct Mcp {
-    pub server: String,
-    pub url: String,
-    /// The agent's token (`sda_…`), sent as `Authorization: Bearer`; never put in argv.
-    pub token: Option<String>,
-}
-
-impl Mcp {
-    /// `run`'s endpoint on the shaked at `self_base`, named after the benchmark.
-    pub(crate) fn of(self_base: &str, run: &AgentRun) -> Mcp {
-        Mcp::for_agent(self_base, &run.branch, &run.spec.id)
-    }
-
-    /// `agent`'s endpoint on `branch`, on the shaked at `self_base`.
-    pub(crate) fn for_agent(self_base: &str, branch: &BranchCtx, agent: &str) -> Mcp {
-        let url = format!(
-            "{}/mcp/{}/{}",
-            self_base.trim_end_matches('/'),
-            branch.branch_id,
-            agent
-        );
-        Mcp {
-            server: server_name(branch.world.bench()),
-            url,
-            token: Some(branch.agent_token(agent)),
-        }
-    }
-}
-
-/// The name the CLIs give the world's MCP server: the benchmark's name, each character outside
-/// `[A-Za-z0-9_-]` (what Claude Code and Codex accept) replaced by `_`; `shakedown` if it is empty.
-pub fn server_name(benchmark: &str) -> String {
-    if benchmark.is_empty() {
-        return "shakedown".into();
-    }
-    benchmark
-        .chars()
-        .map(|c| match c {
-            'A'..='Z' | 'a'..='z' | '0'..='9' | '_' | '-' => c,
-            _ => '_',
-        })
-        .collect()
-}
-
-pub(crate) fn fresh_workdir() -> std::io::Result<std::path::PathBuf> {
-    let d = std::env::temp_dir().join(format!("arena-cli-{}", uuid::Uuid::new_v4().simple()));
-    std::fs::create_dir_all(&d)?;
-    Ok(d)
-}
-
-pub(crate) fn fail(error: String) -> AgentResult {
-    failed(error, 0.0)
-}
-
-/// The secrets a CLI child doesn't get (except its own vendor's key): database credentials,
-/// every model provider's key, and the local model servers.
-const SECRET_ENV: [&str; 7] = [
-    "SHAKEDOWN_PG_URL",
-    "DATABASE_URL",
-    "PGPASSWORD",
-    "OPENROUTER_API_KEY",
-    "OPENAI_API_KEY",
-    "ANTHROPIC_API_KEY",
-    LOCAL_MODELS_ENV,
-];
-
-/// True for the name of an env var a CLI child must not see.
-fn is_secret_env(name: &str) -> bool {
-    let name = parts::settings::new_name(name);
-    name.starts_with("PG")
-        || name.starts_with(LOCAL_KEY_PREFIX)
-        || SECRET_ENV.contains(&name.as_str())
-}
-
-/// The env vars to remove from a CLI child, of those named in `present`: every secret but
-/// `keep`, the key of the CLI's own vendor (Claude Code signs in with `ANTHROPIC_API_KEY`,
-/// Codex with `OPENAI_API_KEY`).
-fn scrubbed(present: impl Iterator<Item = String>, keep: &str) -> Vec<String> {
-    let mut out: Vec<String> = present.filter(|k| is_secret_env(k)).collect();
-    out.extend(
-        SECRET_ENV
-            .iter()
-            .flat_map(|k| [k.to_string(), parts::settings::old_name(k)]),
-    );
-    out.retain(|k| k != keep);
-    out.sort();
-    out.dedup();
-    out
-}
-
-/// Removes database and API secrets from a CLI child's environment, all but `keep`.
-pub(crate) fn scrub_env(c: &mut std::process::Command, keep: &str) {
-    let present = std::env::vars_os().map(|(k, _)| k.to_string_lossy().into_owned());
-    for k in scrubbed(present, keep) {
-        c.env_remove(k);
-    }
+/// `agent`'s endpoint on `branch` under `route` (`mcp` or `gateway`), on the shaked at
+/// `self_base`: `{self_base}/{route}/{branch}/{agent}`.
+pub(crate) fn endpoint(self_base: &str, route: &str, branch: &str, agent: &str) -> String {
+    format!(
+        "{}/{route}/{branch}/{agent}",
+        self_base.trim_end_matches('/')
+    )
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{scrubbed, server_name};
     use crate::model::TokenUsage;
 
     #[test]
@@ -277,59 +109,5 @@ mod tests {
                                       "total_tokens": 20});
         assert_eq!(serde_json::to_value(t).unwrap(), want);
         assert_eq!(serde_json::from_value::<TokenUsage>(want).unwrap(), t);
-    }
-
-    #[test]
-    fn secrets_under_their_old_names_are_removed_too() {
-        let present = ["ARENA_LOCAL_KEY_OLLAMA", "ARENA_PORT"].map(String::from);
-        let gone = scrubbed(present.into_iter(), "ANTHROPIC_API_KEY");
-        for k in [
-            "ARENA_LOCAL_KEY_OLLAMA",
-            "ARENA_PG_URL",
-            "ARENA_LOCAL_MODELS",
-        ] {
-            assert!(gone.iter().any(|g| g == k), "{k} kept");
-        }
-        assert!(!gone.iter().any(|g| g == "ARENA_PORT"));
-    }
-
-    #[test]
-    fn each_cli_keeps_only_its_own_vendor_key() {
-        let present = [
-            "PATH",
-            "HOME",
-            "SHAKEDOWN_PORT",
-            "SHAKEDOWN_LOCAL_KEY_OLLAMA",
-            "PGUSER",
-        ];
-        for (keep, other) in [
-            ("ANTHROPIC_API_KEY", "OPENAI_API_KEY"),
-            ("OPENAI_API_KEY", "ANTHROPIC_API_KEY"),
-        ] {
-            let gone = scrubbed(present.iter().map(|k| k.to_string()), keep);
-            for k in [
-                other,
-                "OPENROUTER_API_KEY",
-                "SHAKEDOWN_LOCAL_KEY_OLLAMA",
-                "SHAKEDOWN_LOCAL_MODELS",
-                "PGUSER",
-                "PGPASSWORD",
-                "SHAKEDOWN_PG_URL",
-                "DATABASE_URL",
-            ] {
-                assert!(gone.iter().any(|g| g == k), "{k} kept with {keep}");
-            }
-            for k in [keep, "PATH", "HOME", "SHAKEDOWN_PORT"] {
-                assert!(!gone.iter().any(|g| g == k), "{k} removed with {keep}");
-            }
-        }
-    }
-
-    #[test]
-    fn the_server_is_named_after_the_benchmark() {
-        assert_eq!(server_name("retail"), "retail");
-        assert_eq!(server_name("toy-bench_2"), "toy-bench_2");
-        assert_eq!(server_name("My bench.v2/é"), "My_bench_v2__");
-        assert_eq!(server_name(""), "shakedown");
     }
 }

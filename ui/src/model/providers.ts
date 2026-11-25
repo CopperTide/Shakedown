@@ -11,7 +11,7 @@ export const isBedrock = (id: string | null | undefined) => !!id?.trim().startsW
 /** `bedrock:us-east-1` → `us-east-1`. */
 export const bedrockRegion = (id: string) => id.trim().slice('bedrock:'.length);
 
-/** `https://agent.example.com/arena` → `agent.example.com`; the text itself when it isn't a URL. */
+/** `https://agent.example.com/shakedown` → `agent.example.com`; the text itself when it isn't a URL. */
 export function hostOf(url: string | null | undefined): string {
   const t = url?.trim() ?? '';
   try {
@@ -35,9 +35,10 @@ export function kindOf(id: string): ProviderKind {
   return 'local';
 }
 
-/** A short name: OpenRouter, OpenAI, Anthropic, or `<name> (local)`. */
+/** A short name: OpenRouter, OpenAI, Anthropic, `<name> key` for a saved key named `key:<name>`, or `<name> (local)`. */
 export function providerName(id: string): string {
   if (isBedrock(id)) return 'Bedrock';
+  if (id.startsWith('key:')) return `${id.slice('key:'.length)} key`;
   switch (kindOf(id)) {
     case 'openrouter': return 'OpenRouter';
     case 'openai': return 'OpenAI';
@@ -127,7 +128,7 @@ export interface ProviderOption {
 
 /**
  * The providers to choose from. `current` (the agent's provider) is always listed and never
- * disabled, so a team keeps showing what it names; one the arena doesn't know is "not configured".
+ * disabled, so a team keeps showing what it names; one the shakedown doesn't know is "not configured".
  */
 export function providerOptions(list: ProviderStatus[], current: string): ProviderOption[] {
   const out: ProviderOption[] = list.map((s) => {

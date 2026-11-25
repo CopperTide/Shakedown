@@ -94,29 +94,20 @@ pub struct Describe {}
 #[derive(Debug, Clone, Serialize)]
 pub struct GetUsage {}
 
-impl Stop {
-    pub fn instance(instance: impl Into<String>) -> Stop {
-        Stop(IdParams {
-            instance: instance.into(),
-        })
-    }
+/// `instance(name)` for each request that names only an instance.
+macro_rules! by_instance {
+    ($($request:ident),+) => {
+        $(impl $request {
+            pub fn instance(instance: impl Into<String>) -> $request {
+                $request(IdParams {
+                    instance: instance.into(),
+                })
+            }
+        })+
+    };
 }
 
-impl Connect {
-    pub fn instance(instance: impl Into<String>) -> Connect {
-        Connect(IdParams {
-            instance: instance.into(),
-        })
-    }
-}
-
-impl GetHttpRoutes {
-    pub fn instance(instance: impl Into<String>) -> GetHttpRoutes {
-        GetHttpRoutes(IdParams {
-            instance: instance.into(),
-        })
-    }
-}
+by_instance!(Stop, Connect, GetHttpRoutes);
 
 #[cfg(test)]
 mod tests {

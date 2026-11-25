@@ -1,47 +1,53 @@
-// A kind's list: every item with its problems, each a link to its editor, and New (worlds also
-// Import from git).
-import { AlertTriangle } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
-import { listItems } from '@/api/project';
+// A kind's list: every item with its problems, each row a link to its editor with Delete beside
+// it, and New (worlds also Import from git). Worlds are listed under their groups, each opening
+// onto its scenarios and experiments.
+import { useNavigate } from 'react-router-dom';
 import { Card } from '@/components/ui/card';
 import { PageBody, PageHeader } from '@/components/ui/page';
 import { EmptyState, ErrorState } from '@/components/ui/state';
-import { useQuery } from '@/hooks/useQuery';
+import { useProjectItems } from '@/hooks/useProjectItems';
 import type { ItemKind, ItemSummary } from '@/model/project';
+import DeleteItemDialog from './DeleteItemDialog';
 import ImportFromGit from './ImportFromGit';
+import ItemRow from './ItemRow';
 import { KINDS } from './kinds';
 import NewItemDialog from './NewItemDialog';
+import WorldTree from './WorldTree';
 
-function Row({ item, route }: { item: ItemSummary; route: string }) {
-  const n = item.problems.length;
+function Rows({ kind, items }: { kind: ItemKind; items: ItemSummary[] }) {
+  const route = KINDS[kind].route;
   return (
-    <li className="flex items-center gap-3 px-[18px] py-3 text-sm">
-      <Link to={`${route}/${item.id}`} className="font-medium hover:text-accent">{item.label}</Link>
-      <span className="font-mono text-2xs text-faint">{item.id}</span>
-      {n > 0 && (
-        <span title={item.problems[0].message} className="inline-flex items-center gap-1 rounded-full bg-warn-soft px-2 py-0.5 text-2xs font-medium text-warn">
-          <AlertTriangle className="size-3" aria-hidden="true" />{n} problem{n > 1 ? 's' : ''}
-        </span>
-      )}
-    </li>
+    <ul className="divide-y divide-line">
+      {items.map((i) => (
+        <ItemRow key={i.id} item={i} to={`${route}/${i.id}`}
+          actions={<DeleteItemDialog compact kind={kind} id={i.id} label={i.label} onDeleted={() => {}} />} />
+      ))}
+    </ul>
   );
+}
+
+function Worlds({ worlds }: { worlds: ItemSummary[] }) {
+  const scenarios = useProjectItems('scenarios').data ?? [];
+  const experiments = useProjectItems('experiments').data ?? [];
+  return <WorldTree worlds={worlds} scenarios={scenarios} experiments={experiments} />;
 }
 
 export default function ItemListPage({ kind }: { kind: ItemKind }) {
   const info = KINDS[kind];
-  const q = useQuery(`items:${kind}`, () => listItems(kind));
+  const q = useProjectItems(kind);
   const navigate = useNavigate();
-  const items = q.data?.items ?? [];
+  const items = q.data ?? [];
   const create = <NewItemDialog kind={kind} taken={items.map((i) => i.id)} onCreated={(id) => navigate(`${info.route}/${id}`)} />;
+  const meta = kind === 'worlds' ? `${info.about} Drag a world onto a group to move it there.` : info.about;
   return (
     <>
-      <PageHeader title={info.many} meta={info.about} actions={kind === 'worlds' ? <div className="flex gap-2"><ImportFromGit onImported={q.reload} />{create}</div> : create} width="wide" />
+      <PageHeader title={info.many} meta={meta} actions={kind === 'worlds' ? <div className="flex gap-2"><ImportFromGit onImported={q.reload} />{create}</div> : create} width="wide" />
       <PageBody width="wide">
         {q.error && <ErrorState error={q.error} onRetry={q.reload} />}
-        <Card>
+        <Card className="overflow-hidden">
           {q.data && items.length === 0
             ? <EmptyState title={`No ${info.many.toLowerCase()} yet.`} action={create} />
-            : <ul className="divide-y divide-line">{items.map((i) => <Row key={i.id} item={i} route={info.route} />)}</ul>}
+            : kind === 'worlds' ? <Worlds worlds={items} /> : <Rows kind={kind} items={items} />}
         </Card>
       </PageBody>
     </>

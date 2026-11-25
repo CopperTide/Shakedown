@@ -37,12 +37,12 @@ pub(super) fn router() -> Router<Arc<AppState>> {
 
 /// The project world `events`' run played (its `package` is the run's benchmark) and its views;
 /// None without a project or such a world.
-fn world_of_run(
+async fn world_of_run(
     state: &AppState,
     caller: &Caller,
     events: &[Event],
 ) -> Option<(Id, Vec<WorldView>)> {
-    let project = state.project_for(caller).current().ok()?;
+    let project = state.project_for(caller).current().await.ok()?;
     let package = run_info(events).benchmark;
     let world = project
         .list(Kind::World)
@@ -53,7 +53,7 @@ fn world_of_run(
             }
             _ => None,
         })?;
-    let views = world_views(&project.root, &world.0, &world.1);
+    let views = world_views(project.store().as_ref(), &world.0, &world.1);
     Some((world.0, views))
 }
 
@@ -82,7 +82,7 @@ async fn list(
     Path(id): Path<String>,
 ) -> ApiResult<Value> {
     let events = branch_events(&state, &caller, &id).await?;
-    let Some((world, found)) = world_of_run(&state, &caller, &events) else {
+    let Some((world, found)) = world_of_run(&state, &caller, &events).await else {
         return Ok(Json(json!({"world": null, "views": [], "problems": []})));
     };
     let (mut views, mut problems) = (vec![], vec![]);
@@ -153,7 +153,9 @@ async fn evaluate(
     Query(q): Query<HashMap<String, String>>,
 ) -> ApiResult<Value> {
     let events = branch_events(&state, &caller, &id).await?;
-    let found = world_of_run(&state, &caller, &events).map_or_else(Vec::new, |(_, v)| v);
+    let found = world_of_run(&state, &caller, &events)
+        .await
+        .map_or_else(Vec::new, |(_, v)| v);
     let view = view_named(&found, &view_id)?;
     let screen = screen_named(view, &q)?;
     let at = at_asked(&q, state.live.get(&id).is_some(), &events)?;

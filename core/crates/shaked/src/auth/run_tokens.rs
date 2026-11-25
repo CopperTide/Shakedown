@@ -5,7 +5,9 @@
 use anyhow::Result;
 use uuid::Uuid;
 
-use super::{Caller, RunTokenKind, SystemScope};
+use super::{
+    engine_check, Action, Caller, CallerKind, Decision, RunTokenKind, SystemScope, Target,
+};
 use crate::store::Store;
 
 /// How long a token lives: a day, longer than a run is expected to take (a local shaked sets no
@@ -33,8 +35,23 @@ fn kind_of(s: &str) -> Option<RunTokenKind> {
     .find(|k| k.as_str() == s)
 }
 
-const LOOKUP: &str = "SELECT run_id, branch_id, kind, agent, sandbox_id FROM shakedown.run_tokens
-    WHERE token_hash = $1 AND revoked_at IS NULL AND expires_at > now()";
+/// A run token `t` of the branch `b` is live: not revoked, and not past its expiry counted in
+/// unpaused time (a pause in progress since `b.paused_at` doesn't count against it, as its resume
+/// extends the token by the pause). The one definition every query of a token's liveness splices
+/// in, with those aliases.
+macro_rules! token_live {
+    () => {
+        "t.revoked_at IS NULL AND t.expires_at + coalesce(now() - b.paused_at, interval '0') > now()"
+    };
+}
+pub(crate) use token_live;
+
+const LOOKUP: &str = concat!(
+    "SELECT t.run_id, t.branch_id, t.kind, t.agent, t.sandbox_id FROM shakedown.run_tokens t
+       LEFT JOIN shakedown.branches b ON b.id = t.branch_id
+     WHERE t.token_hash = $1 AND ",
+    token_live!()
+);
 
 /// The branch-bound caller an `sdr_` or `sdw_` bearer token is; None when it is unknown, revoked
 /// or expired.
@@ -55,4 +72,32 @@ pub async fn resolve_run_token(store: &Store, bearer: &str) -> Result<Option<Cal
             None => c,
         })
     }))
+}
+
+/// The caller a worker token is, when it is live and may do `action` on `branch` of its run
+/// (None: the token's own branch); None for any other token, or a branch it may not.
+pub async fn worker_caller(
+    store: &Store,
+    token: &str,
+    action: Action,
+    branch: Option<&str>,
+) -> Result<Option<Caller>> {
+    let Some(c) = resolve_run_token(store, token).await? else {
+        return Ok(None);
+    };
+    let CallerKind::RunToken {
+        run,
+        branch: own,
+        kind: RunTokenKind::Worker,
+        ..
+    } = &c.kind
+    else {
+        return Ok(None);
+    };
+    let on = Target::Branch {
+        run,
+        branch: branch.unwrap_or(own),
+    };
+    let allowed = engine_check(&c, &action, &on) == Decision::Allow;
+    Ok(allowed.then_some(c))
 }

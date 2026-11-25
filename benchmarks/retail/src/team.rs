@@ -1,5 +1,5 @@
 //! The team this benchmark suggests (triage, then resolver) and the heading over its policy. Triage
-//! is read-only, as every team was before arena let any agent write, so runs stay comparable.
+//! is read-only, as every team was before shakedown let any agent write, so runs stay comparable.
 use shakedown_part::proto::{BenchTeam, TeamRole};
 
 /// The heading over the store policy in each agent's input.

@@ -11,11 +11,7 @@ use axum::{
 };
 use serde_json::{json, Value};
 
-use super::{
-    all,
-    http::{action_of, target_of},
-    Access, OpCtx, Operation,
-};
+use super::{all, http::row, Access, OpCtx, Operation};
 use crate::{
     app::AppState,
     auth::{Caller, Who},
@@ -82,6 +78,11 @@ pub fn tool_name(op: &Operation) -> String {
     op.name.replace('.', "_")
 }
 
+/// The operation whose tool name is `name`.
+pub fn by_tool(name: &str) -> Option<&'static Operation> {
+    all().iter().find(|op| tool_name(op) == name)
+}
+
 fn tools() -> Vec<Value> {
     all()
         .iter()
@@ -101,10 +102,7 @@ async fn call(ctx: &OpCtx<'_>, asker: &Asker<'_>, params: &Value) -> Result<Valu
         .get("name")
         .and_then(Value::as_str)
         .unwrap_or_default();
-    let op = all()
-        .iter()
-        .find(|op| tool_name(op) == name)
-        .ok_or_else(|| (INVALID_PARAMS, format!("no tool named {name}")))?;
+    let op = by_tool(name).ok_or_else(|| (INVALID_PARAMS, format!("no tool named {name}")))?;
     let args = params
         .get("arguments")
         .cloned()
@@ -128,7 +126,7 @@ pub(crate) async fn allowed(
     };
     let app = ctx.app.ok_or("this server cannot check callers")?;
     let id = args.get("id").and_then(Value::as_str).unwrap_or_default();
-    crate::api::authorize(app, caller, action_of(op.access), target_of(op, id))
+    crate::api::routes::ask(app, caller, &row(op), id)
         .await
         .map_err(|e| e.message().to_string())
 }

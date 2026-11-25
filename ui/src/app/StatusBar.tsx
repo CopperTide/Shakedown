@@ -2,11 +2,11 @@ import { ChevronUp } from 'lucide-react';
 import { ProviderStatusLine } from '@/components/ProviderFields';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useHealth } from '@/hooks/useHealth';
-import { bestProviders, checkProviders, useCheckedProviders } from '@/hooks/useProviders';
+import { checkProviders, useCheckedProviders } from '@/hooks/useProviders';
 import { cn } from '@/lib/cn';
 import { providerSummary } from '@/model/providers';
 import type { Health, ProviderStatus } from '@/model/types';
-import { diskFill, diskLine, modesLine } from './status';
+import { diskFill, diskLine, noModelLine } from './status';
 
 /** API mode in one calm line; the full list (each provider, why, and Check) one click away. */
 function ApiMode({ statuses }: { statuses: ProviderStatus[] }) {
@@ -47,22 +47,30 @@ function Disk({ h }: { h: Health }) {
 /** Saves this full or fuller are worth a look before the limit refuses new runs. */
 const NEARLY_FULL = 0.9;
 
+/**
+ * The caller's providers (`/api/providers`, their own keys applied), asked only when a model key is
+ * all that can run agents; null until known. The health's list is public, so it never has the
+ * caller's keys: it stands in only when the caller's can't be read.
+ */
+function useCallerProviders(h: Health | null): ProviderStatus[] | null {
+  const checked = useCheckedProviders(!!h && (h.sandboxes || (!h.claude && !h.codex)));
+  return checked.list ?? (checked.error ? h?.providers ?? [] : null);
+}
+
 /** Only what needs attention, along the bottom: no model to run agents with, or saves nearly full. Nothing otherwise. */
 export default function StatusBar() {
   const h = useHealth();
-  const checked = useCheckedProviders();
+  const statuses = useCallerProviders(h);
   if (!h) return null;
-  const statuses = bestProviders(checked.list, h.providers);
-  const noCli = !h.claude && !h.codex;
-  const noModel = noCli && !statuses.some((s) => s.available);
+  const warning = noModelLine(h, statuses);
   const fill = diskFill(h);
   const disk = !!fill && fill.fraction >= NEARLY_FULL;
-  if (!noModel && !disk) return null;
+  if (!warning && !disk) return null;
   return (
     // `status-line`: the hook the capture scripts (examples/*/capture) hide the bar by.
     <footer className="status-line bottom-0 z-40 flex min-h-7 flex-wrap items-center gap-x-4 gap-y-0.5 border-t border-line bg-surface px-3 py-0.5 text-xs text-muted sm:sticky">
-      {noModel && <span className="font-medium text-alarm">⚠ No model to run agents with: {modesLine(h)}, and no API key is set.</span>}
-      {noModel && <ApiMode statuses={statuses} />}
+      {warning && <span className="font-medium text-alarm">⚠ {warning}</span>}
+      {warning && statuses && <ApiMode statuses={statuses} />}
       {disk && <span className="ml-auto"><Disk h={h} /></span>}
     </footer>
   );

@@ -32,9 +32,9 @@ def _forks(sd: Shakedown, run_id: str, first: str) -> list[str]:
 
 
 @pytest.mark.core
-def test_the_website_sample_runs_against_a_local_shaked(arena, fake_claude, cleanup, capsys):
+def test_the_website_sample_runs_against_a_local_shaked(shakedown, fake_claude, cleanup, capsys):
     ns: dict = {}
-    exec(SAMPLE.replace("http://127.0.0.1:4510", arena.url), ns)
+    exec(SAMPLE.replace("http://127.0.0.1:4510", shakedown.url), ns)
     run = ns["run"]
     cleanup.append(run.run_id)
     *lines, verdict = capsys.readouterr().out.splitlines()
@@ -43,8 +43,8 @@ def test_the_website_sample_runs_against_a_local_shaked(arena, fake_claude, clea
     assert len([e for e in rec.events if e.kind == "tool_call"]) == 45
     assert [int(line.split()[0]) for line in lines] == [e.seq for e in rec.events]
     assert run.check() is not None and verdict == str(run.check())
-    (fork_id,) = _forks(arena, run.run_id, run.id)
-    fork = arena.branch(fork_id).wait(timeout=300)
+    (fork_id,) = _forks(shakedown, run.run_id, run.id)
+    fork = shakedown.branch(fork_id).wait(timeout=300)
     assert fork.start_seq <= 40
     assert [(a.id, a.model) for a in fork.team.agents] == [("support", "sonnet")]
     assert fork.ended

@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/shaked", "crates/arenad-alias", "crates/parts", "crates/shakedown-schema", "crates/project"]
+members = ["crates/shaked", "crates/parts", "crates/shakedown-schema", "crates/project"]
 
 [workspace.dependencies]
 tokio = { version = "1", features = ["full"] }

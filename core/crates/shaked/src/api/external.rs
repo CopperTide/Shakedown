@@ -1,5 +1,6 @@
-//! The routes an external system drives a run with: start it (`POST /api/runs` with `runner:
-//! "external"`), register agents and get their endpoints, report an agent done, and finish it.
+//! The routes an external system drives a run with (started by `POST /api/runs` with `runner:
+//! "external"`, in `api::runs`): register agents and get their endpoints, report an agent done,
+//! and finish it.
 
 use crate::auth::{Caller, Who};
 use std::sync::Arc;
@@ -12,12 +13,11 @@ use axum::{
 use serde::Serialize;
 use serde_json::{json, Value};
 
-use super::{detached, providers_of, ApiError, ApiResult, JsonBody, OptionalJson, StartPermit};
+use super::{detached, providers_of, ApiError, ApiResult, JsonBody, OptionalJson};
 use crate::{
     app::AppState,
     exec::{tool_schemas, BranchCtx},
     external::{self, endpoints, AgentDone, Join, UsageReport},
-    launch::{launch, LaunchSpec},
     model::*,
     proxy::env::env_for,
     reasoning::{self, ReasoningReport},
@@ -37,44 +37,6 @@ pub(super) fn router() -> Router<Arc<AppState>> {
             post(report_reasoning),
         )
         .route("/api/branches/{id}/finish", post(finish))
-}
-
-/// Starts a run whose agents an external system drives: its world started, its clock ticking,
-/// the team's agents (there may be none yet) registered. Answers `{run_id, branch_id, agents}`
-/// with each agent's endpoints. `(max_cost_usd, world_minutes)` are checked after the team and
-/// the disk, the order external runs have always been refused in.
-pub(super) async fn create_run(
-    state: Arc<AppState>,
-    caller: Arc<Caller>,
-    permit: StartPermit,
-    benchmark: String,
-    (task_id, team): (String, Team),
-    scenario: crate::scenario::Scenario,
-    (max_cost_usd, world_minutes): (Option<f64>, Option<f64>),
-) -> ApiResult<Value> {
-    team::validate_agents(&providers_of(&state, &caller).await, &team.agents)?;
-    permit.check_disk(&state).await?;
-    let rules = Rules::new(Runner::External)
-        .with_max_cost(super::max_cost(max_cost_usd)?)
-        .with_world_minutes(super::world_minutes(world_minutes)?);
-    detached(async move {
-        let _permit = permit;
-        let spec = LaunchSpec {
-            scope: caller,
-            task_id: &task_id,
-            team,
-            scenario: &scenario,
-            rules,
-            driver: None,
-            benchmark: Some(&benchmark),
-        };
-        let l = launch(&state, spec).await?;
-        let mut started = external::Started::of(l.run_id, l.branch_id, l.agents);
-        started.run_token = l.run_token;
-        let v = serde_json::to_value(started)?;
-        Ok(Json(super::with_warning(v, l.warning)))
-    })
-    .await
 }
 
 /// The live branch `id` an external system drives: 404 when it isn't live, 409 when shaked runs
@@ -162,9 +124,7 @@ async fn end_agent(
     OptionalJson(done): OptionalJson<AgentDone>,
 ) -> ApiResult<Recorded> {
     let ctx = external_agent(&state, &caller, &id, &agent)?;
-    let ev = ctx
-        .record(&state.store, Some(&agent), &done.payload())
-        .await?;
+    let ev = ctx.record(Some(&agent), &done.payload()).await?;
     Ok(Json(Recorded { seq: ev.seq }))
 }
 
@@ -177,12 +137,7 @@ async fn report_usage(
     JsonBody(report): JsonBody<UsageReport>,
 ) -> ApiResult<Recorded> {
     let ctx = external_agent(&state, &caller, &id, &agent)?;
-    let ev = ctx.append(
-        &state.store,
-        Some(&agent),
-        EventKind::ModelCall,
-        report.payload(),
-    );
+    let ev = ctx.append(Some(&agent), EventKind::ModelCall, report.payload());
     Ok(Json(Recorded { seq: ev.await?.seq }))
 }
 
@@ -206,7 +161,7 @@ async fn report_reasoning(
         let Some(p) = reasoning::payload(item, reasoning::SOURCE_AGENT) else {
             continue;
         };
-        let ev = ctx.record(&state.store, Some(&agent), &p);
+        let ev = ctx.record(Some(&agent), &p);
         seqs.push(ev.await?.seq);
     }
     Ok(Json(RecordedAll { seqs }))

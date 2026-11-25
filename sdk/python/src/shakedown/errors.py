@@ -7,10 +7,6 @@ class ShakedownError(Exception):
     """Base class of every error the SDK raises."""
 
 
-#: The old name (the SDK was ``arena`` until 2026-11-19).
-ArenaError = ShakedownError
-
-
 class ConnectionFailed(ShakedownError):
     """shaked could not be reached (not running, wrong URL, or it went away)."""
 

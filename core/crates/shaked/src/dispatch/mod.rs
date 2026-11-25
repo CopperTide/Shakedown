@@ -10,6 +10,7 @@
 mod board;
 mod inputs;
 mod resume;
+mod session;
 mod stepped;
 
 use std::{
@@ -19,20 +20,15 @@ use std::{
 };
 
 use anyhow::Result;
-use tokio::{
-    sync::{mpsc, watch},
-    task::JoinHandle,
-};
+use tokio::sync::{mpsc, watch};
 
 pub use board::Limits;
 use board::{Action, Board, End, Input, Mail, Reason};
+use session::{lost, Slot};
 pub use stepped::{next_point, run_to_horizon, run_to_team_start};
 
 use crate::{
-    agents::{
-        session::{Session, SessionStart},
-        AgentResult,
-    },
+    agents::{session::SessionStart, AgentResult},
     app::AppState,
     exec::{BranchCtx, Said},
     model::*,
@@ -47,27 +43,6 @@ const FINISH_GRACE: Duration = Duration::from_secs(45);
 /// How long a session gets to end once told to.
 const END_WAIT: Duration = Duration::from_secs(20);
 
-impl Limits {
-    /// The limits `SHAKEDOWN_DISPATCH_MAX_MINUTES`, `SHAKEDOWN_DISPATCH_IDLE_SECS` and
-    /// `SHAKEDOWN_DISPATCH_IDLE_WAKES` set, else the defaults (60 min, 20 s, 3).
-    pub fn from_env() -> Limits {
-        let num = |k: &str| {
-            parts::settings::var(k)
-                .ok()
-                .and_then(|v| v.trim().parse::<u64>().ok())
-        };
-        let d = Limits::default();
-        Limits {
-            max_run: num("SHAKEDOWN_DISPATCH_MAX_MINUTES")
-                .map_or(d.max_run, |m| Duration::from_secs(m * 60)),
-            idle_grace: num("SHAKEDOWN_DISPATCH_IDLE_SECS")
-                .map_or(d.idle_grace, Duration::from_secs),
-            max_idle_wakes: num("SHAKEDOWN_DISPATCH_IDLE_WAKES")
-                .map_or(d.max_idle_wakes, |n| n as u32),
-        }
-    }
-}
-
 /// Runs a dispatch branch to its end: `None` when the lead finished it (the caller freezes and
 /// scores the world), else how it ended (a failed run is scored here).
 pub(crate) async fn run(
@@ -76,49 +51,45 @@ pub(crate) async fn run(
     brief: &Brief,
 ) -> Result<Option<Ending>> {
     // A team that starts later than the clock: the world runs on alone until then.
-    if let Some(clock) = &ctx.rules.stepped {
-        let exec = crate::exec::ToolExec::new(state.store.clone());
-        if let Err(why) = run_to_team_start(&exec, ctx, clock).await {
-            return Ok(Some(Ending::infra(why)));
-        }
+    if let Some(why) = run_to_the_team_start(state, ctx).await {
+        return Ok(Some(Ending::infra(why)));
     }
-    let events = ctx.records(&state.store).events(&ctx.branch_id).await?;
+    let events = ctx.records().events().await?;
     let mut crew = Crew::new(state, ctx, brief);
     let first = crew.begin(&events).await?;
     let end = crew.drive(first.into()).await?;
     crew.wind_down(&end).await?;
     if end == End::Finished {
-        if let Some(clock) = &ctx.rules.stepped {
-            let exec = crate::exec::ToolExec::new(state.store.clone());
-            if let Err(why) = run_to_horizon(&exec, ctx, clock).await {
-                return Ok(Some(Ending::infra(why)));
-            }
+        if let Some(why) = run_to_the_horizon(state, ctx).await {
+            return Ok(Some(Ending::infra(why)));
         }
     }
-    Ok(match end {
-        End::Finished | End::Horizon => None,
-        End::Failed(why) => {
-            runner::freeze(state, ctx).await;
-            runner::check(state, ctx).await?;
-            Some(Ending::failed(why))
-        }
-        End::OverBudget(why) => {
-            runner::freeze(state, ctx).await;
-            runner::check(state, ctx).await?;
-            Some(Ending::because(BranchStatus::BudgetExceeded, why))
-        }
-        End::Broken(why) => Some(Ending::infra(why)),
-        End::Stopped => Some(Ending::STOPPED),
-    })
+    let scored = match end {
+        End::Finished | End::Horizon => return Ok(None),
+        End::Broken(why) => return Ok(Some(Ending::infra(why))),
+        End::Stopped => return Ok(Some(Ending::STOPPED)),
+        End::Failed(why) => Ending::failed(why),
+        End::OverBudget(why) => Ending::because(BranchStatus::BudgetExceeded, why),
+    };
+    runner::score_now(state, ctx).await?;
+    Ok(Some(scored))
+}
+
+/// On a stepped clock, runs the world alone up to the team's start; why that failed.
+async fn run_to_the_team_start(state: &AppState, ctx: &BranchCtx) -> Option<String> {
+    let clock = ctx.rules.stepped.as_ref()?;
+    let exec = crate::exec::ToolExec::new(state.store.clone());
+    run_to_team_start(&exec, ctx, clock).await.err()
+}
+
+/// On a stepped clock, runs the world on to its horizon once the lead finished; why that failed.
+async fn run_to_the_horizon(state: &AppState, ctx: &BranchCtx) -> Option<String> {
+    let clock = ctx.rules.stepped.as_ref()?;
+    let exec = crate::exec::ToolExec::new(state.store.clone());
+    run_to_horizon(&exec, ctx, clock).await.err()
 }
 
 type Channel<T> = (mpsc::UnboundedSender<T>, mpsc::UnboundedReceiver<T>);
-
-/// One agent's session, running on its own task.
-struct Slot {
-    inputs: mpsc::UnboundedSender<String>,
-    task: JoinHandle<()>,
-}
 
 /// The dispatch runner's side of a branch: the board, the agents' sessions, and the channels
 /// their turns and ends come back on.
@@ -156,20 +127,13 @@ impl Drop for Crew {
 
 impl Crew {
     fn new(state: &Arc<AppState>, ctx: &Arc<BranchCtx>, brief: &Brief) -> Crew {
-        let ids: Vec<String> = ctx
-            .roster
-            .team
-            .agents
-            .iter()
-            .map(|a| a.id.clone())
-            .collect();
+        let team = &ctx.roster.team;
         let limits = Limits::from_env();
-        let board = board_of(ctx, &ids, limits);
         Crew {
             state: state.clone(),
             ctx: ctx.clone(),
             brief: brief.clone(),
-            board,
+            board: board_of(ctx, &agent_ids(team), limits),
             limits,
             slots: HashMap::new(),
             working: HashSet::new(),
@@ -187,23 +151,14 @@ impl Crew {
     }
 
     async fn record<P: EventPayload>(&self, agent: &str, payload: &P) -> Result<Event> {
-        self.ctx
-            .record(&self.state.store, Some(agent), payload)
-            .await
+        self.ctx.record(Some(agent), payload).await
     }
 
     /// A new run starts the lead; a fork (its inherited record has agent starts) restarts every
     /// agent from it ([`resume`]). The starts are recorded first.
     async fn begin(&mut self, events: &[Event]) -> Result<Vec<Action>> {
         let Some(r) = resume::resumed(events, &self.ctx.roster.team) else {
-            let all: Vec<String> = self
-                .ctx
-                .roster
-                .team
-                .agents
-                .iter()
-                .map(|a| a.id.clone())
-                .collect();
+            let all = agent_ids(&self.ctx.roster.team);
             self.record_starts(&all).await?;
             return Ok(self.board.start());
         };
@@ -325,56 +280,6 @@ impl Crew {
         Ok(self.board.step(Input::Said(said), self.began.elapsed()))
     }
 
-    /// What opens `agent`'s first turn: the world clock, the brief, how the run works (and how
-    /// world time moves, on a stepped clock) and, on a fork, its history.
-    fn first_input(&self, agent: &str) -> String {
-        let (team, lead) = (&self.ctx.roster.team, self.board.lead_id());
-        let mut input = String::new();
-        if let Some(c) = self.brief.clock {
-            input.push_str(&c.brief(self.ctx.clock.now_ms()));
-        }
-        input.push_str(&inputs::brief_text(&self.brief));
-        input.push_str(&match agent == lead {
-            true => inputs::how_for_lead(team, lead),
-            false => inputs::how_for_member(team, lead),
-        });
-        if let Some(clock) = &self.ctx.rules.stepped {
-            input.push_str(inputs::STEPPED);
-            if agent == lead && clock.horizon_ms.is_some() {
-                input.push_str(inputs::LEAD_STEPPED);
-            }
-        }
-        if let Some(h) = self.history.get(agent) {
-            input.push_str(&inputs::history_text(h));
-        }
-        input
-    }
-
-    /// The input of `agent`'s turn: on its first, the brief, how the run works and (on a fork) its
-    /// history; then why it was woken.
-    fn input_for(&self, agent: &str, reason: Reason, mail: &[Mail]) -> String {
-        let team = &self.ctx.roster.team;
-        let lead = self.board.lead_id();
-        let mut input = String::new();
-        let clock = self.brief.clock;
-        let first = !self.slots.contains_key(agent);
-        if first {
-            input.push_str(&self.first_input(agent));
-        }
-        let max = self.limits.max_idle_wakes;
-        input.push_str(&match reason {
-            Reason::Start => String::new(),
-            Reason::Resume => inputs::CARRY_ON.to_string(),
-            Reason::Mail => inputs::mail_text(team, mail),
-            Reason::Idle(n) => inputs::idle_text(team, lead, n, max, &self.board.statuses()),
-            Reason::Look => inputs::LOOK.to_string(),
-        });
-        if let Some(c) = clock.filter(|_| !first) {
-            input.push_str(&c.now_line(self.ctx.clock.now_ms()));
-        }
-        input
-    }
-
     /// Moves a stepped world on to its next wake point (see [`next_point`]): what the board is
     /// told.
     async fn move_on(&mut self) -> Input {
@@ -402,30 +307,28 @@ impl Crew {
         }
     }
 
+    /// The input of `agent`'s wake, opening with a note when its last turn was cut at the
+    /// model-call limit.
+    fn wake_input(&mut self, agent: &str, reason: Reason, mail: &[Mail]) -> String {
+        let input = self.input_for(agent, reason, mail);
+        match self.cut.remove(agent) {
+            true => format!("{}{input}", inputs::turn_cut(self.ctx.rules.stepped.is_some())),
+            false => input,
+        }
+    }
+
     /// Records `agent`'s wake and starts its turn (its session first, on its first turn).
     async fn wake(&mut self, agent: &str, reason: Reason, mail: &[Mail]) -> Result<()> {
         if agent == self.board.lead_id() {
             self.last_look_ms = self.ctx.clock.now_ms();
         }
-        let mut input = self.input_for(agent, reason, mail);
-        if self.cut.remove(agent) {
-            input = format!("{}{input}", inputs::turn_cut(self.ctx.rules.stepped.is_some()));
-        }
+        let input = self.wake_input(agent, reason, mail);
         self.record(agent, &wake_payload(reason, mail, &input))
             .await?;
         self.working.insert(agent.to_string());
         if !self.slots.contains_key(agent) {
-            if let Err(e) = self.open(agent) {
-                let failed = Input::TurnEnded {
-                    agent: agent.into(),
-                    ok: false,
-                    error: Some(e),
-                    failure: None,
-                    text: String::new(),
-                    note: None,
-                    trimmed: 0,
-                };
-                let _ = self.turns.0.send(failed);
+            if let Err(e) = self.open(agent).await {
+                let _ = self.turns.0.send(failed_to_open(agent, e));
                 return Ok(());
             }
         }
@@ -434,7 +337,7 @@ impl Crew {
     }
 
     /// Starts `agent`'s session on its own task.
-    fn open(&mut self, agent: &str) -> Result<(), String> {
+    async fn open(&mut self, agent: &str) -> Result<(), String> {
         let spec = self
             .ctx
             .roster
@@ -444,19 +347,11 @@ impl Crew {
         let start = SessionStart {
             branch: self.ctx.clone(),
             spec,
-            store: self.state.store.clone(),
         };
-        let session = driver.session(start)?;
-        let (inputs, rx) = mpsc::unbounded_channel();
-        let task = tokio::spawn(serve(
-            session,
-            agent.to_string(),
-            rx,
-            self.turns.0.clone(),
-            self.ends.0.clone(),
-            self.stop.subscribe(),
-        ));
-        self.slots.insert(agent.to_string(), Slot { inputs, task });
+        let (turns, ends) = (self.turns.0.clone(), self.ends.0.clone());
+        let session = driver.session(start).await?;
+        let slot = Slot::spawn(session, agent, turns, ends, self.stop.subscribe());
+        self.slots.insert(agent.to_string(), slot);
         Ok(())
     }
 
@@ -508,6 +403,19 @@ impl Crew {
     }
 }
 
+/// The turn's end of an agent whose session could not be opened (`error`).
+fn failed_to_open(agent: &str, error: String) -> Input {
+    Input::TurnEnded {
+        agent: agent.into(),
+        ok: false,
+        error: Some(error),
+        failure: None,
+        text: String::new(),
+        note: None,
+        trimmed: 0,
+    }
+}
+
 /// The board of `ctx`'s team of `ids` (stepped when its clock is).
 fn board_of(ctx: &BranchCtx, ids: &[String], limits: Limits) -> Board {
     let board = Board::new(ids, ctx.roster.team.lead_index(), limits);
@@ -536,21 +444,6 @@ fn wake_payload(reason: Reason, mail: &[Mail], input: &str) -> WakePayload {
     }
 }
 
-/// An agent's end when its session never said how it ended.
-fn lost(agent: &str) -> AgentResult {
-    AgentResult {
-        ok: false,
-        error: Some(format!(
-            "{agent}'s session did not end in time when the run ended"
-        )),
-        tokens: TokenUsage::default(),
-        cost_usd: None,
-        cost_source: None,
-        seconds: 0.0,
-        failure: None,
-    }
-}
-
 /// The end of an agent that was never given work: it used nothing.
 fn never_worked() -> AgentEndPayload {
     AgentEndPayload {
@@ -565,45 +458,9 @@ fn never_worked() -> AgentEndPayload {
     }
 }
 
-/// Runs `agent`'s session: a turn for each input, each turn's end passed back, until the run
-/// tells it to stop (a turn still going is cut off); then ends the session and passes back its
-/// totals.
-async fn serve(
-    mut session: Box<dyn Session>,
-    agent: String,
-    mut inputs: mpsc::UnboundedReceiver<String>,
-    turns: mpsc::UnboundedSender<Input>,
-    ends: mpsc::UnboundedSender<(String, AgentResult)>,
-    mut stop: watch::Receiver<bool>,
-) {
-    let mut cut = false;
-    loop {
-        let input = tokio::select! {
-            i = inputs.recv() => i,
-            _ = stop.wait_for(|s| *s) => None,
-        };
-        let Some(input) = input else { break };
-        let turn = tokio::select! {
-            t = session.turn(input) => Some(t),
-            _ = stop.wait_for(|s| *s) => None,
-        };
-        let Some(t) = turn else {
-            cut = true;
-            break;
-        };
-        let ended = Input::TurnEnded {
-            agent: agent.clone(),
-            ok: t.ok,
-            error: t.error,
-            failure: t.failure,
-            text: t.text,
-            note: t.note,
-            trimmed: t.trimmed,
-        };
-        let _ = turns.send(ended);
-    }
-    let result = session.end(cut).await;
-    let _ = ends.send((agent, result));
+/// The ids of `team`'s agents, in order.
+fn agent_ids(team: &Team) -> Vec<String> {
+    team.agents.iter().map(|a| a.id.clone()).collect()
 }
 
 #[cfg(test)]

@@ -2,12 +2,13 @@
 //! start. `live_`: runs on a real model make the saves (see `support/live.rs`).
 mod support;
 use support::records;
+use support::team_of;
 
 use std::sync::Arc;
 
 use serde_json::{json, Value};
 use shaked::{app::Config, model::*};
-use support::{app, live, live::Live, packages, run, run_live, AppFx};
+use support::{app, live, live::Live, packages, run, AppFx};
 
 fn agent(id: &str) -> AgentSpec {
     AgentSpec::new(id, AgentKind::Open)
@@ -16,11 +17,7 @@ fn agent(id: &str) -> AgentSpec {
 }
 
 fn team() -> Team {
-    Team {
-        id: "t".into(),
-        name: "T".into(),
-        agents: vec![agent("triage"), agent("resolver")],
-    }
+    team_of(vec![agent("triage"), agent("resolver")])
 }
 
 /// An app that runs no agent; `tweak` adjusts its config.
@@ -114,17 +111,13 @@ async fn run_with_fork(fx: &AppFx, live: &Live) -> (String, Vec<String>) {
     (run_id, saves)
 }
 
+live_test!(
+    live_delete_run_drops_all_part_saves,
+    delete_run_drops_all_part_saves
+);
+
 /// Deleting a run drops every save its branches' events name, and only those: the base and gold
 /// saves stay, and the Shakedown's disk use falls.
-#[test]
-#[ignore = "live: runs a real model (support/live.rs)"]
-fn live_delete_run_drops_all_part_saves() {
-    run_live(
-        Live::any("live_delete_run_drops_all_part_saves"),
-        delete_run_drops_all_part_saves,
-    );
-}
-
 async fn delete_run_drops_all_part_saves(live: Live) {
     let fx = live_setup("delete").await;
     let (run_id, saves) = run_with_fork(&fx, &live).await;
@@ -167,23 +160,16 @@ async fn assert_fork_errors_before_limit(fx: &AppFx) {
         404
     );
     let (_, b) = new_branch(fx).await;
-    assert_eq!(
-        fx.post(&format!("/api/branches/{b}/fork"), json!({"at_seq": 1}))
-            .await
-            .0,
-        409
-    );
+    assert_eq!(fx.fork(&b, json!({"at_seq": 1})).await.0, 409);
     records(&fx.state.store)
         .set_status(&b, BranchStatus::Passed, None)
         .await
         .unwrap();
-    let (st, v) = fx
-        .post(&format!("/api/branches/{b}/fork"), json!({"at_seq": 1}))
-        .await;
+    let (st, v) = fx.fork(&b, json!({"at_seq": 1})).await;
     assert_over_limit(st, &v);
 }
 
-/// The response is the 507 the arena gives when its saves use more than the limit.
+/// The response is the 507 the shakedown gives when its saves use more than the limit.
 fn assert_over_limit(status: u16, body: &Value) {
     assert_eq!(
         (status, body["error"].as_str()),
@@ -252,17 +238,13 @@ async fn orphan_save(fx: &AppFx, save: &str) {
     c.call::<Value>("stop", stop).await.unwrap();
 }
 
+live_test!(
+    live_startup_gc_keeps_named_saves,
+    startup_gc_keeps_named_saves
+);
+
 /// The cleanup at start drops a save no event names, with its folder, and keeps every save a
 /// run's events name and the shared ones.
-#[test]
-#[ignore = "live: runs a real model (support/live.rs)"]
-fn live_startup_gc_keeps_named_saves() {
-    run_live(
-        Live::any("live_startup_gc_keeps_named_saves"),
-        startup_gc_keeps_named_saves,
-    );
-}
-
 async fn startup_gc_keeps_named_saves(live: Live) {
     let fx = live_setup("gc").await;
     let (_, b) = live_run(&fx, &live).await;

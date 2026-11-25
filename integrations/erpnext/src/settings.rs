@@ -45,7 +45,7 @@ impl Default for StackConfig {
                 container: "shakedown-erpnext-db".into(),
                 port: 3308,
                 volume: "shakedown_erpnext_db".into(),
-                root_password: "arena".into(),
+                root_password: "shakedown".into(),
                 flags: SERVER_FLAGS.map(String::from).into(),
             },
             project: "shakedown_erpnext".into(),
@@ -84,20 +84,8 @@ impl StackConfig {
             image: env_or("SHAKEDOWN_ERPNEXT_IMAGE", d.image.clone())?,
             compose_file: env_or("SHAKEDOWN_ERPNEXT_COMPOSE", d.compose_file.clone())?,
         };
-        let c = c.or_existing_old(&d);
         c.check()?;
         Ok(c)
-    }
-
-    /// The stack's names until 2026-11-19 (`arena-erpnext-db`, `arena_erpnext_db`, `arena_erpnext`)
-    /// when its server still has the old default name and only that one exists.
-    fn or_existing_old(mut self, defaults: &StackConfig) -> StackConfig {
-        let new = defaults.server.container.as_str();
-        self.server = (self.server).or_existing_old(new, "arena-erpnext-db", "arena_erpnext_db");
-        if self.server.container != new && self.project == defaults.project {
-            self.project = "arena_erpnext".into();
-        }
-        self
     }
 
     /// These settings with the config's stack keys (`db_container`, `db_port`, `db_volume`,
@@ -231,7 +219,7 @@ mod tests {
     }
 
     #[test]
-    fn stack_defaults_are_the_arena_install() {
+    fn stack_defaults_are_the_shakedown_install() {
         let d = StackConfig::default();
         assert_eq!((d.project.as_str(), d.port), ("shakedown_erpnext", 8180));
         assert_eq!(d.image_tag(), "v16.53.0");
@@ -256,19 +244,19 @@ mod tests {
         let c = d
             .with_config(
                 &json!({"db_container": "db-t", "db_port": 3399, "db_volume": "v-t",
-                                 "project": "arena_t", "http_port": 8181, "diff_doctypes": []}),
+                                 "project": "shakedown_t", "http_port": 8181, "diff_doctypes": []}),
             )
             .unwrap();
         assert_eq!((c.server.container.as_str(), c.server.port), ("db-t", 3399));
         assert_eq!(
             (c.server.volume.as_str(), c.project.as_str(), c.port),
-            ("v-t", "arena_t", 8181)
+            ("v-t", "shakedown_t", 8181)
         );
         assert_eq!(d.with_config(&json!({})).unwrap(), d);
         for bad in [
             json!({"db_port": 70000}),
             json!({"db_container": "a b"}),
-            json!({"project": "Arena"}),
+            json!({"project": "Shakedown"}),
             json!({"db_volume": 3}),
         ] {
             assert_eq!(d.with_config(&bad).unwrap_err().code, -32602, "{bad}");

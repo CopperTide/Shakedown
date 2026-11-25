@@ -62,7 +62,7 @@ struct Saves;
 static SAVES_USERS: std::sync::Mutex<usize> = std::sync::Mutex::new(0);
 
 fn saves_root() -> std::path::PathBuf {
-    std::env::temp_dir().join(format!("arena-part-test-{}", std::process::id()))
+    std::env::temp_dir().join(format!("shakedown-part-test-{}", std::process::id()))
 }
 
 impl Saves {

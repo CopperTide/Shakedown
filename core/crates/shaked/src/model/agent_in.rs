@@ -2,7 +2,7 @@
 
 use serde::Deserialize;
 
-use super::{AgentKind, AgentSpec, Headers};
+use super::{AgentKind, AgentSpec, AuthRef, Headers};
 use crate::providers::BEDROCK_PREFIX;
 
 /// The kinds a team member may name: every [`AgentKind`], and `bedrock`, which is an `open`
@@ -44,6 +44,8 @@ pub(super) struct AgentSpecIn {
     #[serde(default)]
     headers: Headers,
     #[serde(default)]
+    auth: Option<AuthRef>,
+    #[serde(default)]
     tools: Vec<String>,
     #[serde(default)]
     reasoning: Option<serde_json::Value>,
@@ -75,6 +77,7 @@ impl From<AgentSpecIn> for AgentSpec {
             lead: a.lead,
             url: a.url,
             headers: a.headers,
+            auth: a.auth,
             tools: a.tools,
             reasoning: a.reasoning,
             max_tokens: a.max_tokens,
@@ -94,6 +97,19 @@ mod tests {
         .unwrap();
         assert_eq!(a.tools, ["read_tag"]);
         assert!(a.may_use("read_tag") && !a.may_use("write_tag"));
+    }
+
+    #[test]
+    fn auth_on_an_agent_that_is_not_http_is_refused() {
+        let a: AgentSpec = serde_json::from_value(json!({"id": "a", "name": "A",
+            "kind": "open", "auth": {"key": "k"}}))
+        .unwrap();
+        let providers = crate::providers::ProviderConfig::default();
+        let e = crate::model::team::validate_agents(&providers, &[a]).unwrap_err();
+        assert!(
+            e.to_string().contains("auth belongs to http agents only"),
+            "{e}"
+        );
     }
 
     #[test]

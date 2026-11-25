@@ -66,7 +66,7 @@ impl Env {
             container: self.container.clone(),
             port: self.port,
             volume: self.volume.clone(),
-            root_password: "arena".into(),
+            root_password: "shakedown".into(),
             flags: vec![],
         })
         .unwrap()
@@ -557,10 +557,10 @@ async fn live_mariadb_identity_migration() {
         .unwrap();
     let server = e.server();
     let old_schema = async |id: Option<&str>| {
-        let insert = id.map(|id| format!("INSERT INTO arena_meta.server VALUES ('{id}');"));
+        let insert = id.map(|id| format!("INSERT INTO shakedown_meta.server VALUES ('{id}');"));
         let sql = format!(
-            "SET sql_log_bin = 0; DROP TABLE arena_meta.server; \
-             CREATE TABLE arena_meta.server (id CHAR(36) NOT NULL); {}",
+            "SET sql_log_bin = 0; DROP TABLE shakedown_meta.server; \
+             CREATE TABLE shakedown_meta.server (id CHAR(36) NOT NULL); {}",
             insert.unwrap_or_default()
         );
         server

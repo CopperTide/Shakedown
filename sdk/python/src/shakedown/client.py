@@ -24,6 +24,7 @@ from .models import (
     RunSummary,
     Task,
     Team,
+    as_disruption_change,
     as_scenario,
     as_team,
 )
@@ -375,26 +376,11 @@ def _poll(
     return value
 
 
-class OldConnectionName:
-    """``.arena``: the old name of ``.shakedown``, the connection (the SDK was ``arena`` until
-    2026-11-19)."""
-
-    shakedown: Shakedown
-
-    @property
-    def arena(self) -> Shakedown:
-        return self.shakedown
-
-    @arena.setter
-    def arena(self, value: Shakedown) -> None:
-        self.shakedown = value
-
-
 def _bid(b: Union[str, "Branch"]) -> str:
     return b.id if isinstance(b, Branch) else b
 
 
-class Branch(OldConnectionName):
+class Branch:
     """A branch of a run: the original run, or a fork. Cheap to make; reads go to shaked each time."""
 
     def __init__(
@@ -572,10 +558,15 @@ class Branch(OldConnectionName):
         changes: Optional[dict[str, Union[Change, dict[str, Any]]]] = None,
         restore: str = "exact",
         team: TeamLike = None,
+        add: Optional[Sequence[Any]] = None,
+        remove: Optional[Sequence[str]] = None,
     ) -> "Branch":
         """A new branch from just before step ``at_seq``, with ``changes`` to agents
         (``{agent id: Change(...)}``) or, for an external run, another ``team``. The world is
         restored ``exact`` or ``approximate``; a part that can't be is refused (:class:`Conflict`).
+        ``restore="none"`` (evaluation only) leaves the world as this branch ended. ``add`` (scenario
+        options, as a run's ``scenario`` takes them) and ``remove`` (ids of disruptions armed before
+        ``at_seq``) change the scheduled disruptions from the fork point on.
         The fork may start earlier than asked (``fork_info.moved_from``/``reason``). A fork of an
         external run stays live: its ``agents`` hold each agent's endpoints and ``history``."""
         body: dict[str, Any] = {"at_seq": at_seq, "restore": restore}
@@ -585,6 +576,9 @@ class Branch(OldConnectionName):
             }
         if team is not None:
             body["team"] = as_team(team)
+        disruptions = as_disruption_change(add, remove)
+        if disruptions:
+            body["disruptions"] = disruptions
         ans = self.shakedown.post(f"/api/branches/{self.id}/fork", body)
         info = ForkInfo(ans["start_seq"], ans.get("moved_from"), ans.get("reason"))
         b = Branch(self.shakedown, ans["branch_id"], self.run_id, task_id=self.task_id, fork=info)
@@ -819,7 +813,7 @@ class AgentEndpoint:
         return {"mcpServers": {name: server}}
 
 
-class Suite(OldConnectionName):
+class Suite:
     """A test suite. ``report`` is the last report read; :meth:`refresh` reads it again."""
 
     def __init__(self, shakedown: Shakedown, report: dict[str, Any]):
@@ -878,8 +872,5 @@ class Suite(OldConnectionName):
 
         return export_branches(self.shakedown, [b.id for b in self.branches()], path, suite=self.report)
 
-
-#: The old name (the SDK was ``arena`` until 2026-11-19).
-Arena = Shakedown
 
 __all__ = ["Shakedown", "Branch", "Rewind", "AgentEndpoint", "Suite", "ENDED", "DEFAULT_URL"]

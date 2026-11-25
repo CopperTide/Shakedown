@@ -6,7 +6,7 @@
 use std::{future::Future, pin::Pin, sync::Arc};
 
 use super::{AgentResult, FailureKind};
-use crate::{exec::BranchCtx, model::AgentSpec, store::Store};
+use crate::{exec::BranchCtx, model::AgentSpec};
 
 /// How one turn ended: well (with what the agent said last), or failed.
 #[derive(Debug, Clone, PartialEq)]
@@ -50,6 +50,9 @@ impl Turn {
 
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
+/// A session being started: the session, or why it can't be.
+pub type Started<'a> = BoxFuture<'a, Result<Box<dyn Session>, String>>;
+
 /// One agent alive across turns.
 pub trait Session: Send {
     /// Runs one turn with `input` as the user's message; resolves when the agent ends the turn.
@@ -61,12 +64,11 @@ pub trait Session: Send {
     fn end(self: Box<Self>, cut: bool) -> BoxFuture<'static, AgentResult>;
 }
 
-/// What a session starts with: its branch (for its tools and flow), its agent, and the store its
-/// model calls are recorded in.
+/// What a session starts with: its branch (for its tools and flow, and where its model calls are
+/// recorded) and its agent.
 pub struct SessionStart {
     pub branch: Arc<BranchCtx>,
     pub spec: AgentSpec,
-    pub store: Arc<Store>,
 }
 
 /// The note an agent's end carries when a turn of it was cut off.

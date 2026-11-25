@@ -33,8 +33,7 @@ fn text(content: &str) -> (u16, Value) {
 
 /// The example project with the assistant on model `m` of provider `openai`.
 fn project() -> tempfile::TempDir {
-    let dir = tempfile::tempdir().unwrap();
-    support::copy_dir(&support::project_fixture(), dir.path());
+    let dir = support::project::project_copy();
     let config = dir.path().join("shakedown.yaml");
     let text = std::fs::read_to_string(&config).unwrap();
     std::fs::write(
@@ -183,8 +182,7 @@ fn stops_after_eight_turns() {
 #[test]
 fn no_model_is_explained() {
     run(async {
-        let dir = tempfile::tempdir().unwrap();
-        support::copy_dir(&support::project_fixture(), dir.path());
+        let dir = support::project::project_copy();
         let fx = AppFx::idle("assistant", "nomodel")
             .providers(ProviderConfig::default())
             .project(dir.path())
@@ -230,13 +228,6 @@ fn apply_diff_card_writes() {
     });
 }
 
-async fn read_token(fx: &AppFx) -> String {
-    let (_, minted) = fx
-        .post("/api/tokens", json!({"name": "r", "scopes": ["read"]}))
-        .await;
-    minted["token"].as_str().unwrap().to_string()
-}
-
 /// `method path` with `body`, as the token's bearer: the status.
 async fn as_token(fx: &AppFx, token: &str, put: bool, path: &str, body: Value) -> u16 {
     let url = format!("{}{path}", fx.base);
@@ -264,7 +255,7 @@ fn read_token_gets_cards_not_writes() {
         .await;
         let dir = project();
         let fx = app("readtoken", &llm, dir.path()).await;
-        let token = read_token(&fx).await;
+        let token = fx.mint_token(&["read"]).await;
         let chat = json!({"messages": [{"role": "user", "content": "List"}]});
         assert_eq!(
             as_token(&fx, &token, false, "/api/assistant/chat", chat).await,
@@ -282,5 +273,72 @@ fn read_token_gets_cards_not_writes() {
             .await,
             403
         );
+    });
+}
+
+#[test]
+fn delete_card_leaves_the_choice_to_the_person() {
+    run(async {
+        let delete = tool_call(
+            "worlds_delete",
+            json!({"id": "larkspur-plant", "cascade": true, "confirm": true}),
+        );
+        let llm = fake_llm(vec![delete, text("Confirm to delete.")]).await;
+        let dir = project();
+        let fx = app("delete-card", &llm, dir.path()).await;
+        let (status, out) = ask(&fx, "Delete the plant").await;
+        assert_eq!(status, 200, "{out}");
+        assert_eq!(out["cards"][0]["kind"], "confirm");
+        assert_eq!(
+            out["cards"][0]["arguments"],
+            json!({"id": "larkspur-plant"})
+        );
+        assert!(dir
+            .path()
+            .join("worlds/larkspur-plant/world.yaml")
+            .is_file());
+    });
+}
+
+#[test]
+fn every_confirmable_edit_becomes_a_diff_card() {
+    run(async {
+        let rename = tool_call(
+            "project_update",
+            json!({"body": {"format": "shakedown-project/1", "name": "Renamed Ops"}}),
+        );
+        let llm = fake_llm(vec![rename, text("Apply to rename.")]).await;
+        let dir = project();
+        let fx = app("edit-card", &llm, dir.path()).await;
+        let (status, out) = ask(&fx, "Rename the project").await;
+        assert_eq!(status, 200, "{out}");
+        assert_eq!(out["cards"][0]["kind"], "diff", "{out}");
+        assert!(out["cards"][0]["diff"]
+            .as_str()
+            .unwrap()
+            .contains("+name: Renamed Ops"));
+        let text = std::fs::read_to_string(dir.path().join("shakedown.yaml")).unwrap();
+        assert!(
+            !text.contains("Renamed Ops"),
+            "nothing is written before Apply"
+        );
+    });
+}
+
+#[test]
+fn a_restore_card_is_pinned_to_its_delete() {
+    run(async {
+        let restore = tool_call("project_restore", json!({}));
+        let llm = fake_llm(vec![restore, text("Apply to undo.")]).await;
+        let dir = project();
+        let fx = app("restore-card", &llm, dir.path()).await;
+        let (status, _) = fx
+            .delete("/api/project/experiments/supplier-slip-solo-vs-team")
+            .await;
+        assert_eq!(status, 200);
+        let (status, out) = ask(&fx, "Undo that").await;
+        assert_eq!(status, 200, "{out}");
+        assert_eq!(out["cards"][0]["kind"], "diff", "{out}");
+        assert!(out["cards"][0]["arguments"]["trash"].is_string(), "{out}");
     });
 }

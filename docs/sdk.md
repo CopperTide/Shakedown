@@ -4,7 +4,7 @@ Shakedown's core is **shaked** (the service), the **`shakedown-part/1` protocol*
 fully usable without a UI: everything the web UI does goes through shaked's public HTTP API
 ([reference.md](reference.md#http-api)), and so can your code. Three ways in:
 
-- **Python:** the `shakedown` package (in [`sdk/python`](../sdk/python); its old name `arena` still works, see [Old names](../README.md#old-names)): connect to or start a core,
+- **Python:** the `shakedown` package (in [`sdk/python`](../sdk/python)): connect to or start a core,
   build environments, run teams, observe, control, export, and a step-loop environment for RL research.
 - **Any language:** the HTTP API and the event stream (Server-Sent Events); the agents' endpoints are MCP and
   OpenAI chat completions, so any MCP client and any OpenAI-compatible client work.
@@ -42,8 +42,10 @@ with Shakedown.local(                                     # or start one for the
     print(sd.health()["benchmark"])
 ```
 
-A shaked runs one benchmark. To use several, start one `Shakedown.local` per benchmark (each on its own port; they
-can share one Postgres server). `sd.health()`, `sd.providers()` and `sd.world()` say what the core can
+The SDK runs on the core's current benchmark (`SHAKEDOWN_BENCHMARK`, or the one chosen with `POST
+/api/worlds/{name}/use`). The HTTP API's `POST /api/runs` and `POST /api/experiments` also take a `benchmark` per
+call; from the SDK, start one `Shakedown.local` per benchmark (each on its own port; they can share one Postgres
+server). `sd.health()`, `sd.providers()` and `sd.world()` say what the core can
 do: which CLIs it found, which model providers have keys, what each part of the world can restore.
 
 `Shakedown(url, token="sd_…")` sends an API token (from Settings → API tokens in the UI, or
@@ -73,7 +75,8 @@ branch = sd.run(task, team, seed=7,
 The world itself is whatever the benchmark names: its parts and their seed data. To assemble your own world from
 part packages, write a benchmark package that lists the parts (`describe.world`) and brings the tasks, tools and
 gold actions or named checks ([packages.md](packages.md#write-a-benchmark)), put it in a folder, and pass that
-folder in `packages=[...]`. The core has no route to compose a world on the fly.
+folder in `packages=[...]`. The core has no route to compose a world of parts on the fly; the world builder (`POST /api/worlds`) generates
+one from a template ([packages.md](packages.md#templates-and-built-worlds)).
 
 ## Run teams
 
@@ -173,6 +176,8 @@ branch.rewind(event=17).plan()                   # how each part will be restore
 
 from shakedown import Change
 fork = branch.fork(17, changes={"resolver": Change(prompt="...", model="sonnet")}, restore="exact")
+fork = branch.fork(17, changes={"resolver": Change(tools=["get_order_details"])})  # exactly these world tools (not [])
+fork = branch.fork(17, remove=["stale-order-status"])   # drop a scheduled disruption from step 17 on (add=[...] adds options)
 fork.fork_info                                   # start_seq, moved_from, reason (a CLI agent restarts from its start)
 branch.restore_plan(17)                          # how each part will be restored, or the refusal
 fork = ext_branch.fork(9, team=[Agent.external("solo")])     # external runs: another team, live, with history
@@ -243,7 +248,9 @@ a step is reproducible given the world. `examples/step_env.py` uses a Claude mod
 - **Exact and approximate restores.** A fork puts each part back as it was before the fork step: exactly (a save,
   or a deterministic replay checked against the record) or approximately (a save that may miss something). A
   fork that can't restore a part in the mode asked is refused, naming it; an approximate fork is labelled
-  (`restore_mode`, `restored`). See [concepts.md](concepts.md#restore-modes).
+  (`restore_mode`, `restored`). See [concepts.md](concepts.md#restore-modes). For evaluation only,
+  `restore="none"` keeps the agents' context but leaves the world as the parent branch ended (the snapshots-off
+  ablation); the branch records `restore_mode: "none"` and nothing defaults to it.
 - **Pinned parts.** A replay is refused when a part's fingerprint (versions, source hashes) changed since the
   run; each part's fingerprint is in `RunStart.fingerprints`.
 - **Time.** Shakedown times its own overhead on every event; `estimated_s` is the run's time without it.
@@ -280,7 +287,7 @@ A typed Rust client crate is not written yet. Write integrations and benchmarks 
 ## Core and UI are separate
 
 The core (shaked, the protocol, the kits, the integrations and benchmarks) depends on no UI. The web UI (`ui/`)
-is one client of the HTTP API, as CopperTide's Shakedown control and this SDK are. shaked can serve a built UI
+is one client of the HTTP API, as this SDK and the control MCP server are. shaked can serve a built UI
 (`SHAKEDOWN_UI_DIST`) as a convenience; it is not required. A UI served from another origin can call the API when
 shaked lists that origin in `SHAKEDOWN_CORS_ORIGIN` ([reference.md](reference.md#configuration)); the API still
 answers only a loopback `Host`.

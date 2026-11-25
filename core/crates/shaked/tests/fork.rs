@@ -6,6 +6,7 @@
 //! in `src/fork.rs`'s own tests.
 mod support;
 use support::records;
+use support::team_of;
 
 use std::{collections::HashMap, sync::Arc};
 
@@ -24,7 +25,7 @@ use support::{
     packages::{plain_hub, TestHub},
     pg,
     pg::Cleanup,
-    run, run_live, AppFx,
+    run, AppFx,
 };
 
 /// A team for data only (never run).
@@ -34,11 +35,7 @@ fn team() -> Team {
             .with_model("m")
             .with_prompt(format!("You are {id}."))
     };
-    Team {
-        id: "t".into(),
-        name: "T".into(),
-        agents: vec![agent("triage"), agent("resolver")],
-    }
+    team_of(vec![agent("triage"), agent("resolver")])
 }
 
 /// An app with the real drivers on the configured providers.
@@ -77,7 +74,7 @@ fn assert_child_of(c: &Branch, b: &Branch, parent: &str, at: i64) {
     assert_eq!(c.start_seq, Some(at));
     assert_eq!(c.run_id, b.run_id);
     assert_eq!((b.restore_mode, b.restored.len()), (None, 0));
-    assert_eq!(c.restore_mode, Some(parts::proto::Mode::Exact));
+    assert_eq!(c.restore_mode, Some(RestoreMode::Exact));
     let retail = RestoredPart {
         part: "retail".into(),
         how: RestoredHow::Save,
@@ -117,17 +114,10 @@ fn first_read_before_writes(cevs: &[Event], from: i64) -> Option<Value> {
     None
 }
 
-/// A fork at the resolver's start: it starts there, in the same run, its timeline begins with
-/// its parent's, its world is restored exactly from the save as it was at that point (what the
-/// resolver reads first), the triage is not run again, and a bad step or agent makes no branch.
-#[test]
-#[ignore = "live: runs a real model (support/live.rs)"]
-fn live_a_fork_restores_the_world_at_its_fork_point() {
-    run_live(
-        Live::any("live_a_fork_restores_the_world_at_its_fork_point"),
-        a_fork_restores_the_world_at_its_fork_point,
-    );
-}
+live_test!(
+    live_a_fork_restores_the_world_at_its_fork_point,
+    a_fork_restores_the_world_at_its_fork_point
+);
 
 /// A fork at a step the branch doesn't have, or changing an agent the team doesn't have, is
 /// refused and makes no branch.
@@ -154,6 +144,9 @@ async fn assert_bad_forks_make_nothing(fx: &AppFx, pid: &str, at: i64) {
     );
 }
 
+/// A fork at the resolver's start: it starts there, in the same run, its timeline begins with
+/// its parent's, its world is restored exactly from the save as it was at that point (what the
+/// resolver reads first), the triage is not run again, and a bad step or agent makes no branch.
 async fn a_fork_restores_the_world_at_its_fork_point(live: Live) {
     let fx = setup("world").await;
     let (pid, b, pevs) = parent(&fx, bench_team(&fx, &live).await).await;
@@ -178,18 +171,14 @@ async fn a_fork_restores_the_world_at_its_fork_point(live: Live) {
     }
 }
 
+live_test!(
+    live_a_fork_applies_a_prompt_change,
+    a_fork_applies_a_prompt_change
+);
+
 /// A prompt change for the resolver: the child stores its effective team and the change as
 /// given, and (with shaked's own loop) every model call of the resolver in it carries the new
 /// system prompt.
-#[test]
-#[ignore = "live: runs a real model (support/live.rs)"]
-fn live_a_fork_applies_a_prompt_change() {
-    run_live(
-        Live::any("live_a_fork_applies_a_prompt_change"),
-        a_fork_applies_a_prompt_change,
-    );
-}
-
 async fn a_fork_applies_a_prompt_change(live: Live) {
     let fx = setup("prompt").await;
     let team = bench_team(&fx, &live).await;
@@ -219,17 +208,14 @@ async fn a_fork_applies_a_prompt_change(live: Live) {
     }
 }
 
+live_test!(
+    live_an_open_agent_resumes_a_fork_mid_conversation,
+    an_open_agent_resumes_a_fork_mid_conversation,
+    api
+);
+
 /// shaked's own agent resumes a fork at one of its model calls: the child starts there and its
 /// first call sends the conversation recorded up to it.
-#[test]
-#[ignore = "live: runs a real model (support/live.rs)"]
-fn live_an_open_agent_resumes_a_fork_mid_conversation() {
-    run_live(
-        Live::api("live_an_open_agent_resumes_a_fork_mid_conversation"),
-        an_open_agent_resumes_a_fork_mid_conversation,
-    );
-}
-
 async fn an_open_agent_resumes_a_fork_mid_conversation(live: Live) {
     let fx = setup("resume").await;
     let (pid, _b, pevs) = parent(&fx, bench_team(&fx, &live).await).await;
@@ -494,17 +480,14 @@ fn old_run_still_shows_rows_compares_and_deletes() {
     })
 }
 
+live_test!(
+    live_old_run_still_forks_from_its_snapshot,
+    old_run_still_forks_from_its_snapshot,
+    api
+);
+
 /// An old run (its agents were all shaked's own) still forks from its snapshot: a fork at the
 /// model call after the write starts from the snapshot, so the world has the write.
-#[test]
-#[ignore = "live: runs a real model (support/live.rs)"]
-fn live_old_run_still_forks_from_its_snapshot() {
-    run_live(
-        Live::api("live_old_run_still_forks_from_its_snapshot"),
-        old_run_still_forks_from_its_snapshot,
-    );
-}
-
 async fn old_run_still_forks_from_its_snapshot(live: Live) {
     let prompt = "You are a retail support agent. First read order #W7181492 with get_order_details, then stop.";
     let fx = LegacyFx::new(&live.team(vec![live.agent("resolver", prompt)])).await;

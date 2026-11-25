@@ -19,10 +19,13 @@ import { costIsUnknown, teamProviders } from '@/model/providers';
 import { worldLine } from '@/model/restore';
 import type { Branch, BranchDetail, Event } from '@/model/types';
 import ActionTimeline from './ActionTimeline';
+import AskStep from './AskStep';
 import { type ForkChoice, forkChoiceOf } from './architecture';
 import BestSoFar from './BestSoFar';
 import { studyOf } from './candidates';
 import EventLog from './EventLog';
+import { logRows } from './logFilter';
+import { LogFilters, useLogFilter } from './LogFilters';
 import { forkShiftMs, onForkClock } from '@/model/forkTime';
 import { pausesOf } from './flow';
 import { forkNotice } from './forkNotice';
@@ -101,8 +104,8 @@ function Header({ runId, detail, siblings, title, step }: { runId: string; detai
   );
 }
 
-function Side({ runId, detail, event, forking, setForking, autoRows, choice }: {
-  runId: string; detail: BranchDetail; event: Event | null; forking: boolean; setForking: (f: boolean) => void; autoRows: boolean; choice: ForkChoice;
+function Side({ runId, detail, event, forking, setForking, autoRows, choice, onSelect }: {
+  runId: string; detail: BranchDetail; event: Event | null; forking: boolean; setForking: (f: boolean) => void; autoRows: boolean; choice: ForkChoice; onSelect: (s: number) => void;
 }) {
   const nav = useNavigate();
   return (
@@ -114,6 +117,7 @@ function Side({ runId, detail, event, forking, setForking, autoRows, choice }: {
         </div>
       )}
       <Inspector branchId={detail.id} event={event} team={detail.team} autoRows={autoRows} events={detail.events} />
+      {event && <AskStep key={`${detail.id}:${event.seq}`} branchId={detail.id} seq={event.seq} onStep={onSelect} />}
     </StepSidePanel>
   );
 }
@@ -129,6 +133,9 @@ function Main({ detail, timeline: { lanes, span }, selected, onSelect, models, s
     return pausesOf(onForkClock(detail.events, detail.start_seq), now - shift);
   }, [detail.events, detail.start_seq, now]);
   const study = useMemo(() => studyOf(detail.events), [detail.events]);
+  const rows = useMemo(() => logRows(lanes, models), [lanes, models]);
+  const { filter, setFilter, matches } = useLogFilter(rows);
+  const filters = <LogFilters rows={rows} filter={filter} setFilter={setFilter} shown={matches?.size ?? null} />;
   return (
     <div className="flex min-w-0 flex-col gap-3">
       {study && <BestSoFar s={study} selected={selected} onSelect={onSelect} />}
@@ -138,8 +145,8 @@ function Main({ detail, timeline: { lanes, span }, selected, onSelect, models, s
           <div className="flex items-center gap-3 border-b border-line pl-3">
             <TabsList className="border-b-0"><TabsTrigger value="timeline">Timeline</TabsTrigger><TabsTrigger value="log">Event log</TabsTrigger><TabsTrigger value="coordination">Coordination</TabsTrigger></TabsList>
           </div>
-          <TabsContent value="timeline"><ActionTimeline lanes={lanes} team={detail.team} span={span} selected={selected} onSelect={onSelect} models={models} onModels={setModels} live={live} pauses={pauses} /></TabsContent>
-          <TabsContent value="log"><EventLog lanes={lanes} span={span} selected={selected} onSelect={onSelect} models={models} /></TabsContent>
+          <TabsContent value="timeline">{filters}<ActionTimeline lanes={lanes} team={detail.team} span={span} selected={selected} onSelect={onSelect} models={models} onModels={setModels} live={live} pauses={pauses} matches={matches} /></TabsContent>
+          <TabsContent value="log">{filters}<EventLog rows={rows} matches={matches} span={span} selected={selected} onSelect={onSelect} /></TabsContent>
           <TabsContent value="coordination"><Coordination events={detail.events} /></TabsContent>
         </Tabs>
       </Panel>
@@ -180,7 +187,7 @@ export default function Run() {
         <RunErrorBanner error={error} onRetry={reload} detail={detail} />
         <RunReview d={detail} onStep={v.setSelected} />
         <Split storageKey="shakedown.run.side" main={<Main detail={detail} timeline={timeline} selected={v.selected} onSelect={v.setSelected} models={models} setModels={setModels} />}
-          side={<Side runId={runId} detail={detail} event={event} forking={v.forking} setForking={v.setForking} autoRows={v.autoRows} choice={v.choice} />} />
+          side={<Side runId={runId} detail={detail} event={event} forking={v.forking} setForking={v.setForking} autoRows={v.autoRows} choice={v.choice} onSelect={v.setSelected} />} />
         <More detail={detail} />
       </PageBody>
     </>

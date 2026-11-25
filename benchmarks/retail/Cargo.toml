@@ -11,14 +11,10 @@ path = "src/lib.rs"
 name = "shakedown-retail"
 path = "src/main.rs"
 
-# The program's name until 2026-11-19, built too for scripts that still run it.
-[[bin]]
-name = "arena-retail"
-path = "src/old_name.rs"
-
 [dependencies]
 shakedown-part = { path = "../../kits/rust", features = ["postgres"] }
 tokio.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 anyhow.workspace = true
 async-trait.workspace = true

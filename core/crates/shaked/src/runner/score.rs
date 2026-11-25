@@ -11,7 +11,7 @@ use crate::{app::AppState, exec::BranchCtx, model::*, overhead::Cat, world};
 /// clock parts are first moved on to the frozen clock (a wall clock's last tick came up to a tick
 /// before it), and the move recorded, so they are scored at the end. Freezing twice is freezing
 /// once.
-pub(crate) async fn freeze(state: &AppState, ctx: &BranchCtx) {
+pub(super) async fn freeze(state: &AppState, ctx: &BranchCtx) {
     ctx.stop_ticker().await;
     ctx.clock.freeze();
     let exec = crate::exec::ToolExec::new(state.store.clone());
@@ -20,9 +20,15 @@ pub(crate) async fn freeze(state: &AppState, ctx: &BranchCtx) {
     }
 }
 
+/// The world scored as it stands: frozen, then checked.
+pub(crate) async fn score_now(state: &AppState, ctx: &BranchCtx) -> Result<Ending> {
+    freeze(state, ctx).await;
+    check(state, ctx).await
+}
+
 /// Scores the world and records the Check. A branch on which an agent broke a rule fails with it,
 /// whatever the checks say.
-pub(crate) async fn check(state: &AppState, ctx: &BranchCtx) -> Result<Ending> {
+async fn check(state: &AppState, ctx: &BranchCtx) -> Result<Ending> {
     let since = Instant::now();
     let check = score(state, ctx).await?;
     ctx.overhead.add_since(Cat::Score, since);
@@ -31,8 +37,7 @@ pub(crate) async fn check(state: &AppState, ctx: &BranchCtx) -> Result<Ending> {
         None => verdict(&check, &ctx.world.part_names()),
     };
     let payload = serde_json::to_value(&check)?;
-    ctx.append(&state.store, None, EventKind::Check, payload)
-        .await?;
+    ctx.append(None, EventKind::Check, payload).await?;
     Ok(ending)
 }
 

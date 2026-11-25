@@ -9,7 +9,7 @@ use std::{future::Future, path::PathBuf, time::Duration};
 
 use serde_json::{json, Value};
 use shaked::model::*;
-use support::{app::send, AppFx};
+use support::{app::send, poll_until, AppFx, SAVES_BUILT, STEP, TIME_UP_LATE_MS, WAIT};
 
 fn run<F: Future>(f: F) -> F::Output {
     tokio::runtime::Runtime::new().unwrap().block_on(f)
@@ -48,34 +48,34 @@ impl AppFx {
         v["branch_id"].as_str().unwrap().to_string()
     }
 
-    /// Starts the experiment `exp` and waits up to `secs` for it to end: its runs' branches.
-    async fn experiment_runs(&self, exp: Value, secs: u64) -> Vec<String> {
+    /// Starts the experiment `exp` and waits up to `limit` for it to end: its runs' branches
+    /// (those started by then).
+    async fn experiment_runs(&self, exp: Value, limit: Duration) -> Vec<String> {
         let (status, made) = self.post("/api/experiments", exp).await;
         assert_eq!(status, 200, "{made}");
         let id = made["id"].as_str().unwrap().to_string();
         let store = &self.state.store;
-        let deadline = std::time::Instant::now() + Duration::from_secs(secs);
-        loop {
+        let mut branches = vec![];
+        let done = async || {
             let suites = records(store).experiment_suites(&id).await.unwrap();
             let slots = records(store).slots(&suites[0].id).await.unwrap();
-            let branches: Vec<String> = slots.iter().filter_map(|s| s.branch_id.clone()).collect();
+            branches = slots.iter().filter_map(|s| s.branch_id.clone()).collect();
             let ended = records(store).experiment_ended(&id).await.unwrap();
-            if ended && branches.len() == slots.len() || std::time::Instant::now() > deadline {
-                return branches;
-            }
-            tokio::time::sleep(Duration::from_millis(100)).await;
-        }
+            (ended && branches.len() == slots.len()).then_some(())
+        };
+        poll_until(limit, STEP, done).await;
+        branches
     }
 
+    /// The branch once it has ended. A run of task 27 starts and is scored on the test's own hub,
+    /// its saves built behind every other test's, so the wait is [`SAVES_BUILT`].
     async fn ended(&self, branch: &str) -> Branch {
-        for _ in 0..300 {
+        let over = async || {
             let b = records(&self.state.store).branch(branch).await.unwrap();
-            if b.status != BranchStatus::Running {
-                return b;
-            }
-            tokio::time::sleep(Duration::from_millis(100)).await;
-        }
-        panic!("branch {branch} did not end");
+            (b.status != BranchStatus::Running).then_some(b)
+        };
+        let b = poll_until(SAVES_BUILT, STEP, over).await;
+        b.unwrap_or_else(|| panic!("branch {branch} did not end"))
     }
 }
 
@@ -172,14 +172,8 @@ fn a_driver_that_exits_without_finishing_fails_the_run_scored() {
 /// True once the process `pid` is gone, waiting up to `wait`.
 async fn gone_within(pid: &str, wait: Duration) -> bool {
     let proc_dir = PathBuf::from(format!("/proc/{pid}"));
-    let deadline = std::time::Instant::now() + wait;
-    while proc_dir.exists() {
-        if std::time::Instant::now() > deadline {
-            return false;
-        }
-        tokio::time::sleep(Duration::from_millis(100)).await;
-    }
-    true
+    let gone = async || (!proc_dir.exists()).then_some(());
+    poll_until(wait, STEP, gone).await.is_some()
 }
 
 #[test]
@@ -197,7 +191,7 @@ fn a_driver_that_outlives_its_run_is_killed() {
         let b = fx.ended(&branch).await;
         assert_eq!(b.status, BranchStatus::Failed, "{:?}", b.error);
         let pid = std::fs::read_to_string(&pid_file).unwrap();
-        let gone = gone_within(pid.trim(), Duration::from_secs(10)).await;
+        let gone = gone_within(pid.trim(), WAIT).await;
         let _ = std::fs::remove_dir_all(&dir);
         assert!(
             gone,
@@ -213,7 +207,7 @@ fn an_experiment_setup_launches_its_driver_for_each_run() {
         let id = fx.connection("exit_early.py", json!({})).await;
         let exp =
             json!({"task": "27", "runs": 2, "setups": [{"name": "Our code", "connection": id}]});
-        let branches = fx.experiment_runs(exp, 30).await;
+        let branches = fx.experiment_runs(exp, SAVES_BUILT).await;
         assert_eq!(branches.len(), 2, "both runs started");
         for b in &branches {
             let ended = fx.ended(b).await;
@@ -238,26 +232,22 @@ fn an_experiment_setup_launches_its_driver_for_each_run() {
 
 /// The `driver` exit event of `branch`, waiting for it (it is recorded just after the run ends).
 async fn driver_exit(fx: &AppFx, branch: &str) -> Event {
-    for _ in 0..100 {
+    let exit = async || {
         let evs = records(&fx.state.store).events(branch).await.unwrap();
-        let exit = evs.into_iter().rev().find(|e| {
+        evs.into_iter().rev().find(|e| {
             e.kind == EventKind::WorldEvent
                 && e.payload["part"] == "driver"
                 && e.branch_id == branch
-        });
-        if let Some(e) = exit {
-            return e;
-        }
-        tokio::time::sleep(Duration::from_millis(100)).await;
-    }
-    panic!("no driver exit on {branch}");
+        })
+    };
+    let exit = poll_until(WAIT, STEP, exit).await;
+    exit.unwrap_or_else(|| panic!("no driver exit on {branch}"))
 }
 
 impl AppFx {
     /// Forks `branch` at `at`, expecting its driver relaunched: the new branch.
     async fn fork_relaunched(&self, branch: &str, at: i64) -> (String, i64) {
-        let path = format!("/api/branches/{branch}/fork");
-        let (status, forked) = self.post(&path, json!({"at_seq": at})).await;
+        let (status, forked) = self.fork(branch, json!({"at_seq": at})).await;
         assert_eq!(
             (status, forked["driver"].as_str()),
             (200, Some("relaunched")),
@@ -292,7 +282,7 @@ fn a_fork_of_a_code_run_whose_connection_is_gone_fails() {
         let evs = records(&fx.state.store).events(&parent).await.unwrap();
         let at = evs.iter().find(|e| e.kind == EventKind::AgentStart);
         let body = json!({"at_seq": at.unwrap().seq});
-        let (status, forked) = fx.post(&format!("/api/branches/{parent}/fork"), body).await;
+        let (status, forked) = fx.fork(&parent, body).await;
         assert_eq!(
             (status, &forked["driver"]),
             (200, &json!("failed")),
@@ -496,7 +486,7 @@ fn live_an_experiment_setup_runs_a_code_connection() {
         let task = fx.get("/api/tasks").await.1[0]["id"].clone();
         let exp =
             json!({"task": task, "runs": 2, "setups": [{"connection": id}], "max_cost_usd": 1.0});
-        let branches = fx.experiment_runs(exp, 600).await;
+        let branches = fx.experiment_runs(exp, Duration::from_secs(600)).await;
         assert_eq!(branches.len(), 2, "both runs started");
         for b in &branches {
             let ended = fx.ended(b).await;
@@ -564,6 +554,17 @@ fn has_time_up(evs: &[Event]) -> bool {
     evs.iter().any(|e| up(e) && e.payload["kind"] == "time_up")
 }
 
+/// The window ended at clock `limit` or up to [`TIME_UP_LATE_MS`] later.
+fn time_up_on_time(evs: &[Event], limit: i64) {
+    let up = |e: &&Event| e.kind == EventKind::WorldEvent && e.payload["kind"] == "time_up";
+    let at = evs
+        .iter()
+        .find(up)
+        .map(|e| e.payload["clock_ms"].as_i64().unwrap());
+    let on_time = at.is_some_and(|ms| (limit..=limit + TIME_UP_LATE_MS).contains(&ms));
+    assert!(on_time, "time_up at {at:?}, not from {limit} ms");
+}
+
 #[test]
 fn a_driver_that_exits_holding_a_finish_leaves_its_run_to_the_window() {
     run(async {
@@ -575,6 +576,7 @@ fn a_driver_that_exits_holding_a_finish_leaves_its_run_to_the_window() {
         assert!(!error.contains("driver"), "{error}");
         let evs = records(&fx.state.store).events(&branch).await.unwrap();
         assert!(has_time_up(&evs), "the window ended the run");
+        time_up_on_time(&evs, 6000);
         assert!(evs.iter().any(|e| e.kind == EventKind::Check));
         driver_exit(&fx, &branch).await;
     })
@@ -591,5 +593,6 @@ fn a_windowed_run_is_not_cut_off_before_its_window_ends() {
         assert!(!error.contains("still running after"), "{error}");
         let evs = records(&fx.state.store).events(&branch).await.unwrap();
         assert!(has_time_up(&evs), "the window ended the run");
+        time_up_on_time(&evs, 7200);
     })
 }

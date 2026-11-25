@@ -125,8 +125,11 @@ fn in_run(own: &str, kind: RunTokenKind, a: &Action, t: &Target<'_>) -> Decision
     use Action::*;
     let fits = match kind {
         RunTokenKind::Run => matches!(a, RegisterAgent | Report | Finish),
-        RunTokenKind::Agent => matches!(a, CallTools | CallModel),
-        RunTokenKind::Worker | RunTokenKind::Ticket => matches!(a, WorkerLink),
+        // A sandbox's worker appends its branch's events and ends it over the link, and calls
+        // the model gateway for its branch's agents.
+        RunTokenKind::Worker => matches!(a, WorkerLink | CallModel),
+        // Never a caller: an agent token is checked by its branch's roster, a ticket in memory.
+        RunTokenKind::Agent | RunTokenKind::Ticket => false,
     };
     match t {
         Target::Branch { branch, .. } if fits && *branch == own => Decision::Allow,
@@ -218,29 +221,63 @@ mod tests {
         ));
     }
 
+    fn worker() -> Caller {
+        Caller::run_token("r", "b1", RunTokenKind::Worker, None).with_sandbox(Uuid::nil())
+    }
+
+    const B1: Target<'static> = Target::Branch {
+        run: "r",
+        branch: "b1",
+    };
+    const B2: Target<'static> = Target::Branch {
+        run: "r",
+        branch: "b2",
+    };
+    const RUN: Target<'static> = Target::Resource {
+        kind: ResourceKind::Run,
+        id: "r",
+    };
+
     #[test]
-    fn an_agent_token_calls_tools_and_models_only() {
-        let c = Caller::run_token("r", "b1", RunTokenKind::Agent, Some("a"));
-        let b1 = Target::Branch {
-            run: "r",
-            branch: "b1",
-        };
-        assert_eq!(engine_check(&c, &Action::CallTools, &b1), Decision::Allow);
-        assert_eq!(engine_check(&c, &Action::CallModel, &b1), Decision::Allow);
-        for a in [Action::Finish, Action::RegisterAgent, Action::WorkerLink] {
-            assert!(
-                matches!(engine_check(&c, &a, &b1), Decision::Forbidden(_)),
-                "{a:?}"
-            );
+    fn a_worker_token_links_and_calls_models_for_its_branch_only() {
+        let c = worker();
+        for a in [Action::WorkerLink, Action::CallModel] {
+            assert_eq!(engine_check(&c, &a, &B1), Decision::Allow, "{a:?}");
+            assert_eq!(engine_check(&c, &a, &B2), Decision::NotFound, "{a:?}");
+            let d = engine_check(&c, &a, &RUN);
+            assert!(matches!(d, Decision::Forbidden(_)), "{a:?}");
         }
-        let worker = Caller::run_token("r", "b1", RunTokenKind::Worker, None);
-        assert_eq!(
-            engine_check(&worker, &Action::WorkerLink, &b1),
-            Decision::Allow
-        );
-        assert!(matches!(
-            engine_check(&worker, &Action::CallModel, &b1),
-            Decision::Forbidden(_)
-        ));
+    }
+
+    #[test]
+    fn a_worker_token_does_nothing_else() {
+        use Action::*;
+        let c = worker();
+        let others = [
+            Read,
+            Create,
+            Start,
+            Fork,
+            Stop,
+            Record,
+            UseInRun,
+            Rename,
+            ChangeSetup,
+            ReplaceSecret,
+            DeleteFork,
+            Delete,
+            ManageTokens,
+            InstanceAdmin,
+            RegisterAgent,
+            Report,
+            Finish,
+            CallTools,
+        ];
+        for a in others {
+            for t in [B1, B2, RUN, kind(), Target::Instance] {
+                let d = engine_check(&c, &a, &t);
+                assert!(matches!(d, Decision::Forbidden(_)), "{a:?} on {t:?}: {d:?}");
+            }
+        }
     }
 }

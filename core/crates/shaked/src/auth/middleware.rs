@@ -102,9 +102,7 @@ async fn digested(
         let too_large = StatusCode::PAYLOAD_TOO_LARGE;
         return Err(Box::new(refuse(too_large, "the request body is too large")));
     };
-    let sum = ring::digest::digest(&ring::digest::SHA256, &bytes);
-    let mut digest = [0u8; 32];
-    digest.copy_from_slice(sum.as_ref());
+    let digest = super::tokens::sha256(&bytes);
     parts.extensions.insert(crate::layer::BodySha256(digest));
     Ok(axum::body::Body::from(bytes))
 }
@@ -137,10 +135,14 @@ pub async fn authenticate(
     }
     let who = state.store.layer().authenticate(&parts, found).await;
     match who {
-        Ok(c) => {
-            parts.extensions.insert(Arc::new(c));
-            next.run(Request::from_parts(parts, body)).await
-        }
+        Ok(c) => serve(&state, c, Request::from_parts(parts, body), next).await,
         Err(r) => refuse(r.status, &r.message),
     }
+}
+
+/// Serves `req` for `c`, with the header values it reads kept for `c`'s scope.
+async fn serve(state: &AppState, c: Caller, mut req: Request, next: Next) -> Response {
+    let scope = crate::layer::secret_scope(state.store.layer().as_ref(), &c);
+    req.extensions_mut().insert(Arc::new(c));
+    crate::secrets::scoped(scope, next.run(req)).await
 }

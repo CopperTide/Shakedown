@@ -30,7 +30,7 @@ SHIFT = Path(__file__).resolve().parents[3] / "benchmarks" / "factory" / "data" 
 
 def _parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--seconds", type=float, default=95.0, help="arena seconds to run")
+    ap.add_argument("--seconds", type=float, default=95.0, help="shakedown seconds to run")
     ap.add_argument("--out", default="showcase.mp4")
     ap.add_argument("--camera", default="auto")
     ap.add_argument("--fps", type=int, default=30)
@@ -49,7 +49,7 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _inputs(args) -> list:
-    """(arena ms, tool, args) of the plant tool calls asked for, in time order."""
+    """(shakedown ms, tool, args) of the plant tool calls asked for, in time order."""
     out = [(0, "plant_scenario", {"name": "calm"})] if args.calm else []
     for spec in args.at:
         seconds, tool, body = spec.split(":", 2)
@@ -78,7 +78,7 @@ def _run(part, args, end_ms) -> None:
         for event in part.advance("render", ms)["events"]:
             print(f"[render] {ms / 1000:6.1f} s {event['kind']}: {event['text'][:90]}", flush=True)
         if ms % 10000 == 0:
-            print(f"[render] arena {ms / 1000:.0f} s, wall {time.monotonic() - t1:.0f} s", flush=True)
+            print(f"[render] shakedown {ms / 1000:.0f} s, wall {time.monotonic() - t1:.0f} s", flush=True)
 
 
 def main() -> None:
@@ -103,7 +103,7 @@ def main() -> None:
     wall = time.monotonic() - t1
     if args.stills:
         plant.video.stills(plant, args.stills.split(","), Path(args.stills_dir))
-    stats = {"arena_s": args.seconds, "wall_s": round(wall, 1), "wall_per_arena_s": round(wall / max(args.seconds, 1e-6), 2),
+    stats = {"shakedown_s": args.seconds, "wall_s": round(wall, 1), "wall_per_shakedown_s": round(wall / max(args.seconds, 1e-6), 2),
              **plant.video.stats()}
     part.stop("render")
     print("[render] " + json.dumps(stats), flush=True)

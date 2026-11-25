@@ -34,7 +34,7 @@ fn refused_for_others(pid: u32, folder: &Path) {
     assert!(!is(pid, &other_exe).unwrap(), "another program");
     assert!(!kill(pid, Some(pid), &other_exe, Duration::from_secs(1)).unwrap());
     let longer = PathBuf::from(format!("{}3", folder.display()));
-    let shorter = PathBuf::from(format!("/tmp/arena_kit_pg_{}", std::process::id() / 10));
+    let shorter = PathBuf::from(format!("/tmp/shakedown_kit_pg_{}", std::process::id() / 10));
     for f in [&longer, &shorter] {
         let wrong = Identity {
             exe: Path::new("/bin/sh"),
@@ -47,7 +47,7 @@ fn refused_for_others(pid: u32, folder: &Path) {
 
 #[test]
 fn only_the_recorded_program_on_the_folder_is_killed() {
-    let folder = PathBuf::from(format!("/tmp/arena_kit_pg_{}", std::process::id()));
+    let folder = PathBuf::from(format!("/tmp/shakedown_kit_pg_{}", std::process::id()));
     let (mut sh, sleep) = spawn_in(&folder);
     let pid = sh.id();
     let reaper = std::thread::spawn(move || sh.wait());

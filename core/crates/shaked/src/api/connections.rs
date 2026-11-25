@@ -1,6 +1,6 @@
-//! Code connections: save the command that starts a team's driver, list and delete them, test
-//! one, and start a run with one (`POST /api/runs` with `connection`). Every route that can start
-//! a driver refuses requests a web page could make (`guard_launch`).
+//! Code connections: save the command that starts a team's driver, list and delete them, and test
+//! one (a run with one starts in `api::runs`). Every route that can start a driver refuses
+//! requests a web page could make (`guard_launch`).
 
 use crate::auth::{Caller, Who};
 use std::{collections::BTreeMap, sync::Arc, time::Duration};
@@ -15,12 +15,11 @@ use axum::{
 use serde::Deserialize;
 use serde_json::{json, Value};
 
-use super::{detached, parse_body, providers_of, ApiError, ApiResult, StartPermit};
+use super::runs::{start_code, RunAsk};
+use super::{detached, parse_body, ApiError, ApiResult, StartPermit};
 use crate::{
     app::AppState,
-    driver::{self, Launched},
-    external::Started,
-    launch::{launch, LaunchSpec},
+    driver::Launched,
     model::*,
     store::{Connection, NewConnection},
 };
@@ -65,9 +64,9 @@ pub(super) fn guard_launch(state: &AppState, headers: &HeaderMap) -> Result<(), 
                 .starts_with("application/json")
         });
     if !json {
-        return Err(ApiError(
+        return Err(ApiError::new(
             StatusCode::UNSUPPORTED_MEDIA_TYPE,
-            "a request that starts a driver must be JSON (content-type: application/json)".into(),
+            "a request that starts a driver must be JSON (content-type: application/json)",
         ));
     }
     let origin = headers
@@ -75,10 +74,9 @@ pub(super) fn guard_launch(state: &AppState, headers: &HeaderMap) -> Result<(), 
         .map(|v| v.to_str().unwrap_or("null"));
     let allowed = |o: &str| loopback_origin(o) || state.config.cors_origins.iter().any(|a| a == o);
     match origin {
-        Some(o) if !allowed(o) => Err(ApiError(
-            StatusCode::FORBIDDEN,
-            format!("a request from {o} can't start a driver on this machine"),
-        )),
+        Some(o) if !allowed(o) => Err(ApiError::forbidden(format!(
+            "a request from {o} can't start a driver on this machine"
+        ))),
         _ => Ok(()),
     }
 }
@@ -168,80 +166,9 @@ pub(super) async fn connection_or_404(
     found.ok_or_else(|| ApiError::not_found(format!("no connection \"{id}\"")))
 }
 
-/// A run to start with a Code connection.
-pub(super) struct CodeRun {
-    pub task_id: String,
-    pub team: Team,
-    pub scenario: crate::scenario::Scenario,
-    pub max_cost_usd: Option<f64>,
-    /// Its world time window in minutes (`crate::window`).
-    pub world_minutes: Option<f64>,
-    /// The benchmark it runs on (read once when it was asked for).
-    pub benchmark: String,
-}
-
-/// `POST /api/runs` with `connection`: 403/415 for a request a web page could make, 400 for a
-/// runner other than `external` (or `chain`, the default), 404 for an unknown connection.
-pub(super) async fn create_run(
-    state: Arc<AppState>,
-    caller: Arc<Caller>,
-    permit: StartPermit,
-    headers: &HeaderMap,
-    (id, runner): (&str, Runner),
-    run: CodeRun,
-) -> ApiResult<Value> {
-    guard_launch(&state, headers)?;
-    if !matches!(runner, Runner::Chain | Runner::External) {
-        return Err(ApiError::bad(
-            "a run with a Code connection is driven by its driver",
-        ));
-    }
-    let conn = connection_or_404(&state, &caller, id).await?;
-    Ok(Json(
-        start_code_run(state, caller, permit, conn, run).await?.0,
-    ))
-}
-
-/// A run a connection's driver drives, just started: the run's ids, its agents' endpoints (none
-/// yet), and whether the driver started (`launched`) or not (`failed`, the run ended saying why).
-pub(super) async fn start_code_run(
-    state: Arc<AppState>,
-    caller: Arc<Caller>,
-    permit: StartPermit,
-    conn: Connection,
-    run: CodeRun,
-) -> Result<(Value, Option<Launched>), ApiError> {
-    team::validate_agents(&providers_of(&state, &caller).await, &run.team.agents)?;
-    let ids = run.team.agents.iter().map(|a| a.id.as_str());
-    crate::driver::check_token_envs(ids).map_err(ApiError::bad)?;
-    permit.check_disk(&state).await?;
-    detached(async move {
-        let _permit = permit;
-        let spec = LaunchSpec {
-            scope: caller,
-            task_id: &run.task_id,
-            team: run.team,
-            scenario: &run.scenario,
-            rules: driver::rules_for(&conn.id, run.max_cost_usd, run.world_minutes),
-            driver: Some(&conn),
-            benchmark: Some(&run.benchmark),
-        };
-        let l = launch(&state, spec).await?;
-        let (started, launched) = (Started::of(l.run_id, l.branch_id, l.agents), l.driver);
-        let mut v = super::with_warning(serde_json::to_value(&started)?, l.warning);
-        v["connection"] = json!(conn.id);
-        v["driver"] = json!(match launched {
-            Some(_) => "launched",
-            None => "failed",
-        });
-        Ok((v, launched))
-    })
-    .await
-}
-
 /// The run a connection test makes: the benchmark's first task, no agents yet (the driver
 /// registers them), and a spend limit of [`TEST_MAX_COST_USD`].
-async fn test_run(state: &AppState, conn: &Connection) -> Result<CodeRun, ApiError> {
+async fn test_run(state: &AppState, conn: &Connection) -> Result<RunAsk, ApiError> {
     let bench = state.bench().await?;
     let first = bench.tasks.first();
     let task = first.ok_or_else(|| ApiError::bad("the benchmark has no task to test with"))?;
@@ -250,9 +177,10 @@ async fn test_run(state: &AppState, conn: &Connection) -> Result<CodeRun, ApiErr
         name: conn.name.clone(),
         agents: vec![],
     };
-    Ok(CodeRun {
+    Ok(RunAsk {
         task_id: task.id.clone(),
         team,
+        runner: Runner::External,
         scenario: Default::default(),
         max_cost_usd: Some(TEST_MAX_COST_USD),
         world_minutes: None,
@@ -275,8 +203,7 @@ async fn test(
     let permit = StartPermit::take(&state)?;
     let run = test_run(&state, &conn).await?;
     let name = format!("Connection test · {}", conn.name);
-    let (started, launched) =
-        start_code_run(state.clone(), caller.clone(), permit, conn, run).await?;
+    let (started, launched) = start_code(state.clone(), caller.clone(), permit, conn, run).await?;
     let text = |k: &str| started[k].as_str().unwrap_or_default().to_string();
     let (run_id, branch) = (text("run_id"), text("branch_id"));
     state.store.at(&caller).name_run(&run_id, &name).await?;

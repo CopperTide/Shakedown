@@ -15,6 +15,7 @@ export const mark = (glyph: string, word: string, abnormal = false): Mark => ({ 
 export const MARK = {
   starting: mark('◔', 'Starting'),
   running: mark('◐', 'Running'),
+  queued: mark('◔', 'Queued'),
   paused: mark('‖', 'Paused'),
   passed: mark('✓', 'Passed'),
   failed: mark('✕', 'Failed', true),
@@ -22,6 +23,7 @@ export const MARK = {
   stopped: mark('■', 'Stopped'),
   interrupted: mark('■', 'Interrupted', true),
   infraError: mark('⚠', 'Infra error', true),
+  budgetExceeded: mark('$', 'Over budget', true),
 } as const;
 
 /** ✓ when it passed, ✕ (abnormal) when not, each with its word. */
@@ -33,11 +35,13 @@ export const alarmMark = (word: string): Mark => mark('⚠', word, true);
 
 const RUN: Record<BranchStatus, Mark> = {
   running: MARK.running,
+  queued: MARK.queued,
   passed: MARK.passed,
   failed: MARK.failed,
   infra_error: MARK.infraError,
   interrupted: MARK.interrupted,
   stopped: MARK.stopped,
+  budget_exceeded: MARK.budgetExceeded,
 };
 
 /** A run's status. */

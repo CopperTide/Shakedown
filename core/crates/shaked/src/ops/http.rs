@@ -75,8 +75,10 @@ pub fn route_rows() -> &'static [RouteCase] {
     ROWS.get_or_init(|| all().iter().map(row).collect())
 }
 
-fn row(op: &Operation) -> RouteCase {
+/// The route-table row of `op`. An operation under `/api/branches/{id}/` acts on that branch.
+pub(super) fn row(op: &Operation) -> RouteCase {
     let on = match target_of(op, "") {
+        _ if op.path.starts_with("/api/branches/{id}/") => On::Branch,
         Target::Instance => On::Instance,
         Target::Kind(k) => On::Kind(k),
         _ => On::Resource(ResourceKind::ProjectFile),

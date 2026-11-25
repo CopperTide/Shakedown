@@ -49,7 +49,7 @@ struct NewSecret {
 }
 
 fn vault_error(e: String) -> ApiError {
-    ApiError(StatusCode::INTERNAL_SERVER_ERROR, e)
+    ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e)
 }
 
 fn blank_to_none(s: Option<String>) -> Option<String> {
@@ -94,7 +94,7 @@ async fn add(
 
 /// Key `id` of `caller`, else 404.
 async fn find(state: &AppState, caller: &Caller, id: &str) -> Result<(Uuid, KeyRow), ApiError> {
-    let gone = || ApiError::not_found(format!("there is no key \"{id}\""));
+    let gone = || ApiError::missing("key", id);
     let uuid: Uuid = id.parse().map_err(|_| gone())?;
     let rows = state.store.at(caller).list_keys().await?;
     let row = rows.into_iter().find(|r| r.id == uuid).ok_or_else(gone)?;
@@ -117,7 +117,7 @@ async fn replace(
         .await?
     {
         true => Ok(Json(json!({"replaced": id, "key_last4": last4}))),
-        false => Err(ApiError::not_found(format!("there is no key \"{id}\""))),
+        false => Err(ApiError::missing("key", &id)),
     }
 }
 
@@ -133,7 +133,7 @@ async fn test(
         .map_err(vault_error)?
     {
         Some(row) => Ok(Json(row)),
-        None => Err(ApiError::not_found(format!("there is no key \"{id}\""))),
+        None => Err(ApiError::missing("key", &id)),
     }
 }
 
@@ -145,6 +145,6 @@ async fn remove(
     let (uuid, _) = find(&state, &caller, &id).await?;
     match state.store.at(&caller).delete_key(uuid).await? {
         true => Ok(Json(json!({"deleted": id}))),
-        false => Err(ApiError::not_found(format!("there is no key \"{id}\""))),
+        false => Err(ApiError::missing("key", &id)),
     }
 }

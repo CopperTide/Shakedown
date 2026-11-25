@@ -3,27 +3,76 @@
 //! of the parts they name, and each setup becomes a team (led, on a stepped clock). Until worlds
 //! run from their files alone, this is the bridge from files to runs.
 
-use axum::http::StatusCode;
+use std::collections::HashMap;
+
 use chrono::{NaiveDateTime, NaiveTime};
 use parts::proto::{ChosenDisruption, ScenarioRequest, SteppedClock, TimedDisruption};
 use serde_json::{json, Value};
 use shakedown_project::format::{
-    parse_duration_ms, ClockSpec, ExperimentFile, Kind, ScenarioFile, SetupFile, Team as FileTeam,
-    WorldFile,
+    parse_duration_ms, Auth, ClockSpec, ExperimentFile, Kind, ScenarioFile, SetupFile,
+    Team as FileTeam, WorldFile,
 };
-use shakedown_project::{Id, ItemBody, Project};
+use shakedown_project::{kind_name, Id, KindFile, Project, ProjectError};
 
-use super::OpError;
+use super::{unprocessable, OpError};
 use crate::api::experiments::{NewExperimentReq, SetupReq};
-use crate::model::{AgentKind, AgentSpec, Runner, Team};
+use crate::model::{AgentKind, AgentSpec, AuthRef, Runner, Team};
+use crate::providers::KEY_PREFIX;
+
+/// What a deploy refers to by name, and may use: for each stored key a built-in agent names, and
+/// each credential an endpoint's `auth` names, `Ok` or why it may not be used. No secret is held.
+#[derive(Default)]
+pub(crate) struct Credentials {
+    providers: HashMap<String, Result<(), String>>,
+    auth: HashMap<AuthRef, Result<(), String>>,
+}
+
+impl Credentials {
+    pub(crate) fn provider(&mut self, key: &str, verdict: Result<(), String>) {
+        self.providers.insert(key.to_string(), verdict);
+    }
+
+    pub(crate) fn credential(&mut self, auth: AuthRef, verdict: Result<(), String>) {
+        self.auth.insert(auth, verdict);
+    }
+}
+
+/// What the setups of an experiment name: stored keys (as providers) and credentials.
+#[derive(Default)]
+pub(crate) struct Needs {
+    pub providers: Vec<String>,
+    pub auth: Vec<AuthRef>,
+}
+
+/// The keys and credentials the experiment's setups name, so only those are looked up.
+pub(crate) fn needs(project: &Project, id: &Id) -> Result<Needs, OpError> {
+    let mut out = Needs::default();
+    let exp = experiment_of(project, id)?;
+    for name in &exp.setups {
+        match &named::<SetupFile>(project, name)?.team {
+            FileTeam::Builtin { agents } => {
+                let keys = agents
+                    .iter()
+                    .map(|a| a.key.trim())
+                    .filter(|k| !k.is_empty());
+                out.providers.extend(keys.map(str::to_string));
+            }
+            FileTeam::Http {
+                auth: Some(auth), ..
+            } => out.auth.extend(auth_ref(name, auth)?),
+            _ => {}
+        }
+    }
+    Ok(out)
+}
 
 /// The package and task deploying experiment `id` runs (so the caller can look up the task's
 /// `clock_start` for [`request`]).
 pub(crate) fn runtime_of(project: &Project, id: &Id) -> Result<(String, String), OpError> {
     let exp = experiment_of(project, id)?;
     runtime(
-        world_of(project, &exp.world)?,
-        scenario_of(project, &exp.scenario)?,
+        named::<WorldFile>(project, &exp.world)?,
+        named::<ScenarioFile>(project, &exp.scenario)?,
     )
 }
 
@@ -33,18 +82,19 @@ pub(crate) fn runtime_of(project: &Project, id: &Id) -> Result<(String, String),
 pub(crate) fn request(
     project: &Project,
     id: &Id,
+    creds: &Credentials,
     clock_start: Option<&str>,
 ) -> Result<NewExperimentReq, OpError> {
     let exp = experiment_of(project, id)?;
-    no_problems(project, id, exp)?;
-    let scenario = scenario_of(project, &exp.scenario)?;
-    let (package, task) = runtime(world_of(project, &exp.world)?, scenario)?;
+    let scenario = named::<ScenarioFile>(project, &exp.scenario)?;
+    let (package, task) = runtime(named::<WorldFile>(project, &exp.world)?, scenario)?;
     let start = WorldStart::of(clock_start);
     let clock = stepped_clock(scenario, &start)?;
+    let stepped = clock.is_some();
     let setups = exp
         .setups
         .iter()
-        .map(|s| setup_req(project, s, clock.is_some()))
+        .map(|s| setup_req(project, s, creds, stepped))
         .collect::<Result<Vec<_>, _>>()?;
     Ok(NewExperimentReq {
         name: Some(exp.label.clone()),
@@ -75,55 +125,31 @@ fn runtime(world: &WorldFile, scenario: &ScenarioFile) -> Result<(String, String
     Ok((package, task))
 }
 
-fn unprocessable(message: String) -> OpError {
-    OpError::new(StatusCode::UNPROCESSABLE_ENTITY, message)
-}
-
-fn body<'a>(project: &'a Project, kind: Kind, name: &str) -> Result<&'a ItemBody, OpError> {
-    let missing = || {
-        unprocessable(format!(
-            "no {} named {name}",
-            shakedown_project::kind_name(kind)
-        ))
-    };
-    let id = Id::parse(name).map_err(|_| missing())?;
-    project
-        .get(kind, &id)
-        .map(|item| &item.body)
-        .ok_or_else(missing)
-}
-
+/// Experiment `id` (404 if there is none), refused when it or anything it names has problems.
 fn experiment_of<'a>(project: &'a Project, id: &Id) -> Result<&'a ExperimentFile, OpError> {
-    let not_found = || OpError::new(StatusCode::NOT_FOUND, format!("no experiment named {id}"));
-    match project.get(Kind::Experiment, id).map(|i| &i.body) {
-        Some(ItemBody::Experiment(e)) => Ok(e),
-        _ => Err(not_found()),
-    }
+    let exp = project
+        .body::<ExperimentFile>(id)
+        .ok_or_else(|| ProjectError::not_found(Kind::Experiment, id))?;
+    no_problems(project, id, exp)?;
+    Ok(exp)
 }
 
-fn world_of<'a>(project: &'a Project, name: &str) -> Result<&'a WorldFile, OpError> {
-    match body(project, Kind::World, name)? {
-        ItemBody::World(w) => Ok(w),
-        _ => Err(unprocessable(format!("{name} is not a world"))),
-    }
-}
-
-fn scenario_of<'a>(project: &'a Project, name: &str) -> Result<&'a ScenarioFile, OpError> {
-    match body(project, Kind::Scenario, name)? {
-        ItemBody::Scenario(s) => Ok(s),
-        _ => Err(unprocessable(format!("{name} is not a scenario"))),
-    }
+/// The item of format `B` that an experiment or setup names; naming none is 422.
+fn named<'a, B: KindFile>(project: &'a Project, name: &str) -> Result<&'a B, OpError> {
+    let missing = || unprocessable(format!("no {} named {name}", kind_name(B::KIND)));
+    let id = Id::parse(name).map_err(|_| missing())?;
+    project.body::<B>(&id).ok_or_else(missing)
 }
 
 /// Refuses an experiment whose own file, world, scenario or setups have problems.
 fn no_problems(project: &Project, id: &Id, exp: &ExperimentFile) -> Result<(), OpError> {
-    let mut named = vec![
+    let mut refs = vec![
         (Kind::Experiment, id.to_string()),
         (Kind::World, exp.world.clone()),
         (Kind::Scenario, exp.scenario.clone()),
     ];
-    named.extend(exp.setups.iter().map(|s| (Kind::Setup, s.clone())));
-    for (kind, name) in named {
+    refs.extend(exp.setups.iter().map(|s| (Kind::Setup, s.clone())));
+    for (kind, name) in refs {
         let Ok(item) = Id::parse(&name) else { continue };
         if let Some(p) = project.problems_of(kind, &item).first() {
             return Err(unprocessable(format!(
@@ -292,12 +318,14 @@ fn disruptions(scenario: &ScenarioFile) -> Vec<ChosenDisruption> {
 
 /// `name`'s setup as an engine setup: on a stepped clock it runs as a dispatch team (its lead,
 /// else its first agent, leads).
-fn setup_req(project: &Project, name: &str, stepped: bool) -> Result<SetupReq, OpError> {
-    let setup: &SetupFile = match body(project, Kind::Setup, name)? {
-        ItemBody::Setup(s) => s,
-        _ => return Err(unprocessable(format!("{name} is not an agent setup"))),
-    };
-    let agents = agents_of(name, &setup.team)?;
+fn setup_req(
+    project: &Project,
+    name: &str,
+    creds: &Credentials,
+    stepped: bool,
+) -> Result<SetupReq, OpError> {
+    let setup = named::<SetupFile>(project, name)?;
+    let agents = agents_of(name, &setup.team, creds)?;
     let team = Team {
         id: name.to_string(),
         name: setup.label.clone(),
@@ -314,14 +342,20 @@ fn setup_req(project: &Project, name: &str, stepped: bool) -> Result<SetupReq, O
     })
 }
 
-fn agents_of(name: &str, team: &FileTeam) -> Result<Vec<AgentSpec>, OpError> {
+fn agents_of(name: &str, team: &FileTeam, creds: &Credentials) -> Result<Vec<AgentSpec>, OpError> {
     Ok(match team {
-        FileTeam::Builtin { agents } => agents.iter().map(builtin_agent).collect(),
+        FileTeam::Builtin { agents } => agents
+            .iter()
+            .map(|a| builtin_agent(name, a, creds))
+            .collect::<Result<_, _>>()?,
         FileTeam::ClaudeCode => vec![AgentSpec::new("claude-code", AgentKind::ClaudeCode)],
         FileTeam::Codex => vec![AgentSpec::new("codex", AgentKind::Codex)],
-        FileTeam::Http { url, .. } => {
+        FileTeam::Http { url, auth } => {
             let mut agent = AgentSpec::new("endpoint", AgentKind::Http);
             agent.url = Some(url.clone());
+            if let Some(auth) = auth {
+                agent.auth = endpoint_auth(name, auth, creds)?;
+            }
             vec![agent]
         }
         FileTeam::Code { .. } | FileTeam::Madl { .. } => {
@@ -332,7 +366,44 @@ fn agents_of(name: &str, team: &FileTeam) -> Result<Vec<AgentSpec>, OpError> {
     })
 }
 
-fn builtin_agent(spec: &shakedown_project::format::AgentSpec) -> AgentSpec {
+/// The reference an endpoint's `auth` makes: `None` when it names nothing; naming both a key and
+/// a variable is refused.
+fn auth_ref(setup: &str, auth: &Auth) -> Result<Option<AuthRef>, OpError> {
+    match (&auth.key, &auth.env) {
+        (Some(_), Some(_)) => Err(OpError::bad_request(format!(
+            "{setup}: auth names both a key and an environment variable: name one"
+        ))),
+        (Some(key), None) => Ok(Some(AuthRef::Key(key.clone()))),
+        (None, Some(var)) => Ok(Some(AuthRef::Env(var.clone()))),
+        (None, None) => Ok(None),
+    }
+}
+
+/// The credential reference of an endpoint, checked: it must be one a deploy found usable.
+fn endpoint_auth(
+    setup: &str,
+    auth: &Auth,
+    creds: &Credentials,
+) -> Result<Option<AuthRef>, OpError> {
+    let Some(found) = auth_ref(setup, auth)? else {
+        return Ok(None);
+    };
+    match creds.auth.get(&found) {
+        Some(Ok(())) => Ok(Some(found)),
+        Some(Err(why)) => Err(OpError::bad_request(format!("{setup}: auth: {why}"))),
+        None => Err(OpError::bad_request(format!(
+            "{setup}: auth names nothing usable"
+        ))),
+    }
+}
+
+/// A built-in agent. Its `key` makes `key:<name>` its provider, so it runs on that key's
+/// provider and model; a key that is not stored, or may not serve you, refuses the deploy.
+fn builtin_agent(
+    setup: &str,
+    spec: &shakedown_project::format::AgentSpec,
+    creds: &Credentials,
+) -> Result<AgentSpec, OpError> {
     use shakedown_project::format::AgentRuntime;
     let kind = match spec.kind {
         AgentRuntime::Builtin => AgentKind::Open,
@@ -352,7 +423,21 @@ fn builtin_agent(spec: &shakedown_project::format::AgentSpec) -> AgentSpec {
         .as_ref()
         .and_then(|r| serde_json::to_value(r).ok());
     agent.max_tokens = spec.max_tokens;
-    agent
+    let key = spec.key.trim();
+    if !key.is_empty() {
+        match creds.providers.get(key) {
+            Some(Ok(())) => agent.provider = Some(format!("{KEY_PREFIX}{key}")),
+            Some(Err(why)) => return Err(key_refused(setup, &spec.id, key, why)),
+            None => return Err(key_refused(setup, &spec.id, key, "is not stored")),
+        }
+    }
+    Ok(agent)
+}
+
+fn key_refused(setup: &str, agent: &str, key: &str, why: &str) -> OpError {
+    OpError::bad_request(format!(
+        "{setup}: agent {agent} names the key {key:?}, which {why}"
+    ))
 }
 
 #[cfg(test)]

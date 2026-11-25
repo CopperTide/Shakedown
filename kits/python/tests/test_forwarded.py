@@ -27,11 +27,3 @@ def test_readonly_of_reads_the_readonly_header():
     assert readonly_of({"X-Shakedown-Readonly": "1"}) is True
     assert readonly_of({"x-shakedown-readonly": "0"}) is False
     assert readonly_of({}) is False
-
-
-def test_the_old_header_names_from_a_shaked_before_2026_11_19_are_read():
-    from shakedown_part.forwarded import agent_of, readonly_of
-
-    assert agent_of({"X-Arena-Agent": "coder"}) == "coder"
-    assert readonly_of({"X-Arena-Readonly": "1"}) is True
-    assert agent_of({"X-Shakedown-Agent": "new", "X-Arena-Agent": "old"}) == "new"

@@ -1,4 +1,5 @@
-//! A world's view files: the `views:` of its `world.yaml`, read from the world's folder and parsed.
+//! A world's view files: the `views:` of its `world.yaml`, read from the world's folder (in the
+//! project's store) and parsed.
 //! A file that is missing or doesn't parse is a problem of the world and is left out.
 
 use std::path::Path;
@@ -6,6 +7,7 @@ use std::path::Path;
 use crate::format::{parse, Kind, ViewFile, WorldFile};
 use crate::item::{ItemBody, Problem};
 use crate::load::Items;
+use crate::store::Store;
 use crate::Id;
 
 /// One view of a world: its id (the file's stem), its file and what it parsed to.
@@ -17,14 +19,14 @@ pub struct WorldView {
     pub view: Result<ViewFile, String>,
 }
 
-/// The views of `world` (whose id is `id`) in the project at `root`, in the file's order.
-pub fn world_views(root: &Path, id: &Id, world: &WorldFile) -> Vec<WorldView> {
+/// The views of `world` (whose id is `id`) in the project's `store`, in the file's order.
+pub fn world_views(store: &dyn Store, id: &Id, world: &WorldFile) -> Vec<WorldView> {
     let read = |rel: &String| {
         let file = format!("worlds/{id}/{rel}");
         let stem = Path::new(rel)
             .file_stem()
             .map(|s| s.to_string_lossy().to_string());
-        let view = match std::fs::read_to_string(root.join(&file)) {
+        let view = match store.read_text(&file) {
             Ok(text) => parse::<ViewFile>(&file, &text).map_err(|e| e.to_string()),
             Err(e) => Err(format!("{file}: {e}")),
         };
@@ -38,7 +40,7 @@ pub fn world_views(root: &Path, id: &Id, world: &WorldFile) -> Vec<WorldView> {
 }
 
 /// A problem for each view file of a world in `items` that can't be read or parsed.
-pub(crate) fn view_problems(root: &Path, items: &Items) -> Vec<Problem> {
+pub(crate) fn view_problems(store: &dyn Store, items: &Items) -> Vec<Problem> {
     let worlds = items
         .iter()
         .filter_map(|((kind, id), item)| match &item.body {
@@ -47,7 +49,7 @@ pub(crate) fn view_problems(root: &Path, items: &Items) -> Vec<Problem> {
         });
     let mut problems = vec![];
     for (id, world) in worlds {
-        let views = world_views(root, id, world).into_iter().enumerate();
+        let views = world_views(store, id, world).into_iter().enumerate();
         problems.extend(views.filter_map(|(i, v)| {
             v.view.err().map(|message| Problem {
                 kind: Some(Kind::World),

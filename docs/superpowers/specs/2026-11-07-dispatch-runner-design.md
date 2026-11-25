@@ -10,7 +10,7 @@ checks, all 5 safety checks, for about $0.47; the 6-agent `chain` team (Claude C
 
 ## Hard rule
 Real models only: no scripted, demo, stub or fake agents anywhere (code, tests, fixtures). Agent tests are live
-on a real model (Claude Code on haiku by default, see core/crates/arenad/tests/support/live.rs) and tolerate
+on a real model (Claude Code on haiku by default, see core/crates/shaked/tests/support/live.rs) and tolerate
 model variance.
 
 ## 1. The single agent is the default
@@ -30,9 +30,9 @@ model variance.
 - **Continued working.** Agents stay alive across turns: a specialist that finishes a turn waits (it isn't done)
   and wakes on the next delegation or message; it reports back with `report {text}` (to the lead) or
   `message`. CLI agents keep one long-lived session (Claude Code `-p` with stream-json in/out, as
-  Arena-Examples/factory-showcase/designs/claude_agent.py does, with arenad's own isolation flags); API-mode
-  agents keep their conversation in arenad's loop.
-- **Parallel.** Specialists work at the same time; arenad serialises world steps as it does today (the step
+  Shakedown-Examples/factory-showcase/designs/claude_agent.py does, with shaked's own isolation flags); API-mode
+  agents keep their conversation in shaked's loop.
+- **Parallel.** Specialists work at the same time; shaked serialises world steps as it does today (the step
   lock), so the record stays one ordered sequence.
 - **Ending.** The lead calls `finish {summary}` (a talk tool only the lead has); then every agent is stopped,
   the world freezes and is scored. Guard rails: a run-level time limit (configurable; default generous), and an
@@ -45,8 +45,8 @@ model variance.
 - **Prompts.** The benchmark's dispatching team (pharma: from the coordinated roles) gets role prompts written
   for this runner: the lead plans, delegates, checks reports, follows up and finishes; specialists do their
   part, report, and stay available. No handoff-only chain wording.
-- Generalise from the factory showcase's hierarchical design (Arena-Examples/factory-showcase/designs/engine.py,
-  designs.py: delegation by message, waking idle agents, end conditions); don't depend on Arena-Examples at
+- Generalise from the factory showcase's hierarchical design (Shakedown-Examples/factory-showcase/designs/engine.py,
+  designs.py: delegation by message, waking idle agents, end conditions); don't depend on Shakedown-Examples at
   runtime.
 
 ## 3. UI
@@ -58,5 +58,5 @@ model variance.
 Unit tests for the runner's state machine (delegation, wake, idle rule, finish, stop, pause, fork restart) on
 recorded/constructed events with no agent; live tests (haiku) that a dispatch run delegates, specialists work in
 parallel, report, and the lead finishes. Then real runs on the pharma task with Claude Code Sonnet: the single
-agent (default) and the dispatching team, compared in Arena (outcomes table). Report the checks, cost and time
+agent (default) and the dispatching team, compared in Shakedown (outcomes table). Report the checks, cost and time
 of each. Keep real runs to what's needed.

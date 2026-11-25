@@ -235,6 +235,20 @@ impl ProviderConfig {
         }
     }
 
+    /// [`without_environment`](Self::without_environment), keeping the named keys that carry no
+    /// secret: a worker's, which only price its agents' calls
+    /// ([`pricing_named`](Self::pricing_named)).
+    pub fn environment_dropped(self) -> ProviderConfig {
+        let named = self
+            .named
+            .into_iter()
+            .filter(|(_, p)| p.endpoint.key.is_none());
+        ProviderConfig {
+            named: named.collect(),
+            ..ProviderConfig::without_environment()
+        }
+    }
+
     /// Nothing from the environment: only the OpenAI-compatible `base`, as `local:custom`, for
     /// agents that name no provider (see [`ProviderConfig::set_upstream`]).
     pub fn with_upstream(base: &str) -> ProviderConfig {

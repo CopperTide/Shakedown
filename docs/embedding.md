@@ -12,6 +12,12 @@ let store = shaked::store::Store::open(&shaked::pg::Admin::lazy(&opts.pg_url)).a
 shaked::serve::run(store.with_layer(std::sync::Arc::new(my_layer)), opts).await
 ```
 
+A service that runs each branch in a sandbox of its own sets `opts.hosting` to a
+`shaked::hosting::Hosting` over a `SandboxBackend` (E2B's: `shaked::hosting::e2b::E2bBackend`) before
+`run`; `from_env` never sets it. Such a control box refuses runs an external system or a Code connection
+drives, runs one sandbox per `object_prefix` scope at a time and sweeps its sandboxes every minute
+([sandbox runs](internals/sandbox-runs.md)).
+
 ## The hooks
 
 | Hook | When the engine calls it | `LocalLayer` |
@@ -27,6 +33,7 @@ shaked::serve::run(store.with_layer(std::sync::Arc::new(my_layer)), opts).await
 | `routes()` | merged under `/api`, behind `authenticate` | none |
 | `me(caller)` | `GET /api/me`: `mode`, `features` and an optional `account` menu for the UI | `local`, none, none |
 | `object_prefix(caller)` | the first segment of every object key the caller's records name | `local` |
+| `project_home(caller, configured)` | each project read or change: where the caller's project lives, a folder (`ProjectHome::Folder`) or a database the layer keeps (`ProjectHome::Db`, a `ProjectDb` that loads every file and saves a change in one transaction; see [project store](internals/project-store.md)) | the folder `SHAKEDOWN_PROJECT` names |
 
 `shaked::harness` (feature `harness`) has what an embedder's tests need: the route table (`ROUTES`, each route's
 action and target), `SpyLayer` (records every hook call, answers set per test), `scratch_db` and `serve_app`.

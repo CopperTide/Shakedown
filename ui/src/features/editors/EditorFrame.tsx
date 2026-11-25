@@ -1,13 +1,14 @@
-// An editor page's frame: the title, a section list, the section, and the save bar.
+// An editor page's frame: the title and its actions, a section list, the section, and the save bar.
 import type { ReactNode } from 'react';
 import { PageBody, PageHeader } from '@/components/ui/page';
 import { SaveBar } from '@/components/ui/save-bar';
 import { SubNav, type SubNavItem } from '@/components/ui/subnav';
 import type { SaveError } from './useItemEditor';
 
-export default function EditorFrame({ title, meta, sections, active, onSelect, dirty, onSave, onDiscard, saving, error, children }: {
+export default function EditorFrame({ title, meta, actions, sections, active, onSelect, dirty, onSave, onDiscard, saving, error, children }: {
   title: string;
   meta?: ReactNode;
+  actions?: ReactNode;
   sections: SubNavItem[];
   active: string;
   onSelect: (id: string) => void;
@@ -20,7 +21,7 @@ export default function EditorFrame({ title, meta, sections, active, onSelect, d
 }) {
   return (
     <>
-      <PageHeader title={title} meta={meta} width="wide" />
+      <PageHeader title={title} meta={meta} actions={actions} width="wide" />
       <PageBody width="wide">
         {error && <p role="alert" className="rounded-md border border-alarm bg-alarm-soft px-3 py-2 text-sm text-alarm">{error.message}</p>}
         <div className="grid gap-8 md:grid-cols-[200px_minmax(0,1fr)]">

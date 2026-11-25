@@ -32,6 +32,9 @@ pub struct Endpoints {
     pub agent: String,
     pub mcp_url: String,
     pub gateway_url: String,
+    /// Where the agent's own OpenTelemetry SDK sends its spans (OTLP/HTTP; `{otlp_url}/v1/traces`),
+    /// with the agent's token; `env` names it for the SDK (`crate::otel::receive::env`).
+    pub otlp_url: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub proxy_url: Option<String>,
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
@@ -42,8 +45,11 @@ pub struct Endpoints {
 }
 
 impl Endpoints {
-    /// The same endpoints with the agent's token.
+    /// The same endpoints with the agent's token, and the variables that send its OTel SDK's
+    /// spans to its run.
     pub fn with_token(mut self, token: String) -> Endpoints {
+        self.env
+            .extend(crate::otel::receive::env(&self.otlp_url, &token));
         self.token = Some(token);
         self
     }
@@ -62,6 +68,7 @@ pub fn endpoints(
         agent: agent.to_string(),
         mcp_url: format!("{base}/mcp/{branch}/{agent}"),
         gateway_url: format!("{base}/gateway/{branch}/{agent}/v1"),
+        otlp_url: format!("{base}/otlp/{branch}/{agent}"),
         proxy_url: env.get("SHAKEDOWN_PROXY").cloned(),
         env,
         token: None,
@@ -96,13 +103,18 @@ pub(crate) async fn go(state: &AppState, ctx: &Arc<BranchCtx>) -> anyhow::Result
     runner::go_live(state, ctx.clone()).await;
     let mut agents = vec![];
     for spec in &ctx.roster.team.agents {
-        ctx.record(&state.store, Some(&spec.id), &start_payload(spec))
-            .await?;
-        let env = env_for(state, ctx, Some(&spec.id));
-        let ends = endpoints(state.config.public_base(), &ctx.branch_id, &spec.id, env);
-        agents.push(ends.with_token(ctx.agent_token(&spec.id)));
+        ctx.record(Some(&spec.id), &start_payload(spec)).await?;
+        agents.push(agent_endpoints(state, ctx, &spec.id));
     }
     Ok(agents)
+}
+
+/// `agent`'s endpoints on the live branch `ctx`: its proxy variables (a proxy ticket is issued)
+/// and its token.
+pub(crate) fn agent_endpoints(state: &AppState, ctx: &BranchCtx, agent: &str) -> Endpoints {
+    let env = env_for(state, ctx, Some(agent));
+    let ends = endpoints(state.config.public_base(), &ctx.branch_id, agent, env);
+    ends.with_token(ctx.agent_token(agent))
 }
 
 /// An agent an external system registers. Only `id` is needed; `kind` defaults to `external`.
@@ -153,15 +165,14 @@ pub async fn register(store: &Store, ctx: &BranchCtx, join: &Join) -> anyhow::Re
         None => {
             let spec = join.spec();
             if ctx.roster.join(spec.clone()) {
-                ctx.records(store)
+                ctx.scoped(store)
                     .set_team(&ctx.branch_id, &team_with(ctx))
                     .await?;
             }
             spec
         }
     };
-    ctx.record(store, Some(&spec.id), &start_payload(&spec))
-        .await?;
+    ctx.record(Some(&spec.id), &start_payload(&spec)).await?;
     Ok(spec)
 }
 
@@ -282,7 +293,7 @@ impl UsageReport {
 
     /// What the call costs at `provider`'s list price for its model, when the table has it.
     pub fn list_price(&self, provider: &str) -> Option<f64> {
-        crate::budget::price(provider, self.model.as_deref(), &self.tokens())
+        (self.model.as_deref()).and_then(|m| crate::prices::call_cost(provider, m, &self.tokens()))
     }
 
     /// The `ModelCall` payload, with no request or response.
@@ -296,6 +307,7 @@ impl UsageReport {
             cost_source: None,
             provider: None,
             provider_response: None,
+            duration_ms: None,
         };
         let mut v = serde_json::to_value(call).expect("a payload serializes");
         v["reported_by"] = json!(REPORTED_BY_CLIENT);
@@ -322,7 +334,9 @@ pub struct Resumable {
     pub history: Vec<Event>,
 }
 
-/// True when `e` belongs to `agent`'s history: its own step, or a note or message for it.
+/// True when `e` belongs to `agent`'s history: its own event, or a note or message for it or for
+/// [`EVERYONE`]. Unlike the live mailbox (`exec::talk`), a handoff with no `to` is left out, a
+/// handoff to everyone is kept, and its own events are in.
 fn in_history(e: &Event, agent: &str) -> bool {
     let to = e.payload.get("to").and_then(Value::as_str);
     let sent_to_it = matches!(e.kind, EventKind::Handoff | EventKind::Message)

@@ -1,17 +1,22 @@
-//! List, get, put and delete for each kind of item, from one set of handlers. Edits follow the
-//! project's permissions: with "show a diff first", a put returns the diff and writes nothing until
-//! it is sent again with `confirm: true`.
+//! List, get, put, delete and dependents for each kind of item, from one set of handlers. Edits
+//! follow the project's permissions: with "show a diff first", a put returns the diff and writes
+//! nothing until it is sent again with `confirm: true`. A delete is refused while anything uses
+//! the item, unless sent with `cascade: true`.
+
+use std::ops::ControlFlow;
 
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::{json, Value};
-use shakedown_project::format::{
-    EditPolicy, ExperimentFile, Kind, ScenarioFile, SetupFile, WorldFile,
-};
-use shakedown_project::{item_file, Id, ItemBody, Project};
+use shakedown_project::format::{ExperimentFile, Kind, ScenarioFile, SetupFile, WorldFile};
+use shakedown_project::{item_file, Id, ItemBody, ProjectError};
 
+use super::delete_ops;
 use super::project_ops::NoInput;
-use super::{input, schema, view, Access, IdInput, OpCtx, OpError, OpFn, OpFuture, Operation};
+use super::{
+    as_yaml, diff_first, flag, input, schema, view, Access, IdInput, OpCtx, OpError, OpFn,
+    OpFuture, Operation,
+};
 
 pub(super) fn ops() -> Vec<Operation> {
     Kind::ALL.iter().flat_map(|kind| for_kind(*kind)).collect()
@@ -20,9 +25,8 @@ pub(super) fn ops() -> Vec<Operation> {
 /// The names, paths and schemas of one kind's operations.
 struct KindOps {
     area: &'static str,
-    names: [&'static str; 4],
-    many: &'static str,
-    one: &'static str,
+    names: [&'static str; 5],
+    paths: [&'static str; 5],
     put_schema: fn() -> Value,
 }
 
@@ -36,9 +40,15 @@ macro_rules! kind_ops {
                 concat!($dir, ".get"),
                 concat!($dir, ".put"),
                 concat!($dir, ".delete"),
+                concat!($dir, ".dependents"),
             ],
-            many: concat!("/api/project/", $dir),
-            one: concat!("/api/project/", $dir, "/{id}"),
+            paths: [
+                concat!("/api/project/", $dir),
+                concat!("/api/project/", $dir, "/{id}"),
+                concat!("/api/project/", $dir, "/{id}"),
+                concat!("/api/project/", $dir, "/{id}"),
+                concat!("/api/project/", $dir, "/{id}/dependents"),
+            ],
             put_schema: schema::<PutSchema<$file>>,
         }
     };
@@ -53,8 +63,8 @@ fn spec(kind: Kind) -> KindOps {
     }
 }
 
-/// Summary, access and HTTP method of list, get, put and delete, in that order.
-const VERBS: [(&str, Access, &str); 4] = [
+/// Summary, access and HTTP method of list, get, put, delete and dependents, in that order.
+const VERBS: [(&str, Access, &str); 5] = [
     (
         "Lists them, with any problems in their files",
         Access::Read,
@@ -66,16 +76,26 @@ const VERBS: [(&str, Access, &str); 4] = [
         Access::Edit,
         "PUT",
     ),
-    ("Deletes one", Access::Delete, "DELETE"),
+    (
+        "Deletes one; refused while anything uses it unless sent with cascade",
+        Access::Delete,
+        "DELETE",
+    ),
+    (
+        "What uses one, and what deleting it with cascade does to each",
+        Access::Read,
+        "GET",
+    ),
 ];
 
-fn for_kind(kind: Kind) -> [Operation; 4] {
+fn for_kind(kind: Kind) -> [Operation; 5] {
     let s = spec(kind);
-    let runs: [OpFn; 4] = [list, get, put, delete];
-    let schemas: [fn() -> Value; 4] = [
+    let runs: [OpFn; 5] = [list, get, put, delete_ops::delete, delete_ops::dependents];
+    let schemas: [fn() -> Value; 5] = [
         schema::<NoInput>,
         schema::<IdInput>,
         s.put_schema,
+        schema::<delete_ops::DeleteInput>,
         schema::<IdInput>,
     ];
     std::array::from_fn(|i| {
@@ -86,7 +106,7 @@ fn for_kind(kind: Kind) -> [Operation; 4] {
             summary,
             access,
             method,
-            path: if i == 0 { s.many } else { s.one },
+            path: s.paths[i],
             target: Some(kind),
             input_schema: schemas[i],
             run: runs[i],
@@ -99,7 +119,7 @@ fn for_kind(kind: Kind) -> [Operation; 4] {
 struct PutInput {
     id: String,
     body: Value,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "flag")]
     confirm: bool,
 }
 
@@ -115,14 +135,14 @@ struct PutSchema<B: JsonSchema> {
     confirm: Option<bool>,
 }
 
-fn kind_of(op: &Operation) -> Result<Kind, OpError> {
+pub(super) fn kind_of(op: &Operation) -> Result<Kind, OpError> {
     op.target
         .ok_or_else(|| OpError::bad_request("this operation acts on no kind of item"))
 }
 
 fn list<'a>(ctx: &'a OpCtx<'a>, op: &'static Operation, _: Value) -> OpFuture<'a> {
     Box::pin(async move {
-        let (kind, project) = (kind_of(op)?, ctx.project.current()?);
+        let (kind, project) = (kind_of(op)?, ctx.project.current().await?);
         let items: Vec<Value> = project
             .list(kind)
             .into_iter()
@@ -135,8 +155,10 @@ fn list<'a>(ctx: &'a OpCtx<'a>, op: &'static Operation, _: Value) -> OpFuture<'a
 fn get<'a>(ctx: &'a OpCtx<'a>, op: &'static Operation, value: Value) -> OpFuture<'a> {
     Box::pin(async move {
         let (kind, id) = (kind_of(op)?, Id::parse(&input::<IdInput>(value)?.id)?);
-        let project = ctx.project.current()?;
-        let item = project.get(kind, &id).ok_or_else(|| not_found(kind, &id))?;
+        let project = ctx.project.current().await?;
+        let item = project
+            .get(kind, &id)
+            .ok_or_else(|| ProjectError::not_found(kind, &id))?;
         Ok(view::item(&project, item))
     })
 }
@@ -146,54 +168,21 @@ fn put<'a>(ctx: &'a OpCtx<'a>, op: &'static Operation, value: Value) -> OpFuture
         let kind = kind_of(op)?;
         let PutInput { id, body, confirm } = input(value)?;
         let id = Id::parse(&id)?;
-        let body = parse_body(kind, &id, &body)?;
-        let project = ctx.project.current()?;
-        let diff = diff_against(&project, kind, &id, &body)?;
-        if project.config.permissions.edit == EditPolicy::DiffFirst && !confirm {
-            return Ok(json!({ "proposed": true, "diff": diff }));
-        }
-        let item = ctx.project.change(|p| p.put(kind, &id, body))??;
-        let mut out = view::item(&ctx.project.current()?, &item);
+        // Checked exactly as the file would be checked when read back.
+        let body = ItemBody::parse(kind, &item_file(kind, &id), &as_yaml(&body)?)?;
+        let project = ctx.project.current().await?;
+        let old = match project.get(kind, &id) {
+            Some(item) => item.body.to_yaml()?,
+            None => String::new(),
+        };
+        let policy = project.config.permissions.edit;
+        let diff = match diff_first(policy, &old, &body.to_yaml()?, confirm) {
+            ControlFlow::Continue(diff) => diff,
+            ControlFlow::Break(proposal) => return Ok(proposal),
+        };
+        let item = ctx.project.change(|p| p.put(kind, &id, body)).await??;
+        let mut out = view::item(&ctx.project.current().await?, &item);
         out["diff"] = Value::String(diff);
         Ok(out)
     })
-}
-
-fn delete<'a>(ctx: &'a OpCtx<'a>, op: &'static Operation, value: Value) -> OpFuture<'a> {
-    Box::pin(async move {
-        let (kind, id) = (kind_of(op)?, Id::parse(&input::<IdInput>(value)?.id)?);
-        ctx.project.change(|p| p.remove(kind, &id))??;
-        Ok(json!({ "deleted": id.as_str() }))
-    })
-}
-
-/// Checks `body` exactly as the file would be checked when read back.
-fn parse_body(kind: Kind, id: &Id, body: &Value) -> Result<ItemBody, OpError> {
-    let yaml = serde_yaml_ng::to_string(body).map_err(|e| OpError::bad_request(e.to_string()))?;
-    Ok(ItemBody::parse(kind, &item_file(kind, id), &yaml)?)
-}
-
-/// The change `body` makes to the item as it is now, as a unified diff of its YAML.
-fn diff_against(
-    project: &Project,
-    kind: Kind,
-    id: &Id,
-    body: &ItemBody,
-) -> Result<String, OpError> {
-    let old = match project.get(kind, id) {
-        Some(item) => item.body.to_yaml()?,
-        None => String::new(),
-    };
-    let new = body.to_yaml()?;
-    Ok(similar::TextDiff::from_lines(&old, &new)
-        .unified_diff()
-        .to_string())
-}
-
-fn not_found(kind: Kind, id: &Id) -> OpError {
-    shakedown_project::ProjectError::NotFound {
-        kind: shakedown_project::kind_name(kind),
-        id: id.to_string(),
-    }
-    .into()
 }

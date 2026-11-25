@@ -8,7 +8,10 @@ use serde_json::{json, Value};
 use tokio::io::AsyncWriteExt;
 
 use super::{output::json_in, prompt::Prompt, settings::ReviewerModel};
-use crate::{prices, providers::ProviderConfig};
+use crate::{
+    metrics, prices,
+    providers::{Provider, ProviderConfig},
+};
 
 /// How long a review may take.
 pub const TIMEOUT_SECS: u64 = 600;
@@ -31,13 +34,33 @@ pub async fn ask(
     providers: &ProviderConfig,
     http: &reqwest::Client,
 ) -> Result<Answer> {
-    let start = Instant::now();
-    let mut a = match model {
-        ReviewerModel::ClaudeCode { model } => claude(model, prompt).await?,
+    match model {
+        ReviewerModel::ClaudeCode { model } => ask_claude(model, prompt).await,
         ReviewerModel::Provider { provider, model } => {
-            provider_call(provider, model, prompt, providers, http).await?
+            let p = providers.resolve(Some(provider)).map_err(|e| anyhow!(e))?;
+            ask_provider(&p, model, prompt, http).await
         }
-    };
+    }
+}
+
+/// Asks Claude Code headless, timed.
+pub async fn ask_claude(model: &str, prompt: &Prompt) -> Result<Answer> {
+    timed(claude(model, prompt)).await
+}
+
+/// Asks `model` on the resolved provider `p` (one chat-completions call), timed.
+pub async fn ask_provider(
+    p: &Provider,
+    model: &str,
+    prompt: &Prompt,
+    http: &reqwest::Client,
+) -> Result<Answer> {
+    timed(provider_call(p, model, prompt, http)).await
+}
+
+async fn timed(f: impl std::future::Future<Output = Result<Answer>>) -> Result<Answer> {
+    let start = Instant::now();
+    let mut a = f.await?;
     a.seconds = start.elapsed().as_secs_f64();
     Ok(a)
 }
@@ -135,13 +158,12 @@ fn chat_request(model: &str, prompt: &Prompt) -> Value {
 }
 
 async fn provider_call(
-    provider: &str,
+    p: &Provider,
     model: &str,
     prompt: &Prompt,
-    providers: &ProviderConfig,
     http: &reqwest::Client,
 ) -> Result<Answer> {
-    let p = providers.resolve(Some(provider)).map_err(|e| anyhow!(e))?;
+    let provider = &p.id;
     let up = (p.send(http, &chat_request(model, prompt)).await)
         .map_err(|e| anyhow!("{provider}: {e}"))?;
     if !(200..300).contains(&up.status) {
@@ -178,7 +200,7 @@ fn list_price(
     match prices::table().find_flat(provider, model) {
         Some(p) => (
             Some(p.cost(prompt, completion)),
-            Some("list-price estimate".into()),
+            Some(metrics::ESTIMATE.into()),
         ),
         None => (None, None),
     }
@@ -209,13 +231,15 @@ mod tests {
         assert_eq!(at("--system-prompt"), Some(p.system.as_str()));
         // The digest goes on stdin, not on the command line.
         assert!(!args.iter().any(|a| a.contains("The digest of")));
-        let removed: Vec<String> = c
-            .get_envs()
-            .filter(|(_, v)| v.is_none())
-            .map(|(k, _)| k.to_string_lossy().into_owned())
-            .collect();
-        assert!(removed.contains(&"OPENROUTER_API_KEY".to_string()));
-        assert!(!removed.contains(&"ANTHROPIC_API_KEY".to_string()));
+        // Of this process's environment it passes on no other key (and no database URL): each
+        // one present is removed, and none is set.
+        let env: std::collections::BTreeMap<_, _> = c.get_envs().collect();
+        for k in ["OPENROUTER_API_KEY", "OPENAI_API_KEY", "SHAKEDOWN_PG_URL"] {
+            let k = std::ffi::OsStr::new(k);
+            let absent = std::env::var_os(k).is_none() && !env.contains_key(k);
+            let removed = env.get(k) == Some(&None);
+            assert!(removed || absent, "{k:?} reaches the reviewer");
+        }
     }
 
     #[test]

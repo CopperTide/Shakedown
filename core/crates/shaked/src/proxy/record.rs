@@ -3,6 +3,8 @@
 
 use serde_json::{json, Map, Value};
 
+use crate::auth::tokens::{hex, sha256};
+
 /// Bodies up to this size that are UTF-8 are recorded as text.
 pub const BODY_KEPT: usize = 64 * 1024;
 /// Request bodies above this size are refused (413).
@@ -22,7 +24,7 @@ const SECRET_HEADERS: [&str; 5] = [
 /// `{bytes, sha256, text?}`: the body's size, its SHA-256 (hex) and, when it is UTF-8 and at
 /// most `BODY_KEPT` long, its text.
 pub fn body_record(b: &[u8]) -> Value {
-    let mut v = json!({"bytes": b.len(), "sha256": sha256_hex(b)});
+    let mut v = json!({"bytes": b.len(), "sha256": hex(&sha256(b))});
     let text = (b.len() <= BODY_KEPT).then(|| std::str::from_utf8(b).ok());
     if let Some(Some(text)) = text {
         v["text"] = json!(text);
@@ -50,11 +52,6 @@ pub fn kept_headers(h: &[(String, String)]) -> Value {
         }
     }
     Value::Object(out)
-}
-
-fn sha256_hex(b: &[u8]) -> String {
-    let d = ring::digest::digest(&ring::digest::SHA256, b);
-    d.as_ref().iter().map(|x| format!("{x:02x}")).collect()
 }
 
 #[cfg(test)]

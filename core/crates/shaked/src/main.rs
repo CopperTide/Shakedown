@@ -1,10 +1,10 @@
-//! shaked, the Shakedown service (`cargo run -p shaked` from `core`). `core/crates/arenad-alias` builds
-//! this same file as `arenad`, its name until 2026-11-19.
+//! shaked, the Shakedown service (`cargo run -p shaked` from `core`). Its other commands
+//! (`base`, `token`, `store`, `mcp`, `worker`) are in `shaked::cli`.
 //!
 //! Environment: `SHAKEDOWN_PG_URL`, `SHAKEDOWN_BIND` (`127.0.0.1:4510`; the old `SHAKEDOWN_PORT`
 //! still binds `127.0.0.1:<port>`), `SHAKEDOWN_PUBLIC_URL` (the base of every URL handed out;
 //! default `http://<bind>`), `SHAKEDOWN_ALLOWED_HOSTS` (more Host names `/api` answers; see
-//! `shaked::mode`; a bind beyond loopback is refused), `SHAKEDOWN_PROXY_PORT` (the recording proxy,
+//! `shaked::bind`; a bind beyond loopback is refused), `SHAKEDOWN_PROXY_PORT` (the recording proxy,
 //! on 127.0.0.1; default: a free port), `SHAKEDOWN_PROXY_TIMEOUT_SECS` (300: how long a proxied
 //! request may take before it is answered 504),
 //! the model providers of open agents (`OPENROUTER_API_KEY`, `OPENAI_API_KEY`,
@@ -29,9 +29,11 @@
 //! - `SHAKEDOWN_TEMPLATES`: more template folders for the world builder (passed on to it).
 //! - `SHAKEDOWN_RUN_<PACKAGE>`: a command line (`/bin/sh -c`) run in place of a package's `run`,
 //!   e.g. `ssh <host> -- <command>` for a part on another machine (`docs/protocol.md`).
+//! - `SHAKEDOWN_DIR`: `<repo>`, for a shaked run away from the checkout it was built in (a
+//!   sandbox's is `/opt/shakedown`).
 //!
-//! `<repo>` is the folder above `core`, fixed when shaked is built (from `CARGO_MANIFEST_DIR`,
-//! which is `<repo>/core/crates/shaked`, or `<repo>/core/crates/arenad-alias` for `arenad`), so
+//! `<repo>` is by default the folder above `core`, fixed when shaked is built (from
+//! `CARGO_MANIFEST_DIR`, which is `<repo>/core/crates/shaked`), so
 //! the defaults hold wherever shaked is started from.
 
 use std::sync::Arc;

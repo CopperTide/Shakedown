@@ -44,7 +44,7 @@ const ERROR_TAIL_CHARS: usize = 2_000;
 const POLL: Duration = Duration::from_millis(250);
 
 /// The environment a driver inherits from shaked; everything else (provider keys included) is
-/// cleared. The connection's own `env` and the run's `ARENA_*` ids come on top.
+/// cleared. The connection's own `env` and the run's `SHAKEDOWN_*` ids come on top.
 const PASSED_ENV: [&str; 9] = [
     "PATH",
     "HOME",
@@ -134,10 +134,10 @@ fn command_for(
         ("SHAKEDOWN_TASK", ids.task_id),
         ("SHAKEDOWN_CONNECTION", &conn.id),
     ] {
-        cmd.envs(settings::both(k, v));
+        cmd.envs(settings::pair(k, v));
     }
     if let Some(parent) = ids.fork_of {
-        cmd.envs(settings::both("SHAKEDOWN_FORK_OF", parent));
+        cmd.envs(settings::pair("SHAKEDOWN_FORK_OF", parent));
     }
     if let Some(dir) = &conn.workdir {
         cmd.current_dir(dir);
@@ -167,10 +167,10 @@ async fn time_env(
     ];
     let mut env: BTreeMap<String, String> = pairs
         .into_iter()
-        .flat_map(|(k, v)| settings::both(k, v))
+        .flat_map(|(k, v)| settings::pair(k, v))
         .collect();
     if let Some(m) = ctx.and_then(|c| c.rules.world_minutes) {
-        env.extend(settings::both("SHAKEDOWN_WORLD_MINUTES", m.to_string()));
+        env.extend(settings::pair("SHAKEDOWN_WORLD_MINUTES", m.to_string()));
     }
     env
 }
@@ -223,7 +223,7 @@ fn agent_tokens(ctx: &crate::exec::BranchCtx) -> BTreeMap<String, String> {
 
 /// Starts `conn`'s command for the run `ids` and watches it (see the module's notes).
 pub async fn launch(state: &Arc<AppState>, conn: &Connection, ids: RunIds<'_>) -> Result<Launched> {
-    crate::mode::local_only(state.store.layer().policy(), "a Code connection's driver")
+    crate::bind::local_only(state.store.layer().policy(), "a Code connection's driver")
         .map_err(anyhow::Error::msg)?;
     if let Some(ctx) = state.live.get(ids.branch_id) {
         let team = ctx.roster.team.agents.iter().map(|a| a.id.as_str());
@@ -366,7 +366,7 @@ async fn record_exit(state: &AppState, branch: &str, words: &str, l: &Launched) 
     });
     let kind = EventKind::WorldEvent;
     let recorded = match state.live.get(branch) {
-        Some(ctx) => ctx.append_now(&state.store, None, kind, ev).await,
+        Some(ctx) => ctx.append_now(None, kind, ev).await,
         None => {
             state
                 .store

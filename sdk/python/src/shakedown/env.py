@@ -32,7 +32,7 @@ from __future__ import annotations
 import copy
 from typing import Any, Callable, Optional, Sequence, Union
 
-from .client import AgentEndpoint, Branch, OldConnectionName, Shakedown
+from .client import AgentEndpoint, Branch, Shakedown
 from .models import Agent, CheckResult, Event, Task
 
 #: The action that says an agent is done.
@@ -41,8 +41,8 @@ END = "__end__"
 Shaping = Callable[["ShakedownParallelEnv", str, Any, dict], float]
 
 
-class ShakedownParallelEnv(OldConnectionName):
-    metadata = {"name": "arena_parallel_v0", "is_parallelizable": False}
+class ShakedownParallelEnv:
+    metadata = {"name": "shakedown_parallel_v0", "is_parallelizable": False}
 
     def __init__(
         self,
@@ -240,8 +240,5 @@ def _prompt(task: Task, role: str) -> str:
     parts = [p for p in (role.strip(), f"# Ticket\n\n{task.ticket}", task.instructions) if p]
     return "\n\n".join(parts)
 
-
-#: The old name (the SDK was ``arena`` until 2026-11-19).
-ArenaParallelEnv = ShakedownParallelEnv
 
 __all__ = ["ShakedownParallelEnv", "END"]

@@ -56,7 +56,6 @@ def write_package(result: Result, t, dir: Path) -> dict:
         for src, dst in result.files:
             shutil.copytree(src, dir / dst, ignore=_no_links)
         (dir / "shakedown-package.toml").write_text(manifest(result.world, t, version), encoding="utf-8")
-        (dir / "arena-package.toml").unlink(missing_ok=True)  # the old name, from a build before 2026-11-19
     except BaseException:
         shutil.rmtree(dir, ignore_errors=True)
         raise

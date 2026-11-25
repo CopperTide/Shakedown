@@ -53,7 +53,7 @@ def _reachable(pg_url: str) -> bool:
 
 
 @pytest.fixture(scope="session")
-def arena():
+def shakedown():
     url = setting("SHAKEDOWN_SDK_URL")
     if url:
         a = Shakedown(url)
@@ -71,7 +71,7 @@ def arena():
     server = pg or setting("SHAKEDOWN_PG_URL") or "postgres://127.0.0.1:5544/postgres"
     if not _reachable(server):
         pytest.skip(f"no Postgres at {urlparse(server).hostname}:{urlparse(server).port} (set SHAKEDOWN_SDK_PG_URL)")
-    saves = tempfile.mkdtemp(prefix="arena-sdk-test-saves-")
+    saves = tempfile.mkdtemp(prefix="shakedown-sdk-test-saves-")
     a = Shakedown.local(
         benchmark="retail",
         packages=[str(REPO / "integrations"), str(REPO / "benchmarks")],
@@ -93,19 +93,19 @@ def arena():
 
 
 @pytest.fixture
-def fake_claude(arena):
+def fake_claude(shakedown):
     """The shaked here runs Claude Code agents with `tests/fake_bin/claude` (only one the tests started)."""
-    if not hasattr(arena, "process"):
+    if not hasattr(shakedown, "process"):
         pytest.skip("only for a shaked the tests started (its Claude Code is the stand-in)")
 
 
 @pytest.fixture
-def cleanup(arena):
+def cleanup(shakedown):
     """Runs to delete after the test, even when it fails."""
     runs: list[str] = []
     yield runs
     for r in runs:
         try:
-            arena.delete_run(r)
+            shakedown.delete_run(r)
         except Exception:  # noqa: BLE001
             pass

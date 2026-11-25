@@ -1,12 +1,12 @@
-//! The typed payloads of the events shaked writes without a payload struct of their own in
-//! `model`: `RunStart`, `AgentStart`, `Wake`, `Idle`, `Pause`, `Resume` and `Reasoning`. Each is
-//! written with [`BranchCtx::record`](crate::exec::BranchCtx::record) (or
-//! [`Store::record`](crate::store::Store::record) before a branch has a context) and read with
-//! [`Event::decode`]. Their JSON is the JSON written before they were typed.
+//! The typed payload of every event kind, written with
+//! [`BranchCtx::record`](crate::exec::BranchCtx::record) and read with [`Event::decode`]. Their
+//! JSON is the JSON recorded runs hold.
 //!
-//! Every field reads leniently: a key that is absent, or holds something of another shape (a run
-//! recorded by an older shaked), reads as its default, and the other keys still read, as each
-//! key was read on its own before.
+//! The payloads typed after their events were first written (`RunStart`, `AgentStart`, `Wake`,
+//! `Idle`, `Resume` and `Reasoning`) read every field leniently: a key that is absent, or holds
+//! something of another shape (a run recorded by an older shaked), reads as its default, and the
+//! other keys still read, as each key was read on its own before. The others read as they
+//! always have.
 
 use serde::{de::DeserializeOwned, Deserialize, Deserializer, Serialize};
 use serde_json::{Map, Value};
@@ -17,6 +17,37 @@ use crate::{reasoning::ReasoningKind, world::Saves};
 /// A payload of events of kind `KIND`.
 pub trait EventPayload: Serialize + DeserializeOwned + Default {
     const KIND: EventKind;
+}
+
+/// Each payload's kind, one line per kind.
+macro_rules! payload_kind {
+    ($($payload:ty => $kind:ident,)+) => {
+        $(impl EventPayload for $payload {
+            const KIND: EventKind = EventKind::$kind;
+        })+
+    };
+}
+
+payload_kind! {
+    RunStartPayload => RunStart,
+    AgentStartPayload => AgentStart,
+    ModelCallPayload => ModelCall,
+    ToolCallPayload => ToolCall,
+    HandoffPayload => Handoff,
+    MessagePayload => Message,
+    AgentEndPayload => AgentEnd,
+    CheckPayload => Check,
+    WorldEventPayload => WorldEvent,
+    WorldViewPayload => WorldView,
+    PausePayload => Pause,
+    ResumePayload => Resume,
+    DelegationPayload => Delegation,
+    ReportPayload => Report,
+    WakePayload => Wake,
+    IdlePayload => Idle,
+    FinishPayload => Finish,
+    ReasoningPayload => Reasoning,
+    SavePointPayload => SavePoint,
 }
 
 impl Event {
@@ -114,10 +145,6 @@ pub struct RunStartPayload {
     pub world_minutes: Option<f64>,
 }
 
-impl EventPayload for RunStartPayload {
-    const KIND: EventKind = EventKind::RunStart;
-}
-
 impl RunStartPayload {
     /// The `RunStart` of a branch's events, when it has one.
     pub fn of(events: &[Event]) -> Option<RunStartPayload> {
@@ -147,10 +174,6 @@ pub struct AgentStartPayload {
         skip_serializing_if = "std::ops::Not::not"
     )]
     pub external: bool,
-}
-
-impl EventPayload for AgentStartPayload {
-    const KIND: EventKind = EventKind::AgentStart;
 }
 
 impl AgentStartPayload {
@@ -185,10 +208,6 @@ pub struct WakePayload {
     pub idle_wake: Option<u32>,
 }
 
-impl EventPayload for WakePayload {
-    const KIND: EventKind = EventKind::Wake;
-}
-
 /// The payload of `EventKind::Idle`: a dispatch run's agent ended its turn, with what it said.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct IdlePayload {
@@ -220,17 +239,9 @@ pub struct IdlePayload {
     pub trimmed: Option<u32>,
 }
 
-impl EventPayload for IdlePayload {
-    const KIND: EventKind = EventKind::Idle;
-}
-
 /// The payload of `EventKind::Pause` (`{}`).
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct PausePayload {}
-
-impl EventPayload for PausePayload {
-    const KIND: EventKind = EventKind::Pause;
-}
 
 /// Why a save point was made: before a model call through the gateway.
 pub const SAVE_BEFORE_MODEL_CALL: &str = "model_call";
@@ -252,19 +263,11 @@ pub struct SavePointPayload {
     pub paused_ms: i64,
 }
 
-impl EventPayload for SavePointPayload {
-    const KIND: EventKind = EventKind::SavePoint;
-}
-
 /// The payload of `EventKind::Resume`: how long the pause lasted.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ResumePayload {
     #[serde(default, deserialize_with = "lenient")]
     pub paused_ms: i64,
-}
-
-impl EventPayload for ResumePayload {
-    const KIND: EventKind = EventKind::Resume;
 }
 
 /// The payload of `EventKind::Reasoning`: one thing an agent thought or said it would do, where
@@ -292,8 +295,158 @@ pub struct ReasoningPayload {
     pub truncated: bool,
 }
 
-impl EventPayload for ReasoningPayload {
-    const KIND: EventKind = EventKind::Reasoning;
+/// Payload of `EventKind::ToolCall`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct ToolCallPayload {
+    pub name: String,
+    pub args: Value,
+    pub result: Value,
+    pub error: Option<String>,
+    pub reads: Value,
+    pub writes: Value,
+    /// Keys the call changed for its part's own bookkeeping (`_disruption/<id>`): saved like a
+    /// write, but not one (docs/protocol.md, "Ids and keys").
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub internal: Vec<String>,
+    /// `saves["retail"]` when that part was saved, so the old UIs keep working. Runs recorded
+    /// before integrations have only this (read as `saves: {"retail": snapshot}`).
+    pub snapshot: Option<String>,
+    /// Set when the write committed but saving it failed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub snapshot_error: Option<String>,
+    pub tool_call_id: Option<String>,
+    /// The world part the tool ran on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub part: Option<String>,
+    /// `{part: save}` of the parts saved after this call (None when nothing was saved).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub saves: Option<std::collections::BTreeMap<String, String>>,
+    /// The world clock when the call ran.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub clock_ms: Option<i64>,
+    /// How long the world's clock was paused for this step's saves (None when nothing was saved).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub paused_ms: Option<i64>,
+    /// How long the tool ran in the world, gate checks and saves left out (None when it reached
+    /// no part, and in calls recorded before durations were kept).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duration_ms: Option<f64>,
+}
+
+/// Payload of `EventKind::WorldEvent`: something a part reported when its clock advanced.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct WorldEventPayload {
+    pub part: String,
+    pub kind: String,
+    pub text: String,
+    pub data: Value,
+    pub clock_ms: i64,
+}
+
+/// Payload of `EventKind::WorldView`: the world's view the benchmark drew after the step at
+/// `seq_of`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct WorldViewPayload {
+    pub seq_of: i64,
+    pub view: Value,
+}
+
+/// Payload of `EventKind::ModelCall`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct ModelCallPayload {
+    pub request: Value,
+    pub response: Value,
+    pub usage: Value,
+    pub cost_usd: Option<f64>,
+    pub cost_source: Option<String>,
+    /// The provider that answered (absent in calls recorded before providers: OpenRouter).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider: Option<String>,
+    /// The provider's own response, when it differs from the canonical `response` (a provider
+    /// that doesn't speak chat completions); absent when `response` is what it sent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_response: Option<Value>,
+    /// How long the provider took to answer, in milliseconds (absent in calls recorded before
+    /// it was kept, and in calls a client reported).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duration_ms: Option<f64>,
+}
+
+/// Payload of `EventKind::AgentEnd`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct AgentEndPayload {
+    pub ok: bool,
+    pub error: Option<String>,
+    pub tokens: Option<i64>,
+    /// The input and output tokens of `tokens` (absent in runs recorded before they were kept).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt_tokens: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub completion_tokens: Option<i64>,
+    pub cost_usd: Option<f64>,
+    pub cost_source: Option<String>,
+    pub seconds: Option<f64>,
+}
+
+/// Payload of `EventKind::Handoff`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct HandoffPayload {
+    pub note: String,
+    /// The agent the note is for; absent: for whoever comes next.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub to: Option<String>,
+}
+
+/// Payload of `EventKind::Message`: one agent's message to another, or to all (`to` = `*`).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct MessagePayload {
+    pub to: String,
+    pub text: String,
+}
+
+/// Payload of `EventKind::Delegation`: the lead gives agent `to` its `task`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct DelegationPayload {
+    pub to: String,
+    pub task: String,
+}
+
+/// Payload of `EventKind::Report`: an agent's report to the lead (`to`). `turn_end` is set when
+/// the agent ended a turn without reporting and shaked passed on what it said last.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct ReportPayload {
+    pub to: String,
+    pub text: String,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub turn_end: bool,
+}
+
+/// Payload of `EventKind::Finish`: the lead's summary of the run.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct FinishPayload {
+    pub summary: String,
+}
+
+/// Payload of `EventKind::Check`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct CheckPayload {
+    pub passed: bool,
+    /// The gold save (of the first part) the world was compared with.
+    pub gold_db: Option<String>,
+    /// Keys (`<table>/<id>`) whose documents differ from the gold save, sorted; prefixed
+    /// `part:` when the world has more than one part.
+    pub differing_rows: Option<Vec<String>>,
+    /// The benchmark's named checks, for a benchmark that scores the end state itself. Then
+    /// `differing_rows` lists the checks that failed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub checks: Option<Vec<parts::proto::NamedCheck>>,
+    /// `{part: save}` of every part's final state, saved before its instance stopped.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub final_saves: Option<std::collections::BTreeMap<String, String>>,
+    /// Parts that keep no gold save (parts with replay), so they could not be compared with
+    /// the task's expected result.
+    #[serde(default)]
+    pub unchecked: Vec<String>,
 }
 
 #[cfg(test)]

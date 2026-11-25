@@ -1,11 +1,12 @@
 mod support;
 use support::records;
+use support::team_of;
 
 use std::time::Duration;
 
 use serde_json::{json, Value};
 use shaked::{model::*, providers::ProviderConfig};
-use support::{app, live, live::Live, packages, run, run_live, AppFx};
+use support::{app, live, live::Live, packages, run, AppFx};
 
 fn agent(id: &str) -> AgentSpec {
     AgentSpec::new(id, AgentKind::Open)
@@ -14,11 +15,7 @@ fn agent(id: &str) -> AgentSpec {
 }
 
 fn team() -> Team {
-    Team {
-        id: "t".into(),
-        name: "T".into(),
-        agents: vec![agent("triage"), agent("resolver")],
-    }
+    team_of(vec![agent("triage"), agent("resolver")])
 }
 
 /// An app that runs no agent (open mode offered on a server nothing answers on).
@@ -29,12 +26,6 @@ async fn setup(tag: &str) -> AppFx {
 /// An app on the configured providers and Claude Code, for live tests.
 async fn live_setup(tag: &str) -> AppFx {
     AppFx::configured("api", tag).bench("retail").start().await
-}
-
-/// The test's `Cleanup` drops legacy branch and snapshot databases and the metadata database;
-/// its `TestHub` drops the integration's instances and saves.
-async fn teardown(fx: AppFx, _branches: &[&str]) {
-    drop(fx);
 }
 
 impl AppFx {
@@ -109,6 +100,7 @@ async fn assert_health_and_tasks(fx: &AppFx) {
     assert_eq!(st, 200);
     assert!(h["open_available"].as_bool().unwrap());
     assert!(h["claude"].is_boolean() && h["codex"].is_boolean());
+    assert_eq!(h["sandboxes"], false, "{h}");
     assert_eq!(h["benchmark"]["name"], "retail", "{h}");
     assert_eq!(h["benchmark"]["world"][0]["integration"], "postgres", "{h}");
     let (_, tasks) = fx.get("/api/tasks").await;
@@ -192,17 +184,13 @@ fn health_tasks_and_run_validation() {
     })
 }
 
+live_test!(
+    live_post_run_then_stream_until_status,
+    post_run_then_stream_until_status
+);
+
 /// A run started over HTTP streams its events in order to its end, then its status; a stream
 /// opened after the end replays it all; the branch and the run list agree.
-#[test]
-#[ignore = "live: runs a real model (support/live.rs)"]
-fn live_post_run_then_stream_until_status() {
-    run_live(
-        Live::any("live_post_run_then_stream_until_status"),
-        post_run_then_stream_until_status,
-    );
-}
-
 async fn post_run_then_stream_until_status(live: Live) {
     let fx = live_setup("stream").await;
     let bench = fx.state.hub.bench_describe("retail").await.unwrap();
@@ -219,7 +207,7 @@ async fn post_run_then_stream_until_status(live: Live) {
     let again = read_stream(&fx, &branch).await;
     assert_eq!(again.len(), frames);
     assert_branch_and_run_listed(&fx, &branch, &run_id, seqs).await;
-    teardown(fx, &[&branch]).await;
+    drop(fx);
 }
 
 fn solo(live: &Live) -> Team {
@@ -244,17 +232,10 @@ async fn final_save(fx: &AppFx, branch: &str) -> String {
     check.final_saves.unwrap()["retail"].clone()
 }
 
-/// Two runs compared: their statuses and tokens, and differing rows that are exactly what the
-/// part's `diff` of their final saves finds, each side's doc read from its save (keys without a
-/// part prefix in a one-part world).
-#[test]
-#[ignore = "live: runs a real model (support/live.rs)"]
-fn live_compare_diffs_the_final_saves_of_two_runs() {
-    run_live(
-        Live::any("live_compare_diffs_the_final_saves_of_two_runs"),
-        compare_diffs_the_final_saves_of_two_runs,
-    );
-}
+live_test!(
+    live_compare_diffs_the_final_saves_of_two_runs,
+    compare_diffs_the_final_saves_of_two_runs
+);
 
 /// The differing rows are exactly the part's `diff` of the two final saves, each side's doc read
 /// from its save.
@@ -277,6 +258,9 @@ async fn assert_rows_are_the_parts_diff(fx: &AppFx, v: &Value, a: &str, b: &str)
     }
 }
 
+/// Two runs compared: their statuses and tokens, and differing rows that are exactly what the
+/// part's `diff` of their final saves finds, each side's doc read from its save (keys without a
+/// part prefix in a one-part world).
 async fn compare_diffs_the_final_saves_of_two_runs(live: Live) {
     let fx = live_setup("compare").await;
     let a = fx.run_to_end("27", &solo(&live)).await;
@@ -293,7 +277,7 @@ async fn compare_diffs_the_final_saves_of_two_runs(live: Live) {
     let first = &v["first_divergent_seq"];
     assert!(first.is_null() || first.as_i64().unwrap() >= 1, "{first}");
     compare_edge_cases(&fx, &a).await;
-    teardown(fx, &[&a, &b]).await;
+    drop(fx);
 }
 
 /// The rows request for `keys` at step `seq` of branch `b`, plus `extra` query text.
@@ -315,17 +299,7 @@ async fn bad_rows_requests(fx: &AppFx, b: &str, seq: i64) {
     }
 }
 
-/// Rows are read with `inspect` from the save holding the part's state after the step: at the
-/// run's start the base save, and after each step that saved, that save, whatever the agent
-/// wrote; a key the part doesn't have is null.
-#[test]
-#[ignore = "live: runs a real model (support/live.rs)"]
-fn live_rows_read_each_steps_save() {
-    run_live(
-        Live::any("live_rows_read_each_steps_save"),
-        rows_read_each_steps_save,
-    );
-}
+live_test!(live_rows_read_each_steps_save, rows_read_each_steps_save);
 
 /// The rows of what step `e` wrote, read at it, are what its save holds.
 async fn assert_rows_read_the_save(fx: &AppFx, b: &str, e: &Event) {
@@ -341,6 +315,9 @@ async fn assert_rows_read_the_save(fx: &AppFx, b: &str, e: &Event) {
     }
 }
 
+/// Rows are read with `inspect` from the save holding the part's state after the step: at the
+/// run's start the base save, and after each step that saved, that save, whatever the agent
+/// wrote; a key the part doesn't have is null.
 async fn rows_read_each_steps_save(live: Live) {
     let fx = live_setup("rows").await;
     let b = fx.run_to_end("27", &solo(&live)).await;
@@ -362,7 +339,7 @@ async fn rows_read_each_steps_save(live: Live) {
         assert_rows_read_the_save(&fx, &b, e).await;
     }
     bad_rows_requests(&fx, &b, 1).await;
-    teardown(fx, &[&b]).await;
+    drop(fx);
 }
 
 /// A bad step, an unknown agent in the changes and a malformed body are 400; an unknown branch
@@ -387,17 +364,13 @@ async fn assert_fork_errors(fx: &AppFx, url: &str, at: i64) {
     );
 }
 
+live_test!(
+    live_fork_over_http_maps_errors_and_starts_a_branch,
+    fork_over_http_maps_errors_and_starts_a_branch
+);
+
 /// A fork over HTTP: bad requests are mapped to 400 and 404, and a good one starts a child of
 /// the branch in the same run that runs to its end.
-#[test]
-#[ignore = "live: runs a real model (support/live.rs)"]
-fn live_fork_over_http_maps_errors_and_starts_a_branch() {
-    run_live(
-        Live::any("live_fork_over_http_maps_errors_and_starts_a_branch"),
-        fork_over_http_maps_errors_and_starts_a_branch,
-    );
-}
-
 async fn fork_over_http_maps_errors_and_starts_a_branch(live: Live) {
     let fx = live_setup("fork").await;
     let bench = fx.state.hub.bench_describe("retail").await.unwrap();
@@ -418,7 +391,7 @@ async fn fork_over_http_maps_errors_and_starts_a_branch(live: Live) {
     assert_eq!(c.run_id, parent.run_id);
     let cevs = records(&fx.state.store).events(&child).await.unwrap();
     live::assert_recorded(&c, &cevs, &live);
-    teardown(fx, &[&b, &child]).await;
+    drop(fx);
 }
 
 #[test]

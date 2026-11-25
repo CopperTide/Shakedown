@@ -1,0 +1,31 @@
+# The lean profile's memory budget (plan, "LEAN memory budget"): each container's compose mem_limit in MiB and
+# the program's own knob that keeps it under it. test_platform_files.py checks `containers` against compose and
+# profiles/lean.yaml and the total against 2600 MiB. `idle` is what `docker stats` showed a minute after start
+# (2026-11-19, no apps, no traffic: test_live_platform_stack.py); the rest is not measured yet.
+containers:
+  otel-collector: 96          # memory_limiter 80 MiB, batch 512, GOMEMLIMIT 80MiB
+  worldclock-gateway: 32      # Rust, streams one request at a time (Task 7)
+  prometheus: 192             # GOMEMLIMIT 150MiB, retention 2d, OTLP receiver only (no scrape jobs); idle 37
+  alertmanager: 48            # GOMEMLIMIT 32MiB; idle 12
+  loki: 192                   # single binary, GOMEMLIMIT 150MiB, filesystem store, caches off; idle 42
+  tempo: 160                  # GOMEMLIMIT 120MiB, local backend, metrics generator off; idle 26
+  grafana: 160                # SQLite, no plugins, unified alerting off, GOMEMLIMIT 128MiB; idle 118
+  glitchtip: 320              # SERVER_ROLE=all_in_one: one granian worker serving and running tasks; idle 172
+  glitchtip-db: 96            # shared_buffers 16MB, max_connections 20; idle 41
+  prod-storefront: 96         # uvicorn, one worker
+  prod-orders: 96
+  prod-inventory: 96
+  prod-db: 160                # shared_buffers 32MB, work_mem 2MB, max_connections 40
+  staging-storefront: 80
+  staging-orders: 80
+  staging-inventory: 80
+  staging-db: 128             # shared_buffers 16MB
+  traffic: 64                 # standard-library Python, 16 worker threads, 6 world hours of request records
+outside_compose:
+  ci-job: 384                 # the GitHub twin's `docker run --memory 384m`, concurrency 1
+reserved: {}
+containers_mib: 2560          # the sum of the three lists above
+one_shot:                     # psql seeds that exit once the services have migrated, before traffic starts
+  prod-seed: 32
+  staging-seed: 32
+host_processes_mib: 300       # twins and people, measured not capped

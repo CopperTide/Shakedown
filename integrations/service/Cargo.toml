@@ -11,19 +11,9 @@ path = "src/lib.rs"
 name = "shakedown-service"
 path = "src/main.rs"
 
-# The program's name until 2026-11-19, built too for scripts that still run it.
-[[bin]]
-name = "arena-service"
-path = "src/old_name.rs"
-
 [[bin]]
 name = "shakedown-live-service"
 path = "src/live_main.rs"
-
-# The program's name until 2026-11-19, built too for scripts that still run it.
-[[bin]]
-name = "arena-live-service"
-path = "src/old_live_name.rs"
 
 [dependencies]
 shakedown-part = { path = "../../kits/rust", features = ["compose", "http"] }

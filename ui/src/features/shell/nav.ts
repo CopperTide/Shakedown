@@ -31,7 +31,7 @@ export const NAV: NavGroup[] = [
   {
     label: 'Settings',
     items: [
-      { to: '/settings/models', label: 'Connections & models', icon: 'plug', match: /^\/settings\/(models|tokens)/ },
+      { to: '/settings/models', label: 'Connections & models', icon: 'plug', match: /^\/settings\/(models|observability|tokens)/ },
       { to: '/settings/project', label: 'Project settings', icon: 'gear' },
     ],
   },

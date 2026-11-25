@@ -36,7 +36,7 @@ body:
     id: clock
     attributes:
       label: Does it change with time on its own?
-      description: Parts that do use the arena clock.
+      description: Parts that do use the shakedown clock.
       options: ["Yes", "No", Not sure]
   - type: input
     id: needs

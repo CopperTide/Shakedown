@@ -29,7 +29,7 @@ it (`shaked import <url>`, or **Import from git** in the app): shaked fetches th
 its Python packages with uv in an environment of their own and registers every package in it
 ([reference](reference.md#import-from-git)). A `command` run is for
 programs you trust; it runs in the package folder with only `PATH`, `HOME`, `SHAKEDOWN_PG_URL`, `UV_CACHE_DIR`,
-`XDG_CACHE_HOME`, `RUST_LOG` and `SHAKEDOWN_SAVES` in its environment. An `image` run is boxed in a container: no
+`XDG_CACHE_HOME`, `RUST_LOG`, `SHAKEDOWN_SAVES` and, when it is set, `SHAKEDOWN_TEMPLATES` in its environment. An `image` run is boxed in a container: no
 network unless the manifest asks for host networking (`needs.network = "host"`), no environment from shaked,
 and only its own saves folder, mounted at `/saves`.
 
@@ -49,16 +49,43 @@ transport (`docs/protocol.md`, "Benchmark calls"). It answers:
 - `gold_actions`: the tool calls that solve a task. shaked applies them to the base world once per task to make
   the gold world that branches are scored against.
 
+### The description file
+
+A benchmark may ship `describe.json` beside its `shakedown-package.toml`: exactly what its `describe` answers. A
+shaked whose packages run only in sandboxes (a hosted control box) never starts a package program, so it reads a
+benchmark's tasks, world and metadata from this file instead (health, `GET /api/tasks`, a run's scenario). A
+benchmark without one answers 409 there ("benchmark … has no description file"); a shaked that runs packages
+itself ignores the file. So a control box needs only each package's manifest and, for a benchmark, its
+`describe.json`, never its program. `benchmarks/retail/describe.json` is checked against retail's live `describe`
+by `retails_description_file_is_its_live_describe` (`core/crates/shaked/tests/hosting.rs`); after changing retail's
+tasks, tools, team or scenario options, write it again with `SHAKEDOWN_WRITE_DESCRIBE=1` set on that test.
+`benchmarks/software-factory/describe.json` is checked the same way by
+`the_prebuilt_software_factorys_description_file_is_its_live_describe`; in it the package's own folder is
+`${WORLD_DIR}`, so the file holds wherever the package is.
+
+### Prebuilt worlds
+
+A shaked whose packages run only in sandboxes builds no world: `/api/templates`, its preview and
+`POST /api/worlds` answer 409 ("hosted Shakedown ships prebuilt worlds; build custom worlds in local Shakedown").
+It runs the worlds shipped prebuilt instead: a template built with its default choices, committed as a benchmark
+package `benchmarks/<template id>` named after the template (today `software-factory`, the company Northwind
+Labs). `benchmarks/world/worldbench/prebuilt.py` lists them; after changing such a template, run
+`uv run python -m worldbench.prebuilt` in `benchmarks/world` (it keeps each package's `describe.json` and
+`README.md`), then write its `describe.json` again as above. `tests/test_prebuilt.py` fails while a prebuilt world
+is not its template's current build.
+
 A benchmark's tools reach parts only through the parts' `connect` info (for `postgres`, `{url}`), so only parts
 with exact saves may be connected. In Rust, implement `shakedown_part::Benchmark` and end `main` with
-`serve_benchmark(..)`; the Python kit has no benchmark support yet.
+`serve_benchmark(..)`. In Python, the kit's `Benchmark` (`kits/python/shakedown_part/benchmark.py`) does the same;
+`benchmarks/factory-01`, `plant-floor` and `line2-oee` use it.
 
 `benchmarks/retail` is the included example: a Rust program (`src/main.rs`, `src/lib.rs`) whose world is one
 `postgres` part named `retail`; `src/load.rs` seeds it from `data/retail/db.json`, `src/tools/` holds the tools,
 and `src/tasks.rs` reads the tasks and gold actions from `data/retail/tasks.json` (the tasks offered are the
 ids in `data/retail/demo_tasks.json`); `src/team.rs` holds the team it suggests and the `Store policy` heading
-over its policy. Its tests are in `benchmarks/retail/tests`. shaked runs one benchmark at a time, chosen with
-`SHAKEDOWN_BENCHMARK`.
+over its policy. Its tests are in `benchmarks/retail/tests`. Each run names the benchmark it runs on (`POST /api/runs`'s
+`benchmark`, a project world's `package`), else the current one: `SHAKEDOWN_BENCHMARK`, or the one chosen with
+`POST /api/worlds/{name}/use`.
 
 `benchmarks/factory` is a benchmark over eight integrations (`erpnext`, `twenty-crm`, `ridgeline-hub`, the stand-in
 plant, `sculptured`, and three simulations: `utility`, `ot-network`, `shift-roster`) with two tasks, a press bearing
@@ -86,10 +113,13 @@ which serves the world and scores each task by its checks (`shakedown_part.expec
 
 - `kind = "builder"`: the package shaked asks for templates, previews and builds.
 - Templates: the ones shipped with the builder are in `benchmarks/world/library/` (its manifest passes
-  `--templates library`; `small-manufacturer`, see its README), beside its own `templates/` (none yet).
+  `--templates library`; `small-manufacturer`, see its README), beside its own `templates/` (`software-factory`:
+  a GitHub twin with Actions CI, Jira, three services in Docker Compose on `live-service`, an observability stack,
+  Slack, PagerDuty and simulated engineers).
 - `SHAKEDOWN_TEMPLATES`: `:`-separated folders of more templates (each `<id>/template.yaml`).
 - `SHAKEDOWN_WORLDS`: where built worlds are written (default `<repo>/core/worlds`, git-ignored), scanned at start like
-  `SHAKEDOWN_PACKAGES`. A built world's command names `${SHAKEDOWN_DIR}`, the repository folder.
+  `SHAKEDOWN_PACKAGES`. A built world's command names `${SHAKEDOWN_DIR}`, the repository folder: by default the one
+  shaked was built in, else the `SHAKEDOWN_DIR` setting (a sandbox's is `/opt/shakedown`).
 
 shaked asks the first builder installed (by name) for templates and previews, writes a built world into
 `SHAKEDOWN_WORLDS`, installs it while it runs and prepares its base in the background (`docs/reference.md`,

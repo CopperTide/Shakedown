@@ -66,7 +66,7 @@ pub struct AgentUse {
     pub peak_prompt_tokens: Option<i64>,
     /// How many times its client compacted its context (reported).
     pub compactions: i64,
-    /// Arena's overhead recorded on this agent's own events, in seconds.
+    /// Shakedown's overhead recorded on this agent's own events, in seconds.
     pub overhead_s: f64,
 }
 
@@ -74,7 +74,7 @@ pub struct AgentUse {
 pub struct Metrics {
     /// Wall time from the branch's creation to its end (or to now while it runs).
     pub measured_s: f64,
-    /// Arena's own time in it, per kind, in milliseconds.
+    /// Shakedown's own time in it, per kind, in milliseconds.
     pub overhead_ms: Overhead,
     pub overhead_s: f64,
     /// False for runs recorded before overhead was measured: then there is no estimate.
@@ -191,11 +191,20 @@ impl Tally {
     }
 }
 
+/// The label of a cost an agent's run came with, by its source: no API charge on a local model, an
+/// estimate when shaked worked any of it out at list prices, else reported.
+fn label_of(source: Option<&str>) -> &'static str {
+    match source {
+        Some(LOCAL_COST_SOURCE) => NO_CHARGE,
+        Some(s) if s.contains(prices::LIST_PRICE_ESTIMATE) => ESTIMATE,
+        _ => REPORTED,
+    }
+}
+
 /// The cost of one agent run: reported, else estimated from a list price, else unknown.
 fn cost_of(t: &Tally, u: &AgentUse, table: &Prices) -> Cost {
     if let Some(usd) = t.reported {
-        let local = t.source.as_deref() == Some(LOCAL_COST_SOURCE);
-        let mut c = Cost::labelled(Some(usd), if local { NO_CHARGE } else { REPORTED });
+        let mut c = Cost::labelled(Some(usd), label_of(t.source.as_deref()));
         c.source = t.source.clone();
         return c;
     }
@@ -498,6 +507,35 @@ as_of = "2026-11-04""#,
         assert_eq!(m.agents[1].cost.label, NO_CHARGE);
         assert_eq!((m.cost.usd, m.cost.label.as_str()), (None, UNKNOWN));
         assert_eq!(m.tokens, 30);
+    }
+
+    /// A cost shaked worked out at list prices (an open agent's end, a turn stopped before Claude
+    /// Code said its cost) is an estimate, never a reported one; Claude Code's own figure stays
+    /// reported.
+    #[test]
+    fn a_list_price_cost_is_labelled_an_estimate() {
+        let evs = vec![
+            start(1, "a", "open", "claude-x", Some("anthropic")),
+            end(2, "a", Some((10, 5)), Some((0.5, "list_price_estimate"))),
+            start(3, "b", "claude_code", "sonnet", None),
+            cut_off_end(4, "b"),
+            start(5, "c", "claude_code", "sonnet", None),
+            end(6, "c", Some((10, 5)), Some(CLAUDE_CODES_OWN)),
+        ];
+        let m = metrics(&branch(None, 6), &evs, &table(), Utc::now());
+        let labels: Vec<&str> = m.agents.iter().map(|a| a.cost.label.as_str()).collect();
+        assert_eq!(labels, [ESTIMATE, ESTIMATE, REPORTED]);
+        let source = m.agents[0].cost.source.as_deref();
+        assert_eq!(source, Some("list_price_estimate"));
+    }
+
+    /// The cost Claude Code said a session cost.
+    const CLAUDE_CODES_OWN: (f64, &str) = (0.25, "api_equivalent_estimate");
+
+    /// `agent`'s end after earlier turns reported their cost and its last was stopped.
+    fn cut_off_end(seq: i64, agent: &str) -> Event {
+        let cost = (0.75, "api_equivalent_estimate+list_price_estimate");
+        end(seq, agent, Some((10, 5)), Some(cost))
     }
 
     /// A model call `agent`'s client reported: `prompt` tokens of context, or a compaction.

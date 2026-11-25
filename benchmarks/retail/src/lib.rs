@@ -1,5 +1,8 @@
-//! The retail benchmark: τ²-bench retail tools over a Postgres world part.
+//! The retail benchmark: τ²-bench retail tools over a Postgres world part, and the faults a
+//! scenario may plant in it.
+pub mod disrupt;
 pub mod load;
+pub mod options;
 pub mod tasks;
 pub mod team;
 pub mod tools;
@@ -48,23 +51,33 @@ fn url_of(connections: &serde_json::Map<String, Value>) -> R<&str> {
         .ok_or_else(|| PartError::invalid("connections.retail.url is required"))
 }
 
+/// The world's own tool that arms a scenario's disruptions (agents don't get it).
+fn scenario_schema() -> ToolSchema {
+    let disruptions = json!({"type": "array", "items": {"type": "object"}});
+    ToolSchema {
+        name: disrupt::SCENARIO_TOOL.into(),
+        description: "Schedules the scenario's disruptions (a scenario's setup calls it).".into(),
+        input_schema: json!({"type": "object", "properties": {"disruptions": disruptions},
+                             "required": ["disruptions"]}),
+        effect: Effect::Write,
+    }
+}
+
 fn schemas() -> Vec<ToolSchema> {
-    tools::tool_schemas()
-        .into_iter()
-        .map(|v| {
-            let name = v["name"].as_str().unwrap_or("").to_string();
-            ToolSchema {
-                effect: if tools::is_write(&name) {
-                    Effect::Write
-                } else {
-                    Effect::Read
-                },
-                description: v["description"].as_str().unwrap_or("").to_string(),
-                input_schema: v["inputSchema"].clone(),
-                name,
-            }
-        })
-        .collect()
+    let agents = tools::tool_schemas().into_iter().map(|v| {
+        let name = v["name"].as_str().unwrap_or("").to_string();
+        ToolSchema {
+            effect: if tools::is_write(&name) {
+                Effect::Write
+            } else {
+                Effect::Read
+            },
+            description: v["description"].as_str().unwrap_or("").to_string(),
+            input_schema: v["inputSchema"].clone(),
+            name,
+        }
+    });
+    agents.chain([scenario_schema()]).collect()
 }
 
 impl Retail {
@@ -88,6 +101,7 @@ impl Retail {
 impl Benchmark for Retail {
     async fn describe(&self) -> R<BenchDescribe> {
         let tasks = self.task_infos();
+        let ids = tasks.iter().map(|t| t.id.clone()).collect();
         Ok(BenchDescribe {
             name: "retail".into(),
             version: "0.1.0".into(),
@@ -106,7 +120,7 @@ impl Benchmark for Retail {
             links: vec![],
             gates: vec![],
             scored: false,
-            scenario_options: None,
+            scenario_options: Some(options::scenario_options(ids)),
             view: None,
         })
     }
@@ -119,13 +133,19 @@ impl Benchmark for Retail {
     async fn call_tool(&self, p: BenchCallTool) -> R<BenchToolOutput> {
         let url = url_of(&p.connections)?;
         let args = if p.args.is_null() { json!({}) } else { p.args };
-        let out = load::with_conn(url, async |c| tools::call(c, &p.name, &args).await).await?;
+        let name = p.name.as_str();
+        let answer = load::with_conn(url, async |c| match name {
+            disrupt::SCENARIO_TOOL => disrupt::calls::arm(c, &args).await,
+            _ => disrupt::calls::agent_call(c, name, &args).await,
+        });
+        let disrupt::calls::Answer { outcome, events } = answer.await?;
         Ok(BenchToolOutput {
-            result: out.result,
-            error: out.error,
+            result: outcome.result,
+            error: outcome.error,
             part: "retail".into(),
-            reads: out.reads,
-            writes: out.writes,
+            reads: outcome.reads,
+            writes: outcome.writes,
+            events: events.into(),
         })
     }
 

@@ -10,8 +10,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-# `arena_part`: the old import name, an alias of shakedown_part (arena_part/__init__.py).
-packages = ["shakedown_part", "arena_part"]
+packages = ["shakedown_part"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -8,7 +8,7 @@ use serde_json::Value;
 
 use super::{
     lifecycle::{Ending, StartPoint},
-    score::{check, freeze},
+    score::{freeze, score_now},
 };
 use crate::{
     agents::{AgentResult, AgentRun, Driver, FailureKind},
@@ -23,11 +23,22 @@ use crate::{
 /// under their title.
 #[derive(Debug, Clone)]
 pub(crate) struct Brief {
-    pub(crate) ticket: String,
-    pub(crate) title: String,
-    pub(crate) instructions: String,
+    ticket: String,
+    title: String,
+    instructions: String,
     /// The world's own clock, when the task's world keeps a calendar of its own.
     pub(crate) clock: Option<WorldClock>,
+}
+
+impl Brief {
+    /// The start of an agent's first input at world time `now_ms`: the world's date and time
+    /// (when it keeps a calendar), the ticket, and the instructions under their title.
+    pub(crate) fn opening(&self, now_ms: i64) -> String {
+        let mut text = self.clock.map_or_else(String::new, |c| c.brief(now_ms));
+        let (ticket, title, instructions) = (&self.ticket, &self.title, &self.instructions);
+        text.push_str(&format!("{ticket}\n# {title}\n\n{instructions}\n"));
+        text
+    }
 }
 
 pub(super) async fn drive(
@@ -48,18 +59,26 @@ pub(super) async fn drive(
     // Stopping drops the agents where they are (a CLI agent's process is killed with it).
     let ended = tokio::select! {
         ended = agents => ended?,
-        () = ctx.flow.stopped() => return Ok(Ending::STOPPED),
+        () = ctx.flow.stopped() => return stopped(state, ctx).await,
     };
     if let Some(end) = ended {
         // Over its spend limit, a run is scored as it stands (a failure).
         if end.status == BranchStatus::BudgetExceeded {
-            freeze(state, ctx).await;
-            check(state, ctx).await?;
+            score_now(state, ctx).await?;
         }
         return Ok(end);
     }
-    freeze(state, ctx).await;
-    check(state, ctx).await
+    score_now(state, ctx).await
+}
+
+/// How a stopped branch ends: `stopped`, or `budget_exceeded`, scored as it stands, when the
+/// control box stopped a sandbox's run for its limit (only its word turns a stop into that).
+async fn stopped(state: &Arc<AppState>, ctx: &Arc<BranchCtx>) -> Result<Ending> {
+    let Some(why) = ctx.budget.forced() else {
+        return Ok(Ending::STOPPED);
+    };
+    score_now(state, ctx).await?;
+    Ok(Ending::because(BranchStatus::BudgetExceeded, why))
 }
 
 /// The task's ticket, the benchmark's instructions and the world's clock.
@@ -138,23 +157,11 @@ fn restore_notes(ctx: &BranchCtx, from: &StartPoint) -> Result<()> {
 
 /// The ticket, the instructions, and the handoff notes left for the agent: in a legacy run the
 /// previous agent's (which must exist), otherwise every note recorded so far for it.
-async fn agent_input(
-    state: &AppState,
-    ctx: &BranchCtx,
-    idx: usize,
-    brief: &Brief,
-) -> Result<String> {
-    let Brief {
-        ticket,
-        title,
-        instructions,
-        clock,
-    } = brief;
-    let mut input = clock.map_or_else(String::new, |c| c.brief(ctx.clock.now_ms()));
-    input.push_str(&format!("{ticket}\n# {title}\n\n{instructions}\n"));
+async fn agent_input(ctx: &BranchCtx, idx: usize, brief: &Brief) -> Result<String> {
+    let mut input = brief.opening(ctx.clock.now_ms());
     let notes = match ctx.rules.handoff_required {
         true => legacy_note(ctx, idx)?.into_iter().collect(),
-        false => notes_for(state, ctx, &ctx.roster.team.agents[idx].id).await?,
+        false => notes_for(ctx, &ctx.roster.team.agents[idx].id).await?,
     };
     for (from, note) in notes {
         input.push_str(&format!("\n# Handoff note from {from}\n\n{note}\n"));
@@ -176,12 +183,8 @@ fn legacy_note(ctx: &BranchCtx, idx: usize) -> Result<Option<(String, String)>> 
 }
 
 /// The name of the sender and the note of each handoff recorded so far for `agent`.
-async fn notes_for(
-    state: &AppState,
-    ctx: &BranchCtx,
-    agent: &str,
-) -> Result<Vec<(String, String)>> {
-    let events = ctx.records(&state.store).events(&ctx.branch_id).await?;
+async fn notes_for(ctx: &BranchCtx, agent: &str) -> Result<Vec<(String, String)>> {
+    let events = ctx.records().events().await?;
     let name_of = |id: &str| {
         let spec = ctx.roster.team.agents.iter().find(|a| a.id == id);
         spec.map_or_else(|| id.to_string(), |a| a.name.clone())
@@ -203,10 +206,10 @@ async fn run_agent(
     resume: Option<Vec<Value>>,
 ) -> Result<Option<Ending>> {
     let spec = ctx.roster.team.agents[idx].clone();
-    let input = agent_input(state, ctx, idx, brief).await?;
+    let input = agent_input(ctx, idx, brief).await?;
     let driver = driver_for(state, spec.kind)?;
     let start = AgentStartPayload::of(&spec);
-    ctx.record(&state.store, Some(&spec.id), &start).await?;
+    ctx.record(Some(&spec.id), &start).await?;
     let run = AgentRun {
         branch: ctx.clone(),
         spec: spec.clone(),
@@ -230,8 +233,7 @@ async fn record_end(
         freeze(state, ctx).await;
     }
     let end = serde_json::to_value(agent_end(result))?;
-    ctx.append(&state.store, Some(agent), EventKind::AgentEnd, end)
-        .await?;
+    ctx.append(Some(agent), EventKind::AgentEnd, end).await?;
     Ok(())
 }
 
@@ -268,9 +270,12 @@ fn agent_ending(ctx: &BranchCtx, agent: &str, result: AgentResult) -> Option<End
     if !result.ok {
         let e = result.error.unwrap_or_else(|| "agent failed".to_string());
         // The model's own behavior is a failed attempt, not a broken harness.
+        // An agent that failed once the control box said the run was over its limit (its
+        // model call refused 402) failed for the limit.
         let status = match result.failure {
             Some(FailureKind::Model) => BranchStatus::Failed,
             Some(FailureKind::Budget) => BranchStatus::BudgetExceeded,
+            None if ctx.budget.forced().is_some() => BranchStatus::BudgetExceeded,
             None => BranchStatus::InfraError,
         };
         return Some(Ending::because(status, e));

@@ -1,7 +1,6 @@
 import type { ReactElement, ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { modesLine } from '@/app/status';
 import { ProviderSelect, ProviderStatusLine } from '@/components/ProviderFields';
 import { AgentEdit, applied, forkProblem } from '@/features/run/ForkPanel';
 import { changedFields, formatCost } from '@/features/run/timeline';
@@ -69,11 +68,6 @@ describe('health line', () => {
     expect(text(html)).toContain('✓ ollama (local, 127.0.0.1:11434) ready');
     expect(html).toMatch(/<button[^>]*>Check again<\/button>/);
     expect(text(html)).not.toContain('not checked');
-  });
-
-  it('the old single OpenRouter entry is gone from the modes line', () => {
-    expect(modesLine({ open_available: false, claude: true, codex: true })).toBe('Claude Code · Codex');
-    expect(modesLine({ open_available: false, claude: false, codex: false })).toBe('No agent CLI on PATH');
   });
 });
 
@@ -176,6 +170,7 @@ describe('model and cost per provider', () => {
     expect(agentModelLine(agent())).toBe('OpenRouter · deepseek/deepseek-chat-v3.1 (default)');
     expect(agentModelLine(agent({ provider: 'anthropic', model: 'claude-x' }))).toBe('Anthropic · claude-x');
     expect(agentModelLine(agent({ provider: 'local:ollama', model: 'llama3.3' }))).toBe('ollama (local) · llama3.3');
+    expect(agentModelLine(agent({ provider: 'key:openrouter', model: 'anthropic/claude-haiku-5.5' }))).toBe('openrouter key · anthropic/claude-haiku-5.5');
     expect(agentModelLine(agent({ kind: 'claude_code', model: 'sonnet' }))).toBe('Claude Code · Sonnet');
     expect(agentModelLine(agent({ kind: 'claude_code', model: 'haiku' }))).toBe('Claude Code · Haiku');
     expect(agentModelLine(agent({ kind: 'codex', model: null }))).toBe('Codex · Default model');

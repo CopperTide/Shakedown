@@ -5,10 +5,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use serde_json::Value;
 
-use super::{
-    agents::drive,
-    score::{check, freeze},
-};
+use super::{agents::drive, score::score_now};
 use crate::{app::AppState, exec::BranchCtx, model::*};
 
 /// Where a branch's work starts. `notes[j]` is the recorded handoff note of agent `j`
@@ -30,7 +27,7 @@ pub fn spawn_branch(state: &Arc<AppState>, ctx: Arc<BranchCtx>, from: StartPoint
         if let Err(e) = inner.await {
             leave_live(&state, &ctx).await;
             let ending = Ending::infra(format!("runner crashed: {e}"));
-            record_ending(&state, &ctx, ending).await;
+            record_ending(&ctx, ending).await;
         }
     });
 }
@@ -56,8 +53,7 @@ pub async fn finish(state: &AppState, ctx: &BranchCtx) -> Option<Ending> {
     if !ctx.lifecycle.claim_end() {
         return None;
     }
-    freeze(state, ctx).await;
-    let outcome = check(state, ctx).await;
+    let outcome = score_now(state, ctx).await;
     Some(conclude(state, ctx, outcome).await)
 }
 
@@ -69,11 +65,12 @@ pub async fn finish_failed(state: &AppState, ctx: &BranchCtx, why: String) -> Op
     if !ctx.lifecycle.claim_end() {
         return None;
     }
-    freeze(state, ctx).await;
-    let outcome = check(state, ctx).await.map(|ending| match ending.status {
-        BranchStatus::InfraError => ending,
-        _ => Ending::failed(why),
-    });
+    let outcome = score_now(state, ctx)
+        .await
+        .map(|ending| match ending.status {
+            BranchStatus::InfraError => ending,
+            _ => Ending::failed(why),
+        });
     Some(conclude(state, ctx, outcome).await)
 }
 
@@ -102,7 +99,7 @@ async fn conclude(state: &AppState, ctx: &BranchCtx, outcome: Result<Ending>) ->
         (None, Ok(v)) => v,
         (None, Err(e)) => Ending::infra(format!("{e:#}")),
     };
-    record_ending(state, ctx, ending.clone()).await;
+    record_ending(ctx, ending.clone()).await;
     ending
 }
 
@@ -154,12 +151,11 @@ impl Ending {
 /// Records how a branch ended, trying once more when the store fails; a failure is logged (the
 /// branch then stays `running` in the store). What overhead built up after its last event has no
 /// event to go on, and is dropped.
-async fn record_ending(state: &AppState, ctx: &BranchCtx, Ending { status, error }: Ending) {
+async fn record_ending(ctx: &BranchCtx, Ending { status, error }: Ending) {
     ctx.overhead.take();
     let branch_id = &ctx.branch_id;
-    let records = ctx.records(&state.store);
     for attempt in 1..=2 {
-        let set = records.set_status(branch_id, status, error.clone());
+        let set = ctx.records().set_status(status, error.clone());
         match set.await {
             Ok(()) => return,
             Err(e) => {

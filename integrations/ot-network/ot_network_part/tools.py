@@ -1,6 +1,6 @@
 """The OT network's tools: its status, the gateway's sessions and the playbook for agents; isolating and restoring
 a zone, revoking a session and reporting an incident; and the scenario a task's setup sets."""
-from shakedown_part.jsonstate import Done, Scenarios, Tool, event
+from shakedown_part.jsonstate import SCENARIO_PARAMS, Done, Scenarios, Tool, event
 from shakedown_part.params import Param, Refusal
 
 from . import disrupt, network
@@ -111,6 +111,6 @@ TOOLS = {t.name: t for t in [
          (Param("summary", "string"), Param("session", "string", None), Param("zone", "string", None),
           Param("actions", "string", None)), _report),
     Tool("ot_scenario", "Sets the network's scenario and schedules its disruptions (a task's setup calls it; "
-         "agents don't get it).", "write", (Param("name", "string"), Param("disruptions", "array", None)),
+         "agents don't get it).", "write", SCENARIO_PARAMS,
          _scenario),
 ]}

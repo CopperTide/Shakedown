@@ -34,8 +34,10 @@ def _no_check(config, do) -> None:
 @dataclass(frozen=True)
 class Kind:
     """One `do.kind`: `fields` maps each field `do` needs to its JSON Schema type; `apply(config,
-    state, do)` changes the state and gives the keys it wrote; `check(config, do)` raises Refusal
-    for a disruption that can't apply (an unknown lane, say), when it is armed."""
+    state, do)` changes the state and gives the keys it wrote, or a `Fired` with them and world
+    events of the part's own that come after the disruption's (a notice a link can tell apart from
+    the part's other disruptions); `check(config, do)` raises Refusal for a disruption that can't
+    apply (an unknown lane, say), when it is armed."""
     fields: dict
     apply: Callable
     check: Callable = field(default=_no_check)
@@ -93,10 +95,11 @@ def _checked(config, kinds, tools, d) -> dict:
 
 
 def _fire(config, state, kinds, d) -> Fired:
-    written = kinds[d["do"]["kind"]].apply(config, state, d["do"])
+    applied = kinds[d["do"]["kind"]].apply(config, state, d["do"])
+    own = applied if isinstance(applied, Fired) else Fired(list(applied))
     d["fired"] = True
     data = {"id": d["id"], **d["do"]}
-    return Fired([key(d), *written], [{"kind": EVENT, "text": d["text"], "data": data}])
+    return Fired([key(d), *own.writes], [{"kind": EVENT, "text": d["text"], "data": data}, *own.events])
 
 
 def _fire_all(config, state, kinds, due) -> Fired:
@@ -122,6 +125,15 @@ def arm(config, state, kinds, tools, given) -> Fired:
     at_once = [d for d in new if d["when"] == {"after_calls": 0, "tool": None}]
     out.add(_fire_all(config, state, kinds, at_once))
     return out
+
+
+def remove(state, ids) -> list:
+    """Drops the disruptions `ids` from the schedule in `state` (fired or not; what a fired one changed
+    stays) and gives their keys; an id not armed is no change."""
+    armed = state.get("disruptions", [])
+    gone = [d for d in armed if d["id"] in ids]
+    state["disruptions"] = [d for d in armed if d["id"] not in ids]
+    return [key(d) for d in gone]
 
 
 def pending(state, tool) -> list:

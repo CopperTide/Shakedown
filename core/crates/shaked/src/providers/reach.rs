@@ -39,7 +39,7 @@ pub fn reachable_as(url: &Url, policy: &Policy, what: &str) -> Result<(), String
     if url.scheme() != "https" {
         return Err(format!("{what}'s URL must be https here"));
     }
-    match host_of(url) {
+    match host(url) {
         Some(Host::Ip(ip)) => public_as(ip, what),
         Some(Host::Name(d)) if is_local_name(d) => Err(private_refusal(what)),
         Some(Host::Name(_)) => Ok(()),
@@ -52,14 +52,31 @@ enum Host<'a> {
     Name(&'a str),
 }
 
-/// `url`'s host: an address literal (IPv6 without its brackets) or a name.
-fn host_of(url: &Url) -> Option<Host<'_>> {
+/// `url`'s host, for the policy check: an address literal (IPv6 without its brackets) or a name.
+fn host(url: &Url) -> Option<Host<'_>> {
     let h = url.host_str().filter(|h| !h.is_empty())?;
     let bare = h.trim_start_matches('[').trim_end_matches(']');
     Some(match bare.parse::<IpAddr>() {
         Ok(ip) => Host::Ip(ip),
         Err(_) => Host::Name(h),
     })
+}
+
+/// `host[:port]` of `url`, as a `Host` header carries it.
+pub(super) fn host_port(url: &Url) -> Option<String> {
+    let host = url.host_str()?;
+    Some(match url.port() {
+        Some(p) => format!("{host}:{p}"),
+        None => host.to_string(),
+    })
+}
+
+/// `host[:port]` of `url`: the only part of it a label or a reason shows, since a URL may carry
+/// a credential; `fallback` when it has no host.
+pub fn host_of(url: &str, fallback: &str) -> String {
+    (Url::parse(url).ok().as_ref())
+        .and_then(host_port)
+        .unwrap_or_else(|| fallback.to_string())
 }
 
 /// [`reachable`], then (when the policy forbids private URLs) every address the host resolves to
@@ -72,7 +89,7 @@ pub async fn reach(url: &str, policy: &Policy) -> Result<(), String> {
 pub async fn reach_as(url: &str, policy: &Policy, what: &str) -> Result<(), String> {
     let parsed = Url::parse(url).map_err(|e| format!("not a URL: {e}"))?;
     reachable_as(&parsed, policy, what)?;
-    let Some(Host::Name(host)) = host_of(&parsed) else {
+    let Some(Host::Name(host)) = host(&parsed) else {
         return Ok(());
     };
     if policy.private_model_urls {

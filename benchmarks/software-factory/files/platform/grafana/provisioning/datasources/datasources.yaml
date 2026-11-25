@@ -1,0 +1,36 @@
+# Every store is read through the world-time gateway's query face. X-Shakedown-Shift: wall asks it to move
+# Grafana's wall-clock window to world time and the answer's timestamps back, so dashboards follow the world.
+apiVersion: 1
+datasources:
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://worldclock-gateway:4319/q/prometheus
+    isDefault: true
+    jsonData:
+      httpHeaderName1: X-Shakedown-Shift
+      timeInterval: 15s
+    secureJsonData:
+      httpHeaderValue1: wall
+  - name: Loki
+    uid: loki
+    type: loki
+    access: proxy
+    url: http://worldclock-gateway:4319/q/loki
+    jsonData:
+      httpHeaderName1: X-Shakedown-Shift
+    secureJsonData:
+      httpHeaderValue1: wall
+  - name: Tempo
+    uid: tempo
+    type: tempo
+    access: proxy
+    url: http://worldclock-gateway:4319/q/tempo
+    jsonData:
+      httpHeaderName1: X-Shakedown-Shift
+      tracesToLogsV2:
+        datasourceUid: loki
+        filterByTraceID: true
+    secureJsonData:
+      httpHeaderValue1: wall

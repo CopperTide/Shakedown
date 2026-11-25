@@ -39,9 +39,22 @@ pub enum ForkError {
         "the {part} integration is running on a different machine or version than the original"
     )]
     FingerprintMismatch { part: String },
+    /// A tools change with an empty list: that would mean every tool again, not none.
+    #[error("a fork can't cut every tool of \"{0}\" with `tools: []`, which means every tool again; make it read_only or list the tools it keeps")]
+    NoTools(String),
+    /// A tools change lists a tool the world doesn't offer agents.
+    #[error("the world has no tool \"{0}\" for an agent to use")]
+    UnknownTool(String),
+    /// A change to the scheduled disruptions that can't be made (see
+    /// [`ForkRequest::disruptions`]).
+    #[error("{0}")]
+    Disruptions(String),
     /// A team change the run can't take (see [`ForkRequest::team`]).
     #[error("{0}")]
     TeamChange(&'static str),
+    /// Packages run only in sandboxes here, so no fork's world can start (403).
+    #[error("{0}")]
+    SandboxOnly(String),
     /// Storage or database failure.
     #[error("fork failed: {0:#}")]
     Internal(anyhow::Error),

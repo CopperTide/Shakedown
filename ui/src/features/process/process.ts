@@ -8,7 +8,7 @@ import type { Event, Team } from '@/model/types';
 
 export type UnitState = 'idle' | 'running' | 'done' | 'failed' | 'automatic';
 
-/** The world's links (calls one part makes on another, e.g. a QA review): drawn as a unit, run by arena. */
+/** The world's links (calls one part makes on another, e.g. a QA review): drawn as a unit, run by shakedown. */
 export const LINK_AGENT = 'link';
 
 export interface Counts {

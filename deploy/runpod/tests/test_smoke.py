@@ -47,7 +47,7 @@ class _Branch:
         self.stopped = True
 
 
-class _Arena:
+class _Shakedown:
     def __init__(self, branch):
         self.branch, self.deleted = branch, []
 
@@ -67,16 +67,16 @@ def _event(kind, payload):
 
 def test_smoke_through_shaked_finds_the_gateway_reasoning(tmp_path, runner, clock):
     branch = _Branch([_event("model_call", {}), _event("reasoning", {"source": "gateway", "model_call_seq": 3})])
-    arena = _Arena(branch)
+    shakedown = _Shakedown(branch)
     hosts = {POD_HOST: vllm("k1"), "shaked.test": lambda r: httpx.Response(200, json={"ok": True})}
     ops = make_ops(tmp_path, runner, clock, http=route(hosts))
     report = smoke(ops, BASE, "k1", "openai/gpt-oss-120b", through_shaked="http://127.0.0.1:4510",
-                   arena_factory=lambda url: arena)
+                   shakedown_factory=lambda url: shakedown)
     assert report.ok, report.lines()
     assert report.checks[-1].name == "reasoning recorded through shaked"
     assert branch.registered == ("smoke", {"kind": "external", "provider": "local:runpod",
                                            "model": "openai/gpt-oss-120b"})
-    assert branch.stopped and arena.deleted == ["r1"]
+    assert branch.stopped and shakedown.deleted == ["r1"]
 
 
 def test_smoke_through_shaked_without_reasoning_fails(tmp_path, runner, clock):
@@ -84,5 +84,5 @@ def test_smoke_through_shaked_without_reasoning_fails(tmp_path, runner, clock):
     hosts = {POD_HOST: vllm("k1"), "shaked.test": lambda r: httpx.Response(200, json={"ok": True})}
     ops = make_ops(tmp_path, runner, clock, http=route(hosts))
     report = smoke(ops, BASE, "k1", "openai/gpt-oss-120b", through_shaked="http://x",
-                   arena_factory=lambda url: _Arena(branch))
+                   shakedown_factory=lambda url: _Shakedown(branch))
     assert not report.ok and branch.stopped

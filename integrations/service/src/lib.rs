@@ -131,7 +131,7 @@ impl Service {
         env.extend((config.images.iter()).map(|(s, i)| (image_var(s), i.clone())));
         if config.live {
             let dir = self.clock_dir(id).to_string_lossy().into_owned();
-            env.extend(shakedown_part::settings::both("SHAKEDOWN_CLOCK_DIR", dir));
+            env.extend(shakedown_part::settings::pair("SHAKEDOWN_CLOCK_DIR", dir));
         }
         let name = format!("shakedown_{id}");
         let project = Project::new(&name, &config.compose_file, &env);

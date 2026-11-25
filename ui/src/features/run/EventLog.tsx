@@ -3,16 +3,17 @@ import { StatusMark } from '@/components/ui/status';
 import { Table, Td, Th } from '@/components/ui/table';
 import { cn } from '@/lib/cn';
 import { alarmMark } from '@/lib/mark';
-import { type LaneRow, type Span, formatDuration } from '@/model/lanes';
+import { type Span, formatDuration } from '@/model/lanes';
+import type { LogRow } from './logFilter';
 
 const offset = (at: number, span: Span | null) => (span && !Number.isNaN(at) ? `+${((at - span.start) / 1000).toFixed(1)} s` : '–');
 
-/** Every step as a row: the record behind the timeline, in step order. */
-export default function EventLog({ lanes, span, selected, onSelect, models }: {
-  lanes: LaneRow[]; span: Span | null; selected: number | null; onSelect: (seq: number) => void; models: boolean;
+/** Every step as a row (only those in `matches` when filtered): the record behind the timeline, in step order. */
+export default function EventLog({ rows: all, matches, span, selected, onSelect }: {
+  rows: LogRow[]; matches: ReadonlySet<number> | null; span: Span | null; selected: number | null; onSelect: (seq: number) => void;
 }) {
   const box = useRef<HTMLDivElement>(null);
-  const rows = lanes.flatMap((l) => l.marks.filter((m) => models || m.kind !== 'model').map((m) => ({ lane: l.name, m }))).sort((a, b) => a.m.seq - b.m.seq);
+  const rows = matches ? all.filter((r) => matches.has(r.m.seq)) : all;
   useEffect(() => { box.current?.querySelector('[data-active]')?.scrollIntoView({ block: 'nearest' }); }, [selected]);
   return (
     <div ref={box} className="max-h-[420px] overflow-auto">
@@ -31,6 +32,7 @@ export default function EventLog({ lanes, span, selected, onSelect, models }: {
           </tr>
         ))}</tbody>
       </Table>
+      {rows.length === 0 && <p className="px-3 py-4 text-xs text-muted">No step matches the filter.</p>}
     </div>
   );
 }

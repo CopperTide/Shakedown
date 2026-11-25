@@ -1,6 +1,6 @@
 """The LIMS's tools: reads of the lab's records for agents, the scenario a task's setup sets, and the QA
 head's review that a benchmark's link calls."""
-from shakedown_part.jsonstate import Done, Tool
+from shakedown_part.jsonstate import SCENARIO_PARAMS, Done, Tool
 from shakedown_part.params import Param
 
 from . import disrupt, lab, qa
@@ -40,7 +40,7 @@ TOOLS = {t.name: t for t in [
     Tool("lims_get_document", "One document of the lab, with its text.", "read", (Param("id", "string"),),
          _get_document),
     Tool("lims_scenario", "Sets the lab's scenario and schedules its disruptions (a task's setup calls it; "
-         "agents don't get it).", "write", (Param("name", "string"), Param("disruptions", "array", None)),
+         "agents don't get it).", "write", SCENARIO_PARAMS,
          _scenario),
     Tool("qa_review", "The QA head reviews a proposed change (a benchmark's link calls it; agents don't get it).",
          "write", (Param("id", "string"), Param("action", "string"), Param("payload", "object", None),

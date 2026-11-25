@@ -148,7 +148,7 @@ pub struct Cas {
 }
 
 impl Cas {
-    /// The CA of `branch` (in a new `<temp>/arena-proxy-<random>/`, private to this user), made
+    /// The CA of `branch` (in a new `<temp>/shakedown-proxy-<random>/`, private to this user), made
     /// the first time it is asked for. A fork is a branch of its own: its world gets its own CA.
     pub fn for_branch(&self, branch: &str) -> anyhow::Result<Arc<WorldCa>> {
         let mut by_branch = self.by_branch.lock().unwrap();
@@ -156,7 +156,7 @@ impl Cas {
             return Ok(ca.clone());
         }
         let random = uuid::Uuid::new_v4().simple();
-        let dir = std::env::temp_dir().join(format!("arena-proxy-{random}"));
+        let dir = std::env::temp_dir().join(format!("shakedown-proxy-{random}"));
         let ca = Arc::new(WorldCa::new(branch, &dir)?);
         by_branch.insert(branch.to_string(), ca.clone());
         Ok(ca)
@@ -208,7 +208,7 @@ mod tests {
 
     #[tokio::test]
     async fn the_leaf_names_its_host() {
-        let dir = std::env::temp_dir().join(format!("arena-tls-test-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("shakedown-tls-test-{}", std::process::id()));
         let ca = WorldCa::new("b_leaf", &dir).unwrap();
         let server = ca.server_config("toy.test").unwrap();
         assert!(handshake(&ca, server.clone(), "toy.test").await);
@@ -226,7 +226,7 @@ mod tests {
     fn a_leaf_names_its_cas_key_as_strict_verifiers_require() {
         // Python 3.13's default context (VERIFY_X509_STRICT) refuses a leaf without the
         // Authority Key Identifier: "Missing Authority Key Identifier".
-        let dir = std::env::temp_dir().join(format!("arena-tls-aki-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("shakedown-tls-aki-{}", std::process::id()));
         let ca = WorldCa::new("b_aki", &dir).unwrap();
         let (leaf, _) = ca.leaf("toy.test").unwrap();
         let (aki, ski) = (
@@ -274,7 +274,7 @@ mod tests {
         let mode = std::fs::metadata(dir).unwrap().permissions().mode() & 0o777;
         assert_eq!(mode, 0o700);
         let planted =
-            std::env::temp_dir().join(format!("arena-tls-planted-{}", std::process::id()));
+            std::env::temp_dir().join(format!("shakedown-tls-planted-{}", std::process::id()));
         std::fs::create_dir_all(&planted).unwrap();
         assert!(
             WorldCa::new("b_planted", &planted).is_err(),

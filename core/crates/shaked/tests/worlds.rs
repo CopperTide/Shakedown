@@ -9,7 +9,7 @@ use support::records;
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 use parts::{Hub, Registry};
@@ -18,7 +18,7 @@ use shaked::providers::ProviderConfig;
 use support::{
     app,
     packages::{bin_dir, counter, package_root, toy, Package, TestHub, ToyRoot},
-    run, AppFx,
+    poll_until, run, AppFx, STEP,
 };
 
 /// A test's packages and its worlds folder (removed on drop).
@@ -116,17 +116,17 @@ impl Fx {
 /// The row of world `name` once its state is `want` (a failure, when ready is wanted, panics with
 /// its error).
 async fn wait_world(app: &AppFx, name: &str, want: &str) -> Value {
-    let deadline = Instant::now() + Duration::from_secs(90);
-    while Instant::now() < deadline {
+    let got = async || {
         let (status, v) = app.get(&format!("/api/worlds/{name}")).await;
         assert_eq!(status, 200, "{v}");
         if v["state"] == want {
-            return v;
+            return Some(v);
         }
         assert!(v["state"] != "failed" || want != "ready", "{v}");
-        tokio::time::sleep(Duration::from_millis(100)).await;
-    }
-    panic!("world {name} did not get {want}");
+        None
+    };
+    let v = poll_until(Duration::from_secs(90), STEP, got).await;
+    v.unwrap_or_else(|| panic!("world {name} did not get {want}"))
 }
 
 #[test]
@@ -400,7 +400,7 @@ impl Start {
 }
 
 #[test]
-fn arena_benchmark_wins_over_the_remembered_world() {
+fn shakedown_benchmark_wins_over_the_remembered_world() {
     run(async {
         let start = Start::new("wenv", "acme");
         let (_clean, state) = start.state(Some("toybench")).await;
@@ -430,18 +430,6 @@ fn a_remembered_world_that_cant_describe_itself_is_left_for_the_only_one_install
     });
 }
 
-/// A provider that accepts connections and never answers: a run on it stays running.
-async fn silent_provider() -> String {
-    let (listener, base) = app::bind().await;
-    tokio::spawn(async move {
-        let mut held = vec![];
-        while let Ok((socket, _)) = listener.accept().await {
-            held.push(socket);
-        }
-    });
-    base
-}
-
 impl Fx {
     /// An experiment of two runs of `t1` by one open agent: its id.
     async fn experiment(&self) -> String {
@@ -457,15 +445,13 @@ impl Fx {
     /// The branch of the experiment's `n`-th run once it is running.
     async fn running(&self, exp: &str, n: usize) -> String {
         let mut v = Value::Null;
-        for _ in 0..300 {
+        let started = async || {
             v = self.app.get(&format!("/api/experiments/{exp}")).await.1;
             let r = &v["setups"][0]["runs"][n];
-            if r["status"] == "running" {
-                return r["branch_id"].as_str().unwrap().to_string();
-            }
-            tokio::time::sleep(Duration::from_millis(100)).await;
-        }
-        panic!("run {n} of {exp} did not start: {v}");
+            (r["status"] == "running").then(|| r["branch_id"].as_str().unwrap().to_string())
+        };
+        let branch = poll_until(Duration::from_secs(90), STEP, started).await;
+        branch.unwrap_or_else(|| panic!("run {n} of {exp} did not start: {v}"))
     }
 
     /// The benchmark the branch's `RunStart` names.
@@ -479,7 +465,7 @@ impl Fx {
 fn an_experiment_keeps_its_world_when_another_is_chosen() {
     run(async {
         let part = counter("counter", &[]);
-        let fx = Fx::on("wexp", roots("wexp", part), &silent_provider().await).await;
+        let fx = Fx::on("wexp", roots("wexp", part), &app::silent_provider().await).await;
         fx.built("Acme Tools").await;
         let exp = fx.experiment().await;
         let first = fx.running(&exp, 0).await;
@@ -523,7 +509,7 @@ async fn asked_for(tag: &str) -> AppFx {
     AppFx::idle("worlds", tag)
         .root(root)
         .bench("toybench")
-        .providers(ProviderConfig::with_upstream(&silent_provider().await))
+        .providers(ProviderConfig::with_upstream(&app::silent_provider().await))
         .start()
         .await
 }

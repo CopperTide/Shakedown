@@ -1,6 +1,7 @@
 //! Installed parts (integrations and benchmarks): manifests, the program client and the hub.
 mod check;
 mod client;
+pub mod described;
 mod hub;
 mod manifest;
 pub mod request;
@@ -8,6 +9,7 @@ mod run_override;
 
 pub use check::{check, Report, Step};
 pub use client::{CallError, Client, ProgramDirs};
+pub use described::{NoDescription, DESCRIBE_FILE};
 pub use hub::Hub;
 pub use manifest::{manifest_file, Kind, Manifest, Needs, Registry, Run, WorldMeta};
 pub use request::Request;

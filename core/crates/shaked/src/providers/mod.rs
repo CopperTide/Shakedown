@@ -6,7 +6,9 @@
 
 mod anthropic;
 pub(crate) mod bedrock;
+pub(crate) mod canonical;
 mod config;
+mod key_check;
 pub mod keys;
 mod listing;
 mod openai;
@@ -14,8 +16,10 @@ pub mod reach;
 mod status;
 mod transport;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
+
+use crate::prices;
 
 pub use config::{
     is_openrouter_url, local_key_env, local_price_env, Endpoint, LocalEndpoint, ProviderConfig,
@@ -35,6 +39,14 @@ pub const CUSTOM_PREFIX: &str = "custom:";
 /// One of the model keys you can see, by its name: `key:<name>`. The only way a key shared with
 /// you (another member's) serves your agents.
 pub const KEY_PREFIX: &str = "key:";
+/// A key an agent names (`key:<name>`) and the provider id it keys (`openrouter`,
+/// `custom:<name>`, …), never its secret: what a sandbox's worker prices that agent's calls by,
+/// while the control box adds the key itself ([`ProviderConfig::pricing_named`]).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NamedKey {
+    pub name: String,
+    pub provider: String,
+}
 /// Amazon Bedrock in one AWS region: `bedrock:<region>`.
 pub const BEDROCK_PREFIX: &str = "bedrock:";
 /// The local provider the old single-upstream override becomes.
@@ -191,6 +203,17 @@ impl Provider {
         }
     }
 
+    /// A `POST` to `path` under the provider's base with its own key, as its API takes it
+    /// (`x-api-key` for Claude's, else a bearer token), and nothing else: for a request passed
+    /// on as an agent sent it.
+    pub fn raw_post(&self, http: &reqwest::Client, path: &str) -> reqwest::RequestBuilder {
+        let post = reqwest::Method::POST;
+        match self.kind {
+            ProviderKind::Anthropic => anthropic::request(self, http, post, path),
+            _ => openai::request(self, http, post, path),
+        }
+    }
+
     /// Why the provider can't take calls (no request is made to find out).
     pub fn unavailable(&self) -> Option<Unavailable> {
         let missing = |env| {
@@ -214,14 +237,29 @@ impl Provider {
         }
     }
 
-    /// The cost of a successful call with `usage`: what OpenRouter reports, a local server's
-    /// declared rate (else 0), unknown otherwise (no price table is kept).
+    /// The cost of a successful call with `usage` as the provider makes it known: what OpenRouter
+    /// reports, a local server's declared rate (else 0), unknown otherwise (see
+    /// [`Provider::call_cost`] for the list price).
     pub fn cost(&self, usage: &Value) -> Option<f64> {
         match self.kind {
             ProviderKind::OpenRouter => usage.get("cost").and_then(Value::as_f64),
             ProviderKind::Local => Some(self.rate.map_or(0.0, |r| r.cost(usage))),
             ProviderKind::OpenAi | ProviderKind::Anthropic | ProviderKind::Bedrock => None,
         }
+    }
+
+    /// What a successful call of `model` with the canonical `usage` cost: what the provider
+    /// reports ([`Provider::cost`]), else its list price (`docs/prices.toml`), cache writes and
+    /// cache hits at their own rates; `None` when neither is known.
+    pub fn call_cost(&self, model: &str, usage: &Value) -> Option<f64> {
+        let listed = || prices::call_cost(&self.id, model, &prices::CallTokens::of_usage(usage));
+        self.cost(usage).or_else(listed)
+    }
+
+    /// The label of what [`Provider::call_cost`] gives: the provider's own cost's, else a
+    /// list-price estimate.
+    pub fn call_cost_source(&self) -> &'static str {
+        self.cost_source().unwrap_or(prices::LIST_PRICE_ESTIMATE)
     }
 
     /// The label of a cost [`Provider::cost`] knows; `None` where it never knows one.
@@ -278,6 +316,17 @@ impl ProviderConfig {
             }
             _ => Err(e),
         })
+    }
+
+    /// `self` knowing each of `named` (`key:<name>`) as the provider it keys, with no key: what a
+    /// worker, which holds no keys, prices those agents' calls by.
+    pub fn pricing_named(mut self, named: &[NamedKey]) -> ProviderConfig {
+        for k in named {
+            if let Ok(p) = self.resolve_pricing(Some(&k.provider)) {
+                self.named.push((k.name.clone(), p));
+            }
+        }
+        self
     }
 
     /// Bedrock in the region `id` names (`Ok(None)` never: a bad region is an error).
@@ -417,5 +466,33 @@ mod tests {
         };
         assert_eq!(c.resolve(Some("anthropic")).unwrap().max_tokens, 64_000);
         assert_eq!(c.all()[2].max_tokens, 64_000);
+    }
+
+    #[test]
+    fn a_named_key_prices_as_the_provider_it_keys() {
+        let named = |name: &str, provider: &str| NamedKey {
+            name: name.into(),
+            provider: provider.into(),
+        };
+        let keys = [named("mine", "openrouter"), named("pod", "custom:pod")];
+        let c = ProviderConfig::without_environment().pricing_named(&keys);
+        let p = c.resolve_pricing(Some("key:mine")).unwrap();
+        assert_eq!(
+            (p.kind, p.id.as_str()),
+            (ProviderKind::OpenRouter, OPENROUTER)
+        );
+        assert!(p.endpoint.key.is_none(), "a worker holds no key");
+        let pod = c.resolve_pricing(Some("key:pod")).unwrap();
+        assert_eq!(pod.kind, ProviderKind::Local);
+        let e = c.resolve_pricing(Some("key:other")).unwrap_err();
+        assert!(e.contains("unknown provider"), "{e}");
+        let mut keyed = c.clone();
+        keyed.named[0].1.endpoint.key = Some(Secret::new("k"));
+        let names = |c: &ProviderConfig| c.named.iter().map(|(n, _)| n.clone()).collect::<Vec<_>>();
+        assert_eq!(
+            names(&keyed.environment_dropped()),
+            ["pod"],
+            "no secret survives"
+        );
     }
 }

@@ -1,5 +1,7 @@
 import { MoreHorizontal } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
+import { exportRun, type Exported } from '@/api/observability';
 import { openPalette } from '@/app/palette';
 import { StatusChip } from '@/components/marks';
 import { Button } from '@/components/ui/button';
@@ -22,6 +24,22 @@ const VIEWS: { page: Exclude<RunPage, 'live'>; label: string; path: string }[] =
  * A run's "⋯": its other views, comparing it, its reruns, and rewinding it. Rewind lives here
  * only: it is for digging into one run, not part of testing agents.
  */
+/** What an export did, in one line: per target sent, queued or failed; none set up says where to add one. */
+export function exportedLine(r: Exported): string {
+  if (r.exports.length === 0) return 'No observability target yet: add one in Settings → Observability.';
+  return r.exports.map((e) => `${e.target}: ${e.state === 'done' ? `sent${e.spans != null ? ` ${e.spans} spans` : ''}` : e.state === 'queued' ? 'queued until the run ends' : `failed${e.error ? ` (${e.error})` : ''}`}`).join(' · ');
+}
+
+async function sendOut(branchId: string) {
+  try {
+    const r = await exportRun(branchId);
+    const failed = r.exports.some((e) => e.state === 'failed');
+    (failed ? toast.error : toast)(exportedLine(r));
+  } catch (e) {
+    toast.error(`Export failed: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+
 export default function RunMenu({ runId, d, page, step, siblings = [] }: {
   runId: string; d: BranchDetail; page: RunPage; step: number | null; siblings?: Branch[];
 }) {
@@ -40,6 +58,7 @@ export default function RunMenu({ runId, d, page, step, siblings = [] }: {
           <DropdownMenuItem key={v.page} onSelect={() => nav(withStep(`/${v.path}/${at}`, step))}>{v.label}</DropdownMenuItem>
         ))}
         <DropdownMenuItem onSelect={() => openPalette({ kind: 'compare-runs', first: branchId })}>Compare with another run…</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => void sendOut(branchId)}>Export this run (OpenTelemetry)</DropdownMenuItem>
         {reruns.length > 0 && <DropdownMenuLabel>Reruns</DropdownMenuLabel>}
         {reruns.map(({ branch: b, depth }) => (
           <DropdownMenuItem key={b.id} onSelect={() => nav(path`/runs/${runId}/${b.id}`)} className={b.id === branchId ? 'bg-accent-soft' : ''}>

@@ -8,7 +8,7 @@ use super::server::{check_account, check_db, Server};
 use super::sql::{like_prefix, quote_ident};
 
 /// The database holding the server's identity, made when the server is first ensured.
-const META_DB: &str = "arena_meta";
+const META_DB: &str = "shakedown_meta";
 
 /// `CREATE TABLE IF NOT EXISTS` for the one-row identity table.
 fn server_table() -> String {

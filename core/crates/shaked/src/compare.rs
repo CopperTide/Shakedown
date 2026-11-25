@@ -10,11 +10,11 @@ use parts::{
 use serde_json::{json, Map, Value};
 
 use crate::{
-    metrics::metrics,
+    metrics::{metrics, MIXED},
     model::*,
     prices,
     restore::keeps_saves,
-    saves::{self, part_code},
+    save_calls::{self, part_code},
     world::{Saves, HTTP_TOOL},
 };
 
@@ -56,7 +56,7 @@ fn combined_source(ends: &[AgentEndPayload]) -> Value {
     match sources.len() {
         0 => Value::Null,
         1 => json!(sources[0]),
-        _ => json!("mixed"),
+        _ => json!(MIXED),
     }
 }
 
@@ -180,7 +180,7 @@ pub async fn differing_rows(
 /// `[{key, a, b}]` of one part: the keys that differ between its two saves, with their docs.
 /// The part's internal keys (its own bookkeeping) are left out.
 async fn part_rows(hub: &Hub, p: &WorldPart, [a, b]: [&str; 2]) -> Result<Vec<Value>> {
-    let mut keys = saves::diff(hub, &p.integration, a, b).await?;
+    let mut keys = save_calls::diff(hub, &p.integration, a, b).await?;
     keys.retain(|k| !is_internal_key(k));
     let da = docs(hub, &p.integration, a, &keys).await?;
     let db = docs(hub, &p.integration, b, &keys).await?;
@@ -199,7 +199,7 @@ async fn docs(
     save: &str,
     keys: &[String],
 ) -> Result<Map<String, Value>> {
-    match saves::inspect(hub, integration, save, keys).await {
+    match save_calls::inspect(hub, integration, save, keys).await {
         Err(e) if part_code(&e) == Some(-32602) => Ok(Map::new()),
         r => r,
     }

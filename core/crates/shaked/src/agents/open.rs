@@ -8,14 +8,15 @@ use std::{
 use serde_json::{json, Value};
 
 use super::{
-    session::{end_error, BoxFuture, Session, SessionStart, Turn},
+    session::{end_error, BoxFuture, Session, SessionStart, Started, Turn},
     AgentResult, AgentRun, Driver, FailureKind,
 };
 use crate::{
     app::AppState,
     exec::{tool_schemas, BranchCtx, ToolExec, FINISH, HANDOFF},
+    gateway::Api,
     model::{add_cost, AgentSpec, TokenUsage},
-    providers::Provider,
+    providers::{keys, Provider, ProviderConfig},
 };
 
 /// How many model calls an API-mode agent's turn makes at most, unless
@@ -112,18 +113,24 @@ impl Driver for OpenDriver {
         Box::pin(self.run_inner(run))
     }
 
-    fn session(&self, start: SessionStart) -> Result<Box<dyn Session>, String> {
-        let state = self.state.upgrade().ok_or("server is shutting down")?;
-        let lp = Loop::new(state, start.branch, &start.spec).map_err(|f| f.split().0)?;
-        let system = json!({"role": "system", "content": start.spec.prompt});
-        Ok(Box::new(OpenSession {
-            lp,
-            messages: vec![system],
-            context_turns: context_turns(),
-            totals: Totals::new(),
-            busy: Duration::ZERO,
-            error: None,
-        }))
+    fn session(&self, start: SessionStart) -> Started<'_> {
+        Box::pin(async move {
+            let state = self.state.upgrade().ok_or("server is shutting down")?;
+            // The caller's own keys, as for a run: an agent may name one (`key:<name>`).
+            let providers = keys::config_for(&state, &start.branch.caller).await;
+            let lp =
+                Loop::new(state, start.branch, &start.spec, &providers).map_err(|f| f.split().0)?;
+            let system = json!({"role": "system", "content": start.spec.prompt});
+            let session: Box<dyn Session> = Box::new(OpenSession {
+                lp,
+                messages: vec![system],
+                context_turns: context_turns(),
+                totals: Totals::new(),
+                busy: Duration::ZERO,
+                error: None,
+            });
+            Ok::<_, String>(session)
+        })
     }
 }
 
@@ -157,24 +164,6 @@ impl OpenSession {
         }
         turn
     }
-
-    fn result(self, cut: bool) -> AgentResult {
-        let error = end_error(self.error, cut);
-        let [prompt, completion, total] = self.totals.tokens;
-        AgentResult {
-            ok: error.is_none(),
-            error,
-            failure: None,
-            tokens: TokenUsage {
-                prompt_tokens: prompt,
-                completion_tokens: completion,
-                total_tokens: total,
-            },
-            cost_source: self.totals.cost.and(self.totals.source).map(str::to_string),
-            cost_usd: self.totals.cost,
-            seconds: self.busy.as_secs_f64(),
-        }
-    }
 }
 
 impl Session for OpenSession {
@@ -183,7 +172,8 @@ impl Session for OpenSession {
     }
 
     fn end(self: Box<Self>, cut: bool) -> BoxFuture<'static, AgentResult> {
-        let result = self.result(cut);
+        let error = end_error(self.error, cut);
+        let result = self.totals.result(error, None, self.busy.as_secs_f64());
         Box::pin(async move { result })
     }
 }
@@ -193,7 +183,7 @@ struct Totals {
     tokens: [i64; 3],
     /// `None` once a call's cost is unknown.
     cost: Option<f64>,
-    /// The label of the cost: the provider's, once the provider is known.
+    /// The label of the cost: the provider's, once a call was made.
     source: Option<&'static str>,
 }
 
@@ -206,7 +196,8 @@ impl Totals {
         }
     }
 
-    fn add(&mut self, provider: &Provider, usage: &Value) {
+    /// Adds a call of `model` on `provider` with `usage`, at the price the gateway charges it.
+    fn add(&mut self, provider: &Provider, model: &str, usage: &Value) {
         for (total, k) in
             self.tokens
                 .iter_mut()
@@ -214,7 +205,31 @@ impl Totals {
         {
             *total += usage[k].as_i64().unwrap_or(0);
         }
-        self.cost = add_cost(self.cost, provider.cost(usage));
+        self.cost = add_cost(self.cost, provider.call_cost(model, usage));
+        self.source = Some(provider.call_cost_source());
+    }
+
+    /// The agent's result: these totals, with `error` and `failure`, over `seconds`.
+    fn result(
+        self,
+        error: Option<String>,
+        failure: Option<FailureKind>,
+        seconds: f64,
+    ) -> AgentResult {
+        let [prompt_tokens, completion_tokens, total_tokens] = self.tokens;
+        AgentResult {
+            ok: error.is_none(),
+            error,
+            failure,
+            tokens: TokenUsage {
+                prompt_tokens,
+                completion_tokens,
+                total_tokens,
+            },
+            cost_source: self.cost.and(self.source).map(str::to_string),
+            cost_usd: self.cost,
+            seconds,
+        }
     }
 }
 
@@ -233,7 +248,7 @@ fn tool_message(id: &str, content: String) -> Value {
 }
 
 /// What the gateway answered: its status, the `retry-after` seconds it passed on, its body.
-struct Answer {
+struct GatewayAnswer {
     status: reqwest::StatusCode,
     retry_after: Option<u64>,
     text: String,
@@ -245,7 +260,7 @@ struct Gateway {
     token: String,
 }
 
-async fn post(http: &reqwest::Client, gw: &Gateway, body: &Value) -> Result<Answer, Fault> {
+async fn post(http: &reqwest::Client, gw: &Gateway, body: &Value) -> Result<GatewayAnswer, Fault> {
     let resp = http
         .post(&gw.url)
         .bearer_auth(&gw.token)
@@ -262,7 +277,7 @@ async fn post(http: &reqwest::Client, gw: &Gateway, body: &Value) -> Result<Answ
         .text()
         .await
         .map_err(|e| format!("gateway response unreadable: {e}"))?;
-    Ok(Answer {
+    Ok(GatewayAnswer {
         status,
         retry_after,
         text,
@@ -273,13 +288,13 @@ async fn post(http: &reqwest::Client, gw: &Gateway, body: &Value) -> Result<Answ
 /// [`retry_wait`]) while the provider is overloaded or rate-limiting; the parsed response.
 async fn model_call(
     http: &reqwest::Client,
-    url: &Gateway,
+    gw: &Gateway,
     body: &Value,
     retry_base: Duration,
 ) -> Result<Value, Fault> {
     let mut retries = 0;
     loop {
-        let a = post(http, url, body).await?;
+        let a = post(http, gw, body).await?;
         if a.status.is_success() {
             return Ok(
                 serde_json::from_str(&a.text).map_err(|e| format!("bad model response: {e}"))?
@@ -311,14 +326,10 @@ fn failure(status: reqwest::StatusCode, text: &str) -> String {
     format!("model call failed ({}): {detail}", status.as_u16())
 }
 
-/// The recording gateway's address for `agent` on `branch`.
+/// The recording gateway's chat address for `agent` on `branch`.
 fn gateway_url(state: &AppState, branch: &str, agent: &str) -> String {
-    format!(
-        "{}/gateway/{}/{}/v1/chat/completions",
-        state.config.self_base.trim_end_matches('/'),
-        branch,
-        agent
-    )
+    let base = super::endpoint(&state.config.self_base, "gateway", branch, agent);
+    format!("{base}/v1/{}", Api::Chat.path())
 }
 
 /// How a session's turn ended. A turn that reached [`max_model_calls`] ends like any other, with a
@@ -341,7 +352,13 @@ fn session_turn(done: Result<String, Fault>) -> Turn {
 /// read once, else [`MAX_MODEL_CALLS`].
 pub fn max_model_calls() -> usize {
     static MAX: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
-    let read = || call_limit(std::env::var("SHAKEDOWN_AGENT_MAX_MODEL_CALLS").ok().as_deref());
+    let read = || {
+        call_limit(
+            std::env::var("SHAKEDOWN_AGENT_MAX_MODEL_CALLS")
+                .ok()
+                .as_deref(),
+        )
+    };
     *MAX.get_or_init(read)
 }
 
@@ -414,7 +431,7 @@ struct Loop {
     state: Arc<AppState>,
     provider: Provider,
     model: String,
-    url: Gateway,
+    gateway: Gateway,
     tools: Vec<Value>,
     branch: Arc<BranchCtx>,
     agent: String,
@@ -425,10 +442,15 @@ struct Loop {
 }
 
 impl Loop {
-    fn new(state: Arc<AppState>, branch: Arc<BranchCtx>, spec: &AgentSpec) -> Result<Loop, Fault> {
-        let (provider, model) = provider_and_model(&state, spec)?;
+    fn new(
+        state: Arc<AppState>,
+        branch: Arc<BranchCtx>,
+        spec: &AgentSpec,
+        providers: &ProviderConfig,
+    ) -> Result<Loop, Fault> {
+        let (provider, model) = provider_and_model(providers, spec)?;
         Ok(Loop {
-            url: Gateway {
+            gateway: Gateway {
                 url: gateway_url(&state, &branch.branch_id, &spec.id),
                 token: branch.agent_token(&spec.id),
             },
@@ -443,6 +465,12 @@ impl Loop {
         })
     }
 
+    /// The request of the loop's next model call on `messages`.
+    fn body(&self, messages: &[Value]) -> Value {
+        let (reasoning, max_tokens) = (self.reasoning.as_ref(), self.max_tokens);
+        call_body(messages, &self.tools, &self.model, reasoning, max_tokens)
+    }
+
     /// Model calls, running the tools each one asks for, until the agent answers without a tool
     /// call or ends its part (`handoff`, `finish`); what it said last.
     async fn until_done(
@@ -450,14 +478,12 @@ impl Loop {
         messages: &mut Vec<Value>,
         totals: &mut Totals,
     ) -> Result<String, Fault> {
-        totals.source = self.provider.cost_source();
         let exec = ToolExec::new(self.state.store.clone());
         let base = self.state.config.retry_base;
         let mut said = String::new();
         for _ in 0..max_model_calls() {
-            let body = call_body(messages, &self.tools, &self.model, self.reasoning.as_ref(), self.max_tokens);
-            let v = model_call(&self.state.http, &self.url, &body, base).await?;
-            totals.add(&self.provider, &v["usage"]);
+            let v = model_call(&self.state.http, &self.gateway, &self.body(messages), base).await?;
+            totals.add(&self.provider, &self.model, &v["usage"]);
             // The gateway priced the call into the run's estimate: stop once it is over.
             if let Some(why) = self.branch.budget.over() {
                 return Err(Fault::Budget(why));
@@ -492,25 +518,14 @@ impl OpenDriver {
             Ok(()) => (None, None),
             Err((e, failure)) => (Some(e), failure),
         };
-        let [prompt, completion, total] = totals.tokens;
-        AgentResult {
-            ok: error.is_none(),
-            error,
-            failure,
-            tokens: TokenUsage {
-                prompt_tokens: prompt,
-                completion_tokens: completion,
-                total_tokens: total,
-            },
-            cost_source: totals.cost.and(totals.source).map(str::to_string),
-            cost_usd: totals.cost,
-            seconds: start.elapsed().as_secs_f64(),
-        }
+        totals.result(error, failure, start.elapsed().as_secs_f64())
     }
 
     async fn drive(&self, run: &AgentRun, totals: &mut Totals) -> Result<(), Fault> {
         let state = self.state.upgrade().ok_or("server is shutting down")?;
-        let lp = Loop::new(state, run.branch.clone(), &run.spec)?;
+        // The caller's own keys are known here, so an agent may name one (`key:<name>`).
+        let providers = keys::config_for(&state, &run.branch.caller).await;
+        let lp = Loop::new(state, run.branch.clone(), &run.spec, &providers)?;
         let mut messages = initial_messages(run);
         lp.until_done(&mut messages, totals).await.map(drop)
     }
@@ -519,14 +534,11 @@ impl OpenDriver {
 /// The agent's provider, and its model, else the provider's default; an error when the
 /// provider is unknown or has no default.
 fn provider_and_model<'a>(
-    state: &AppState,
+    providers: &ProviderConfig,
     spec: &'a AgentSpec,
 ) -> Result<(Provider, &'a str), Fault> {
     // The gateway resolves the real provider with your keys; this one prices the calls.
-    let provider = state
-        .config
-        .providers
-        .resolve_pricing(spec.provider.as_deref())?;
+    let provider = providers.resolve_pricing(spec.provider.as_deref())?;
     let named = spec.model.as_deref().filter(|m| !m.trim().is_empty());
     let model = named.or(provider.default_model()).ok_or_else(|| {
         Fault::Infra(format!(
@@ -622,9 +634,15 @@ mod tests {
     fn a_session_turn_at_the_call_limit_ends_with_a_note_not_a_failure() {
         let t = session_turn(Err(Fault::CallLimit("still checking".into())));
         assert!(t.ok && t.error.is_none());
-        assert_eq!((t.text.as_str(), t.note.as_deref()), ("still checking", Some(CALL_LIMIT_NOTE)));
+        assert_eq!(
+            (t.text.as_str(), t.note.as_deref()),
+            ("still checking", Some(CALL_LIMIT_NOTE))
+        );
         let (e, failure) = Fault::CallLimit(String::new()).split();
-        assert!(e.contains("exceeded") && failure == Some(FailureKind::Model), "a one-shot run still fails");
+        assert!(
+            e.contains("exceeded") && failure == Some(FailureKind::Model),
+            "a one-shot run still fails"
+        );
         let t = session_turn(Err(Fault::Model("bad".into())));
         assert!(!t.ok && t.note.is_none());
     }
@@ -633,14 +651,24 @@ mod tests {
     fn old_bulky_tool_results_are_trimmed_and_everything_else_kept() {
         let mut m = convo(6, 5_000);
         let before = m.clone();
-        assert_eq!(trim_context(&mut m, 4), 2, "turns 0 and 1 are older than the latest four");
+        assert_eq!(
+            trim_context(&mut m, 4),
+            2,
+            "turns 0 and 1 are older than the latest four"
+        );
         for (i, (a, b)) in m.iter().zip(&before).enumerate() {
             let old_tool = b["role"] == "tool" && i < 7;
             match old_tool {
                 true => {
                     let c = a["content"].as_str().unwrap();
-                    assert!(c.starts_with("[older tool result trimmed by Shakedown: 5000 characters"), "{c}");
-                    assert_eq!(a["tool_call_id"], b["tool_call_id"], "the call keeps its result's id");
+                    assert!(
+                        c.starts_with("[older tool result trimmed by Shakedown: 5000 characters"),
+                        "{c}"
+                    );
+                    assert_eq!(
+                        a["tool_call_id"], b["tool_call_id"],
+                        "the call keeps its result's id"
+                    );
                 }
                 false => assert_eq!(a, b, "message {i} is kept as it was"),
             }
@@ -666,10 +694,39 @@ mod tests {
         let msgs = [json!({"role": "user", "content": "hi"})];
         let plain = call_body(&msgs, &[], "m", None, None);
         assert!(plain.get("reasoning").is_none() && plain.get("max_tokens").is_none());
-        let set = call_body(&msgs, &[], "m", Some(&json!({"effort": "high"})), Some(16_000));
+        let set = call_body(
+            &msgs,
+            &[],
+            "m",
+            Some(&json!({"effort": "high"})),
+            Some(16_000),
+        );
         assert_eq!(set["reasoning"], json!({"effort": "high"}));
         assert_eq!(set["max_tokens"], json!(16_000));
         assert_eq!(set["model"], "m");
+    }
+
+    /// An open agent's end counts each call at the price the gateway charges it: on Claude, whose
+    /// answers say no cost, the list price with cache reads at the cache rate.
+    #[test]
+    fn an_open_claude_agents_cost_prices_cache_reads_at_the_cache_rate() {
+        let claude = ProviderConfig::default()
+            .resolve(Some("anthropic"))
+            .unwrap();
+        let usage = crate::providers::canonical::cached_usage(12, 0, 30, 5);
+        let mut totals = Totals::new();
+        totals.add(&claude, "claude-sonnet-5-5", &usage);
+        let r = totals.result(None, None, 1.0);
+        let t = crate::prices::CallTokens {
+            input: 12,
+            cache_write: 0,
+            cache_read: 30,
+            output: 5,
+        };
+        let want = crate::prices::call_cost("anthropic", "claude-sonnet-5-5", &t);
+        assert!(want.is_some(), "the table prices claude-sonnet-5-5");
+        assert_eq!(r.cost_usd, want);
+        assert_eq!(r.cost_source.as_deref(), Some("list_price_estimate"));
     }
 
     #[test]

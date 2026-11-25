@@ -120,7 +120,28 @@ fn truck_late() -> DisruptionOption {
     option(what, params, "delivery_delay", text, extra)
 }
 
-/// What the builder may add to the shift task; all four are offered selected.
+/// X6 of the cs2680 evaluation, a fault rather than a front: from the agents' `{after}`+1st
+/// `utility_meter` reading on, the site meter reads `{percent}` low (what agents read; the meter's
+/// state, which the checks read, keeps the true load). Not offered selected.
+fn meter_low() -> DisruptionOption {
+    let what = (
+        "meter-low",
+        "Site meter reads low",
+        "From the agents' reading after the first {after}, the site's main meter reads {percent}% below the true load; the agents are not told",
+        "utility",
+    );
+    let params = vec![
+        ScenarioParam::int("after", "After how many meter readings", (0, 30, 2)),
+        ScenarioParam::int("percent", "How much low (%)", (1, 99, 15)),
+    ];
+    let template = json!({"id": what.0, "when": {"after_calls": "{after}", "tool": "utility_meter"},
+                          "do": {"kind": "meter_low", "percent": "{percent}"},
+                          "text": "The site's main meter starts reading {percent}% low"});
+    bench::option(what, params, template, false)
+}
+
+/// What the builder may add to the shift task: the four fronts, offered selected, and the meter
+/// fault, not.
 pub fn scenario_options() -> ScenarioOptions {
     let setup = |tool: &str| SetupTemplate {
         tool: tool.into(),
@@ -128,7 +149,13 @@ pub fn scenario_options() -> ScenarioOptions {
     };
     ScenarioOptions {
         base: vec![SHIFT_TASK.into()],
-        disruptions: vec![demand_response(), remote_session(), callout(), truck_late()],
+        disruptions: vec![
+            demand_response(),
+            remote_session(),
+            callout(),
+            truck_late(),
+            meter_low(),
+        ],
         setup: BTreeMap::from([
             ("utility".into(), setup("utility_scenario")),
             ("network".into(), setup("ot_scenario")),
@@ -143,7 +170,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn four_fronts_each_on_its_part_offered_selected() {
+    fn four_fronts_each_on_its_part_offered_selected_and_a_fault_not() {
         let o = scenario_options();
         let ids: Vec<(&str, &str)> = (o.disruptions.iter())
             .map(|d| (d.id.as_str(), d.part.as_str()))
@@ -153,9 +180,11 @@ mod tests {
             ("remote-session", "network"),
             ("operator-callouts", "roster"),
             ("truck-late", "hub"),
+            ("meter-low", "utility"),
         ];
         assert_eq!(ids, want);
-        assert!(o.disruptions.iter().all(|d| d.default));
+        let selected: Vec<bool> = o.disruptions.iter().map(|d| d.default).collect();
+        assert_eq!(selected, [true, true, true, true, false]);
         let when = |d: &DisruptionOption| d.template["when"]["after_calls"] == "{after}";
         assert!(o.disruptions.iter().all(when));
         assert_eq!(o.setup["hub"].tool, "hub_scenario");
@@ -172,5 +201,30 @@ mod tests {
         let out = &o.disruptions[2].template["do"]["operators"];
         assert_eq!(out, &json!(["OP-14", "OP-12"]));
         assert_eq!(o.disruptions[3].template["do"]["extra_hours"], "{hours}");
+    }
+
+    /// X6: the meter reads 15% low from the agents' third `utility_meter` reading on.
+    #[test]
+    fn the_meter_fault_reads_low_after_two_readings_by_default() {
+        let o = scenario_options();
+        let low = &o.disruptions[4];
+        let t = &low.template;
+        assert_eq!(t["when"]["tool"], "utility_meter");
+        assert_eq!(
+            t["do"],
+            json!({"kind": "meter_low", "percent": "{percent}"})
+        );
+        let default = |name: &str| {
+            low.params
+                .iter()
+                .find(|p| p.name == name)
+                .unwrap()
+                .default
+                .clone()
+        };
+        assert_eq!(
+            (default("after"), default("percent")),
+            (json!(2), json!(15))
+        );
     }
 }

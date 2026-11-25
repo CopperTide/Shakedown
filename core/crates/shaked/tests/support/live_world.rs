@@ -1,6 +1,6 @@
 //! A whole world of real services for a live test: an ERPNext stack, a Twenty server and saves of
 //! the test's own (removed when the `Stack` drops), the Sculptured program, a team on a real model
-//! run to its check, and what Arena owes any such run.
+//! run to its check, and what Shakedown owes any such run.
 #![allow(dead_code)]
 
 use std::{path::PathBuf, process::Command, sync::Arc, time::Duration};
@@ -101,7 +101,7 @@ impl Drop for Stack {
 }
 
 /// `PATH` with the Sculptured program to use first: `SHAKEDOWN_SCULPTURED_BINARY`, else a release build
-/// next to the arena checkout, else the one already on it.
+/// next to the shakedown checkout, else the one already on it.
 pub fn path_with_sculptured() -> String {
     let path = std::env::var("PATH").unwrap_or_default();
     let local = repo().join("../sculptured/target/release/sculptured");

@@ -1,0 +1,44 @@
+# As lean.yaml, plus the metrics generator (service graphs and span metrics, written to Prometheus).
+server:
+  http_listen_port: 3200
+  log_level: warn
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        http:
+          endpoint: 0.0.0.0:4318
+
+ingester:
+  max_block_duration: 5m
+
+compactor:
+  compaction:
+    block_retention: 168h
+
+metrics_generator:
+  storage:
+    path: /var/tempo/generator/wal
+    remote_write:
+      - url: http://prometheus:9090/api/v1/write
+        send_exemplars: true
+
+overrides:
+  defaults:
+    metrics_generator:
+      processors: [service-graphs, span-metrics]
+
+storage:
+  trace:
+    backend: local
+    local:
+      path: /var/tempo/blocks
+    wal:
+      path: /var/tempo/wal
+      # Spans come stamped in world time, which may be far behind the wall clock (a fork run later): without
+      # this Tempo keeps them but its searches leave out traces more than 2 m from its own clock.
+      ingestion_time_range_slack: 168h
+
+usage_report:
+  reporting_enabled: false

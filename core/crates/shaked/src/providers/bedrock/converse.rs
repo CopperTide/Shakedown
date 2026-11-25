@@ -9,6 +9,8 @@
 
 use serde_json::{json, Map, Value};
 
+use crate::providers::canonical;
+
 /// What stands in for an empty text, which Converse refuses.
 const EMPTY: &str = "(empty)";
 
@@ -16,24 +18,15 @@ fn text_block(text: &str) -> Value {
     json!({"text": if text.is_empty() { EMPTY } else { text }})
 }
 
-/// A canonical message's content as text: a string, or the text of its parts.
+/// A canonical message's content as text: a string, or the text of its parts (a part that isn't
+/// text is left out).
 fn content_text(content: &Value) -> String {
-    match content {
-        Value::String(s) => s.clone(),
-        Value::Array(parts) => parts
-            .iter()
-            .filter_map(|p| p["text"].as_str())
-            .collect::<Vec<_>>()
-            .join("\n"),
-        _ => String::new(),
-    }
+    canonical::content_text(content, |p| p["text"].as_str().map(str::to_owned))
 }
 
 fn tool_use(call: &Value) -> Value {
-    let f = &call["function"];
-    let args = f["arguments"].as_str().unwrap_or("{}");
-    let input: Value = serde_json::from_str(args).unwrap_or_else(|_| json!({}));
-    json!({"toolUse": {"toolUseId": call["id"], "name": f["name"], "input": input}})
+    let input = canonical::arguments(call).unwrap_or_else(|| json!({}));
+    json!({"toolUse": {"toolUseId": call["id"], "name": call["function"]["name"], "input": input}})
 }
 
 fn assistant_blocks(m: &Value) -> Vec<Value> {
@@ -53,18 +46,6 @@ fn assistant_blocks(m: &Value) -> Vec<Value> {
 fn tool_result(m: &Value) -> Value {
     let text = content_text(&m["content"]);
     json!({"toolResult": {"toolUseId": m["tool_call_id"], "content": [text_block(&text)]}})
-}
-
-/// Appends a turn, merged into the last one when it has the same role.
-fn push_turn(turns: &mut Vec<Value>, role: &str, blocks: Vec<Value>) {
-    if let Some(last) = turns.last_mut().filter(|t| t["role"] == role) {
-        let content = last["content"]
-            .as_array_mut()
-            .expect("a turn's content is a list");
-        content.extend(blocks);
-        return;
-    }
-    turns.push(json!({"role": role, "content": blocks}));
 }
 
 fn tool_config(tools: &[Value]) -> Value {
@@ -103,20 +84,19 @@ fn inference_config(chat: &Value) -> Map<String, Value> {
 
 /// The Converse request body for canonical request `chat` (the model goes in the URL).
 pub(super) fn request(chat: &Value) -> Value {
-    let messages = chat["messages"].as_array().map_or(&[][..], Vec::as_slice);
     let mut system = vec![];
     let mut turns = vec![];
-    for m in messages {
-        match m["role"].as_str().unwrap_or("") {
-            "system" | "developer" => system.push(text_block(&content_text(&m["content"]))),
-            "assistant" => push_turn(&mut turns, "assistant", assistant_blocks(m)),
-            "tool" => push_turn(&mut turns, "user", vec![tool_result(m)]),
-            _ => push_turn(
-                &mut turns,
-                "user",
-                vec![text_block(&content_text(&m["content"]))],
-            ),
+    for m in canonical::messages(chat) {
+        if canonical::is_system(m) {
+            system.push(text_block(&content_text(&m["content"])));
+            continue;
         }
+        let (role, blocks) = match m["role"].as_str() {
+            Some("assistant") => ("assistant", assistant_blocks(m)),
+            Some("tool") => ("user", vec![tool_result(m)]),
+            _ => ("user", vec![text_block(&content_text(&m["content"]))]),
+        };
+        canonical::push_turn(&mut turns, role, blocks);
     }
     let mut body = json!({"messages": turns});
     if !system.is_empty() {
@@ -143,16 +123,14 @@ fn finish_reason(stop: Option<&str>) -> &'static str {
 
 fn tool_call(block: &Value) -> Value {
     let u = &block["toolUse"];
-    json!({"id": u["toolUseId"], "type": "function",
-           "function": {"name": u["name"], "arguments": u["input"].to_string()}})
+    canonical::tool_call(&u["toolUseId"], &u["name"], &u["input"])
 }
 
 fn usage(u: &Value) -> Value {
     let n = |k: &str| u[k].as_i64().unwrap_or(0);
-    let prompt = n("inputTokens") + n("cacheReadInputTokens") + n("cacheWriteInputTokens");
-    let completion = n("outputTokens");
-    json!({"prompt_tokens": prompt, "completion_tokens": completion,
-           "total_tokens": prompt + completion})
+    let (fresh, written) = (n("inputTokens"), n("cacheWriteInputTokens"));
+    let (read, output) = (n("cacheReadInputTokens"), n("outputTokens"));
+    canonical::cached_usage(fresh, written, read, output)
 }
 
 /// The canonical response for Converse answer `raw` to a call to `model`.
@@ -166,18 +144,14 @@ pub(super) fn response(raw: &Value, model: &str) -> Value {
         .filter(|b| b.get("toolUse").is_some())
         .map(tool_call)
         .collect();
-    let mut message = json!({"role": "assistant",
-                             "content": if text.is_empty() { Value::Null } else { json!(text.join("\n")) }});
-    if !calls.is_empty() {
-        message["tool_calls"] = json!(calls);
-    }
-    json!({
-        "object": "chat.completion",
-        "model": model,
-        "choices": [{"index": 0, "message": message,
-                     "finish_reason": finish_reason(raw["stopReason"].as_str())}],
-        "usage": usage(&raw["usage"]),
-    })
+    let content = if text.is_empty() {
+        Value::Null
+    } else {
+        json!(text.join("\n"))
+    };
+    let message = canonical::assistant(content, calls);
+    let finish = finish_reason(raw["stopReason"].as_str());
+    canonical::completion(&json!(model), message, finish, usage(&raw["usage"]))
 }
 
 /// A Converse error answer (`{"message": ...}`) in the canonical error shape.
@@ -246,10 +220,29 @@ mod tests {
         );
         assert_eq!(
             r["usage"],
-            json!({"prompt_tokens": 100, "completion_tokens": 20, "total_tokens": 120})
+            json!({"prompt_tokens": 100, "completion_tokens": 20, "total_tokens": 120,
+                   "input_tokens": 100, "cache_creation_input_tokens": 0,
+                   "cache_read_input_tokens": 0})
         );
         let cut = response(&json!({"stopReason": "max_tokens"}), "m");
         assert_eq!(cut["choices"][0]["finish_reason"], "length");
+    }
+
+    #[test]
+    fn a_converse_answer_keeps_its_cache_counts_for_pricing() {
+        let raw = json!({"usage": {"inputTokens": 10, "cacheReadInputTokens": 300,
+                                   "cacheWriteInputTokens": 20, "outputTokens": 5}});
+        let r = response(&raw, "m");
+        let u = &r["usage"];
+        let counts = [
+            "prompt_tokens",
+            "cache_read_input_tokens",
+            "cache_creation_input_tokens",
+        ];
+        assert_eq!(
+            counts.map(|k| &u[k]),
+            [&json!(330), &json!(300), &json!(20)]
+        );
     }
 
     #[test]

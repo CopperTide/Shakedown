@@ -1,0 +1,1430 @@
+{
+  "name": "software-factory",
+  "version": "1.0.0+437f24b1",
+  "protocol": 1,
+  "world": [
+    {
+      "part": "github",
+      "integration": "github-twin",
+      "config": {
+        "actions": {
+          "concurrency": 1,
+          "deploy_timeout_s": 360,
+          "enabled": true,
+          "image_prefix": "shakedown-sf",
+          "job_memory": "384m",
+          "runners": {
+            "ubuntu-latest": "shakedown-sf/base:1.0.0"
+          }
+        },
+        "default_user": "northwind-labs-admin",
+        "hosts": [
+          {
+            "host": "github.northwind-labs.test"
+          }
+        ],
+        "installed_version": "3.20.0",
+        "org": "northwind-labs",
+        "protection": {},
+        "repos": [
+          {
+            "default_branch": "main",
+            "description": "The shop's public API",
+            "name": "storefront",
+            "private": true,
+            "source": "${WORLD_DIR}/files/repos/storefront/"
+          },
+          {
+            "default_branch": "main",
+            "description": "Orders and their totals",
+            "name": "orders",
+            "private": true,
+            "source": "${WORLD_DIR}/files/repos/orders/"
+          },
+          {
+            "default_branch": "main",
+            "description": "Stock and reservations",
+            "name": "inventory",
+            "private": true,
+            "source": "${WORLD_DIR}/files/repos/inventory/"
+          }
+        ],
+        "review_assignment": {
+          "count": 1,
+          "reviewers": [
+            "kiraf",
+            "zebn",
+            "jemc",
+            "tarak",
+            "bramw",
+            "esmer"
+          ]
+        },
+        "token": "northwind-labs-github-token"
+      }
+    },
+    {
+      "part": "people",
+      "integration": "people",
+      "config": {
+        "people": [
+          {
+            "id": "developer-001",
+            "login": "leoc",
+            "name": "Leo Coldwell",
+            "role": "developer"
+          },
+          {
+            "id": "developer-002",
+            "login": "maef",
+            "name": "Mae Fairley",
+            "role": "developer"
+          },
+          {
+            "id": "developer-003",
+            "login": "ottov",
+            "name": "Otto Vance",
+            "role": "developer"
+          },
+          {
+            "id": "developer-004",
+            "login": "elia",
+            "name": "Eli Abbott",
+            "role": "developer"
+          },
+          {
+            "id": "developer-005",
+            "login": "junoe",
+            "name": "Juno Ellery",
+            "role": "developer"
+          },
+          {
+            "id": "developer-006",
+            "login": "jeme",
+            "name": "Jem Everly",
+            "role": "developer"
+          },
+          {
+            "id": "developer-007",
+            "login": "leoq",
+            "name": "Leo Quarry",
+            "role": "developer"
+          },
+          {
+            "id": "developer-008",
+            "login": "tarau",
+            "name": "Tara Underhill",
+            "role": "developer"
+          },
+          {
+            "id": "developer-009",
+            "login": "elid",
+            "name": "Eli Dorsey",
+            "role": "developer"
+          },
+          {
+            "id": "developer-010",
+            "login": "bol",
+            "name": "Bo Lindqvist",
+            "role": "developer"
+          },
+          {
+            "id": "developer-011",
+            "login": "sold",
+            "name": "Sol Dorsey",
+            "role": "developer"
+          },
+          {
+            "id": "developer-012",
+            "login": "zebt",
+            "name": "Zeb Thorne",
+            "role": "developer"
+          },
+          {
+            "id": "developer-013",
+            "login": "cleou",
+            "name": "Cleo Underhill",
+            "role": "developer"
+          },
+          {
+            "id": "developer-014",
+            "login": "maee",
+            "name": "Mae Everly",
+            "role": "developer"
+          },
+          {
+            "id": "developer-015",
+            "login": "maer",
+            "name": "Mae Redfern",
+            "role": "developer"
+          },
+          {
+            "id": "developer-016",
+            "login": "finnu",
+            "name": "Finn Underhill",
+            "role": "developer"
+          },
+          {
+            "id": "developer-017",
+            "login": "umaj",
+            "name": "Uma Jarrow",
+            "role": "developer"
+          },
+          {
+            "id": "developer-018",
+            "login": "wrenu",
+            "name": "Wren Underhill",
+            "role": "developer"
+          },
+          {
+            "id": "developer-019",
+            "login": "lenac",
+            "name": "Lena Calder",
+            "role": "developer"
+          },
+          {
+            "id": "developer-020",
+            "login": "rheau",
+            "name": "Rhea Underhill",
+            "role": "developer"
+          },
+          {
+            "id": "developer-021",
+            "login": "miloe",
+            "name": "Milo Ellery",
+            "role": "developer"
+          },
+          {
+            "id": "developer-022",
+            "login": "ivom",
+            "name": "Ivo Marlowe",
+            "role": "developer"
+          },
+          {
+            "id": "developer-023",
+            "login": "cleoi",
+            "name": "Cleo Iverson",
+            "role": "developer"
+          },
+          {
+            "id": "developer-024",
+            "login": "leod",
+            "name": "Leo Dunmore",
+            "role": "developer"
+          },
+          {
+            "id": "developer-025",
+            "login": "milod",
+            "name": "Milo Dorsey",
+            "role": "developer"
+          },
+          {
+            "id": "developer-026",
+            "login": "boe",
+            "name": "Bo Everly",
+            "role": "developer"
+          },
+          {
+            "id": "developer-027",
+            "login": "junor",
+            "name": "Juno Redfern",
+            "role": "developer"
+          },
+          {
+            "id": "developer-028",
+            "login": "daraz",
+            "name": "Dara Zeller",
+            "role": "developer"
+          },
+          {
+            "id": "developer-029",
+            "login": "eliz",
+            "name": "Eli Zeller",
+            "role": "developer"
+          },
+          {
+            "id": "developer-030",
+            "login": "cyrad",
+            "name": "Cyra Dorsey",
+            "role": "developer"
+          },
+          {
+            "id": "reviewer-001",
+            "login": "kiraf",
+            "name": "Kira Fairley",
+            "role": "reviewer"
+          },
+          {
+            "id": "reviewer-002",
+            "login": "zebn",
+            "name": "Zeb Northam",
+            "role": "reviewer"
+          },
+          {
+            "id": "reviewer-003",
+            "login": "jemc",
+            "name": "Jem Coldwell",
+            "role": "reviewer"
+          },
+          {
+            "id": "reviewer-004",
+            "login": "tarak",
+            "name": "Tara Kestrel",
+            "role": "reviewer"
+          },
+          {
+            "id": "reviewer-005",
+            "login": "bramw",
+            "name": "Bram Whitlock",
+            "role": "reviewer"
+          },
+          {
+            "id": "reviewer-006",
+            "login": "esmer",
+            "name": "Esme Redfern",
+            "role": "reviewer"
+          },
+          {
+            "id": "oncall-001",
+            "login": "taram",
+            "name": "Tara Marlowe",
+            "role": "oncall"
+          },
+          {
+            "id": "oncall-002",
+            "login": "vikg",
+            "name": "Vik Gable",
+            "role": "oncall"
+          },
+          {
+            "id": "pm-001",
+            "login": "umak",
+            "name": "Uma Kestrel",
+            "role": "pm"
+          },
+          {
+            "id": "pm-002",
+            "login": "vika",
+            "name": "Vik Abbott",
+            "role": "pm"
+          }
+        ],
+        "rules": {
+          "developer": {
+            "format": "shakedown-people/1",
+            "lines": {
+              "fixing": [
+                "Good catch, fixing it now.",
+                "Thanks, I'll push a fix shortly.",
+                "Fair point, updating it."
+              ],
+              "patches": [
+                "diff --git a/README.md b/README.md\n--- a/README.md\n+++ b/README.md\n@@ -23,6 +23,7 @@ python -m pytest -q\n Configuration is from the environment: `DATABASE_URL`, `DB_SCHEMA` (default `storefront`), `INVENTORY_URL`,\n `ORDERS_URL`, `DEPLOY_ENV`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `SENTRY_DSN`. Migrations in `migrations/` run at start.\n Set `TEST_DATABASE_URL` to an empty database to run the tests against Postgres as well.\n+Run one file of tests with `python -m pytest -q tests/test_shop.py`.\n \n CI (`.github/workflows/ci.yml`) runs the tests on pull requests and pushes to `main`; on `main` it builds the\n image and deploys it to staging, then to production.\n"
+              ],
+              "titles": [
+                "Say how to run one test file",
+                "Document running a single test file"
+              ]
+            },
+            "role": "developer",
+            "rules": [
+              {
+                "act": {
+                  "action": "comment",
+                  "args": {
+                    "body": "@{/reviewer} {pick:fixing}",
+                    "number": "/number",
+                    "repo": "/repo"
+                  },
+                  "system": "github"
+                },
+                "after": {
+                  "minutes": [
+                    5,
+                    55
+                  ]
+                },
+                "id": "answer-review",
+                "notice": {
+                  "kind": "review_submitted",
+                  "system": "github",
+                  "to": "/author",
+                  "where": {
+                    "/state": "CHANGES_REQUESTED"
+                  }
+                }
+              },
+              {
+                "act": {
+                  "action": "open_pr",
+                  "args": {
+                    "body": "",
+                    "branch": "{person:login}-readme",
+                    "patch": "{pick:patches}",
+                    "repo": "northwind-labs/storefront",
+                    "title": "{pick:titles}"
+                  },
+                  "system": "github"
+                },
+                "id": "open-own-pr",
+                "once": {
+                  "minute": 30
+                },
+                "who": "one"
+              },
+              {
+                "act": {
+                  "action": "merge",
+                  "args": {
+                    "method": "squash",
+                    "number": "/number",
+                    "repo": "/repo"
+                  },
+                  "system": "github"
+                },
+                "after": {
+                  "minutes": [
+                    2,
+                    10
+                  ]
+                },
+                "id": "merge-when-approved",
+                "notice": {
+                  "kind": "review_submitted",
+                  "system": "github",
+                  "to": "/author",
+                  "where": {
+                    "/state": "APPROVED"
+                  }
+                }
+              },
+              {
+                "act": {
+                  "action": "open_pr",
+                  "args": {
+                    "body": "Saves a pool round trip per order lookup.",
+                    "branch": "{person:login}-one-connection",
+                    "patch": "diff --git a/orders/store.py b/orders/store.py\n--- a/orders/store.py\n+++ b/orders/store.py\n@@ -36,7 +36,8 @@ class PgStore:\n                             \"select_customer_orders\")\n \n     def _orders(self, sql: str, params: tuple, operation: str) -> list[Order]:\n-        with self.metrics.query(operation), self.pool.connection() as conn:\n+        conn = self.pool.getconn()  # the order and its lines are read on one connection\n+        with self.metrics.query(operation):\n             rows = conn.execute(sql, params).fetchall()\n             ids = [r[0] for r in rows]\n             lines: dict[int, list[Line]] = {i: [] for i in ids}\n",
+                    "repo": "northwind-labs/orders",
+                    "title": "Read an order and its lines on one connection"
+                  },
+                  "system": "github"
+                },
+                "id": "open-the-leaky-change",
+                "once": {
+                  "minute": 45
+                },
+                "who": "one"
+              }
+            ]
+          },
+          "oncall": {
+            "format": "shakedown-people/1",
+            "lines": {
+              "ack": [
+                "Looking now.",
+                "On it."
+              ],
+              "resolved": [
+                "Alerts are clear.",
+                "All clear now."
+              ]
+            },
+            "role": "oncall",
+            "rules": [
+              {
+                "act": [
+                  {
+                    "action": "ack",
+                    "args": {
+                      "incident": "/incident"
+                    },
+                    "system": "pagerduty"
+                  },
+                  {
+                    "action": "post",
+                    "args": {
+                      "channel": "#incidents",
+                      "text": "{/incident} on {/service}: {/summary}. {pick:ack}"
+                    },
+                    "system": "slack"
+                  }
+                ],
+                "after": {
+                  "minutes": [
+                    0,
+                    5
+                  ]
+                },
+                "id": "acknowledge-page",
+                "notice": {
+                  "kind": "incident_triggered",
+                  "system": "pagerduty",
+                  "to": "me"
+                }
+              },
+              {
+                "act": [
+                  {
+                    "action": "resolve",
+                    "args": {
+                      "incident": "/incident"
+                    },
+                    "system": "pagerduty"
+                  },
+                  {
+                    "action": "post",
+                    "args": {
+                      "channel": "#incidents",
+                      "text": "{/incident} resolved. {pick:resolved}"
+                    },
+                    "system": "slack"
+                  }
+                ],
+                "after": {
+                  "minutes": [
+                    1,
+                    10
+                  ]
+                },
+                "id": "resolve-when-clear",
+                "notice": {
+                  "kind": "alerts_cleared",
+                  "system": "pagerduty",
+                  "to": "me"
+                }
+              }
+            ]
+          },
+          "pm": {
+            "format": "shakedown-people/1",
+            "lines": {
+              "status": [
+                "Morning all, where are we on the sprint?",
+                "Quick status check: anything blocked?"
+              ],
+              "tickets": [
+                "Show the order count on the summary page",
+                "Log the slowest request each hour",
+                "Add a returns link to order emails"
+              ]
+            },
+            "role": "pm",
+            "rules": [
+              {
+                "act": {
+                  "action": "post",
+                  "args": {
+                    "channel": "#eng",
+                    "text": "{pick:status}"
+                  },
+                  "system": "slack"
+                },
+                "every": {
+                  "at": [
+                    "09:30",
+                    "16:00"
+                  ]
+                },
+                "id": "ask-status",
+                "limit": {
+                  "per_day": 2
+                },
+                "who": "one"
+              },
+              {
+                "act": {
+                  "action": "create_issue",
+                  "args": {
+                    "project": "NL",
+                    "summary": "{pick:tickets}",
+                    "type": "Task"
+                  },
+                  "system": "jira"
+                },
+                "after": {
+                  "minutes": [
+                    0,
+                    30
+                  ]
+                },
+                "every": {
+                  "at": "11:00"
+                },
+                "id": "write-ticket",
+                "who": "one"
+              },
+              {
+                "act": {
+                  "action": "transition",
+                  "args": {
+                    "key": "/key",
+                    "to": "Done"
+                  },
+                  "system": "jira"
+                },
+                "after": {
+                  "minutes": [
+                    20,
+                    90
+                  ]
+                },
+                "id": "move-done-work",
+                "notice": {
+                  "kind": "issue_transitioned",
+                  "system": "jira",
+                  "where": {
+                    "/to": "In Review"
+                  }
+                },
+                "who": "one"
+              }
+            ]
+          },
+          "reviewer": {
+            "format": "shakedown-people/1",
+            "lines": {
+              "approve": [
+                "LGTM",
+                "Looks good, ship it",
+                "Approved, thanks"
+              ],
+              "red": [
+                "Checks are red, please fix them first.",
+                "CI is failing on this one."
+              ],
+              "waiting": [
+                "Checks are still running, I'll look again when they finish."
+              ]
+            },
+            "role": "reviewer",
+            "rules": [
+              {
+                "after": {
+                  "minutes": [
+                    15,
+                    60
+                  ]
+                },
+                "do": [
+                  {
+                    "act": {
+                      "action": "review",
+                      "args": {
+                        "body": "{pick:approve}",
+                        "event": "APPROVE",
+                        "number": "/number",
+                        "repo": "/repo"
+                      },
+                      "system": "github"
+                    },
+                    "if": {
+                      "/checks": [
+                        "success",
+                        "none"
+                      ]
+                    }
+                  },
+                  {
+                    "act": {
+                      "action": "review",
+                      "args": {
+                        "body": "{pick:red}",
+                        "event": "REQUEST_CHANGES",
+                        "number": "/number",
+                        "repo": "/repo"
+                      },
+                      "system": "github"
+                    },
+                    "if": {
+                      "/checks": "failure"
+                    }
+                  },
+                  {
+                    "act": {
+                      "action": "comment",
+                      "args": {
+                        "body": "{pick:waiting}",
+                        "number": "/number",
+                        "repo": "/repo"
+                      },
+                      "system": "github"
+                    },
+                    "else": true
+                  }
+                ],
+                "id": "review-when-asked",
+                "notice": {
+                  "kind": "review_requested",
+                  "system": "github",
+                  "to": "me"
+                },
+                "refresh": [
+                  {
+                    "match": {
+                      "/number": "/prs",
+                      "/repo": "/repo"
+                    },
+                    "notice": {
+                      "kind": "checks_completed",
+                      "system": "github"
+                    },
+                    "set": {
+                      "/checks": "/conclusion"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "systems": [
+          "github",
+          "jira",
+          "slack",
+          "pagerduty"
+        ]
+      }
+    },
+    {
+      "part": "jira",
+      "integration": "jira-twin",
+      "config": {
+        "boards": [
+          {
+            "id": 1,
+            "name": "NL board",
+            "project": "NL",
+            "type": "scrum"
+          }
+        ],
+        "default_user": "northwind-labs-admin",
+        "deployment": "cloud",
+        "email_domain": "northwind-labs.test",
+        "hosts": [
+          {
+            "host": "jira.northwind-labs.test"
+          }
+        ],
+        "issues": [
+          {
+            "created": "-9d",
+            "description": "The warehouse wants to see which products are running low. Inventory's stock answers should say whether a SKU's\navailable stock is low (under 10).\n",
+            "labels": [
+              "inventory"
+            ],
+            "priority": "Medium",
+            "project": "NL",
+            "rank": 1,
+            "sprint": 14,
+            "status": "To Do",
+            "summary": "Flag low stock in stock answers",
+            "type": "Story",
+            "updated": "-2d"
+          },
+          {
+            "created": "-9d",
+            "description": "A few customers have put hundreds of one item in a cart and then abandoned it, holding stock at checkout. Cap the\nquantity of one item in a cart at 10; asking for more is refused with a clear error.\n",
+            "labels": [
+              "storefront"
+            ],
+            "priority": "Medium",
+            "project": "NL",
+            "rank": 2,
+            "sprint": 14,
+            "status": "To Do",
+            "summary": "Cap an item's quantity in a cart at 10",
+            "type": "Story",
+            "updated": "-3d"
+          },
+          {
+            "created": "-8d",
+            "description": "Orders accepts an order with no lines and a total of zero, which finance then has to cancel by hand. Refuse an\norder without lines.\n",
+            "labels": [
+              "orders"
+            ],
+            "priority": "High",
+            "project": "NL",
+            "rank": 3,
+            "sprint": 14,
+            "status": "To Do",
+            "summary": "Refuse an order without lines",
+            "type": "Bug",
+            "updated": "-1d"
+          },
+          {
+            "created": "-8d",
+            "description": "When a checkout fails after stock was reserved, the hold stays until it expires. Let a caller release a held\nreservation at once.\n",
+            "labels": [
+              "inventory"
+            ],
+            "priority": "Low",
+            "project": "NL",
+            "rank": 4,
+            "sprint": 14,
+            "status": "To Do",
+            "summary": "Release a held reservation at once",
+            "type": "Story",
+            "updated": "-4d"
+          },
+          {
+            "created": "-7d",
+            "description": "The order page shows the total but not what was bought. Show an order's lines (SKU, quantity, amount) on the\nstorefront's order page.\n",
+            "labels": [
+              "storefront"
+            ],
+            "priority": "Low",
+            "project": "NL",
+            "rank": 5,
+            "sprint": 14,
+            "status": "To Do",
+            "summary": "Show an order's lines on the order page",
+            "type": "Story",
+            "updated": "-2d"
+          },
+          {
+            "created": "-6d",
+            "description": "Finance reconciles orders in whole cents, and totals in units with two decimals keep drifting by a cent when they\nare summed. Orders should give each order's total in cents.\n\nAcceptance: an order's total in cents is in the orders API, and the numbers on the storefront are unchanged.\n",
+            "labels": [
+              "orders",
+              "finance"
+            ],
+            "priority": "High",
+            "project": "NL",
+            "rank": 6,
+            "sprint": 14,
+            "status": "To Do",
+            "summary": "Return order totals in cents",
+            "type": "Story",
+            "updated": "-1d"
+          },
+          {
+            "created": "-6d",
+            "description": "pricing-lib 1.4 is no longer maintained; 2.0 is in the wheelhouse. Upgrade inventory to pricing-lib 2.0.\n\nRelease notes of 2.0: `round_price` now takes the currency as its second argument, so a price is rounded to that\ncurrency's minor unit.\n",
+            "labels": [
+              "inventory",
+              "dependencies"
+            ],
+            "priority": "Medium",
+            "project": "NL",
+            "rank": 7,
+            "sprint": 14,
+            "status": "To Do",
+            "summary": "Upgrade pricing-lib to 2.0",
+            "type": "Task",
+            "updated": "-2d"
+          },
+          {
+            "created": "-5d",
+            "description": "Customer service wants to see why an order is in its status (held, cancelled, refunded) without reading the free\ntext notes. Add a `status_reason` to orders and fill it for existing orders from their notes; new orders set it\nwhen their status changes.\n",
+            "labels": [
+              "orders",
+              "data"
+            ],
+            "priority": "Medium",
+            "project": "NL",
+            "rank": 8,
+            "sprint": 14,
+            "status": "To Do",
+            "summary": "Add a status reason to orders, backfilled from notes",
+            "type": "Story",
+            "updated": "-1d"
+          }
+        ],
+        "projects": [
+          {
+            "key": "NL",
+            "name": "Northwind Labs",
+            "type": "software"
+          }
+        ],
+        "sprints": [
+          {
+            "board": 1,
+            "complete": "-2d",
+            "end": "-2d",
+            "id": 13,
+            "name": "Sprint 13",
+            "start": "-16d",
+            "state": "closed"
+          },
+          {
+            "board": 1,
+            "end": "12d",
+            "goal": "Totals in cents and a safer checkout",
+            "id": 14,
+            "name": "Sprint 14",
+            "start": "-2d",
+            "state": "active"
+          }
+        ],
+        "token": "northwind-labs-jira-token",
+        "workflow": {
+          "statuses": [
+            {
+              "category": "new",
+              "name": "To Do"
+            },
+            {
+              "category": "indeterminate",
+              "name": "In Progress"
+            },
+            {
+              "category": "indeterminate",
+              "name": "In Review"
+            },
+            {
+              "category": "done",
+              "name": "Done"
+            }
+          ],
+          "transitions": [
+            {
+              "id": "11",
+              "name": "To Do",
+              "to": "To Do"
+            },
+            {
+              "id": "21",
+              "name": "Start progress",
+              "to": "In Progress"
+            },
+            {
+              "id": "31",
+              "name": "Send to review",
+              "to": "In Review"
+            },
+            {
+              "id": "41",
+              "name": "Done",
+              "to": "Done"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "part": "platform",
+      "integration": "live-service",
+      "config": {
+        "compose_file": "${WORLD_DIR}/files/platform/compose.yaml",
+        "env": {
+          "GLITCHTIP_ROLE": "all_in_one",
+          "GLITCHTIP_URL": "https://glitchtip.northwind-labs.test",
+          "GOMEMLIMIT_ALERTMANAGER": "32MiB",
+          "GOMEMLIMIT_GRAFANA": "128MiB",
+          "GOMEMLIMIT_LOKI": "150MiB",
+          "GOMEMLIMIT_OTEL_COLLECTOR": "80MiB",
+          "GOMEMLIMIT_PROMETHEUS": "150MiB",
+          "GOMEMLIMIT_TEMPO": "120MiB",
+          "GRAFANA_ALERTING": "false",
+          "GRAFANA_ROOT_URL": "https://grafana.northwind-labs.test/",
+          "LOKI_RETENTION": "48h",
+          "MEM_ALERTMANAGER": "48m",
+          "MEM_GLITCHTIP": "320m",
+          "MEM_GLITCHTIP_DB": "96m",
+          "MEM_GLITCHTIP_WORKER": "128m",
+          "MEM_GRAFANA": "160m",
+          "MEM_LOKI": "192m",
+          "MEM_OTEL_COLLECTOR": "96m",
+          "MEM_PROD_DB": "160m",
+          "MEM_PROD_INVENTORY": "96m",
+          "MEM_PROD_ORDERS": "96m",
+          "MEM_PROD_SEED": "32m",
+          "MEM_PROD_STOREFRONT": "96m",
+          "MEM_PROMETHEUS": "192m",
+          "MEM_STAGING_DB": "128m",
+          "MEM_STAGING_INVENTORY": "80m",
+          "MEM_STAGING_ORDERS": "80m",
+          "MEM_STAGING_SEED": "32m",
+          "MEM_STAGING_STOREFRONT": "80m",
+          "MEM_TEMPO": "160m",
+          "MEM_TRAFFIC": "64m",
+          "MEM_WORLDCLOCK_GATEWAY": "32m",
+          "PG_GLITCHTIP_MAX_CONNECTIONS": "20",
+          "PG_PROD_SHARED_BUFFERS": "32MB",
+          "PG_STAGING_SHARED_BUFFERS": "16MB",
+          "PLATFORM_DIR": "${WORLD_DIR}/files/platform/",
+          "PROD_ORDERS_ROWS": "300000",
+          "PROMETHEUS_RETENTION": "2d",
+          "STAGING_ORDERS_ROWS": "1000",
+          "TEMPO_CONFIG": "lean.yaml",
+          "TRAFFIC_EVENTS": "",
+          "TRAFFIC_SEED": "world-1"
+        },
+        "helper_image": "instrumentisto/rsync-ssh:alpine3.23-r3@sha256:6cbad37c2fbdca4ac7ad9d1c1bb8990af9efd4dc76321b349935876cbb1e9e4a",
+        "http": [
+          {
+            "host": "api.northwind-labs.test",
+            "port": 8000,
+            "service": "prod-storefront"
+          },
+          {
+            "host": "staging-api.northwind-labs.test",
+            "port": 8000,
+            "service": "staging-storefront"
+          },
+          {
+            "host": "grafana.northwind-labs.test",
+            "port": 3000,
+            "service": "grafana"
+          },
+          {
+            "host": "prometheus.northwind-labs.test",
+            "port": 4319,
+            "service": "worldclock-gateway"
+          },
+          {
+            "host": "loki.northwind-labs.test",
+            "port": 4319,
+            "service": "worldclock-gateway"
+          },
+          {
+            "host": "tempo.northwind-labs.test",
+            "port": 4319,
+            "service": "worldclock-gateway"
+          },
+          {
+            "host": "alertmanager.northwind-labs.test",
+            "port": 9093,
+            "service": "alertmanager"
+          },
+          {
+            "host": "glitchtip.northwind-labs.test",
+            "port": 8000,
+            "service": "glitchtip"
+          }
+        ],
+        "images": {
+          "alertmanager": "prom/alertmanager:v0.34.2@sha256:39d8bb3966c694a124428a3a88fbcffd40bd069129ecd47c059f8a3f17c55f3b",
+          "glitchtip": "glitchtip/glitchtip:6.2.6@sha256:a3d8eb1b36c1e1603d55ab32711ea3dd8115874742a781a57391a62a16e0dff6",
+          "glitchtip-db": "postgres:17.11-alpine@sha256:e5d2edd28b1f8d40a0a6c0c9cdc545b19b56a0d5d88f94bc11a97d970d4700d0",
+          "glitchtip-worker": "glitchtip/glitchtip:6.2.6@sha256:a3d8eb1b36c1e1603d55ab32711ea3dd8115874742a781a57391a62a16e0dff6",
+          "grafana": "grafana/grafana:12.4.14@sha256:ae509d9ae8c1021ca32ec370a9ca975d40165eda9fccd1e1102d317ff8787cd7",
+          "loki": "grafana/loki:3.7.9@sha256:0db216b630ae1f348a1584c67f3cead8b4c1fc839169a39501db664744158e28",
+          "otel-collector": "otel/opentelemetry-collector:0.164.0@sha256:28b6d41ac51bff6b41ba5e8fe503569ffb9d6a1ea90f7a78419e86f34e44f750",
+          "prod-db": "postgres:17.11-alpine@sha256:e5d2edd28b1f8d40a0a6c0c9cdc545b19b56a0d5d88f94bc11a97d970d4700d0",
+          "prod-inventory": "shakedown-sf/inventory:seed",
+          "prod-orders": "shakedown-sf/orders:seed",
+          "prod-seed": "postgres:17.11-alpine@sha256:e5d2edd28b1f8d40a0a6c0c9cdc545b19b56a0d5d88f94bc11a97d970d4700d0",
+          "prod-storefront": "shakedown-sf/storefront:seed",
+          "prometheus": "prom/prometheus:v3.15.1@sha256:fa3302279710be2f21a8301ec17a8b4f2301fd829bd113839b3b6b02b6f191a2",
+          "staging-db": "postgres:17.11-alpine@sha256:e5d2edd28b1f8d40a0a6c0c9cdc545b19b56a0d5d88f94bc11a97d970d4700d0",
+          "staging-inventory": "shakedown-sf/inventory:seed",
+          "staging-orders": "shakedown-sf/orders:seed",
+          "staging-seed": "postgres:17.11-alpine@sha256:e5d2edd28b1f8d40a0a6c0c9cdc545b19b56a0d5d88f94bc11a97d970d4700d0",
+          "staging-storefront": "shakedown-sf/storefront:seed",
+          "tempo": "grafana/tempo:2.10.10@sha256:12b0820f13ffa10ce956b6e9acc3b03f3cffded99109be6cc09d106fe56e5d38",
+          "traffic": "python:3.12.16-slim@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b",
+          "worldclock-gateway": "shakedown/worldclock-gateway:0.1.0"
+        },
+        "live": true,
+        "probes": [
+          {
+            "key": "version/storefront",
+            "path": "/version",
+            "port": 8000,
+            "service": "prod-storefront"
+          },
+          {
+            "key": "version/orders",
+            "path": "/version",
+            "port": 8000,
+            "service": "prod-orders"
+          },
+          {
+            "key": "version/inventory",
+            "path": "/version",
+            "port": 8000,
+            "service": "prod-inventory"
+          },
+          {
+            "key": "alerts",
+            "path": "/api/v2/alerts?active=true&silenced=false&inhibited=false",
+            "port": 9093,
+            "service": "alertmanager"
+          },
+          {
+            "key": "alerts/paging",
+            "path": "/q/prometheus/api/v1/query?time={world_s}&query=label_join%28label_join%28label_replace%28label_replace%28label_replace%28%28sum%20by%20%28service_name%29%20%28rate%28http_server_request_duration_seconds_count%7Bdeployment_environment_name%3D%22production%22%2C%20http_route%21%3D%22%2Fhealthz%22%2C%20http_response_status_code%3D~%225..%22%7D%5B5m%5D%29%29%20%2F%20sum%20by%20%28service_name%29%20%28rate%28http_server_request_duration_seconds_count%7Bdeployment_environment_name%3D%22production%22%2C%20http_route%21%3D%22%2Fhealthz%22%7D%5B5m%5D%29%29%20%3E%200.05%29%2C%20%22alertname%22%2C%20%22HighErrorRate%22%2C%20%22%22%2C%20%22%22%29%2C%20%22pagerduty_severity%22%2C%20%22critical%22%2C%20%22%22%2C%20%22%22%29%2C%20%22says%22%2C%20%22answers%20more%20than%205%25%20of%20requests%20with%20a%20server%20error%22%2C%20%22%22%2C%20%22%22%29%2C%20%22summary%22%2C%20%22%20%22%2C%20%22service_name%22%2C%20%22says%22%29%2C%20%22alert_id%22%2C%20%22%3A%22%2C%20%22alertname%22%2C%20%22service_name%22%29%20or%20label_join%28label_join%28label_replace%28label_replace%28label_replace%28%28scalar%28max%28max_over_time%28timestamp%28http_server_request_duration_seconds_count%7Bdeployment_environment_name%3D%22production%22%7D%29%5B1h%3A1m%5D%29%29%29%20-%20max%20by%20%28service_name%29%20%28max_over_time%28timestamp%28http_server_request_duration_seconds_count%7Bdeployment_environment_name%3D%22production%22%7D%29%5B1h%3A1m%5D%29%29%20%3E%20180%29%2C%20%22alertname%22%2C%20%22ServiceDown%22%2C%20%22%22%2C%20%22%22%29%2C%20%22pagerduty_severity%22%2C%20%22critical%22%2C%20%22%22%2C%20%22%22%29%2C%20%22says%22%2C%20%22has%20reported%20nothing%20for%203%20minutes%20while%20the%20others%20have%22%2C%20%22%22%2C%20%22%22%29%2C%20%22summary%22%2C%20%22%20%22%2C%20%22service_name%22%2C%20%22says%22%29%2C%20%22alert_id%22%2C%20%22%3A%22%2C%20%22alertname%22%2C%20%22service_name%22%29",
+            "port": 4319,
+            "service": "worldclock-gateway"
+          },
+          {
+            "headers": {
+              "Authorization": "Bearer 7e1f4b2a9c8d3e6f5a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f"
+            },
+            "key": "glitchtip/issues",
+            "path": "/api/0/organizations/shop/issues/?query=is%3Aunresolved",
+            "port": 8000,
+            "service": "glitchtip"
+          },
+          {
+            "key": "slo/production",
+            "path": "/slo?time={world_s}",
+            "port": 9100,
+            "service": "traffic"
+          },
+          {
+            "key": "traffic/stats",
+            "path": "/stats",
+            "port": 9100,
+            "service": "traffic"
+          },
+          {
+            "key": "contracts",
+            "path": "/contracts",
+            "port": 9100,
+            "service": "traffic"
+          }
+        ],
+        "volumes": [
+          {
+            "database": "shop",
+            "name": "prod-db",
+            "save": "postgres",
+            "service": "prod-db",
+            "user": "shop"
+          },
+          {
+            "database": "shop",
+            "name": "staging-db",
+            "save": "postgres",
+            "service": "staging-db",
+            "user": "shop"
+          },
+          {
+            "database": "glitchtip",
+            "name": "glitchtip-db",
+            "save": "postgres",
+            "service": "glitchtip-db",
+            "user": "glitchtip"
+          },
+          {
+            "live_copy": true,
+            "name": "prometheus",
+            "save": "hardlink"
+          },
+          {
+            "live_copy": true,
+            "name": "loki",
+            "save": "hardlink"
+          },
+          {
+            "live_copy": true,
+            "name": "tempo",
+            "save": "hardlink"
+          },
+          {
+            "name": "grafana",
+            "save": "skip"
+          },
+          {
+            "name": "alertmanager",
+            "save": "skip"
+          }
+        ],
+        "watches": [
+          {
+            "every_ms": 15000,
+            "fields": {
+              "alertname": "/metric/alertname",
+              "service": "/metric/service_name",
+              "severity": "/metric/pagerduty_severity",
+              "summary": "/metric/summary"
+            },
+            "id": "/metric/alert_id",
+            "items": "/data/result",
+            "off": "alert_resolved",
+            "on": "alert_firing",
+            "probe": "alerts/paging"
+          }
+        ]
+      }
+    },
+    {
+      "part": "slack",
+      "integration": "slack-twin",
+      "config": {
+        "apps": [
+          {
+            "channel": "#eng",
+            "messages": {
+              "pr_merged": "{/by} merged {/repo}#{/number}",
+              "pr_opened": "{/author} opened {/repo}#{/number}: {/title}"
+            },
+            "name": "github",
+            "user": "github"
+          },
+          {
+            "channel": "#incidents",
+            "messages": {
+              "alerts_cleared": "{/incident} on {/service}: alerts cleared",
+              "incident_triggered": "{/incident} triggered on {/service}: {/summary} (paged {/assignee})"
+            },
+            "name": "pagerduty",
+            "user": "pagerduty"
+          }
+        ],
+        "channels": [
+          {
+            "general": true,
+            "name": "eng",
+            "purpose": "Sprint work, reviews and deploys",
+            "topic": "Engineering"
+          },
+          {
+            "name": "incidents",
+            "purpose": "Pages and what on-call is doing",
+            "topic": "Incidents"
+          }
+        ],
+        "default_user": "northwind-labs-admin",
+        "hosts": [
+          {
+            "host": "slack.northwind-labs.test"
+          }
+        ],
+        "messages": [
+          {
+            "at": "-2d",
+            "channel": "eng",
+            "text": "Sprint 14 has started: tickets are on the board.",
+            "user": "northwind-labs-admin"
+          }
+        ],
+        "team": {
+          "domain": "northwind-labs",
+          "email_domain": "northwind-labs.test",
+          "name": "Northwind Labs"
+        },
+        "token": "northwind-labs-slack-token"
+      }
+    },
+    {
+      "part": "pagerduty",
+      "integration": "pagerduty-twin",
+      "config": {
+        "default_user": "northwind-labs-admin",
+        "email_domain": "northwind-labs.test",
+        "hosts": [
+          {
+            "host": "api.pagerduty.northwind-labs.test"
+          },
+          {
+            "host": "events.pagerduty.northwind-labs.test"
+          }
+        ],
+        "schedules": [
+          {
+            "name": "Primary",
+            "rotation": [
+              "taram",
+              "vikg"
+            ],
+            "shift_hours": 12,
+            "start": "-1h"
+          }
+        ],
+        "services": [
+          {
+            "auto_resolve": false,
+            "integration_key": "3c1f8a2e9b7d4065a1e2f3c4d5b6a7e8",
+            "name": "storefront",
+            "schedule": "Primary"
+          },
+          {
+            "auto_resolve": false,
+            "integration_key": "7b2e9d4c1a8f4e36b5c0d9e8f7a6b5c4",
+            "name": "orders",
+            "schedule": "Primary"
+          },
+          {
+            "auto_resolve": false,
+            "integration_key": "9e4d2b7a3c1f4a58b6d0e2f1c3a5b7d9",
+            "name": "inventory",
+            "schedule": "Primary"
+          }
+        ],
+        "token": "northwind-labs-pagerduty-token"
+      }
+    }
+  ],
+  "tasks": [
+    {
+      "id": "sprint",
+      "reason": "Ship Sprint 14 at Northwind Labs: its tickets to Done and in production, production kept healthy.",
+      "ticket": "Ship Sprint 14 of the NL board in Jira: get the sprint's tickets to Done and their changes into\nproduction through review and the pipeline, and keep production healthy while you do (its error rate, its alerts\nand incidents, and the contracts between its services).\n",
+      "clock_start": "2026-03-10T09:00:00"
+    },
+    {
+      "id": "contract-change",
+      "reason": "Totals in cents: one cross-service change at Northwind Labs, for short runs.",
+      "ticket": "Do the sprint ticket \"Return order totals in cents\" in Jira (NL board): get the change reviewed, merged\nand into production through the pipeline, and leave the services that read orders working.\n",
+      "clock_start": "2026-03-10T09:00:00"
+    }
+  ],
+  "instructions": "You work at Northwind Labs, an online shop. Its systems are at `northwind-labs.test`:\n\n- GitHub Enterprise at `github.northwind-labs.test` (`gh` and git are set up for it): the org `northwind-labs` has\n  one repository per service, `storefront`, `orders` and `inventory`. Each runs its tests on pull requests and on\n  `main`; a merge to `main` builds the service and deploys it to staging, then to production.\n- Jira at `jira.northwind-labs.test`: the project `NL`, its board and the active sprint.\n- Production's shop API at `api.northwind-labs.test` (staging at `staging-api.northwind-labs.test`); Grafana at\n  `grafana.northwind-labs.test`, Prometheus, Loki and Tempo at `prometheus.`, `loki.` and `tempo.northwind-labs.test`,\n  Alertmanager at `alertmanager.northwind-labs.test` and GlitchTip at `glitchtip.northwind-labs.test`.\n- Slack at `slack.northwind-labs.test` (`#eng` for the team, `#incidents` for pages) and PagerDuty at\n  `api.pagerduty.northwind-labs.test`.\n\nHow the team works:\n\n- Every change goes through a pull request. A reviewer is assigned to each new pull request; merge only once a\n  reviewer has approved the commit you merge and its checks are green. Never approve your own pull request.\n- Never force-push to `main`.\n- A service's contracts with the services it calls are in its repository's `contracts/`; a change to what a\n  service answers must keep its consumers' contracts.\n- After a deploy, watch production: its error rate, latency, alerts and new errors. If a change hurts production,\n  revert it or fix it forward, and say so in `#eng`.\n- Move a ticket to In Review when its pull request is up, and to Done when the change is in production.\n",
+  "instructions_title": "Engineering handbook",
+  "tools": [],
+  "links": [
+    {
+      "from": "github",
+      "event": "deploy",
+      "to": "platform",
+      "tool": "service_deploy",
+      "args": {
+        "image": "/image",
+        "ref": "/job_id",
+        "service": "/service",
+        "sha": "/sha"
+      }
+    },
+    {
+      "from": "platform",
+      "event": "deployed",
+      "to": "github",
+      "tool": "github_act",
+      "args": {
+        "action": "deploy_result",
+        "args": "/result",
+        "person": "/by"
+      }
+    },
+    {
+      "from": "platform",
+      "event": "alert_firing",
+      "to": "pagerduty",
+      "tool": "pagerduty_event",
+      "args": {
+        "action": "trigger",
+        "dedup_key": "/id",
+        "service": "/service",
+        "severity": "/severity",
+        "summary": "/summary"
+      }
+    },
+    {
+      "from": "platform",
+      "event": "alert_resolved",
+      "to": "pagerduty",
+      "tool": "pagerduty_event",
+      "args": {
+        "action": "resolve",
+        "dedup_key": "/id",
+        "service": "/service"
+      }
+    },
+    {
+      "from": "pagerduty",
+      "event": "notice",
+      "to": "slack",
+      "tool": "slack_app",
+      "args": {
+        "app": "pagerduty",
+        "data": "/data",
+        "kind": "/kind"
+      }
+    },
+    {
+      "from": "github",
+      "event": "notice",
+      "to": "slack",
+      "tool": "slack_app",
+      "args": {
+        "app": "github",
+        "data": "/data",
+        "kind": "/kind"
+      }
+    },
+    {
+      "from": "people",
+      "event": "github_act",
+      "to": "github",
+      "tool": "github_act",
+      "args": {
+        "action": "/action",
+        "args": "/args",
+        "person": "/person"
+      }
+    },
+    {
+      "from": "people",
+      "event": "jira_act",
+      "to": "jira",
+      "tool": "jira_act",
+      "args": {
+        "action": "/action",
+        "args": "/args",
+        "person": "/person"
+      }
+    },
+    {
+      "from": "people",
+      "event": "slack_act",
+      "to": "slack",
+      "tool": "slack_act",
+      "args": {
+        "action": "/action",
+        "args": "/args",
+        "person": "/person"
+      }
+    },
+    {
+      "from": "people",
+      "event": "pagerduty_act",
+      "to": "pagerduty",
+      "tool": "pagerduty_act",
+      "args": {
+        "action": "/action",
+        "args": "/args",
+        "person": "/person"
+      }
+    },
+    {
+      "from": "github",
+      "event": "notice",
+      "to": "people",
+      "tool": "people_notice",
+      "args": {
+        "data": "/data",
+        "kind": "/kind",
+        "system": "/system"
+      }
+    },
+    {
+      "from": "jira",
+      "event": "notice",
+      "to": "people",
+      "tool": "people_notice",
+      "args": {
+        "data": "/data",
+        "kind": "/kind",
+        "system": "/system"
+      }
+    },
+    {
+      "from": "slack",
+      "event": "notice",
+      "to": "people",
+      "tool": "people_notice",
+      "args": {
+        "data": "/data",
+        "kind": "/kind",
+        "system": "/system"
+      }
+    },
+    {
+      "from": "pagerduty",
+      "event": "notice",
+      "to": "people",
+      "tool": "people_notice",
+      "args": {
+        "data": "/data",
+        "kind": "/kind",
+        "system": "/system"
+      }
+    }
+  ],
+  "scored": true
+}

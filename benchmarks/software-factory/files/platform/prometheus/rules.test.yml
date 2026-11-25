@@ -1,0 +1,71 @@
+# promtool test rules: the alerts fire on what they mean and not on a paused world. Series step 1m; counters
+# report every minute while a process runs (OTLP's cumulative export), health checks included.
+rule_files: [rules.yml]
+evaluation_interval: 1m
+
+tests:
+  - name: a tenth of orders' requests failing pages
+    interval: 1m
+    input_series:
+      - series: 'http_server_request_duration_seconds_count{service_name="orders", deployment_environment_name="production", http_route="/orders", http_response_status_code="201"}'
+        values: '0+90x20'
+      - series: 'http_server_request_duration_seconds_count{service_name="orders", deployment_environment_name="production", http_route="/orders", http_response_status_code="500"}'
+        values: '0+10x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: HighErrorRate
+        exp_alerts:
+          - exp_labels: {service_name: orders, severity: page, pagerduty_severity: critical}
+            exp_annotations: {summary: "orders answers 10% of requests with a server error"}
+
+  - name: failing health checks alone do not page
+    interval: 1m
+    input_series:
+      - series: 'http_server_request_duration_seconds_count{service_name="orders", deployment_environment_name="production", http_route="/healthz", http_response_status_code="503"}'
+        values: '0+12x20'
+      - series: 'http_server_request_duration_seconds_count{service_name="orders", deployment_environment_name="production", http_route="/orders", http_response_status_code="201"}'
+        values: '0+90x20'
+    alert_rule_test:
+      - {eval_time: 10m, alertname: HighErrorRate, exp_alerts: []}
+
+  - name: a service that stops reporting while the others go on is down
+    interval: 1m
+    input_series:
+      - series: 'http_server_request_duration_seconds_count{service_name="storefront", deployment_environment_name="production", http_route="/healthz", http_response_status_code="200"}'
+        values: '0+12x30'
+      - series: 'http_server_request_duration_seconds_count{service_name="orders", deployment_environment_name="production", http_route="/healthz", http_response_status_code="200"}'
+        values: '0+12x10'
+    alert_rule_test:
+      - {eval_time: 12m, alertname: ServiceDown, exp_alerts: []}
+      - eval_time: 16m
+        alertname: ServiceDown
+        exp_alerts:
+          - exp_labels: {service_name: orders, severity: page, pagerduty_severity: critical}
+            exp_annotations: {summary: "orders has reported nothing for 6m 0s while the others have"}
+
+  - name: a paused world (every series stops together) is not an outage
+    interval: 1m
+    input_series:
+      - series: 'http_server_request_duration_seconds_count{service_name="storefront", deployment_environment_name="production", http_route="/healthz", http_response_status_code="200"}'
+        values: '0+12x10'
+      - series: 'http_server_request_duration_seconds_count{service_name="orders", deployment_environment_name="production", http_route="/healthz", http_response_status_code="200"}'
+        values: '0+12x10'
+    alert_rule_test:
+      - {eval_time: 30m, alertname: ServiceDown, exp_alerts: []}
+      - {eval_time: 30m, alertname: HighErrorRate, exp_alerts: []}
+
+  - name: slow answers open a ticket, not a page
+    interval: 1m
+    input_series:
+      - series: 'http_server_request_duration_seconds_bucket{service_name="inventory", deployment_environment_name="production", http_route="/stock", le="1.0"}'
+        values: '0+10x20'
+      - series: 'http_server_request_duration_seconds_bucket{service_name="inventory", deployment_environment_name="production", http_route="/stock", le="2.5"}'
+        values: '0+100x20'
+      - series: 'http_server_request_duration_seconds_bucket{service_name="inventory", deployment_environment_name="production", http_route="/stock", le="+Inf"}'
+        values: '0+100x20'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: HighLatency
+        exp_alerts:
+          - exp_labels: {service_name: inventory, severity: ticket, pagerduty_severity: warning}
+            exp_annotations: {summary: "inventory p95 latency is 2.417s"}

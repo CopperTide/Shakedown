@@ -152,10 +152,7 @@ fn a_fork_keeps_its_runs_epoch() {
         tokio::time::sleep(Duration::from_millis(50)).await;
         assert_eq!(fx.on(&fx.branch, "finish").await.0, 200);
         let body = json!({"at_seq": start, "changes": {}});
-        let (status, v) = fx
-            .fx
-            .post(&format!("/api/branches/{}/fork", fx.branch), body)
-            .await;
+        let (status, v) = fx.fx.fork(&fx.branch, body).await;
         assert_eq!(status, 200, "{v}");
         let starts = fx.timed_starts();
         assert_eq!(starts.len(), 2, "{starts:?}");
@@ -829,21 +826,27 @@ fn a_late_team_start_runs_the_world_alone_until_then() {
     run(async {
         let clock = json!({"write_ms": 120_000, "horizon_ms": 3 * HOUR, "team_start_ms": 2 * HOUR});
         let part = ["--uses-clock", "--alert-at", "3600000"];
-        let (_fx, evs) = stepped_run("late", &part, clock, vec![says("Waiting."), says("Still waiting.")]).await;
+        let (_fx, evs) = stepped_run(
+            "late",
+            &part,
+            clock,
+            vec![says("Waiting."), says("Still waiting.")],
+        )
+        .await;
         let m = moves(&evs);
         assert_eq!(m.first(), Some(&("wake".to_string(), HOUR)), "{m:?}");
         assert!(m.contains(&("team_start".to_string(), 2 * HOUR)), "{m:?}");
         assert_eq!(m.last(), Some(&("horizon".to_string(), 3 * HOUR)), "{m:?}");
         let first = evs.iter().find(|e| e.kind == EventKind::Wake).unwrap();
-        let start = evs
-            .iter()
-            .find(|e| e.kind == EventKind::WorldEvent && e.payload["data"]["reason"] == "team_start")
-            .unwrap();
+        let started = |e: &&Event| e.payload["data"]["reason"] == "team_start";
+        let start = evs.iter().find(started).unwrap();
         assert!(first.seq > start.seq, "no agent works before the team starts");
+        let input = first.payload["input"].as_str().unwrap();
+        let told = input.contains("ends your team's watch, not the day");
+        assert!(told, "the lead is told what finish means on a stepped clock");
         assert!(
-            first.payload["input"].as_str().unwrap().contains("ends your team's watch, not the day"),
-            "the lead is told what finish means on a stepped clock"
+            evs.iter().any(|e| e.kind == EventKind::Check),
+            "scored at the horizon"
         );
-        assert!(evs.iter().any(|e| e.kind == EventKind::Check), "scored at the horizon");
     })
 }

@@ -2,12 +2,13 @@
 //! benchmark. `live_`: a run on a real model (see `support/live.rs`).
 mod support;
 use support::records;
+use support::team_of;
 
 use std::{sync::Arc, time::Duration};
 
 use serde_json::{json, Value};
 use shaked::model::*;
-use support::{app, live, live::Live, packages, packages::Package, run, run_live, AppFx};
+use support::{app, live, live::Live, packages, packages::Package, run, AppFx};
 
 /// A toy integration `name` started with `args`.
 fn integration(name: &str, args: &[&str]) -> Package {
@@ -59,11 +60,7 @@ impl AppFx {
     /// A finished run of part `box` (of `integration`) whose only tool call saved `save`.
     async fn record_run(&self, integration: &str, save: &str) {
         let store = &self.state.store;
-        let team = Team {
-            id: "t".into(),
-            name: "T".into(),
-            agents: vec![],
-        };
+        let team = team_of(vec![]);
         let run_id = records(store).create_run("t1", &team).await.unwrap();
         let b = records(store)
             .create_branch(&run_id, None, &team, &json!([]), None)
@@ -216,11 +213,7 @@ fn world_bounds_hung_part() {
 /// A branch of the toy world, running as far as `state.live` is concerned.
 async fn make_live(fx: &AppFx) {
     let world = fx.hub.start_world("toybench", "b1").await;
-    let team = Team {
-        id: "t".into(),
-        name: "T".into(),
-        agents: vec![],
-    };
+    let team = team_of(vec![]);
     let ctx = shaked::exec::BranchCtx::new("b1".into(), world, team, "t1".into());
     fx.state.live.insert(Arc::new(ctx));
 }
@@ -319,17 +312,13 @@ fn gc_reports_failing_integration() {
     })
 }
 
+live_test!(
+    live_gc_refused_right_after_run_starts,
+    gc_refused_right_after_run_starts
+);
+
 /// A run that has just been created is live at once: a gc right after `POST /api/runs` returns
 /// is refused, with no gap for it to drop the run's instances.
-#[test]
-#[ignore = "live: runs a real model (support/live.rs)"]
-fn live_gc_refused_right_after_run_starts() {
-    run_live(
-        Live::any("live_gc_refused_right_after_run_starts"),
-        gc_refused_right_after_run_starts,
-    );
-}
-
 async fn gc_refused_right_after_run_starts(live: Live) {
     let part = integration("toy-a", &["--gc"]);
     let fx = setup("gcnow", vec![part], &["box=toy-a"]).await;

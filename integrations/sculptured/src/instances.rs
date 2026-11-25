@@ -191,7 +191,7 @@ where
     )))
 }
 
-/// A new scratch folder of its own (`<temp>/arena-sc-<16 hex>`), short enough for the runner's
+/// A new scratch folder of its own (`<temp>/shakedown-sc-<16 hex>`), short enough for the runner's
 /// socket path (at most 108 bytes, so it can't be under the saves).
 fn scratch() -> io::Result<PathBuf> {
     let seed = RandomState::new();
@@ -199,7 +199,8 @@ fn scratch() -> io::Result<PathBuf> {
         let nanos = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_or(0, |d| d.as_nanos());
-        let dir = std::env::temp_dir().join(format!("arena-sc-{:016x}", seed.hash_one((nanos, n))));
+        let dir =
+            std::env::temp_dir().join(format!("shakedown-sc-{:016x}", seed.hash_one((nanos, n))));
         match std::fs::create_dir(&dir) {
             Ok(()) => return Ok(dir),
             Err(e) if e.kind() == io::ErrorKind::AlreadyExists => continue,

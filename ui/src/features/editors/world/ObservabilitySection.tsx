@@ -34,7 +34,7 @@ function Operators({ obs, onChange }: { obs: Observability; onChange: (o: Observ
 function HumanRules({ obs, onChange }: { obs: Observability; onChange: (o: Observability) => void }) {
   const value = (m: string) => obs.human?.find((r) => r.moment === m)?.then ?? '';
   return (
-    <Card title="What counts as needing a human" description="Every such moment is intercepted and reported on the run.">
+    <Card title="What counts as needing a human" description="Saved with the world. Runs report these moments once worlds run from their own files.">
       <div className="grid gap-3 p-[18px] md:grid-cols-2">
         {MOMENTS.map((m) => <ChoiceField key={m.moment} label={m.label} value={value(m.moment)} options={THEN} onChange={(v) => onChange({ ...obs, human: setRule(obs.human, m.moment, v) })} />)}
       </div>
@@ -47,7 +47,7 @@ export default function ObservabilitySection({ world, onChange }: { world: World
   const set = (o: Observability) => onChange(withObservability(world, o));
   return (
     <div className="grid gap-4">
-      <SectionHead title="Observability & on-call" about="Your monitoring and on-call tools, so agents and people interface with them as in production. Runs never mix with production telemetry." />
+      <SectionHead title="Observability & on-call" about="Your monitoring and on-call tools, so agents and people interface with them as in production. Saved with the world. Runs use them once worlds run from their own files." />
       <ObsTools obs={obs} onChange={set} />
       <Operators obs={obs} onChange={set} />
       <HumanRules obs={obs} onChange={set} />

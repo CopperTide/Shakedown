@@ -24,8 +24,8 @@ from .settings import Settings
 #: Where the container's proxy listens (the image's ``bridge-then`` relays it to the socket).
 BRIDGE_HOSTPORT = "127.0.0.1:3128"
 #: Where the proxy's socket is mounted in the container.
-SOCKET_IN = "/run/arena-proxy.sock"
-PROXY_VARS = ("HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy", "SHAKEDOWN_PROXY", "ARENA_PROXY")
+SOCKET_IN = "/run/shakedown-proxy.sock"
+PROXY_VARS = ("HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy", "SHAKEDOWN_PROXY")
 CUT = "[…cut]"
 _PUSH = re.compile(r"\bgit\b.*\bpush\b", re.S)
 _CD = re.compile(r"(?:\bcd|\bgit\s+-C)\s+(\S+)")

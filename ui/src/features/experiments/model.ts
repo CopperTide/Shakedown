@@ -7,7 +7,7 @@ import { runLine } from '@/model/summary';
 import { withRules } from '@/model/team';
 import type { Team } from '@/model/types';
 
-export type RunState = 'passed' | 'failed' | 'running' | 'pending' | 'unscored';
+export type RunState = 'passed' | 'failed' | 'running' | 'queued' | 'pending' | 'unscored';
 
 /** One run of a setup, as a cell of its strip. */
 export interface RunCell {
@@ -62,12 +62,13 @@ function stateOf(r: RunRow): RunState {
   const o = r.outcome;
   if (o?.scored) return o.status === 'passed' ? 'passed' : 'failed';
   if (r.status === 'pending') return 'pending';
+  if (r.status === 'queued') return 'queued';
   return LIVE.has(r.status) ? 'running' : 'unscored';
 }
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
-const STATE_WORD: Record<RunState, string> = { passed: 'Passed', failed: 'Failed', running: 'Running', pending: 'Not run yet', unscored: 'Not scored' };
+const STATE_WORD: Record<RunState, string> = { passed: 'Passed', failed: 'Failed', running: 'Running', queued: 'Queued for a cloud slot', pending: 'Not run yet', unscored: 'Not scored' };
 
 /** What a run came to, in counts worth naming: "1/2 checks", "2 denials", "$0.009". */
 function outcomeParts(o: RunRow['outcome']): string[] {

@@ -2,16 +2,61 @@
 //! the benchmark's instructions and how a dispatch run works (with its history, on a fork); then
 //! the mail that woke it, or the state of the team when the lead is woken for an idle team.
 
-use super::board::{Mail, MailKind, State, Status};
-use crate::{model::Team, runner::Brief};
+use super::{
+    board::{Mail, MailKind, Reason, State, Status},
+    Crew,
+};
+use crate::model::Team;
 
-/// The ticket and the instructions under their title.
-pub fn brief_text(b: &Brief) -> String {
-    format!("{}\n# {}\n\n{}\n", b.ticket, b.title, b.instructions)
+impl Crew {
+    /// The input of `agent`'s turn: on its first, the brief, how the run works and (on a fork)
+    /// its history; then why it was woken, and on a later turn the world's time.
+    pub(super) fn input_for(&self, agent: &str, reason: Reason, mail: &[Mail]) -> String {
+        let team = &self.ctx.roster.team;
+        let lead = self.board.lead_id();
+        let mut input = String::new();
+        let first = !self.slots.contains_key(agent);
+        if first {
+            input.push_str(&self.first_input(agent));
+        }
+        let max = self.limits.max_idle_wakes;
+        input.push_str(&match reason {
+            Reason::Start => String::new(),
+            Reason::Resume => CARRY_ON.to_string(),
+            Reason::Mail => mail_text(team, mail),
+            Reason::Idle(n) => idle_text(team, lead, n, max, &self.board.statuses()),
+            Reason::Look => LOOK.to_string(),
+        });
+        if let Some(c) = self.brief.clock.filter(|_| !first) {
+            input.push_str(&c.now_line(self.ctx.clock.now_ms()));
+        }
+        input
+    }
+
+    /// What opens `agent`'s first turn: the brief (with the world clock), how the run works (and
+    /// how world time moves, on a stepped clock) and, on a fork, its history.
+    fn first_input(&self, agent: &str) -> String {
+        let (team, lead) = (&self.ctx.roster.team, self.board.lead_id());
+        let mut input = self.brief.opening(self.ctx.clock.now_ms());
+        input.push_str(&match agent == lead {
+            true => how_for_lead(team, lead),
+            false => how_for_member(team, lead),
+        });
+        if let Some(clock) = &self.ctx.rules.stepped {
+            input.push_str(STEPPED);
+            if agent == lead && clock.horizon_ms.is_some() {
+                input.push_str(LEAD_STEPPED);
+            }
+        }
+        if let Some(h) = self.history.get(agent) {
+            input.push_str(&history_text(h));
+        }
+        input
+    }
 }
 
 /// `id`'s name in `team` with its id: "Quality assurance (`quality`)".
-pub fn named(team: &Team, id: &str) -> String {
+fn named(team: &Team, id: &str) -> String {
     match team.agents.iter().find(|a| a.id == id) {
         Some(a) if a.name != a.id => format!("{} (`{id}`)", a.name),
         _ => format!("`{id}`"),
@@ -19,7 +64,7 @@ pub fn named(team: &Team, id: &str) -> String {
 }
 
 /// How a dispatch run works, for the lead.
-pub fn how_for_lead(team: &Team, lead: &str) -> String {
+fn how_for_lead(team: &Team, lead: &str) -> String {
     let others: Vec<String> = (team.agents.iter())
         .filter(|a| a.id != lead)
         .map(|a| format!("- {}", named(team, &a.id)))
@@ -35,7 +80,7 @@ pub fn how_for_lead(team: &Team, lead: &str) -> String {
 }
 
 /// How a dispatch run works, for an agent the lead gives work.
-pub fn how_for_member(team: &Team, lead: &str) -> String {
+fn how_for_member(team: &Team, lead: &str) -> String {
     format!(
         "\n# How this run works\n\n{} leads this run and gives you work. Do your part, then \
          `report {{text}}` to the lead with the facts and ids it needs. You then wait: you are woken \
@@ -56,7 +101,7 @@ fn heading(team: &Team, m: &Mail) -> String {
 }
 
 /// The mail that woke an agent, oldest first.
-pub fn mail_text(team: &Team, mail: &[Mail]) -> String {
+fn mail_text(team: &Team, mail: &[Mail]) -> String {
     let each = mail
         .iter()
         .map(|m| format!("\n# {}\n\n{}\n", heading(team, m), m.text));
@@ -84,7 +129,7 @@ fn status_line(team: &Team, s: &Status) -> String {
 }
 
 /// The lead's `n`th wake (of `max`) for a team that waits with nothing to do.
-pub fn idle_text(team: &Team, lead: &str, n: u32, max: u32, statuses: &[Status]) -> String {
+fn idle_text(team: &Team, lead: &str, n: u32, max: u32, statuses: &[Status]) -> String {
     let lines: Vec<String> = (statuses.iter())
         .filter(|s| s.id != lead)
         .map(|s| status_line(team, s))
@@ -98,7 +143,7 @@ pub fn idle_text(team: &Team, lead: &str, n: u32, max: u32, statuses: &[Status])
 }
 
 /// The start of an agent's first turn after a fork: what it did and got before the fork point.
-pub fn history_text(history: &str) -> String {
+fn history_text(history: &str) -> String {
     format!(
         "\n# Your work so far\n\nThis run was forked: you are starting again from a recorded point. \
          Here is what you did and were told before it, oldest first; the world is as it was then.\n\n{history}\n"
@@ -155,7 +200,10 @@ mod tests {
         let stepped = turn_cut(true);
         let calls = format!("{} model calls", crate::agents::open::max_model_calls());
         assert!(stepped.contains(&calls) && stepped.contains("To wait, end your turn"));
-        assert!(!turn_cut(false).contains("clock"), "no world-time advice without a stepped clock");
+        assert!(
+            !turn_cut(false).contains("clock"),
+            "no world-time advice without a stepped clock"
+        );
         assert!(STEPPED.contains("To let time pass, end your turn"));
         assert!(LEAD_STEPPED.contains("ends your team's watch, not the day"));
         assert!(LEAD_STEPPED.contains("end your turn instead"));

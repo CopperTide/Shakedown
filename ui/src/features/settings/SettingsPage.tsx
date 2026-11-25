@@ -1,4 +1,4 @@
-// Settings: API tokens and Models, side by side as two pages under one header.
+// Settings: Models, Observability and API tokens, side by side as pages under one header.
 import type { ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { PageBody, PageHeader } from '@/components/ui/page';
@@ -6,6 +6,7 @@ import { cn } from '@/lib/cn';
 
 const TABS = [
   { to: '/settings/models', label: 'Models' },
+  { to: '/settings/observability', label: 'Observability' },
   { to: '/settings/tokens', label: 'API tokens' },
 ];
 

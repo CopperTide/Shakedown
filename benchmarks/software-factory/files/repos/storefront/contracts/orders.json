@@ -1,0 +1,8 @@
+{
+  "consumer": "storefront",
+  "provider": "orders",
+  "calls": [
+    {"method": "GET", "path": "/orders/1",
+     "fields": {"id": "number", "status": "string", "total": "number", "created_at": "string"}}
+  ]
+}

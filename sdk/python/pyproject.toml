@@ -22,15 +22,14 @@ Homepage = "https://github.com/CopperTide/Shakedown"
 Documentation = "https://github.com/CopperTide/Shakedown/blob/main/docs/sdk.md"
 
 [dependency-groups]
-dev = ["pytest>=8"]
+dev = ["pytest>=8", "pydantic>=2"]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-# `arena`: the old import name, an alias of shakedown (src/arena/__init__.py).
-packages = ["src/shakedown", "src/arena"]
+packages = ["src/shakedown"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

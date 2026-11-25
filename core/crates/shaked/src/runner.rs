@@ -10,9 +10,9 @@ pub(crate) use agents::{agent_end, driver_for, Brief};
 pub use lifecycle::{
     finish, finish_failed, go_live, run_branch, spawn_branch, stop, Ending, StartPoint,
 };
+pub(crate) use score::score_now;
 pub use score::NOTHING_CHECKED;
-pub(crate) use score::{check, freeze};
 pub use start::{
-    begin_run, new_seed, setup_failed, setup_or_infra_error, start_run, RunError, RunOptions,
-    MAX_SEED,
+    begin_run, new_seed, record_start, record_unplanned, setup_failed, stand_up, start_run,
+    BranchPlan, RunError, RunOptions, MAX_SEED, NO_BENCHMARK,
 };

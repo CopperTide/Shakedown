@@ -12,6 +12,7 @@ use shaked::{
 use support::{pg, records, run, AppFx};
 
 mod support;
+use support::team_of;
 
 const MCP_LIST: &str = r#"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#;
 
@@ -129,8 +130,8 @@ fn with_token() -> Mcp {
 
 #[test]
 fn claude_gets_its_token_in_a_private_config_file() {
-    let dir = tempfile_dir("claude");
-    let c = claude::command_in("claude", &spec(), &with_token(), "do it", &dir).unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let c = claude::command_in("claude", &spec(), &with_token(), "do it", dir.path()).unwrap();
     let a: Vec<String> = c
         .get_args()
         .map(|x| x.to_string_lossy().into_owned())
@@ -141,7 +142,7 @@ fn claude_gets_its_token_in_a_private_config_file() {
     );
     let i = a.iter().position(|x| x == "--mcp-config").unwrap();
     let path = std::path::Path::new(&a[i + 1]);
-    assert!(path.starts_with(&dir));
+    assert!(path.starts_with(dir.path()));
     assert_eq!(
         std::fs::metadata(path).unwrap().permissions().mode() & 0o777,
         0o600
@@ -151,13 +152,12 @@ fn claude_gets_its_token_in_a_private_config_file() {
         cfg["mcpServers"]["bench"]["headers"]["Authorization"],
         "Bearer sda_secret"
     );
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]
 fn codex_reads_its_token_from_the_env() {
-    let dir = tempfile_dir("codex");
-    let c = codex::command_with("codex", &spec(), &with_token(), &dir, "do it");
+    let dir = tempfile::tempdir().unwrap();
+    let c = codex::command_with("codex", &spec(), &with_token(), dir.path(), "do it");
     let a: Vec<String> = c
         .get_args()
         .map(|x| x.to_string_lossy().into_owned())
@@ -173,23 +173,11 @@ fn codex_reads_its_token_from_the_env() {
         env.map(|v| v.to_string_lossy().into_owned()).as_deref(),
         Some("sda_secret")
     );
-    std::fs::remove_dir_all(&dir).unwrap();
-}
-
-fn tempfile_dir(tag: &str) -> std::path::PathBuf {
-    let id = &uuid::Uuid::new_v4().simple().to_string()[..8];
-    let d = std::env::temp_dir().join(format!("shaked-runtokens-{tag}-{id}"));
-    std::fs::create_dir_all(&d).unwrap();
-    d
 }
 
 /// A run with one branch, in the local org: the run and the branch.
 async fn one_branch(store: &shaked::store::Store) -> (String, String) {
-    let team = shaked::model::Team {
-        id: "t".into(),
-        name: "T".into(),
-        agents: vec![],
-    };
+    let team = team_of(vec![]);
     let r = records(store);
     let run_id = r.create_run("t", &team).await.unwrap();
     let b1 = r

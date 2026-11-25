@@ -43,7 +43,7 @@ impl Stack {
             ("SHAKEDOWN_ERPNEXT_IMAGE", cfg.image.clone()),
         ]
         .into_iter()
-        .flat_map(|(k, v)| shakedown_part::settings::both(k, v))
+        .flat_map(|(k, v)| shakedown_part::settings::pair(k, v))
         .collect();
         let project = Project::new(&cfg.project, &cfg.compose_file, &env)?;
         Ok(Stack {

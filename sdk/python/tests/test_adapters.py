@@ -21,7 +21,7 @@ REFUSED = "refused: exceeds the limit"
 
 
 class FakeEndpoint:
-    """Stands in for :class:`arena.AgentEndpoint`: two tools, ``reserve`` always refused."""
+    """Stands in for :class:`shakedown.AgentEndpoint`: two tools, ``reserve`` always refused."""
 
     id = "planner"
     gateway_url = "http://127.0.0.1:4510/gateway/b1/planner/v1"

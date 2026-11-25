@@ -7,6 +7,7 @@ const CELL: Record<RunState, string> = {
   passed: 'bg-ok border-ok',
   failed: 'bg-alarm border-alarm text-surface',
   running: 'border-line-strong bg-sunken animate-pulse',
+  queued: 'border-line-strong bg-sunken',
   pending: 'border-dashed border-line-strong',
   unscored: 'bg-warn-soft border-warn text-warn',
 };

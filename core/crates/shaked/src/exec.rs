@@ -1,9 +1,11 @@
 mod agent_tokens;
+mod branch;
 mod dispatch;
 mod http;
 mod lifecycle;
 mod links;
 mod mailbox;
+mod records;
 mod roster;
 mod save_point;
 mod setup;
@@ -16,219 +18,23 @@ use parts::proto::{Effect, ToolOutput, WorldEvent};
 use serde_json::{json, Value};
 
 use crate::{
-    clock::BranchClock,
-    flow::{FlowControl, STOPPED},
     model::*,
-    overhead::{Cat, Ledger},
+    overhead::Cat,
     recorded::LEGACY_PART,
     store::Store,
-    ticker::Ticker,
-    world::{Called, PartEvent, Saves, World, WorldError},
+    world::{Called, PartEvent, Saves, WorldError},
 };
 
+pub use branch::BranchCtx;
 pub use dispatch::{Said, CLOSED, DELEGATE, FINISH, REPORT};
 pub use http::{HttpAnswer, HttpCall, NOT_RUNNING};
 pub use lifecycle::Lifecycle;
 pub use links::{ALERT, LINK_ACTOR};
 pub use mailbox::Mailbox;
+pub use records::{BranchRecords, StoreRecords};
 pub use roster::Roster;
 pub use setup::SETUP_ACTOR;
 pub use talk::{handoff_schema, mail_for, said_text, HANDOFF, INBOX, MESSAGE};
-
-/// One running branch: its world, team, world clock and per-agent handoff notes.
-pub struct BranchCtx {
-    pub branch_id: String,
-    pub world: Arc<World>,
-    pub task_id: String,
-    /// The branch's world clock (from 0 at the run's start, from the fork point on a fork).
-    pub clock: BranchClock,
-    /// The rules the branch runs under (from its run's `RunStart`).
-    pub rules: Rules,
-    /// Its spend limit and running estimate (`rules.max_cost_usd`).
-    pub budget: crate::budget::Budget,
-    /// Held across every tool call so world order, saves and event order agree.
-    gate: tokio::sync::Mutex<()>,
-    /// Paused, stopped or running: calls wait while the branch is paused.
-    pub flow: FlowControl,
-    /// Its team, the agents that joined it and their tokens.
-    pub roster: Roster,
-    /// Its agents' handoff notes and what they say.
-    pub mailbox: Mailbox,
-    /// Its ticker and how far it is through its life.
-    pub lifecycle: Lifecycle,
-    /// The Shakedown's time on this branch since its last event (see [`crate::overhead`]).
-    pub overhead: Ledger,
-    /// A finish held until the run's world time window ends (see [`crate::window`]).
-    pub window: std::sync::Mutex<Option<crate::window::Held>>,
-    /// Who the branch runs for: its records are written for this caller.
-    pub caller: Arc<crate::auth::Caller>,
-}
-
-impl BranchCtx {
-    /// A branch whose clock starts at 0 (at the speed `SHAKEDOWN_CLOCK_SPEED` sets), under the rules
-    /// of runs recorded before runners (see [`Rules::legacy`]) until `with_rules` says otherwise.
-    pub fn new(branch_id: String, world: Arc<World>, team: Team, task_id: String) -> BranchCtx {
-        BranchCtx {
-            branch_id,
-            world,
-            task_id,
-            clock: BranchClock::from_env(0),
-            rules: Rules::legacy(),
-            budget: crate::budget::Budget::default(),
-            gate: tokio::sync::Mutex::new(()),
-            flow: FlowControl::default(),
-            roster: Roster::new(team),
-            mailbox: Mailbox::default(),
-            lifecycle: Lifecycle::default(),
-            overhead: Ledger::default(),
-            window: std::sync::Mutex::default(),
-            caller: Arc::new(crate::auth::Caller::person()),
-        }
-    }
-
-    /// The same branch run for `scope` (a new branch runs for the local owner until told).
-    pub fn with_caller(mut self, caller: Arc<crate::auth::Caller>) -> BranchCtx {
-        self.caller = caller;
-        self
-    }
-
-    /// How long an agent token of this branch lives (unpaused time): a day, the local plan's
-    /// longest branch.
-    pub fn token_ttl(&self) -> std::time::Duration {
-        std::time::Duration::from_secs(crate::auth::run_tokens::DEFAULT_TOKEN_SECS)
-    }
-
-    /// `agent`'s token on this branch, issued on first use.
-    pub fn agent_token(&self, agent: &str) -> String {
-        self.roster.ensure_token(agent, self.token_ttl())
-    }
-
-    /// The store's records as this branch's scope.
-    pub fn records<'a>(&'a self, store: &'a Store) -> crate::store::Scoped<'a> {
-        store.at(&self.caller)
-    }
-
-    /// The same branch under `rules`.
-    pub fn with_rules(mut self, rules: Rules) -> BranchCtx {
-        self.budget = crate::budget::Budget::new(rules.max_cost_usd);
-        self.rules = rules;
-        self
-    }
-
-    /// The same branch with `clock` as its world clock.
-    pub fn with_clock(mut self, clock: BranchClock) -> BranchCtx {
-        self.clock = clock;
-        self
-    }
-
-    /// Starts the clock ticker (when the world has clock parts and none runs yet).
-    pub async fn start_ticker(self: &Arc<Self>, store: &Arc<Store>) {
-        let mut t = self.lifecycle.ticker.lock().await;
-        if t.is_none() {
-            *t = Ticker::start(ToolExec::new(store.clone()), self.clone());
-        }
-    }
-
-    /// Stops the clock ticker and waits for it to end.
-    pub async fn stop_ticker(&self) {
-        if let Some(t) = self.lifecycle.ticker.lock().await.take() {
-            t.stop().await;
-        }
-    }
-
-    /// Holds the branch gate: no tool call runs on the world until the guard drops.
-    pub async fn gate(&self) -> tokio::sync::MutexGuard<'_, ()> {
-        self.gate.lock().await
-    }
-
-    /// Records `payload` as an event of its kind on this branch (see `append`).
-    pub async fn record<P: EventPayload>(
-        &self,
-        store: &Store,
-        agent: Option<&str>,
-        payload: &P,
-    ) -> anyhow::Result<Event> {
-        let payload = serde_json::to_value(payload)?;
-        self.append(store, agent, P::KIND, payload).await
-    }
-
-    /// Records an event of this branch with the world clock paused: recording is Shakedown's work.
-    pub async fn append(
-        &self,
-        store: &Store,
-        agent: Option<&str>,
-        kind: EventKind,
-        payload: Value,
-    ) -> anyhow::Result<Event> {
-        let _paused = self.clock.paused();
-        self.append_now(store, agent, kind, payload).await
-    }
-
-    /// Records an event of this branch, the world clock running on (for what happens outside the
-    /// agents' and the world's work, like a driver's exit). It carries the overhead built up since
-    /// the branch's last event; the time it takes is overhead of the kind `record`.
-    pub async fn append_now(
-        &self,
-        store: &Store,
-        agent: Option<&str>,
-        kind: EventKind,
-        payload: Value,
-    ) -> anyhow::Result<Event> {
-        let since = std::time::Instant::now();
-        let (id, built_up) = (&self.branch_id, self.overhead.take());
-        let ev = self
-            .records(store)
-            .append_with(id, agent, kind, payload, built_up)
-            .await;
-        self.overhead.add_since(Cat::Record, since);
-        ev
-    }
-
-    /// Pauses the branch: new tool calls and model calls wait and the world clock stands still
-    /// until `resume`. Records `Pause`; false when the branch wasn't running.
-    pub async fn pause(&self, store: &Store) -> anyhow::Result<bool> {
-        if !self.flow.pause() {
-            return Ok(false);
-        }
-        self.clock.pause();
-        self.record(store, None, &PausePayload {}).await?;
-        Ok(true)
-    }
-
-    /// Resumes a paused branch: the calls that wait go on and the clock runs again. Records
-    /// `Resume` with how long the pause lasted (counted as Shakedown's time, not the run's); false
-    /// when the branch wasn't paused.
-    pub async fn resume(&self, store: &Store) -> anyhow::Result<bool> {
-        Ok(self.resume_lasting(store).await?.is_some())
-    }
-
-    /// `resume`, saying how long the pause lasted (None: the branch wasn't paused).
-    pub async fn resume_lasting(
-        &self,
-        store: &Store,
-    ) -> anyhow::Result<Option<std::time::Duration>> {
-        let Some(lasted) = self.flow.resume() else {
-            return Ok(None);
-        };
-        let ms = lasted.as_secs_f64() * 1000.0;
-        self.overhead.add(Cat::Pause, ms);
-        self.clock.resume();
-        self.roster.extend(lasted);
-        let resumed = ResumePayload {
-            paused_ms: ms.round() as i64,
-        };
-        self.record(store, None, &resumed).await?;
-        Ok(Some(lasted))
-    }
-
-    /// Waits for the branch gate, counting the wait as Shakedown's overhead.
-    async fn gate_timed(&self) -> tokio::sync::MutexGuard<'_, ()> {
-        let since = std::time::Instant::now();
-        let guard = self.gate.lock().await;
-        self.overhead.add_since(Cat::Wait, since);
-        guard
-    }
-}
 
 /// The single place where tool calls are executed, recorded and saved.
 pub struct ToolExec {
@@ -298,29 +104,53 @@ impl CallFacts {
     }
 }
 
-fn tool_call_payload(
-    name: &str,
+/// A step made and not yet recorded: the tool, its args, its outcome and what else it left.
+struct Step {
+    tool: String,
     args: Value,
-    outcome: &Result<Value, String>,
-    tool_call_id: Option<String>,
-    f: CallFacts,
-) -> ToolCallPayload {
-    ToolCallPayload {
-        name: name.to_string(),
-        args,
-        result: outcome.as_ref().ok().cloned().unwrap_or(Value::Null),
-        error: outcome.as_ref().err().cloned(),
-        reads: json!(f.reads),
-        writes: json!(f.writes),
-        internal: f.internal,
-        snapshot: f.saves.as_ref().and_then(|s| s.get(LEGACY_PART).cloned()),
-        snapshot_error: f.save_error,
-        tool_call_id,
-        part: f.part,
-        saves: f.saves,
-        clock_ms: f.clock_ms,
-        paused_ms: f.paused_ms,
-        duration_ms: f.duration_ms,
+    outcome: Result<Value, String>,
+    facts: CallFacts,
+}
+
+impl Step {
+    fn new(tool: &str, args: Value, outcome: Result<Value, String>, facts: CallFacts) -> Step {
+        Step {
+            tool: tool.to_string(),
+            args,
+            outcome,
+            facts,
+        }
+    }
+
+    /// The step as a `ToolCall` event's payload.
+    fn into_payload(self, tool_call_id: Option<String>) -> ToolCallPayload {
+        let Step {
+            tool,
+            args,
+            outcome,
+            facts: f,
+        } = self;
+        let (result, error) = match outcome {
+            Ok(v) => (v, None),
+            Err(e) => (Value::Null, Some(e)),
+        };
+        ToolCallPayload {
+            name: tool,
+            args,
+            result,
+            error,
+            reads: json!(f.reads),
+            writes: json!(f.writes),
+            internal: f.internal,
+            snapshot: f.saves.as_ref().and_then(|s| s.get(LEGACY_PART).cloned()),
+            snapshot_error: f.save_error,
+            tool_call_id,
+            part: f.part,
+            saves: f.saves,
+            clock_ms: f.clock_ms,
+            paused_ms: f.paused_ms,
+            duration_ms: f.duration_ms,
+        }
     }
 }
 
@@ -536,8 +366,7 @@ impl ToolExec {
             data: json!({"from_ms": from_ms, "reason": reason}),
             clock_ms: to,
         };
-        self.record(branch, None, EventKind::WorldEvent, &moved)
-            .await?;
+        self.record(branch, None, &moved).await?;
         self.report_counted(branch, events)
             .await
             .map(|(_, alerts)| alerts)
@@ -593,51 +422,56 @@ impl ToolExec {
         args: Value,
         tool_call_id: Option<String>,
     ) -> Result<Value, String> {
-        branch.flow.go().await.map_err(|_| STOPPED.to_string())?;
-        let _gate = branch.gate_timed().await;
-        if branch.lifecycle.is_closed() {
-            return Err(CLOSED.to_string());
-        }
+        let _gate = branch.enter_step().await.map_err(str::to_string)?;
         if talk::is_talk(branch, name) {
             return self.talk(branch, agent, name, args, tool_call_id).await;
         }
         let (outcome, mut facts) = self.execute(branch, agent, name, &args).await;
         let events = std::mem::take(&mut facts.events);
-        let wrote = facts.wrote_world();
-        let payload = tool_call_payload(name, args, &outcome, tool_call_id, facts);
-        let seq = self
-            .record_seq(branch, Some(agent), EventKind::ToolCall, &payload)
+        let step = Step::new(name, args, outcome.clone(), facts);
+        let wrote = self
+            .record_step(branch, Some(agent), step, tool_call_id)
             .await?;
         let linked = self.report(branch, events).await?;
-        if let Some(seq_of) = linked.or(wrote.then_some(seq)) {
+        if let Some(seq_of) = linked.or(wrote) {
             self.record_view(branch, seq_of).await;
         }
         outcome
     }
 
-    async fn record<T: serde::Serialize>(
+    /// Records `step` as a tool call of `actor`; its seq when it wrote the world's state.
+    async fn record_step(
+        &self,
+        branch: &BranchCtx,
+        actor: Option<&str>,
+        step: Step,
+        tool_call_id: Option<String>,
+    ) -> Result<Option<i64>, String> {
+        let wrote = step.facts.wrote_world();
+        let payload = step.into_payload(tool_call_id);
+        let seq = self.record_seq(branch, actor, &payload).await?;
+        Ok(wrote.then_some(seq))
+    }
+
+    async fn record<P: EventPayload>(
         &self,
         branch: &BranchCtx,
         agent: Option<&str>,
-        kind: EventKind,
-        payload: &T,
+        payload: &P,
     ) -> Result<(), String> {
-        self.record_seq(branch, agent, kind, payload)
-            .await
-            .map(drop)
+        self.record_seq(branch, agent, payload).await.map(drop)
     }
 
     /// Records an event; its seq.
-    async fn record_seq<T: serde::Serialize>(
+    async fn record_seq<P: EventPayload>(
         &self,
         branch: &BranchCtx,
         agent: Option<&str>,
-        kind: EventKind,
-        payload: &T,
+        payload: &P,
     ) -> Result<i64, String> {
         let v = serde_json::to_value(payload).map_err(|e| format!("internal error: {e}"))?;
         let e = branch
-            .append(&self.store, agent, kind, v)
+            .append(agent, P::KIND, v)
             .await
             .map_err(|e| format!("internal error: recording event: {e:#}"))?;
         Ok(e.seq)

@@ -38,23 +38,19 @@ pub fn resumed(events: &[Event], team: &Team) -> Option<Resumed> {
         return None;
     }
     let ids: Vec<&str> = team.agents.iter().map(|a| a.id.as_str()).collect();
+    let agents_where = |keep: fn(&[Event], &str) -> bool| -> Vec<String> {
+        let kept = ids.iter().filter(|id| keep(events, id));
+        kept.map(|id| id.to_string()).collect()
+    };
     Some(Resumed {
         idle_wakes: idle_wakes(events),
         pending: pending(events, &ids),
-        working: ids
-            .iter()
-            .filter(|id| working(events, id))
-            .map(|id| id.to_string())
-            .collect(),
+        working: agents_where(working),
         history: ids
             .iter()
             .map(|id| (id.to_string(), history(events, id)))
             .collect(),
-        restart: ids
-            .iter()
-            .filter(|id| balanced(events, id))
-            .map(|id| id.to_string())
-            .collect(),
+        restart: agents_where(balanced),
         woke: events.iter().any(|e| e.kind == EventKind::Wake),
     })
 }
@@ -91,11 +87,13 @@ fn mail_kind(kind: EventKind) -> Option<MailKind> {
     }
 }
 
-/// Who mail `e` went to: its `to`, or everyone but its sender for `*`.
+/// Who mail `e` went to: its `to` when that is another agent of the team, or everyone but its
+/// sender for [`EVERYONE`] (any mail kind). The live mailbox (`exec::talk`) and an external
+/// agent's history (`external::in_history`) read `to` by rules of their own, on purpose.
 fn recipients(e: &Event, ids: &[&str]) -> Vec<String> {
     let from = e.agent.as_deref().unwrap_or("");
     match str_of(e, "to") {
-        "*" => ids
+        EVERYONE => ids
             .iter()
             .filter(|id| **id != from)
             .map(|id| id.to_string())

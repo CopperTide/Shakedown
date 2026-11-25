@@ -19,7 +19,7 @@ use crate::{
     app::AppState,
     external::Started,
     launch::{launch, LaunchSpec},
-    model::{BranchStatus, Rules, Runner},
+    model::{Rules, Runner},
     runner::RunError,
 };
 
@@ -54,22 +54,42 @@ pub fn spawn_builtin(state: &Arc<AppState>, scope: Arc<Caller>, suite: Suite) {
 /// Claims and runs each slot in turn until all are done or shaked shuts down; an error stops
 /// the suite.
 async fn drive_builtin(state: &Arc<AppState>, scope: &Arc<Caller>, suite: &Suite) -> Result<()> {
-    loop {
-        if shutting_down(state) {
-            return Ok(());
-        }
-        let Some(slot) = state.store.at(scope).claim_slot(&suite.id).await? else {
-            return Ok(());
-        };
-        if let Some(branch) = start_builtin(state, scope, suite, &slot).await? {
-            wait_ended(state, scope, &branch).await?;
+    while !shutting_down(state) && run_next(state, scope, suite, None).await? {}
+    Ok(())
+}
+
+/// Claims the suite's next slot, starts its run (through its Code connection's driver, else a
+/// built-in runner) and waits for its end: false when every slot was claimed. A run that started
+/// just as `experiment` was stopped is stopped too.
+pub(crate) async fn run_next(
+    state: &Arc<AppState>,
+    scope: &Arc<Caller>,
+    suite: &Suite,
+    experiment: Option<&str>,
+) -> Result<bool> {
+    let Some(slot) = state.store.at(scope).claim_slot(&suite.id).await? else {
+        return Ok(false);
+    };
+    let started = match suite.connection {
+        Some(_) => crate::driver::start_slot(state, scope, suite, &slot).await?,
+        None => start_builtin(state, scope, suite, &slot).await?,
+    };
+    let Some(branch) = started else {
+        return Ok(true);
+    };
+    if let Some(id) = experiment {
+        if state.store.at(scope).experiment_ended(id).await? {
+            state.live.stop(state, &branch).await;
+            crate::hosting::stop_queued(state, scope, &branch).await?;
         }
     }
+    wait_ended(state, scope, &branch).await?;
+    Ok(true)
 }
 
 /// Starts the slot's run (waiting out a cleanup): its branch, or None when its setup failed
 /// (recorded on the slot). Saves over the limit stop the suite.
-pub(crate) async fn start_builtin(
+async fn start_builtin(
     state: &Arc<AppState>,
     scope: &Arc<Caller>,
     suite: &Suite,
@@ -105,11 +125,11 @@ pub(crate) fn slot_spec<'a>(
     }
 }
 
-/// Waits until the branch is no longer running (or shaked shuts down).
-pub(crate) async fn wait_ended(state: &AppState, scope: &Caller, branch: &str) -> Result<()> {
+/// Waits until the branch is no longer running or queued (or shaked shuts down).
+async fn wait_ended(state: &AppState, scope: &Caller, branch: &str) -> Result<()> {
     while !shutting_down(state) {
         match state.store.at(scope).find_branch(branch).await? {
-            Some(b) if b.status == BranchStatus::Running => tokio::time::sleep(POLL).await,
+            Some(b) if b.status.goes_on() => tokio::time::sleep(POLL).await,
             _ => return Ok(()),
         }
     }

@@ -1,6 +1,6 @@
-//! A real model for the tests that run agents. Arena tests agent behaviour on real models only,
+//! A real model for the tests that run agents. Shakedown tests agent behaviour on real models only,
 //! never on a fake model server or a scripted agent: a model's answers vary from run to run, so
-//! these tests assert what Arena records and enforces (the run starts and ends, every step is
+//! these tests assert what Shakedown records and enforces (the run starts and ends, every step is
 //! recorded with its fields, a gate refuses what it must when such a call happens, the checks are
 //! computed, a fork restores exactly), never a model's wording or one path through a task.
 //!
@@ -24,6 +24,39 @@ use std::{process::Command, sync::Arc, time::Duration};
 
 use serde_json::{json, Value};
 use shaked::{app::AppState, model::*};
+
+/// A live test: `#[test] #[ignore]` `fn $name` running `$body` on the model `Live::$on` gives
+/// (`any` unless named), `$why` its ignore reason (by default the one for `any` and `api`, or
+/// for `claude`). It skips, saying why, when there is no such model.
+#[macro_export]
+macro_rules! live_test {
+    ($name:ident, $body:ident) => {
+        $crate::live_test!($name, $body, any);
+    };
+    ($name:ident, $body:ident, claude) => {
+        $crate::live_test!(
+            $name,
+            $body,
+            claude,
+            "live: runs Claude Code (support/live.rs)"
+        );
+    };
+    ($name:ident, $body:ident, $on:ident) => {
+        $crate::live_test!(
+            $name,
+            $body,
+            $on,
+            "live: runs a real model (support/live.rs)"
+        );
+    };
+    ($name:ident, $body:ident, $on:ident, $why:literal) => {
+        #[test]
+        #[ignore = $why]
+        fn $name() {
+            $crate::support::run_live($crate::support::live::Live::$on(stringify!($name)), $body);
+        }
+    };
+}
 
 /// The model a live test's agents run on.
 #[derive(Debug, Clone, PartialEq)]
@@ -211,18 +244,12 @@ pub const BRANCH_TIMEOUT: Duration = Duration::from_secs(20 * 60);
 
 /// The branch once it has ended (any status but `running`).
 pub async fn ended(state: &AppState, branch: &str) -> Branch {
-    let polls = BRANCH_TIMEOUT.as_millis() / 500;
-    for _ in 0..polls {
-        let b = crate::support::records(&state.store)
-            .branch(branch)
-            .await
-            .unwrap();
-        if b.status != BranchStatus::Running {
-            return b;
-        }
-        tokio::time::sleep(Duration::from_millis(500)).await;
-    }
-    panic!("branch {branch} still running after {BRANCH_TIMEOUT:?}");
+    let over = async || {
+        let b = crate::support::records(&state.store).branch(branch).await;
+        Some(b.unwrap()).filter(|b| !b.status.goes_on())
+    };
+    let b = crate::support::poll_until(BRANCH_TIMEOUT, Duration::from_millis(500), over).await;
+    b.unwrap_or_else(|| panic!("branch {branch} still running after {BRANCH_TIMEOUT:?}"))
 }
 
 /// The branch once it has ended, asserting it ended for a reason of the task (passed or failed,
@@ -408,7 +435,7 @@ pub struct ExternalRun {
 }
 
 /// One `usage` report per assistant message of a Claude Code `stream-json` output (the stream
-/// repeats a message once per content block), in Arena's `POST .../usage` shape.
+/// repeats a message once per content block), in Shakedown's `POST .../usage` shape.
 fn usage_reports(stdout: &str) -> (Vec<Value>, Value) {
     let (mut reports, mut seen, mut result) = (vec![], vec![], Value::Null);
     for line in stdout.lines() {
@@ -469,7 +496,7 @@ fn claude_command(
 /// What `c` printed, run in a fresh work folder (removed after), ten minutes at most.
 async fn output_in_a_fresh_folder(mut c: tokio::process::Command) -> std::process::Output {
     let workdir =
-        std::env::temp_dir().join(format!("arena-live-{}", uuid::Uuid::new_v4().simple()));
+        std::env::temp_dir().join(format!("shakedown-live-{}", uuid::Uuid::new_v4().simple()));
     std::fs::create_dir_all(&workdir).unwrap();
     c.current_dir(&workdir);
     let out = tokio::time::timeout(Duration::from_secs(600), c.output()).await;

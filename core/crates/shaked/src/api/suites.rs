@@ -177,7 +177,8 @@ async fn list(State(state): State<Arc<AppState>>, Who(caller): Who) -> ApiResult
     Ok(Json(out))
 }
 
-async fn find(state: &AppState, caller: &Caller, id: &str) -> Result<Suite, ApiError> {
+/// The suite `id`, or 404.
+pub(super) async fn find(state: &AppState, caller: &Caller, id: &str) -> Result<Suite, ApiError> {
     state
         .store
         .at(caller)

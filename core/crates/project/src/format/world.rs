@@ -13,6 +13,9 @@ pub struct WorldFile {
     pub format: String,
     /// The world's display name.
     pub label: String,
+    /// The group lists show it under, e.g. the customer it is for.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
     /// The installed package (a benchmark or a built world) whose runtime runs this world until
     /// worlds run from their files alone.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -41,6 +44,17 @@ impl Format for WorldFile {
     const FORMAT: &'static str = "shakedown-world/3";
 
     fn check(&self) -> Result<(), Invalid> {
+        if let Some(group) = &self.group {
+            if group.trim().is_empty() {
+                return Err(Invalid::new("/group", "a group needs a name"));
+            }
+            if group.trim() != group {
+                return Err(Invalid::new(
+                    "/group",
+                    "a group name has no spaces at its start or end",
+                ));
+            }
+        }
         for (i, source) in self.data.iter().enumerate() {
             source
                 .check()

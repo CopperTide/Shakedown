@@ -110,7 +110,7 @@ describe('import', () => {
 
   it('takes a Shakedown team as it is, and says what is wrong with anything else', () => {
     const t = team(2);
-    expect(importTeam(JSON.stringify(t))).toEqual({ team: t, from: 'Arena' });
+    expect(importTeam(JSON.stringify(t))).toEqual({ team: t, from: 'Shakedown' });
     expect(importTeam('{nope')).toEqual({ error: expect.stringContaining("isn't a JSON file") });
     expect(importTeam('{"id":"x","name":"x","agents":[]}')).toEqual({ error: 'There are no agents in this file.' });
     expect(importTeam(JSON.stringify({ ...t, agents: [{ id: 'a', name: 'A', kind: 'scripted', prompt: '' }] })))

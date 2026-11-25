@@ -55,7 +55,7 @@ fn exited(c: &mut Child) -> bool {
 
 #[tokio::test]
 async fn gc_stops_a_leaked_instance_and_nothing_else() {
-    let root = std::env::temp_dir().join(format!("arena_sc_gc_{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("shakedown_sc_gc_{}", std::process::id()));
     let mut t = Tmp(root.clone(), vec![]);
     let saves = root.join("saves/sculptured");
     let live = saves.join(".live");

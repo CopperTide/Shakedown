@@ -1,6 +1,6 @@
 """The utility's tools: the site meter and the demand-response events for agents, the reading the plant sends
 (a benchmark's link calls it) and the scenario a task's setup sets."""
-from shakedown_part.jsonstate import Done, Scenarios, Tool
+from shakedown_part.jsonstate import SCENARIO_PARAMS, Done, Scenarios, Tool
 from shakedown_part.params import Param, Refusal
 
 from . import disrupt, meter
@@ -9,7 +9,7 @@ BASE = "base"
 
 
 def _meter(config, state, args):
-    return Done(meter.meter_doc(config, state), reads=["meter/site"])
+    return Done(meter.reading(config, state), reads=["meter/site"])
 
 
 def _events(config, state, args):
@@ -57,5 +57,5 @@ TOOLS = {t.name: t for t in [
          "get it).", "write", (Param("kw", "number"), Param("cause", "string", None)), _load),
     Tool("utility_scenario", "Sets the utility's scenario and schedules its disruptions (a task's setup calls "
          "it; agents don't get it).", "write",
-         (Param("name", "string"), Param("disruptions", "array", None)), _scenario),
+         SCENARIO_PARAMS, _scenario),
 ]}

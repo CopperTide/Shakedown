@@ -7,7 +7,7 @@ from . import errors
 from .errors import PartError
 from .world_time import WorldTime
 
-#: The protocol's name, as `describe` announces it; shaked also takes `1` and the old name `arena-part/1`.
+#: The protocol's name, as `describe` announces it; shaked also takes `1`.
 PROTOCOL_NAME = "shakedown-part/1"
 
 _ID = re.compile(r"[a-z0-9_]{1,63}")

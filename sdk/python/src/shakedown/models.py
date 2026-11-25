@@ -129,13 +129,14 @@ def as_team(team: "Team | list[Agent] | dict[str, Any] | None") -> dict[str, Any
 @dataclass
 class Change:
     """A change to one agent in a fork. Unset fields are left as they are; ``model=""`` clears the
-    model."""
+    model; ``tools`` gives exactly the world tools listed (``[]`` is refused: it would mean every tool)."""
 
     prompt: Optional[str] = None
     model: Optional[str] = None
     kind: Optional[Kind] = None
     provider: Optional[str] = None
     read_only: Optional[bool] = None
+    tools: Optional[list[str]] = None
 
     def to_dict(self) -> dict[str, Any]:
         return {k: v for k, v in self.__dict__.items() if v is not None}
@@ -167,18 +168,29 @@ class Scenario:
         return {"disruptions": [d.to_dict() for d in self.disruptions]}
 
 
+def _chosen(d: "Disruption | str | dict[str, Any]") -> dict:
+    if isinstance(d, str):
+        return Disruption(d).to_dict()
+    return d.to_dict() if isinstance(d, Disruption) else dict(d)
+
+
 def as_scenario(s: "Scenario | list[Disruption | str] | dict[str, Any] | None") -> Optional[dict]:
     if s is None:
         return None
     if isinstance(s, Scenario):
         return s.to_dict()
     if isinstance(s, list):
-        return {
-            "disruptions": [
-                (Disruption(d) if isinstance(d, str) else d).to_dict() for d in s
-            ]
-        }
+        return {"disruptions": [_chosen(d) for d in s]}
     return dict(s)
+
+
+def as_disruption_change(add=None, remove=None) -> Optional[dict]:
+    """A fork's ``disruptions``: options to ``add`` (:class:`Disruption`, an option id, or a dict) and
+    armed disruption ids to ``remove``; None when neither is given."""
+    if not add and not remove:
+        return None
+    added = as_scenario(list(add or []))["disruptions"]
+    return {"add": added, "remove": list(remove or [])}
 
 
 # ---------------------------------------------------------------- the benchmark

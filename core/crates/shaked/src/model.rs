@@ -6,9 +6,11 @@ use serde_json::Value;
 pub use crate::secrets::Headers;
 
 mod agent_in;
+mod hold;
 mod payloads;
 pub mod team;
 
+pub use hold::Hold;
 pub use payloads::*;
 pub use team::TeamError;
 
@@ -44,6 +46,15 @@ macro_rules! named_enum {
             }
         }
     };
+}
+
+/// Where an `http` agent's credential is kept: the name of one of the caller's own stored keys,
+/// or an environment variable (`SHAKEDOWN_AGENT_*`, where a layer lets it). Never the secret.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AuthRef {
+    Key(String),
+    Env(String),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -92,6 +103,10 @@ pub struct AgentSpec {
     /// out (see [`crate::secrets`]).
     #[serde(default, skip_serializing_if = "Headers::is_empty")]
     pub headers: Headers,
+    /// Where an `http` agent's credential lives, by reference: resolved for the caller the run
+    /// is for each time a request is made, never kept in the agent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auth: Option<AuthRef>,
     /// The world tools this agent may see and call, by name (empty: every tool). A restriction
     /// of the setup, like `read_only`; the talk tools of its runner are always offered.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -123,6 +138,7 @@ impl AgentSpec {
             lead: false,
             url: None,
             headers: Headers::default(),
+            auth: None,
             tools: Vec::new(),
             reasoning: None,
             max_tokens: None,
@@ -175,6 +191,10 @@ pub struct Change {
     /// Whether the agent is kept from writing (see [`AgentSpec::read_only`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub read_only: Option<bool>,
+    /// The world tools the agent may see and call after the fork: exactly this list (see
+    /// [`AgentSpec::tools`]). An empty list is refused: it would mean every tool, not none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tools: Option<Vec<String>>,
 }
 
 /// A stored team as it ran: an agent recorded before `read_only` existed (no such key) ran under
@@ -218,7 +238,7 @@ impl Team {
 
 /// The rules a branch runs under, recorded in its run's `RunStart` (`runner`, `handoff`,
 /// `max_cost_usd`, `connection`, `world_minutes`).
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Rules {
     pub runner: Runner,
     /// True for runs recorded before handoffs were optional: every agent but the last must hand
@@ -316,6 +336,9 @@ named_enum! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub enum BranchStatus {
         Running = "running",
+        /// A cloud run waiting for its scope's sandbox slot (`hosting::slots`); it runs once
+        /// the runs before it are done.
+        Queued = "queued",
         Passed = "passed",
         Failed = "failed",
         InfraError = "infra_error",
@@ -325,6 +348,13 @@ named_enum! {
         /// The run's model-spend estimate passed its `max_cost_usd`: its agents were stopped and
         /// the world scored as it stood (a failure).
         BudgetExceeded = "budget_exceeded",
+    }
+}
+
+impl BranchStatus {
+    /// True while the branch has not ended: running, or queued to run.
+    pub fn goes_on(self) -> bool {
+        matches!(self, BranchStatus::Running | BranchStatus::Queued)
     }
 }
 
@@ -373,6 +403,9 @@ named_enum! {
         /// shaked saved the parts that save at points (`{reason, saves, error?, paused_ms}`):
         /// bookkeeping, no step.
         SavePoint = "save_point",
+        /// Spans an agent's own tracing sent over OTLP during its run (`{spans: [..]}`, each
+        /// `crate::otel::receive::Imported`): its internal steps, as its own code saw them.
+        Spans = "spans",
     }
 }
 
@@ -394,71 +427,6 @@ pub struct Event {
     pub payload: Value,
 }
 
-/// Payload of `EventKind::ToolCall`.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct ToolCallPayload {
-    pub name: String,
-    pub args: Value,
-    pub result: Value,
-    pub error: Option<String>,
-    pub reads: Value,
-    pub writes: Value,
-    /// Keys the call changed for its part's own bookkeeping (`_disruption/<id>`): saved like a
-    /// write, but not one (docs/protocol.md, "Ids and keys").
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub internal: Vec<String>,
-    /// `saves["retail"]` when that part was saved, so the old UIs keep working. Runs recorded
-    /// before integrations have only this (read as `saves: {"retail": snapshot}`).
-    pub snapshot: Option<String>,
-    /// Set when the write committed but saving it failed.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub snapshot_error: Option<String>,
-    pub tool_call_id: Option<String>,
-    /// The world part the tool ran on.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub part: Option<String>,
-    /// `{part: save}` of the parts saved after this call (None when nothing was saved).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub saves: Option<std::collections::BTreeMap<String, String>>,
-    /// The world clock when the call ran.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub clock_ms: Option<i64>,
-    /// How long the world's clock was paused for this step's saves (None when nothing was saved).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub paused_ms: Option<i64>,
-    /// How long the tool ran in the world, gate checks and saves left out (None when it reached
-    /// no part, and in calls recorded before durations were kept).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub duration_ms: Option<f64>,
-}
-
-/// Payload of `EventKind::WorldEvent`: something a part reported when its clock advanced.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct WorldEventPayload {
-    pub part: String,
-    pub kind: String,
-    pub text: String,
-    pub data: Value,
-    pub clock_ms: i64,
-}
-
-/// Payload of `EventKind::ModelCall`.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct ModelCallPayload {
-    pub request: Value,
-    pub response: Value,
-    pub usage: Value,
-    pub cost_usd: Option<f64>,
-    pub cost_source: Option<String>,
-    /// The provider that answered (absent in calls recorded before providers: OpenRouter).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub provider: Option<String>,
-    /// The provider's own response, when it differs from the canonical `response` (a provider
-    /// that doesn't speak chat completions); absent when `response` is what it sent.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub provider_response: Option<Value>,
-}
-
 /// Tokens of model calls, OpenAI-shaped: what an agent's calls add up to.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TokenUsage {
@@ -478,92 +446,34 @@ impl TokenUsage {
     }
 }
 
-/// Payload of `EventKind::AgentEnd`.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-pub struct AgentEndPayload {
-    pub ok: bool,
-    pub error: Option<String>,
-    pub tokens: Option<i64>,
-    /// The input and output tokens of `tokens` (absent in runs recorded before they were kept).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub prompt_tokens: Option<i64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub completion_tokens: Option<i64>,
-    pub cost_usd: Option<f64>,
-    pub cost_source: Option<String>,
-    pub seconds: Option<f64>,
-}
-
-/// Payload of `EventKind::Handoff`.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct HandoffPayload {
-    pub note: String,
-    /// The agent the note is for; absent: for whoever comes next.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub to: Option<String>,
-}
-
-/// Payload of `EventKind::Message`: one agent's message to another, or to all (`to` = `*`).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct MessagePayload {
-    pub to: String,
-    pub text: String,
-}
-
-/// Payload of `EventKind::Delegation`: the lead gives agent `to` its `task`.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct DelegationPayload {
-    pub to: String,
-    pub task: String,
-}
-
-/// Payload of `EventKind::Report`: an agent's report to the lead (`to`). `turn_end` is set when
-/// the agent ended a turn without reporting and shaked passed on what it said last.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-pub struct ReportPayload {
-    pub to: String,
-    pub text: String,
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub turn_end: bool,
-}
-
-impl EventPayload for AgentEndPayload {
-    const KIND: EventKind = EventKind::AgentEnd;
-}
-
-impl EventPayload for ReportPayload {
-    const KIND: EventKind = EventKind::Report;
-}
-
-/// Payload of `EventKind::Finish`: the lead's summary of the run.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct FinishPayload {
-    pub summary: String,
-}
-
 /// `to` of a message for every agent.
 pub const EVERYONE: &str = "*";
 
-/// Payload of `EventKind::Check`.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct CheckPayload {
-    pub passed: bool,
-    /// The gold save (of the first part) the world was compared with.
-    pub gold_db: Option<String>,
-    /// Keys (`<table>/<id>`) whose documents differ from the gold save, sorted; prefixed
-    /// `part:` when the world has more than one part.
-    pub differing_rows: Option<Vec<String>>,
-    /// The benchmark's named checks, for a benchmark that scores the end state itself. Then
-    /// `differing_rows` lists the checks that failed.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub checks: Option<Vec<parts::proto::NamedCheck>>,
-    /// `{part: save}` of every part's final state, saved before its instance stopped.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub final_saves: Option<std::collections::BTreeMap<String, String>>,
-    /// Parts that keep no gold save (parts with replay), so they could not be compared with
-    /// the task's expected result.
-    #[serde(default)]
-    pub unchecked: Vec<String>,
+/// The restore a fork asks for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum RestoreMode {
+    /// The world as it was just before the fork point, exactly.
+    Exact,
+    /// The world as it was just before the fork point, approximately where a part can't be
+    /// exact.
+    Approximate,
+    /// For evaluation only (the snapshots-off ablation): the agents' context up to the fork
+    /// point, but the world as the parent ended, as forks that keep no world state do. Never a
+    /// default: only a request that names it gets it.
+    #[serde(rename = "none")]
+    NotRestored,
+}
+
+impl RestoreMode {
+    /// The mode each part's restore is planned in: a fork that leaves the world as it ended
+    /// starts each part from its end save, exact or approximate as the part keeps it.
+    pub fn parts_mode(self) -> Mode {
+        match self {
+            RestoreMode::Exact => Mode::Exact,
+            RestoreMode::Approximate | RestoreMode::NotRestored => Mode::Approximate,
+        }
+    }
 }
 
 /// How a part of a rerun's world was restored.
@@ -576,6 +486,9 @@ pub enum RestoredHow {
     Replay,
     /// From its save, approximately.
     Approximate,
+    /// Not put back: left as the parent branch ended (a fork with [`RestoreMode::NotRestored`]).
+    #[serde(rename = "none")]
+    NotRestored,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -598,7 +511,7 @@ pub struct Branch {
     pub created_at: DateTime<Utc>,
     pub ended_at: Option<DateTime<Utc>>,
     /// The restore a fork asked for (None for a run's first branch).
-    pub restore_mode: Option<Mode>,
+    pub restore_mode: Option<RestoreMode>,
     /// How each part of a fork's world was restored (empty for a run's first branch).
     pub restored: Vec<RestoredPart>,
 }
@@ -618,7 +531,7 @@ mod tests {
     use super::*;
 
     /// Every kind's and status's name, as stored and as the API shows it.
-    const KINDS: [&str; 19] = [
+    const KINDS: [&str; 20] = [
         "run_start",
         "agent_start",
         "model_call",
@@ -638,9 +551,11 @@ mod tests {
         "finish",
         "reasoning",
         "save_point",
+        "spans",
     ];
-    const STATUSES: [&str; 7] = [
+    const STATUSES: [&str; 8] = [
         "running",
+        "queued",
         "passed",
         "failed",
         "infra_error",

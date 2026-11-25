@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogActions, DialogContent } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { errorMessage } from '@/lib/errors';
+import { CREATED, track } from '@/lib/productAnalytics';
 import type { ItemKind } from '@/model/project';
 import { ID_RULE, idFor, isValidId } from './idRule';
 import { KINDS } from './kinds';
@@ -28,6 +29,7 @@ export default function NewItemDialog({ kind, taken, onCreated }: { kind: ItemKi
     if (problem) { setError(problem); return; }
     try {
       await putItem(kind, id, TEMPLATES[kind](label), true);
+      track(CREATED[kind]);
       setOpen(false);
       onCreated(id);
     } catch (e) {
@@ -39,7 +41,7 @@ export default function NewItemDialog({ kind, taken, onCreated }: { kind: ItemKi
       <Button variant="primary" onClick={() => setOpen(true)}><Plus />New {KINDS[kind].one}</Button>
       <DialogContent title={`New ${KINDS[kind].one}`}>
         <div className="grid gap-3 px-4 py-3 text-sm">
-          <label className="grid gap-1"><span>Name</span><Input aria-label="Name" value={label} onChange={(e) => { setLabel(e.target.value); setId(idFor(e.target.value)); }} placeholder="Larkspur Valve Works" /></label>
+          <label className="grid gap-1"><span>Name</span><Input aria-label="Name" value={label} onChange={(e) => { setLabel(e.target.value); setId(idFor(e.target.value)); }} placeholder={KINDS[kind].example} /></label>
           <label className="grid gap-1"><span>Id</span><Input aria-label="Id" value={id} onChange={(e) => setId(e.target.value)} className="font-mono" /></label>
           {error && <p role="alert" className="text-alarm">{error}</p>}
         </div>

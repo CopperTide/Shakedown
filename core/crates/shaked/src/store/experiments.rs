@@ -125,6 +125,14 @@ impl Scoped<'_> {
         Ok(self.execute(sql, &[&id, &project_experiment]).await? == 1)
     }
 
+    /// Unlinks every experiment deployed from project experiment `project_experiment`, whose
+    /// file is deleted: they list as earlier experiments, and a new file with the same id starts
+    /// with no deployments. How many were unlinked.
+    pub async fn unlink_deployments(&self, project_experiment: &str) -> Result<u64> {
+        let sql = "UPDATE experiments SET project_experiment = NULL WHERE project_experiment = $1";
+        self.execute(sql, &[&project_experiment]).await
+    }
+
     /// The experiments deployed from project experiment `project_experiment`, newest first.
     pub async fn deployments_of(&self, project_experiment: &str) -> Result<Vec<String>> {
         let sql =

@@ -8,8 +8,8 @@ use parts::{proto::BenchDescribe, Hub, Registry};
 
 use crate::{
     app::{self, AppState, Config},
+    bind::Bind,
     layer::Policy,
-    mode::Bind,
     store::Store,
 };
 
@@ -21,8 +21,9 @@ pub struct ServeOptions {
     pub pg_url: String,
     /// `SHAKEDOWN_UI_DIST`.
     pub ui_dist: Option<PathBuf>,
-    /// `shaked base`: build the benchmark's base world and exit.
-    pub build_base: bool,
+    /// Where new runs' branches run, for a control box that runs them in sandboxes (never from
+    /// the environment: the embedding binary sets it).
+    pub hosting: Option<Arc<crate::hosting::Hosting>>,
 }
 
 impl ServeOptions {
@@ -32,7 +33,7 @@ impl ServeOptions {
             bind: bind(policy)?,
             pg_url: crate::pg::configured_url().await,
             ui_dist: ui_dist_from_env(),
-            build_base: std::env::args().nth(1).as_deref() == Some("base"),
+            hosting: None,
         })
     }
 }
@@ -40,8 +41,7 @@ impl ServeOptions {
 /// Starts shaked over `store` (its layer with it) and serves until ctrl-c.
 pub async fn run(store: Store, opts: ServeOptions) -> anyhow::Result<()> {
     let here = store.layer().policy().runs_packages_here;
-    let objects = object_stores(store.layer().policy()).await?;
-    let state = app_state(store, &opts, objects)?;
+    let state = app_state(store, &opts).await?;
     if state.store.layer().policy().serves_others {
         // Read now: a shaked that serves others never starts without its vault key.
         state.vault().map_err(anyhow::Error::msg)?;
@@ -50,9 +50,6 @@ pub async fn run(store: Store, opts: ServeOptions) -> anyhow::Result<()> {
         true => Some(local_start(&state).await?),
         false => None,
     };
-    if let (true, Some(bench)) = (opts.build_base, &bench) {
-        return build_base(&state, bench).await;
-    }
     app::install_default_drivers(&state);
     let mut router = app::router(state.clone());
     if let Some(dist) = &opts.ui_dist {
@@ -60,6 +57,14 @@ pub async fn run(store: Store, opts: ServeOptions) -> anyhow::Result<()> {
     }
     let listener = tokio::net::TcpListener::bind(opts.bind.addr).await?;
     start_proxy(&state).await?;
+    // The branches sandboxes' workers run: stops a restart interrupted, dead worker tokens.
+    tokio::spawn(crate::worker::holds::sweep_every(state.clone()));
+    // Ended runs to their observability targets, from the records (never from a sandbox).
+    tokio::spawn(crate::otel::exporter::every(state.clone()));
+    if state.hosting.get().is_some() {
+        // This control box's sandboxes whose branch ended or that outlived their timeout.
+        tokio::spawn(crate::hosting::sweep_every(state.clone()));
+    }
     let line = listening_line(&state, &opts.bind, bench.as_ref(), opts.ui_dist.as_deref());
     println!("{line}");
     axum::serve(listener, router)
@@ -79,14 +84,19 @@ async fn register_imports(state: &AppState) {
     }
 }
 
+/// `<repo>`: `SHAKEDOWN_DIR`, else the folder above `core` this shaked was built in.
 pub(crate) fn repo_dir() -> PathBuf {
-    let here = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    here.canonicalize().unwrap_or(here)
+    let built = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    env_path("SHAKEDOWN_DIR", built.canonicalize().unwrap_or(built))
 }
 
 fn env_path(key: &str, default: PathBuf) -> PathBuf {
-    parts::settings::var_os(key)
-        .filter(|v| !v.is_empty())
+    path_or(parts::settings::var_os(key), default)
+}
+
+/// `set` as a path unless it is unset or empty, else `default`.
+fn path_or(set: Option<std::ffi::OsString>, default: PathBuf) -> PathBuf {
+    set.filter(|v| !v.is_empty())
         .map(PathBuf::from)
         .unwrap_or(default)
 }
@@ -95,38 +105,46 @@ fn env_path(key: &str, default: PathBuf) -> PathBuf {
 fn worlds_dir() -> anyhow::Result<PathBuf> {
     let dir = env_path("SHAKEDOWN_WORLDS", repo_dir().join("core/worlds"));
     std::fs::create_dir_all(&dir)?;
-    crate::worlds::remove_leftovers(&dir);
+    crate::world_builds::remove_leftovers(&dir);
     Ok(dir)
 }
 
 /// What every command-mode program gets: `SHAKEDOWN_PG_URL`, and `SHAKEDOWN_TEMPLATES` when it is set.
 fn program_env(pg_url: &str) -> Vec<(String, String)> {
     let mut env: Vec<(String, String)> =
-        parts::settings::both("SHAKEDOWN_PG_URL", pg_url.to_string()).into();
+        parts::settings::pair("SHAKEDOWN_PG_URL", pg_url.to_string()).into();
     if let Some(t) = parts::settings::var("SHAKEDOWN_TEMPLATES")
         .ok()
         .filter(|t| !t.is_empty())
     {
-        env.extend(parts::settings::both("SHAKEDOWN_TEMPLATES", t));
+        env.extend(parts::settings::pair("SHAKEDOWN_TEMPLATES", t));
     }
     env
 }
 
-/// The hub over `SHAKEDOWN_PACKAGES` and the built worlds, `SHAKEDOWN_BIN_DIR` and `SHAKEDOWN_SAVES`.
-fn hub(pg_url: &str, worlds: &std::path::Path) -> anyhow::Result<Hub> {
-    let arena = repo_dir();
+/// The hub over `SHAKEDOWN_PACKAGES` and the built worlds, `SHAKEDOWN_BIN_DIR` and `SHAKEDOWN_SAVES`;
+/// it starts package programs when `programs` (else it describes benchmarks from their files).
+fn hub(pg_url: &str, worlds: &std::path::Path, programs: bool) -> anyhow::Result<Hub> {
+    let shakedown = repo_dir();
     let mut roots: Vec<PathBuf> = match parts::settings::var("SHAKEDOWN_PACKAGES") {
         Ok(p) if !p.is_empty() => std::env::split_paths(&p).collect(),
-        _ => vec![arena.join("integrations"), arena.join("benchmarks")],
+        _ => vec![shakedown.join("integrations"), shakedown.join("benchmarks")],
     };
     roots.push(worlds.to_path_buf());
-    let bin_dir = env_path("SHAKEDOWN_BIN_DIR", arena.join("core/target/release"));
-    let saves = env_path("SHAKEDOWN_SAVES", arena.join("core/saves"));
+    let bin_dir = env_path("SHAKEDOWN_BIN_DIR", shakedown.join("core/target/release"));
+    let saves = env_path("SHAKEDOWN_SAVES", shakedown.join("core/saves"));
     std::fs::create_dir_all(&saves)?;
     let registry = Registry::scan(&roots)?;
     Ok(Hub::new(registry, bin_dir, saves)
-        .with_repo_dir(arena)
-        .with_env(program_env(pg_url)))
+        .with_repo_dir(shakedown)
+        .with_env(program_env(pg_url))
+        .with_programs(programs))
+}
+
+/// The hub a `shaked worker` runs its branch's world on: the one `shaked` would serve with, from
+/// the same environment.
+pub(crate) async fn worker_hub() -> anyhow::Result<Hub> {
+    hub(&crate::pg::configured_url().await, &worlds_dir()?, true)
 }
 
 /// The stores `SHAKEDOWN_OBJECT_STORE` names; where the layer serves others, the write store is
@@ -143,16 +161,14 @@ pub async fn object_stores(
     Ok(Some(Arc::new(stores)))
 }
 
-/// The state over `store` and the hub.
-fn app_state(
-    store: Store,
-    opts: &ServeOptions,
-    objects: Option<Arc<crate::objects::ObjectStores>>,
-) -> anyhow::Result<Arc<AppState>> {
+/// The state over `store`, its object stores and the hub.
+async fn app_state(store: Store, opts: &ServeOptions) -> anyhow::Result<Arc<AppState>> {
+    let objects = object_stores(store.layer().policy()).await?;
     let (url, bind) = (&opts.pg_url, &opts.bind);
     let store = Arc::new(store);
     let worlds = worlds_dir()?;
-    let hub = Arc::new(hub(url, &worlds)?);
+    let here = store.layer().policy().runs_packages_here;
+    let hub = Arc::new(hub(url, &worlds, here)?);
     let mut config = Config::new();
     config.self_base = format!("http://{}", loopback_of(bind.addr));
     config.public_url = bind.public_url.to_string();
@@ -163,6 +179,9 @@ fn app_state(
         .map(PathBuf::from);
     let mut state = AppState::new(store, hub, config);
     state.objects = objects;
+    if let Some(hosting) = &opts.hosting {
+        let _ = state.hosting.set(hosting.clone());
+    }
     Ok(Arc::new(state))
 }
 
@@ -177,14 +196,14 @@ fn loopback_of(addr: std::net::SocketAddr) -> std::net::SocketAddr {
 /// Where to listen: beyond this machine only for a layer that serves others.
 fn bind(policy: &Policy) -> anyhow::Result<Bind> {
     let get = |k: &str| parts::settings::var(k).ok();
-    crate::mode::bind_from(get, policy.serves_others).map_err(anyhow::Error::msg)
+    crate::bind::bind_from(get, policy.serves_others).map_err(anyhow::Error::msg)
 }
 
 /// The modes this machine can run, for the startup line.
 fn available_modes(state: &AppState) -> Vec<&'static str> {
     [
-        ("claude-code", crate::api::on_path("claude")),
-        ("codex", crate::api::on_path("codex")),
+        ("claude-code", app::on_path("claude")),
+        ("codex", app::on_path("codex")),
         ("open", state.config.open_available()),
     ]
     .into_iter()
@@ -205,9 +224,11 @@ async fn shutdown_on_ctrl_c(state: Arc<AppState>) {
 }
 
 /// `shaked base`: makes the benchmark's base world, the saves every run starts from, unless it
-/// exists, and exits.
-async fn build_base(state: &AppState, bench: &BenchDescribe) -> anyhow::Result<()> {
-    let saves = crate::world::ensure_base(&state.hub, bench).await?;
+/// exists. `store`'s layer runs packages here and serves no one else.
+pub(crate) async fn build_base(store: Store, opts: &ServeOptions) -> anyhow::Result<()> {
+    let state = app_state(store, opts).await?;
+    let bench = local_start(&state).await?;
+    let saves = crate::world::ensure_base(&state.hub, &bench).await?;
     println!(
         "shaked: base of {} {}: {saves:?}",
         bench.name, bench.version
@@ -232,7 +253,7 @@ fn ui_dist_from_env() -> Option<PathBuf> {
 }
 
 /// Serves the recording proxy on 127.0.0.1 (`SHAKEDOWN_PROXY_PORT`).
-async fn start_proxy(state: &Arc<AppState>) -> anyhow::Result<()> {
+pub(crate) async fn start_proxy(state: &Arc<AppState>) -> anyhow::Result<()> {
     let proxy = tokio::net::TcpListener::bind(("127.0.0.1", proxy_port_from_env()?)).await?;
     println!("shaked: proxy on http://{}", proxy.local_addr()?);
     tokio::spawn(crate::proxy::serve(state.clone(), proxy));
@@ -266,4 +287,19 @@ async fn local_start(state: &AppState) -> anyhow::Result<BenchDescribe> {
     let bench = state.startup_bench().await?;
     crate::gc::run_startup_gc(&state.store, &state.hub, &state.benchmark()).await?;
     Ok(bench)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::path_or;
+    use std::path::PathBuf;
+
+    #[test]
+    fn a_set_folder_overrides_the_default_and_an_empty_one_does_not() {
+        let built = PathBuf::from("/build/repo");
+        let set = Some("/opt/shakedown".into());
+        assert_eq!(path_or(set, built.clone()), PathBuf::from("/opt/shakedown"));
+        assert_eq!(path_or(Some("".into()), built.clone()), built);
+        assert_eq!(path_or(None, built.clone()), built);
+    }
 }

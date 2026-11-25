@@ -11,11 +11,6 @@ path = "src/lib.rs"
 name = "shakedown-pharma"
 path = "src/main.rs"
 
-# The program's name until 2026-11-19, built too for scripts that still run it.
-[[bin]]
-name = "arena-pharma"
-path = "src/old_name.rs"
-
 [dependencies]
 shakedown-part = { path = "../../kits/rust", features = ["http"] }
 tokio.workspace = true

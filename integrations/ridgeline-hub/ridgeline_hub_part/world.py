@@ -9,7 +9,7 @@ from .config import Config, load_market
 TICK_MS = 500  # the hub ticks the market every 0.5 s
 
 
-class ArenaFactory:
+class ShakedownFactory:
     """What the Market expects of the hub's factory: an event queue, a plant clock and shipments. A booked
     shipment is also a `shipment_booked` event, which a benchmark's link can hand to the plant."""
 
@@ -39,10 +39,10 @@ class ArenaFactory:
         return events
 
 
-def arena_market_class(base):
-    """`base` (the hub's Market) with `now()` reading arena seconds instead of the wall clock."""
+def shakedown_market_class(base):
+    """`base` (the hub's Market) with `now()` reading shakedown seconds instead of the wall clock."""
 
-    class ArenaMarket(base):
+    class ShakedownMarket(base):
         def __init__(self, factory, suppliers, elapsed_ms):
             super().__init__(factory, suppliers)
             self.elapsed_ms = elapsed_ms
@@ -50,7 +50,7 @@ def arena_market_class(base):
         def now(self) -> float:
             return self.elapsed_ms() / 1000
 
-    return ArenaMarket
+    return ShakedownMarket
 
 
 class World:
@@ -58,8 +58,8 @@ class World:
         module, suppliers = load_market(cfg)
         self.module = module
         self.stepper = FixedStep(TICK_MS, clock_ms)
-        self.factory = ArenaFactory(cfg.plant_start, self.elapsed_ms)
-        self.market = arena_market_class(module.Market)(self.factory, suppliers, self.elapsed_ms)
+        self.factory = ShakedownFactory(cfg.plant_start, self.elapsed_ms)
+        self.market = shakedown_market_class(module.Market)(self.factory, suppliers, self.elapsed_ms)
         self.cfg = cfg
         self.inbound = inbound.new_state(cfg.inbound, cfg.plant_start)
 

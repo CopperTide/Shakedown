@@ -7,7 +7,7 @@ import pytest
 from shakedown import Agent, Change, Disruption, Scenario, Team
 from shakedown.errors import BadRequest, Conflict, DiskFull, NotFound, from_status, ApiError
 from shakedown.export import branch_row, event_rows
-from shakedown.models import BranchRecord, CheckResult, Event, as_scenario, as_team
+from shakedown.models import BranchRecord, CheckResult, Event, as_disruption_change, as_scenario, as_team
 from shakedown.sse import parse
 from shakedown.mcp import Tool, ToolResult
 from shakedown.env import _messages_for, _parse_action, END
@@ -50,6 +50,12 @@ def test_scenarios_and_changes():
     assert as_scenario(Scenario([Disruption("x")])) == {"disruptions": [{"id": "x"}]}
     assert as_scenario(None) is None
     assert Change(model="", prompt="new").to_dict() == {"model": "", "prompt": "new"}
+    assert Change(tools=["get_order_details"]).to_dict() == {"tools": ["get_order_details"]}
+    assert Change(tools=[]).to_dict() == {"tools": []}
+    assert as_disruption_change() is None
+    assert as_disruption_change(["x1", Disruption("x2", {"after": 1})], ["x3"]) == {
+        "add": [{"id": "x1"}, {"id": "x2", "params": {"after": 1}}], "remove": ["x3"]}
+    assert as_disruption_change(remove=["x3"]) == {"add": [], "remove": ["x3"]}
 
 
 def test_check_result_named_and_gold():
@@ -150,7 +156,7 @@ def test_poll_fetches_until_done_or_the_deadline():
 
 
 class _Answers:
-    """An arena whose GETs answer `bodies` in turn (the last one again once they run out)."""
+    """An shakedown whose GETs answer `bodies` in turn (the last one again once they run out)."""
 
     def __init__(self, *bodies):
         self.bodies, self.paths = list(bodies), []
@@ -167,11 +173,11 @@ def _branch(status):
 def test_branch_and_suite_wait_read_until_ended(monkeypatch):
     slept = []
     monkeypatch.setattr("shakedown.client.time.sleep", slept.append)
-    arena = _Answers(_branch("running"), _branch("running"), _branch("passed"))
-    assert Branch(arena, "b1", "r1").wait(poll=0.25).status == "passed"
-    assert (arena.paths, slept) == (["/api/branches/b1"] * 3, [0.25, 0.25])
-    arena = _Answers({"id": "s1", "status": "running"}, {"id": "s1", "status": "done", "summary": {"n": 2}})
-    suite = Suite(arena, {"id": "s1", "status": "running"})
+    shakedown = _Answers(_branch("running"), _branch("running"), _branch("passed"))
+    assert Branch(shakedown, "b1", "r1").wait(poll=0.25).status == "passed"
+    assert (shakedown.paths, slept) == (["/api/branches/b1"] * 3, [0.25, 0.25])
+    shakedown = _Answers({"id": "s1", "status": "running"}, {"id": "s1", "status": "done", "summary": {"n": 2}})
+    suite = Suite(shakedown, {"id": "s1", "status": "running"})
     assert suite.wait(poll=1) == {"id": "s1", "status": "done", "summary": {"n": 2}} == suite.report
     with pytest.raises(TimeoutError, match="^branch b1 still running after -1 s$"):
         Branch(_Answers(_branch("running")), "b1", "r1").wait(timeout=-1)
@@ -201,9 +207,9 @@ def test_agent_endpoint_without_proxy():
 
 def test_branch_clock_gets_the_route():
     clock = {"clock_ms": 5, "speed": 1.0, "paused": False, "world_epoch_ms": 1_000, "world_ms": 1_005}
-    arena = _Answers(clock)
-    assert Branch(arena, "b1", "r1").clock() == clock
-    assert arena.paths == ["/api/branches/b1/clock"]
+    shakedown = _Answers(clock)
+    assert Branch(shakedown, "b1", "r1").clock() == clock
+    assert shakedown.paths == ["/api/branches/b1/clock"]
 
 
 # ---------------------------------------------------------------- drivers
@@ -346,12 +352,12 @@ def _program(folder, name):
     return str(p)
 
 
-def test_find_shaked_prefers_shaked_and_still_finds_a_build_named_arenad(tmp_path, monkeypatch):
+def test_find_shaked_prefers_shaked_and_still_finds_a_build_named_shaked(tmp_path, monkeypatch):
     from shakedown.local import find_shaked
 
     monkeypatch.delenv("SHAKEDOWN_BIN_DIR", raising=False)
     monkeypatch.setenv("PATH", str(tmp_path / "nowhere"))
-    old = _program(tmp_path, "arenad")
+    old = _program(tmp_path, "shaked")
     assert find_shaked(None, str(tmp_path)) == old
     new = _program(tmp_path, "shaked")
     assert find_shaked(None, str(tmp_path)) == new
@@ -394,41 +400,14 @@ def test_rewind_takes_a_seq_or_an_event():
     assert branch.rewind(Event.from_dict({"seq": 12, "kind": "tool_call", "payload": {}})).seq == 12
 
 
-def test_the_old_import_name_arena_is_shakedown_and_warns_once():
-    import subprocess
-    import sys
-
-    code = """
-import warnings
-warnings.simplefilter("always")
-with warnings.catch_warnings(record=True) as w:
-    import arena, arena
-    from arena import Arena, ArenaError, Agent
-    from arena.local import LocalArena, find_arenad
-    from arena.env import ArenaParallelEnv
-    from arena.adapters import _schema
-    import arena.client
-import shakedown, shakedown.local, shakedown.env, shakedown.adapters._schema
-assert Arena is shakedown.Shakedown and ArenaError is shakedown.ShakedownError and Agent is shakedown.Agent
-assert LocalArena is shakedown.local.LocalShakedown and find_arenad is shakedown.local.find_shaked
-assert ArenaParallelEnv is shakedown.env.ShakedownParallelEnv and _schema is shakedown.adapters._schema
-assert arena.client is shakedown.client and arena.errors is shakedown.errors
-assert shakedown.client.__spec__.name == "shakedown.client"
-print(len([x for x in w if issubclass(x.category, DeprecationWarning) and "shakedown" in str(x.message)]))
-"""
-    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
-    assert out.returncode == 0, out.stderr
-    assert out.stdout.strip() == "1"
-
-
-def test_a_branch_suite_and_env_keep_their_connection_as_arena_too():
+def test_a_branch_and_a_suite_keep_their_connection():
     from shakedown.client import Branch, Shakedown, Suite
 
     sd = Shakedown("http://127.0.0.1:1")
     b = Branch(sd, "b1", "r1")
-    assert b.shakedown is sd and b.arena is sd
+    assert b.shakedown is sd
     s = Suite(sd, {"id": "s1"})
-    assert s.arena is sd
+    assert s.shakedown is sd
 
 
 def test_token_is_sent_and_never_shown(monkeypatch):

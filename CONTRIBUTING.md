@@ -31,6 +31,7 @@ cargo build --release                          # integrations and benchmarks, in
 | `integrations/<name>/` | One package per kind of system (Postgres, a folder, Docker Compose, MariaDB, ERPNext, ...). |
 | `benchmarks/<name>/` | Benchmarks: tasks, tools, seed data and gold actions. `benchmarks/retail` is the included example. |
 | `ui/` | The web UI (React, Vite). |
+| `sdk/python/` | The Python SDK, `shakedown` (installs as `shakedown-sdk`). |
 | `docs/` | The protocol, concepts, reference and measurements. |
 | `deploy/compose.yml` | The Postgres shaked and the tests use. |
 
@@ -46,6 +47,7 @@ The core never depends on an integration or a benchmark, and they never depend o
    cargo clippy --workspace --all-targets && (cd core && cargo clippy --workspace --all-targets)
    cargo test && (cd core && cargo test)
    (cd kits/python && uv run --with pytest pytest -q)
+   (cd sdk/python && uv run pytest -q)
    (cd ui && npm test && npm run build)
    ```
    The tests of `integrations/ridgeline-hub` and `integrations/isaac-sim` read the Ridgeline factory example from `CopperTide-Examples/factory` next to your checkout. **That example is not public yet**, so outside contributors can't run those two suites: without it every test in them is skipped. CI runs everything above and only imports those two packages. Likewise the CopperTide program that `integrations/sculptured` runs is not published yet; its only test is `live_` and is skipped without it. `benchmarks/factory` needs both: its unit tests run anywhere, and its `live_` test skips without them.

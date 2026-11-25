@@ -19,7 +19,7 @@ struct Saves(PathBuf);
 
 impl Saves {
     fn new(tag: &str) -> Saves {
-        let p = std::env::temp_dir().join(format!("arena_folder_{}_{tag}", std::process::id()));
+        let p = std::env::temp_dir().join(format!("shakedown_folder_{}_{tag}", std::process::id()));
         let _ = fs::remove_dir_all(&p);
         fs::create_dir_all(&p).unwrap();
         Saves(p)
@@ -99,7 +99,7 @@ async fn write_outside_root_refused() {
     let s = Saves::new("outside");
     let p = s.part();
     p.start(start("a", json!({}), None)).await.unwrap();
-    for bad in ["../x", "a/../../x", "/etc/arena_x", ""] {
+    for bad in ["../x", "a/../../x", "/etc/shakedown_x", ""] {
         let out = write(&p, "a", bad, "no").await;
         assert!(out.error.is_some(), "{bad:?} should be refused: {out:?}");
         assert!(out.writes.is_empty());
@@ -211,7 +211,7 @@ async fn config_root_seeds_the_instance() {
     let r = tool(&p, "a", "read_file", json!({"path": "d/f"})).await;
     assert_eq!(r.result.unwrap()["content"], "seeded");
     let e = p
-        .start(start("b", json!({"root": "/nonexistent/arena"}), None))
+        .start(start("b", json!({"root": "/nonexistent/shakedown"}), None))
         .await;
     assert_eq!(e.unwrap_err().code, -32602);
 }

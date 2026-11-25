@@ -17,7 +17,7 @@ use support::{
     live::Live,
     packages,
     packages::{counter, package_root, toy, Package, ToyRoot},
-    run_live, AppFx,
+    AppFx,
 };
 
 /// One call of a task's setup: `tool` of part `part` with `args`.
@@ -149,9 +149,7 @@ fn start_of(evs: &[Event], id: &str) -> i64 {
 }
 
 fn tool_calls(evs: &[Event]) -> Vec<&Event> {
-    evs.iter()
-        .filter(|e| e.kind == EventKind::ToolCall)
-        .collect()
+    support::of_kind(evs, EventKind::ToolCall)
 }
 
 /// The `value` results of the branch's `get` calls at or after `from`.
@@ -171,17 +169,10 @@ fn assert_continued(cevs: &[Event], at: i64, from: i64) {
     }
 }
 
+live_test!(live_exact_refused_names_part, exact_refused_names_part);
+
 /// A part with only approximate saves can't be restored exactly: the refusal names it, and
 /// nothing is made.
-#[test]
-#[ignore = "live: runs a real model (support/live.rs)"]
-fn live_exact_refused_names_part() {
-    run_live(
-        Live::any("live_exact_refused_names_part"),
-        exact_refused_names_part,
-    );
-}
-
 async fn exact_refused_names_part(live: Live) {
     let part = ["part", "--exact", "none", "--approximate"];
     let root = package_root(
@@ -230,14 +221,7 @@ async fn assert_listed(fx: &Fx, parent: &str, child: &str) {
     assert_eq!(v["b"]["restore_mode"], "approximate");
 }
 
-#[test]
-#[ignore = "live: runs a real model (support/live.rs)"]
-fn live_approximate_marks_branch() {
-    run_live(
-        Live::any("live_approximate_marks_branch"),
-        approximate_marks_branch,
-    );
-}
+live_test!(live_approximate_marks_branch, approximate_marks_branch);
 
 async fn approximate_marks_branch(live: Live) {
     let root = counter_world("approx", "approx_and_replay", &[], &[add(1000), add(7)]);
@@ -268,14 +252,10 @@ async fn assert_nothing_checked(fx: &Fx, parent: &str, child: &str) {
     );
 }
 
-#[test]
-#[ignore = "live: runs a real model (support/live.rs)"]
-fn live_replay_only_restores_exactly() {
-    run_live(
-        Live::any("live_replay_only_restores_exactly"),
-        replay_only_restores_exactly,
-    );
-}
+live_test!(
+    live_replay_only_restores_exactly,
+    replay_only_restores_exactly
+);
 
 async fn replay_only_restores_exactly(live: Live) {
     let root = counter_world("replay", "replay_only", &[], &[add(1000), add(7)]);
@@ -292,18 +272,14 @@ async fn replay_only_restores_exactly(live: Live) {
     assert_nothing_checked(&fx, &parent, &child).await;
 }
 
+live_test!(
+    live_exact_replay_starts_like_the_original,
+    exact_replay_starts_like_the_original
+);
+
 /// A part with replay and approximate saves starts fresh with the run's seed in the run's first
 /// branch too (the counter starts at `seed % 1000`), so an exact replay starts from the same
 /// state and doesn't diverge.
-#[test]
-#[ignore = "live: runs a real model (support/live.rs)"]
-fn live_exact_replay_starts_like_the_original() {
-    run_live(
-        Live::any("live_exact_replay_starts_like_the_original"),
-        exact_replay_starts_like_the_original,
-    );
-}
-
 async fn exact_replay_starts_like_the_original(live: Live) {
     let root = counter_world("seeded", "approx_and_replay", &["--seeded"], &[add(1000)]);
     let fx = setup("seeded", root, &live).await;
@@ -346,14 +322,7 @@ async fn assert_stopped(fx: &Fx, branch: &str) {
     }
 }
 
-#[test]
-#[ignore = "live: runs a real model (support/live.rs)"]
-fn live_replay_divergence_fails() {
-    run_live(
-        Live::any("live_replay_divergence_fails"),
-        replay_divergence_fails,
-    );
-}
+live_test!(live_replay_divergence_fails, replay_divergence_fails);
 
 async fn replay_divergence_fails(live: Live) {
     let root = counter_world("noisy", "nondeterministic", &[], &[add(1), add(2), add(3)]);
@@ -371,14 +340,10 @@ async fn replay_divergence_fails(live: Live) {
     assert_stopped(&fx, &child.id).await;
 }
 
-#[test]
-#[ignore = "live: runs a real model (support/live.rs)"]
-fn live_fingerprint_mismatch_refused() {
-    run_live(
-        Live::any("live_fingerprint_mismatch_refused"),
-        fingerprint_mismatch_refused,
-    );
-}
+live_test!(
+    live_fingerprint_mismatch_refused,
+    fingerprint_mismatch_refused
+);
 
 async fn fingerprint_mismatch_refused(live: Live) {
     let setup_calls = [add(1), add(2)];
@@ -454,14 +419,10 @@ async fn assert_ticked_then_stopped(log: &std::path::Path, branch: &str) {
     assert_eq!(after, n, "no tick after the branch ended");
 }
 
-#[test]
-#[ignore = "live: runs a real model (support/live.rs)"]
-fn live_clock_advances_and_pauses_during_save() {
-    run_live(
-        Live::any("live_clock_advances_and_pauses_during_save"),
-        clock_advances_and_pauses_during_save,
-    );
-}
+live_test!(
+    live_clock_advances_and_pauses_during_save,
+    clock_advances_and_pauses_during_save
+);
 
 async fn clock_advances_and_pauses_during_save(live: Live) {
     let logs = ToyRoot(packages::toy_dir("clocklog"));
@@ -549,14 +510,7 @@ async fn assert_plan_bad_requests(fx: &Fx, branch: &str, at: i64) {
     }
 }
 
-#[test]
-#[ignore = "live: runs a real model (support/live.rs)"]
-fn live_restore_plan_endpoint() {
-    run_live(
-        Live::any("live_restore_plan_endpoint"),
-        restore_plan_endpoint,
-    );
-}
+live_test!(live_restore_plan_endpoint, restore_plan_endpoint);
 
 async fn restore_plan_endpoint(live: Live) {
     let fx = setup("plan", plan_world(), &live).await;
@@ -575,17 +529,13 @@ async fn restore_plan_endpoint(live: Live) {
     assert_plan_bad_requests(&fx, &branch, at).await;
 }
 
+live_test!(
+    live_start_fingerprint_refusal_is_409,
+    start_fingerprint_refusal_is_409
+);
+
 /// A part refusing to start with a fingerprint mismatch (-32003) is the same 409, and the new
 /// branch ends infra_error.
-#[test]
-#[ignore = "live: runs a real model (support/live.rs)"]
-fn live_start_fingerprint_refusal_is_409() {
-    run_live(
-        Live::any("live_start_fingerprint_refusal_is_409"),
-        start_fingerprint_refusal_is_409,
-    );
-}
-
 async fn start_fingerprint_refusal_is_409(live: Live) {
     let marks = ToyRoot(packages::toy_dir("movedmark"));
     std::fs::create_dir_all(&marks.0).unwrap();
@@ -617,16 +567,12 @@ async fn start_fingerprint_refusal_is_409(live: Live) {
     );
 }
 
-/// A fork's clock starts at the fork point's clock (the last one recorded before it), not 0.
-#[test]
-#[ignore = "live: runs a real model (support/live.rs)"]
-fn live_fork_clock_starts_at_fork_point() {
-    run_live(
-        Live::any("live_fork_clock_starts_at_fork_point"),
-        fork_clock_starts_at_fork_point,
-    );
-}
+live_test!(
+    live_fork_clock_starts_at_fork_point,
+    fork_clock_starts_at_fork_point
+);
 
+/// A fork's clock starts at the fork point's clock (the last one recorded before it), not 0.
 async fn fork_clock_starts_at_fork_point(live: Live) {
     let root = counter_world("forkclock", "exact", &[], &[add(1)]);
     let fx = setup("forkclock", root, &live).await;
@@ -697,17 +643,10 @@ fn late_world_events(evs: &[Event]) -> Vec<i64> {
         .collect()
 }
 
+live_test!(live_scoring_freezes_the_world, scoring_freezes_the_world);
+
 /// Once the last agent ends the world stands still: no world event after it, and the counter's
 /// final save is what the agent last read, however long the gold save takes to build.
-#[test]
-#[ignore = "live: runs a real model (support/live.rs)"]
-fn live_scoring_freezes_the_world() {
-    run_live(
-        Live::any("live_scoring_freezes_the_world"),
-        scoring_freezes_the_world,
-    );
-}
-
 async fn scoring_freezes_the_world(live: Live) {
     let fx = setup("freeze", freeze_world(), &live).await;
     let (_branch, evs) = fx.run_to_end(readers(&live, 1, "get")).await;
@@ -731,18 +670,14 @@ async fn restore_plan(fx: &Fx, branch: &str, at: i64, restore: &str) -> (u16, Va
     fx.get(&path).await
 }
 
+live_test!(
+    live_approximate_before_the_first_save_replays,
+    approximate_before_the_first_save_replays
+);
+
 /// A part with replay and approximate saves starts fresh in the run's first branch, so it has no
 /// save before its first one: an approximate fork before it replays the part (exactly), and the
 /// restore plan says so.
-#[test]
-#[ignore = "live: runs a real model (support/live.rs)"]
-fn live_approximate_before_the_first_save_replays() {
-    run_live(
-        Live::any("live_approximate_before_the_first_save_replays"),
-        approximate_before_the_first_save_replays,
-    );
-}
-
 async fn approximate_before_the_first_save_replays(live: Live) {
     let root = counter_world(
         "firstsave",
@@ -762,18 +697,14 @@ async fn approximate_before_the_first_save_replays(live: Live) {
     assert_restored(&fx, &child, "approximate", "replay").await;
 }
 
+live_test!(
+    live_exact_refused_after_an_approximate_restore,
+    exact_refused_after_an_approximate_restore
+);
+
 /// A branch B restored its part approximately: an exact rerun of B past B's start would replay
 /// the part through that approximate state, so it is refused (and the restore plan says so); an
 /// approximate one works.
-#[test]
-#[ignore = "live: runs a real model (support/live.rs)"]
-fn live_exact_refused_after_an_approximate_restore() {
-    run_live(
-        Live::any("live_exact_refused_after_an_approximate_restore"),
-        exact_refused_after_an_approximate_restore,
-    );
-}
-
 async fn exact_refused_after_an_approximate_restore(live: Live) {
     let root = counter_world(
         "approxchain",
@@ -802,16 +733,12 @@ async fn exact_refused_after_an_approximate_restore(live: Live) {
     fx.fork_to_end(&b, at, Some("approximate")).await;
 }
 
-/// A replayed part whose config changed since the run can't be replayed exactly.
-#[test]
-#[ignore = "live: runs a real model (support/live.rs)"]
-fn live_exact_refused_when_the_config_changed() {
-    run_live(
-        Live::any("live_exact_refused_when_the_config_changed"),
-        exact_refused_when_the_config_changed,
-    );
-}
+live_test!(
+    live_exact_refused_when_the_config_changed,
+    exact_refused_when_the_config_changed
+);
 
+/// A replayed part whose config changed since the run can't be replayed exactly.
 async fn exact_refused_when_the_config_changed(live: Live) {
     let setup_calls = [add(1), add(2)];
     let root = counter_world("cfga", "replay_only", &[], &setup_calls);
@@ -850,17 +777,13 @@ fn alarm_world() -> ToyRoot {
     )
 }
 
+live_test!(
+    live_fork_reports_no_world_event_twice,
+    fork_reports_no_world_event_twice
+);
+
 /// A fork's clock parts restored from a save are moved to the fork point's clock before it
 /// runs, and what they report on the way was recorded already: no world event twice.
-#[test]
-#[ignore = "live: runs a real model (support/live.rs)"]
-fn live_fork_reports_no_world_event_twice() {
-    run_live(
-        Live::any("live_fork_reports_no_world_event_twice"),
-        fork_reports_no_world_event_twice,
-    );
-}
-
 async fn fork_reports_no_world_event_twice(live: Live) {
     let fx = setup("alarm", alarm_world(), &live).await;
     let (parent, evs) = fx.run_to_end(readers(&live, 2, "peek")).await;

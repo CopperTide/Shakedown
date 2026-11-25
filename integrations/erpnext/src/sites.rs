@@ -39,7 +39,7 @@ impl SitesDir {
         let uid = std::fs::metadata(&self.root)?.uid();
         if uid != FRAPPE_UID {
             return Err(io::Error::other(format!(
-                "{} belongs to uid {uid}, but ERPNext runs as uid {FRAPPE_UID}; run arena as \
+                "{} belongs to uid {uid}, but ERPNext runs as uid {FRAPPE_UID}; run shakedown as \
                  uid {FRAPPE_UID}",
                 self.root.display()
             )));

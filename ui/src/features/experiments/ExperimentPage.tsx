@@ -1,5 +1,5 @@
 import { CircleStop } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { experiment as fetchExperiment, stopExperiment } from '@/api/experiments';
 import { Button } from '@/components/ui/button';
@@ -12,6 +12,7 @@ import { useAction } from '@/hooks/useAction';
 import { pollWhile, useQuery } from '@/hooks/useQuery';
 import { useTaskNames } from '@/hooks/useTasks';
 import { experimentMark } from '@/lib/mark';
+import { track } from '@/lib/productAnalytics';
 import type { Experiment } from '@/model/experiment';
 import { measureRows } from './measures';
 import { columnOf } from './model';
@@ -103,5 +104,6 @@ export default function ExperimentPage() {
 /** Several experiments' setups side by side (`/experiments/compare?ids=a,b`). */
 export function ComparePage() {
   const [sp] = useSearchParams();
+  useEffect(() => track('compare opened', { of: 'experiments' }), []);
   return <View ids={(sp.get('ids') ?? '').split(',').filter(Boolean)} />;
 }

@@ -73,6 +73,18 @@ pub fn serve(listener: tokio::net::TcpListener, state: &Arc<AppState>) {
 /// needs no key) but never call a model.
 pub const NOWHERE: &str = "http://127.0.0.1:9";
 
+/// A provider that accepts connections and never answers (a run on it stays running): its base.
+pub async fn silent_provider() -> String {
+    let (listener, base) = bind().await;
+    tokio::spawn(async move {
+        let mut held = vec![];
+        while let Ok((socket, _)) = listener.accept().await {
+            held.push(socket);
+        }
+    });
+    base
+}
+
 /// An app on `hub` with the real drivers (Claude Code, Codex and shaked's own loop on the
 /// providers the environment configures), served on a free port; `tweak` adjusts the config
 /// first. The state and the app's base URL.

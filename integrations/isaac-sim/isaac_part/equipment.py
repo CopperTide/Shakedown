@@ -1,4 +1,4 @@
-"""What the arena adds to the factory example's plant, beside its Factory (which is never edited): robot cells and
+"""What the shakedown adds to the factory example's plant, beside its Factory (which is never edited): robot cells and
 the plant's electrical load. Both are configured (`cells`, `power`), so a world that names neither sees the plant as
 it was. They are stepped from the plant's physics steps only, at a fixed rate, so what they give after an advance
 doesn't depend on how the advances were split.

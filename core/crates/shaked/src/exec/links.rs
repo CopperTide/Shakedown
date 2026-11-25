@@ -15,8 +15,7 @@ use crate::{
 };
 
 use super::{
-    failure, outcome_of, save_step, tool_call_payload, world_event_payload, BranchCtx, CallFacts,
-    ToolExec,
+    failure, outcome_of, save_step, world_event_payload, BranchCtx, CallFacts, Step, ToolExec,
 };
 
 /// The actor of the steps links make; no agent may have this id.
@@ -29,49 +28,38 @@ const MAX_LINK_CALLS: usize = 64;
 /// becomes mail to the lead (docs/protocol.md, "Stepped clock").
 pub const ALERT: &str = "alert";
 
-/// A call the world makes of a part (for a link or a task's setup), made and not yet recorded.
-pub(super) struct LinkStep {
-    pub(super) tool: String,
-    pub(super) args: Value,
-    pub(super) outcome: Result<Value, String>,
-    pub(super) facts: CallFacts,
-}
-
+/// A world event, or a call the world made of a part for a link, made and not yet recorded.
 enum Reported {
     Event(PartEvent),
-    Link(LinkStep),
+    Link(Step),
 }
 
 /// A link's step that didn't reach the part: no `part`, so a replay doesn't repeat it.
-fn step_not_made(tool: &str, args: Value, error: String, clock_ms: i64) -> LinkStep {
-    LinkStep {
-        tool: tool.to_string(),
-        args,
-        outcome: Err(error),
-        facts: CallFacts {
-            clock_ms: Some(clock_ms),
-            ..CallFacts::default()
-        },
-    }
+fn step_not_made(tool: &str, args: Value, error: String, clock_ms: i64) -> Step {
+    let facts = CallFacts {
+        clock_ms: Some(clock_ms),
+        ..CallFacts::default()
+    };
+    Step::new(tool, args, Err(error), facts)
 }
 
 /// Makes `link`'s call for the event with `data`.
-async fn call_link(branch: &BranchCtx, link: &Link, data: &Value, clock_ms: i64) -> LinkStep {
+async fn call_link(branch: &BranchCtx, link: &Link, data: &Value, clock_ms: i64) -> Step {
     match link_args(link, data) {
         Ok(args) => call_part(branch, &link.to, &link.tool, args, clock_ms).await,
         Err(e) => step_not_made(&link.tool, json!({}), e, clock_ms),
     }
 }
 
-/// Calls `tool` of `part` with `args` for the world itself, marking the part written when the
-/// call wrote, so the next save of what changed includes it.
+/// Calls `tool` of `part` with `args` for the world itself (for a link or a task's setup),
+/// marking the part written when the call wrote, so the next save of what changed includes it.
 pub(super) async fn call_part(
     branch: &BranchCtx,
     part: &str,
     tool: &str,
     args: Value,
     clock_ms: i64,
-) -> LinkStep {
+) -> Step {
     let world = &branch.world;
     let output = match world
         .call_part_tool(part, tool, args.clone(), clock_ms)
@@ -85,12 +73,7 @@ pub(super) async fn call_part(
     if facts.changed_part() {
         world.mark_written(part);
     }
-    LinkStep {
-        tool: tool.to_string(),
-        args,
-        outcome,
-        facts,
-    }
+    Step::new(tool, args, outcome, facts)
 }
 
 /// `events` and every call they set off (a call's own events can set off more), in order.
@@ -180,20 +163,13 @@ impl ToolExec {
                 let alert = e.event.kind == ALERT && branch.clock.is_stepped();
                 let said = alert.then(|| (e.part.clone(), e.event.text.clone()));
                 let payload = world_event_payload(e);
-                let seq = (self.record_seq(branch, None, EventKind::WorldEvent, &payload)).await?;
+                let seq = self.record_seq(branch, None, &payload).await?;
                 if let Some((part, text)) = said {
                     tell_lead(branch, seq, &part, &text);
                 }
                 Ok(None)
             }
-            Reported::Link(s) => {
-                let wrote = s.facts.wrote_world();
-                let payload = tool_call_payload(&s.tool, s.args, &s.outcome, None, s.facts);
-                let seq =
-                    (self.record_seq(branch, Some(LINK_ACTOR), EventKind::ToolCall, &payload))
-                        .await?;
-                Ok(wrote.then_some(seq))
-            }
+            Reported::Link(s) => self.record_step(branch, Some(LINK_ACTOR), s, None).await,
         }
     }
 }

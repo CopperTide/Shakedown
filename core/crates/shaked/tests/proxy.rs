@@ -29,8 +29,6 @@ async fn echo_host(h: HeaderMap) -> axum::Json<Value> {
         "x-shakedown-effect",
         "x-shakedown-agent",
         "x-shakedown-readonly",
-        "x-arena-agent",
-        "x-arena-readonly",
     ];
     let got: HashMap<&str, &str> = (names.iter())
         .filter_map(|n| Some((*n, h.get(*n)?.to_str().ok()?)))
@@ -42,11 +40,6 @@ async fn echo_host(h: HeaderMap) -> axum::Json<Value> {
 async fn echo_auth(h: HeaderMap) -> String {
     let auth = h.get("authorization").map(|v| v.to_str().unwrap());
     auth.unwrap_or("").to_string()
-}
-
-/// A part from before 2026-11-19: it says it only read under the old header name.
-async fn old_read() -> ([(&'static str, &'static str); 1], &'static str) {
-    ([("x-arena-effect", "read")], "{}")
 }
 
 /// The upstream the toy part routes `toy.test` to.
@@ -70,7 +63,6 @@ fn upstream_app() -> Router {
             post(|b: String| async { (StatusCode::CREATED, b) }),
         )
         .route("/graphql", post(graphql))
-        .route("/old-read", post(old_read))
         .route("/hang", get(std::future::pending::<String>))
         .route(
             "/read",
@@ -218,7 +210,7 @@ fn a_client_cannot_set_the_forwarding_headers() {
         let v: Value = r.unwrap().json().await.unwrap();
         let want = json!({"host": "toy.test", "x-forwarded-host": "toy.test",
                           "x-forwarded-proto": "http", "x-forwarded-port": "80",
-                          "x-shakedown-agent": "planner", "x-arena-agent": "planner"});
+                          "x-shakedown-agent": "planner"});
         assert_eq!(v, want);
     })
 }
@@ -277,7 +269,7 @@ fn the_upstream_sees_the_worlds_host_name() {
         let v: Value = r.unwrap().json().await.unwrap();
         let want = json!({"host": "toy.test", "x-forwarded-host": "toy.test",
                           "x-forwarded-proto": "http", "x-forwarded-port": "80",
-                          "x-shakedown-agent": "planner", "x-arena-agent": "planner"});
+                          "x-shakedown-agent": "planner"});
         assert_eq!(v, want);
     })
 }
@@ -417,21 +409,12 @@ fn the_upstream_is_told_which_agent_sent_each_request() {
             let r = (fx.client(agent).get("http://toy.test/echo-host"))
                 .header("x-shakedown-agent", "boss")
                 .header("x-shakedown-readonly", "0")
-                .header("x-arena-agent", "boss")
-                .header("x-arena-readonly", "0")
                 .send()
                 .await;
             let v: Value = r.unwrap().json().await.unwrap();
-            // Under both names, for parts written before 2026-11-19; a client's own copies dropped.
-            assert_eq!(
-                (&v["x-shakedown-agent"], &v["x-arena-agent"]),
-                (&json!(agent), &json!(agent)),
-                "{v}"
-            );
-            assert!(
-                v.get("x-shakedown-readonly").is_none() && v.get("x-arena-readonly").is_none(),
-                "{v}"
-            );
+            // A client's own copies are dropped.
+            assert_eq!(v["x-shakedown-agent"], json!(agent), "{v}");
+            assert!(v.get("x-shakedown-readonly").is_none(), "{v}");
         }
     })
 }
@@ -447,7 +430,6 @@ fn a_read_only_post_goes_marked_to_a_route_that_honours_read_only() {
             (&v["x-shakedown-agent"], &v["x-shakedown-readonly"]),
             (&json!("reader"), &json!("1"))
         );
-        assert_eq!(v["x-arena-readonly"], json!("1"), "the old name too: {v}");
         let e = fx.last_tool_call().await;
         assert!(e.payload["error"].is_null(), "{}", e.payload);
         assert_eq!(e.payload["reads"], json!(["http/toy.test"]));
@@ -509,27 +491,6 @@ fn secrets_in_headers_are_not_recorded() {
         assert!(e.payload["args"]["headers"]
             .get("proxy-authorization")
             .is_none());
-    })
-}
-
-/// A part written before 2026-11-19 says the effect under the old header name; it counts, and the
-/// client sees neither name.
-#[test]
-fn the_effect_header_under_its_old_name_still_counts() {
-    run(async {
-        let fx = ProxyFx::new("oldeffect", &upstream().await, &[]).await;
-        let r = fx
-            .client("planner")
-            .post("http://toy.test/old-read")
-            .send()
-            .await
-            .unwrap();
-        assert!(!r.headers().contains_key("x-arena-effect"));
-        let e = fx.last_tool_call().await;
-        assert_eq!(
-            (&e.payload["reads"], &e.payload["writes"]),
-            (&json!(["http/toy.test"]), &json!([]))
-        );
     })
 }
 
@@ -716,10 +677,10 @@ fn an_agents_register_answer_has_its_proxy_only_in_a_world_that_serves_http() {
         let a = plain
             .join(json!({"id": "planner", "name": "Planner"}))
             .await;
-        assert!(
-            a.get("proxy_url").is_none() && a.get("env").is_none(),
-            "{a}"
-        );
+        // No proxy variables: only the ones that point its OTel SDK at the run.
+        let env = a["env"].as_object().cloned().unwrap_or_default();
+        assert!(a.get("proxy_url").is_none(), "{a}");
+        assert!(env.keys().all(|k| k.starts_with("OTEL_")), "{a}");
     })
 }
 
@@ -834,7 +795,7 @@ fn https_forwarding_says_https_on_443() {
             .unwrap();
         let want = json!({"host": "toy.test", "x-forwarded-host": "toy.test",
                           "x-forwarded-proto": "https", "x-forwarded-port": "443",
-                          "x-shakedown-agent": "planner", "x-arena-agent": "planner"});
+                          "x-shakedown-agent": "planner"});
         assert_eq!(v, want);
     })
 }

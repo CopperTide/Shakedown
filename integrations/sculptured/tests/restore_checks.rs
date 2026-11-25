@@ -59,7 +59,7 @@ async fn start_from(part: &Sculptured, save: &str) -> shakedown_part::PartError 
 
 #[tokio::test]
 async fn restores_refused_before_anything_runs() {
-    let t = Tmp(std::env::temp_dir().join(format!("arena_sc_rc_{}", std::process::id())));
+    let t = Tmp(std::env::temp_dir().join(format!("shakedown_sc_rc_{}", std::process::id())));
     let saves = t.0.join("saves/sculptured");
     fake_save(&saves, "other_build", "sculptured 0.0.1", 1);
     fake_save(&saves, "too_many", &echo_build(), 9);

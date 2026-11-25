@@ -232,10 +232,7 @@ fn private_urls_are_fine_here_and_refused_when_the_policy_says_so() {
 fn any_case_of_bearer_is_the_token_and_another_scheme_is_refused() {
     run(async {
         let fx = app("scheme").await;
-        let (_, made) = fx
-            .post("/api/tokens", json!({"name": "r", "scopes": ["read"]}))
-            .await;
-        let token = made["token"].as_str().unwrap();
+        let token = fx.mint_token(&["read"]).await;
         let url = format!("{}/api/models/keys", fx.base);
         let cases = [
             (format!("bearer {token}"), 403),
@@ -263,10 +260,7 @@ fn a_read_token_cannot_add_keys() {
     run(async {
         let fx = app("scope").await;
         for scope in ["read", "run"] {
-            let (_, made) = fx
-                .post("/api/tokens", json!({"name": scope, "scopes": [scope]}))
-                .await;
-            let token = made["token"].as_str().unwrap();
+            let token = fx.mint_token(&[scope]).await;
             let req = fx.http.post(format!("{}/api/models/keys", fx.base));
             let req = req
                 .bearer_auth(token)

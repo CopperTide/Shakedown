@@ -32,7 +32,7 @@ export default function EventsSection({ scenario, onChange }: { scenario: Scenar
   const list = scenario.events ?? [];
   return (
     <div className="grid gap-4">
-      <SectionHead title="Events" about="Failures and disruptions, with when each fires. Paired seeds keep the same times across setups." />
+      <SectionHead title="Events" about="Failures and disruptions, with when each fires. Runs play each event's fault and parameters; the times are saved with the scenario and runs use them once worlds run from their own files." />
       <Card>
         <ItemRows items={list} empty="No events yet." onRemove={(i) => onChange({ ...scenario, events: removeAt(list, i) })}
           render={(e) => <span><span className="font-mono text-faint">{e.at ?? `#${e.after_calls}`}</span> <span className="font-medium">{e.name}</span>{e.fault && <span className="text-faint"> · {e.fault}</span>}</span>} />

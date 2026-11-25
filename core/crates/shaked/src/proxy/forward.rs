@@ -4,10 +4,7 @@
 use std::{sync::LazyLock, time::Duration};
 
 use bytes::Bytes;
-use parts::proto::{
-    Effect, AGENT_HEADER, EFFECT_HEADER, OLD_AGENT_HEADER, OLD_EFFECT_HEADER, OLD_READONLY_HEADER,
-    READONLY_HEADER,
-};
+use parts::proto::{Effect, AGENT_HEADER, EFFECT_HEADER, READONLY_HEADER};
 
 use crate::{exec::HttpCall, world::HostRoute};
 
@@ -41,12 +38,12 @@ pub fn is_hop(name: &str) -> bool {
     name.starts_with("proxy-") || HOP_BY_HOP.contains(&name.as_str())
 }
 
-/// True for a header the proxy sets itself (`x-forwarded-*`, `forwarded`, `x-shakedown-*` and the
-/// old `x-arena-*`): a client's own copy is dropped, so an upstream can trust what it reads there.
+/// True for a header the proxy sets itself (`x-forwarded-*`, `forwarded`, `x-shakedown-*`): a
+/// client's own copy is dropped, so an upstream can trust what it reads there.
 fn is_set_by_proxy(name: &str) -> bool {
     let name = name.to_ascii_lowercase();
     name == "forwarded"
-        || ["x-forwarded-", "x-shakedown-", "x-arena-"]
+        || ["x-forwarded-", "x-shakedown-"]
             .iter()
             .any(|p| name.starts_with(p))
 }
@@ -107,14 +104,10 @@ fn own_headers(
         .header("x-forwarded-proto", call.scheme)
         .header("x-forwarded-port", call.port.to_string());
     if let Some(agent) = sender.agent {
-        req = req
-            .header(AGENT_HEADER, agent)
-            .header(OLD_AGENT_HEADER, agent);
+        req = req.header(AGENT_HEADER, agent);
     }
     if sender.readonly {
-        req = req
-            .header(READONLY_HEADER, "1")
-            .header(OLD_READONLY_HEADER, "1");
+        req = req.header(READONLY_HEADER, "1");
     }
     req
 }
@@ -128,7 +121,6 @@ async fn answered(resp: reqwest::Response) -> Result<Forwarded, String> {
         let value = String::from_utf8_lossy(v.as_bytes()).into_owned();
         match k.as_str() {
             EFFECT_HEADER => effect = effect_of(&value),
-            OLD_EFFECT_HEADER => effect = effect.or_else(|| effect_of(&value)),
             name if is_hop(name) => {}
             name => headers.push((name.to_string(), value)),
         }

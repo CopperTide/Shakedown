@@ -1,5 +1,5 @@
 {
-  "name": "arena-ui-lint",
+  "name": "shakedown-ui-lint",
   "private": true,
   "description": "ESLint toolchain. Kept apart because typescript-eslint 8 needs TypeScript < 6.1 and the app builds with TypeScript 7.",
   "type": "module",

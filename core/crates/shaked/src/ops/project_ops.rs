@@ -1,13 +1,14 @@
 //! The project itself: its status, and creating one.
 
+use std::ops::ControlFlow;
+
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::{json, Value};
-use shakedown_project::format::{parse, to_yaml, EditPolicy, Kind, ProjectFile};
+use shakedown_project::format::{parse, to_yaml, Kind, ProjectFile};
 use shakedown_project::Project;
 
-use super::{input, schema, view, Access, OpCtx, OpFuture, Operation};
-use crate::project_state::NoProject;
+use super::{as_yaml, diff_first, flag, input, schema, view, Access, OpCtx, OpFuture, Operation};
 
 pub(super) fn ops() -> Vec<Operation> {
     vec![
@@ -46,7 +47,7 @@ fn project_op(
 #[derive(Deserialize)]
 struct UpdateInput {
     body: Value,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "flag")]
     confirm: bool,
 }
 
@@ -76,14 +77,13 @@ struct InitInput {
 }
 
 fn status<'a>(ctx: &'a OpCtx<'a>, _: &'static Operation, _: Value) -> OpFuture<'a> {
-    Box::pin(async move { Ok(status_of(&ctx.project.current()?)) })
+    Box::pin(async move { Ok(status_of(&ctx.project.current().await?)) })
 }
 
 fn init<'a>(ctx: &'a OpCtx<'a>, _: &'static Operation, value: Value) -> OpFuture<'a> {
     Box::pin(async move {
         let InitInput { name, git } = input(value)?;
-        let root = ctx.project.root().ok_or(NoProject::NotConfigured)?;
-        let project = Project::init(root, &name, git)?;
+        let project = ctx.project.init(&name, git).await??;
         Ok(status_of(&project))
     })
 }
@@ -91,19 +91,15 @@ fn init<'a>(ctx: &'a OpCtx<'a>, _: &'static Operation, value: Value) -> OpFuture
 fn update<'a>(ctx: &'a OpCtx<'a>, _: &'static Operation, value: Value) -> OpFuture<'a> {
     Box::pin(async move {
         let UpdateInput { body, confirm } = input(value)?;
-        let yaml = serde_yaml_ng::to_string(&body)
-            .map_err(|e| super::OpError::bad_request(e.to_string()))?;
-        let config: ProjectFile = parse("shakedown.yaml", &yaml)?;
-        let project = ctx.project.current()?;
-        let old = to_yaml(&project.config)?;
-        let diff = similar::TextDiff::from_lines(&old, &to_yaml(&config)?)
-            .unified_diff()
-            .to_string();
-        if project.config.permissions.edit == EditPolicy::DiffFirst && !confirm {
-            return Ok(json!({ "proposed": true, "diff": diff }));
+        let config: ProjectFile = parse("shakedown.yaml", &as_yaml(&body)?)?;
+        let project = ctx.project.current().await?;
+        let (old, new) = (to_yaml(&project.config)?, to_yaml(&config)?);
+        let policy = project.config.permissions.edit;
+        if let ControlFlow::Break(proposal) = diff_first(policy, &old, &new, confirm) {
+            return Ok(proposal);
         }
-        ctx.project.change(|p| p.set_config(config))??;
-        Ok(status_of(&ctx.project.current()?))
+        ctx.project.change(|p| p.set_config(config)).await??;
+        Ok(status_of(&ctx.project.current().await?))
     })
 }
 
@@ -120,7 +116,7 @@ fn status_of(project: &Project) -> Value {
         },
         "problems": problems,
         "settings": project.config,
-        "root": project.root.display().to_string(),
-        "imports": crate::git_import::listed(&project.root),
+        "root": project.root().map(|r| r.display().to_string()),
+        "imports": project.root().map(crate::git_import::listed).unwrap_or_default(),
     })
 }

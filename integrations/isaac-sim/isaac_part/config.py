@@ -26,7 +26,7 @@ class Config:
     record_fps: int = 30  # frames per second of world time; the MP4 plays at this rate, so in world time
     scene: str = "ridgeline"  # what the plant looks like: the factory's own scene, or "showcase" (visuals only)
     record_height: int = 720  # the MP4's height in pixels; the width follows at 16:9
-    cells: tuple = ()  # robot cells the arena adds beside the factory's presses (equipment.py)
+    cells: tuple = ()  # robot cells the shakedown adds beside the factory's presses (equipment.py)
     power: dict | None = None  # the plant's load model; None: no load is reported
     render: dict = field(default_factory=dict)  # carb settings for the renderer (isaac only), e.g. the path tracer
 

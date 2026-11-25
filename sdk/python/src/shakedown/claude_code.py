@@ -22,8 +22,8 @@ from .errors import ShakedownError
 from .models import Task
 
 #: Environment variables the CLI never gets (database URLs, other vendors' keys).
-SCRUB = ("PGPASSWORD", "PGUSER", "PGHOST", "PGDATABASE", "PGPORT", "SHAKEDOWN_PG_URL", "ARENA_PG_URL",
-         "DATABASE_URL", "OPENROUTER_API_KEY", "OPENAI_API_KEY", "SHAKEDOWN_LOCAL_MODELS", "ARENA_LOCAL_MODELS")
+SCRUB = ("PGPASSWORD", "PGUSER", "PGHOST", "PGDATABASE", "PGPORT", "SHAKEDOWN_PG_URL", "SHAKEDOWN_PG_URL",
+         "DATABASE_URL", "OPENROUTER_API_KEY", "OPENAI_API_KEY", "SHAKEDOWN_LOCAL_MODELS", "SHAKEDOWN_LOCAL_MODELS")
 
 
 class ClaudeCodeMissing(ShakedownError):
@@ -84,7 +84,7 @@ def run(
     recorded on the branch; with ``end``, the agent's end is recorded with its totals."""
     if not available():
         raise ClaudeCodeMissing("Claude Code (`claude`) is not on PATH; install it and sign in")
-    workdir = tempfile.mkdtemp(prefix="arena-claude-")
+    workdir = tempfile.mkdtemp(prefix="shakedown-claude-")
     started = time.monotonic()
     try:
         cfg = os.path.join(workdir, "mcp.json")

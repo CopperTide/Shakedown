@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { Me } from '@/api/me';
-import { AccountMenu, choose } from './AccountMenu';
+import { AccountMenu, choose, itemUrl } from './AccountMenu';
 
 const local: Me = { mode: 'local', user: { name: 'You' }, features: [] };
 
@@ -25,5 +25,16 @@ describe('Account menu', () => {
     fetch.mockClear();
     await choose({ label: 'Here', current: true }, { fetch, reload });
     expect(fetch).not.toHaveBeenCalled();
+  });
+  it('a path is on the core, a full URL is used as it is', () => {
+    expect(itemUrl('/api/switch', '/sd')).toBe('/sd/api/switch');
+    expect(itemUrl('https://app.example.com/gw/api/logout', '/sd')).toBe('https://app.example.com/gw/api/logout');
+  });
+  it('posts a full URL as it is (a route of the deployment, outside the core), then reloads', async () => {
+    const fetch = vi.fn(async () => new Response('{}'));
+    const reload = vi.fn();
+    await choose({ label: 'Sign out', post: 'https://app.example.com/gw/api/logout' }, { fetch, reload });
+    expect(fetch).toHaveBeenCalledWith('https://app.example.com/gw/api/logout', expect.objectContaining({ method: 'POST', credentials: 'include' }));
+    expect(reload).toHaveBeenCalledOnce();
   });
 });

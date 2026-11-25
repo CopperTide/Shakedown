@@ -9,8 +9,6 @@
     print(run.check())
     run.rewind(event=40).fork(model="sonnet")       # back to just before event 40, one thing changed
 
-``arena`` (with ``Arena``) is this package's old name, kept as an alias.
-
 See docs/sdk.md in the Shakedown repository (CopperTide/Shakedown).
 """
 

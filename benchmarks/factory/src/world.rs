@@ -112,7 +112,7 @@ fn boards() -> Vec<Link> {
         ("number", "/extra_hours"),
     ];
     vec![
-        board("utility", "disruption", &dr("notified")),
+        board("utility", "demand_response_notified", &dr("notified")),
         board("utility", "demand_response_active", &dr("active")),
         board("utility", "demand_response_ended", &dr("ended")),
         board("network", "disruption", &ot("intrusion")),
@@ -216,6 +216,19 @@ mod tests {
             crm.unwrap().config["workspace_name"],
             "Ridgeline Components"
         );
+    }
+
+    /// The board shows a demand-response notice from the utility's own notice event, never from
+    /// its other disruptions (a meter reading low has no target to show).
+    #[test]
+    fn the_boards_dr_notice_comes_from_the_utilitys_notice_only() {
+        let boards = boards();
+        let from_utility: Vec<&str> = (boards.iter())
+            .filter(|l| l.from == "utility")
+            .map(|l| l.event.as_str())
+            .collect();
+        assert!(!from_utility.contains(&"disruption"), "{from_utility:?}");
+        assert!(from_utility.contains(&"demand_response_notified"));
     }
 
     #[test]

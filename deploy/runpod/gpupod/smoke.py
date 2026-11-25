@@ -113,17 +113,17 @@ class _Smoke:
 
 
 def smoke(ops: Ops, base: str, key: str, model: str, through_shaked: Optional[str] = None,
-          arena_factory: Optional[Callable[[str], Any]] = None) -> SmokeReport:
+          shakedown_factory: Optional[Callable[[str], Any]] = None) -> SmokeReport:
     s = _Smoke(ops, base, key, model)
     s.models()
     s.tool_round()
     s.decode()
     if through_shaked:
-        _through_shaked(s, through_shaked, arena_factory or _arena, ops.spec.shaked_provider)
+        _through_shaked(s, through_shaked, shakedown_factory or _shakedown, ops.spec.shaked_provider)
     return s.report
 
 
-def _arena(url: str) -> Any:
+def _shakedown(url: str) -> Any:
     from shakedown import Shakedown
 
     return Shakedown(url)
@@ -132,8 +132,8 @@ def _arena(url: str) -> Any:
 def _through_shaked(s: _Smoke, url: str, factory: Callable[[str], Any], provider: str) -> None:
     """One gateway call of an external run of the benchmark's first task; the run is stopped
     (unscored) and deleted after."""
-    arena = factory(url)
-    branch = arena.external_run(arena.tasks()[0])
+    shakedown = factory(url)
+    branch = shakedown.external_run(shakedown.tasks()[0])
     try:
         a = branch.register("smoke", kind="external", provider=f"local:{provider}", model=s.model)
         s.http.post(f"{a.gateway_url}/chat/completions", timeout=100,
@@ -145,4 +145,4 @@ def _through_shaked(s: _Smoke, url: str, factory: Callable[[str], Any], provider
                 "no reasoning event from the gateway with its model_call_seq")
     finally:
         branch.stop()
-        arena.delete_run(branch.run_id)
+        shakedown.delete_run(branch.run_id)

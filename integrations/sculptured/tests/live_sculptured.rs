@@ -1,4 +1,4 @@
-//! Runs real `coppertide serve` instances: `cargo test -p arena-sculptured -- --ignored live_`.
+//! Runs real `coppertide serve` instances: `cargo test -p shakedown-sculptured -- --ignored live_`.
 //! Needs the CopperTide program (`coppertide` on `PATH`, or env
 //! `SHAKEDOWN_COPPERTIDE_BINARY`; `sculptured` and `SHAKEDOWN_SCULPTURED_BINARY` still work); without it the test says so and passes. Every server and folder
 //! the test makes is removed afterwards, even on failure (the drop runs the integration's `gc`).
@@ -17,7 +17,7 @@ struct World {
 
 impl World {
     fn new() -> World {
-        let dir = std::env::temp_dir().join(format!("arena_live_sc_{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("shakedown_live_sc_{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         World { dir }
@@ -67,7 +67,7 @@ fn binary() -> Option<PathBuf> {
 fn start(instance: &str, binary: &PathBuf, from: Option<&str>) -> StartParams {
     StartParams {
         instance: instance.into(),
-        config: json!({"binary": binary, "team": "arena"}),
+        config: json!({"binary": binary, "team": "shakedown"}),
         seed: 1,
         clock_ms: 0,
         from: from.map(|s| FromSave {

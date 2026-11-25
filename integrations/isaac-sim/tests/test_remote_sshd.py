@@ -35,7 +35,7 @@ def server(tmp_path):
 def ssh(port, key, command, stdin=""):
     return subprocess.run(["ssh", "-p", str(port), "-i", str(key), "-o", "StrictHostKeyChecking=no", "-o",
                            "UserKnownHostsFile=/dev/null", "-o", "BatchMode=yes", "-o", "LogLevel=ERROR",
-                           "arena@127.0.0.1", "--", command], input=stdin, capture_output=True, text=True,
+                           "shakedown@127.0.0.1", "--", command], input=stdin, capture_output=True, text=True,
                           timeout=30)
 
 
@@ -56,7 +56,7 @@ def test_a_large_output_arrives_whole(server):
     port, key = server
     out = subprocess.run(["ssh", "-p", str(port), "-i", str(key), "-o", "StrictHostKeyChecking=no", "-o",
                           "UserKnownHostsFile=/dev/null", "-o", "BatchMode=yes", "-o", "LogLevel=ERROR",
-                          "arena@127.0.0.1", "--", "head -c 25000000 /dev/urandom | tee >(sha256sum >&2)"],
+                          "shakedown@127.0.0.1", "--", "head -c 25000000 /dev/urandom | tee >(sha256sum >&2)"],
                          capture_output=True, timeout=60)
     import hashlib
     assert len(out.stdout) == 25_000_000

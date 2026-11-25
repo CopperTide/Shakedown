@@ -4,33 +4,30 @@ use std::{collections::HashMap, sync::Arc};
 
 use axum::{
     body::Bytes,
-    extract::{Path, Query, State},
-    http::StatusCode,
-    response::{IntoResponse, Response},
+    extract::{Query, State},
     routing::{get, post},
     Json, Router,
 };
-use parts::proto::Mode;
-use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::{
     app::AppState,
-    auth::{Action, Caller, Decision, Target, Who},
-    fork::{self, ForkError},
+    auth::{Caller, Who},
     gc,
-    layer::{Costly, KeySource, Meter, Usage},
-    metrics,
     model::*,
-    prices, prompts,
+    prompts,
     providers::{self, ProviderStatus},
     runner,
 };
 
+pub use crate::app::on_path;
+
 mod assistant;
+mod branches;
 mod compare;
 mod connect;
 mod connections;
+mod error;
 pub(crate) mod experiments;
 mod external;
 mod extract;
@@ -38,10 +35,12 @@ mod flow;
 mod me;
 mod models;
 mod names;
+mod observability;
 mod recording;
 mod review;
 pub mod routes;
 mod rows;
+mod runs;
 mod sandbox;
 mod stream;
 mod suites;
@@ -52,6 +51,8 @@ mod world;
 mod world_views;
 mod worlds;
 
+use error::ApiResult;
+pub use error::{authorize, ApiError};
 use extract::{JsonBody, OptionalJson, StartPermit};
 pub use ui::with_ui;
 
@@ -62,14 +63,6 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/api/tasks", get(tasks))
         .route("/api/team/default", get(default_team))
         .route("/api/teams", get(suggested_teams))
-        .route("/api/runs", get(list_runs).post(create_run))
-        .route("/api/runs/{id}", axum::routing::delete(delete_run))
-        .route("/api/runs/{id}/name", post(names::set))
-        .route("/api/branches/{id}", get(get_branch))
-        .route("/api/branches/{id}/stream", get(stream::stream))
-        .route("/api/branches/{id}/rows", get(rows::rows))
-        .route("/api/branches/{id}/fork", post(fork_branch))
-        .route("/api/branches/{id}/restore-plan", get(get_restore_plan))
         .route("/api/compare", get(compare::compare_branches))
         .route("/api/world", get(world::world))
         .route("/api/usage", get(world::usage))
@@ -81,6 +74,8 @@ pub fn router() -> Router<Arc<AppState>> {
 /// The routes each `api` module serves.
 fn modules() -> Router<Arc<AppState>> {
     Router::new()
+        .merge(runs::router())
+        .merge(branches::router())
         .merge(assistant::router())
         .merge(external::router())
         .merge(connect::router())
@@ -89,6 +84,7 @@ fn modules() -> Router<Arc<AppState>> {
         .merge(me::router())
         .merge(tokens::router())
         .merge(models::router())
+        .merge(observability::router())
         .merge(suites::router())
         .merge(experiments::router())
         .merge(review::router())
@@ -100,145 +96,11 @@ fn modules() -> Router<Arc<AppState>> {
         .merge(crate::ops::http::router())
 }
 
-// ---------------------------------------------------------------- errors
-
-#[derive(Debug)]
-pub struct ApiError(StatusCode, String);
-
-impl ApiError {
-    /// What went wrong, as the caller sees it.
-    pub fn message(&self) -> &str {
-        &self.1
-    }
-
-    /// The HTTP status it answers with.
-    pub fn status(&self) -> StatusCode {
-        self.0
-    }
-
-    fn bad(msg: impl Into<String>) -> ApiError {
-        ApiError(StatusCode::BAD_REQUEST, msg.into())
-    }
-    fn not_found(msg: impl Into<String>) -> ApiError {
-        ApiError(StatusCode::NOT_FOUND, msg.into())
-    }
-    fn insufficient_storage(msg: impl Into<String>) -> ApiError {
-        ApiError(StatusCode::INSUFFICIENT_STORAGE, msg.into())
-    }
-    fn conflict(msg: impl Into<String>) -> ApiError {
-        ApiError(StatusCode::CONFLICT, msg.into())
-    }
-}
-
-impl From<crate::ops::OpError> for ApiError {
-    fn from(e: crate::ops::OpError) -> ApiError {
-        ApiError(e.status, e.message)
-    }
-}
-
-impl From<anyhow::Error> for ApiError {
-    /// A write the database refused for this caller (SQLSTATE 42501, insufficient privilege: a
-    /// hosting layer's policies) is 403; a unique violation (23505) is 409, naming the constraint;
-    /// anything else is 500 (its text hidden where the layer serves others, see `app::router`).
-    fn from(e: anyhow::Error) -> ApiError {
-        use tokio_postgres::error::SqlState;
-        let pg = (e.chain()).find_map(|c| c.downcast_ref::<tokio_postgres::Error>());
-        match pg.and_then(|p| p.code()) {
-            Some(c) if *c == SqlState::INSUFFICIENT_PRIVILEGE => {
-                ApiError(StatusCode::FORBIDDEN, "you may not do that".into())
-            }
-            Some(c) if *c == SqlState::UNIQUE_VIOLATION => {
-                let db = pg.and_then(|p| p.as_db_error());
-                let which = db.and_then(|d| d.constraint()).unwrap_or("a unique key");
-                ApiError::conflict(format!("that already exists ({which})"))
-            }
-            _ => ApiError(StatusCode::INTERNAL_SERVER_ERROR, format!("{e:#}")),
-        }
-    }
-}
-
-/// Whether `caller` may do `action` on `target`: the engine's own checks (`auth::engine_check`),
-/// then the layer's `authorize`. 404 when not found, 403 when refused.
-pub async fn authorize(
-    state: &AppState,
-    caller: &Caller,
-    action: Action,
-    target: Target<'_>,
-) -> Result<(), ApiError> {
-    let decision = match crate::auth::engine_check(caller, &action, &target) {
-        Decision::Allow => state.store.layer().authorize(caller, action, target).await,
-        refused => refused,
-    };
-    match decision {
-        Decision::Allow => Ok(()),
-        Decision::NotFound => Err(ApiError::not_found("not found".to_string())),
-        Decision::Forbidden(why) => Err(ApiError(StatusCode::FORBIDDEN, why)),
-    }
-}
-
-impl From<crate::layer::Refusal> for ApiError {
-    fn from(r: crate::layer::Refusal) -> ApiError {
-        ApiError(r.status, r.message)
-    }
-}
-
-impl From<runner::RunError> for ApiError {
-    fn from(e: runner::RunError) -> ApiError {
-        match e {
-            runner::RunError::UnknownTask(_) => ApiError::not_found(e.to_string()),
-            runner::RunError::Refused(r) => r.into(),
-            runner::RunError::Other(e) => e.into(),
-        }
-    }
-}
-
-impl From<TeamError> for ApiError {
-    fn from(e: TeamError) -> ApiError {
-        ApiError::bad(e.to_string())
-    }
-}
-
-impl From<serde_json::Error> for ApiError {
-    fn from(e: serde_json::Error) -> ApiError {
-        anyhow::Error::from(e).into()
-    }
-}
-
-impl From<ForkError> for ApiError {
-    fn from(e: ForkError) -> ApiError {
-        let status = match &e {
-            ForkError::UnknownBranch(_) => StatusCode::NOT_FOUND,
-            ForkError::BranchRunning
-            | ForkError::Refused(_)
-            | ForkError::ReplayDiverged { .. }
-            | ForkError::FingerprintMismatch { .. } => StatusCode::CONFLICT,
-            ForkError::UnknownSeq
-            | ForkError::TeamChange(_)
-            | ForkError::UnknownAgent(_)
-            | ForkError::MissingHandoff(_)
-            | ForkError::NoRestorePoint { .. } => StatusCode::BAD_REQUEST,
-            ForkError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
-        };
-        ApiError(status, e.to_string())
-    }
-}
-
-impl IntoResponse for ApiError {
-    fn into_response(self) -> Response {
-        (self.0, Json(json!({"error": self.1}))).into_response()
-    }
-}
-
-type ApiResult<T> = Result<Json<T>, ApiError>;
-
 async fn api_not_found() -> ApiError {
     ApiError::not_found("no such route")
 }
 
-/// 404 for the branch `id` that isn't there.
-fn no_branch(id: &str) -> ApiError {
-    ApiError::not_found(format!("there is no branch \"{id}\""))
-}
+// ---------------------------------------------------------------- shared helpers
 
 /// The branch `id`; 404 when there is none.
 async fn branch_or_404(state: &AppState, caller: &Caller, id: &str) -> Result<Branch, ApiError> {
@@ -247,7 +109,7 @@ async fn branch_or_404(state: &AppState, caller: &Caller, id: &str) -> Result<Br
         .at(caller)
         .find_branch(id)
         .await?
-        .ok_or_else(|| no_branch(id))
+        .ok_or_else(|| ApiError::missing("branch", id))
 }
 
 /// The query's `a` and `b` (a pair to compare); 400 without both.
@@ -260,24 +122,6 @@ fn pair(q: &HashMap<String, String>) -> Result<(String, String), ApiError> {
 
 fn parse_body<T: serde::de::DeserializeOwned>(body: &Bytes) -> Result<T, ApiError> {
     serde_json::from_slice(body).map_err(|e| ApiError::bad(format!("bad request body: {e}")))
-}
-
-/// 400 when the team the fork would run (`changes` applied to `parent`) puts a changed agent in
-/// open mode on a provider that can't run it.
-fn check_fork_team(
-    providers: &providers::ProviderConfig,
-    parent: &Team,
-    changes: &HashMap<String, Change>,
-) -> Result<(), ApiError> {
-    let team = fork::apply_changes(parent, changes);
-    let changed_open = team
-        .agents
-        .iter()
-        .filter(|a| a.kind == AgentKind::Open && changes.contains_key(&a.id));
-    for a in changed_open {
-        team::open_check(providers, a.provider.as_deref(), a.model.as_deref())?;
-    }
-    Ok(())
 }
 
 /// A blank provider means the default one, as in a fork change.
@@ -297,59 +141,9 @@ async fn detached<T: Send + 'static>(
     f: impl std::future::Future<Output = Result<T, ApiError>> + Send + 'static,
 ) -> Result<T, ApiError> {
     tokio::spawn(f).await.map_err(|e| {
-        ApiError(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("request task failed: {e}"),
-        )
+        let why = format!("request task failed: {e}");
+        ApiError::new(axum::http::StatusCode::INTERNAL_SERVER_ERROR, why)
     })?
-}
-
-// ---------------------------------------------------------------- simple routes
-
-pub fn on_path(name: &str) -> bool {
-    std::env::var_os("PATH").is_some_and(|p| {
-        std::env::split_paths(&p).any(|d| {
-            let f = d.join(name);
-            f.is_file() && {
-                #[cfg(unix)]
-                {
-                    use std::os::unix::fs::PermissionsExt;
-                    std::fs::metadata(&f).is_ok_and(|m| m.permissions().mode() & 0o111 != 0)
-                }
-                #[cfg(not(unix))]
-                {
-                    true
-                }
-            }
-        })
-    })
-}
-
-async fn health(State(state): State<Arc<AppState>>) -> ApiResult<Value> {
-    let bytes = gc::usage(&state.hub, &state.benchmark()).await?;
-    let benchmark = match state.bench().await {
-        Ok(b) => json!({"name": b.name, "version": b.version, "tasks": b.tasks.len(),
-                        "world": b.world.iter().map(|p| json!({"part": p.part, "integration": p.integration})).collect::<Vec<_>>()}),
-        Err(e) => json!({"name": state.benchmark(), "error": format!("{e:#}")}),
-    };
-    Ok(Json(json!({
-        "open_available": state.config.open_available(),
-        "providers": providers::summary(&state.config.providers),
-        "claude": on_path("claude"),
-        "codex": on_path("codex"),
-        "benchmark": benchmark,
-        "disk": {"bytes": bytes, "limit_bytes": state.config.max_db_bytes},
-    })))
-}
-
-/// `[{id, kind, label, available, why?, models?}]`: each provider, asking the ones that list
-/// their models (each bounded by `providers::LIST_TIMEOUT`, all at once).
-async fn list_providers(
-    State(state): State<Arc<AppState>>,
-    Who(caller): Who,
-) -> Json<Vec<ProviderStatus>> {
-    let config = providers_of(&state, &caller).await;
-    Json(providers::statuses(&config, &state.http).await)
 }
 
 /// 507 when the Shakedown's saves already use at least the configured limit.
@@ -363,32 +157,74 @@ async fn check_disk(state: &AppState) -> Result<(), ApiError> {
 /// Why a run is refused while the saves are over the limit.
 pub const SAVES_FULL: &str = "Shakedown's saves use more than the limit; delete old runs";
 
-/// True when any branch of the run is running (stored as running, or live in this process).
-async fn run_is_running(state: &AppState, caller: &Caller, id: &str) -> Result<bool, ApiError> {
-    let records = state.store.at(caller);
-    if records.run_has_running(id).await? {
-        return Ok(true);
+/// The benchmark a new run, suite or experiment is made on: the one it asks for (409 when it isn't
+/// installed), else the current one. Read once, so that what the request checks and what it starts
+/// are on the same benchmark whatever is chosen meanwhile.
+fn benchmark_asked(state: &AppState, asked: Option<&str>) -> Result<String, ApiError> {
+    match asked {
+        Some(name) if !state.has_benchmark(name) => Err(ApiError::conflict(format!(
+            "no benchmark named {name} is installed"
+        ))),
+        Some(name) => Ok(name.to_string()),
+        None => Ok(state.benchmark()),
     }
-    let branches = records.run_branches(id).await?;
-    Ok(branches.iter().any(|b| state.live.contains(b)))
 }
 
-async fn delete_run(
+/// A request's seed: absent, or at most 2^53 - 1 (else 400).
+fn checked_seed(asked: Option<u64>) -> Result<Option<u64>, ApiError> {
+    match asked {
+        Some(s) if s > runner::MAX_SEED => Err(ApiError::bad("seed must be at most 2^53 - 1")),
+        s => Ok(s),
+    }
+}
+
+/// A request's spend limit: absent, or a positive number of dollars (else 400).
+fn max_cost(asked: Option<f64>) -> Result<Option<f64>, ApiError> {
+    match asked {
+        None => Ok(None),
+        Some(v) => crate::budget::positive(v)
+            .map(Some)
+            .ok_or_else(|| ApiError::bad("max_cost_usd must be a positive number of dollars")),
+    }
+}
+
+/// A request's world time window: absent, or from 0 to 1440 minutes (else 400).
+fn world_minutes(asked: Option<f64>) -> Result<Option<f64>, ApiError> {
+    match asked {
+        Some(m) if !crate::window::valid_minutes(m) => Err(ApiError::bad(crate::window::INVALID)),
+        m => Ok(m),
+    }
+}
+
+// ---------------------------------------------------------------- simple routes
+
+async fn health(State(state): State<Arc<AppState>>) -> ApiResult<Value> {
+    let bytes = gc::usage(&state.hub, &state.benchmark()).await?;
+    let benchmark = match state.bench().await {
+        Ok(b) => json!({"name": b.name, "version": b.version, "tasks": b.tasks.len(),
+                        "world": b.world.iter().map(|p| json!({"part": p.part, "integration": p.integration})).collect::<Vec<_>>()}),
+        Err(e) => json!({"name": state.benchmark(), "error": format!("{e:#}")}),
+    };
+    Ok(Json(json!({
+        "open_available": state.config.open_available(),
+        "providers": providers::summary(&state.config.providers),
+        "claude": on_path("claude"),
+        "codex": on_path("codex"),
+        // Packages and agents run only in sandboxes: this machine's PATH says nothing of the CLIs.
+        "sandboxes": !state.store.layer().policy().runs_packages_here,
+        "benchmark": benchmark,
+        "disk": {"bytes": bytes, "limit_bytes": state.config.max_db_bytes},
+    })))
+}
+
+/// `[{id, kind, label, available, why?, models?}]`: each provider, asking the ones that list
+/// their models (each bounded by `providers::LIST_TIMEOUT`, all at once).
+async fn list_providers(
     State(state): State<Arc<AppState>>,
     Who(caller): Who,
-    Path(id): Path<String>,
-) -> ApiResult<Value> {
-    if !state.store.at(&caller).run_exists(&id).await? {
-        return Err(ApiError::not_found(format!("there is no run \"{id}\"")));
-    }
-    if run_is_running(&state, &caller, &id).await? {
-        return Err(ApiError::conflict("the run still has a running branch"));
-    }
-    detached(async move {
-        let dropped = gc::delete_run(state.store.at(&caller), &state.hub, &id).await?;
-        Ok(Json(json!({"dropped": dropped})))
-    })
-    .await
+) -> Json<Vec<ProviderStatus>> {
+    let config = providers_of(&state, &caller).await;
+    Json(providers::statuses(&config, &state.http).await)
 }
 
 /// The benchmark's tasks: `[{id, reason, ticket, instructions, clock_start?}]`; an external design
@@ -423,365 +259,4 @@ async fn suggested_teams(
     Query(q): Query<prompts::Pick>,
 ) -> ApiResult<Vec<prompts::Suggested>> {
     Ok(Json(prompts::suggested_teams(&state.bench().await?, &q)))
-}
-
-async fn list_runs(
-    State(state): State<Arc<AppState>>,
-    Who(caller): Who,
-) -> ApiResult<Vec<RunSummary>> {
-    Ok(Json(state.store.at(&caller).runs().await?))
-}
-
-// ---------------------------------------------------------------- runs
-
-#[derive(Deserialize)]
-struct NewRun {
-    task_id: String,
-    team: Team,
-    /// `chain` (default), `concurrent`, `dispatch`, or `external` (see `api::external`).
-    #[serde(default)]
-    runner: Runner,
-    /// The disruptions to add to the task (`{disruptions: [{id, params}]}`).
-    #[serde(default)]
-    scenario: Option<parts::proto::ScenarioRequest>,
-    /// The world's seed (at most 2^53 - 1); random when absent.
-    #[serde(default)]
-    seed: Option<u64>,
-    /// The run's model-spend limit in USD (`crate::budget`); `SHAKEDOWN_MAX_COST_USD` when absent.
-    #[serde(default)]
-    max_cost_usd: Option<f64>,
-    /// A Code connection: shaked launches its driver, which drives the run (`runner` is then
-    /// `external`; `chain`, the default, is taken as that).
-    #[serde(default)]
-    connection: Option<String>,
-    /// The benchmark it is made on (absent: the current one); 409 when it isn't installed.
-    #[serde(default)]
-    benchmark: Option<String>,
-    /// A world time window in minutes for a run an external system drives (`crate::window`).
-    #[serde(default)]
-    world_minutes: Option<f64>,
-}
-
-/// A request's world time window: absent, or from 0 to 1440 minutes (else 400).
-pub(crate) fn world_minutes(asked: Option<f64>) -> Result<Option<f64>, ApiError> {
-    match asked {
-        Some(m) if !crate::window::valid_minutes(m) => Err(ApiError::bad(crate::window::INVALID)),
-        m => Ok(m),
-    }
-}
-
-/// The benchmark a new run, suite or experiment is made on: the one it asks for (409 when it isn't
-/// installed), else the current one. Read once, so that what the request checks and what it starts
-/// are on the same benchmark whatever is chosen meanwhile.
-pub(super) fn benchmark_asked(state: &AppState, asked: Option<&str>) -> Result<String, ApiError> {
-    match asked {
-        Some(name) if !state.has_benchmark(name) => Err(ApiError::conflict(format!(
-            "no benchmark named {name} is installed"
-        ))),
-        Some(name) => Ok(name.to_string()),
-        None => Ok(state.benchmark()),
-    }
-}
-
-/// A request's spend limit: absent, or a positive number of dollars (else 400).
-pub(crate) fn max_cost(asked: Option<f64>) -> Result<Option<f64>, ApiError> {
-    match asked {
-        None => Ok(None),
-        Some(v) => crate::budget::positive(v)
-            .map(Some)
-            .ok_or_else(|| ApiError::bad("max_cost_usd must be a positive number of dollars")),
-    }
-}
-
-/// `POST /api/runs` with `connection` (see `connections::create_run`).
-async fn create_code_run(
-    state: Arc<AppState>,
-    caller: Arc<Caller>,
-    permit: StartPermit,
-    headers: &axum::http::HeaderMap,
-    req: NewRun,
-    bench: String,
-    scenario: crate::scenario::Scenario,
-) -> ApiResult<Value> {
-    let max_cost_usd = max_cost(req.max_cost_usd)?;
-    let world_minutes = world_minutes(req.world_minutes)?;
-    let (task_id, team) = (req.task_id, req.team);
-    let run = connections::CodeRun {
-        task_id,
-        team,
-        scenario,
-        max_cost_usd,
-        world_minutes,
-        benchmark: bench,
-    };
-    let id = req.connection.unwrap_or_default();
-    connections::create_run(state, caller, permit, headers, (&id, req.runner), run).await
-}
-
-/// `POST /api/runs` with `runner: external` (see `external::create_run`, which checks its spend
-/// limit and world time window).
-async fn create_external_run(
-    state: Arc<AppState>,
-    caller: Arc<Caller>,
-    permit: StartPermit,
-    req: NewRun,
-    bench: String,
-    scenario: crate::scenario::Scenario,
-) -> ApiResult<Value> {
-    let (run, limits) = (
-        (req.task_id, req.team),
-        (req.max_cost_usd, req.world_minutes),
-    );
-    external::create_run(state, caller, permit, bench, run, scenario, limits).await
-}
-
-/// A new run's benchmark and scenario (its seed checked).
-async fn new_run_world(
-    state: &AppState,
-    req: &mut NewRun,
-) -> Result<(String, crate::scenario::Scenario), ApiError> {
-    settle_providers(&mut req.team);
-    let bench = benchmark_asked(state, req.benchmark.as_deref())?;
-    let mut scenario = twin::scenario_of(state, &bench, req.scenario.as_ref()).await?;
-    if req.seed.is_some_and(|s| s > runner::MAX_SEED) {
-        return Err(ApiError::bad("seed must be at most 2^53 - 1"));
-    }
-    scenario.seed = req.seed;
-    let runner = match req.connection {
-        Some(_) => Runner::External,
-        None => req.runner,
-    };
-    if let Some(why) = crate::scenario::refusal(runner, &scenario) {
-        return Err(ApiError::bad(why));
-    }
-    Ok((bench, scenario))
-}
-
-/// `POST /api/runs`: the layer admits and meters the run where every run starts
-/// ([`launch`](crate::launch::launch)); its warning, if any, is in the answer. A run the layer
-/// refuses is refused first, before its world is looked up, so the answer names the quota.
-async fn create_run(
-    State(state): State<Arc<AppState>>,
-    Who(caller): Who,
-    permit: StartPermit,
-    headers: axum::http::HeaderMap,
-    JsonBody(req): JsonBody<NewRun>,
-) -> ApiResult<Value> {
-    crate::layer::admit(&state.store, &caller, Costly::StartRun).await?;
-    start_run(state, caller, permit, headers, req).await
-}
-
-/// `v` with the layer's admission `warning`, when there is one.
-pub(crate) fn with_warning(mut v: Value, warning: Option<String>) -> Value {
-    if let Some(w) = warning {
-        v["warning"] = json!(w);
-    }
-    v
-}
-
-/// One fork started, for the layer's `runs` meter.
-fn runs_usage<'a>(key: String, run: Option<&'a str>, branch: Option<&'a str>) -> Usage<'a> {
-    Usage {
-        meter: Meter::Runs,
-        quantity: 1,
-        key,
-        run,
-        branch,
-        paid_by: KeySource::Environment,
-    }
-}
-
-async fn start_run(
-    state: Arc<AppState>,
-    caller: Arc<Caller>,
-    permit: StartPermit,
-    headers: axum::http::HeaderMap,
-    mut req: NewRun,
-) -> ApiResult<Value> {
-    if let Some(id) = req.connection.as_deref() {
-        let kind = crate::auth::ResourceKind::Connection;
-        let named = Target::Resource { kind, id };
-        authorize(&state, &caller, Action::UseInRun, named).await?;
-    }
-    let (bench, scenario) = new_run_world(&state, &mut req).await?;
-    if req.connection.is_some() {
-        return create_code_run(state, caller, permit, &headers, req, bench, scenario).await;
-    }
-    if req.runner == Runner::External {
-        return create_external_run(state, caller, permit, req, bench, scenario).await;
-    }
-    team::validate_builtin(&providers_of(&state, &caller).await, &req.team, req.runner)?;
-    let max = max_cost(req.max_cost_usd)?;
-    permit.check_disk(&state).await?;
-    let v = detached(async move {
-        let _permit = permit;
-        let (task, team) = (&req.task_id, req.team);
-        let run = runner::RunOptions::new(req.runner)
-            .scenario(&scenario)
-            .scope(&caller);
-        let run = run.benchmark(&bench);
-        let l = run.max_cost(max).launch(&state, task, team).await?;
-        let v = json!({"run_id": l.run_id, "branch_id": l.branch_id});
-        Ok(with_warning(v, l.warning))
-    })
-    .await?;
-    Ok(Json(v))
-}
-
-/// `GET /api/branches/{id}`: the branch, its events, budget and metrics. `?lean=1` reads each
-/// model call without its request and response bodies (`Scoped::events_lean`), for pages that
-/// show the world rather than the calls: most of a long run's record, left out.
-async fn get_branch(
-    State(state): State<Arc<AppState>>,
-    Who(caller): Who,
-    Path(id): Path<String>,
-    Query(q): Query<HashMap<String, String>>,
-) -> ApiResult<Value> {
-    let branch = branch_or_404(&state, &caller, &id).await?;
-    let records = state.store.at(&caller);
-    let lean = q.get("lean").is_some_and(|v| v == "1" || v == "true");
-    let events = match lean {
-        true => records.events_lean(&id).await?,
-        false => records.events(&id).await?,
-    };
-    let now = chrono::Utc::now();
-    let m = metrics::metrics(&branch, &events, prices::table(), now);
-    let mut v = serde_json::to_value(branch)?;
-    v["budget"] = budget_of(&state, &id, &events);
-    v["events"] = serde_json::to_value(events)?;
-    v["metrics"] = serde_json::to_value(m)?;
-    v["paused"] = json!(flow::is_paused(&state, &id));
-    Ok(Json(v))
-}
-
-/// A branch's spend limit (from its `RunStart`) and, while it runs, its live estimate.
-fn budget_of(state: &AppState, id: &str, events: &[crate::model::Event]) -> Value {
-    let start = crate::model::RunStartPayload::of(events);
-    let max = start.and_then(|s| s.max_cost_usd);
-    let live = state.live.get(id).map(|c| c.budget.spent());
-    json!({"max_cost_usd": max, "estimate_usd": live})
-}
-
-fn exact() -> Mode {
-    Mode::Exact
-}
-
-#[derive(Deserialize)]
-struct ForkReq {
-    at_seq: i64,
-    #[serde(default)]
-    changes: HashMap<String, Change>,
-    /// `"exact"` (default) or `"approximate"`.
-    #[serde(default = "exact")]
-    restore: Mode,
-    /// Another team, for a run an external system drives (in place of `changes`).
-    #[serde(default)]
-    team: Option<Team>,
-}
-
-/// The branch to fork: 404 for an unknown branch and 409 for a running one; these come before
-/// the 507 check.
-async fn forkable(state: &AppState, caller: &Caller, id: &str) -> Result<Branch, ApiError> {
-    match state.store.at(caller).find_branch(id).await? {
-        None => Err(no_branch(id)),
-        Some(b) if b.status == BranchStatus::Running => {
-            Err(ApiError::conflict("the branch is still running"))
-        }
-        Some(b) => Ok(b),
-    }
-}
-
-/// A fork of a run a Code connection drove starts its driver again: 415/403 for a request a web
-/// page could make (`connections::guard_launch`).
-async fn guard_code_fork(
-    state: &AppState,
-    caller: &Caller,
-    headers: &axum::http::HeaderMap,
-    id: &str,
-) -> Result<(), ApiError> {
-    let events = state.store.at(caller).events(id).await?;
-    match crate::recorded::rules(&events).connection {
-        Some(_) => connections::guard_launch(state, headers),
-        None => Ok(()),
-    }
-}
-
-/// `POST /api/branches/{id}/fork`: admitted and metered by the layer.
-async fn fork_branch(
-    State(state): State<Arc<AppState>>,
-    Who(caller): Who,
-    Path(id): Path<String>,
-    permit: StartPermit,
-    headers: axum::http::HeaderMap,
-    JsonBody(req): JsonBody<ForkReq>,
-) -> ApiResult<fork::ForkResponse> {
-    crate::layer::admit(&state.store, &caller, Costly::Fork { branch: &id }).await?;
-    let (st, who) = (state.clone(), caller.clone());
-    let Json(resp) = fork_admitted(st, who, id, permit, headers, req).await?;
-    let key = format!("fork:{}", resp.branch_id);
-    let usage = runs_usage(key, None, Some(&resp.branch_id));
-    crate::layer::meter(&state.store, &caller, usage).await;
-    Ok(Json(resp))
-}
-
-async fn fork_admitted(
-    state: Arc<AppState>,
-    caller: Arc<Caller>,
-    id: String,
-    permit: StartPermit,
-    headers: axum::http::HeaderMap,
-    mut req: ForkReq,
-) -> ApiResult<fork::ForkResponse> {
-    let parent = forkable(&state, &caller, &id).await?;
-    guard_code_fork(&state, &caller, &headers, &id).await?;
-    fork::settle_changes(&parent.team, &mut req.changes, &state.config.providers);
-    let providers = providers_of(&state, &caller).await;
-    check_fork_team(&providers, &parent.team, &req.changes)?;
-    if let Some(team) = &mut req.team {
-        settle_providers(team);
-        team::validate(&providers, team)?;
-    }
-    permit.check_disk(&state).await?;
-    let req = fork::ForkRequest {
-        at_seq: req.at_seq,
-        changes: req.changes,
-        restore: req.restore,
-        team: req.team,
-    };
-    let resp = detached(async move {
-        let _permit = permit;
-        Ok(fork::fork_with(&state, &caller, &id, req).await?)
-    })
-    .await?;
-    Ok(Json(resp))
-}
-
-/// `restore=exact|approximate` (default exact).
-fn parse_restore(q: &HashMap<String, String>) -> Result<Mode, ApiError> {
-    match q.get("restore").filter(|r| !r.is_empty()) {
-        None => Ok(exact()),
-        Some(r) => serde_json::from_value(json!(r))
-            .map_err(|_| ApiError::bad(format!("restore must be exact or approximate, not {r:?}"))),
-    }
-}
-
-/// `{parts: [{part, how, estimate_seconds?}]}`: how each part of a fork at `at_seq` would be
-/// restored, or the refusal (409).
-async fn get_restore_plan(
-    State(state): State<Arc<AppState>>,
-    Who(caller): Who,
-    Path(id): Path<String>,
-    Query(q): Query<HashMap<String, String>>,
-) -> ApiResult<Value> {
-    let at_seq: i64 = q
-        .get("at_seq")
-        .and_then(|s| s.parse().ok())
-        .ok_or_else(|| ApiError::bad("at_seq must be an integer"))?;
-    let mode = parse_restore(&q)?;
-    let parts =
-        detached(
-            async move { Ok(fork::restore_preview(&state, &caller, &id, at_seq, mode).await?) },
-        )
-        .await?;
-    Ok(Json(json!({"parts": parts})))
 }

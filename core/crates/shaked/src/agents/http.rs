@@ -11,7 +11,12 @@
 //! No answer by the deadline, or `ok: false`, is a failed run (the agent's doing); an agent that
 //! can't be reached or answers an error status is an infrastructure error.
 
-use std::{future::Future, pin::Pin, sync::Arc, time::Duration};
+use std::{
+    future::Future,
+    pin::Pin,
+    sync::{Arc, Weak},
+    time::Duration,
+};
 
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use serde::Deserialize;
@@ -19,21 +24,21 @@ use serde_json::{json, Value};
 
 use super::{AgentResult, AgentRun, Driver, FailureKind};
 use crate::{
+    app::AppState,
     layer::Policy,
     model::{AgentSpec, TokenUsage},
     store::Store,
 };
 
 pub const PROTOCOL: &str = "shakedown-agent/1";
-/// Its name until 2026-11-19: an agent that refuses [`PROTOCOL`] (a 4xx answer) is asked again
-/// under it.
-pub const OLD_PROTOCOL: &str = "arena-agent/1";
 /// The longest a hello may take.
 pub const HELLO_TIMEOUT: Duration = Duration::from_secs(10);
 /// How an agent's own cost is labelled.
 pub const COST_SOURCE: &str = "agent_reported";
 
 pub struct HttpDriver {
+    // Weak: `AppState` owns the drivers, so a strong reference would be a cycle.
+    state: Weak<AppState>,
     /// The shaked base URL the agent is told to reach the MCP endpoint at.
     pub agent_base: String,
     pub store: Arc<Store>,
@@ -43,12 +48,14 @@ pub struct HttpDriver {
 }
 
 impl HttpDriver {
-    pub fn new(agent_base: String, store: Arc<Store>, timeout: Duration) -> HttpDriver {
+    pub fn new(state: &Arc<AppState>, agent_base: String, timeout: Duration) -> HttpDriver {
+        let store = state.store.clone();
         let http = reqwest::Client::builder().connect_timeout(Duration::from_secs(10));
         let http = crate::providers::reach::guard(http, store.layer().policy())
             .build()
             .expect("http client");
         HttpDriver {
+            state: Arc::downgrade(state),
             agent_base,
             store,
             http,
@@ -57,16 +64,20 @@ impl HttpDriver {
     }
 }
 
+/// The `Authorization` value for `auth`, read for `caller` while the server is still there.
+async fn read_bearer(
+    state: &Weak<AppState>,
+    caller: &crate::auth::Caller,
+    auth: &crate::model::AuthRef,
+) -> Result<String, String> {
+    let state = state.upgrade().ok_or("server is shutting down")?;
+    super::endpoint_auth::bearer(&state, caller, auth).await
+}
+
 /// The URL's host (and port), the only part of it an error names: a URL may carry a credential
 /// in its query.
 pub fn host_of(url: &str) -> String {
-    reqwest::Url::parse(url)
-        .ok()
-        .and_then(|u| {
-            u.host_str()
-                .map(|h| u.port().map_or(h.to_string(), |p| format!("{h}:{p}")))
-        })
-        .unwrap_or_else(|| "the agent".into())
+    crate::providers::reach::host_of(url, "the agent")
 }
 
 /// Why `url` can't be an agent's address, if it can't.
@@ -80,10 +91,22 @@ pub fn bad_url(url: Option<&str>) -> Option<String> {
     }
 }
 
+/// What a request to the agent carries besides the run: its typed headers, kept for `scope`, and
+/// the credential `auth` stands for, already read for this request.
+pub struct Sent<'a> {
+    pub scope: &'a str,
+    pub bearer: Option<&'a str>,
+}
+
 /// The agent's headers with their values, as sensitive header values.
-fn headers_of(spec: &AgentSpec) -> Result<HeaderMap, String> {
+fn headers_of(spec: &AgentSpec, sent: &Sent) -> Result<HeaderMap, String> {
     let mut map = HeaderMap::new();
-    for (name, value) in spec.headers.reveal()? {
+    let mut pairs = spec.headers.reveal_for(sent.scope)?;
+    pairs.extend(
+        sent.bearer
+            .map(|b| ("Authorization".to_string(), b.to_string())),
+    );
+    for (name, value) in pairs {
         let n = HeaderName::from_bytes(name.trim().as_bytes())
             .map_err(|_| format!("{name:?} is not a header name"))?;
         let mut v = HeaderValue::from_str(value.trim())
@@ -115,10 +138,11 @@ struct Usage {
     output_tokens: i64,
 }
 
-fn failure(error: String, failure: Option<FailureKind>) -> AgentResult {
+/// A failure of the agent's own doing (`FailureKind::Model`).
+fn agent_failed(error: String) -> AgentResult {
     AgentResult {
-        failure,
-        ..super::fail(error)
+        failure: Some(FailureKind::Model),
+        ..AgentResult::failed(error)
     }
 }
 
@@ -130,10 +154,7 @@ fn done(body: &str) -> AgentResult {
         let why = d.error.unwrap_or_else(|| "no reason given".into());
         return AgentResult {
             tokens,
-            ..failure(
-                format!("the agent says it failed: {why}"),
-                Some(FailureKind::Model),
-            )
+            ..agent_failed(format!("the agent says it failed: {why}"))
         };
     }
     AgentResult {
@@ -153,27 +174,9 @@ fn answered(host: &str, status: u16, body: &str) -> AgentResult {
         return done(body);
     }
     let tail: String = body.trim().chars().take(300).collect();
-    failure(
-        format!("the agent at {host} answered HTTP {status}: {tail}"),
-        None,
-    )
-}
-
-/// POSTs `body` to the agent; when it refuses it (a 4xx answer), POSTs it again with the old
-/// protocol name, for agents written before 2026-11-19 that check the name. The last answer.
-async fn post_speaking(
-    http: &reqwest::Client,
-    policy: &Policy,
-    spec: &AgentSpec,
-    body: &Value,
-) -> Result<(u16, String), String> {
-    let first = post(http, policy, spec, body).await?;
-    if !(400..500).contains(&first.0) {
-        return Ok(first);
-    }
-    let mut old = body.clone();
-    old["protocol"] = json!(OLD_PROTOCOL);
-    post(http, policy, spec, &old).await
+    AgentResult::failed(format!(
+        "the agent at {host} answered HTTP {status}: {tail}"
+    ))
 }
 
 /// What the reach checks call an agent.
@@ -185,6 +188,7 @@ async fn post(
     http: &reqwest::Client,
     policy: &Policy,
     spec: &AgentSpec,
+    sent: &Sent<'_>,
     body: &Value,
 ) -> Result<(u16, String), String> {
     let url = spec.url.as_deref().unwrap_or_default();
@@ -194,7 +198,7 @@ async fn post(
         .map_err(|why| format!("the agent at {host} cannot be reached from here: {why}"))?;
     let r = http
         .post(url)
-        .headers(headers_of(spec)?)
+        .headers(headers_of(spec, sent)?)
         .json(body)
         .send()
         .await;
@@ -214,10 +218,11 @@ pub async fn hello(
     http: &reqwest::Client,
     policy: &Policy,
     spec: &AgentSpec,
+    sent: &Sent<'_>,
 ) -> Result<Option<String>, String> {
     let host = host_of(spec.url.as_deref().unwrap_or_default());
     let body = json!({"protocol": PROTOCOL, "type": "hello"});
-    let said = post_speaking(http, policy, spec, &body);
+    let said = post(http, policy, spec, sent, &body);
     let (status, text) = tokio::time::timeout(HELLO_TIMEOUT, said)
         .await
         .map_err(|_| {
@@ -247,18 +252,19 @@ pub async fn hello(
 impl HttpDriver {
     async fn run_body(&self, run: &AgentRun, token: &str) -> anyhow::Result<Value> {
         let branch = &run.branch;
-        let run_id = branch
-            .records(&self.store)
-            .branch(&branch.branch_id)
-            .await?
-            .run_id;
+        let run_id = match &branch.run_id {
+            Some(id) => id.clone(),
+            None => {
+                let records = branch.scoped(&self.store);
+                records.branch(&branch.branch_id).await?.run_id
+            }
+        };
         let ends = crate::external::endpoints(
             &self.agent_base,
             &branch.branch_id,
             &run.spec.id,
             Default::default(),
         );
-        let (mcp, gateway) = (ends.mcp_url, ends.gateway_url);
         let deadline = chrono::Utc::now() + self.timeout;
         Ok(json!({
             "protocol": PROTOCOL,
@@ -267,8 +273,9 @@ impl HttpDriver {
             "branch_id": branch.branch_id,
             "agent": run.spec.id,
             "task": super::prompt_of(run),
-            "mcp_url": mcp,
-            "gateway_url": gateway,
+            "mcp_url": ends.mcp_url,
+            "gateway_url": ends.gateway_url,
+            "otlp_traces_url": format!("{}/v1/traces", ends.otlp_url),
             "token": token,
             "deadline": deadline.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
         }))
@@ -276,7 +283,7 @@ impl HttpDriver {
 
     async fn run_agent(&self, run: &AgentRun) -> AgentResult {
         if run.resume.is_some() {
-            return super::fail("an http agent can't resume in the middle of its run".into());
+            return AgentResult::failed("an http agent can't resume in the middle of its run");
         }
         let token = run
             .branch
@@ -287,30 +294,53 @@ impl HttpDriver {
         result
     }
 
+    /// The credential the agent's `auth` stands for, read now for the caller the run is for.
+    async fn bearer(&self, run: &AgentRun) -> Result<Option<String>, String> {
+        let Some(auth) = &run.spec.auth else {
+            return Ok(None);
+        };
+        let read = read_bearer(&self.state, &run.branch.caller, auth).await;
+        read.map(Some)
+            .map_err(|why| format!("the agent's credential could not be read: {why}"))
+    }
+
+    /// POSTs the run to the agent within the run's time, with the credential read now; `None`
+    /// when no answer came in time.
+    async fn send_run(
+        &self,
+        run: &AgentRun,
+        body: &Value,
+    ) -> Option<Result<(u16, String), String>> {
+        let scope = crate::layer::secret_scope(self.store.layer().as_ref(), &run.branch.caller);
+        let bearer = match self.bearer(run).await {
+            Ok(b) => b,
+            Err(e) => return Some(Err(e)),
+        };
+        let sent = Sent {
+            scope: &scope,
+            bearer: bearer.as_deref(),
+        };
+        let policy = self.store.layer().policy();
+        let post = post(&self.http, policy, &run.spec, &sent, body);
+        run.branch.flow.timeout(self.timeout, post).await
+    }
+
     async fn call(&self, run: &AgentRun, token: &str) -> AgentResult {
         let body = match self.run_body(run, token).await {
             Ok(b) => b,
-            Err(e) => return super::fail(format!("{e:#}")),
+            Err(e) => return AgentResult::failed(format!("{e:#}")),
         };
         let host = host_of(run.spec.url.as_deref().unwrap_or_default());
         let started = std::time::Instant::now();
-        let waited = run
-            .branch
-            .flow
-            .timeout(
-                self.timeout,
-                post_speaking(&self.http, self.store.layer().policy(), &run.spec, &body),
-            )
-            .await;
+        let waited = self.send_run(run, &body).await;
         let mut r = match waited {
             None => {
                 let secs = self.timeout.as_secs();
-                failure(
-                    format!("the agent at {host} did not answer within {secs} s"),
-                    Some(FailureKind::Model),
-                )
+                agent_failed(format!(
+                    "the agent at {host} did not answer within {secs} s"
+                ))
             }
-            Some(Err(e)) => super::fail(e),
+            Some(Err(e)) => AgentResult::failed(e),
             Some(Ok((status, text))) => answered(&host, status, &text),
         };
         r.seconds = started.elapsed().as_secs_f64();
@@ -327,6 +357,14 @@ impl Driver for HttpDriver {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn a_dropped_server_answers_that_it_is_shutting_down() {
+        let caller = crate::auth::Caller::person();
+        let auth = crate::model::AuthRef::Key("k".into());
+        let e = read_bearer(&Weak::new(), &caller, &auth).await.unwrap_err();
+        assert!(e.contains("server is shutting down"), "{e}");
+    }
 
     #[test]
     fn answers_map_to_results() {

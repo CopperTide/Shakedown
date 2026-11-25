@@ -10,7 +10,7 @@ use crate::model::*;
 
 use super::{
     dispatch::{self, Said},
-    tool_call_payload, BranchCtx, CallFacts, ToolExec,
+    BranchCtx, CallFacts, Step, ToolExec,
 };
 
 pub const HANDOFF: &str = "handoff";
@@ -160,7 +160,10 @@ impl ToolExec {
             _ => dispatch::take(branch, agent, name, &args).map(Taken::Dispatch),
         };
         match taken {
-            Ok(Taken::Handoff(p)) => self.recorded(branch, agent, EventKind::Handoff, &p).await,
+            Ok(Taken::Handoff(p)) => {
+                self.record(branch, Some(agent), &p).await?;
+                Ok(json!({"ok": true}))
+            }
             Ok(Taken::Message(p)) => {
                 let said = Said::new(agent, EventKind::Message, Some(&p.to), &p.text);
                 self.told(branch, said, &p).await
@@ -168,35 +171,22 @@ impl ToolExec {
             Ok(Taken::Dispatch(d)) => self.dispatched(branch, agent, d).await,
             Ok(Taken::Inbox) => self.inbox(branch, agent, args, tool_call_id).await,
             Err(e) => {
-                self.refused(branch, agent, name, args, e, tool_call_id)
-                    .await
+                let step = Step::new(name, args, Err(e), CallFacts::default());
+                self.record_talk(branch, agent, step, tool_call_id).await
             }
         }
     }
 
-    async fn recorded<T: serde::Serialize>(
-        &self,
-        branch: &BranchCtx,
-        agent: &str,
-        kind: EventKind,
-        payload: &T,
-    ) -> Result<Value, String> {
-        self.record(branch, Some(agent), kind, payload).await?;
-        Ok(json!({"ok": true}))
-    }
-
     /// Records what an agent said (`said`, its payload `payload`) and tells the branch's dispatch
     /// runner, if it has one.
-    pub(super) async fn told<T: serde::Serialize>(
+    pub(super) async fn told<P: EventPayload>(
         &self,
         branch: &BranchCtx,
         mut said: Said,
-        payload: &T,
+        payload: &P,
     ) -> Result<Value, String> {
         let agent = said.from.clone();
-        said.seq = self
-            .record_seq(branch, Some(&agent), said.kind, payload)
-            .await?;
+        said.seq = self.record_seq(branch, Some(&agent), payload).await?;
         branch.mailbox.tell(said);
         Ok(json!({"ok": true}))
     }
@@ -209,27 +199,23 @@ impl ToolExec {
         args: Value,
         tool_call_id: Option<String>,
     ) -> Result<Value, String> {
-        let events = branch.records(&self.store).events(&branch.branch_id).await;
+        let events = branch.records().events().await;
         let events = events.map_err(|e| format!("internal error: reading the record: {e:#}"))?;
         let outcome = Ok(json!({"messages": mail_for(&events, agent)}));
-        let payload = tool_call_payload(INBOX, args, &outcome, tool_call_id, CallFacts::default());
-        self.record(branch, Some(agent), EventKind::ToolCall, &payload)
-            .await?;
-        outcome
+        let step = Step::new(INBOX, args, outcome, CallFacts::default());
+        self.record_talk(branch, agent, step, tool_call_id).await
     }
 
-    async fn refused(
+    /// Records `step`, a talk call that reached no part, as a tool call of `agent`; its outcome.
+    async fn record_talk(
         &self,
         branch: &BranchCtx,
         agent: &str,
-        name: &str,
-        args: Value,
-        error: String,
+        step: Step,
         tool_call_id: Option<String>,
     ) -> Result<Value, String> {
-        let outcome = Err(error);
-        let payload = tool_call_payload(name, args, &outcome, tool_call_id, CallFacts::default());
-        self.record(branch, Some(agent), EventKind::ToolCall, &payload)
+        let outcome = step.outcome.clone();
+        self.record_step(branch, Some(agent), step, tool_call_id)
             .await?;
         outcome
     }

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // A file experiment's page: its scenario, setups and repeats, its problems, and a clear page for
 // an id that doesn't exist.
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import FileExperimentPage from './FileExperimentPage';
@@ -45,6 +45,24 @@ describe('file experiment page', () => {
     expect(await screen.findByText('15 runs')).toBeTruthy();
     expect(await screen.findByText('Label of team')).toBeTruthy();
     expect(screen.getByText('Label of supplier-slip')).toBeTruthy();
+  });
+
+  it('breadcrumb_world_scenario_experiment', async () => {
+    mockFetch(EXPERIMENT);
+    show('slip');
+    const trail = await screen.findByRole('navigation', { name: 'Where this experiment sits' });
+    const links = within(trail).getAllByRole('link');
+    expect(links.map((l) => [l.textContent, l.getAttribute('href')])).toEqual([
+      ['Label of larkspur-plant', '/worlds/larkspur-plant'],
+      ['Label of supplier-slip', '/scenarios/supplier-slip'],
+    ]);
+    expect(within(trail).getByText('Supplier slip: solo vs team').getAttribute('aria-current')).toBe('page');
+  });
+
+  it('offers_delete', async () => {
+    mockFetch(EXPERIMENT);
+    show('slip');
+    expect(await screen.findByRole('button', { name: 'Delete' })).toBeTruthy();
   });
 
   it('unknown_file_experiment', async () => {

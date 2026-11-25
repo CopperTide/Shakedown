@@ -11,6 +11,10 @@ use crate::auth::{
     RunTokenKind,
 };
 
+/// Revokes branch `$1`'s live tokens (only agent `$2`'s, when it is not null).
+pub(crate) const REVOKE: &str = "UPDATE run_tokens SET revoked_at = now()
+    WHERE branch_id = $1 AND revoked_at IS NULL AND ($2::text IS NULL OR agent = $2)";
+
 impl Scoped<'_> {
     /// A new token of `kind` for `branch` of `run` (an agent token names its agent, a worker or
     /// ticket token its sandbox), good until `expires`: the token, which only its hash is kept of.
@@ -48,8 +52,6 @@ impl Scoped<'_> {
 
     /// Revokes `branch`'s live tokens (only `agent`'s, when given): how many.
     pub async fn revoke_run_tokens(&self, branch: &str, agent: Option<&str>) -> Result<u64> {
-        let sql = "UPDATE run_tokens SET revoked_at = now()
-                   WHERE branch_id = $1 AND revoked_at IS NULL AND ($2::text IS NULL OR agent = $2)";
-        self.execute(sql, &[&branch, &agent]).await
+        self.execute(REVOKE, &[&branch, &agent]).await
     }
 }

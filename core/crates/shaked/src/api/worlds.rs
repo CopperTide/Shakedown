@@ -19,7 +19,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use super::extract::JsonBody;
-use crate::{app::AppState, world, worlds};
+use crate::{app::AppState, world, world_builds};
 
 /// A refusal: its status and JSON body.
 struct Refused(StatusCode, Value);
@@ -48,8 +48,12 @@ fn refusal(status: StatusCode, msg: impl Into<String>) -> Refused {
 }
 
 /// The builder's answer to `r`. A refusal (`-32602`) is `invalid` with its message, or 422 with
-/// its problems when it gives them; no builder installed is a 404.
+/// its problems when it gives them; no builder installed is a 404, and a shaked that starts no
+/// package program a 409 ([`world_builds::PREBUILT_ONLY`]).
 async fn ask<R: Request>(state: &AppState, r: &R, invalid: StatusCode) -> Result<Value, Refused> {
+    if !state.hub.runs_programs() {
+        return Err(refusal(StatusCode::CONFLICT, world_builds::PREBUILT_ONLY));
+    }
     let name = (state.hub.registry().builders().next()).map(|m| m.name.clone());
     let name =
         name.ok_or_else(|| refusal(StatusCode::NOT_FOUND, "no world builder is installed"))?;
@@ -117,12 +121,12 @@ struct BuildReq {
 /// (409 with a free one), generates it into the worlds folder, installs it and prepares it in the
 /// background: 202 `{name, state: "preparing"}`.
 async fn build(State(state): State<Arc<AppState>>, JsonBody(req): JsonBody<BuildReq>) -> Answer {
-    let asked = worlds::Asked::now(&state);
-    let dir = worlds_dir(&state)?;
+    let asked = world_builds::Asked::now(&state);
     let name = previewed_name(&state, &req).await?;
+    let dir = worlds_dir(&state)?;
     refuse_taken(&state, &dir, &name)?;
     write_world(&state, &dir, &req, &name).await?;
-    worlds::spawn_prepare(&state, &name, asked);
+    world_builds::spawn_prepare(&state, &name, asked);
     Ok(preparing(&name))
 }
 
@@ -225,7 +229,7 @@ fn listed(state: &AppState) -> Vec<Manifest> {
 
 /// `preparing`/`ready`/`failed` from this run of shaked, else `ready` when its base saves exist
 /// (`not_prepared` when they don't, or that can't be told).
-async fn state_of(state: &AppState, name: &str) -> worlds::BuildState {
+async fn state_of(state: &AppState, name: &str) -> world_builds::BuildState {
     if let Some(b) = state.builds.state(name) {
         return b;
     }
@@ -234,7 +238,7 @@ async fn state_of(state: &AppState, name: &str) -> worlds::BuildState {
         world::has_base(&state.hub, &bench).await
     };
     let ready = based.await.unwrap_or(false);
-    worlds::BuildState {
+    world_builds::BuildState {
         state: if ready { "ready" } else { "not_prepared" },
         elapsed_ms: 0,
         error: None,
@@ -293,7 +297,7 @@ async fn choose(State(state): State<Arc<AppState>>, UrlPath(name): UrlPath<Strin
 /// is being prepared.
 async fn prepare(State(state): State<Arc<AppState>>, UrlPath(name): UrlPath<String>) -> Answer {
     benchmark_or_404(&state, &name)?;
-    if !worlds::spawn_prepare(&state, &name, worlds::Asked::now(&state)) {
+    if !world_builds::spawn_prepare(&state, &name, world_builds::Asked::now(&state)) {
         return Err(refusal(
             StatusCode::CONFLICT,
             format!("{name} is being prepared"),

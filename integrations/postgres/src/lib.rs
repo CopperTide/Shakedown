@@ -1,7 +1,7 @@
 //! The generic `postgres` integration: each instance is a database, each save a copy of one.
 //!
 //! Databases are `pi_<ns><instance>` and `ps_<ns><save>`. `ns` is empty unless env `SHAKEDOWN_PG_NS`
-//! (or `?arena_ns=` on `SHAKEDOWN_PG_URL`) sets it (tests use it to keep their databases apart from everyone else's). With an empty `ns`,
+//! (or `?shakedown_ns=` on `SHAKEDOWN_PG_URL`) sets it (tests use it to keep their databases apart from everyone else's). With an empty `ns`,
 //! ids that name an existing legacy database (`snap_*`, `branch_*`, `gold_*`, `world_base`) are
 //! used as they are, so runs recorded before saves were parts still open.
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -27,7 +27,7 @@ pub struct Postgres {
     live: Mutex<HashSet<String>>,
 }
 
-/// Takes `shakedown_ns=<ns>` (or its old name `arena_ns=<ns>`) out of the URL's query string; other
+/// Takes `shakedown_ns=<ns>` out of the URL's query string; other
 /// query parameters stay.
 fn split_ns(url: &str) -> (String, String) {
     let Some((base, query)) = url.split_once('?') else {
@@ -36,10 +36,7 @@ fn split_ns(url: &str) -> (String, String) {
     let mut ns = String::new();
     let mut rest = vec![];
     for kv in query.split('&') {
-        match kv
-            .strip_prefix("shakedown_ns=")
-            .or_else(|| kv.strip_prefix("arena_ns="))
-        {
+        match kv.strip_prefix("shakedown_ns=") {
             Some(n) => ns = n.to_string(),
             None => rest.push(kv),
         }
@@ -728,16 +725,11 @@ mod tests {
             (u.into(), "x_".into())
         );
         assert_eq!(
-            split_ns(&format!("{u}?arena_ns=x_")),
-            (u.into(), "x_".into()),
-            "the old name"
-        );
-        assert_eq!(
-            split_ns(&format!("{u}?arena_ns=x_&sslmode=disable")),
+            split_ns(&format!("{u}?shakedown_ns=x_&sslmode=disable")),
             (format!("{u}?sslmode=disable"), "x_".into())
         );
         assert_eq!(
-            split_ns(&format!("{u}?sslmode=disable&arena_ns=y_")),
+            split_ns(&format!("{u}?sslmode=disable&shakedown_ns=y_")),
             (format!("{u}?sslmode=disable"), "y_".into())
         );
     }

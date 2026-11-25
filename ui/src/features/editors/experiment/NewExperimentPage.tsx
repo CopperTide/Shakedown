@@ -1,5 +1,5 @@
-// A new experiment: name it, pick its world, scenario and setups, say how often, and create it as a
-// file in the project. Nothing runs until it is deployed.
+// A new experiment: name it, pick its world, scenario and setups, say how often and what a run may
+// spend, and create it as a file in the project. Nothing runs until it is deployed.
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { putItem } from '@/api/project';
@@ -9,8 +9,11 @@ import { PageBody, PageHeader } from '@/components/ui/page';
 import { ErrorState } from '@/components/ui/state';
 import { useQuery } from '@/hooks/useQuery';
 import { errorMessage } from '@/lib/errors';
+import { track } from '@/lib/productAnalytics';
 import type { ExperimentBody } from '@/model/project';
 import { idFor } from '../idRule';
+import { KINDS } from '../kinds';
+import { capProblem } from './budget';
 import { loadChoices } from './choices';
 import ExperimentFields from './ExperimentFields';
 
@@ -21,10 +24,14 @@ export default function NewExperimentPage() {
   const [body, setBody] = useState(EMPTY);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
-  const ready = body.label.trim() && body.world && body.scenario && body.setups.length > 0;
+  const ready = body.label.trim() && body.world && body.scenario && body.setups.length > 0 && !capProblem(body);
   const create = async () => {
     const id = idFor(body.label);
-    try { await putItem('experiments', id, body, true); navigate(`/experiments/file/${id}`); } catch (e) { setError(errorMessage(e)); }
+    try {
+      await putItem('experiments', id, body, true);
+      track('experiment created');
+      navigate(`/experiments/file/${id}`);
+    } catch (e) { setError(errorMessage(e)); }
   };
   return (
     <>
@@ -32,7 +39,7 @@ export default function NewExperimentPage() {
       <PageBody width="default">
         {choices.error && <ErrorState error={choices.error} onRetry={choices.reload} />}
         <label className="grid gap-1 text-sm"><span className="text-muted">Name</span>
-          <Input aria-label="Name" value={body.label} onChange={(e) => setBody({ ...body, label: e.target.value })} placeholder="Supplier slip: solo vs team" /></label>
+          <Input aria-label="Name" value={body.label} onChange={(e) => setBody({ ...body, label: e.target.value })} placeholder={KINDS.experiments.example} /></label>
         {choices.data && <ExperimentFields body={body} choices={choices.data} onChange={setBody} />}
         {error && <p role="alert" className="text-sm text-alarm">{error}</p>}
         <div className="flex justify-end"><Button variant="primary" disabled={!ready} onClick={() => { void create(); }}>Create experiment</Button></div>

@@ -158,7 +158,7 @@ async fn generate_key(stack: &Stack, site: &Site) -> Result<ApiKey> {
 fn setup_answers() -> Value {
     json!({"args": {
         "language": "English", "country": "United States", "timezone": "UTC",
-        "currency": "USD", "company_name": "Arena Co", "company_abbr": "AC",
+        "currency": "USD", "company_name": "Shakedown Co", "company_abbr": "AC",
         "chart_of_accounts": "Standard", "fy_start_date": "2026-01-01",
         "fy_end_date": "2026-12-31", "enable_telemetry": 0,
     }})

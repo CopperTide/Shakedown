@@ -7,16 +7,16 @@ simulated people, choose events, review, build) and it is ready to run in under 
 validated by a schema. The world is generated from template + choices + seed, the same way every time.
 
 **Architecture:** A Python package `benchmarks/world` holds the template loader, its JSON Schema, a deterministic
-generator and the templates themselves. It is installed as a new package kind, `builder`, which arenad talks to over
+generator and the templates themselves. It is installed as a new package kind, `builder`, which shaked talks to over
 the usual line protocol (`templates`, `template`, `preview`, `generate`). Building writes a generated **benchmark
-package** under `ARENA_WORLDS` (its `world.json` plus copied files). Its program is the same Python package run as a
+package** under `SHAKEDOWN_WORLDS` (its `world.json` plus copied files). Its program is the same Python package run as a
 generic world benchmark (`python -m worldbench --world world.json`), scored by the template's checks through a new
-kit evaluator. arenad installs that package into the hub at runtime, prepares its base world in the background and
+kit evaluator. shaked installs that package into the hub at runtime, prepares its base world in the background and
 makes it the current benchmark. The UI adds a stepper page at `/worlds/new` and a world picker on Run once and New
 experiment.
 
 **Tech Stack:** Python 3.10+ (`pyyaml`, `jsonschema` in `benchmarks/world` only; the kit stays dependency-free), Rust
-(`parts`, `arenad`; no new crates), React + TypeScript + vitest.
+(`parts`, `shaked`; no new crates), React + TypeScript + vitest.
 
 **Spec:** `docs/superpowers/specs/2026-11-19-software-factory-design.md` (Goal 3; "Calls made after the builder check":
 Builder UI, Scoring). Check format: `docs/superpowers/specs/2026-11-17-any-agent-sandboxes-expected-state-design.md`
@@ -26,12 +26,12 @@ Builder UI, Scoring). Check format: `docs/superpowers/specs/2026-11-17-any-agent
 
 | # | Call | Why | Cost if wrong |
 |---|---|---|---|
-| W1 | Templates are **YAML validated by a JSON Schema** (`worldbench/schema/template.schema.json`, draft 2020-12), loaded and expanded by a **Python builder package** (`benchmarks/world`, manifest `kind = "builder"`), not by arenad. | The core holds no system code; PyYAML and jsonschema are mature, and Python keeps cargo off the shared machine. Comments in YAML matter for long templates (traps, people). | One more program per arenad; arenad needs `uv` (already true for the Python packages). |
-| W2 | A built world **is a generated benchmark package** in `ARENA_WORLDS` (default `<arena>/core/worlds`, git-ignored, scanned at start like `ARENA_PACKAGES`): `arena-package.toml` (`opt_in = true`, a `[world]` table with title and template) + `world.json` + `files/`. Its command runs `${ARENA_DIR}/benchmarks/world` (a new substitution beside `${ARENA_BIN_DIR}`). | Runs, forks, reruns, gc and experiments already key everything by benchmark name; a package per world needs no new concept downstream. | Built worlds are only as portable as the checkout they name (`${ARENA_DIR}` keeps them movable with it). |
+| W1 | Templates are **YAML validated by a JSON Schema** (`worldbench/schema/template.schema.json`, draft 2020-12), loaded and expanded by a **Python builder package** (`benchmarks/world`, manifest `kind = "builder"`), not by shaked. | The core holds no system code; PyYAML and jsonschema are mature, and Python keeps cargo off the shared machine. Comments in YAML matter for long templates (traps, people). | One more program per shaked; shaked needs `uv` (already true for the Python packages). |
+| W2 | A built world **is a generated benchmark package** in `SHAKEDOWN_WORLDS` (default `<shakedown>/core/worlds`, git-ignored, scanned at start like `SHAKEDOWN_PACKAGES`): `shakedown-package.toml` (`opt_in = true`, a `[world]` table with title and template) + `world.json` + `files/`. Its command runs `${SHAKEDOWN_DIR}/benchmarks/world` (a new substitution beside `${SHAKEDOWN_BIN_DIR}`). | Runs, forks, reruns, gc and experiments already key everything by benchmark name; a package per world needs no new concept downstream. | Built worlds are only as portable as the checkout they name (`${SHAKEDOWN_DIR}` keeps them movable with it). |
 | W3 | The package name is the **company slug** (`northwind-labs`); a name taken by any installed package or built world is refused (409) with a suggestion (`northwind-labs-2`). Built worlds are **never edited or deleted in this stage**. | Forks and reruns re-read `describe` by name, so a world must not change under its runs. | A user who wants a change builds again under a new name. |
-| W4 | The **current benchmark becomes switchable** at runtime (`POST /api/worlds/{name}/use`; a world is made current when it is ready). It is not persisted: at start `ARENA_BENCHMARK` or the only-one rule decides, as today. Runs, suites and experiments carry the benchmark they were created with (`LaunchSpec.benchmark`). | Every page reads `state.bench()`; switching one value is the least invasive change. | After a restart the user picks the world again (one select). |
+| W4 | The **current benchmark becomes switchable** at runtime (`POST /api/worlds/{name}/use`; a world is made current when it is ready). It is not persisted: at start `SHAKEDOWN_BENCHMARK` or the only-one rule decides, as today. Runs, suites and experiments carry the benchmark they were created with (`LaunchSpec.benchmark`). | Every page reads `state.bench()`; switching one value is the least invasive change. | After a restart the user picks the world again (one select). |
 | W5 | Generation is **deterministic**: template version + choices + seed → byte-identical `world.json` (sorted keys, `${WORLD_DIR}` instead of absolute paths). People names come from seeded name pools in template data. | Two designs must meet the same company; a rebuild must be checkable. | None found. |
-| W6 | **Checks use the any-agent part 4 format** (YAML: `name, says, safety?, check`), evaluated **now** by a new kit module `arena_part.expect` inside the world benchmark's `score` (part 4 is not built). End state only (no `unchanged`/`change`); adds `ref` (compare with another doc's field) and `measure`. | Part 4 has no code yet; scoring must not wait for it, and the format is already approved. | When part 4 lands in arenad it must keep these semantics or the template's checks mean two things (listed in stage 4's "What stage 4 needs from part 4"). |
+| W6 | **Checks use the any-agent part 4 format** (YAML: `name, says, safety?, check`), evaluated **now** by a new kit module `shakedown_part.expect` inside the world benchmark's `score` (part 4 is not built). End state only (no `unchanged`/`change`); adds `ref` (compare with another doc's field) and `measure`. | Part 4 has no code yet; scoring must not wait for it, and the format is already approved. | When part 4 lands in shaked it must keep these semantics or the template's checks mean two things (listed in stage 4's "What stage 4 needs from part 4"). |
 | W7 | **Events are baked into the world at build** (`apply`: append/set into a part's config, add setup calls or links), not run-level disruptions. A template may still pass `scenario_options` through. | Traps are properties of the company (its code, data, people); a comparison needs both designs in the same world. | A user who wants a trap per run builds two worlds (or uses the parts' scenario options). |
 | W8 | "Ready in under a minute" = generate + install + `world::ensure_base` in the background; the UI polls `GET /api/worlds/{name}` and shows elapsed time, not per-part progress. | `ensure_base` is opaque; per-part progress would thread a sink through world start. | An indeterminate bar for up to a minute. |
 | W9 | Docker images a template needs are **checked, never pulled**: the preview lists each with `present` and the template's hint (the command that fetches or builds it); building is refused while one is missing. | Repo rule (`--pull never`); a pull inside "build" would blow the minute and hide downloads. | The user runs one command before the first build. |
@@ -41,7 +41,7 @@ Builder UI, Scoring). Check format: `docs/superpowers/specs/2026-11-17-any-agent
 
 - Shared machine: `export CARGO_BUILD_JOBS=2 CARGO_PROFILE_DEV_DEBUG=0` for every cargo command; one cargo build at a
   time (stage 2 may be building); vitest `--maxWorkers=1`. Redirect long output to a file and read its tail.
-- Two cargo workspaces: root (`kits/rust`, `integrations/*`, `benchmarks/*`) and `core/` (`arenad`, `parts`).
+- Two cargo workspaces: root (`kits/rust`, `integrations/*`, `benchmarks/*`) and `core/` (`shaked`, `parts`).
 - Gate per commit: in each workspace touched, `cargo clippy --workspace --all-targets -- -D warnings` and
   `cargo test --workspace --no-fail-fast`; `uv run pytest -q` in each Python package touched; in `ui/`, `npx tsc -b`,
   `npm run lint` and `npx vitest run --maxWorkers=1`. Postgres for core tests: `deploy-pg-1` on 127.0.0.1:5544.
@@ -49,12 +49,12 @@ Builder UI, Scoring). Check format: `docs/superpowers/specs/2026-11-17-any-agent
 - No hardcoded domain data ([[no-hardcoded-domain-data]]): company, systems, people, events, tasks and checks live in
   template files; tests read fixture templates under `tests/fixtures/templates/` with neutral names.
 - Packages use only the kits; `core/` never depends on them (`core/crates/parts/tests/isolation.rs`).
-- Existing behaviour stays: every existing test passes unchanged; `ARENA_BENCHMARK` and the only-benchmark rule still
+- Existing behaviour stays: every existing test passes unchanged; `SHAKEDOWN_BENCHMARK` and the only-benchmark rule still
   choose the benchmark at start; manifests without `[world]` parse as before.
 - UI: the existing look only (`ui/docs/ui.md`): tokens from `src/styles/index.css`, primitives from
   `src/components/ui`, page width `broad`, one primary action per screen, labels start with a capital, no ids on
   screen (tooltips at most), a status is a glyph and a word.
-- Do not rename `arena`/`ARENA_*` identifiers. Commit messages: plain sentences in the repo's style, ending with
+- Do not rename `shakedown`/`SHAKEDOWN_*` identifiers. Commit messages: plain sentences in the repo's style, ending with
   `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Do not push.
 
 ## Review Focus
@@ -67,7 +67,7 @@ Builder UI, Scoring). Check format: `docs/superpowers/specs/2026-11-17-any-agent
 3. Unticking a system that a task, role, event or link needs drops those with a reason; a world left with no task is
    a problem, not an empty benchmark (Task 2 `test_dropping_a_system_drops_what_needs_it`,
    `test_a_world_with_no_task_is_a_problem`).
-4. arenad restarted after a build: the world is listed, can be chosen and run; its state reads `ready` when its base
+4. shaked restarted after a build: the world is listed, can be chosen and run; its state reads `ready` when its base
    saves exist, `not_prepared` otherwise (Task 7 `a_built_world_survives_a_restart`).
 5. A people edit that outlives its person (rename p-012, then lower the count to 10): the UI prunes it, the server
    refuses it with its path (Task 2 `test_an_edit_of_a_missing_person_is_a_problem`, Task 9 `prune`).
@@ -77,7 +77,7 @@ Builder UI, Scoring). Check format: `docs/superpowers/specs/2026-11-17-any-agent
 ## Template format (the contract every task below shares)
 
 File `templates/<id>/template.yaml` inside a template root (the builder's own `benchmarks/world/templates/`, plus the
-`:`-separated `ARENA_TEMPLATES` roots the hub passes to the builder program).
+`:`-separated `SHAKEDOWN_TEMPLATES` roots the hub passes to the builder program).
 
 ```yaml
 format: shakedown-template/1
@@ -162,11 +162,11 @@ scenario_options: null                 # passed through when present
 ### Task 1: Template schema, loader and includes
 
 **Files:**
-- Create: `benchmarks/world/{arena-package.toml,pyproject.toml,README.md}`, `benchmarks/world/worldbench/{__init__.py,template.py,expand.py}`,
+- Create: `benchmarks/world/{shakedown-package.toml,pyproject.toml,README.md}`, `benchmarks/world/worldbench/{__init__.py,template.py,expand.py}`,
   `benchmarks/world/worldbench/schema/template.schema.json`
 - Create: `benchmarks/world/tests/{conftest.py,test_template.py,test_expand.py}`, fixtures
   `benchmarks/world/tests/fixtures/templates/{shop,bad-include,bad-placeholder}/` (neutral names: systems `alpha`,
-  `beta`, `gamma`; integration names from `core/crates/arenad/tests/fixtures/toy.py`'s defaults)
+  `beta`, `gamma`; integration names from `core/crates/shaked/tests/fixtures/toy.py`'s defaults)
 - Modify: `.gitignore` (`core/worlds/`)
 
 **Interfaces:**
@@ -224,7 +224,7 @@ def test_a_folder_include_is_copied_and_named_by_world_dir(tmp_path):
   Expected: import errors.
 - [ ] **Step 3: Implement the schema, `template.py` and `expand.py`.** Placeholder scan with one regex
   (`\{\{|\}\}|\{([a-z_]+(?:\.[a-z0-9_-]+)*)\}`); includes resolved with `Path.resolve()` and `is_relative_to(dir)`.
-  `pyproject.toml`: `requires-python = ">=3.11"` (`tomllib` in tests), deps `arena-part` (path), `pyyaml`,
+  `pyproject.toml`: `requires-python = ">=3.11"` (`tomllib` in tests), deps `shakedown-part` (path), `pyyaml`,
   `jsonschema`. The package manifest: `kind = "builder"`, `name = "world-builder"`, `run = { command = ["uv", "run", "--project",
   ".", "python", "-m", "worldbench.builder"] }` (the program arrives in Task 5).
 - [ ] **Step 4: Run** — `uv run pytest -q`; Expected: all pass.
@@ -309,15 +309,15 @@ def test_slug_of():   # Review Focus 2
 
 ---
 
-### Task 3: Checks over the end state in the Python kit (`arena_part.expect`)
+### Task 3: Checks over the end state in the Python kit (`shakedown_part.expect`)
 
 **Files:**
-- Create: `kits/python/arena_part/expect.py`, `kits/python/tests/test_expect.py`
-- Modify: `kits/python/arena_part/__init__.py`, `docs/protocol.md` ("Scoring by named checks": the kit evaluator)
+- Create: `kits/python/shakedown_part/expect.py`, `kits/python/tests/test_expect.py`
+- Modify: `kits/python/shakedown_part/__init__.py`, `docs/protocol.md` ("Scoring by named checks": the kit evaluator)
 
 **Interfaces:**
 - Produces: `evaluate(checks: list[dict], docs: dict[str, dict[str, Any]]) -> list[dict]` — each result is
-  `arena_part.benchmark.check(name, passed, detail, safety, measure)`. Check forms (part 4 §3, end state):
+  `shakedown_part.benchmark.check(name, passed, detail, safety, measure)`. Check forms (part 4 §3, end state):
   - key: `{part, key, field?, op, value | ref: {part, key, field}}`, `op` ∈ `= != < <= > >= in contains exists absent`;
   - find: `{part, find: "<glob>", where?: {field: value | {op: value}}, count: "<op> <n>" | n}`;
   - `{all: [check]}`, `{any: [check]}`;
@@ -367,7 +367,7 @@ Also `test_all_and_any`, `test_in_and_contains`, `test_absent_passes_on_a_missin
 - Create: `benchmarks/world/worldbench/{__main__.py,runtime.py}`, `benchmarks/world/tests/test_runtime.py`
 
 **Interfaces:**
-- Consumes: `world_json` output (Task 2), `arena_part.expect.evaluate` (Task 3), `arena_part.benchmark.Benchmark`.
+- Consumes: `world_json` output (Task 2), `shakedown_part.expect.evaluate` (Task 3), `shakedown_part.benchmark.Benchmark`.
 - Produces: `class WorldBenchmark(Benchmark)` with `__init__(self, world_file: Path)`; `describe()` →
   `{name, version, protocol: 1, world: parts, tasks: [{id, reason, ticket, setup, clock_start?}], instructions,
   instructions_title?, team: teams[0], teams: teams[1:], tools: [], links, gates, scored: true, scenario_options?}`
@@ -403,13 +403,13 @@ line, read one result line).
 
 **Files:**
 - Create: `benchmarks/world/worldbench/{builder.py,install.py,needs.py}`, `benchmarks/world/tests/test_builder.py`
-- Modify: `docs/protocol.md` (new section "Builder calls"), `docs/packages.md` (the `builder` kind, `ARENA_WORLDS`,
-  `ARENA_TEMPLATES`)
+- Modify: `docs/protocol.md` (new section "Builder calls"), `docs/packages.md` (the `builder` kind, `SHAKEDOWN_WORLDS`,
+  `SHAKEDOWN_TEMPLATES`)
 
 **Interfaces:**
 - Consumes: `list_templates`, `form` (Task 1), `generate`, `world_json` (Task 2).
 - Produces (methods over the kit's `serve(builder, dispatch_fn=dispatch)`; roots = `<package>/templates` +
-  `ARENA_TEMPLATES`):
+  `SHAKEDOWN_TEMPLATES`):
 
 | Method | Params | Result |
 |---|---|---|
@@ -419,7 +419,7 @@ line, read one result line).
 | `generate` | `{id, choices, dir}` | writes the package into `dir` (must not exist) → `{name, title, version}`; problems or a missing image → `-32602` with `data: {problems}` |
 
   - `install.write_package(result: Result, t: Template, dir: Path) -> dict` writes `world.json`, copies `files`, and
-    `arena-package.toml`:
+    `shakedown-package.toml`:
 
 ```toml
 kind = "benchmark"
@@ -427,7 +427,7 @@ name = "<slug>"
 version = "<template version>+<first 8 hex of sha256(world.json)>"
 protocol = 1
 opt_in = true
-run = { command = ["uv", "run", "--project", "${ARENA_DIR}/benchmarks/world", "python", "-m", "worldbench", "--world", "world.json", "--version", "<version>"] }
+run = { command = ["uv", "run", "--project", "${SHAKEDOWN_DIR}/benchmarks/world", "python", "-m", "worldbench", "--world", "world.json", "--version", "<version>"] }
 needs = { gpu_vram_gb = 0, services = [] }
 [world]
 title = "<company name>"
@@ -447,9 +447,9 @@ def test_preview_answers_what_review_shows(builder):
     assert (p["name"], p["title"], p["domain"]) == ("acme-tools", "Acme Tools", "acme-tools.test")
     assert p["problems"] == [] and p["needs"]["memory_mb"] == 90
 
-def test_generate_writes_a_package_arenad_can_load(builder, tmp_path):
+def test_generate_writes_a_package_shaked_can_load(builder, tmp_path):
     out = call(builder, "generate", {"id": "shop", "choices": {}, "dir": str(tmp_path / "acme")})
-    toml = tomllib.loads((tmp_path / "acme" / "arena-package.toml").read_text())
+    toml = tomllib.loads((tmp_path / "acme" / "shakedown-package.toml").read_text())
     assert toml["kind"] == "benchmark" and toml["opt_in"] is True and toml["world"]["template"] == "shop"
     assert toml["version"] == out["version"] and out["version"].startswith("1.0.0+")
 
@@ -459,7 +459,7 @@ def test_generate_refuses_a_missing_image(builder_without_docker, tmp_path):
     assert not (tmp_path / "x").exists()
 ```
 
-Also `test_templates_lists_every_root` (an `ARENA_TEMPLATES` root adds a template) and
+Also `test_templates_lists_every_root` (an `SHAKEDOWN_TEMPLATES` root adds a template) and
 `test_generate_into_an_existing_dir_is_refused`.
 
 - [ ] **Step 2: Run to verify they fail** — `uv run pytest -q tests/test_builder.py`.
@@ -470,13 +470,13 @@ Also `test_templates_lists_every_root` (an `ARENA_TEMPLATES` root adds a templat
 
 ---
 
-### Task 6: `parts`: the builder kind, `${ARENA_DIR}`, and packages installed at runtime
+### Task 6: `parts`: the builder kind, `${SHAKEDOWN_DIR}`, and packages installed at runtime
 
 **Files:**
 - Modify: `core/crates/parts/src/manifest.rs` (`Kind::Builder`, `Manifest.world: Option<WorldMeta>`,
   `Registry::builders`, `Registry::add`), `core/crates/parts/src/hub.rs` (registry behind `std::sync::RwLock`,
-  `install`, `with_arena_dir`), `core/crates/parts/src/client.rs` (`${ARENA_DIR}`), `core/crates/parts/src/request.rs`
-  (builder requests), call sites of `hub.registry()` in `core/crates/arenad/src`
+  `install`, `with_shakedown_dir`), `core/crates/parts/src/client.rs` (`${SHAKEDOWN_DIR}`), `core/crates/parts/src/request.rs`
+  (builder requests), call sites of `hub.registry()` in `core/crates/shaked/src`
 - Test: unit tests in `manifest.rs`, `hub.rs`, `request.rs`; `core/crates/parts/tests/isolation.rs` unchanged and green
 
 **Interfaces:**
@@ -486,7 +486,7 @@ Also `test_templates_lists_every_root` (an `ARENA_TEMPLATES` root adds a templat
   - `Registry::builders(&self) -> impl Iterator<Item = &Manifest>`; `Registry::add(&mut self, m: Manifest) -> Result<()>`
     (refuses a taken name: `a package named {name} is installed already`).
   - `Hub::registry(&self) -> std::sync::RwLockReadGuard<'_, Registry>`; `Hub::install(&self, dir: &Path) -> Result<Manifest>`;
-    `Hub::with_arena_dir(self, dir: PathBuf) -> Hub`; command args get `${ARENA_DIR}` replaced as `${ARENA_BIN_DIR}` is.
+    `Hub::with_shakedown_dir(self, dir: PathBuf) -> Hub`; command args get `${SHAKEDOWN_DIR}` replaced as `${SHAKEDOWN_BIN_DIR}` is.
   - `parts::request::{ListTemplates, GetTemplate { id }, PreviewWorld { id, choices: Value }, GenerateWorld { id, choices: Value, dir: String }}`,
     sent as `templates`, `template`, `preview`, `generate`, each answering `serde_json::Value`.
 
@@ -513,8 +513,8 @@ async fn a_package_installed_at_runtime_is_found_and_a_taken_name_is_refused() {
     assert_eq!(hub.install(&pkg_dir("acme")).unwrap_err().to_string(), "a package named acme is installed already");
 }
 #[test]
-fn arena_dir_is_substituted_in_commands() {
-    assert_eq!(expand_arg("${ARENA_DIR}/benchmarks/world", Path::new("/b"), Path::new("/a")), "/a/benchmarks/world");
+fn shakedown_dir_is_substituted_in_commands() {
+    assert_eq!(expand_arg("${SHAKEDOWN_DIR}/benchmarks/world", Path::new("/b"), Path::new("/a")), "/a/benchmarks/world");
 }
 ```
 
@@ -524,20 +524,20 @@ Also `request.rs`: `sent(&PreviewWorld { id: "shop".into(), choices: json!({}) }
 - [ ] **Step 3: Implement**, then fix each `hub.registry()` call site so the guard is a statement temporary (no guard
   held across `.await`).
 - [ ] **Step 4: Run the core gate** — Expected: all pass, isolation test green.
-- [ ] **Step 5: Commit** — "Packages may be world builders, a benchmark may say which world it is, packages can be installed while arenad runs, and commands may name the arena folder"
+- [ ] **Step 5: Commit** — "Packages may be world builders, a benchmark may say which world it is, packages can be installed while shaked runs, and commands may name the shakedown folder"
 
 ---
 
-### Task 7: arenad's worlds API and the switchable current benchmark
+### Task 7: shaked's worlds API and the switchable current benchmark
 
 **Files:**
-- Create: `core/crates/arenad/src/worlds.rs` (build states, prepare), `core/crates/arenad/src/api/worlds.rs` (routes),
-  `core/crates/arenad/tests/worlds.rs`, `core/crates/arenad/tests/fixtures/builder.py` (toy builder: one template
+- Create: `core/crates/shaked/src/worlds.rs` (build states, prepare), `core/crates/shaked/src/api/worlds.rs` (routes),
+  `core/crates/shaked/tests/worlds.rs`, `core/crates/shaked/tests/fixtures/builder.py` (toy builder: one template
   `toy`; `generate` writes a package whose command is `python3 <toy.py> bench --integration <toy>`)
-- Modify: `core/crates/arenad/src/app.rs` (`current` benchmark, `Builds`), `core/crates/arenad/src/main.rs`
-  (`ARENA_WORLDS` root, `with_arena_dir`), `core/crates/arenad/src/launch.rs` + `runner/start.rs` + `suite/drive.rs` +
-  `api/experiments.rs` + `api/suites.rs` (benchmark carried), `core/crates/arenad/src/world/standard.rs` (`has_base`),
-  `core/crates/arenad/src/api.rs` (merge router; `state.benchmark()`), `docs/reference.md` (routes)
+- Modify: `core/crates/shaked/src/app.rs` (`current` benchmark, `Builds`), `core/crates/shaked/src/main.rs`
+  (`SHAKEDOWN_WORLDS` root, `with_shakedown_dir`), `core/crates/shaked/src/launch.rs` + `runner/start.rs` + `suite/drive.rs` +
+  `api/experiments.rs` + `api/suites.rs` (benchmark carried), `core/crates/shaked/src/world/standard.rs` (`has_base`),
+  `core/crates/shaked/src/api.rs` (merge router; `state.benchmark()`), `docs/reference.md` (routes)
 
 **Interfaces:**
 - Consumes: `Hub::install`, `Registry::builders`, `WorldMeta`, builder requests (Task 6); `world::ensure_base`.
@@ -556,14 +556,14 @@ Also `request.rs`: `sent(&PreviewWorld { id: "shop".into(), choices: json!({}) }
     - `GET /api/templates/{id}` → `template`; `POST /api/templates/{id}/preview` (body = choices) → `preview`.
     - `POST /api/worlds` `{template, choices}` → 202 `{name, state: "preparing"}`; 422 `{problems}`; 409
       `{error: "a world or package named {name} exists: give the company another name", suggested: "{name}-2"}`
-      (the first free `-N`). Generates into `<ARENA_WORLDS>/.{name}.tmp-<8 hex>` then renames.
+      (the first free `-N`). Generates into `<SHAKEDOWN_WORLDS>/.{name}.tmp-<8 hex>` then renames.
     - `GET /api/worlds` → `[{name, title, template: {id, name} | null, built, current, state}]` for every non-opt-in or
       built benchmark (`state` from `Builds`, else `ready`/`not_prepared` by `has_base`).
     - `GET /api/worlds/{name}` → that row plus `elapsed_ms`, `error`; `POST /api/worlds/{name}/use` → 200 row, 404
       unknown; `POST /api/worlds/{name}/prepare` → 202 (again after a failure).
 
-- [ ] **Step 1: Write the failing tests** (`tests/worlds.rs`, the toy builder under a temp `ARENA_PACKAGES` root and a
-  temp `ARENA_WORLDS`)
+- [ ] **Step 1: Write the failing tests** (`tests/worlds.rs`, the toy builder under a temp `SHAKEDOWN_PACKAGES` root and a
+  temp `SHAKEDOWN_WORLDS`)
 
 ```rust
 #[tokio::test]
@@ -596,16 +596,16 @@ async fn a_built_world_survives_a_restart() {   // Review Focus 4
 }
 ```
 
-Also `problems_are_a_422_and_nothing_is_written` (no folder left in `ARENA_WORLDS`), `a_double_build_is_refused_while_preparing`
+Also `problems_are_a_422_and_nothing_is_written` (no folder left in `SHAKEDOWN_WORLDS`), `a_double_build_is_refused_while_preparing`
 (second POST → 409), `a_failed_prepare_can_be_prepared_again` (the toy part made to fail start once), and
 `a_live_run_of_the_small_manufacturer_is_ready_in_under_a_minute` (`#[ignore]`, `live_` prefix: the real builder and
 the Task 8 template; asserts `elapsed_ms < 60_000`).
 
-- [ ] **Step 2: Run to verify they fail** — `(cd core && cargo test -p arenad --test worlds > target/w7.log 2>&1); tail -30 core/target/w7.log`.
+- [ ] **Step 2: Run to verify they fail** — `(cd core && cargo test -p shaked --test worlds > target/w7.log 2>&1); tail -30 core/target/w7.log`.
 - [ ] **Step 3: Implement** the current benchmark (`std::sync::RwLock<String>`), the carried benchmark, `has_base`,
   `Builds`, `prepare` (a `tokio::spawn` holding `state.cleanup.read()` as runs do), and the routes.
 - [ ] **Step 4: Run the core gate** — Expected: all pass, existing launch/suite/experiment tests unchanged.
-- [ ] **Step 5: Commit** — "arenad builds worlds from templates: it lists templates, previews and builds a world, prepares its base in the background and makes it current; runs, suites and experiments keep the world they started on"
+- [ ] **Step 5: Commit** — "shaked builds worlds from templates: it lists templates, previews and builds a world, prepares its base in the background and makes it current; runs, suites and experiments keep the world they started on"
 
 ---
 
@@ -642,7 +642,7 @@ def test_its_checks_pass_on_the_factory01_gold_end_state(templates, factory01_go
 
 - [ ] **Step 2: Run to verify they fail** — `uv run pytest -q tests/test_small_manufacturer.py`.
 - [ ] **Step 3: Write the template data.** Then run the Task 7 live test once:
-  `(cd core && cargo test -p arenad --test worlds -- --ignored live_ > target/w8.log 2>&1); tail -20 core/target/w8.log`.
+  `(cd core && cargo test -p shaked --test worlds -- --ignored live_ > target/w8.log 2>&1); tail -20 core/target/w8.log`.
 - [ ] **Step 4: Run** — `uv run pytest -q`; Expected: all pass; live test reports `elapsed_ms` < 60000 (paste it in
   the README's "Verified" line with the machine).
 - [ ] **Step 5: Commit** — "A small manufacturer template (ERP and shift roster, operators as simulated people, a supplier delay) builds a world the same checks as Factory-01 score"
@@ -784,9 +784,9 @@ build on this machine; Python and UI tasks may run beside them.
 ## Left for stage 4
 
 - The software-factory template, its twins and the people engine that reads the roles' `rules` files.
-- What part 4 must keep from `arena_part.expect` (stage 4 plan, "What stage 4 needs from part 4").
+- What part 4 must keep from `shakedown_part.expect` (stage 4 plan, "What stage 4 needs from part 4").
 - Deleting or renaming built worlds; per-part progress while a world prepares; templates from Community roots.
 
 ## Owner rulings (2026-11-19)
 
-- arenad remembers the current built world across a restart (in its data dir). Why: a demo must survive a restart. Cost: one small persisted record.
+- shaked remembers the current built world across a restart (in its data dir). Why: a demo must survive a restart. Cost: one small persisted record.

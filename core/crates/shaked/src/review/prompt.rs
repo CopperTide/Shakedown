@@ -1,5 +1,6 @@
 //! What the reviewer is told: a system prompt for each kind of review, the JSON schema its answer
-//! must follow, and the digest as the user message.
+//! must follow, and the digest as the user message. Asking about a step has its prompt in
+//! `ask_prompt.md`.
 
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -134,6 +135,33 @@ pub fn compare_schema() -> Value {
 
 pub fn suites_schema() -> Value {
     compare_schema_with(str_list())
+}
+
+/// The schema of an answer about a step.
+pub fn ask_schema() -> Value {
+    let evidence = object(
+        json!({"source": {"type": "string"}, "quote": {"type": "string"}, "why": {"type": "string"}}),
+        &["source", "quote", "why"],
+    );
+    let guess = object(
+        json!({"text": {"type": "string"}, "based_on": str_list()}),
+        &["text", "based_on"],
+    );
+    object(
+        json!({"answer": {"type": "string"},
+               "evidence": {"type": "array", "items": evidence},
+               "speculation": {"type": "array", "items": guess}}),
+        &["answer", "evidence", "speculation"],
+    )
+}
+
+/// What the explainer is told to answer a question about a step, from what it may read.
+pub fn ask_prompt(context: &impl Serialize) -> Prompt {
+    Prompt {
+        system: include_str!("ask_prompt.md").trim().to_string(),
+        user: user_message("the question, the step and the sources", context),
+        schema: ask_schema(),
+    }
 }
 
 fn user_message(what: &str, digest: &impl Serialize) -> String {

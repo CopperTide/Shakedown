@@ -1,4 +1,4 @@
-//! Wire types of shakedown-part/1 (called arena-part/1 until 2026-11-19). See docs/protocol.md.
+//! Wire types of shakedown-part/1. See docs/protocol.md.
 use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
@@ -13,15 +13,13 @@ pub use view::*;
 pub const PROTOCOL: u32 = 1;
 /// The protocol's name, as the kits announce it in `describe`'s `protocol`.
 pub const PROTOCOL_NAME: &str = "shakedown-part/1";
-/// Its name until 2026-11-19, still accepted.
-pub const OLD_PROTOCOL_NAME: &str = "arena-part/1";
 
-/// The protocol version a manifest's or a `describe`'s `protocol` says: the number, or either name
-/// of version 1 (None: neither).
+/// The protocol version a manifest's or a `describe`'s `protocol` says: the number, or the name of
+/// version 1 (None: neither).
 pub fn protocol_version(v: &Value) -> Option<u32> {
     match v {
         Value::Number(n) => n.as_u64().and_then(|n| u32::try_from(n).ok()),
-        Value::String(s) if s == PROTOCOL_NAME || s == OLD_PROTOCOL_NAME => Some(PROTOCOL),
+        Value::String(s) if s == PROTOCOL_NAME => Some(PROTOCOL),
         _ => None,
     }
 }
@@ -145,20 +143,14 @@ pub struct WorldTimeParams {
 /// The header an upstream answers a proxied request with to say whether it read or wrote
 /// (`read` or `write`); shaked strips it before the client sees the answer.
 pub const EFFECT_HEADER: &str = "x-shakedown-effect";
-/// Its name until 2026-11-19, still read from an upstream.
-pub const OLD_EFFECT_HEADER: &str = "x-arena-effect";
 
 /// The header shaked's proxy names the agent behind a request with (a client's own copy is
 /// dropped); none for a driver's request no agent's model call came before.
 pub const AGENT_HEADER: &str = "x-shakedown-agent";
-/// Its name until 2026-11-19, sent too, for parts written before.
-pub const OLD_AGENT_HEADER: &str = "x-arena-agent";
 
 /// The header (`1`) shaked's proxy marks a read-only agent's request with, sent only to routes
 /// that say `honours_readonly`: the part must then refuse its writes itself.
 pub const READONLY_HEADER: &str = "x-shakedown-readonly";
-/// Its name until 2026-11-19, sent too, for parts written before.
-pub const OLD_READONLY_HEADER: &str = "x-arena-readonly";
 
 /// A host an instance serves through shaked's proxy: requests to `host` go to `upstream`. `env`
 /// is what drivers and agents are given to find it (`GITHUB_API_URL`); each of `reads` is a
@@ -544,6 +536,10 @@ pub struct BenchToolOutput {
     pub reads: Vec<String>,
     #[serde(default)]
     pub writes: Vec<String>,
+    /// Events the call gives the world, as a part's `call_tool` does (a scheduled disruption the
+    /// benchmark keeps in its part's state, say): recorded, and matched against the world's links.
+    #[serde(default, skip_serializing_if = "<[_]>::is_empty")]
+    pub events: Box<[WorldEvent]>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -641,12 +637,8 @@ mod protocol_names {
     use super::*;
 
     #[test]
-    fn both_names_and_the_number_say_version_1() {
-        for v in [
-            json_n(1),
-            Value::from(PROTOCOL_NAME),
-            Value::from(OLD_PROTOCOL_NAME),
-        ] {
+    fn the_name_and_the_number_say_version_1() {
+        for v in [json_n(1), Value::from(PROTOCOL_NAME)] {
             assert_eq!(protocol_version(&v), Some(PROTOCOL), "{v}");
         }
         assert_eq!(protocol_version(&Value::from("other-part/1")), None);

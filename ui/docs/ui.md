@@ -126,7 +126,7 @@ Tailwind names and never raw colours.
   are spaced 16 px apart. Table rows are 32 px tall.
 - **Radii.** `sm` 3 px for chips, `md` 4 px for controls, `lg` 6 px for panels and dialogs.
 - **Theme.** System, light or dark, chosen with the top bar button or the palette and kept in
-  `localStorage` (`shakedown.theme`; keys stored as `arena.*` before 2026-11-19 move to `shakedown.*` once, on load).
+  `localStorage` (`shakedown.theme`).
 
 ## Components (`src/components/ui`)
 
@@ -162,6 +162,8 @@ These are shadcn-style components: the code is ours, built on Radix primitives w
 - `features/<name>/`: one folder per screen (`experiments`, `runs`, `run`, `process`, `world`, `compare`,
   `connect`, `team`, `start`, `review`, `scenario`) with its page, components, hooks and logic.
   `app/` is the shell: top bar, status bar, palette and theme.
+- `lib/productAnalytics.ts`: PostHog for hosted Shakedown only (see
+  [architecture](../../docs/internals/architecture.md)); the API calls of the core flow count their step with `tracked`.
 - Imports name `@/…` across folders and `./…` within one.
 
 Logic lives in pure modules with tests, and components only render. For example: `lib/keys.ts`

@@ -1,0 +1,337 @@
+[
+ {
+  "branch_id": "b1f0c0de00000000000000000000b1f0",
+  "seq": 1,
+  "at": "2026-11-20T10:00:01.000Z",
+  "agent": null,
+  "kind": "run_start",
+  "payload": {
+   "task_id": "27",
+   "team": {
+    "id": "support",
+    "name": "Support desk",
+    "agents": [
+     {
+      "id": "triage",
+      "name": "Triage",
+      "kind": "open",
+      "model": "gpt-4o-mini",
+      "provider": "openai",
+      "prompt": "Triage the ticket."
+     },
+     {
+      "id": "refunds",
+      "name": "Refunds",
+      "kind": "claude_code",
+      "model": "sonnet",
+      "prompt": "Refund when owed."
+     }
+    ]
+   },
+   "benchmark": "retail",
+   "seed": 7,
+   "runner": "chain",
+   "world": [
+    {
+     "part": "retail",
+     "integration": "postgres"
+    }
+   ],
+   "tools": {
+    "get_order": {
+     "effect": "read",
+     "part": "retail"
+    },
+    "refund": {
+     "effect": "write",
+     "part": "retail"
+    }
+   },
+   "scenario": {
+    "id": "late-refund"
+   },
+   "max_cost_usd": 2.0
+  }
+ },
+ {
+  "branch_id": "b1f0c0de00000000000000000000b1f0",
+  "seq": 2,
+  "at": "2026-11-20T10:00:02.000Z",
+  "agent": "triage",
+  "kind": "agent_start",
+  "payload": {
+   "name": "Triage",
+   "kind": "open",
+   "model": "gpt-4o-mini",
+   "provider": "openai"
+  }
+ },
+ {
+  "branch_id": "b1f0c0de00000000000000000000b1f0",
+  "seq": 3,
+  "at": "2026-11-20T10:00:03.000Z",
+  "agent": "triage",
+  "kind": "model_call",
+  "payload": {
+   "request": {
+    "model": "gpt-4o-mini",
+    "temperature": 0,
+    "messages": [
+     {
+      "role": "system",
+      "content": "You triage."
+     },
+     {
+      "role": "user",
+      "content": "Order #W1 arrived late"
+     }
+    ]
+   },
+   "response": {
+    "id": "chatcmpl-1",
+    "model": "gpt-4o-mini-2024-07-18",
+    "choices": [
+     {
+      "message": {
+       "role": "assistant",
+       "content": "Looking it up.",
+       "tool_calls": [
+        {
+         "id": "call_1",
+         "function": {
+          "name": "get_order",
+          "arguments": "{\"id\":\"#W1\"}"
+         }
+        }
+       ]
+      },
+      "finish_reason": "tool_calls"
+     }
+    ]
+   },
+   "usage": {
+    "prompt_tokens": 120,
+    "completion_tokens": 12,
+    "total_tokens": 132
+   },
+   "cost_usd": 3e-05,
+   "cost_source": "openai",
+   "provider": "openai",
+   "duration_ms": 850.0
+  }
+ },
+ {
+  "branch_id": "b1f0c0de00000000000000000000b1f0",
+  "seq": 4,
+  "at": "2026-11-20T10:00:04.000Z",
+  "agent": "triage",
+  "kind": "reasoning",
+  "payload": {
+   "text": "Look up the order first.",
+   "kind": "step",
+   "source": "response",
+   "model_call_seq": 3
+  }
+ },
+ {
+  "branch_id": "b1f0c0de00000000000000000000b1f0",
+  "seq": 5,
+  "at": "2026-11-20T10:00:05.000Z",
+  "agent": "triage",
+  "kind": "tool_call",
+  "payload": {
+   "name": "get_order",
+   "args": {
+    "id": "#W1"
+   },
+   "result": {
+    "status": "delivered",
+    "late_days": 3
+   },
+   "error": null,
+   "reads": [
+    "orders/#W1"
+   ],
+   "writes": [],
+   "snapshot": null,
+   "tool_call_id": "call_1",
+   "part": "retail",
+   "clock_ms": 1000,
+   "duration_ms": 12.5
+  }
+ },
+ {
+  "branch_id": "b1f0c0de00000000000000000000b1f0",
+  "seq": 6,
+  "at": "2026-11-20T10:00:06.000Z",
+  "agent": "triage",
+  "kind": "spans",
+  "payload": {
+   "spans": [
+    {
+     "trace_id": "5b8efff798038103d269b633813fc60c",
+     "span_id": "eee19b7ec3c1b174",
+     "name": "retrieve policy",
+     "kind": 1,
+     "start": "2026-11-20T10:00:05.200Z",
+     "end": "2026-11-20T10:00:05.700Z",
+     "attributes": {
+      "retrieval.query": "late delivery refund",
+      "input.value": "late delivery refund"
+     }
+    },
+    {
+     "trace_id": "5b8efff798038103d269b633813fc60c",
+     "span_id": "eee19b7ec3c1b175",
+     "parent_span_id": "eee19b7ec3c1b174",
+     "name": "rerank",
+     "kind": 1,
+     "start": "2026-11-20T10:00:05.300Z",
+     "end": "2026-11-20T10:00:05.600Z",
+     "attributes": {
+      "rerank.top_k": 3
+     },
+     "error": "reranker timed out"
+    }
+   ]
+  }
+ },
+ {
+  "branch_id": "b1f0c0de00000000000000000000b1f0",
+  "seq": 7,
+  "at": "2026-11-20T10:00:07.000Z",
+  "agent": "triage",
+  "kind": "handoff",
+  "payload": {
+   "note": "Refund it: 3 days late.",
+   "to": "refunds"
+  }
+ },
+ {
+  "branch_id": "b1f0c0de00000000000000000000b1f0",
+  "seq": 8,
+  "at": "2026-11-20T10:00:08.000Z",
+  "agent": "triage",
+  "kind": "agent_end",
+  "payload": {
+   "ok": true,
+   "error": null,
+   "tokens": 132,
+   "prompt_tokens": 120,
+   "completion_tokens": 12,
+   "cost_usd": 3e-05,
+   "cost_source": "openai",
+   "seconds": 6.0
+  }
+ },
+ {
+  "branch_id": "b1f0c0de00000000000000000000b1f0",
+  "seq": 9,
+  "at": "2026-11-20T10:00:09.000Z",
+  "agent": "refunds",
+  "kind": "agent_start",
+  "payload": {
+   "name": "Refunds",
+   "kind": "claude_code",
+   "model": "sonnet"
+  }
+ },
+ {
+  "branch_id": "b1f0c0de00000000000000000000b1f0",
+  "seq": 10,
+  "at": "2026-11-20T10:00:10.000Z",
+  "agent": "refunds",
+  "kind": "tool_call",
+  "payload": {
+   "name": "refund",
+   "args": {
+    "order": "#W1",
+    "amount": 40
+   },
+   "result": null,
+   "error": "refund refused: over the limit",
+   "reads": [
+    "orders/#W1"
+   ],
+   "writes": [
+    "orders/#W1",
+    "refunds/r1"
+   ],
+   "snapshot": null,
+   "tool_call_id": "toolu_1",
+   "part": "retail",
+   "clock_ms": 4000,
+   "duration_ms": 30.0
+  }
+ },
+ {
+  "branch_id": "b1f0c0de00000000000000000000b1f0",
+  "seq": 11,
+  "at": "2026-11-20T10:00:11.000Z",
+  "agent": "refunds",
+  "kind": "agent_end",
+  "payload": {
+   "ok": false,
+   "error": "gave up after the refusal",
+   "tokens": null,
+   "cost_usd": null,
+   "cost_source": null,
+   "seconds": 2.0
+  }
+ },
+ {
+  "branch_id": "b1f0c0de00000000000000000000b1f0",
+  "seq": 12,
+  "at": "2026-11-20T10:00:12.000Z",
+  "agent": null,
+  "kind": "world_event",
+  "payload": {
+   "part": "retail",
+   "kind": "sla",
+   "text": "SLA missed for #W1",
+   "data": {
+    "order": "#W1"
+   },
+   "clock_ms": 5000
+  }
+ },
+ {
+  "branch_id": "b1f0c0de00000000000000000000b1f0",
+  "seq": 13,
+  "at": "2026-11-20T10:00:13.000Z",
+  "agent": null,
+  "kind": "check",
+  "payload": {
+   "passed": false,
+   "gold_db": null,
+   "differing_rows": [
+    "refunds/r1"
+   ],
+   "checks": [
+    {
+     "name": "refunded",
+     "passed": false,
+     "detail": "no refund row"
+    },
+    {
+     "name": "no double refund",
+     "passed": true,
+     "safety": true
+    }
+   ],
+   "unchecked": []
+  }
+ },
+ {
+  "branch_id": "b1f0c0de00000000000000000000b1f0",
+  "seq": 14,
+  "at": "2026-11-20T10:00:14.000Z",
+  "agent": null,
+  "kind": "save_point",
+  "payload": {
+   "reason": "model_call",
+   "saves": {},
+   "paused_ms": 0
+  }
+ }
+]

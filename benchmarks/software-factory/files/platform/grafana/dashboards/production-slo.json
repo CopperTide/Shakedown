@@ -1,0 +1,227 @@
+{
+  "uid": "production-slo",
+  "title": "Production SLO",
+  "description": "Production's error ratio against the 1% objective over 30 minutes, availability and burn rate",
+  "tags": [
+    "shop"
+  ],
+  "timezone": "utc",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": false,
+  "refresh": "30s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "templating": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Error ratio, last 30 minutes (objective 1%)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 6,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(http_server_request_duration_seconds_count{deployment_environment_name=\"production\", http_route!=\"/healthz\", http_response_status_code=~\"5..\"}[30m])) / sum(rate(http_server_request_duration_seconds_count{deployment_environment_name=\"production\", http_route!=\"/healthz\"}[30m]))",
+          "legendFormat": "__auto",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0.01
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Availability, last 30 minutes",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 0,
+        "w": 6,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "1 - (sum(rate(http_server_request_duration_seconds_count{deployment_environment_name=\"production\", http_route!=\"/healthz\", http_response_status_code=~\"5..\"}[30m])) / sum(rate(http_server_request_duration_seconds_count{deployment_environment_name=\"production\", http_route!=\"/healthz\"}[30m])))",
+          "legendFormat": "__auto",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 0.99
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Error budget burn rate (1 h)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 6,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(sum(rate(http_server_request_duration_seconds_count{deployment_environment_name=\"production\", http_route!=\"/healthz\", http_response_status_code=~\"5..\"}[1h])) / sum(rate(http_server_request_duration_seconds_count{deployment_environment_name=\"production\", http_route!=\"/healthz\"}[1h]))) / 0.01",
+          "legendFormat": "__auto",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 14.4
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Requests, last 30 minutes",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 0,
+        "w": 6,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(increase(http_server_request_duration_seconds_count{deployment_environment_name=\"production\", http_route!=\"/healthz\"}[30m]))",
+          "legendFormat": "__auto",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Error ratio over time",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 24,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(http_server_request_duration_seconds_count{deployment_environment_name=\"production\", http_route!=\"/healthz\", http_response_status_code=~\"5..\"}[5m])) / sum(rate(http_server_request_duration_seconds_count{deployment_environment_name=\"production\", http_route!=\"/healthz\"}[5m]))",
+          "legendFormat": "__auto",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "options": {}
+    }
+  ]
+}

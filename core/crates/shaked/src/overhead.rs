@@ -1,4 +1,4 @@
-//! Arena's own time, kept apart from the agents' and the world's so a run's numbers can estimate
+//! Shakedown's own time, kept apart from the agents' and the world's so a run's numbers can estimate
 //! production. Each piece of Shakedown's work adds its milliseconds to the branch's ledger (its
 //! `BranchCtx::overhead`); the next event recorded for the branch carries what built up since the
 //! one before, as `overhead_ms`, and the ledger starts again. Summing `overhead_ms` over a

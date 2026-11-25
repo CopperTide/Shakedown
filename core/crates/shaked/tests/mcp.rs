@@ -1,5 +1,6 @@
 mod support;
 use support::records;
+use support::team_of;
 
 use std::{path::PathBuf, sync::Arc};
 
@@ -45,11 +46,7 @@ async fn new_branch(store: &Store) -> (Team, String) {
         tools: vec!["get_user_details".into()],
         ..agent("lister")
     };
-    let team = Team {
-        id: "t".into(),
-        name: "T".into(),
-        agents: vec![agent("triage"), auditor, lister, agent("resolver")],
-    };
+    let team = team_of(vec![agent("triage"), auditor, lister, agent("resolver")]);
     let run_id = records(store).create_run("task", &team).await.unwrap();
     let branch = records(store)
         .create_branch(&run_id, None, &team, &json!([]), None)
@@ -65,12 +62,8 @@ async fn setup_with(tag: &str, extra: &[PathBuf], bench: &str) -> Fx {
     let world = hub.start_world(bench, &branch).await;
     let state = AppState::new(store.clone(), hub.hub.clone(), Config::new());
     let state = Arc::new(state.with_benchmark(bench));
-    let ctx = Arc::new(BranchCtx::new(
-        branch.clone(),
-        world.clone(),
-        team,
-        "task".into(),
-    ));
+    let ctx = BranchCtx::new(branch.clone(), world.clone(), team, "task".into());
+    let ctx = Arc::new(support::in_store(ctx, &store));
     state.live.insert(ctx.clone());
     let (listener, base) = app::bind().await;
     app::serve(listener, &state);
@@ -455,6 +448,28 @@ fn a_tokenless_call_is_told_to_send_the_agents_token() {
         let why = v["error"]["message"].as_str().unwrap_or_default();
         assert!(why.contains("`token`"), "{v}");
         assert!(why.contains("shakedown-sdk 0.2.0"), "{v}");
+        teardown(fx).await;
+    })
+}
+
+/// A refused call says why in JSON-RPC's terms: -32000 for no such branch or agent, -32001
+/// without the agent's token.
+#[test]
+fn refusals_carry_their_json_rpc_codes() {
+    run(async {
+        let fx = setup("codes").await;
+        let list = json!({"jsonrpc": "2.0", "id": 1, "method": "tools/list"});
+        let (s, v) = rpc(&fx, "nobody", list.clone()).await;
+        assert_eq!((s, &v["error"]["code"]), (404, &json!(-32000)), "{v}");
+        assert_eq!(v["error"]["message"], "unknown branch or agent");
+        let url = format!("{}/{}/triage", fx.url, fx.branch);
+        let r = reqwest::Client::new().post(url).bearer_auth("sda_wrong");
+        let r = r.json(&list).send().await.unwrap();
+        assert_eq!(r.status(), 401);
+        let v: Value = r.json().await.unwrap();
+        let (code, id) = (&v["error"]["code"], &v["id"]);
+        assert_eq!((code, id), (&json!(-32001), &Value::Null));
+        assert_eq!(v["error"]["message"], shaked::external::TOKEN_WANTED);
         teardown(fx).await;
     })
 }

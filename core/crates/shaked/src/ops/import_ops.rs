@@ -8,7 +8,7 @@ use serde_json::{json, Value};
 use shakedown_project::kind_name;
 
 use super::migrate::{plan, OldExperiment, Plan};
-use super::{input, schema, Access, OpCtx, OpError, OpFuture, Operation};
+use super::{flag, input, schema, Access, OpCtx, OpError, OpFuture, Operation};
 use crate::app::AppState;
 use crate::auth::Caller;
 
@@ -30,15 +30,9 @@ pub(super) fn ops() -> Vec<Operation> {
 #[derive(Deserialize, JsonSchema)]
 struct ImportInput {
     /// Write now; without it, nothing is written and the plan is answered.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "flag")]
+    #[schemars(with = "bool")]
     confirm: bool,
-}
-
-fn internal(e: anyhow::Error) -> OpError {
-    OpError::new(
-        axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-        format!("{e:#}"),
-    )
 }
 
 fn import<'a>(ctx: &'a OpCtx<'a>, _: &'static Operation, value: Value) -> OpFuture<'a> {
@@ -46,7 +40,7 @@ fn import<'a>(ctx: &'a OpCtx<'a>, _: &'static Operation, value: Value) -> OpFutu
         let ImportInput { confirm } = input(value)?;
         let app = ctx.app("moving earlier work")?;
         let old = earlier(app, &ctx.caller).await?;
-        let moved = plan(&ctx.project.current()?, &benchmarks(app), &old);
+        let moved = plan(&ctx.project.current().await?, &benchmarks(app), &old);
         let files: Vec<Value> = moved
             .files
             .iter()
@@ -73,7 +67,7 @@ async fn write(
         skipped,
     } = moved;
     for (kind, id, body) in files {
-        ctx.project.change(|p| p.put(kind, &id, body))??;
+        ctx.project.change(|p| p.put(kind, &id, body)).await??;
     }
     let mut linked = 0;
     for (old, id) in links {
@@ -82,7 +76,7 @@ async fn write(
             .at(&ctx.caller)
             .link_deployment(&old, id.as_str())
             .await
-            .map_err(internal)?
+            .map_err(OpError::internal)?
         {
             linked += 1;
         }
@@ -112,10 +106,11 @@ fn benchmarks(app: &AppState) -> Vec<(String, String)> {
 /// The experiments not yet in a project, with their setups' teams.
 async fn earlier(app: &AppState, caller: &Caller) -> Result<Vec<OldExperiment>, OpError> {
     let records = app.store.at(caller);
-    let suites = records.suites().await.map_err(internal)?;
+    let suites = records.suites().await.map_err(OpError::internal)?;
     let mut out = Vec::new();
-    for id in records.unlinked_experiments().await.map_err(internal)? {
-        let Some(e) = records.experiment(&id).await.map_err(internal)? else {
+    let unlinked = records.unlinked_experiments().await;
+    for id in unlinked.map_err(OpError::internal)? {
+        let Some(e) = records.experiment(&id).await.map_err(OpError::internal)? else {
             continue;
         };
         let teams = suites

@@ -8,7 +8,7 @@ from .equipment import Equipment
 from .log import log
 
 
-class ArenaClock:
+class ShakedownClock:
     """What the names `time` and `datetime` are inside the factory module (the factory itself is never edited):
     both read the world clock of the plant being driven, so the plant clock Factory.reset takes, the promised
     dates and each event's `wall` are the same in every run. One per process; a Plant points it at itself
@@ -28,7 +28,7 @@ class ArenaClock:
     monotonic = time
 
 
-CLOCK = ArenaClock()
+CLOCK = ShakedownClock()
 
 
 def physics_hz(cfg, mods) -> int:

@@ -119,7 +119,7 @@ A benchmark program speaks the same transport.
 |---|---|---|
 | `describe` | `{}` | `{name, version, protocol, world: [{part, integration, config}], tasks: [{id, reason, ticket, setup?: [{part, tool, args}], clock_start?}], instructions, instructions_title?, team?, teams?, tools: [ToolSchema], links?: [Link], gates?: [Gate], scored?: bool, scenario_options?: ScenarioOptions, view?: {docs: [part]}}` |
 | `seed` | `{connections: {part: info}}` | `{}` (loads the starting data into fresh instances) |
-| `call_tool` | `{name, args, connections}` | `{result?, error?, part, reads, writes}` |
+| `call_tool` | `{name, args, connections}` | `{result?, error?, part, reads, writes, events?: [{kind, text, data}]}` (`events` as a part's `call_tool` gives them) |
 | `gold_actions` | `{task}` | `{actions: [{name, args}]}` |
 | `score` (with `scored: true`) | `{task, docs: {part: {key: doc}}}` | `{checks: [{name, passed, detail?, safety?, measure?}]}` (`safety: true`: a hard safety check, an unsafe action rather than a missed goal, reported apart from the score; `measure`: a number the check measured, see [Scoring by named checks](#scoring-by-named-checks)) |
 | `view` (with `view`) | `{connections: {part: info}, docs: {part: {key: doc}}}` | `{view: TwinView}`: the world's digital twin now ([The world's view](#the-worlds-view)) |
@@ -179,8 +179,9 @@ start from the same base.
   after them.
 - A call that fails (a tool error or a part that can't be reached) ends the branch `infra_error` before any agent
   runs, saying which call failed.
-- A tool a setup calls is the world's own: agents don't get it (as with links). A world is refused when a setup
-  names a part it doesn't have or a tool that part doesn't list.
+- A tool a setup calls is the world's own: agents don't get it (as with links). A setup may call a tool of its part,
+  or one of the benchmark's tools that acts on that part (its answer names that `part`, else the call fails). A world
+  is refused when a setup names a part it doesn't have or a tool neither that part nor the benchmark lists.
 - A task's gold save is made from the base with its setup calls first, then its gold actions.
 
 ### A task's clock
@@ -239,12 +240,22 @@ builder shows them, and a run or suite names the ones it chose.
   disruption}]}` (`params` with the defaults filled in, `disruption` the filled template); a run without one has no
   `scenario`. Forks and replays keep it: a fork's record starts with its parent's events (so with its `RunStart`), and
   its parts restore from saves made after the setup or repeat the setup's recorded calls.
+- A fork may change the schedule from its start on (`POST /api/branches/{id}/fork` with `disruptions: {add, remove}`):
+  shaked calls the scenario tool `setup` names for each part concerned, once, on the new branch's world before any
+  agent, with `{disruptions: [the added options' filled templates], remove: [ids]}` (not the template's `args`), and
+  records it as a setup step. A part that takes it drops the disruptions `remove` names (fired or not) and arms the
+  others as at setup; one that can't answers an error: the fork is refused (409) and its new branch ends
+  `infra_error` saying why. Retail takes it, and so do the Python kit's `jsonstate` scenario tools
+  (`jsonstate.SCENARIO_PARAMS`, `change_scenario`: without `name` they keep the scenario and don't arm its data's
+  disruptions again) and the ridgeline hub's.
 
 ### Scheduled disruptions
 
 The disruptions a scenario adds are scheduled inside simulated parts, and the agents are not told; they find out when
 they query or act. A part that offers them takes them in its scenario tool's `disruptions` (and its scenario's data
-may list more). The Python kit implements this convention (`shakedown_part.disruptions`, used by `jsonstate`).
+may list more). The Python kit implements this convention (`shakedown_part.disruptions`, used by `jsonstate`). A
+benchmark whose tools act on a part directly may keep the schedule in that part's state and arm it with a benchmark
+tool of its own (retail does).
 
 - A disruption is `{id, when: {after_calls, tool?}, do: {kind, ...}, text}`. `after_calls` counts the agents' tool calls
   the part answered since setup (only calls of `tool`, when given); the world's own calls (a setup's, a link's) count
@@ -252,7 +263,8 @@ may list more). The Python kit implements this convention (`shakedown_part.disru
   so that call already sees the changed world, and fires even if that call is then refused. One with `after_calls` 0
   and no `tool` fires as it is armed, in the setup call.
 - When one fires, the call's `events` get `{kind: "disruption", text, data: {id, ...do}}`, which shaked records as a
-  world event at that moment. While one waits, each call it counts names the internal key `_disruption/<id>` in
+  world event at that moment; the part may follow it with events of its own (a notice a link can tell apart from the
+  part's other disruptions). While one waits, each call it counts names the internal key `_disruption/<id>` in
   `writes`, so shaked saves the count with the step without making the step a write: the schedule is part of the
   part's state, so forks and replays meet the same schedule. `inspect` shows `_disruption/<id>` with its count
   (`seen`) and whether it `fired`.
@@ -273,9 +285,16 @@ may list more). The Python kit implements this convention (`shakedown_part.disru
   `lane_unavailable {carrier, origin, destination}`, `transit_delay {carrier, origin, destination, extra_days}`,
   `reject_next {action, note?}` (the director rejects the next decision on that action). pharma-lims: `result_fails
   {lot, test}` (the lot's test fails, so it can't be released). utility: `demand_response {event, target_kw, lead_min,
-  minutes}`. ot-network: `remote_session {session, user, source, target, activity?}`. shift-roster: `callout
+  minutes}` (followed by its own `demand_response_notified` event), `meter_low {percent}` (what agents read of the
+  meter is `percent` low from then on). ot-network: `remote_session {session, user, source, target, activity?}`. shift-roster: `callout
   {operators}`. ridgeline-hub (not on `jsonstate`; it uses the kit's `disruptions.on_call`): `delivery_delay {delivery,
-  extra_hours}`.
+  extra_hours}`. The retail benchmark (its tool `retail_scenario`, the schedule in table `_disruption` of the
+  retail database; `when.tool` may also be a list of tools, any of which counts): `stale_status` (an order's status
+  reads delivered for pending and pending for delivered), `timeout` (the call isn't made and answers that it timed
+  out and may not have been processed), `variant_unavailable {item_id?}` (the variant, else the product's first in
+  stock, reads out of stock) and `lost_write` (the write answers as if made but writes nothing); each acts on the
+  answer of the call it fires on only, and counts only calls it changes (an order delivered or pending, a product
+  with the variant in stock, a write that succeeds; a timeout any call). One can't fire as it is armed.
 
 ### The world's view
 

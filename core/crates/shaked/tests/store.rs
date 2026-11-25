@@ -4,16 +4,7 @@ use support::{pg, run};
 
 mod support;
 use support::records;
-
-fn team() -> Team {
-    Team {
-        id: "t".into(),
-        name: "T".into(),
-        agents: vec![AgentSpec::new("a", AgentKind::Open)
-            .with_name("A")
-            .with_prompt("p")],
-    }
-}
+use support::team;
 
 async fn fresh(tag: &str) -> (Admin, String, Store, pg::Cleanup) {
     let admin = pg::admin();
@@ -248,26 +239,6 @@ fn one_run_reads_as_the_list_has_it() {
         assert_eq!(records(&store).run("nope").await.unwrap(), None);
         done(admin, name, store).await;
     })
-}
-
-/// The records stay where an install from before 2026-11-19 keeps them (`arena`) while the server
-/// has no `shakedown` database; else they go to the new one.
-#[test]
-fn the_store_keeps_an_old_named_database_until_a_new_one_exists() {
-    run(async {
-        let admin = pg::admin();
-        let (new, old) = (pg::db_name("pick_new"), pg::db_name("pick_old"));
-        let clean = pg::Cleanup::new();
-        clean.add(&new);
-        clean.add(&old);
-        let pick = || shaked::store::pick_db(&admin, &new, &old);
-        assert_eq!(pick().await.unwrap(), new, "neither: the new one is made");
-        admin.create_db_from(&old, "template1").await.unwrap();
-        assert_eq!(pick().await.unwrap(), old, "only the old one");
-        admin.create_db_from(&new, "template1").await.unwrap();
-        assert_eq!(pick().await.unwrap(), new, "both: the new one");
-        drop(clean);
-    });
 }
 
 /// A transaction dropped before its commit takes its connection with it, so the layer's session

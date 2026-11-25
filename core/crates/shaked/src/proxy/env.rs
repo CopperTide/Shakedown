@@ -29,7 +29,6 @@ pub fn env_for(state: &AppState, ctx: &BranchCtx, agent: Option<&str>) -> BTreeM
         "HTTPS_PROXY",
         "https_proxy",
         "SHAKEDOWN_PROXY",
-        "ARENA_PROXY",
     ] {
         env.insert(k.to_string(), url.clone());
     }

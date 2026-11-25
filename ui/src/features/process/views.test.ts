@@ -28,7 +28,7 @@ describe('flow graph', () => {
 });
 
 describe('world links in the process view', () => {
-  it('are a unit run by arena, and arena\'s inbox reads are messages, not unknown calls', () => {
+  it('are a unit run by shakedown, and shakedown\'s inbox reads are messages, not unknown calls', () => {
     const evs: Event[] = [runStart, ev(2, 1, 'link', 'tool_call', { name: 'qa_review', part: 'lims' }), ev(3, 2, 'quality', 'tool_call', { name: 'inbox' })];
     const v = processView(evs, actionsOf(evs), team);
     expect(v.units.find((u) => u.id === 'link')).toMatchObject({ name: 'World links', state: 'automatic', other: 1 });

@@ -4,7 +4,7 @@ config, the budget, KPIs, confidence intervals, the record) is the part's, whate
 
 Today's backend is `des`, the open-source discrete-event model in `des.py`, in process.
 
-A commercial simulator (Rockwell Arena Simulation or Emulate3D, on a licensed Windows machine) is
+A commercial simulator (Rockwell Shakedown Simulation or Emulate3D, on a licensed Windows machine) is
 meant to plug in as a worker over HTTP. That adapter is not built; the contract it must meet is in
 `integrations/line-sim/README.md` ("A remote simulator"). Asking for any backend but `des` is
 refused at `start`.

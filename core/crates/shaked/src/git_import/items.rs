@@ -85,10 +85,13 @@ fn files_under(base: &Path, dir: &Path, out: &mut Vec<String>) {
 /// What happens to each of `repo`'s items in the project at `target` (which may not be a
 /// project yet), given what the last import of this repo wrote.
 pub fn plan(repo: &Project, target: &Path, last: Option<&Record>) -> Vec<ItemPlan> {
+    let Some(root) = repo.root() else {
+        return vec![];
+    };
     let mut out = vec![];
     for kind in Kind::ALL {
         for item in repo.list(kind) {
-            let Some(digest) = digest(&repo.root, kind, &item.id) else {
+            let Some(digest) = digest(root, kind, &item.id) else {
                 continue;
             };
             let wrote = last.and_then(|r| r.item(kind, item.id.as_str()));

@@ -75,26 +75,11 @@ async fn answer(
     Json(work(&seen, &body).await)
 }
 
-/// An agent written before 2026-11-19 that refuses any protocol name but `arena-agent/1` (400).
-async fn old_answer(
-    seen: State<Shared>,
-    headers: HeaderMap,
-    Json(body): Json<Value>,
-) -> axum::response::Response {
-    use axum::response::IntoResponse;
-    if body["protocol"] != "arena-agent/1" {
-        let refused = format!("unknown protocol {}", body["protocol"]);
-        return (axum::http::StatusCode::BAD_REQUEST, refused).into_response();
-    }
-    answer(seen, headers, Json(body)).await.into_response()
-}
-
-/// The protocol client at `/ok` (and at `/old` under the old protocol name), an agent that never answers at `/slow` and one that fails at
+/// The protocol client at `/ok`, an agent that never answers at `/slow` and one that fails at
 /// `/error`; the server's base URL.
 async fn agent_server(seen: Shared) -> String {
     let app = Router::new()
         .route("/ok", post(answer))
-        .route("/old", post(old_answer))
         .route(
             "/slow",
             post(|| async { std::future::pending::<String>().await }),
@@ -318,37 +303,6 @@ fn the_check_says_hello_and_gives_back_the_agent_without_its_secrets() {
         let (b, _, _) = fx.run_to_end(json!([v["agent"].clone()]), "chain").await;
         assert_ne!(b.status, BranchStatus::InfraError, "{:?}", b.error);
         assert_eq!(fx.seen.lock().unwrap().keys, [SECRET, SECRET]);
-    });
-}
-
-/// An agent that only speaks the old name `arena-agent/1` is asked again under it, for the hello
-/// and for its runs.
-#[test]
-fn an_agent_that_only_knows_the_old_protocol_name_still_works() {
-    run(async {
-        let fx = setup("oldname").await;
-        let body = json!({"kind": "http", "url": format!("{}/old", fx.agent)});
-        let (st, v) = fx.post("/api/agents/check", body).await;
-        assert_eq!(
-            (st, &v["ok"], &v["name"]),
-            (200, &json!(true), &json!("Plant agent")),
-            "{v}"
-        );
-        let protocols: Vec<Value> = fx
-            .seen
-            .lock()
-            .unwrap()
-            .bodies
-            .iter()
-            .map(|b| b["protocol"].clone())
-            .collect();
-        assert_eq!(
-            protocols,
-            [json!("arena-agent/1")],
-            "only the retried hello reached the handler"
-        );
-        let (b, _, _) = fx.run_to_end(json!([v["agent"].clone()]), "chain").await;
-        assert_ne!(b.status, BranchStatus::InfraError, "{:?}", b.error);
     });
 }
 

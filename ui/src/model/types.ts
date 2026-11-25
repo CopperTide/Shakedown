@@ -40,7 +40,7 @@ export interface ProviderStatus {
   models?: string[];
 }
 /** `stopped`: someone stopped the run before it ended (`POST /api/branches/{id}/stop`); unscored. */
-export type BranchStatus = 'running' | 'passed' | 'failed' | 'infra_error' | 'interrupted' | 'stopped';
+export type BranchStatus = 'running' | 'queued' | 'passed' | 'failed' | 'infra_error' | 'interrupted' | 'stopped' | 'budget_exceeded';
 export type EventKind =
   | 'run_start'
   | 'agent_start'
@@ -71,7 +71,10 @@ export type EventKind =
    *  'agent'|'gateway'|'claude_code', model_call_seq?, truncated?}`); not a step of its own. */
   | 'reasoning'
   /** shaked saved the parts that save at points (`payload: {reason, saves, error?, paused_ms}`); not a step. */
-  | 'save_point';
+  | 'save_point'
+  /** Spans the agent's own OpenTelemetry SDK sent during its run (`payload: {spans: [{trace_id, span_id,
+   *  parent_span_id?, name, kind, start, end, attributes?, events?, error?}]}`): its internal steps. */
+  | 'spans';
 
 export type RestoreMode = 'exact' | 'approximate';
 /** How one part of a rerun's world is (or was) restored (`model.rs` `RestoredHow`). */
@@ -298,6 +301,24 @@ export interface IdlePayload {
 }
 
 /** The parts that save at points, saved before a model call, when a driver asked or after the task's setup. */
+/** One span an agent's own OpenTelemetry SDK sent (ids in hex, times ISO). */
+export interface ImportedSpan {
+  trace_id: string;
+  span_id: string;
+  parent_span_id?: string;
+  name: string;
+  kind: number;
+  start: string;
+  end: string;
+  attributes?: Record<string, unknown>;
+  events?: { name: string; at: string; attributes?: Record<string, unknown> }[];
+  error?: string;
+}
+
+export interface SpansPayload {
+  spans: ImportedSpan[];
+}
+
 export interface SavePointPayload {
   reason: 'model_call' | 'asked' | 'setup';
   saves: Saves;
@@ -341,6 +362,7 @@ export interface Payloads {
   finish: FinishPayload;
   reasoning: ReasoningPayload;
   save_point: SavePointPayload;
+  spans: SpansPayload;
 }
 
 export interface CheckPayload {
@@ -393,7 +415,7 @@ export interface Branch {
   restored?: RestoredPart[];
 }
 
-/** Arena's own time per kind, in ms (`overhead.rs`); a kind with none is absent. */
+/** Shakedown's own time per kind, in ms (`overhead.rs`); a kind with none is absent. */
 export type Overhead = Partial<Record<'save' | 'restore' | 'record' | 'gateway' | 'gate' | 'link' | 'mcp' | 'wait' | 'score' | 'pause', number>>;
 
 /** A cost and where it comes from (`metrics.rs`). */
@@ -432,6 +454,8 @@ export interface Metrics {
 export interface BranchDetail extends Branch {
   events: Event[];
   metrics?: Metrics;
+  /** A queued cloud run's place in line, from 1. */
+  queue_position?: number | null;
 }
 
 export interface RunSummary {
@@ -456,13 +480,16 @@ export interface Health {
   open_available: boolean;
   /** Each provider from the configuration alone: local servers are `checked: false` (not asked). */
   providers?: ProviderStatus[];
+  /** Whether the Claude Code and Codex CLIs are on the shaked machine's PATH. */
   claude: boolean;
   codex: boolean;
+  /** Packages and agents run only in sandboxes (hosted): the CLIs run there, whatever this machine's PATH says. */
+  sandboxes?: boolean;
   disk?: DiskUsage;
   benchmark?: BenchmarkInfo;
 }
 
-/** Space used by every save the arena keeps (the hub's and each integration's), and the limit. */
+/** Space used by every save the shakedown keeps (the hub's and each integration's), and the limit. */
 export interface DiskUsage {
   bytes: number;
   limit_bytes: number;

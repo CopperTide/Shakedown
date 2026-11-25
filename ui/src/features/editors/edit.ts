@@ -21,5 +21,8 @@ export function setIn<T>(obj: T, path: Path, value: unknown): T {
 /** `list` with `item` at the end. */
 export const addTo = <T>(list: T[] | undefined, item: T): T[] => [...(list ?? []), item];
 
+/** `list` with its `i`th item replaced by `item`. */
+export const replaceAt = <T>(list: T[] | undefined, i: number, item: T): T[] => (list ?? []).map((x, j) => (j === i ? item : x));
+
 /** `list` without its `i`th item. */
 export const removeAt = <T>(list: T[] | undefined, i: number): T[] => (list ?? []).filter((_, j) => j !== i);

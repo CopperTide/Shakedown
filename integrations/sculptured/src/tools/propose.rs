@@ -1,5 +1,5 @@
 //! `propose_change`: proposes the change to the team as an outside system, through CopperTide's
-//! `POST /api/teams/{team}/changes` (proposer `arena`). CopperTide checks the team's rules,
+//! `POST /api/teams/{team}/changes` (proposer `shakedown`). CopperTide checks the team's rules,
 //! records the change and asks a person in Needs you; the person's answer (`decide_change`)
 //! decides it. CopperTide refusing the arguments is the tool's error.
 use anyhow::{Context, Result};
@@ -12,8 +12,8 @@ use crate::api::{Api, Reply};
 use crate::changes;
 use crate::team::MAX_WAITING;
 
-/// The name the tools propose under: CopperTide shows it as `external.arena@<team>`.
-pub const PROPOSER: &str = "arena";
+/// The name the tools propose under: CopperTide shows it as `external.shakedown@<team>`.
+pub const PROPOSER: &str = "shakedown";
 
 pub async fn propose(api: &Api, team: &str, args: &Value) -> Result<Outcome> {
     if !args.is_object() {

@@ -1,7 +1,9 @@
 //! Starting a new run, whoever drives it: shaked's own runners, an external system, or a Code
 //! connection's driver that shaked launches. Every path that makes a new run goes through
 //! [`launch`]: the run and its first branch, its world, its `RunStart` and its setup
-//! ([`runner::begin_run`]), then the branch started the way its runner says.
+//! ([`runner::begin_run`]), then the branch started the way its runner says. On a control box
+//! with [`Hosting`](crate::hosting::Hosting) the run and its branch are recorded here and the
+//! branch runs in a sandbox instead.
 
 use std::sync::Arc;
 
@@ -10,6 +12,7 @@ use crate::{
     driver::{self, RunIds},
     exec::BranchCtx,
     external::{self, Endpoints},
+    hosting::Turn,
     model::*,
     runner::{self, RunError, StartPoint},
     scenario::Scenario,
@@ -88,7 +91,7 @@ async fn run_token_of(
         return Ok(None);
     }
     let expires = chrono::Utc::now() + ctx.token_ttl();
-    let records = ctx.records(&state.store);
+    let records = ctx.scoped(&state.store);
     let kind = crate::auth::RunTokenKind::Run;
     Ok(Some(
         records
@@ -97,33 +100,29 @@ async fn run_token_of(
     ))
 }
 
-/// The run's driver started, when it has one.
-async fn launch_driver_of(
-    state: &Arc<AppState>,
-    driver: Option<&Connection>,
-    ids: RunIds<'_>,
-) -> Option<driver::Launched> {
-    driver::launch_or_fail(state, driver?, ids).await
-}
-
 /// Starts the run `spec` describes. shaked's own runners run its team on a spawned task, one
 /// agent after another (or as the runner says); a run an external system drives goes live, its
 /// team's agents (there may be none yet) started, and then its driver is launched, if it has one.
 /// The layer admits the run first (a refusal starts nothing) and meters it once it has begun, so
 /// every way a run starts (`POST /api/runs`, suites, experiments, a suite's claim) is counted.
 pub async fn launch(state: &Arc<AppState>, spec: LaunchSpec<'_>) -> Result<Launched, RunError> {
-    let (task_id, driver) = (spec.task_id, spec.driver);
-    let (warning, run_id, ctx) = admitted_begin(state, spec).await?;
+    if let Some(hosting) = state.hosting.get() {
+        return hosted(state, hosting, &spec).await;
+    }
+    let (warning, run_id, ctx) = admitted_begin(state, &spec).await?;
     let branch_id = ctx.branch_id.clone();
     let run_token = run_token_of(state, &ctx, &run_id).await?;
     let agents = go(state, Arc::new(ctx)).await?;
     let ids = RunIds {
         run_id: &run_id,
         branch_id: &branch_id,
-        task_id,
+        task_id: spec.task_id,
         fork_of: None,
     };
-    let driver = launch_driver_of(state, driver, ids).await;
+    let driver = match spec.driver {
+        Some(conn) => driver::launch_or_fail(state, conn, ids).await,
+        None => None,
+    };
     Ok(Launched {
         run_id,
         branch_id,
@@ -134,27 +133,68 @@ pub async fn launch(state: &Arc<AppState>, spec: LaunchSpec<'_>) -> Result<Launc
     })
 }
 
+/// Why a control box that runs branches in sandboxes refuses a run an external system or a
+/// Code connection drives.
+pub const NOT_IN_A_SANDBOX: &str =
+    "runs an external system or a Code connection drives don't run in the cloud yet";
+
+/// [`launch`] on a control box with [`Hosting`](crate::hosting::Hosting): the run admitted,
+/// given a sandbox slot of its scope or a turn in its queue (refused 429 beyond
+/// [`QUEUE_PER_SCOPE`](crate::hosting::QUEUE_PER_SCOPE) waiting), recorded here without
+/// starting a package program (`record_unplanned`) and metered, its branch run in a sandbox,
+/// now or `queued` until its turn. When the sandbox can't start, the branch ends `infra_error`.
+async fn hosted(
+    state: &Arc<AppState>,
+    hosting: &crate::hosting::Hosting,
+    spec: &LaunchSpec<'_>,
+) -> Result<Launched, RunError> {
+    if spec.rules.runner == Runner::External || spec.driver.is_some() {
+        let status = axum::http::StatusCode::UNPROCESSABLE_ENTITY;
+        let refusal = crate::layer::Refusal::new(status, NOT_IN_A_SANDBOX);
+        return Err(RunError::Refused(refusal));
+    }
+    let warning = admit_run(state, spec).await?;
+    let turn = hosting.reserve(state, &spec.scope)?;
+    // No package program starts here: the sandbox's worker describes and plans the world.
+    let plan = runner::record_unplanned(state, spec).await?;
+    meter_run(state, spec, &plan.run_id, &plan.branch_id).await;
+    let (run_id, branch_id) = (plan.run_id.clone(), plan.branch_id.clone());
+    match turn {
+        Turn::Now(slot) => hosting.start_or_fail(state, &plan, &spec.scope, slot).await,
+        Turn::Later => hosting.queue(state, plan, spec.scope.clone()).await?,
+    }
+    Ok(Launched {
+        run_id,
+        branch_id,
+        agents: vec![],
+        driver: None,
+        run_token: None,
+        warning,
+    })
+}
+
 /// The run `spec` describes admitted by the layer, begun ([`runner::begin_run`]) and metered:
 /// the layer's warning, the run and its first branch.
 async fn admitted_begin(
     state: &Arc<AppState>,
-    spec: LaunchSpec<'_>,
+    spec: &LaunchSpec<'_>,
 ) -> Result<(Option<String>, RunId, BranchCtx), RunError> {
-    let costly = crate::layer::Costly::StartRun;
-    let warning = crate::layer::admit(&state.store, &spec.scope, costly).await?;
-    let begun = runner::begin_run(
-        state,
-        &spec.scope,
-        spec.benchmark,
-        spec.task_id,
-        spec.team,
-        spec.rules,
-        spec.scenario,
-    );
-    let (run_id, ctx) = begun.await?;
-    let usage = runs_usage(&run_id, &ctx.branch_id);
-    crate::layer::meter(&state.store, &spec.scope, usage).await;
+    let warning = admit_run(state, spec).await?;
+    let (run_id, ctx) = runner::begin_run(state, spec).await?;
+    meter_run(state, spec, &run_id, &ctx.branch_id).await;
     Ok((warning, run_id, ctx))
+}
+
+/// The layer's admission of a new run: its warning, if any.
+async fn admit_run(state: &AppState, spec: &LaunchSpec<'_>) -> Result<Option<String>, RunError> {
+    let costly = crate::layer::Costly::StartRun;
+    Ok(crate::layer::admit(&state.store, &spec.scope, costly).await?)
+}
+
+/// Meters a run begun.
+async fn meter_run(state: &AppState, spec: &LaunchSpec<'_>, run_id: &str, branch_id: &str) {
+    let usage = runs_usage(run_id, branch_id);
+    crate::layer::meter(&state.store, &spec.scope, usage).await;
 }
 
 /// One run started, for the layer's `runs` meter (keyed by the run, so it counts once).

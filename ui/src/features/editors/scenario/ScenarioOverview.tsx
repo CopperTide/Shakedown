@@ -1,10 +1,11 @@
-// The scenario at a glance: the ticket, then its events in the order they fire.
+// The scenario at a glance: the ticket, its events in the order they fire, and the experiments playing it.
 import { Card } from '@/components/ui/card';
-import type { ScenarioBody } from '@/model/project';
+import type { ItemSummary, ScenarioBody } from '@/model/project';
 import { SectionHead } from '../fields';
+import RelatedItems from '../RelatedItems';
 import { timeline } from './events';
 
-export default function ScenarioOverview({ scenario }: { scenario: ScenarioBody }) {
+export default function ScenarioOverview({ scenario, experiments }: { scenario: ScenarioBody; experiments: ItemSummary[] }) {
   const { timed, byCalls } = timeline(scenario.events ?? []);
   return (
     <div className="grid gap-4">
@@ -16,6 +17,7 @@ export default function ScenarioOverview({ scenario }: { scenario: ScenarioBody 
           {byCalls.map((e, i) => <li key={`c${i}`} className="flex gap-3 px-[18px] py-2 text-sm"><span className="w-14 font-mono text-faint">#{e.after_calls}</span>{e.name}</li>)}
         </ol>
       </Card>
+      <RelatedItems title="Experiments using this scenario" noun="experiment" items={experiments} to={(id) => `/experiments/file/${id}`} empty="No experiments use this scenario yet." />
     </div>
   );
 }

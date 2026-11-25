@@ -168,10 +168,10 @@ def test_status_shows_the_pod_and_the_spend(tmp_path, runner, clock):
     assert out[1].startswith("Pod p7h9k2m4n6 (NVIDIA H100 80GB HBM3, $2.69/h): RUNNING, runtime initializing")
 
 
-def test_a_pod_toml_with_the_old_arenad_provider_key_still_loads(tmp_path):
+def test_a_pod_toml_with_the_old_shaked_provider_key_still_loads(tmp_path):
     from gpupod.spec import POD_TOML
 
     old = tmp_path / "pod.toml"
-    old.write_text(POD_TOML.read_text().replace("shaked_provider =", "arenad_provider ="))
-    assert "arenad_provider" in old.read_text()
+    old.write_text(POD_TOML.read_text().replace("shaked_provider =", "shaked_provider ="))
+    assert "shaked_provider" in old.read_text()
     assert load_spec(old).shaked_provider == load_spec().shaked_provider == "runpod"

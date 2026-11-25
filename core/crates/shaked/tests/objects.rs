@@ -2,13 +2,13 @@
 //! any, a verified `store copy` that repoints saves, and the start-up probe. On memory and files;
 //! the `live_minio_*` test runs MinIO in Docker (removed afterwards).
 mod support;
+use support::team;
 
 use std::{path::PathBuf, time::Duration};
 
 use bytes::Bytes;
 use serde_json::json;
 use shaked::{
-    model::*,
     objects::{
         copy, keys,
         url::{backends, Backend},
@@ -196,16 +196,6 @@ fn reads_come_from_the_store_a_row_names_after_the_write_store_changes() {
             "a still answers"
         );
     })
-}
-
-fn team() -> Team {
-    Team {
-        id: "t".into(),
-        name: "T".into(),
-        agents: vec![AgentSpec::new("a", AgentKind::Open)
-            .with_name("A")
-            .with_prompt("p")],
-    }
 }
 
 /// `n` saves of one object each on the write store, with their rows: their object refs.

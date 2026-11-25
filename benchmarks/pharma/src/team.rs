@@ -1,7 +1,7 @@
 //! The incident's ticket, the rules every agent gets and the deployments this benchmark suggests
 //! (`data/teams.json`): a single agent (shaked's default), a dispatching team whose lead delegates
 //! to the roles (for shaked's `dispatch` runner), and the coordinated team for a chain, whose roles
-//! have only the tools their decisions need, with short prompts and compact reports. Arena imposes
+//! have only the tools their decisions need, with short prompts and compact reports. Shakedown imposes
 //! none of it.
 use std::sync::OnceLock;
 

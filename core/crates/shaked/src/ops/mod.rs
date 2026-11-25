@@ -2,9 +2,12 @@
 //! class and input schema. The HTTP routes and the control MCP server are both generated from it,
 //! so the buttons, the API, the assistant and any agent can do the same things.
 
+mod data_ops;
+mod delete_ops;
 mod deploy;
 mod deploy_ops;
 mod error;
+mod group_ops;
 pub mod http;
 mod import_git_ops;
 mod import_ops;
@@ -12,16 +15,20 @@ mod item_ops;
 mod madl_ops;
 pub mod mcp;
 mod migrate;
+mod observability_ops;
 mod project_ops;
+mod restore_ops;
 pub mod stdio;
+mod step_ops;
 mod view;
 
+use std::ops::ControlFlow;
 use std::sync::{Arc, OnceLock};
 
 use futures_util::future::BoxFuture;
 use serde::de::DeserializeOwned;
-use serde_json::Value;
-use shakedown_project::format::Kind;
+use serde_json::{json, Value};
+use shakedown_project::format::{EditPolicy, Kind};
 
 use crate::app::AppState;
 use crate::auth::Caller;
@@ -123,10 +130,15 @@ pub fn all() -> &'static [Operation] {
     ALL.get_or_init(|| {
         let mut ops = project_ops::ops();
         ops.extend(item_ops::ops());
+        ops.extend(data_ops::ops());
+        ops.extend(group_ops::ops());
+        ops.extend(restore_ops::ops());
         ops.extend(deploy_ops::ops());
         ops.extend(madl_ops::ops());
         ops.extend(import_ops::ops());
         ops.extend(import_git_ops::ops());
+        ops.extend(step_ops::ops());
+        ops.extend(observability_ops::ops());
         ops
     })
 }
@@ -148,7 +160,52 @@ fn input<T: DeserializeOwned>(value: Value) -> Result<T, OpError> {
     serde_json::from_value(value).map_err(|e| OpError::bad_request(e.to_string()))
 }
 
+/// A yes-or-no input, as JSON's `true`/`false` or, from a query string, `"true"`/`"false"`.
+fn flag<'de, D: serde::Deserializer<'de>>(d: D) -> Result<bool, D::Error> {
+    #[derive(serde::Deserialize)]
+    #[serde(untagged)]
+    enum Flag {
+        Bool(bool),
+        Text(String),
+    }
+    match <Flag as serde::Deserialize>::deserialize(d)? {
+        Flag::Bool(b) => Ok(b),
+        Flag::Text(t) if t == "true" => Ok(true),
+        Flag::Text(t) if t == "false" => Ok(false),
+        Flag::Text(t) => Err(serde::de::Error::custom(format!(
+            "expected true or false, got {t:?}"
+        ))),
+    }
+}
+
 /// The JSON Schema of `T`, as a value.
 fn schema<T: schemars::JsonSchema>() -> Value {
     serde_json::to_value(schemars::schema_for!(T)).unwrap_or(Value::Null)
+}
+
+/// An input body as YAML, to be parsed as a file would be; one that can't be is 400.
+fn as_yaml(body: &Value) -> Result<String, OpError> {
+    serde_yaml_ng::to_string(body).map_err(|e| OpError::bad_request(e.to_string()))
+}
+
+/// The unified diff of an edit from `old` to `new` YAML. When the project's edit `policy` shows a
+/// diff first and the edit is not confirmed, breaks with the reply to give instead of writing.
+fn diff_first(
+    policy: EditPolicy,
+    old: &str,
+    new: &str,
+    confirm: bool,
+) -> ControlFlow<Value, String> {
+    let diff = similar::TextDiff::from_lines(old, new)
+        .unified_diff()
+        .to_string();
+    if policy == EditPolicy::DiffFirst && !confirm {
+        return ControlFlow::Break(json!({ "proposed": true, "diff": diff }));
+    }
+    ControlFlow::Continue(diff)
+}
+
+/// A request that names something unusable (422).
+fn unprocessable(message: String) -> OpError {
+    OpError::new(axum::http::StatusCode::UNPROCESSABLE_ENTITY, message)
 }

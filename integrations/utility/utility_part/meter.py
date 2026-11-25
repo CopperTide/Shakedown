@@ -72,13 +72,17 @@ def _transitions(config, state) -> list:
         now = status_at(ev, state["clock_ms"])
         if now != ev["status"]:
             ev["status"] = now
-            out.append(_window_event(config, ev))
+            out.append(window_event(config, ev))
     return out
 
 
-def _window_event(config, ev) -> dict:
+def window_event(config, ev) -> dict:
+    """The world event of the event's status now: its notice, or its window starting or ending."""
     target = ev["target_w"] / 1000
-    if ev["status"] == "active":
+    if ev["status"] == "notified":
+        text = (f"Demand-response event {ev['id']} notified: hold the site at or below {target:g} kW from "
+                f"{plant_time(config, ev['start_ms'])}")
+    elif ev["status"] == "active":
         text = (f"Demand-response window {ev['id']} started: hold the site at or below {target:g} kW until "
                 f"{plant_time(config, ev['end_ms'])}")
     else:
@@ -120,6 +124,19 @@ def meter_doc(config, state) -> dict:
             "at": plant_time(config, state["clock_ms"]), "kw": m["w"] / 1000, "peak_kw": m["peak_w"] / 1000,
             "kwh_this_shift": kwh(m["wms"]["standard"] + m["wms"]["peak"]),
             "energy_cost_usd": round(cost, 2), "tariff_period": period, "price_per_kwh": price(config, period)}
+
+
+READ_FIELDS = ("kw", "peak_kw", "kwh_this_shift", "energy_cost_usd")
+
+
+def reading(config, state) -> dict:
+    """The meter as an agent reads it: `meter_doc`, with what it measures scaled by its `read_factor` once a
+    `meter_low` disruption has fired."""
+    doc = meter_doc(config, state)
+    factor = state["meter"].get("read_factor", 1)
+    if factor != 1:
+        doc.update({k: round(doc[k] * factor, 3) for k in READ_FIELDS})
+    return doc
 
 
 def event_doc(config, ev) -> dict:

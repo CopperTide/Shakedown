@@ -1,5 +1,6 @@
 mod support;
 use support::records;
+use support::team_of;
 
 use std::{path::Path, sync::Arc};
 
@@ -75,11 +76,7 @@ fn claude_command_has_only_the_world_mcp() {
     assert_eq!(a[0], "-p");
     assert_eq!(a[a.len() - 2..], ["--", "do it"]);
     assert!(a.contains(&"--no-session-persistence".to_string()));
-    // Claude Code keeps its own vendor's key, and loses the others.
-    for key in ["PGPASSWORD", "OPENAI_API_KEY", "OPENROUTER_API_KEY"] {
-        assert!(c.get_envs().any(|(k, v)| k == key && v.is_none()), "{key}");
-    }
-    assert!(!c.get_envs().any(|(k, _)| k == "ANTHROPIC_API_KEY"));
+    assert_secrets_scrubbed(&c, "OPENAI_API_KEY");
     let c = claude::command(&spec(Some("opus")), &mcp(), "x");
     assert!(args(&c).contains(&"opus".to_string()));
 }
@@ -139,39 +136,35 @@ fn codex_command_sets_mcp_url() {
     assert!(a.windows(2).any(|w| w == ["--disable", "hooks"]));
     assert!(a.contains(&"web_search=\"disabled\"".to_string()));
     assert!(a.windows(2).any(|w| w == ["-m", "gpt-x"]));
-    assert_secrets_scrubbed(&c);
+    assert_secrets_scrubbed(&c, "ANTHROPIC_API_KEY");
     assert!(a.windows(2).any(|w| w == ["-C", "/tmp/w"]));
     assert_eq!(a.last().unwrap(), "do it");
 }
 
-/// Every secret the driver must not hand to the agent is removed from the command's environment.
-fn assert_secrets_scrubbed(c: &std::process::Command) {
-    let removed: Vec<_> = c
-        .get_envs()
-        .filter(|(_, v)| v.is_none())
-        .map(|(k, _)| k.to_string_lossy().into_owned())
-        .collect();
+/// The command hands the agent no secret of this process's environment (which holds
+/// `SHAKEDOWN_PG_URL` in these tests), nor `other`, the other vendor's key: each one present is
+/// removed, and none is set (`agents::cli`'s tests check a started child's environment whole).
+fn assert_secrets_scrubbed(c: &std::process::Command, other: &str) {
+    let env: std::collections::BTreeMap<_, _> = c.get_envs().collect();
     for k in [
         "SHAKEDOWN_PG_URL",
         "DATABASE_URL",
         "PGPASSWORD",
         "OPENROUTER_API_KEY",
-        "ANTHROPIC_API_KEY",
         "SHAKEDOWN_LOCAL_MODELS",
+        other,
     ] {
-        assert!(removed.contains(&k.to_string()), "{k} not scrubbed");
+        let removed = env.get(std::ffi::OsStr::new(k)) == Some(&None);
+        let absent = std::env::var_os(k).is_none() && !env.contains_key(std::ffi::OsStr::new(k));
+        assert!(removed || absent, "{k} reaches the agent");
     }
-    // Codex keeps its own vendor's key.
-    assert!(!c.get_envs().any(|(k, _)| k == "OPENAI_API_KEY"));
 }
 
 // ---- driver behaviour with fake binaries ----
 
 fn fake(script: &str) -> String {
-    use std::os::unix::fs::PermissionsExt;
     let p = std::env::temp_dir().join(format!("fakecli-{}.sh", uuid::Uuid::new_v4().simple()));
-    std::fs::write(&p, format!("#!/bin/sh\n{script}\n")).unwrap();
-    std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
+    support::write_script(&p, script);
     p.to_string_lossy().into_owned()
 }
 
@@ -194,11 +187,7 @@ async fn toy_world(tag: &str) -> ToyWorld {
 }
 
 fn bare_run(toy: &ToyWorld, resume: Option<Vec<serde_json::Value>>) -> AgentRun {
-    let team = Team {
-        id: "t".into(),
-        name: "T".into(),
-        agents: vec![spec(None)],
-    };
+    let team = team_of(vec![spec(None)]);
     let branch = BranchCtx::new("b1".into(), toy.world.clone(), team, "task".into());
     AgentRun {
         branch: Arc::new(branch),
@@ -283,6 +272,64 @@ fn drivers_name_the_mcp_server_after_the_benchmark() {
     })
 }
 
+/// A fake CLI that writes the env vars `vars`, one per line, to a fresh file: (the CLI, the file).
+fn env_recorder(vars: &[&str]) -> (String, std::path::PathBuf) {
+    let out = std::env::temp_dir().join(format!("fakeenv-{}", uuid::Uuid::new_v4().simple()));
+    let lines: Vec<String> = vars
+        .iter()
+        .map(|v| format!("printf '%s\\n' \"${v}\""))
+        .collect();
+    let script = format!("{{ {}; }} > {}; exit 1", lines.join("; "), out.display());
+    (fake(&script), out)
+}
+
+/// What the fake CLI recorded, once run.
+fn recorded_env(out: &std::path::Path) -> Vec<String> {
+    let text = std::fs::read_to_string(out).unwrap_or_default();
+    let _ = std::fs::remove_file(out);
+    text.lines().map(str::to_string).collect()
+}
+
+/// What Claude Code (else Codex) run with `via_gateway` saw of `vars`, and its agent's token.
+async fn routed_env(toy: &ToyWorld, claude: bool, via_gateway: bool) -> (Vec<String>, String) {
+    let run = bare_run(toy, None);
+    let token = run.branch.agent_token("triage");
+    let vars = match claude {
+        true => ["ANTHROPIC_BASE_URL", "ANTHROPIC_API_KEY"],
+        false => ["OPENAI_BASE_URL", "OPENAI_API_KEY"],
+    };
+    let (binary, out) = env_recorder(&vars);
+    if claude {
+        let mut d = ClaudeDriver::new("http://127.0.0.1:7");
+        (d.binary, d.via_gateway) = (binary, via_gateway);
+        d.run(run).await;
+    } else {
+        let mut d = CodexDriver::new("http://127.0.0.1:7");
+        (d.binary, d.via_gateway) = (binary, via_gateway);
+        d.run(run).await;
+    }
+    (recorded_env(&out), token)
+}
+
+/// In a worker (`via_gateway`) a CLI agent's API goes to the worker's gateway for its branch
+/// and agent, its agent token as the key; elsewhere neither is set.
+#[test]
+fn cli_agents_in_a_worker_send_model_calls_to_its_gateway() {
+    run(async {
+        let toy = toy_world("cliroute").await;
+        let base = "http://127.0.0.1:7/gateway/b1/triage";
+        let (seen, token) = routed_env(&toy, true, true).await;
+        assert_eq!(seen, [base.to_string(), token], "Claude Code");
+        let (seen, token) = routed_env(&toy, false, true).await;
+        assert_eq!(seen, [format!("{base}/v1"), token], "Codex");
+        for claude in [true, false] {
+            // The CLI's own key, if the environment has one, is its sign-in: left alone.
+            let (seen, _) = routed_env(&toy, claude, false).await;
+            assert_eq!(seen[0], "", "not in a worker");
+        }
+    })
+}
+
 #[test]
 fn driver_times_out() {
     run(async {
@@ -305,11 +352,7 @@ fn agent_spec(id: &str, kind: AgentKind, prompt: &str) -> AgentSpec {
 
 fn live_team() -> Team {
     let a = |id: &str| agent_spec(id, AgentKind::ClaudeCode, "p");
-    Team {
-        id: "t".into(),
-        name: "T".into(),
-        agents: vec![a("triage"), a("resolver")],
-    }
+    team_of(vec![a("triage"), a("resolver")])
 }
 
 /// Binds a free local port and returns the listener with its base URL.
@@ -364,11 +407,7 @@ async fn live(tag: &str, mk: impl FnOnce(String) -> Box<dyn Driver>) {
 
 /// A context for `branch` whose team has no agents.
 fn agentless_ctx(branch: &str, world: &Arc<World>) -> Arc<BranchCtx> {
-    let team = Team {
-        id: "t".into(),
-        name: "T".into(),
-        agents: vec![],
-    };
+    let team = team_of(vec![]);
     Arc::new(BranchCtx::new(
         branch.into(),
         world.clone(),

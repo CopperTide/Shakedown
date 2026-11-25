@@ -5,7 +5,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{exec::BranchCtx, model::ReasoningPayload, store::Store};
+use crate::{exec::BranchCtx, model::ReasoningPayload};
 
 /// Most items one report may carry.
 pub const MAX_ITEMS: usize = 100;
@@ -148,21 +148,30 @@ pub fn from_claude_message(message: &Value) -> Vec<ReasoningItem> {
 /// already happened.
 pub async fn record(
     ctx: &BranchCtx,
-    store: &Store,
     agent: &str,
     items: Vec<ReasoningItem>,
     source: &str,
     seq: Option<i64>,
 ) {
-    for mut item in items {
-        item.model_call_seq = item.model_call_seq.or(seq);
-        let Some(p) = payload(&item, source) else {
-            continue;
-        };
-        if let Err(e) = ctx.record(store, Some(agent), &p).await {
+    for p in payloads(items, source, seq) {
+        if let Err(e) = ctx.record(Some(agent), &p).await {
             eprintln!("branch {}: recording reasoning: {e:#}", ctx.branch_id);
         }
     }
+}
+
+/// The events of `items` from `source` worth recording (an empty one is not), each tied to the
+/// model call `seq` unless it names its own.
+pub fn payloads(
+    items: Vec<ReasoningItem>,
+    source: &str,
+    seq: Option<i64>,
+) -> Vec<ReasoningPayload> {
+    let tied = items.into_iter().map(|mut item| {
+        item.model_call_seq = item.model_call_seq.or(seq);
+        item
+    });
+    tied.filter_map(|item| payload(&item, source)).collect()
 }
 
 #[cfg(test)]

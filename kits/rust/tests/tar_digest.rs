@@ -30,7 +30,7 @@ fn tar(dir: &Path, out: &str, names: &[&str]) -> PathBuf {
 
 #[test]
 fn digest_ignores_order_and_sees_changes() {
-    let t = Tmp(std::env::temp_dir().join(format!("arena_kit_tar_{}", std::process::id())));
+    let t = Tmp(std::env::temp_dir().join(format!("shakedown_kit_tar_{}", std::process::id())));
     fs::create_dir_all(t.0.join("src")).unwrap();
     fs::write(t.0.join("src/a"), "aaaa").unwrap();
     fs::write(t.0.join("src/b"), "bb").unwrap();
@@ -59,7 +59,8 @@ fn digest_ignores_order_and_sees_changes() {
 #[test]
 fn digest_reader_matches_digest() {
     use shakedown_part::helpers::tar_digest::digest_reader;
-    let t = Tmp(std::env::temp_dir().join(format!("arena_kit_tar_reader_{}", std::process::id())));
+    let t =
+        Tmp(std::env::temp_dir().join(format!("shakedown_kit_tar_reader_{}", std::process::id())));
     fs::create_dir_all(t.0.join("src")).unwrap();
     fs::write(t.0.join("src/a"), "aaaa").unwrap();
     let path = tar(&t.0, "a.tar", &["a"]);
@@ -70,7 +71,8 @@ fn digest_reader_matches_digest() {
 
 #[test]
 fn digest_ignores_when_a_link_was_made_but_not_where_it_points() {
-    let t = Tmp(std::env::temp_dir().join(format!("arena_kit_tar_link_{}", std::process::id())));
+    let t =
+        Tmp(std::env::temp_dir().join(format!("shakedown_kit_tar_link_{}", std::process::id())));
     fs::create_dir_all(t.0.join("src")).unwrap();
     let link = t.0.join("src/l");
     std::os::unix::fs::symlink("a", &link).unwrap();

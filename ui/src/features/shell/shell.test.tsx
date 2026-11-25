@@ -34,6 +34,7 @@ describe('shell', () => {
     expect(screen.getByRole('link', { name: 'Home' }).getAttribute('aria-current')).toBeNull();
   });
 
+
   it('shows_project_name', async () => {
     mockFetch({ '/api/project': { name: 'Larkspur Ops', counts: {}, problems: [] } });
     render(<MemoryRouter><Sidebar /></MemoryRouter>);

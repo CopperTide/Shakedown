@@ -87,15 +87,9 @@ pub struct ProgramDirs<'a> {
 /// A command argument with `${SHAKEDOWN_BIN_DIR}` and `${SHAKEDOWN_DIR}` replaced (`${SHAKEDOWN_DIR}` only
 /// when `repo_dir` is set).
 fn expand_arg(arg: &str, bin_dir: &Path, repo_dir: &Path) -> String {
-    let mut arg = arg.to_string();
-    // `${ARENA_BIN_DIR}` and `${ARENA_DIR}`: the old names, in manifests written before 2026-11-19.
-    for name in ["${SHAKEDOWN_BIN_DIR}", "${ARENA_BIN_DIR}"] {
-        arg = arg.replace(name, &bin_dir.to_string_lossy());
-    }
+    let mut arg = arg.replace("${SHAKEDOWN_BIN_DIR}", &bin_dir.to_string_lossy());
     if !repo_dir.as_os_str().is_empty() {
-        for name in ["${SHAKEDOWN_DIR}", "${ARENA_DIR}"] {
-            arg = arg.replace(name, &repo_dir.to_string_lossy());
-        }
+        arg = arg.replace("${SHAKEDOWN_DIR}", &repo_dir.to_string_lossy());
     }
     arg
 }
@@ -150,7 +144,7 @@ fn program_command(
     for k in PASSED_ENV {
         c.envs(shakedown_part::settings::passed(k));
     }
-    c.envs(shakedown_part::settings::both(
+    c.envs(shakedown_part::settings::pair(
         "SHAKEDOWN_SAVES",
         dirs.saves,
     ));
@@ -286,10 +280,17 @@ fn spawn_waiter(
 impl Client {
     /// Starts the program. Command mode runs in the manifest's folder with a cleared environment.
     pub async fn spawn(m: &Manifest, bin_dir: &Path, saves_root: &Path) -> Result<Client> {
-        Client::spawn_with_env(m, bin_dir, saves_root, &[]).await
+        let dirs = ProgramDirs {
+            bin: bin_dir,
+            repo: Path::new(""),
+            saves: saves_root,
+        };
+        Client::spawn_in(m, dirs, &[]).await
     }
 
-    /// Like `spawn_with_env`, with `${SHAKEDOWN_DIR}` substituted too.
+    /// Like `spawn`, with `${SHAKEDOWN_DIR}` substituted and extra environment variables for
+    /// command mode (they override the ones passed through). Image mode ignores them: a container
+    /// gets no environment from shaked.
     pub async fn spawn_in(
         m: &Manifest,
         dirs: ProgramDirs<'_>,
@@ -297,22 +298,6 @@ impl Client {
     ) -> Result<Client> {
         let (cmd, container) = command_for(m, dirs, env)?;
         Client::spawn_command(m, cmd, container)
-    }
-
-    /// Like `spawn`, with extra environment variables for command mode (they override the ones
-    /// passed through). Image mode ignores them: a container gets no environment from shaked.
-    pub async fn spawn_with_env(
-        m: &Manifest,
-        bin_dir: &Path,
-        saves_root: &Path,
-        env: &[(String, String)],
-    ) -> Result<Client> {
-        let dirs = ProgramDirs {
-            bin: bin_dir,
-            repo: Path::new(""),
-            saves: saves_root,
-        };
-        Client::spawn_in(m, dirs, env).await
     }
 
     /// Starts `cmd` with piped stdio in a process group of its own.
@@ -384,27 +369,18 @@ impl Client {
         self.call_within(method, params, Some(self.timeout)).await
     }
 
-    /// `call` without a deadline: waits until the program answers or exits. For work that must be
-    /// over before the caller goes on.
-    pub async fn call_until_done<T: DeserializeOwned>(
-        &self,
-        method: &str,
-        params: Value,
-    ) -> Result<T, CallError> {
-        self.call_within(method, params, None).await
-    }
-
     /// `request`'s method with its params; the answer read as `T`.
     pub async fn request<T: DeserializeOwned>(&self, r: &impl Request) -> Result<T, CallError> {
         self.call(method_of(r), params_of(r)).await
     }
 
-    /// `request` without a deadline (see [`Client::call_until_done`]).
+    /// `request` without a deadline: waits until the program answers or exits. For work that
+    /// must be over before the caller goes on.
     pub async fn request_until_done<T: DeserializeOwned>(
         &self,
         r: &impl Request,
     ) -> Result<T, CallError> {
-        self.call_until_done(method_of(r), params_of(r)).await
+        self.call_within(method_of(r), params_of(r), None).await
     }
 
     async fn call_within<T: DeserializeOwned>(

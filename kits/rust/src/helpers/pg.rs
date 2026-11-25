@@ -11,7 +11,7 @@ use tokio_postgres::{Client, NoTls};
 use super::instances::KeyedLocks;
 
 mod server;
-pub use server::{configured_url, DEFAULT_URL, OLD_DEFAULT_URL};
+pub use server::{configured_url, DEFAULT_URL};
 
 /// Copies, drops and lists databases on a Postgres server.
 pub struct Templates {

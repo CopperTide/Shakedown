@@ -15,7 +15,7 @@ use shaked::{
     model::*,
     store::{NewSuite, Store},
 };
-use support::{live, live::Live, packages::toy_world, pg, pg::Cleanup, run, run_live, AppFx};
+use support::{live, live::Live, packages::toy_world, pg, pg::Cleanup, poll_until, run, AppFx};
 
 const SYSTEM: &str =
     r#"{"kind": "erp", "product": "Toy ERP", "stands_in_for": "SAP S/4HANA", "simulated": true}"#;
@@ -40,17 +40,16 @@ impl AppFx {
 
     /// The suite's report once it is finished.
     async fn finished(&self, id: &str) -> Value {
-        let polls = live::BRANCH_TIMEOUT.as_millis() / 500;
-        for _ in 0..polls {
+        let over = async || {
             let (status, v) = self.get(&format!("/api/suites/{id}")).await;
             assert_eq!(status, 200, "{v}");
-            if v["status"] != "running" {
-                assert_eq!(v["status"], "finished", "{v}");
-                return v;
-            }
-            tokio::time::sleep(Duration::from_millis(500)).await;
-        }
-        panic!("the suite did not finish");
+            Some(v).filter(|v| v["status"] != "running")
+        };
+        let step = Duration::from_millis(500);
+        let v = poll_until(live::BRANCH_TIMEOUT, step, over).await;
+        let v = v.expect("the suite did not finish");
+        assert_eq!(v["status"], "finished", "{v}");
+        v
     }
 }
 
@@ -190,17 +189,13 @@ async fn assert_run_start_names_its_systems(fx: &AppFx, r: &Value) {
     assert_eq!(world["parts"][0]["system"]["product"], "Toy ERP");
 }
 
+live_test!(
+    live_a_builtin_suite_of_two_tasks_aggregates_its_runs,
+    a_builtin_suite_of_two_tasks_aggregates_its_runs
+);
+
 /// A built-in suite of two tasks runs its team on a real model one run after another, can't be
 /// claimed, and its report adds up its runs; the suite list shows it finished.
-#[test]
-#[ignore = "live: runs a real model (support/live.rs)"]
-fn live_a_builtin_suite_of_two_tasks_aggregates_its_runs() {
-    run_live(
-        Live::any("live_a_builtin_suite_of_two_tasks_aggregates_its_runs"),
-        a_builtin_suite_of_two_tasks_aggregates_its_runs,
-    );
-}
-
 async fn a_builtin_suite_of_two_tasks_aggregates_its_runs(live: Live) {
     let fx = setup("builtin").await;
     let id = fx
@@ -233,15 +228,10 @@ fn verdict_for(a: f64, b: f64) -> &'static str {
     }
 }
 
-/// Two suites compared: each check's verdict follows from its pass rate in each report.
-#[test]
-#[ignore = "live: runs a real model (support/live.rs)"]
-fn live_comparing_two_suites_judges_each_check_by_its_rates() {
-    run_live(
-        Live::any("live_comparing_two_suites_judges_each_check_by_its_rates"),
-        comparing_two_suites_judges_each_check_by_its_rates,
-    );
-}
+live_test!(
+    live_comparing_two_suites_judges_each_check_by_its_rates,
+    comparing_two_suites_judges_each_check_by_its_rates
+);
 
 /// A built-in suite of `team` over both tasks once each, run to its end: its id and report.
 async fn suite_of(fx: &AppFx, team: Value) -> (String, Value) {
@@ -252,6 +242,7 @@ async fn suite_of(fx: &AppFx, team: Value) -> (String, Value) {
     (id, r)
 }
 
+/// Two suites compared: each check's verdict follows from its pass rate in each report.
 async fn comparing_two_suites_judges_each_check_by_its_rates(live: Live) {
     let fx = setup("compare").await;
     let (a, ra) = suite_of(&fx, poker(&live, 1)).await;
@@ -320,14 +311,11 @@ async fn drive(fx: &AppFx, live: &Live, c: &Value) -> i64 {
     peak
 }
 
-#[test]
-#[ignore = "live: runs Claude Code (support/live.rs)"]
-fn live_an_external_system_claims_and_drives_each_run_of_a_suite() {
-    run_live(
-        Live::claude("live_an_external_system_claims_and_drives_each_run_of_a_suite"),
-        an_external_system_claims_and_drives_each_run_of_a_suite,
-    );
-}
+live_test!(
+    live_an_external_system_claims_and_drives_each_run_of_a_suite,
+    an_external_system_claims_and_drives_each_run_of_a_suite,
+    claude
+);
 
 async fn an_external_system_claims_and_drives_each_run_of_a_suite(live: Live) {
     let fx = setup("external").await;

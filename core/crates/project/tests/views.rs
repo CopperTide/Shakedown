@@ -73,7 +73,8 @@ fn a_world_lists_its_views_and_a_broken_one_is_a_problem() {
     std::fs::write(world.join("views/occ.yaml"), example()).unwrap();
     std::fs::write(world.join("views/bad.yaml"), "format: shakedown-view/1\n").unwrap();
     let parsed: WorldFile = parse("world.yaml", file).unwrap();
-    let views = world_views(root.path(), &Id::parse("w").unwrap(), &parsed);
+    let store = shakedown_project::store::FsStore::new(root.path());
+    let views = world_views(&store, &Id::parse("w").unwrap(), &parsed);
     let ids: Vec<(&str, bool)> = views
         .iter()
         .map(|v| (v.id.as_str(), v.view.is_ok()))

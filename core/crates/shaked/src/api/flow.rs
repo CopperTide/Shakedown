@@ -1,5 +1,7 @@
 //! Pausing, resuming and stopping a live branch (`POST /api/branches/{id}/pause`, `/resume`,
-//! `/stop`), whatever drives its agents, and asking for a save point (`/save`).
+//! `/stop`), whatever drives its agents, and asking for a save point (`/save`). A branch a worker
+//! in a sandbox runs is not live here: the control box holds it itself ([`holds`]), whether its
+//! worker is connected or not, and tells the worker.
 
 use crate::auth::{Caller, Who};
 use std::sync::Arc;
@@ -15,8 +17,10 @@ use super::{ApiError, ApiResult};
 use crate::{
     app::AppState,
     exec::{BranchCtx, ToolExec},
+    model::Hold,
     model::{SavePointPayload, SAVE_ASKED},
     runner,
+    worker::holds,
 };
 
 pub(super) fn router() -> Router<Arc<AppState>> {
@@ -35,8 +39,36 @@ async fn live(state: &AppState, caller: &Caller, id: &str) -> Result<Arc<BranchC
     }
     match state.store.at(caller).find_branch(id).await? {
         Some(_) => Err(ApiError::conflict("the run is not running")),
-        None => Err(super::no_branch(id)),
+        None => Err(ApiError::missing("branch", id)),
     }
+}
+
+/// What a stop pressed by a person says.
+const STOPPED_BY_HAND: &str = "stopped";
+
+/// Puts branch `id` on `hold` when a sandbox's worker runs it (see [`holds`]): whether the hold
+/// changed; None when it runs here, or no longer runs. 404 when the caller can't see it.
+async fn relayed(
+    state: &Arc<AppState>,
+    caller: &Caller,
+    id: &str,
+    hold: Hold,
+) -> Result<Option<bool>, ApiError> {
+    if state.live.contains(id) {
+        return Ok(None);
+    }
+    let at = state.store.at(caller);
+    if at.find_branch(id).await?.is_none() {
+        return Err(ApiError::missing("branch", id));
+    }
+    if !state.links.has(id) && !at.is_linked(id).await? {
+        return Ok(None);
+    }
+    // The branch records for its link's caller once its worker started.
+    let acting = state.links.started(id).and_then(|l| l.caller());
+    let acting = acting.unwrap_or_else(|| Arc::new(caller.clone()));
+    let changed = holds::put(state, &acting, id, hold, STOPPED_BY_HAND).await?;
+    Ok(Some(changed))
 }
 
 /// Whether the branch is paused now, and whether the request changed that.
@@ -52,8 +84,11 @@ async fn pause(
     Who(caller): Who,
     Path(id): Path<String>,
 ) -> ApiResult<Value> {
+    if let Some(changed) = relayed(&state, &caller, &id, Hold::Paused).await? {
+        return Ok(Json(json!({"paused": true, "changed": changed})));
+    }
     let ctx = live(&state, &caller, &id).await?;
-    paused(&ctx, ctx.pause(&state.store).await?)
+    paused(&ctx, ctx.pause().await?)
 }
 
 /// `POST /api/branches/{id}/resume`: the calls that wait go on, the world clock runs again.
@@ -62,23 +97,35 @@ async fn resume(
     Who(caller): Who,
     Path(id): Path<String>,
 ) -> ApiResult<Value> {
+    if let Some(changed) = relayed(&state, &caller, &id, Hold::Running).await? {
+        return Ok(Json(json!({"paused": false, "changed": changed})));
+    }
     let ctx = live(&state, &caller, &id).await?;
-    let lasted = ctx.resume_lasting(&state.store).await?;
+    let lasted = ctx.resume_lasting().await?;
     if let Some(by) = lasted {
         // Expiry counts only unpaused time: the branch's proxy tickets and run tokens move too.
         state.proxy.tickets.extend(&id, by);
-        ctx.records(&state.store).extend_run_tokens(&id, by).await?;
+        ctx.scoped(&state.store).extend_run_tokens(&id, by).await?;
     }
     paused(&ctx, lasted.is_some())
 }
 
 /// `POST /api/branches/{id}/stop`: the run ends `stopped`, unscored. shaked's own runner ends
-/// the branch on its task; the stream says when it has.
+/// the branch on its task; the stream says when it has. A queued cloud run ends at once.
 async fn stop(
     State(state): State<Arc<AppState>>,
     Who(caller): Who,
     Path(id): Path<String>,
 ) -> ApiResult<Value> {
+    if crate::hosting::stop_queued(&state, &caller, &id).await? {
+        return Ok(Json(json!({"stopping": true})));
+    }
+    if relayed(&state, &caller, &id, Hold::STOPPED)
+        .await?
+        .is_some()
+    {
+        return Ok(Json(json!({"stopping": true})));
+    }
     let ctx = live(&state, &caller, &id).await?;
     let stopped = super::detached(async move { Ok(runner::stop(&state, &ctx).await) }).await?;
     Ok(Json(json!({"stopping": stopped})))
@@ -97,7 +144,7 @@ async fn save(
     }
     let exec = ToolExec::new(state.store.clone());
     let made = exec.save_point(&ctx, SAVE_ASKED).await;
-    let made = made.map_err(|e| ApiError(axum::http::StatusCode::INTERNAL_SERVER_ERROR, e))?;
+    let made = made.map_err(|e| ApiError::new(axum::http::StatusCode::INTERNAL_SERVER_ERROR, e))?;
     let Some(e) = made else {
         return Ok(Json(json!({"seq": null, "saves": {}})));
     };
@@ -113,7 +160,7 @@ async fn clock(
     Path(id): Path<String>,
 ) -> ApiResult<Value> {
     let ctx = live(&state, &caller, &id).await?;
-    let events = ctx.records(&state.store).events(&id).await?;
+    let events = ctx.records().events().await?;
     let epoch = crate::recorded::world_epoch_ms(&events);
     let clock_ms = ctx.clock.now_ms();
     Ok(Json(json!({

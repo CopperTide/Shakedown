@@ -5,10 +5,8 @@
 
 use std::time::Duration;
 
-use serde_json::json;
-
 use super::{BranchCtx, ToolExec};
-use crate::{model::EventKind, overhead::Cat};
+use crate::{model::WorldViewPayload, overhead::Cat};
 
 /// How long the benchmark gets to draw one view.
 const VIEW_TIMEOUT: Duration = Duration::from_secs(10);
@@ -29,11 +27,8 @@ impl ToolExec {
             Ok(Err(e)) => return eprintln!("branch {}: no view: {e}", branch.branch_id),
             Err(_) => return eprintln!("branch {}: the view took too long", branch.branch_id),
         };
-        let payload = json!({"seq_of": seq_of, "view": view});
-        if let Err(e) = self
-            .record(branch, None, EventKind::WorldView, &payload)
-            .await
-        {
+        let payload = WorldViewPayload { seq_of, view };
+        if let Err(e) = self.record(branch, None, &payload).await {
             eprintln!(
                 "branch {}: could not record the view: {e}",
                 branch.branch_id

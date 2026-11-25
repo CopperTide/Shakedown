@@ -123,14 +123,19 @@ request is recorded as an `http` step of the part that serves its host: inspecta
   "task": "<the agent's prompt, the ticket, the instructions and any handoff notes>",
   "mcp_url": "http://127.0.0.1:4510/mcp/<branch>/<agent>",
   "gateway_url": "http://127.0.0.1:4510/gateway/<branch>/<agent>/v1",
-  "token": "<the agent's token (sda_…) for mcp_url and gateway_url>",
+  "otlp_traces_url": "http://127.0.0.1:4510/otlp/<branch>/<agent>/v1/traces",
+  "token": "<the agent's token (sda_…) for mcp_url, gateway_url and otlp_traces_url>",
   "deadline": "2026-11-09T04:18:33Z"
 }
 ```
 
 The agent works through `mcp_url`, an MCP endpoint (streamable HTTP, JSON answers) with the world's tools and
 the talk tools, sending `Authorization: Bearer <token>` on every call; a call without it gets 401. The same
-token opens `gateway_url`, the recording model gateway (OpenAI-compatible: `{gateway_url}/chat/completions`).
+token opens `gateway_url`, the recording model gateway (OpenAI-compatible: `{gateway_url}/chat/completions`;
+`{gateway_url}/messages` and `{gateway_url}/responses` pass Anthropic Messages and OpenAI Responses calls through
+as sent, see [reference.md](reference.md#http-api)). An agent instrumented with OpenTelemetry can send its own
+spans to `otlp_traces_url` (OTLP/HTTP, the same token): they go into the run's record under the agent, see
+[observability.md](observability.md#your-agents-own-spans).
 Every tool call is recorded as for any other agent, refusals included.
 
 **Every agent has a token.** Since 2026-11-20 no MCP or gateway call gets in without the agent's token
