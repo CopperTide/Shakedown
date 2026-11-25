@@ -1,57 +1,42 @@
-// The systems agents work against: each a product, an MCP server or an API, real, recorded or a
-// stand-in, with its credential named, never written.
+// Saved connector declarations, their interfaces, and the vendor discovery catalog.
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
 import type { Connector, WorldBody } from '@/model/project';
 import { addTo, removeAt } from '../edit';
-import { ChoiceField, ItemRows, SectionHead, TextField } from '../fields';
+import { ItemRows, SectionHead } from '../fields';
+import AddConnector from './AddConnector';
+import ConnectorCatalog from './catalog/ConnectorCatalog';
+import ConnectorBrand from './catalog/ConnectorBrand';
+import ConnectorDetails from './catalog/ConnectorDetails';
+import { catalogEntry } from './catalog/search';
+export { connectorOf } from './AddConnector';
 
-const MODES = [{ value: 'real', label: 'Real system, sandboxed' }, { value: 'replay', label: 'Record once, then replay' }, { value: 'stand-in', label: 'Built-in stand-in' }] as const;
-
-/** The connector the form describes, without empty fields. */
-export function connectorOf(f: Record<string, string>): Connector {
-  const c: Connector = { id: f.id, label: f.label, mode: (f.mode || 'real') as Connector['mode'] };
-  if (f.product) c.product = f.product;
-  if (f.mcp) c.mcp = f.mcp;
-  if (f.openapi) c.openapi = f.openapi;
-  if (f.key) c.auth = { key: f.key };
-  else if (f.env) c.auth = { env: f.env };
-  return c;
-}
-
-function AddConnector({ onAdd }: { onAdd: (c: Connector) => void }) {
-  const [f, setF] = useState<Record<string, string>>({ mode: 'real' });
-  const field = (k: string) => ({ value: f[k] ?? '', onChange: (v: string) => setF({ ...f, [k]: v }) });
-  return (
-    <Card title="Add a connector">
-      <div className="grid gap-3 p-[18px] md:grid-cols-2">
-        <TextField label="Connector id" mono placeholder="mes" {...field('id')} />
-        <TextField label="Connector name" placeholder="Larkspur MES" {...field('label')} />
-        <ChoiceField label="How runs use it" value={(f.mode ?? 'real') as Connector['mode']} options={[...MODES]} onChange={(v) => setF({ ...f, mode: v })} />
-        <TextField label="Product" placeholder="sap-s4hana (a built-in product connector)" {...field('product')} />
-        <TextField label="MCP server URL" mono placeholder="https://…/mcp" {...field('mcp')} />
-        <TextField label="OpenAPI spec file" mono placeholder="carrier-rates.openapi.yaml" {...field('openapi')} />
-        <TextField label="Key-store name" mono placeholder="A name from the key store, never the key" {...field('key')} />
-        <TextField label="Or environment variable" mono placeholder="CARRIER_TOKEN" {...field('env')} />
-      </div>
-      <div className="flex justify-end border-t border-line px-[18px] py-2.5">
-        <Button disabled={!f.id || !f.label} onClick={() => { onAdd(connectorOf(f)); setF({ mode: 'real' }); }}>Add connector</Button>
-      </div>
-    </Card>
-  );
+function ConnectorRow({ connector: c, onInspect }: { connector: Connector; onInspect: () => void }) {
+  const entry = catalogEntry(c.product, c.label);
+  return <button onClick={onInspect} className="flex w-full items-center gap-3 rounded text-left outline-none focus-visible:ring-2 focus-visible:ring-accent" aria-label={`Inspect ${c.label}`}>
+    <ConnectorBrand entry={entry} name={c.label} /><span className="min-w-0 flex-1"><span className="block font-medium">{c.label}</span><span className="mt-1 block text-xs text-muted">{[c.mcp && 'MCP', c.openapi && 'OpenAPI', c.product && 'Product', c.mode].filter(Boolean).join(' · ')}</span></span><span className="text-xs text-muted">Details →</span>
+  </button>;
 }
 
 export default function ConnectorsSection({ world, onChange }: { world: WorldBody; onChange: (w: WorldBody) => void }) {
   const list = world.connectors ?? [];
-  return (
-    <div className="grid gap-4">
-      <SectionHead title="Connectors" about="The software products agents work against. Saved with the world. Runs use them once worlds run from their own files." />
-      <Card>
-        <ItemRows items={list} empty="No connectors yet." onRemove={(i) => onChange({ ...world, connectors: removeAt(list, i) })}
-          render={(c) => <span><span className="font-medium">{c.label}</span> <span className="font-mono text-2xs text-faint">{c.id} · {c.mode}</span></span>} />
-      </Card>
-      <AddConnector onAdd={(c) => onChange({ ...world, connectors: addTo(list, c) })} />
-    </div>
-  );
+  const [catalog, setCatalog] = useState(false);
+  const [inspect, setInspect] = useState<Connector | null>(null);
+  const [problem, setProblem] = useState('');
+  const add = (c: Connector) => {
+    if (list.some((item) => item.id === c.id)) { const error = `Connector id “${c.id}” is already in this world. Use a unique id.`; setProblem(error); return error; }
+    setProblem(''); onChange({ ...world, connectors: addTo(list, c) });
+  };
+  return <div className="grid gap-4">
+    <div className="flex flex-wrap items-start justify-between gap-3"><SectionHead title="Connectors" about="Inspect the systems in this world, or discover enterprise APIs and MCP servers in the catalog." /><Button onClick={() => setCatalog(true)}>Browse connector catalog</Button></div>
+    {problem && <p role="alert" className="text-sm text-alarm">{problem}</p>}
+    <Card title={`In this world · ${list.length}`} description="Saved configuration. Runtime support and connectivity are not inferred from these declarations.">
+      <ItemRows items={list} empty="No connectors yet. Browse the catalog or add a custom API below." onRemove={(i) => onChange({ ...world, connectors: removeAt(list, i) })} render={(c) => <ConnectorRow connector={c} onInspect={() => setInspect(c)} />} />
+    </Card>
+    <AddConnector onAdd={add} />
+    <ConnectorCatalog open={catalog} onClose={() => setCatalog(false)} onAdd={add} />
+    <Dialog open={!!inspect} onOpenChange={(open) => { if (!open) setInspect(null); }}><DialogContent title="Connector details" className="overflow-y-auto">{inspect && <ConnectorDetails connector={inspect} entry={catalogEntry(inspect.product, inspect.label)} />}</DialogContent></Dialog>
+  </div>;
 }
