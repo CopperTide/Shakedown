@@ -6,6 +6,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { forgetShared } from '@/hooks/query';
 import ItemListPage from './ItemListPage';
+import { KINDS } from './kinds';
 import { useItemEditor } from './useItemEditor';
 
 const WORLD = { kind: 'world', id: 'plant', label: 'Plant', hash: 'h', problems: [] as { pointer: string; message: string }[], body: { format: 'shakedown-world/3', label: 'Plant' } };
@@ -90,5 +91,14 @@ describe('editing layer', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Create' }));
     expect(await screen.findByText('A world named plant already exists.')).toBeTruthy();
     expect(puts).toEqual([]);
+  });
+
+  it('each_kind_suggests_a_name_of_its_own', async () => {
+    mockFetch();
+    render(<MemoryRouter><ItemListPage kind="scenarios" /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole('button', { name: /New scenario/ }));
+    expect(screen.getByLabelText('Name').getAttribute('placeholder')).toBe('Supplier slip during a rush order');
+    const examples = Object.values(KINDS).map((k) => k.example);
+    expect(new Set(examples).size).toBe(examples.length);
   });
 });
