@@ -21,3 +21,17 @@ export function coordination(events: Event[]): { agents: string[]; links: Link[]
   }
   return { agents, links: [...links.values()].sort((a, b) => a.from.localeCompare(b.from) || a.to.localeCompare(b.to)) };
 }
+
+const KIND: Record<string, string> = { message: 'Message', report: 'Report', delegation: 'Delegation', handoff: 'Handoff' };
+
+/** Recorded exchanges, including broadcasts and messages to agents outside the declared team. */
+export function exchangesOf(events: Event[]) {
+  return events.filter((e) => Object.hasOwn(KIND, e.kind)).map((e) => {
+    const p = e.payload as Record<string, unknown>;
+    return {
+      seq: e.seq, kind: KIND[e.kind], from: e.agent ?? 'System',
+      to: p.to === '*' ? 'Everyone' : String(p.to ?? (e.kind === 'report' ? 'Lead' : 'Next agent')),
+      text: String(p.text ?? p.task ?? p.note ?? ''),
+    };
+  }).sort((a, b) => a.seq - b.seq);
+}

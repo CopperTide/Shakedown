@@ -1,13 +1,14 @@
 // The Coordination tab: the run's agents and what passed between them.
 import type { Event } from '@/model/types';
+import CoordinationMessages from './CoordinationMessages';
 import { coordination } from './coordination';
 
-export default function Coordination({ events }: { events: Event[] }) {
+export default function Coordination({ events, onSelect }: { events: Event[]; onSelect: (seq: number) => void }) {
   const { agents, links } = coordination(events);
   return (
     <div className="grid gap-3 p-4 text-sm">
       <p className="text-muted">{agents.length} agent{agents.length === 1 ? '' : 's'}: {agents.join(', ') || 'none recorded'}. A team described in MADL also shows its declared connections on its setup page.</p>
-      {links.length === 0 ? <p className="text-faint">Agents didn't message each other in this run.</p> : (
+      {links.length === 0 ? <p className="text-faint">No directed connections between team members were recorded.</p> : (
         <table className="w-full text-left">
           <thead className="font-mono text-2xs uppercase text-faint"><tr><th className="py-1">From</th><th>To</th><th className="text-right">Messages</th><th className="text-right">Handoffs</th><th className="text-right">Delegations</th></tr></thead>
           <tbody className="divide-y divide-line">
@@ -17,6 +18,7 @@ export default function Coordination({ events }: { events: Event[] }) {
           </tbody>
         </table>
       )}
+      <CoordinationMessages events={events} onSelect={onSelect} />
     </div>
   );
 }

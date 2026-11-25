@@ -46,14 +46,13 @@ function labelClass(p: Placed, shape: Shape, selected: boolean): string {
   return cn('rounded-sm px-0.5 text-2xs whitespace-nowrap', tone, selected && 'bg-raised text-fg shadow-pop ring-1 ring-accent');
 }
 
-function MarkButton({ p, selected, dim, onSelect }: { p: Placed; selected: boolean; dim: boolean; onSelect: (seq: number) => void }) {
+function MarkButton({ p, selected, onSelect }: { p: Placed; selected: boolean; onSelect: (seq: number) => void }) {
   const shape = shapeOf(p.mark);
   const text = textOf(p, selected);
   const style: CSSProperties = { left: p.x, top: RULER_H + p.lane * LANE_H + LANE_H / 2 };
   return (
     <button data-seq={p.mark.seq} title={hint(p.mark)} aria-label={hint(p.mark)} aria-pressed={selected} onClick={() => onSelect(p.mark.seq)}
-      data-dim={dim || undefined}
-      className={cn('group absolute flex items-center gap-1 rounded-sm outline-none', p.mark.inherited && 'opacity-40', dim && !selected && 'opacity-15', selected ? 'z-20' : 'z-10')}
+      className={cn('group absolute flex items-center gap-1 rounded-sm outline-none', p.mark.inherited && 'opacity-40', selected ? 'z-20' : 'z-10')}
       style={{ ...style, transform: 'translate(-6px, -50%)' }}>
       <span className="grid size-3 place-items-center">
         <span className={cn('block', SHAPE[shape], selected && 'ring-2 ring-accent ring-offset-2 ring-offset-surface')} />
@@ -144,7 +143,7 @@ export interface TimelineProps {
   live?: boolean;
   /** Pauses, drawn as bands across the lanes. */
   pauses?: Pause[];
-  /** The steps a filter keeps: the other marks are dimmed (null: none filtered). */
+  /** The steps a filter keeps: only matching marks and lanes are shown (null: none filtered). */
   matches?: ReadonlySet<number> | null;
 }
 
@@ -293,22 +292,26 @@ export default function ActionTimeline({ lanes, team, span, selected, onSelect, 
   const minW = box.width < 640 ? 640 : 240;
   const viewW = Math.max(0, box.width - labelW);
   const t = useTrackView(box.ref.current, viewW, minW, live, span);
-  const layout = useMemo(() => (span ? layoutTimeline(lanes, span, t.trackW, models, pauses) : null), [lanes, span, t.trackW, models, pauses]);
+  const visibleLanes = useMemo(() => matches ? lanes.map((lane) => ({
+    ...lane, marks: lane.marks.filter((mark) => matches.has(mark.seq)),
+  })).filter((lane) => lane.marks.length > 0) : lanes, [lanes, matches]);
+  const layout = useMemo(() => (span ? layoutTimeline(visibleLanes, span, t.trackW, models, pauses) : null), [visibleLanes, span, t.trackW, models, pauses]);
   const mouse = useMouse(box.ref.current, labelW, t);
   useNativeScroll(box.ref.current, t);
   useShowSelected(selected, layout, t);
-  const height = lanes.length * LANE_H;
+  const height = visibleLanes.length * LANE_H;
   return (
     <div className="group/tl relative flex min-w-0 flex-col">
       <Overlay t={t} viewW={viewW} minW={minW} models={models} onModels={onModels} live={live} />
+      {matches?.size === 0 && <p className="px-3 py-6 text-sm text-muted">No timeline events match the filters.</p>}
       <div ref={box.ref} className="relative flex min-w-0 cursor-grab touch-pan-y overflow-x-auto overscroll-x-contain select-none active:cursor-grabbing" {...mouse}>
-        <LaneLabels lanes={lanes} team={team} width={labelW} />
+        <LaneLabels lanes={visibleLanes} team={team} width={labelW} />
         {layout && (
           <div className="relative shrink-0" style={{ width: t.trackW, height: RULER_H + height }}>
             <Ruler layout={layout} />
             <Bands layout={layout} height={height} />
-            <Wires layout={layout} lanes={lanes.length} width={t.trackW} selected={selected} />
-            {layout.placed.map((p) => <MarkButton key={p.mark.seq} p={p} selected={selected === p.mark.seq} dim={!!matches && !matches.has(p.mark.seq)} onSelect={onSelect} />)}
+            <Wires layout={layout} lanes={visibleLanes.length} width={t.trackW} selected={selected} />
+            {layout.placed.map((p) => <MarkButton key={p.mark.seq} p={p} selected={selected === p.mark.seq} onSelect={onSelect} />)}
           </div>
         )}
       </div>

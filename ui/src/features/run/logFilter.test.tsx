@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // Filtering a run's steps: by action, agent and outcome with counts, by text in the detail, kept in
-// the address; the event log lists the matches and the timeline dims the rest.
+// the address; the event log lists the matches and the timeline shows the same matches.
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -68,12 +68,13 @@ function Harness() {
 }
 
 describe('step filter on the run page', () => {
-  it('opens_from_a_shared_address_lists_the_matches_and_dims_the_rest_of_the_timeline', () => {
+  it('opens_from_a_shared_address_lists_the_matches_and_filters_the_timeline', () => {
     render(<MemoryRouter initialEntries={['/runs/r/b?outcome=refused']}><Harness /></MemoryRouter>);
     expect(screen.getByRole('status', { name: 'Matching steps' }).textContent).toBe(`1 of ${rows.length} steps`);
     expect(screen.getAllByRole('row')).toHaveLength(2); // the header and step 9
-    expect(document.querySelector('[data-seq="9"]')?.hasAttribute('data-dim')).toBe(false);
-    expect(document.querySelector('[data-seq="6"]')?.hasAttribute('data-dim')).toBe(true);
+    expect(document.querySelector('[data-seq="9"]')).not.toBeNull();
+    expect(document.querySelector('[data-seq="6"]')).toBeNull();
+    expect(document.querySelectorAll('button[data-seq]')).toHaveLength(1);
     fireEvent.click(screen.getByRole('button', { name: 'Agent' }));
     const lead = screen.getByRole('checkbox', { name: /Coordinator/ });
     expect(lead.closest('label')?.textContent).toBe('Coordinator0');
@@ -89,8 +90,11 @@ describe('step filter on the run page', () => {
     expect(screen.getAllByRole('row')).toHaveLength(3);
     fireEvent.change(screen.getByLabelText("Search the steps' detail"), { target: { value: 'nothing like it' } });
     expect(screen.getByText('No step matches the filter.')).toBeTruthy();
+    expect(screen.getByText('No timeline events match the filters.')).toBeTruthy();
+    expect(document.querySelectorAll('button[data-seq]')).toHaveLength(0);
     fireEvent.click(screen.getByRole('button', { name: 'Clear all' }));
     expect(screen.getByTestId('search').textContent).toBe('?step=3');
     expect(screen.getAllByRole('row')).toHaveLength(rows.length + 1);
+    expect(document.querySelectorAll('button[data-seq]')).toHaveLength(rows.length);
   });
 });

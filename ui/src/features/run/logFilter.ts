@@ -1,6 +1,6 @@
 // Filtering a run's steps: by action, agent and outcome (any of the picked values of each), and by
 // text in the detail. Kept in the address (`?action=…&agent=…&outcome=…&q=…`) so a filtered view
-// can be shared; the event log shows only the matching steps and the timeline dims the others.
+// can be shared; the event log shows only the matching steps and the timeline shows the same matching steps.
 import type { LaneRow, TimelineMark } from '@/model/lanes';
 
 /** One step as the event log lists it: its mark and the lane (agent) it is on. */

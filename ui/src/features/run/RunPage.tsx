@@ -24,7 +24,7 @@ import { type ForkChoice, forkChoiceOf } from './architecture';
 import BestSoFar from './BestSoFar';
 import { studyOf } from './candidates';
 import EventLog from './EventLog';
-import { logRows } from './logFilter';
+import { logRows, matching, parseFilter } from './logFilter';
 import { LogFilters, useLogFilter } from './LogFilters';
 import { forkShiftMs, onForkClock } from '@/model/forkTime';
 import { pausesOf } from './flow';
@@ -147,7 +147,7 @@ function Main({ detail, timeline: { lanes, span }, selected, onSelect, models, s
           </div>
           <TabsContent value="timeline">{filters}<ActionTimeline lanes={lanes} team={detail.team} span={span} selected={selected} onSelect={onSelect} models={models} onModels={setModels} live={live} pauses={pauses} matches={matches} /></TabsContent>
           <TabsContent value="log">{filters}<EventLog rows={rows} matches={matches} span={span} selected={selected} onSelect={onSelect} /></TabsContent>
-          <TabsContent value="coordination"><Coordination events={detail.events} /></TabsContent>
+          <TabsContent value="coordination"><Coordination events={detail.events} onSelect={onSelect} /></TabsContent>
         </Tabs>
       </Panel>
       {selected != null && <Panel><PanelHeader title="Trace" /><Waterfall events={detail.events} selected={selected} onSelect={onSelect} /></Panel>}
@@ -159,12 +159,14 @@ function Main({ detail, timeline: { lanes, span }, selected, onSelect, models, s
  * Selection (the address's `?step=`, shared with the process and world views), the rewind panel
  * (`?fork=1`, opened from the run's ⋯) and the notice, reset whenever the branch changes.
  */
-function useRunView(branchId: string, order: number[]) {
+function useRunView(branchId: string, timeline: Timeline, models: boolean) {
   const [sp, setSp] = useSearchParams();
   const loc = useLocation();
   const [selected, setSelected] = useStepParam();
   const [notice, setNotice] = useState<string | null>((loc.state as { notice?: string } | null)?.notice ?? null);
   useEffect(() => { setNotice((loc.state as { notice?: string } | null)?.notice ?? null); }, [branchId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const matches = useMemo(() => matching(logRows(timeline.lanes, models), parseFilter(sp)), [timeline.lanes, models, sp]);
+  const order = useMemo(() => matches ? timeline.order.filter((seq) => matches.has(seq)) : timeline.order, [timeline.order, matches]);
   useStepKeys(order, setSelected);
   const setForking = (on: boolean) => setSp((prev) => { const out = new URLSearchParams(prev); if (on) out.set('fork', '1'); else { out.delete('fork'); out.delete('change'); } return out; }, { replace: true });
   return { selected, setSelected, forking: sp.get('fork') === '1', setForking, notice, setNotice, autoRows: sp.get('rows') === '1', choice: forkChoiceOf(sp.get('change')) };
@@ -176,7 +178,7 @@ export default function Run() {
   const [models, setModels] = useState(true);
   const nameOf = useTaskNames();
   const timeline = useTimeline(detail, models);
-  const v = useRunView(branchId, timeline.order);
+  const v = useRunView(branchId, timeline, models);
   if (!detail) return <PageGate title="Run" label="Loading the run's steps…" rows={5} error={error} onRetry={reload} />;
   const event = detail.events.find((e) => e.seq === v.selected) ?? null;
   return (
