@@ -76,6 +76,7 @@ pub fn tasks(d: &Data) -> Vec<TaskInfo> {
         ticket: team::TICKET.into(),
         setup: setup(d, s),
         clock_start: None,
+        group: None,
     };
     SCENARIOS.iter().map(task).collect()
 }

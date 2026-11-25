@@ -78,6 +78,7 @@ impl Retail {
                 ticket,
                 setup: vec![],
                 clock_start: None,
+                group: None,
             }
         };
         self.tasks.demo().into_iter().map(task).collect()

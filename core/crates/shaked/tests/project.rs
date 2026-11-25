@@ -3,9 +3,10 @@
 
 mod support;
 
+use serde_json::json;
 use shaked::project_state::NoProject;
 use shakedown_project::format::Kind;
-use support::{run, AppFx};
+use support::{packages::toy_world, run, AppFx};
 
 fn larkspur() -> tempfile::TempDir {
     let dir = tempfile::tempdir().unwrap();
@@ -144,4 +145,60 @@ fn same_folder_shares_state() {
         ));
         assert!(std::sync::Arc::ptr_eq(&a, &b));
     });
+}
+
+/// Larkspur with its plant world run by the toy benchmark, and a world `bare` with no package.
+fn larkspur_with_packages() -> tempfile::TempDir {
+    let dir = larkspur();
+    let worlds = dir.path().join("worlds");
+    let plant = worlds.join("larkspur-plant/world.yaml");
+    let text = std::fs::read_to_string(&plant).unwrap();
+    std::fs::write(&plant, format!("{text}package: toybench\n")).unwrap();
+    std::fs::create_dir_all(worlds.join("bare")).unwrap();
+    let bare = "format: shakedown-world/3\nlabel: Bare\n";
+    std::fs::write(worlds.join("bare/world.yaml"), bare).unwrap();
+    dir
+}
+
+/// A world's tasks are its package's, asked for by the package's name or by the project world
+/// that names it, each with its group.
+#[test]
+fn a_worlds_tasks_are_listed_by_its_package() {
+    run(async {
+        let dir = larkspur_with_packages();
+        let bench = ["--scored", "--two-tasks", "--group", "test"];
+        let fx = AppFx::idle("project", "tasks")
+            .root(toy_world("project-tasks", &[], &bench))
+            .bench("toybench")
+            .project(dir.path())
+            .start()
+            .await;
+        let (status, by_world) = fx.get("/api/benchmark?world=larkspur-plant").await;
+        assert_eq!(status, 200, "{by_world}");
+        let tasks = json!([{"id": "t1", "reason": "poke it", "group": "test"},
+                           {"id": "t2", "reason": "poke it twice"}]);
+        assert_eq!(
+            (&by_world["name"], &by_world["tasks"]),
+            (&json!("toybench"), &tasks)
+        );
+        let (_, by_name) = fx.get("/api/benchmark?name=toybench").await;
+        assert_eq!(by_name["tasks"], tasks);
+        let (_, listed) = fx.get("/api/tasks").await;
+        assert_eq!(listed[0]["group"], "test");
+        assert_unknown_benchmarks_are_404s(&fx).await;
+    });
+}
+
+/// An unknown package or world, and a world without a package, are 404s that say why.
+async fn assert_unknown_benchmarks_are_404s(fx: &AppFx) {
+    let no_package =
+        "Bare has no runtime yet: set package: to an installed benchmark or built world";
+    for (path, why) in [
+        ("name=nope", "no benchmark named nope is installed"),
+        ("world=nope", "no world named nope"),
+        ("world=bare", no_package),
+    ] {
+        let (status, v) = fx.get(&format!("/api/benchmark?{path}")).await;
+        assert_eq!((status, v["error"].as_str()), (404, Some(why)), "{path}");
+    }
 }

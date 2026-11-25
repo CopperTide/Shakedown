@@ -60,12 +60,22 @@ pub(crate) fn request(
     })
 }
 
-/// The package that runs the world and the task of it the scenario plays.
-fn runtime(world: &WorldFile, scenario: &ScenarioFile) -> Result<(String, String), OpError> {
-    let package = world.package.clone().ok_or_else(|| {
+/// The package that runs the project's world `name`.
+pub(crate) fn world_package(project: &Project, name: &str) -> Result<String, OpError> {
+    package_of(world_of(project, name)?)
+}
+
+/// The package that runs `world`: an installed benchmark or built world.
+fn package_of(world: &WorldFile) -> Result<String, OpError> {
+    world.package.clone().ok_or_else(|| {
         let why = "has no runtime yet: set package: to an installed benchmark or built world";
         unprocessable(format!("{} {why}", world.label))
-    })?;
+    })
+}
+
+/// The package that runs the world and the task of it the scenario plays.
+fn runtime(world: &WorldFile, scenario: &ScenarioFile) -> Result<(String, String), OpError> {
+    let package = package_of(world)?;
     let task = scenario.preset.clone().ok_or_else(|| {
         unprocessable(format!(
             "{} names no task of {package} to play: set preset:",

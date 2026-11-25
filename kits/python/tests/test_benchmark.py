@@ -62,3 +62,11 @@ def test_a_check_is_safety_or_not_and_has_a_measure_only_when_given():
     assert check("y", [1], "d", safety=True)["safety"] is True
     measure = {"value": 0.8, "unit": "OEE"}
     assert check("z", True, "d", measure=measure)["measure"] == measure
+
+
+def test_a_task_may_carry_the_group_it_is_listed_under():
+    class Grouped(Demo):
+        def task(self):
+            return {**super().task(), "group": "test"}
+
+    assert Grouped({"a": {}}).describe()["tasks"] == [{"id": "the-task", "reason": "why", "group": "test"}]

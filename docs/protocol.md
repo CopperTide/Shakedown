@@ -117,7 +117,7 @@ A benchmark program speaks the same transport.
 
 | Method | Params | Result |
 |---|---|---|
-| `describe` | `{}` | `{name, version, protocol, world: [{part, integration, config}], tasks: [{id, reason, ticket, setup?: [{part, tool, args}], clock_start?}], instructions, instructions_title?, team?, teams?, tools: [ToolSchema], links?: [Link], gates?: [Gate], scored?: bool, scenario_options?: ScenarioOptions, view?: {docs: [part]}}` |
+| `describe` | `{}` | `{name, version, protocol, world: [{part, integration, config}], tasks: [{id, reason, ticket, setup?: [{part, tool, args}], clock_start?, group?}], instructions, instructions_title?, team?, teams?, tools: [ToolSchema], links?: [Link], gates?: [Gate], scored?: bool, scenario_options?: ScenarioOptions, view?: {docs: [part]}}` |
 | `seed` | `{connections: {part: info}}` | `{}` (loads the starting data into fresh instances) |
 | `call_tool` | `{name, args, connections}` | `{result?, error?, part, reads, writes}` |
 | `gold_actions` | `{task}` | `{actions: [{name, args}]}` |
@@ -126,6 +126,8 @@ A benchmark program speaks the same transport.
 
 - `instructions_title` is the heading over `instructions` in each agent's input; shaked uses
   `Instructions` when it is absent.
+- A task's `group` is the group it is listed under (a benchmark's split, such as `test` or `train`); the scenario
+  editor's task picker groups the tasks by it.
 - `team` is the team the benchmark suggests, `{id, name, agents: [{id, name, prompt, read_only?, tools?}]}` (ids
   match `^[a-z0-9_-]+$`; the order is the order shaked's chain runner runs them in). Every agent may use
   every tool unless `read_only` is true, which keeps it to read tools, or `tools` lists the world tools it gets; no agent has to hand off. shaked

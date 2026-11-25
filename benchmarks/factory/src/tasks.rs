@@ -20,6 +20,7 @@ pub fn tasks() -> Vec<TaskInfo> {
         ticket: team::TICKET.into(),
         setup: vec![],
         clock_start: Some(crate::shift::plant_start().into()),
+        group: None,
     };
     let shift = TaskInfo {
         id: SHIFT_TASK.into(),
@@ -35,6 +36,7 @@ pub fn tasks() -> Vec<TaskInfo> {
             args: json!({"name": "calm"}),
         }],
         clock_start: Some(crate::shift::plant_start().into()),
+        group: None,
     };
     vec![bearing, shift]
 }

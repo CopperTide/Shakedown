@@ -420,6 +420,9 @@ pub struct TaskInfo {
     /// rather than the date their environment reports.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub clock_start: Option<String>,
+    /// The group the task is listed under (a benchmark's split, such as `test` or `train`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
 }
 
 /// One call of a task's setup: `tool` of the part `part`, with `args`.
@@ -661,6 +664,22 @@ mod protocol_names {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_task_may_carry_a_group_and_one_without_reads_as_before() {
+        let grouped = serde_json::json!({"id": "t1", "reason": "r", "ticket": "", "group": "test"});
+        let task: TaskInfo = serde_json::from_value(grouped.clone()).unwrap();
+        assert_eq!(task.group.as_deref(), Some("test"));
+        assert_eq!(serde_json::to_value(&task).unwrap(), grouped);
+        let plain = serde_json::json!({"id": "t2", "reason": "r", "ticket": ""});
+        let task: TaskInfo = serde_json::from_value(plain.clone()).unwrap();
+        assert_eq!(task.group, None);
+        assert_eq!(
+            serde_json::to_value(&task).unwrap(),
+            plain,
+            "no group is written"
+        );
+    }
 
     #[test]
     fn a_check_may_carry_a_measure_and_one_without_reads_as_before() {
