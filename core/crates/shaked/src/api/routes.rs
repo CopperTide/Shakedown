@@ -222,6 +222,15 @@ fn changes_this_machine(c: &RouteCase) -> bool {
     )
 }
 
+/// The refusal of `c` where packages run only in sandboxes: building a world is a 409 saying
+/// hosted Shakedown ships prebuilt worlds, the rest a 403.
+fn not_here(c: &RouteCase) -> ApiError {
+    if (c.method, c.path) == ("POST", "/api/worlds") {
+        return ApiError::conflict(crate::world_builds::PREBUILT_ONLY);
+    }
+    ApiError::forbidden("this shaked runs packages only in sandboxes")
+}
+
 /// Asks about the matched route before its handler runs: the engine's checks, then the layer's.
 pub async fn authorize_route(
     State(state): State<Arc<AppState>>,
@@ -242,8 +251,7 @@ pub async fn authorize_route(
         return crate::auth::extract::no_caller().into_response();
     };
     if changes_this_machine(c) && !state.store.layer().policy().runs_packages_here {
-        let why = "this shaked runs packages only in sandboxes";
-        return ApiError::forbidden(why).into_response();
+        return not_here(c).into_response();
     }
     let id = param(c.path, req.uri().path()).to_string();
     match ask(&state, &caller, c, &id).await {

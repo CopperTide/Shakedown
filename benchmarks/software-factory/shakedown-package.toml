@@ -1,0 +1,12 @@
+kind = "benchmark"
+name = "software-factory"
+version = "1.0.0+437f24b1"
+protocol = 1
+opt_in = true
+run = { command = ["uv", "run", "--project", "${SHAKEDOWN_DIR}/benchmarks/world", "python", "-m", "worldbench", "--world", "world.json", "--version", "1.0.0+437f24b1"] }
+needs = { gpu_vram_gb = 0, services = [] }
+
+[world]
+title = "Northwind Labs"
+template = "software-factory"
+template_name = "Software company"

@@ -115,10 +115,11 @@ fn must_not_run(name: &str, marker: &std::path::Path) -> Package {
     }
 }
 
-/// Retail's description file in the repository.
-fn retail_describe_file() -> PathBuf {
+/// `bench`'s description file in the repository.
+fn describe_file(bench: &str) -> PathBuf {
     packages::repo()
-        .join("benchmarks/retail")
+        .join("benchmarks")
+        .join(bench)
         .join(parts::DESCRIBE_FILE)
 }
 
@@ -132,30 +133,73 @@ async fn sandbox_only(tag: &str, root: &ToyRoot, bench: &str) -> AppFx {
     fx.bench(bench).start().await
 }
 
+/// A control box whose packages run only in sandboxes, over a stand-in for `bench` (its
+/// description file, a program that must never start), answers `bench`'s `tasks` tasks and
+/// starts a run of the first in a sandbox, starting no program here.
+async fn runs_from_its_description(bench: &str, tasks: usize) {
+    let tag = format!("sd{}", bench.replace('-', ""));
+    let marker = packages::toy_dir(&format!("{tag}-ran"));
+    let _ = std::fs::remove_file(&marker);
+    let root = packages::package_root(&tag, &[must_not_run(bench, &marker)]);
+    let copied = root.0.join(bench).join(parts::DESCRIBE_FILE);
+    std::fs::copy(describe_file(bench), copied).unwrap();
+    let fx = sandbox_only(&tag, &root, bench).await;
+    let (status, health) = fx.get("/api/health").await;
+    assert_eq!(status, 200, "{health}");
+    assert_eq!(health["benchmark"]["tasks"], tasks, "{health}");
+    let (status, list) = fx.get("/api/tasks").await;
+    assert_eq!(status, 200, "{list}");
+    // The sandbox's worker finds no packages: its branch ends there, nothing runs here.
+    let fake = fake_host(&fx, &packages::toy_dir(&format!("{tag}-none")), |h| h);
+    let team = scripted_team(nothing()).await;
+    let body = json!({"task_id": list[0]["id"], "team": team, "runner": "chain"});
+    let (status, v) = fx.post("/api/runs", body).await;
+    assert_eq!(status, 200, "{v}");
+    assert_eq!(fake.created(), 1);
+    live::ended(&fx.state, v["branch_id"].as_str().unwrap()).await;
+    assert!(
+        !marker.exists(),
+        "a package program started on the control box"
+    );
+}
+
 #[test]
 fn a_sandbox_only_control_box_reads_retails_description_and_starts_no_program() {
+    run(runs_from_its_description("retail", 10));
+}
+
+#[test]
+fn a_sandbox_only_control_box_runs_the_prebuilt_software_factory_from_its_description() {
+    run(runs_from_its_description("software-factory", 2));
+}
+
+#[test]
+fn hosted_world_building_is_409_where_packages_run_in_sandboxes() {
     run(async {
-        let marker = packages::toy_dir("sd-retail-ran");
+        let marker = packages::toy_dir("sd-build-ran");
         let _ = std::fs::remove_file(&marker);
-        let root = packages::package_root("sd-retail", &[must_not_run("retail", &marker)]);
-        std::fs::copy(retail_describe_file(), root.0.join("retail/describe.json")).unwrap();
-        let fx = sandbox_only("sdretail", &root, "retail").await;
-        let (status, health) = fx.get("/api/health").await;
-        assert_eq!(status, 200, "{health}");
-        assert_eq!(health["benchmark"]["tasks"], 10, "{health}");
-        let (status, tasks) = fx.get("/api/tasks").await;
-        assert_eq!(status, 200, "{tasks}");
-        // The sandbox's worker finds no packages: its branch ends there, nothing runs here.
-        let fake = fake_host(&fx, &packages::toy_dir("sd-retail-none"), |h| h);
-        let team = scripted_team(nothing()).await;
-        let body = json!({"task_id": tasks[0]["id"], "team": team, "runner": "chain"});
-        let (status, v) = fx.post("/api/runs", body).await;
-        assert_eq!(status, 200, "{v}");
-        assert_eq!(fake.created(), 1);
-        live::ended(&fx.state, v["branch_id"].as_str().unwrap()).await;
+        let builder = Package {
+            kind: "builder",
+            ..must_not_run("world-builder", &marker)
+        };
+        let bench = must_not_run("toybench", &marker);
+        let root = packages::package_root("sd-build", &[builder, bench]);
+        let fx = sandbox_only("sdbuild", &root, "toybench").await;
+        let preview = json!({"company": {"name": "Acme"}});
+        let build = json!({"template": "software-factory", "choices": {}});
+        for (status, v) in [
+            fx.get("/api/templates").await,
+            fx.get("/api/templates/software-factory").await,
+            fx.post("/api/templates/software-factory/preview", preview)
+                .await,
+            fx.post("/api/worlds", build).await,
+        ] {
+            assert_eq!(status, 409, "{v}");
+            assert!(v["error"].to_string().contains("prebuilt worlds"), "{v}");
+        }
         assert!(
             !marker.exists(),
-            "a package program started on the control box"
+            "the world builder started on the control box"
         );
     });
 }
@@ -182,22 +226,36 @@ fn a_benchmark_without_a_description_file_is_409_where_packages_run_in_sandboxes
     });
 }
 
-/// Writes `benchmarks/retail/describe.json` from retail's live `describe` when
-/// `SHAKEDOWN_WRITE_DESCRIBE` is set; else checks the file is it.
+/// Writes `benchmarks/<bench>/describe.json` from `bench`'s live `describe` when
+/// `SHAKEDOWN_WRITE_DESCRIBE` is set; else checks the file is it. The package's own folder is
+/// `${WORLD_DIR}` in the file (a built world names its files under it), so the file holds
+/// wherever the package is.
+async fn description_file_is_live_describe(bench: &str) {
+    let hub = TestHub::new(&[]);
+    let m = hub.hub.registry().get(bench).cloned().unwrap();
+    let live = hub.hub.bench_describe(bench).await.unwrap();
+    let dir = m.dir.canonicalize().unwrap();
+    let text = serde_json::to_string_pretty(&live).unwrap() + "\n";
+    let text = text.replace(dir.to_str().unwrap(), "${WORLD_DIR}");
+    if parts::settings::var_os("SHAKEDOWN_WRITE_DESCRIBE").is_some() {
+        std::fs::write(describe_file(bench), &text).unwrap();
+    }
+    let live: parts::proto::BenchDescribe = serde_json::from_str(&text).unwrap();
+    let file = parts::described::read(&m).unwrap();
+    let stale = format!(
+        "benchmarks/{bench}/describe.json is stale: run this test with SHAKEDOWN_WRITE_DESCRIBE=1"
+    );
+    assert_eq!(file, live, "{stale}");
+}
+
 #[test]
 fn retails_description_file_is_its_live_describe() {
-    run(async {
-        let hub = TestHub::new(&[]);
-        let live = hub.hub.bench_describe("retail").await.unwrap();
-        if parts::settings::var_os("SHAKEDOWN_WRITE_DESCRIBE").is_some() {
-            let text = serde_json::to_string_pretty(&live).unwrap() + "\n";
-            std::fs::write(retail_describe_file(), text).unwrap();
-        }
-        let retail = hub.hub.registry().get("retail").cloned().unwrap();
-        let file = parts::described::read(&retail).unwrap();
-        let stale = "benchmarks/retail/describe.json is stale: run this test with SHAKEDOWN_WRITE_DESCRIBE=1";
-        assert_eq!(file, live, "{stale}");
-    });
+    run(description_file_is_live_describe("retail"));
+}
+
+#[test]
+fn the_prebuilt_software_factorys_description_file_is_its_live_describe() {
+    run(description_file_is_live_describe("software-factory"));
 }
 
 /// `POST /api/runs` of `t1` for `team`: the status and the answer.

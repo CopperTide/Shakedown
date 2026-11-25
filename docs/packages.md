@@ -56,6 +56,20 @@ itself ignores the file. So a control box needs only each package's manifest and
 `describe.json`, never its program. `benchmarks/retail/describe.json` is checked against retail's live `describe`
 by `retails_description_file_is_its_live_describe` (`core/crates/shaked/tests/hosting.rs`); after changing retail's
 tasks, tools, team or scenario options, write it again with `SHAKEDOWN_WRITE_DESCRIBE=1` set on that test.
+`benchmarks/software-factory/describe.json` is checked the same way by
+`the_prebuilt_software_factorys_description_file_is_its_live_describe`; in it the package's own folder is
+`${WORLD_DIR}`, so the file holds wherever the package is.
+
+### Prebuilt worlds
+
+A shaked whose packages run only in sandboxes builds no world: `/api/templates`, its preview and
+`POST /api/worlds` answer 409 ("hosted Shakedown ships prebuilt worlds; build custom worlds in local Shakedown").
+It runs the worlds shipped prebuilt instead: a template built with its default choices, committed as a benchmark
+package `benchmarks/<template id>` named after the template (today `software-factory`, the company Northwind
+Labs). `benchmarks/world/worldbench/prebuilt.py` lists them; after changing such a template, run
+`uv run python -m worldbench.prebuilt` in `benchmarks/world` (it keeps each package's `describe.json` and
+`README.md`), then write its `describe.json` again as above. `tests/test_prebuilt.py` fails while a prebuilt world
+is not its template's current build.
 
 A benchmark's tools reach parts only through the parts' `connect` info (for `postgres`, `{url}`), so only parts
 with exact saves may be connected. In Rust, implement `shakedown_part::Benchmark` and end `main` with
@@ -101,7 +115,8 @@ which serves the world and scores each task by its checks (`shakedown_part.expec
   Slack, PagerDuty and simulated engineers).
 - `SHAKEDOWN_TEMPLATES`: `:`-separated folders of more templates (each `<id>/template.yaml`).
 - `SHAKEDOWN_WORLDS`: where built worlds are written (default `<repo>/core/worlds`, git-ignored), scanned at start like
-  `SHAKEDOWN_PACKAGES`. A built world's command names `${SHAKEDOWN_DIR}`, the repository folder.
+  `SHAKEDOWN_PACKAGES`. A built world's command names `${SHAKEDOWN_DIR}`, the repository folder: by default the one
+  shaked was built in, else the `SHAKEDOWN_DIR` setting (a sandbox's is `/opt/shakedown`).
 
 shaked asks the first builder installed (by name) for templates and previews, writes a built world into
 `SHAKEDOWN_WORLDS`, installs it while it runs and prepares its base in the background (`docs/reference.md`,

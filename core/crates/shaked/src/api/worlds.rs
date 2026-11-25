@@ -48,8 +48,12 @@ fn refusal(status: StatusCode, msg: impl Into<String>) -> Refused {
 }
 
 /// The builder's answer to `r`. A refusal (`-32602`) is `invalid` with its message, or 422 with
-/// its problems when it gives them; no builder installed is a 404.
+/// its problems when it gives them; no builder installed is a 404, and a shaked that starts no
+/// package program a 409 ([`world_builds::PREBUILT_ONLY`]).
 async fn ask<R: Request>(state: &AppState, r: &R, invalid: StatusCode) -> Result<Value, Refused> {
+    if !state.hub.runs_programs() {
+        return Err(refusal(StatusCode::CONFLICT, world_builds::PREBUILT_ONLY));
+    }
     let name = (state.hub.registry().builders().next()).map(|m| m.name.clone());
     let name =
         name.ok_or_else(|| refusal(StatusCode::NOT_FOUND, "no world builder is installed"))?;
@@ -118,8 +122,8 @@ struct BuildReq {
 /// background: 202 `{name, state: "preparing"}`.
 async fn build(State(state): State<Arc<AppState>>, JsonBody(req): JsonBody<BuildReq>) -> Answer {
     let asked = world_builds::Asked::now(&state);
-    let dir = worlds_dir(&state)?;
     let name = previewed_name(&state, &req).await?;
+    let dir = worlds_dir(&state)?;
     refuse_taken(&state, &dir, &name)?;
     write_world(&state, &dir, &req, &name).await?;
     world_builds::spawn_prepare(&state, &name, asked);

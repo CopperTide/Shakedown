@@ -9,7 +9,9 @@ control box talk is in [docs/internals/sandbox-runs.md](../../docs/internals/san
 - Ubuntu 24.04 with Docker Engine, Buildx and Compose.
 - `shaked` and the package programs (release builds) in `/opt/shakedown/bin`, and the packages
   (`integrations/`, `benchmarks/`, `kits/python`) in `/opt/shakedown`. Each Python package's
-  environment is synced at build time, so `uv` runs offline.
+  environment is synced at build time, so `uv` runs offline. `benchmarks/` includes the prebuilt
+  worlds (`software-factory`); `SHAKEDOWN_DIR=/opt/shakedown` (`worker.env`) is what their
+  `${SHAKEDOWN_DIR}/benchmarks/world` command names.
 - Python 3.12 with `uv`, and Node 22.
 - PostgreSQL 16 on `127.0.0.1:5544`, the server packages reach at `SHAKEDOWN_PG_URL` (retail's
   parts use it). Its login is a local one: nothing outside the sandbox reaches it.

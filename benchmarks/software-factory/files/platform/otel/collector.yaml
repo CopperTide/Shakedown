@@ -1,0 +1,29 @@
+# Apps → this collector (OTLP/HTTP on 4318) → the world-time gateway, which restamps and forwards to the stores.
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 80
+    spike_limit_mib: 16
+  batch:
+    send_batch_size: 512
+    timeout: 2s
+
+exporters:
+  otlphttp:
+    endpoint: http://worldclock-gateway:4318
+    compression: none
+
+service:
+  pipelines:
+    traces: {receivers: [otlp], processors: [memory_limiter, batch], exporters: [otlphttp]}
+    metrics: {receivers: [otlp], processors: [memory_limiter, batch], exporters: [otlphttp]}
+    logs: {receivers: [otlp], processors: [memory_limiter, batch], exporters: [otlphttp]}
+  telemetry:
+    logs: {level: warn}
+    metrics: {level: none}

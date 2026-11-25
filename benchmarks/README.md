@@ -24,7 +24,8 @@ it is tested and its limits. No scoring here calls a model.
 
 [`world/`](world/README.md) is the world builder (package `world-builder`), not a benchmark with fixed tasks. It
 fills a template from a user's choices and a seed and writes the result as a benchmark package that `shaked` runs.
-Each built world's tasks are scored by named checks on the end state.
+Each built world's tasks are scored by named checks on the end state. [`software-factory/`](software-factory/README.md)
+is that template built with its defaults and committed, for hosted Shakedown, which builds no world.
 
 | Template | What a built world measures | Scoring |
 |---|---|---|

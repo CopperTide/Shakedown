@@ -13,6 +13,10 @@ use serde::Serialize;
 
 use crate::app::AppState;
 
+/// Why a shaked whose packages run only in sandboxes builds no world (a 409).
+pub const PREBUILT_ONLY: &str =
+    "hosted Shakedown ships prebuilt worlds; build custom worlds in local Shakedown";
+
 /// The file in the worlds folder that names the current benchmark.
 const CURRENT_FILE: &str = ".current";
 

@@ -1,0 +1,19 @@
+# Prometheus takes metrics only over OTLP (from the world-time gateway, already in world time); it scrapes
+# nothing. A service's `service.name` and `deployment.environment.name` become the labels `service_name` and
+# `deployment_environment_name`.
+global:
+  evaluation_interval: 15s
+
+rule_files: [/etc/prometheus/rules.yml]
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
+otlp:
+  promote_resource_attributes: [service.name, deployment.environment.name]
+
+storage:
+  tsdb:
+    out_of_order_time_window: 30m

@@ -168,7 +168,10 @@ stateDiagram-v2
    `Hub::bench_describe` reads the benchmark's description file (`describe.json` beside its manifest,
    `parts::described`; missing, it is 409 `NoDescription`), and `gc::usage` (the disk check, health) counts the
    save folders alone. So the control box installs each package's manifest and each benchmark's
-   `describe.json`, and nothing else of them (`docs/packages.md`, "The description file").
+   `describe.json`, and nothing else of them (`docs/packages.md`, "The description file"). Nor does it
+   build worlds (the world builder is a package program): its builder routes answer 409, and it runs the
+   worlds shipped prebuilt under `benchmarks/` (`software-factory`), which the template carries whole and
+   whose command finds the builder's project through `SHAKEDOWN_DIR=/opt/shakedown` (`worker.env`).
 3. `Hosting::start`: `links.expect(plan)`, then `backend.create(spec)`. A world built on this control box (the
    benchmark's folder is in `Config::worlds_dir`, as the world builder makes it; the template has only the
    installed packages) is copied into the sandbox's `SANDBOX_WORLDS` (`/var/lib/shakedown/worlds`, the
