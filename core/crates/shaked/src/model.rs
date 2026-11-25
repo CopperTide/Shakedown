@@ -379,6 +379,9 @@ named_enum! {
         /// shaked saved the parts that save at points (`{reason, saves, error?, paused_ms}`):
         /// bookkeeping, no step.
         SavePoint = "save_point",
+        /// Spans an agent's own tracing sent over OTLP during its run (`{spans: [..]}`, each
+        /// `crate::otel::receive::Imported`): its internal steps, as its own code saw them.
+        Spans = "spans",
     }
 }
 
@@ -504,7 +507,7 @@ mod tests {
     use super::*;
 
     /// Every kind's and status's name, as stored and as the API shows it.
-    const KINDS: [&str; 19] = [
+    const KINDS: [&str; 20] = [
         "run_start",
         "agent_start",
         "model_call",
@@ -524,6 +527,7 @@ mod tests {
         "finish",
         "reasoning",
         "save_point",
+        "spans",
     ];
     const STATUSES: [&str; 8] = [
         "running",

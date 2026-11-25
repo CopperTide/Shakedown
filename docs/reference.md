@@ -37,6 +37,15 @@ All JSON on `http://127.0.0.1:4510`, except the event stream. Errors are `{error
 | `POST /api/models/keys/{id}/secret` | `{secret}`: replaces a key's secret |
 | `POST /api/models/keys/{id}/test` | a one-token call with the key; the key with `checked_ok` and `check_detail` (the provider's reason, never the key) |
 | `DELETE /api/models/keys/{id}` | deletes a key |
+| `GET /api/observability/targets` | where runs are exported, `[{id, name, kind, endpoint, project, header_names, include_content, auto_export, export_metrics, checked_ok, checked_at, check_detail, created_at}]`: header names, never their values. See [observability.md](observability.md) |
+| `POST /api/observability/targets` | adds a target (`admin` token scope). `kind` `langfuse` (`region` `us`, `eu` or `self` with `base_url`; `public_key`, `secret_key`), `phoenix` (`base_url`, default `http://127.0.0.1:6006`; `api_key?`; `project?`, default `shakedown`) or `otlp` (`endpoint`, `/v1/traces` added unless it ends with it; `headers?`, at most 20). `include_content` defaults to true for a target on your own server and false for Langfuse Cloud and Phoenix Cloud; `auto_export` defaults to true; `export_metrics` (OTLP metrics, `otlp` only) to false. 400 when the preset lacks a field or the endpoint may not be reached from here; 409 when the name is taken |
+| `POST /api/observability/targets/{id}` | `{include_content?, auto_export?, export_metrics?}`: changes what the target gets |
+| `POST /api/observability/targets/{id}/test` | sends one span (its own trace); the target with `checked_ok` and `check_detail` (what the collector answered, header values blanked) |
+| `DELETE /api/observability/targets/{id}` | deletes a target and its export rows |
+| `GET /api/observability/exports?branch=&limit=` | the latest exports (of one branch), `[{target_id, target, branch_id, state, attempts, spans, last_error, exported_at, next_at}]`; `state` `pending`, `done` or `failed` (after 6 tries) |
+| `POST /api/branches/{id}/export` | `{target_id?}`: sends the branch to that target (every target when absent) now, from its record; a branch that has not ended is queued for when it does. `{branch_id, exports: [{target_id, target, state, spans?, error?}]}` (`state` `done`, `failed` or `queued`); 409 when there is no target |
+| `POST /api/runs/export` | `runs.export`: `{branch_id, target_id?}`, the same as `POST /api/branches/{id}/export`, for the assistant and agents over MCP |
+| `GET /metrics` | the runs as Prometheus text (format 0.0.4): branches by status, pass rate, run time, model calls, tokens, cost and call latency by world, setup, model and provider. Authenticated like `/api`: the person at this machine, or an API token (`read` scope is enough) |
 | `GET /api/tasks` | the benchmark's tasks, `[{id, reason, ticket, instructions, clock_start?}]` (`instructions` is the benchmark's, the same for every task; `clock_start`, the world's date and time at clock 0 when its world keeps its own calendar: agents are told the world's date, see [protocol](protocol.md#a-tasks-clock)) |
 | `GET /api/benchmark` | `{name, version, tasks: [{id, reason}], scenario_options, view}`: `scenario_options` is the benchmark's `describe.scenario_options` (null when it offers none), the disruptions a run's scenario may add ([protocol](protocol.md#a-runs-scenario)); `view` is true when the benchmark draws the world's view |
 | `GET /api/templates` | the world builder's templates, `[{id, name, summary, version, systems: [label]}]` ([protocol](protocol.md#builder-calls)); 404 `no world builder is installed` when no package of `kind = "builder"` is (with several, the first by name answers). Where packages run only in sandboxes (hosted), this, the form, the preview and `POST /api/worlds` answer 409 `hosted Shakedown ships prebuilt worlds; build custom worlds in local Shakedown` |
@@ -55,7 +64,7 @@ All JSON on `http://127.0.0.1:4510`, except the event stream. Errors are `{error
 | `POST /api/runs/{id}/name` | `{name}` sets an optional display name (1–300 bytes after trimming); 404 for a missing run. `GET /api/runs` includes `name` when set; task ids and event records are unchanged |
 | `DELETE /api/runs/{id}` | delete a run and what it saved (409 while a branch runs) |
 | `GET /api/branches/{id}` | a branch with its events, `budget` (`{max_cost_usd, estimate_usd}`: its spend limit, and its running estimate while it runs), `queue_position` (a queued cloud run's place in line, 1 = next; else null) and `metrics`: `{measured_s, overhead_ms: {save?, restore?, record?, gateway?, gate?, link?, mcp?, wait?, score?, pause?}, overhead_s, overhead_recorded, estimated_s, tokens, cost, agents: [{agent, kind, model, provider, tokens, prompt_tokens, completion_tokens, cost, model_calls, peak_prompt_tokens, compactions, overhead_s}]}`, each `cost` `{usd, label, source, as_of}` (see concepts, "Overhead and estimates"); `peak_prompt_tokens` is the largest `usage.prompt_tokens` of the agent's model calls, `overhead_s` the overhead recorded on its own events |
-| `POST /api/branches/{id}/agents` | external runs: `{id, name?, kind?, model?, provider?, prompt?, read_only?}` registers an agent (kind `external` by default), or starts a registered one again; returns `{agent, mcp_url, gateway_url, tools, spec}`. 404 when the branch isn't live, 409 when shaked runs its agents |
+| `POST /api/branches/{id}/agents` | external runs: `{id, name?, kind?, model?, provider?, prompt?, read_only?}` registers an agent (kind `external` by default), or starts a registered one again; returns `{agent, mcp_url, gateway_url, otlp_url, env, token, tools, spec}` (`env` holds the `OTEL_EXPORTER_OTLP_*` variables, see below). 404 when the branch isn't live, 409 when shaked runs its agents |
 | `POST /api/branches/{id}/agents/{agent}/end` | external runs: `{ok?, error?, prompt_tokens?, completion_tokens?, cost_usd?, cost_source?, seconds?}` records the agent's end |
 | `POST /api/branches/{id}/agents/{agent}/usage` | external runs: `{message_id?, model?, input_tokens?, cache_creation_input_tokens?, cache_read_input_tokens?, output_tokens?, context_window?}` records one model call the agent's client saw (a CLI's per-message usage, such as Claude Code's `stream-json`) as a `model_call` with `request` and `response` null, `reported_by: "client"`, and `usage` whose `prompt_tokens` is the whole input (fresh, cache-written and cache-read tokens); `{compaction: {trigger?, pre_tokens?}}` records that the client compacted the agent's context (a `model_call` with empty `usage`). 404 for an agent the branch doesn't have |
 | `POST /api/branches/{id}/agents/{agent}/reasoning` | external runs: `{items: [{text, kind?: "thinking"\|"step"\|"plan", model_call_seq?}]}` (1 to 100 items) records one `reasoning` event per item with `source: "agent"`; blank items are skipped and text over 32 768 characters is cut (`truncated: true`). Answers `{seqs}`. 400 for no items, too many or an unknown `kind`; 404 for an agent the branch doesn't have |
@@ -95,6 +104,15 @@ All JSON on `http://127.0.0.1:4510`, except the event stream. Errors are `{error
 | `GET /api/world` | the benchmark's parts with what each integration reports (version, restore, clock use, tool names, and `system` when it says what kind of system it is) and whether it answered (each gets 5 s; a silent one shows `did not answer within 5 s`) |
 | `GET /api/usage` | `{integrations: [{integration, parts, bytes, error?}], total_bytes, limit_bytes}`: the bytes each integration keeps (its own `usage` plus its save folders) and the world parts that use it. An integration whose `usage` fails or doesn't answer within 5 s has `bytes: 0` and an `error`, and adds nothing to `total_bytes` |
 | `POST /api/gc` | runs the startup cleanup and returns `{removed, freed_bytes, errors}`; it keeps every save a recorded run names and the shared base and gold saves; 409 while agents are running, and new runs and forks answer 409 while it runs. It has no deadline: it answers when every integration's `gc` has (an integration that never answers keeps the cleanup on until it exits), and a client that stops waiting does not end it |
+
+An agent's own OpenTelemetry SDK sends its spans to `POST /otlp/{branch}/{agent}/v1/traces` (OTLP/HTTP,
+`application/x-protobuf` or `application/json`, uncompressed, with the agent's token as a bearer token): each
+request becomes one `spans` event of that agent. At most 4 MiB a body (413), 512 spans a request and 20,000 a
+branch (the rest dropped and counted in the answer's `partial_success`), 20 requests a second a branch (429);
+404 once the branch has ended. `/v1/metrics` and `/v1/logs` there take the request and drop it. Each agent's
+endpoints carry `otlp_url` and, in `env`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`,
+`OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf` and `OTEL_EXPORTER_OTLP_HEADERS=Authorization=Bearer%20<token>`; an
+`http` agent's run body carries `otlp_traces_url`.
 
 New runs and forks answer 507 once the saves reach the disk limit. The `/api` routes answer only
 requests whose `Host` is a loopback address. The agents' MCP endpoints (`/mcp/{branch}/{agent}`) and the
@@ -181,8 +199,8 @@ Environment variables, read once at startup by shaked:
   others (default: loopback only). An open-source shaked refuses to start with it set.
 - `SHAKEDOWN_DB`: the database of shaked's records on that server (default `shakedown`, else an existing
   `shakedown`).
-- `SHAKEDOWN_VAULT_KEY` (64 hex characters) or `SHAKEDOWN_VAULT_KEY_FILE`: the key your model keys are sealed
-  with (AES-256-GCM, each bound to its row). Without either, `core/vault.key` is made (mode 0600, ignored by
+- `SHAKEDOWN_VAULT_KEY` (64 hex characters) or `SHAKEDOWN_VAULT_KEY_FILE`: the key your model keys (and the
+  headers of your observability targets) are sealed with (AES-256-GCM, each bound to its row). Without either, `core/vault.key` is made (mode 0600, ignored by
   git) the first time a key is saved; a shaked whose layer serves others refuses to start without one of the
   two. A lost vault key makes the saved keys unreadable: add them again.
 - `SHAKEDOWN_OBJECT_STORE`: object stores for saves, transcripts and exports, `name=url,name=url` or one URL

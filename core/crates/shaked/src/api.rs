@@ -35,6 +35,7 @@ mod flow;
 mod me;
 mod models;
 mod names;
+mod observability;
 mod recording;
 mod review;
 pub mod routes;
@@ -82,6 +83,7 @@ fn modules() -> Router<Arc<AppState>> {
         .merge(me::router())
         .merge(tokens::router())
         .merge(models::router())
+        .merge(observability::router())
         .merge(suites::router())
         .merge(experiments::router())
         .merge(review::router())

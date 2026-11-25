@@ -677,10 +677,10 @@ fn an_agents_register_answer_has_its_proxy_only_in_a_world_that_serves_http() {
         let a = plain
             .join(json!({"id": "planner", "name": "Planner"}))
             .await;
-        assert!(
-            a.get("proxy_url").is_none() && a.get("env").is_none(),
-            "{a}"
-        );
+        // No proxy variables: only the ones that point its OTel SDK at the run.
+        let env = a["env"].as_object().cloned().unwrap_or_default();
+        assert!(a.get("proxy_url").is_none(), "{a}");
+        assert!(env.keys().all(|k| k.starts_with("OTEL_")), "{a}");
     })
 }
 

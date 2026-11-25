@@ -1,0 +1,372 @@
+[
+  {
+    "trace_id": "0123456789abcdef0123456789abcdef",
+    "span_id": "2f2c87d2bd043372",
+    "name": "Late refund",
+    "kind": "internal",
+    "start": "2026-11-20T09:59:59Z",
+    "end": "2026-11-20T10:00:15Z",
+    "attrs": {
+      "langfuse.session.id": "x1",
+      "langfuse.trace.name": "Late refund",
+      "openinference.span.kind": "CHAIN",
+      "session.id": "x1",
+      "shakedown.experiment.id": "x1",
+      "shakedown.experiment.name": "Refund policy",
+      "shakedown.max_cost_usd": 2.0,
+      "shakedown.run.id": "0123456789abcdef0123456789abcdef",
+      "shakedown.run.name": "Late refund",
+      "shakedown.runner": "chain",
+      "shakedown.scenario.id": "late-refund",
+      "shakedown.seed": 7,
+      "shakedown.setup.id": "support",
+      "shakedown.setup.name": "Support desk",
+      "shakedown.suite.id": "s1",
+      "shakedown.suite.name": "Refund policy (Support desk)",
+      "shakedown.task.id": "27",
+      "shakedown.world": "retail",
+      "shakedown.world.parts": [
+        "retail"
+      ]
+    }
+  },
+  {
+    "trace_id": "0123456789abcdef0123456789abcdef",
+    "span_id": "9470695169f4cb98",
+    "parent": "2f2c87d2bd043372",
+    "name": "branch",
+    "kind": "internal",
+    "start": "2026-11-20T10:00:00Z",
+    "end": "2026-11-20T10:00:15Z",
+    "attrs": {
+      "openinference.span.kind": "CHAIN",
+      "shakedown.branch.id": "b1f0c0de00000000000000000000b1f0",
+      "shakedown.branch.status": "failed",
+      "shakedown.experiment.id": "x1",
+      "shakedown.experiment.name": "Refund policy",
+      "shakedown.max_cost_usd": 2.0,
+      "shakedown.outcome.passed": false,
+      "shakedown.run.id": "0123456789abcdef0123456789abcdef",
+      "shakedown.run.name": "Late refund",
+      "shakedown.runner": "chain",
+      "shakedown.scenario.id": "late-refund",
+      "shakedown.seed": 7,
+      "shakedown.setup.id": "support",
+      "shakedown.setup.name": "Support desk",
+      "shakedown.suite.id": "s1",
+      "shakedown.suite.name": "Refund policy (Support desk)",
+      "shakedown.task.id": "27",
+      "shakedown.world": "retail",
+      "shakedown.world.parts": [
+        "retail"
+      ]
+    },
+    "events": [
+      {
+        "name": "shakedown.world_event",
+        "at": "2026-11-20T10:00:12Z",
+        "attrs": {
+          "shakedown.world_event.clock_ms": 5000,
+          "shakedown.world_event.data": "{\"order\":\"#W1\"}",
+          "shakedown.world_event.kind": "sla",
+          "shakedown.world_event.part": "retail",
+          "shakedown.world_event.text": "SLA missed for #W1"
+        }
+      }
+    ],
+    "error": {
+      "message": "failed"
+    }
+  },
+  {
+    "trace_id": "0123456789abcdef0123456789abcdef",
+    "span_id": "2f2040785982e1e9",
+    "parent": "9470695169f4cb98",
+    "name": "invoke_agent Triage",
+    "kind": "internal",
+    "start": "2026-11-20T10:00:02Z",
+    "end": "2026-11-20T10:00:08Z",
+    "attrs": {
+      "gen_ai.agent.id": "triage",
+      "gen_ai.agent.name": "Triage",
+      "gen_ai.operation.name": "invoke_agent",
+      "gen_ai.provider.name": "openai",
+      "gen_ai.request.model": "gpt-4o-mini",
+      "gen_ai.usage.input_tokens": 120,
+      "gen_ai.usage.output_tokens": 12,
+      "langfuse.observation.type": "agent",
+      "openinference.span.kind": "AGENT",
+      "shakedown.agent.external": false,
+      "shakedown.agent.kind": "open",
+      "shakedown.agent.ok": true,
+      "shakedown.agent.seconds": 6.0,
+      "shakedown.agent.tokens": 132,
+      "shakedown.cost_usd": 0.00003
+    },
+    "events": [
+      {
+        "name": "shakedown.handoff",
+        "at": "2026-11-20T10:00:07Z",
+        "attrs": {
+          "shakedown.agent": "triage",
+          "shakedown.handoff.note": "Refund it: 3 days late.",
+          "shakedown.handoff.to": "refunds"
+        }
+      }
+    ]
+  },
+  {
+    "trace_id": "0123456789abcdef0123456789abcdef",
+    "span_id": "428d29e05b87d2d8",
+    "parent": "2f2040785982e1e9",
+    "name": "chat gpt-4o-mini",
+    "kind": "client",
+    "start": "2026-11-20T10:00:02.150Z",
+    "end": "2026-11-20T10:00:03Z",
+    "attrs": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "openai",
+      "gen_ai.request.model": "gpt-4o-mini",
+      "gen_ai.request.temperature": 0.0,
+      "gen_ai.response.finish_reasons": [
+        "tool_calls"
+      ],
+      "gen_ai.response.id": "chatcmpl-1",
+      "gen_ai.response.model": "gpt-4o-mini-2024-07-18",
+      "gen_ai.system": "openai",
+      "gen_ai.usage.cost": 0.00003,
+      "gen_ai.usage.input_tokens": 120,
+      "gen_ai.usage.output_tokens": 12,
+      "input.mime_type": "application/json",
+      "input.value": "[{\"content\":\"You triage.\",\"role\":\"system\"},{\"content\":\"Order #W1 arrived late\",\"role\":\"user\"}]",
+      "langfuse.observation.type": "generation",
+      "llm.input_messages.0.message.content": "You triage.",
+      "llm.input_messages.0.message.role": "system",
+      "llm.input_messages.1.message.content": "Order #W1 arrived late",
+      "llm.input_messages.1.message.role": "user",
+      "llm.model_name": "gpt-4o-mini",
+      "llm.output_messages.0.message.content": "Looking it up.",
+      "llm.output_messages.0.message.role": "assistant",
+      "llm.provider": "openai",
+      "llm.system": "openai",
+      "llm.token_count.completion": 12,
+      "llm.token_count.prompt": 120,
+      "llm.token_count.total": 132,
+      "openinference.span.kind": "LLM",
+      "output.value": "Looking it up.",
+      "shakedown.cost_source": "openai",
+      "shakedown.cost_usd": 0.00003,
+      "shakedown.model.duration_ms": 850.0,
+      "shakedown.model.tool_calls": [
+        "get_order"
+      ]
+    },
+    "events": [
+      {
+        "name": "gen_ai.content.prompt",
+        "at": "2026-11-20T10:00:03Z",
+        "attrs": {
+          "gen_ai.prompt": "[{\"content\":\"You triage.\",\"role\":\"system\"},{\"content\":\"Order #W1 arrived late\",\"role\":\"user\"}]"
+        }
+      },
+      {
+        "name": "gen_ai.content.completion",
+        "at": "2026-11-20T10:00:03Z",
+        "attrs": {
+          "gen_ai.completion": "Looking it up."
+        }
+      }
+    ]
+  },
+  {
+    "trace_id": "0123456789abcdef0123456789abcdef",
+    "span_id": "e18ce23827a0e1f8",
+    "parent": "428d29e05b87d2d8",
+    "name": "reasoning",
+    "kind": "internal",
+    "start": "2026-11-20T10:00:04Z",
+    "end": "2026-11-20T10:00:04Z",
+    "attrs": {
+      "langfuse.observation.type": "span",
+      "openinference.span.kind": "CHAIN",
+      "output.value": "Look up the order first.",
+      "shakedown.content.reasoning": "Look up the order first.",
+      "shakedown.reasoning.kind": "step",
+      "shakedown.reasoning.source": "response",
+      "shakedown.reasoning.truncated": false
+    }
+  },
+  {
+    "trace_id": "0123456789abcdef0123456789abcdef",
+    "span_id": "fbf72bf27ef63529",
+    "parent": "2f2040785982e1e9",
+    "name": "execute_tool get_order",
+    "kind": "internal",
+    "start": "2026-11-20T10:00:04.987500Z",
+    "end": "2026-11-20T10:00:05Z",
+    "attrs": {
+      "gen_ai.operation.name": "execute_tool",
+      "gen_ai.tool.call.arguments": "{\"id\":\"#W1\"}",
+      "gen_ai.tool.call.id": "call_1",
+      "gen_ai.tool.call.result": "{\"late_days\":3,\"status\":\"delivered\"}",
+      "gen_ai.tool.name": "get_order",
+      "gen_ai.tool.type": "function",
+      "input.value": "{\"id\":\"#W1\"}",
+      "langfuse.observation.type": "tool",
+      "openinference.span.kind": "TOOL",
+      "output.value": "{\"late_days\":3,\"status\":\"delivered\"}",
+      "shakedown.db.keys_read": [
+        "orders/#W1"
+      ],
+      "shakedown.db.rows_read": 1,
+      "shakedown.db.rows_written": 0,
+      "shakedown.tool.duration_ms": 12.5,
+      "shakedown.tool.effect": "read",
+      "shakedown.tool.part": "retail",
+      "shakedown.world.clock_ms": 1000,
+      "tool.name": "get_order",
+      "tool.parameters": "{\"id\":\"#W1\"}"
+    }
+  },
+  {
+    "trace_id": "0123456789abcdef0123456789abcdef",
+    "span_id": "2d081314db453cb5",
+    "parent": "2f2040785982e1e9",
+    "name": "retrieve policy",
+    "kind": "internal",
+    "start": "2026-11-20T10:00:05.200Z",
+    "end": "2026-11-20T10:00:05.700Z",
+    "attrs": {
+      "input.value": "late delivery refund",
+      "retrieval.query": "late delivery refund",
+      "shakedown.imported": true,
+      "shakedown.imported.span_id": "eee19b7ec3c1b174",
+      "shakedown.imported.trace_id": "5b8efff798038103d269b633813fc60c"
+    }
+  },
+  {
+    "trace_id": "0123456789abcdef0123456789abcdef",
+    "span_id": "7ae4b61a437c8351",
+    "parent": "2d081314db453cb5",
+    "name": "rerank",
+    "kind": "internal",
+    "start": "2026-11-20T10:00:05.300Z",
+    "end": "2026-11-20T10:00:05.600Z",
+    "attrs": {
+      "rerank.top_k": 3,
+      "shakedown.imported": true,
+      "shakedown.imported.span_id": "eee19b7ec3c1b175",
+      "shakedown.imported.trace_id": "5b8efff798038103d269b633813fc60c"
+    },
+    "error": {
+      "message": "reranker timed out"
+    }
+  },
+  {
+    "trace_id": "0123456789abcdef0123456789abcdef",
+    "span_id": "f300ccd86685f2dd",
+    "parent": "9470695169f4cb98",
+    "name": "invoke_agent Refunds",
+    "kind": "internal",
+    "start": "2026-11-20T10:00:09Z",
+    "end": "2026-11-20T10:00:11Z",
+    "attrs": {
+      "gen_ai.agent.id": "refunds",
+      "gen_ai.agent.name": "Refunds",
+      "gen_ai.operation.name": "invoke_agent",
+      "gen_ai.request.model": "sonnet",
+      "langfuse.observation.type": "agent",
+      "openinference.span.kind": "AGENT",
+      "shakedown.agent.external": false,
+      "shakedown.agent.kind": "claude_code",
+      "shakedown.agent.ok": false,
+      "shakedown.agent.seconds": 2.0
+    },
+    "error": {
+      "message": "gave up after the refusal"
+    }
+  },
+  {
+    "trace_id": "0123456789abcdef0123456789abcdef",
+    "span_id": "c586c55f53fc10d4",
+    "parent": "f300ccd86685f2dd",
+    "name": "execute_tool refund",
+    "kind": "internal",
+    "start": "2026-11-20T10:00:09.970Z",
+    "end": "2026-11-20T10:00:10Z",
+    "attrs": {
+      "gen_ai.operation.name": "execute_tool",
+      "gen_ai.tool.call.arguments": "{\"amount\":40,\"order\":\"#W1\"}",
+      "gen_ai.tool.call.id": "toolu_1",
+      "gen_ai.tool.call.result": "null",
+      "gen_ai.tool.name": "refund",
+      "gen_ai.tool.type": "function",
+      "input.value": "{\"amount\":40,\"order\":\"#W1\"}",
+      "langfuse.observation.type": "tool",
+      "openinference.span.kind": "TOOL",
+      "output.value": "null",
+      "shakedown.db.keys_read": [
+        "orders/#W1"
+      ],
+      "shakedown.db.keys_written": [
+        "orders/#W1",
+        "refunds/r1"
+      ],
+      "shakedown.db.rows_read": 1,
+      "shakedown.db.rows_written": 2,
+      "shakedown.tool.duration_ms": 30.0,
+      "shakedown.tool.effect": "write",
+      "shakedown.tool.part": "retail",
+      "shakedown.world.clock_ms": 4000,
+      "tool.name": "refund",
+      "tool.parameters": "{\"amount\":40,\"order\":\"#W1\"}"
+    },
+    "error": {
+      "message": "refund refused: over the limit"
+    }
+  },
+  {
+    "trace_id": "0123456789abcdef0123456789abcdef",
+    "span_id": "d88814b0cb6ebb25",
+    "parent": "9470695169f4cb98",
+    "name": "evaluate",
+    "kind": "internal",
+    "start": "2026-11-20T10:00:11Z",
+    "end": "2026-11-20T10:00:13Z",
+    "attrs": {
+      "langfuse.observation.type": "evaluator",
+      "openinference.span.kind": "EVALUATOR",
+      "shakedown.check.differing": 1,
+      "shakedown.check.differing_rows": [
+        "refunds/r1"
+      ],
+      "shakedown.check.named": 2,
+      "shakedown.check.named_passed": 1,
+      "shakedown.check.passed": false
+    },
+    "events": [
+      {
+        "name": "shakedown.check",
+        "at": "2026-11-20T10:00:13Z",
+        "attrs": {
+          "shakedown.check.detail": "no refund row",
+          "shakedown.check.name": "refunded",
+          "shakedown.check.passed": false,
+          "shakedown.check.safety": false
+        }
+      },
+      {
+        "name": "shakedown.check",
+        "at": "2026-11-20T10:00:13Z",
+        "attrs": {
+          "shakedown.check.name": "no double refund",
+          "shakedown.check.passed": true,
+          "shakedown.check.safety": true
+        }
+      }
+    ],
+    "error": {
+      "message": "the world did not end as the task expects"
+    }
+  }
+]

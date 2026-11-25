@@ -30,7 +30,8 @@ pub(super) async fn chat(
     };
     let (target, agent) = (&a.target, &route.agent);
     let (upstream, upstream_ms) = upstream(&state, &a.provider, &a.request).await;
-    let (status, payload) = model_call_payload(a.request, &a.provider, &upstream);
+    let (status, mut payload) = model_call_payload(a.request, &a.provider, &upstream);
+    payload.duration_ms = Some(upstream_ms);
     target.overhead(a.since, upstream_ms);
     let (charge, v) = target.bill(agent, (&a.provider, &payload), Outcome::of(status, None));
     let items =
@@ -117,6 +118,7 @@ fn model_call_payload(
         provider: Some(provider.id.clone()),
         provider_response: raw_evidence(upstream),
         response,
+        duration_ms: None,
     };
     (status, payload)
 }

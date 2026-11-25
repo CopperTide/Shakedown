@@ -128,7 +128,8 @@ impl Call {
     async fn finish(&self, a: Answered, sent_at: Instant) -> Option<f64> {
         let outcome = Outcome::of(a.status, a.interrupted.as_deref());
         let interrupted = a.interrupted.clone();
-        let payload = self.payload(outcome != Outcome::Failed, a);
+        let mut payload = self.payload(outcome != Outcome::Failed, a);
+        payload.duration_ms = Some(ms_since(sent_at));
         let (agent, p) = (&self.route.agent, &self.prepared);
         let (charge, mut v) = p.target.bill(agent, (&p.provider, &payload), outcome);
         marked(&mut v, self.route.api, interrupted.as_deref());
@@ -159,6 +160,7 @@ impl Call {
             cost_source: cost_usd.and(p.cost_source()).map(str::to_string),
             provider: Some(p.id.clone()),
             provider_response: None,
+            duration_ms: None,
         }
     }
 }

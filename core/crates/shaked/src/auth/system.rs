@@ -17,6 +17,8 @@ pub enum SystemJob {
     /// token died (at start, and now and then), and finding which branches the control box's
     /// sandboxes run still run (the sandbox sweep).
     LinkSweep,
+    /// Sending ended branches to their observability targets, and recording how it went.
+    ObservabilityExport,
 }
 
 /// Permission to open one system job's transactions (`Store::system_tx`). Built only in this
@@ -63,6 +65,13 @@ impl SystemScope {
     pub(crate) fn link_sweep() -> SystemScope {
         SystemScope {
             job: SystemJob::LinkSweep,
+        }
+    }
+
+    /// Sending ended branches to the observability targets their owners queued them for.
+    pub(crate) fn observability_export() -> SystemScope {
+        SystemScope {
+            job: SystemJob::ObservabilityExport,
         }
     }
 }

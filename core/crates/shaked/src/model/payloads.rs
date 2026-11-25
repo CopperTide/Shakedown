@@ -343,6 +343,10 @@ pub struct ModelCallPayload {
     /// that doesn't speak chat completions); absent when `response` is what it sent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provider_response: Option<Value>,
+    /// How long the provider took to answer, in milliseconds (absent in calls recorded before
+    /// it was kept, and in calls a client reported).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duration_ms: Option<f64>,
 }
 
 /// Payload of `EventKind::AgentEnd`.

@@ -117,6 +117,7 @@ mod tests {
             cost_source: None,
             provider: None,
             provider_response: None,
+            duration_ms: None,
         }
     }
 

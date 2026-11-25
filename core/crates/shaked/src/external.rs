@@ -32,6 +32,9 @@ pub struct Endpoints {
     pub agent: String,
     pub mcp_url: String,
     pub gateway_url: String,
+    /// Where the agent's own OpenTelemetry SDK sends its spans (OTLP/HTTP; `{otlp_url}/v1/traces`),
+    /// with the agent's token; `env` names it for the SDK (`crate::otel::receive::env`).
+    pub otlp_url: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub proxy_url: Option<String>,
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
@@ -42,8 +45,11 @@ pub struct Endpoints {
 }
 
 impl Endpoints {
-    /// The same endpoints with the agent's token.
+    /// The same endpoints with the agent's token, and the variables that send its OTel SDK's
+    /// spans to its run.
     pub fn with_token(mut self, token: String) -> Endpoints {
+        self.env
+            .extend(crate::otel::receive::env(&self.otlp_url, &token));
         self.token = Some(token);
         self
     }
@@ -62,6 +68,7 @@ pub fn endpoints(
         agent: agent.to_string(),
         mcp_url: format!("{base}/mcp/{branch}/{agent}"),
         gateway_url: format!("{base}/gateway/{branch}/{agent}/v1"),
+        otlp_url: format!("{base}/otlp/{branch}/{agent}"),
         proxy_url: env.get("SHAKEDOWN_PROXY").cloned(),
         env,
         token: None,
@@ -300,6 +307,7 @@ impl UsageReport {
             cost_source: None,
             provider: None,
             provider_response: None,
+            duration_ms: None,
         };
         let mut v = serde_json::to_value(call).expect("a payload serializes");
         v["reported_by"] = json!(REPORTED_BY_CLIENT);

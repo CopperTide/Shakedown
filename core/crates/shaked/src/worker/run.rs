@@ -130,7 +130,9 @@ async fn worker_state(to: ForwardTo, keys: &[NamedKey]) -> Result<Arc<AppState>>
     let hub = crate::serve::worker_hub().await?;
     let base = format!("http://{}", listener.local_addr()?);
     let state = worker_app(hub, base, (to, keys), jail)?;
-    let agents = crate::mcp::router().merge(crate::gateway::worker_router());
+    let agents = crate::mcp::router()
+        .merge(crate::gateway::worker_router())
+        .merge(crate::otel::receive::router());
     let agents = agents.with_state(state.clone());
     for l in jailed.into_iter().chain([listener]) {
         let agents = agents.clone();

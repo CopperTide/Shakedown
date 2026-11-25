@@ -12,7 +12,7 @@ use crate::model::*;
 
 const RUN_COLS: &str = "id, name, task_id, created_at";
 /// A branch's columns, of `b`.
-const BRANCH_COLS: &str =
+pub(super) const BRANCH_COLS: &str =
     "b.id, b.run_id, b.parent_id, b.start_seq, b.team, b.changes, b.fork_note, \
      b.status, b.error, b.created_at, b.ended_at, b.restore_mode, b.restored";
 
@@ -49,19 +49,19 @@ impl Scoped<'_> {
             Some((p, s)) => (Some(p.to_string()), Some(s)),
             None => (None, None),
         };
-        self.execute(
-            "INSERT INTO branches (id, run_id, parent_id, start_seq, team, changes, fork_note)
+        let team = serde_json::to_value(team)?;
+        self.in_tx(async |tx| {
+            tx.execute(
+                "INSERT INTO branches (id, run_id, parent_id, start_seq, team, changes, fork_note)
                  VALUES ($1, $2, $3, $4, $5, $6, $7)",
-            &[
-                &id,
-                &run_id,
-                &parent_id,
-                &start_seq,
-                &serde_json::to_value(team)?,
-                changes,
-                &fork_note,
-            ],
-        )
+                &[
+                    &id, &run_id, &parent_id, &start_seq, &team, changes, &fork_note,
+                ],
+            )
+            .await?;
+            // Queued for the targets that export every branch: sent once it ends.
+            tx.execute(super::observability::ENQUEUE_NEW, &[&id]).await
+        })
         .await?;
         Ok(id)
     }
@@ -218,7 +218,7 @@ fn summary_from(r: &Row, branches: Vec<Branch>) -> RunSummary {
     }
 }
 
-fn branch_from(r: &Row) -> Result<Branch> {
+pub(super) fn branch_from(r: &Row) -> Result<Branch> {
     let status: String = r.get("status");
     let mut team: Value = r.get("team");
     crate::model::legacy_read_only(&mut team);

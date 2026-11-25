@@ -14,6 +14,7 @@ mod item_ops;
 mod madl_ops;
 pub mod mcp;
 mod migrate;
+mod observability_ops;
 mod project_ops;
 mod restore_ops;
 pub mod stdio;
@@ -135,6 +136,7 @@ pub fn all() -> &'static [Operation] {
         ops.extend(madl_ops::ops());
         ops.extend(import_ops::ops());
         ops.extend(step_ops::ops());
+        ops.extend(observability_ops::ops());
         ops
     })
 }

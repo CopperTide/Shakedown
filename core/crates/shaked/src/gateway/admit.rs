@@ -201,6 +201,7 @@ async fn unreached(
             cost_source: None,
             provider: None,
             provider_response: None,
+            duration_ms: None,
         };
         let mut v = serde_json::to_value(&payload).unwrap_or_default();
         marked(&mut v, route.api, None);

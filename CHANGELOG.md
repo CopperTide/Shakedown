@@ -25,6 +25,14 @@
 
 ### Added
 
+- **Observability.** Settings → Observability sends every run as an OpenTelemetry trace (OTLP/HTTP protobuf) to
+  Langfuse, Arize Phoenix or any OTLP collector: run, branch, agent turns, model calls (GenAI semantic conventions
+  and OpenInference), tool calls with rows read and written, reasoning and the check; content only where the target
+  takes it. Exports are queued, sent from the record once a branch ends, retried with backoff, and can be asked for
+  (`POST /api/branches/{id}/export`, `runs.export`). `GET /metrics` serves Prometheus text; an OTLP target can also
+  get OTLP metrics. An agent's own OTel SDK can send its spans to `/otlp/{branch}/{agent}/v1/traces` (each agent's
+  endpoints carry `otlp_url` and `OTEL_EXPORTER_OTLP_*` in `env`); they are kept as a new `spans` event. Model
+  calls now record `duration_ms`. Migration shakedown 6. See `docs/observability.md`.
 - **Product analytics in hosted Shakedown.** Served under `/sd/` by CopperTide's gateway with a PostHog key,
   the UI starts PostHog: the person by id, their org as a group, masked autocapture and session replay,
   page addresses as route templates, and named steps of the core flow (never names or content). A local

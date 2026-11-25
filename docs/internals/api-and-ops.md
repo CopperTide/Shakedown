@@ -32,7 +32,7 @@ shaked serves one HTTP API. The UI, the Python SDK, scripts and CI all use it. O
 | `src/ops/http.rs` | Mounts every operation at its route, one route-table row each (`route_rows`). |
 | `src/ops/mcp.rs` | The control MCP server: `POST /mcp`, operations as tools (`scenarios.put` is `scenarios_put`), `allowed`. |
 | `src/ops/stdio.rs` | `shaked mcp`: the same handler over stdio, project folder only. |
-| `src/ops/{project_ops,item_ops,deploy_ops,madl_ops,import_ops}.rs` | The 23 operations. |
+| `src/ops/{project_ops,item_ops,data_ops,group_ops,restore_ops,deploy_ops,madl_ops,import_ops,observability_ops}.rs` | The operations, each module one area (`runs.export` sends a run to its observability targets). |
 | `src/ops/{deploy,migrate,view,error}.rs` | Project experiment → engine mapping. Earlier work → project files. Item JSON. Errors. |
 | `src/assistant/` | The Ask chat: `mod.rs` loop, `prompt.rs`, `tools.rs` (registry as tools, cards). |
 | `src/project_state.rs` | The project folder, re-read when its files change. |
@@ -40,6 +40,7 @@ shaked serves one HTTP API. The UI, the Python SDK, scripts and CI all use it. O
 | `src/experiment/` | `mod.rs` (setups, `run_order`), `drive.rs`, `view.rs`. |
 | `src/review/` | `jobs.rs` (`Subject`, jobs), `digest.rs`, `pair.rs`, `suites.rs`, `prompt.rs`, `reviewer.rs`, `output.rs` (citations checked), `settings.rs`; `ask.rs` (a step's sources, the answer's quotes checked), `asking.rs` (the question stored, the explainer on the asker's key), `ask_prompt.md`. |
 | `src/metrics.rs`, `src/compare.rs` | Time, overhead, tokens and cost per agent. Branch summary, first divergent step, differing rows. |
+| `src/api/observability.rs` | Observability targets, exports, exporting a run now, `GET /metrics` (see [observability](observability.md)). |
 | `src/gc.rs` | Disk usage, deleting a run's saves, startup and manual cleanup. |
 
 ## An HTTP request

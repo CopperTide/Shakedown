@@ -10,6 +10,8 @@ An agent gets three endpoints on its branch, each tied to its agent token (`sda_
 - the **model gateway**, `/gateway/{branch}/{agent}/v1/…`: every model call, one `model_call` event each
 - the **world MCP endpoint**, `/mcp/{branch}/{agent}`: the world's tools and the talk tools
 - the **recording proxy** on 127.0.0.1, for the agent's own HTTP clients (`git`, `gh`, `curl`, SDKs).
+- for an agent you run yourself, the **OTLP receiver**, `/otlp/{branch}/{agent}/v1/traces`: its own OTel SDK's
+  spans, one `spans` event a request (see [observability](observability.md)).
 
 shaked holds the model keys. An agent never sees one: the gateway adds the key chosen for the branch's caller.
 

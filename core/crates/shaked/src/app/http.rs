@@ -147,6 +147,7 @@ pub fn router(state: Arc<AppState>) -> Router {
     // `/api`'s auth.
     let all = crate::mcp::router()
         .merge(crate::gateway::router())
+        .merge(crate::otel::receive::router())
         .merge(crate::worker::router())
         .merge(api);
     let all = match state.store.layer().policy().serves_others {

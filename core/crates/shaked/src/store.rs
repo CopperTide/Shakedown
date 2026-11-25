@@ -24,6 +24,9 @@ mod control;
 mod events;
 mod experiments;
 mod linked;
+mod obs_exports;
+mod obs_metrics;
+mod observability;
 mod open;
 mod provider_keys;
 mod reviews;
@@ -38,6 +41,11 @@ pub use control::Controlled;
 pub(crate) use events::with_overhead;
 pub use experiments::{NewExperiment, NewSetup};
 pub use linked::Linked;
+pub use obs_exports::{backoff, Due, ExportRow, RunRecord, Tried, MAX_ATTEMPTS};
+pub use obs_metrics::{BranchLine, CallLine, Snapshot};
+pub use observability::{
+    target_context, NewTarget, OpenTarget, TargetFlags, TargetKind, TargetRow,
+};
 pub use open::{prepare_db, template_key};
 pub use provider_keys::{KeyKind, KeyRow, NameTaken, NewKey, OpenKey};
 pub use reviews::{ReviewDone, StoredReview};

@@ -112,6 +112,10 @@ pub const BASE_FILES: Files = Files {
             "0005_branch_rules_hold.sql",
             include_str!("../migrations/shakedown/0005_branch_rules_hold.sql"),
         ),
+        (
+            "0006_observability.sql",
+            include_str!("../migrations/shakedown/0006_observability.sql"),
+        ),
     ],
     also_accept: &[],
 };

@@ -265,7 +265,6 @@ impl HttpDriver {
             &run.spec.id,
             Default::default(),
         );
-        let (mcp, gateway) = (ends.mcp_url, ends.gateway_url);
         let deadline = chrono::Utc::now() + self.timeout;
         Ok(json!({
             "protocol": PROTOCOL,
@@ -274,8 +273,9 @@ impl HttpDriver {
             "branch_id": branch.branch_id,
             "agent": run.spec.id,
             "task": super::prompt_of(run),
-            "mcp_url": mcp,
-            "gateway_url": gateway,
+            "mcp_url": ends.mcp_url,
+            "gateway_url": ends.gateway_url,
+            "otlp_traces_url": format!("{}/v1/traces", ends.otlp_url),
             "token": token,
             "deadline": deadline.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
         }))

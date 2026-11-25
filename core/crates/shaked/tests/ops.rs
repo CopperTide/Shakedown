@@ -58,7 +58,8 @@ fn access_classes_follow_the_verb() {
                 Access::Read
             }
             "delete" => Access::Delete,
-            "deploy" | "ask" => Access::Spend,
+            // Deploying and asking spend; exporting sends a run's record out: all are asked for.
+            "deploy" | "ask" | "export" => Access::Spend,
             _ => Access::Edit,
         };
         assert_eq!(op.access, want, "{}", op.name);

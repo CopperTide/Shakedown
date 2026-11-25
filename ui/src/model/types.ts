@@ -71,7 +71,10 @@ export type EventKind =
    *  'agent'|'gateway'|'claude_code', model_call_seq?, truncated?}`); not a step of its own. */
   | 'reasoning'
   /** shaked saved the parts that save at points (`payload: {reason, saves, error?, paused_ms}`); not a step. */
-  | 'save_point';
+  | 'save_point'
+  /** Spans the agent's own OpenTelemetry SDK sent during its run (`payload: {spans: [{trace_id, span_id,
+   *  parent_span_id?, name, kind, start, end, attributes?, events?, error?}]}`): its internal steps. */
+  | 'spans';
 
 export type RestoreMode = 'exact' | 'approximate';
 /** How one part of a rerun's world is (or was) restored (`model.rs` `RestoredHow`). */
@@ -298,6 +301,24 @@ export interface IdlePayload {
 }
 
 /** The parts that save at points, saved before a model call, when a driver asked or after the task's setup. */
+/** One span an agent's own OpenTelemetry SDK sent (ids in hex, times ISO). */
+export interface ImportedSpan {
+  trace_id: string;
+  span_id: string;
+  parent_span_id?: string;
+  name: string;
+  kind: number;
+  start: string;
+  end: string;
+  attributes?: Record<string, unknown>;
+  events?: { name: string; at: string; attributes?: Record<string, unknown> }[];
+  error?: string;
+}
+
+export interface SpansPayload {
+  spans: ImportedSpan[];
+}
+
 export interface SavePointPayload {
   reason: 'model_call' | 'asked' | 'setup';
   saves: Saves;
@@ -341,6 +362,7 @@ export interface Payloads {
   finish: FinishPayload;
   reasoning: ReasoningPayload;
   save_point: SavePointPayload;
+  spans: SpansPayload;
 }
 
 export interface CheckPayload {

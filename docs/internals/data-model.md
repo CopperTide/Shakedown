@@ -33,6 +33,7 @@ migrations on top (`tests/no_orgs.rs` keeps the engine free of them).
 | 3 | `0003_project_experiments.sql` | `experiments.project_experiment`: the project experiment file a deployment came from. |
 | 4 | `0004_event_link_n.sql` | `events.link_n` and the unique partial index `(branch_id, link_n) WHERE link_n IS NOT NULL`. |
 | 5 | `0005_branch_rules_hold.sql` | `branches.rules`, `branches.hold` (`paused`, `stopping`, `budget_exceeded`), `branches.paused_at`. |
+| 6 | `0006_observability.sql` | Tables `observability_targets` (headers sealed, `header_names` listed) and `observability_exports` (one row per target and branch: state, attempts, next try). See [observability](observability.md). |
 
 How they are applied (`core/crates/shakedown-schema/src/lib.rs`, `migrator.rs`):
 
@@ -201,14 +202,14 @@ flowchart LR
 
 ## Event kinds
 
-19 kinds (`EventKind` in `src/model.rs`), each with a typed payload (`payload_kind!` in
+20 kinds (`EventKind` in `src/model.rs`), each with a typed payload (`payload_kind!` in
 `src/model/payloads.rs`). Payloads are written with `BranchCtx::record` and read with `Event::decode`.
 
 | Kind | Payload | Recorded by |
 |---|---|---|
 | `run_start` | `RunStartPayload`: task, team, benchmark, world, seed, base_seed, fingerprints, base saves, runner, handoff, systems, tools, scenario, world_epoch_ms | `runner/start.rs`, `start_world` (seq 1) |
 | `agent_start` | `AgentStartPayload` | runners, `external::go`, `register` |
-| `model_call` | `ModelCallPayload`: request, response, usage, cost_usd, cost_source, provider, provider_response (plus `api`, `stream`, `interrupted`, `charged_usd`, `estimated` on raw calls) | `gateway/book.rs`. Client-reported for Claude Code outside a worker, and external usage reports |
+| `model_call` | `ModelCallPayload`: request, response, usage, cost_usd, cost_source, provider, provider_response, duration_ms (plus `api`, `stream`, `interrupted`, `charged_usd`, `estimated` on raw calls) | `gateway/book.rs`. Client-reported for Claude Code outside a worker, and external usage reports |
 | `tool_call` | `ToolCallPayload`: name, args, result, error, reads, writes, part, saves, clock_ms, paused_ms, duration_ms, tool_call_id | `exec.rs`, `record_step` (agents, `setup`, `link`, `http`) |
 | `handoff`, `message` | `HandoffPayload`, `MessagePayload` | `exec/talk.rs` |
 | `delegation`, `report`, `finish` | `DelegationPayload`, `ReportPayload`, `FinishPayload` | `exec/dispatch.rs` |
@@ -220,6 +221,7 @@ flowchart LR
 | `pause`, `resume` | `PausePayload`, `ResumePayload` (paused_ms) | `exec/branch.rs` |
 | `reasoning` | `ReasoningPayload`: text, kind, source, model_call_seq, truncated | `reasoning.rs`, the gateway, drivers |
 | `save_point` | `SavePointPayload`: reason, saves, error, paused_ms | `exec/save_point.rs` (bookkeeping, no step) |
+| `spans` | `otel::imported::SpansPayload`: the spans an agent's own OTel SDK sent (one request each) | `otel/receive.rs` |
 
 Payloads typed after their events were first written (`RunStart`, `AgentStart`, `Wake`, `Idle`, `Resume`,
 `Reasoning`) read every field leniently, so a run recorded by an older shaked still reads. JSON shapes are

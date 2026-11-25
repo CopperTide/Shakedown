@@ -59,6 +59,8 @@ pub async fn run(store: Store, opts: ServeOptions) -> anyhow::Result<()> {
     start_proxy(&state).await?;
     // The branches sandboxes' workers run: stops a restart interrupted, dead worker tokens.
     tokio::spawn(crate::worker::holds::sweep_every(state.clone()));
+    // Ended runs to their observability targets, from the records (never from a sandbox).
+    tokio::spawn(crate::otel::exporter::every(state.clone()));
     if state.hosting.get().is_some() {
         // This control box's sandboxes whose branch ended or that outlived their timeout.
         tokio::spawn(crate::hosting::sweep_every(state.clone()));
