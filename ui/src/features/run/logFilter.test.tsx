@@ -95,7 +95,7 @@ describe('step filter on the run page', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Clear all' }));
     expect(screen.getByTestId('search').textContent).toBe('?step=3');
     expect(screen.getAllByRole('row')).toHaveLength(rows.length + 1);
-    expect(document.querySelectorAll('button[data-seq]').length).toBeGreaterThan(1);
+    expect(document.querySelectorAll('button[data-seq]')).toHaveLength(rows.length);
     expect(document.querySelectorAll('[data-event-count]')).toHaveLength(0);
   });
 });
