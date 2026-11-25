@@ -478,6 +478,10 @@ whether they are simulated, with the action flows between them; a timeline with 
 marked by system kind and read or write (writes solid, reads hollow, approvals and refusals as interlocks, errors
 and refusals the only colour), with its duration and outcome; trends (actions per minute per system, context per
 model call, tokens and cost); and the inspector for one step. It follows a running branch over the event stream.
+On the run page, the timeline and the event log share a filter: by action (Reasoning, Model call, a system's
+read or write…), agent and outcome, each value with its count, and a search over the detail. The event log lists
+only the matching steps and the timeline dims the others; the filter is in the address (`?action=Reasoning&agent=…
+&outcome=error&q=…`), so a filtered view can be shared.
 Suites show as experiments (`/experiments/{id}`: pass rates, safety, spread; `/suites/{id}` redirects there), and
 several side by side at `/experiments/compare?ids=a,b`. Checked by eye on two external suites of the retail benchmark driven by a script
 before scripted drivers were removed; not yet checked again with real agents.

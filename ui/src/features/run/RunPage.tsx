@@ -23,6 +23,8 @@ import { type ForkChoice, forkChoiceOf } from './architecture';
 import BestSoFar from './BestSoFar';
 import { studyOf } from './candidates';
 import EventLog from './EventLog';
+import { logRows } from './logFilter';
+import { LogFilters, useLogFilter } from './LogFilters';
 import { forkShiftMs, onForkClock } from '@/model/forkTime';
 import { pausesOf } from './flow';
 import { forkNotice } from './forkNotice';
@@ -129,6 +131,9 @@ function Main({ detail, timeline: { lanes, span }, selected, onSelect, models, s
     return pausesOf(onForkClock(detail.events, detail.start_seq), now - shift);
   }, [detail.events, detail.start_seq, now]);
   const study = useMemo(() => studyOf(detail.events), [detail.events]);
+  const rows = useMemo(() => logRows(lanes, models), [lanes, models]);
+  const { filter, setFilter, matches } = useLogFilter(rows);
+  const filters = <LogFilters rows={rows} filter={filter} setFilter={setFilter} shown={matches?.size ?? null} />;
   return (
     <div className="flex min-w-0 flex-col gap-3">
       {study && <BestSoFar s={study} selected={selected} onSelect={onSelect} />}
@@ -138,8 +143,8 @@ function Main({ detail, timeline: { lanes, span }, selected, onSelect, models, s
           <div className="flex items-center gap-3 border-b border-line pl-3">
             <TabsList className="border-b-0"><TabsTrigger value="timeline">Timeline</TabsTrigger><TabsTrigger value="log">Event log</TabsTrigger><TabsTrigger value="coordination">Coordination</TabsTrigger></TabsList>
           </div>
-          <TabsContent value="timeline"><ActionTimeline lanes={lanes} team={detail.team} span={span} selected={selected} onSelect={onSelect} models={models} onModels={setModels} live={live} pauses={pauses} /></TabsContent>
-          <TabsContent value="log"><EventLog lanes={lanes} span={span} selected={selected} onSelect={onSelect} models={models} /></TabsContent>
+          <TabsContent value="timeline">{filters}<ActionTimeline lanes={lanes} team={detail.team} span={span} selected={selected} onSelect={onSelect} models={models} onModels={setModels} live={live} pauses={pauses} matches={matches} /></TabsContent>
+          <TabsContent value="log">{filters}<EventLog rows={rows} matches={matches} span={span} selected={selected} onSelect={onSelect} /></TabsContent>
           <TabsContent value="coordination"><Coordination events={detail.events} /></TabsContent>
         </Tabs>
       </Panel>
