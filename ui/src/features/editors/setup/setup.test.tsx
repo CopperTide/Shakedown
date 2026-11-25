@@ -43,6 +43,27 @@ describe('setup editor', () => {
     expect((await save()).team).toEqual({ kind: 'builtin', agents: [{ id: 'planner', role: 'You keep orders on schedule.', model: 'claude-sonnet', key: 'anthropic-main', tools: ['*'] }] });
   });
 
+  it('edit_builtin_agent_in_place', async () => {
+    const agents = [
+      { id: 'planner', role: 'Plan.', model: 'claude-sonnet', key: 'k', tools: ['*'] },
+      { id: 'buyer', role: 'Buy.', model: 'claude-haiku', key: 'k', tools: ['erp', 'mail'] },
+    ];
+    mockFetch({ ...BODY, team: { kind: 'builtin', agents } });
+    show();
+    await section('Agents');
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Edit' }))[1]);
+    expect((screen.getByLabelText('Tools') as HTMLInputElement).value).toBe('erp, mail');
+    type('Agent id', 'planner');
+    expect(screen.getByRole('alert').textContent).toMatch(/already called planner/);
+    expect((screen.getByRole('button', { name: 'Save agent' }) as HTMLButtonElement).disabled).toBe(true);
+    type('Agent id', 'buyer');
+    type('Model', 'claude-sonnet');
+    type('Role prompt', 'Buy carefully.');
+    fireEvent.click(screen.getByRole('button', { name: 'Save agent' }));
+    expect(screen.getByRole('button', { name: 'Add agent' })).toBeTruthy();
+    expect((await save()).team).toEqual({ kind: 'builtin', agents: [agents[0], { id: 'buyer', role: 'Buy carefully.', model: 'claude-sonnet', key: 'k', tools: ['erp', 'mail'] }] });
+  });
+
   it('http_auth_is_a_key_name', async () => {
     mockFetch();
     show();

@@ -1,9 +1,10 @@
 // The small form pieces every editor uses: a labelled text box, a labelled choice, a list of items
-// with Remove.
-import { Trash2 } from 'lucide-react';
+// with Remove (and Edit, where items can be edited in place).
+import { Pencil, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input, NativeSelect, Textarea } from '@/components/ui/input';
+import { cn } from '@/lib/cn';
 
 export function TextField({ label, value, onChange, placeholder, mono = false, multiline = false }: {
   label: string;
@@ -40,19 +41,22 @@ export function ChoiceField<V extends string>({ label, value, options, onChange 
   );
 }
 
-/** Items as rows, each with Remove; `empty` when there are none. */
-export function ItemRows<T>({ items, render, onRemove, empty }: {
+/** Items as rows, each with Remove (and Edit with `onEdit`; the row `editing` is marked); `empty` when there are none. */
+export function ItemRows<T>({ items, render, onRemove, onEdit, editing, empty }: {
   items: T[];
   render: (item: T) => ReactNode;
   onRemove: (i: number) => void;
+  onEdit?: (i: number) => void;
+  editing?: number | null;
   empty: string;
 }) {
   if (items.length === 0) return <p className="px-[18px] py-4 text-sm text-faint">{empty}</p>;
   return (
     <ul className="divide-y divide-line">
       {items.map((item, i) => (
-        <li key={i} className="flex items-center gap-3 px-[18px] py-2.5 text-sm">
+        <li key={i} aria-current={editing === i || undefined} className={cn('flex items-center gap-3 px-[18px] py-2.5 text-sm', editing === i && 'bg-hover')}>
           <div className="min-w-0 flex-1">{render(item)}</div>
+          {onEdit && <Button variant="ghost" size="sm" aria-label="Edit" onClick={() => onEdit(i)}><Pencil /></Button>}
           <Button variant="ghost" size="sm" aria-label="Remove" onClick={() => onRemove(i)}><Trash2 /></Button>
         </li>
       ))}
