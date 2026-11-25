@@ -35,6 +35,13 @@ describe('shell', () => {
   });
 
 
+  it('links directly to observability without marking models active', () => {
+    mockFetch({ '/api/project': { name: 'Larkspur Ops', counts: {}, problems: [] } });
+    render(<MemoryRouter initialEntries={['/settings/observability']}><Sidebar /></MemoryRouter>);
+    expect(screen.getByRole('link', { name: 'Observability' }).getAttribute('aria-current')).toBe('page');
+    expect(screen.getByRole('link', { name: 'Connections & models' }).getAttribute('aria-current')).toBeNull();
+  });
+
   it('shows_project_name', async () => {
     mockFetch({ '/api/project': { name: 'Larkspur Ops', counts: {}, problems: [] } });
     render(<MemoryRouter><Sidebar /></MemoryRouter>);

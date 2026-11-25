@@ -32,6 +32,11 @@ describe('Observability', () => {
     const form = { ...emptyTargetForm(), kind: 'otlp' as const, name: 'jaeger', endpoint: 'http://127.0.0.1:4318', include_content: false };
     expect(targetBody(form)).toEqual({ kind: 'otlp', name: 'jaeger', endpoint: 'http://127.0.0.1:4318', headers: {}, include_content: false });
   });
+  it('shows when no external destinations are configured', () => {
+    const html = draw(emptyTargetForm(), []);
+    expect(html).toContain('No telemetry destinations configured');
+    expect(html).toContain('Run events are recorded locally');
+  });
   it('offers metrics only for a generic collector', () => {
     expect(draw(emptyTargetForm())).not.toContain('OTLP metrics every minute');
     expect(draw(emptyTargetForm(), [{ ...target, kind: 'otlp' }])).toContain('OTLP metrics every minute');

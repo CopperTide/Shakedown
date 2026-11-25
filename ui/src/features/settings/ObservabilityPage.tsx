@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Field, Input, Textarea } from '@/components/ui/input';
 import { Panel, PanelHeader } from '@/components/ui/panel';
 import { Segmented } from '@/components/ui/segmented';
-import { EmptyState, ErrorState } from '@/components/ui/state';
+import { EmptyState, ErrorState, LoadingState } from '@/components/ui/state';
 import { Toggle } from '@/components/ui/toggle';
 import { useAction } from '@/hooks/useAction';
 import { useQuery } from '@/hooks/useQuery';
@@ -150,6 +150,19 @@ function ExportList({ exports }: { exports: ExportRow[] }) {
   );
 }
 
+function ExportStatus({ targets }: { targets: TargetRow[] }) {
+  const automatic = targets.filter((t) => t.auto_export).length;
+  return (
+    <section className="rounded-lg border border-line bg-raised p-4" aria-label="Telemetry status">
+      <h2 className="text-base font-semibold">{targets.length ? `${targets.length} telemetry destination${targets.length === 1 ? '' : 's'}` : 'No telemetry destinations configured'}</h2>
+      <p className="mt-1 text-sm text-muted">{targets.length
+        ? `${automatic} set to export new runs automatically when they finish. Use Test to check a destination; Recent exports shows delivery results.`
+        : 'Run events are recorded locally. Add a destination below to send traces to your observability platform.'}</p>
+      <p className="mt-2 text-xs text-muted">Langfuse · Arize Phoenix · OTLP/HTTP collectors. Completed-run traces include model and tool calls; prompt and response content is controlled per destination.</p>
+    </section>
+  );
+}
+
 export function ObservabilityView({ targets, exports, form, testing, error, onChange, onAdd, onTest, onFlags, onDelete }: {
   targets: TargetRow[]; exports: ExportRow[]; form: TargetForm; testing: string | null; error: string | null;
   onChange: (f: TargetForm) => void; onAdd: () => void; onTest: (id: string) => void;
@@ -158,6 +171,7 @@ export function ObservabilityView({ targets, exports, form, testing, error, onCh
   const set = (p: Partial<TargetForm>) => onChange({ ...form, ...p });
   return (
     <>
+      <ExportStatus targets={targets} />
       <Panel>
         <PanelHeader title="Send runs to" />
         <form className="flex flex-col gap-3 p-4" onSubmit={(e) => { e.preventDefault(); onAdd(); }}>
@@ -170,7 +184,7 @@ export function ObservabilityView({ targets, exports, form, testing, error, onCh
       </Panel>
       <Panel>
         <PanelHeader title="Targets" />
-        {targets.length === 0 ? <EmptyState title="No targets yet." hint="Prometheus can also scrape /metrics." /> : (
+        {targets.length === 0 ? <EmptyState title="No targets yet." hint="Add a destination above. Prometheus can also scrape /metrics." /> : (
           <ul className="divide-y divide-line">
             {targets.map((t) => (
               <TargetItem key={t.id} t={t} testing={testing === t.id} onTest={() => onTest(t.id)} onFlags={(f) => onFlags(t.id, f)} onDelete={() => onDelete(t.id)} />
@@ -206,9 +220,9 @@ export default function ObservabilityPage() {
   return (
     <SettingsPage>
       {failed && <ErrorState error={String(failed)} />}
-      <ObservabilityView targets={targets.data ?? []} exports={exports.data ?? []} form={form} testing={testing}
+      {targets.loading && !targets.data ? <LoadingState label="Loading telemetry destinations" /> : <ObservabilityView targets={targets.data ?? []} exports={exports.data ?? []} form={form} testing={testing}
         error={add.error ? String(add.error) : null} onChange={setForm} onAdd={() => { void add.run(); }}
-        onTest={(id) => { void test.run(id); }} onFlags={(id, f) => { void flags.run(id, f); }} onDelete={(id) => { void remove.run(id); }} />
+        onTest={(id) => { void test.run(id); }} onFlags={(id, f) => { void flags.run(id, f); }} onDelete={(id) => { void remove.run(id); }} />}
     </SettingsPage>
   );
 }

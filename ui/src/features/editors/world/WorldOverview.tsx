@@ -37,6 +37,7 @@ export default function WorldOverview({ world, onOpen, onChange, groups, scenari
         <Summary title="Software flows" text={count(world.flows?.length, 'flow', 'flows')} onOpen={() => onOpen('flows')} />
         <Summary title="Data" text={count(world.data?.length, 'source', 'sources')} onOpen={() => onOpen('data')} />
         <Summary title="People" text={count(world.people?.length, 'person', 'people')} onOpen={() => onOpen('people')} />
+        <Summary title="Observability & on-call" text={count(world.observability?.tools?.length, 'declared tool', 'declared tools')} onOpen={() => onOpen('observability')} />
         <Summary title="Runtime" text={world.package ? `Runs on ${world.package}` : 'No runtime yet'} onOpen={() => onOpen('runtime')} />
       </div>
       <RelatedItems title="Scenarios in this world" noun="scenario" items={scenarios} to={(id) => `/scenarios/${id}`} empty="No scenarios in this world yet." />

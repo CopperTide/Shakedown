@@ -1,6 +1,7 @@
 // Observability and on-call: the tools runs report to, the people who answer pages, and what
 // counts as needing a human.
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import type { Observability, WorldBody } from '@/model/project';
@@ -47,7 +48,10 @@ export default function ObservabilitySection({ world, onChange }: { world: World
   const set = (o: Observability) => onChange(withObservability(world, o));
   return (
     <div className="grid gap-4">
-      <SectionHead title="Observability & on-call" about="Your monitoring and on-call tools, so agents and people interface with them as in production. Saved with the world. Runs use them once worlds run from their own files." />
+      <SectionHead title="Observability & on-call" about="Declare monitoring tools and simulated operators for this world. These declarations do not configure telemetry export." />
+      <Card title="Export actual run telemetry" description="Send completed runs to Langfuse, Arize Phoenix, or an OTLP collector. Configure destinations, test connectivity, and inspect export history in project settings.">
+        <div className="px-[18px] py-3"><Button asChild><Link to="/settings/observability">Open telemetry destinations</Link></Button></div>
+      </Card>
       <ObsTools obs={obs} onChange={set} />
       <Operators obs={obs} onChange={set} />
       <HumanRules obs={obs} onChange={set} />

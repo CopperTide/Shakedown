@@ -18,7 +18,7 @@ export default function ObsTools({ obs, onChange }: { obs: Observability; onChan
     setF({ id: '', product: '', mode: 'stand-in', seeded: '', key: '' });
   };
   return (
-    <Card title="Tools" description="Datadog, Grafana, Splunk, Sentry, PagerDuty, an OpenTelemetry collector…">
+    <Card title="World tool declarations" description="Datadog, Grafana, Splunk, Sentry, PagerDuty… Saved as world configuration; adding a declaration does not connect or verify a tool.">
       <ItemRows items={list} empty="No observability tools yet." onRemove={(i) => onChange({ ...obs, tools: removeAt(list, i) })}
         render={(t) => <span><span className="font-medium">{t.product}</span> <span className="text-faint">· {t.mode === 'real' ? 'real, tagged by run' : 'stand-in'}</span></span>} />
       <div className="grid gap-3 border-t border-line p-[18px] md:grid-cols-2">
