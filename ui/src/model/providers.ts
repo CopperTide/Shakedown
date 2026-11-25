@@ -35,9 +35,10 @@ export function kindOf(id: string): ProviderKind {
   return 'local';
 }
 
-/** A short name: OpenRouter, OpenAI, Anthropic, or `<name> (local)`. */
+/** A short name: OpenRouter, OpenAI, Anthropic, `<name> key` for a saved key named `key:<name>`, or `<name> (local)`. */
 export function providerName(id: string): string {
   if (isBedrock(id)) return 'Bedrock';
+  if (id.startsWith('key:')) return `${id.slice('key:'.length)} key`;
   switch (kindOf(id)) {
     case 'openrouter': return 'OpenRouter';
     case 'openai': return 'OpenAI';

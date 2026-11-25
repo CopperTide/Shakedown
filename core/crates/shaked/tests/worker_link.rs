@@ -62,6 +62,7 @@ async fn started(fx: &AppFx, plan: &BranchPlan, ticket: &str) -> (Ws, String) {
         plan: got,
         token,
         gateway,
+        ..
     } = hear(&mut ws).await
     else {
         panic!("the first answer is start");

@@ -16,7 +16,7 @@ pub mod reach;
 mod status;
 mod transport;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::prices;
@@ -39,6 +39,14 @@ pub const CUSTOM_PREFIX: &str = "custom:";
 /// One of the model keys you can see, by its name: `key:<name>`. The only way a key shared with
 /// you (another member's) serves your agents.
 pub const KEY_PREFIX: &str = "key:";
+/// A key an agent names (`key:<name>`) and the provider id it keys (`openrouter`,
+/// `custom:<name>`, …), never its secret: what a sandbox's worker prices that agent's calls by,
+/// while the control box adds the key itself ([`ProviderConfig::pricing_named`]).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NamedKey {
+    pub name: String,
+    pub provider: String,
+}
 /// Amazon Bedrock in one AWS region: `bedrock:<region>`.
 pub const BEDROCK_PREFIX: &str = "bedrock:";
 /// The local provider the old single-upstream override becomes.
@@ -310,6 +318,17 @@ impl ProviderConfig {
         })
     }
 
+    /// `self` knowing each of `named` (`key:<name>`) as the provider it keys, with no key: what a
+    /// worker, which holds no keys, prices those agents' calls by.
+    pub fn pricing_named(mut self, named: &[NamedKey]) -> ProviderConfig {
+        for k in named {
+            if let Ok(p) = self.resolve_pricing(Some(&k.provider)) {
+                self.named.push((k.name.clone(), p));
+            }
+        }
+        self
+    }
+
     /// Bedrock in the region `id` names (`Ok(None)` never: a bad region is an error).
     fn bedrock(&self, id: &str) -> Result<Option<Provider>, String> {
         let region = id.strip_prefix(BEDROCK_PREFIX).unwrap_or_default();
@@ -447,5 +466,33 @@ mod tests {
         };
         assert_eq!(c.resolve(Some("anthropic")).unwrap().max_tokens, 64_000);
         assert_eq!(c.all()[2].max_tokens, 64_000);
+    }
+
+    #[test]
+    fn a_named_key_prices_as_the_provider_it_keys() {
+        let named = |name: &str, provider: &str| NamedKey {
+            name: name.into(),
+            provider: provider.into(),
+        };
+        let keys = [named("mine", "openrouter"), named("pod", "custom:pod")];
+        let c = ProviderConfig::without_environment().pricing_named(&keys);
+        let p = c.resolve_pricing(Some("key:mine")).unwrap();
+        assert_eq!(
+            (p.kind, p.id.as_str()),
+            (ProviderKind::OpenRouter, OPENROUTER)
+        );
+        assert!(p.endpoint.key.is_none(), "a worker holds no key");
+        let pod = c.resolve_pricing(Some("key:pod")).unwrap();
+        assert_eq!(pod.kind, ProviderKind::Local);
+        let e = c.resolve_pricing(Some("key:other")).unwrap_err();
+        assert!(e.contains("unknown provider"), "{e}");
+        let mut keyed = c.clone();
+        keyed.named[0].1.endpoint.key = Some(Secret::new("k"));
+        let names = |c: &ProviderConfig| c.named.iter().map(|(n, _)| n.clone()).collect::<Vec<_>>();
+        assert_eq!(
+            names(&keyed.environment_dropped()),
+            ["pod"],
+            "no secret survives"
+        );
     }
 }

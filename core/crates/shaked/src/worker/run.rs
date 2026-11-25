@@ -33,7 +33,7 @@ use crate::{
     exec::BranchCtx,
     gateway::ForwardTo,
     layer::WorkerLayer,
-    providers::{ProviderConfig, Secret},
+    providers::{NamedKey, ProviderConfig, Secret},
     runner::{self, StartPoint},
     store::Store,
 };
@@ -98,15 +98,17 @@ async fn take_ticket(path: &std::path::Path) -> Result<String> {
 
 /// The worker's own shaked on `hub`, reached at `base`: no database (its records go over the
 /// link), [`WorkerLayer`] (no vault, no keys from the environment), its model calls sent on
-/// `to` the control box, its CLI agents in the `jail` when there is one.
+/// `to` the control box, priced knowing the `keys` its agents name, its CLI agents in the `jail`
+/// when there is one.
 fn worker_app(
     hub: parts::Hub,
     base: String,
-    to: ForwardTo,
+    (to, keys): (ForwardTo, &[NamedKey]),
     jail: Option<Jail>,
 ) -> Result<Arc<AppState>> {
     let store = Arc::new(Store::detached(Arc::new(WorkerLayer))?);
-    let mut config = Config::with_providers(ProviderConfig::without_environment());
+    let providers = ProviderConfig::without_environment().pricing_named(keys);
+    let mut config = Config::with_providers(providers);
     config.self_base = base;
     config.forward_to = Some(to);
     config.jail = jail;
@@ -118,7 +120,7 @@ fn worker_app(
 /// The worker's shaked ([`worker_app`]) on the hub from the environment, serving its agents' MCP
 /// endpoint, gateway (forwarding `to` the control box) and proxy on 127.0.0.1; the MCP endpoint
 /// and gateway on the jail's address too, when the environment names a jail.
-async fn worker_state(to: ForwardTo) -> Result<Arc<AppState>> {
+async fn worker_state(to: ForwardTo, keys: &[NamedKey]) -> Result<Arc<AppState>> {
     let jail = Jail::from_env().map_err(anyhow::Error::msg)?;
     let jailed = match &jail {
         Some(j) => Some(bind(j.listen).await?),
@@ -126,7 +128,8 @@ async fn worker_state(to: ForwardTo) -> Result<Arc<AppState>> {
     };
     let listener = bind(([127, 0, 0, 1], 0).into()).await?;
     let hub = crate::serve::worker_hub().await?;
-    let state = worker_app(hub, format!("http://{}", listener.local_addr()?), to, jail)?;
+    let base = format!("http://{}", listener.local_addr()?);
+    let state = worker_app(hub, base, (to, keys), jail)?;
     let agents = crate::mcp::router().merge(crate::gateway::worker_router());
     let agents = agents.with_state(state.clone());
     for l in jailed.into_iter().chain([listener]) {
@@ -205,12 +208,13 @@ async fn drive(o: Opened) -> Result<()> {
         plan,
         token,
         gateway,
+        keys,
         records,
         controls,
         link,
     } = o;
     let token = Secret::new(token);
-    let state = worker_state(ForwardTo { gateway, token }).await?;
+    let state = worker_state(ForwardTo { gateway, token }, &keys).await?;
     let ctx = match runner::stand_up(&state, &plan, records).await {
         Ok(ctx) => Arc::new(ctx),
         // Its end (`infra_error`) went over the link.
@@ -238,7 +242,7 @@ mod tests {
             gateway: "http://127.0.0.1:9/gateway".into(),
             token: Secret::new("sdw_t"),
         };
-        let state = worker_app(hub, "http://127.0.0.1:9".into(), to, None).unwrap();
+        let state = worker_app(hub, "http://127.0.0.1:9".into(), (to, &[]), None).unwrap();
         let Err(refused) = state.vault() else {
             panic!("no vault in a worker");
         };

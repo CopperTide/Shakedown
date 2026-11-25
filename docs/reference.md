@@ -334,7 +334,8 @@ key replaces the environment's key for that provider (on its server, unless the 
 `local:<name>` of the same name). The newest key of a provider wins. Without one, the environment's key is
 used. An agent can also name one key as its provider, `key:<name>`. Where keys are shared between people (a
 hosted org), only your own keys apply by kind: another member's key serves your agent only when it names it
-`key:<name>`, and never when that key names its own server.
+`key:<name>`, and never when that key names its own server. In a cloud run the same keys apply, the run
+owner's: the sandbox holds none, and the control box adds the key to each model call.
 
 A local provider is any server that speaks the OpenAI chat-completions API, such as Ollama, vLLM, LM Studio or
 llama.cpp's server. For example:

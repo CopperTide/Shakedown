@@ -28,7 +28,7 @@ use super::{
     frames::{ToControl, ToWorker, GIVE_UP, REFUSED_ENDED, REFUSED_TOKEN},
     link_records::{LinkRecords, Outbox, Request},
 };
-use crate::runner::BranchPlan;
+use crate::{providers::NamedKey, runner::BranchPlan};
 
 type Ws = WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>;
 
@@ -126,6 +126,8 @@ pub struct Opened {
     pub token: String,
     /// The control box's model gateway.
     pub gateway: String,
+    /// The keys the team's agents name, and the providers they key (no secrets).
+    pub keys: Vec<NamedKey>,
     pub records: Arc<LinkRecords>,
     /// Pause, resume and stop from the control box, in order.
     pub controls: UnboundedReceiver<ToWorker>,
@@ -140,25 +142,19 @@ pub async fn open(url: &str, ticket: &str, patience: Patience) -> Result<Opened>
         plan,
         token,
         gateway,
+        keys,
     } = start
     else {
         bail!("the first answer was not start");
     };
     let (records, requests) = LinkRecords::new(plan.branch_id.clone());
     let (controls_to, controls) = mpsc::unbounded_channel();
-    let link = LinkClient {
-        url: url.to_string(),
-        token: token.clone(),
-        patience,
-        requests: Some(requests),
-        controls: controls_to,
-        outbox: Outbox::default(),
-        down_since: None,
-    };
+    let link = LinkClient::new(url, &token, patience, (requests, controls_to));
     Ok(Opened {
         plan: *plan,
         token,
         gateway,
+        keys,
         records: Arc::new(records),
         controls,
         link: tokio::spawn(link.serve(ws)),
@@ -209,6 +205,25 @@ async fn next_request(requests: &mut Option<UnboundedReceiver<Request>>) -> Opti
 }
 
 impl LinkClient {
+    /// The link to `url` with worker token `token`, nothing sent yet: the branch's records'
+    /// `requests` go out, the control box's controls to `controls`.
+    fn new(
+        url: &str,
+        token: &str,
+        patience: Patience,
+        (requests, controls): (UnboundedReceiver<Request>, UnboundedSender<ToWorker>),
+    ) -> LinkClient {
+        LinkClient {
+            url: url.to_string(),
+            token: token.to_string(),
+            patience,
+            requests: Some(requests),
+            controls,
+            outbox: Outbox::default(),
+            down_since: None,
+        }
+    }
+
     /// Keeps the link up until the control box has the branch's end: a lost connection is
     /// joined again; a refusal once the end was sent means the end was recorded (the token died
     /// with the branch).

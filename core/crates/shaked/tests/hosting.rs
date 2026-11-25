@@ -4,6 +4,7 @@
 //! `cargo test -p shaked --test hosting -- --ignored live_ --nocapture`. Each kills every
 //! sandbox it made, also when it fails, and its sandboxes time out on their own anyway.
 mod support;
+use support::fake_apis::{fake_apis, test_vault, FakeApis, Seen};
 use support::link::ws_url;
 use support::packages::{Package, TestHub, ToyRoot};
 use support::scripted::{nothing, scripted_team, Between};
@@ -289,6 +290,57 @@ fn a_run_with_hosting_runs_in_a_fake_sandbox() {
         assert_eq!(evs.first().map(|e| e.kind), Some(EventKind::RunStart));
         killed(&fake, 1).await;
         assert_eq!(fake.created(), 1);
+    });
+}
+
+/// The run owner's own OpenRouter key, as the Settings page saves it.
+const OWN_ROUTER_KEY: &str = "sk-or-own-key-4444";
+
+/// A hosted control box whose providers are `up` (no key of the environment's), its caller's
+/// own OpenRouter key saved under the name `openrouter`, on `up`: the app and the backend.
+async fn keyed_hosted(tag: &str, up: &FakeApis) -> (AppFx, Arc<FakeBackend>) {
+    let root = packages::toy_world(&format!("host-{tag}"), &[], &["--scored"]);
+    let toys = root.0.clone();
+    let fx = AppFx::idle("hosting", tag).root(root).bench("toybench");
+    let fx = fx.providers(up.providers()).start().await;
+    let _ = fx.state.vault.set(test_vault());
+    let key = json!({"name": "openrouter", "kind": "openrouter", "secret": OWN_ROUTER_KEY,
+                     "base_url": format!("{}/v1", up.base)});
+    let (status, v) = fx.post("/api/models/keys", key).await;
+    assert_eq!(status, 200, "{v}");
+    let fake = fake_host(&fx, &toys, |h| h);
+    (fx, fake)
+}
+
+/// A built-in API-mode agent `id` on `provider` (None: the default).
+fn api_agent(id: &str, provider: Option<&str>) -> Value {
+    json!({"id": id, "name": id, "kind": "open", "model": "m", "provider": provider})
+}
+
+#[test]
+fn a_hosted_api_agent_calls_on_the_owners_key_by_name_or_by_kind() {
+    run(async {
+        let up = fake_apis().await;
+        let (fx, fake) = keyed_hosted("keys", &up).await;
+        let agents = [
+            api_agent("named", Some("key:openrouter")),
+            api_agent("plain", None),
+        ];
+        let team = json!({"id": "t", "name": "T", "agents": agents});
+        let id = start(&fx, &serde_json::from_value(team).unwrap()).await;
+        let b = live::ended(&fx.state, &id).await;
+        assert_ne!(b.status, BranchStatus::InfraError, "{:?}", b.error);
+        let seen = up.seen();
+        let calls = seen.iter().filter(|s| s.path == "/v1/chat/completions");
+        let auth = |s: &Seen| s.headers["authorization"].to_str().unwrap().to_string();
+        let auths: Vec<String> = calls.map(auth).collect();
+        let want = format!("Bearer {OWN_ROUTER_KEY}");
+        assert_eq!(
+            auths,
+            [want.clone(), want],
+            "one call per agent, on the owner's key"
+        );
+        killed(&fake, 1).await;
     });
 }
 

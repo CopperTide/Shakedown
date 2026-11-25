@@ -6,6 +6,7 @@
 use crate::{
     model::{BranchStatus, EventKind},
     overhead::Overhead,
+    providers::NamedKey,
     runner::BranchPlan,
 };
 use serde::{Deserialize, Serialize};
@@ -47,10 +48,14 @@ pub enum ToControl {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ToWorker {
     /// `gateway` is the control box's model gateway base URL.
+    /// `keys`: the keys the team's agents name (`key:<name>`) and the providers they key, for
+    /// pricing their calls; never a secret (the control box adds the key to each call).
     Start {
         plan: Box<BranchPlan>,
         token: String,
         gateway: String,
+        #[serde(default)]
+        keys: Vec<NamedKey>,
     },
     /// Sent in `n` order; `seq` is what the control box assigned.
     Ack {
@@ -145,6 +150,10 @@ mod tests {
             plan: Box::new(plan()),
             token: "k".into(),
             gateway: "http://g".into(),
+            keys: vec![NamedKey {
+                name: "mine".into(),
+                provider: "openrouter".into(),
+            }],
         };
         round_trip(start, "start");
         round_trip(ToWorker::Ack { n: 4, seq: 90 }, "ack");

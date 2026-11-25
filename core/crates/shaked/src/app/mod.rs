@@ -293,7 +293,7 @@ impl AppState {
         let policy = store.layer().policy();
         let (http, stream_http) = (shared_client(policy), stream_client(policy));
         if !policy.environment_keys {
-            config.providers = ProviderConfig::without_environment();
+            config.providers = config.providers.environment_dropped();
         }
         let (benchmark, current) = start_benchmarks(&hub, &config);
         AppState {

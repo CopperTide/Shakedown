@@ -88,7 +88,11 @@ sequenceDiagram
    temporary file in the same folder and renames it.
 2. **Open.** `client::open` says hello with the ticket and waits up to 60 s for `Start`.
 3. **Worker app.** `worker_app` builds a shaked with `Store::detached` (no database: any query fails at once),
-   `WorkerLayer`, `ProviderConfig::without_environment()` and `forward_to` set. Its world MCP endpoint, gateway
+   `WorkerLayer`, `ProviderConfig::without_environment()` knowing `Start.keys` by name with no key
+   (`pricing_named`), and `forward_to` set. The worker's own loop resolves an agent's provider only to price
+   its calls and pick a default model; the control box resolves it again with the run owner's keys
+   (`keys::provider_for`: a `key:<name>` the owner may use, else the owner's own key of the provider's kind,
+   else the environment's) and adds the key to each call. Its world MCP endpoint, gateway
    and proxy listen on 127.0.0.1. With a jail (`Jail::from_env`), the MCP endpoint and gateway listen on the
    jail's address too, and the CLI drivers hand out URLs on it.
 4. **Drive.** `runner::stand_up(plan, LinkRecords)`, then `run_branch`. `obey` applies `Pause`, `Resume`,
@@ -105,7 +109,7 @@ One JSON object per WebSocket text message, tagged by `type` (`src/worker/frames
 | worker → control | `hello {ticket, resume_from}` | First frame. `ticket` is a ticket `sdt_` or, on a reconnect, the worker token `sdw_`. `resume_from` is the last `n` acked. |
 | worker → control | `event {n, agent, kind, payload, overhead}` | One event. `n` is the worker's counter from 1. |
 | worker → control | `ended {status, error}` | How the branch ended. Sent only after every event is acked. |
-| control → worker | `start {plan, token, gateway}` | The `BranchPlan`, the worker token, the control box's gateway base. |
+| control → worker | `start {plan, token, gateway, keys}` | The `BranchPlan`, the worker token, the control box's gateway base, and `keys`: each key the team's agents name (`key:<name>`) with the provider id it keys (`{name, provider}`), never its secret. |
 | control → worker | `ack {n, seq}` | Event `n` is recorded as `seq`. |
 | control → worker | `pause`, `resume`, `stop` | A hold pressed in the UI or by the control box. |
 | control → worker | `over_budget {why}` | The spend estimate on the control box passed the limit. The worker stops, the branch ends `budget_exceeded`. |

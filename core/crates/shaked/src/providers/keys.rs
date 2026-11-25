@@ -9,13 +9,14 @@ use uuid::Uuid;
 
 pub use super::key_check::{check_new, check_secret, test_key, Checked};
 use super::{
-    reach, Endpoint, LocalEndpoint, Provider, ProviderConfig, ProviderKind, Secret, BEDROCK_PREFIX,
-    CUSTOM_PREFIX, KEY_PREFIX, LOCAL_PREFIX,
+    reach, Endpoint, LocalEndpoint, NamedKey, Provider, ProviderConfig, ProviderKind, Secret,
+    BEDROCK_PREFIX, CUSTOM_PREFIX, KEY_PREFIX, LOCAL_PREFIX,
 };
 use crate::{
     app::AppState,
     auth::Caller,
     layer::{KeySource, ModelWant},
+    model::Team,
     store::{KeyKind, KeyRow, OpenKey},
 };
 
@@ -167,6 +168,31 @@ pub async fn config_for(state: &AppState, caller: &Caller) -> ProviderConfig {
             state.config.providers.clone()
         }
     }
+}
+
+/// The keys `team`'s agents name (`key:<name>`) among those `caller` sees, each with the
+/// provider it keys and no secret: what a sandbox's worker is told in `Start`.
+pub async fn named_in(state: &AppState, caller: &Caller, team: &Team) -> Vec<NamedKey> {
+    let agents = team.agents.iter();
+    let names: Vec<&str> = agents
+        .filter_map(|a| a.provider.as_deref()?.strip_prefix(KEY_PREFIX))
+        .collect();
+    if names.is_empty() {
+        return vec![];
+    }
+    let rows = match state.store.at(caller).list_keys().await {
+        Ok(rows) => rows,
+        Err(e) => {
+            eprintln!("shaked: listing your model keys: {e:#}");
+            return vec![];
+        }
+    };
+    let named = rows.iter().filter(|r| names.contains(&r.name.as_str()));
+    let named = named.map(|r| NamedKey {
+        name: r.name.clone(),
+        provider: provider_id(r),
+    });
+    named.collect()
 }
 
 /// The provider `asked` names for `caller`, and whose key pays: your key, else the environment's,

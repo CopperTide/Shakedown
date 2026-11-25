@@ -195,11 +195,14 @@ async fn redeem(
         return Err(refused("a ticket's worker resumes from 0"));
     }
     let (taken, link, plan) = take_ticket(state, secret)?;
+    let caller = taken.ticket.caller.clone();
     let token = claimed_token(state, &link, secret, taken).await?;
+    let keys = crate::providers::keys::named_in(state, &caller, &plan.team).await;
     let start = ToWorker::Start {
         plan: Box::new(plan),
         token,
         gateway: format!("{}/gateway", state.config.public_base()),
+        keys,
     };
     Ok((link, Some(start)))
 }
