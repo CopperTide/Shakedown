@@ -196,7 +196,7 @@ async fn export(
     Ok(Json(json!({ "branch_id": id, "exports": results })))
 }
 
-/// `GET /metrics`: the caller's runs as Prometheus text (an API token's org when hosted).
+/// `GET /metrics`: the runs the caller sees, as Prometheus text.
 async fn metrics(
     State(state): State<Arc<AppState>>,
     Who(caller): Who,
