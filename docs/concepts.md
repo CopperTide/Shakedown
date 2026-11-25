@@ -41,8 +41,7 @@ section has a View button on each file source that shows the file (or the files 
 1 MiB, or the size of a binary file. The same is `worlds.data` for MCP, the assistant and the API.
 
 **Groups.** A world's optional `group` is the name lists show it under, so the worlds of one customer sit together:
-the Worlds page and the sidebar list groups A to Z, the worlds in no group last, and worlds by label within each (the
-sidebar opens only the group of the world on screen). A file without `group` loads and saves exactly as before (the
+the Worlds page lists groups A to Z, the worlds in no group last, and worlds by label within each. A file without `group` loads and saves exactly as before (the
 field is written only when set); a blank name, or one with spaces at either end, is a problem at `/group`. Set it in
 the world's Overview (a choice of the project's groups or a new one), drag a world onto a group's header (a toast
 offers Undo), or rename a group from its header, which rewrites every world in it, each file checked before any is
