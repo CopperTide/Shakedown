@@ -11,9 +11,9 @@ import HomePage from './HomePage';
 
 const NOW = Date.parse('2026-11-21T12:00:00Z');
 
-function run(id: string, daysAgo: number, status: 'passed' | 'failed' | 'running'): RunSummary {
+function run(id: string, daysAgo: number, status: string): RunSummary {
   const at = new Date(NOW - daysAgo * 86_400_000).toISOString();
-  return { id, task_id: 't', created_at: at, branches: [{ id: `${id}b`, run_id: id, parent_id: null, start_seq: null, team: { agents: [] } as never, changes: null, fork_note: null, status, error: null, created_at: at, ended_at: null }] };
+  return { id, task_id: 't', created_at: at, branches: [{ id: `${id}b`, run_id: id, parent_id: null, start_seq: null, team: { agents: [] } as never, changes: null, fork_note: null, status: status as never, error: null, created_at: at, ended_at: null }] };
 }
 
 function mockFetch(project: unknown, runs: RunSummary[] = []) {
@@ -38,6 +38,12 @@ describe('home', () => {
   it('attention_lists_failures_newest_first', () => {
     const list = attention([run('a', 3, 'failed'), run('b', 1, 'failed'), run('c', 0, 'passed')]);
     expect(list.map((b) => b.run_id)).toEqual(['b', 'a']);
+  });
+
+  it('errored_stopped_and_over_budget_runs_count_as_failed', () => {
+    const runs = ['infra_error', 'stopped', 'interrupted', 'budget_exceeded', 'failed', 'passed', 'queued'].map((s, i) => run(s, i / 10, s));
+    expect(weekStats(runs, NOW)).toEqual({ runs: 7, passed: 1, failed: 5, running: 0, passRate: 1 / 6 });
+    expect(attention(runs).map((b) => b.run_id)).toEqual(['infra_error', 'stopped', 'interrupted', 'budget_exceeded', 'failed']);
   });
 
   it('home_without_project', async () => {
