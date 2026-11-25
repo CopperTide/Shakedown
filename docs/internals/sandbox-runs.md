@@ -14,9 +14,9 @@ enforcement on the control box, holds and the sweep, the E2B sandbox backend (`s
 create, write a file, kill, state), the E2B template a sandbox starts from, in `deploy/sandbox` (see
 [In the sandbox](#in-the-sandbox)), and `Hosting` (`src/hosting/mod.rs`), which runs each new branch of a
 control box in a sandbox of its own and kills the sandbox when the branch ends. A control box runs branches
-in sandboxes only when the binary embedding shaked sets `ServeOptions::hosting` (the hosted layer, M2a Task 12
-in the Cloud plan `docs/superpowers/plans/2026-11-21-hosted-shakedown-m2a-sandbox-runner.md`); personal use
-never does. The link tests play `Hosting`'s part by hand (`tests/support/link.rs`, `ticketed`).
+in sandboxes only when the binary embedding shaked sets `ServeOptions::hosting`. The hosted layer does with
+`SHAKED_CLOUD=e2b` (CopperTide-Cloud `crates/shaked-hosted/src/cloud.rs`, described in its
+`docs/internals/hosted-runs.md`); personal use never does. The link tests play `Hosting`'s part by hand (`tests/support/link.rs`, `ticketed`).
 
 ## Modules
 
@@ -204,8 +204,10 @@ queue); slots and deadlines live in memory, so a restarted control box counts no
 deadline for branches already running (the sweep and E2B's timeout still end their sandboxes, and the link
 sweep ends their branches when the worker token dies); a running branch whose sandbox vanished while no
 watcher ran ends only by that token sweep; quotas from `quotas.toml` (sandbox-hours per month, a global
-ceiling, `SHAKED_CLOUD=off`) and the sealed envd token (R2) are the hosted layer's to add. There is no `sandboxes` table in the
-engine (ruling R6: the hosted layer keeps `shakedown_hosted.sandboxes`); the backend's labels are the record.
+ceiling) and the sealed envd token (R2) are the hosted layer's to add. There is no `sandboxes` table in the
+engine (ruling R6): the backend's labels are the record. The hosted layer wraps the backend so each sandbox gets
+its `shakedown_hosted.sandboxes` row, named by the `sandbox` label, before its ticket, and marks the row deleted on
+kill (CopperTide-Cloud `crates/shaked-hosted/src/sandboxes.rs`).
 
 The spec a sandbox is created with:
 
