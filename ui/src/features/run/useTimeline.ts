@@ -11,7 +11,8 @@ import { stepOrder } from './timelineLayout';
 export function useTimeline(d: BranchDetail | null, models: boolean) {
   const lanes = useMemo(() => (d ? buildLanes(onForkClock(d.events, d.start_seq), d.team, d.start_seq) : []), [d]);
   const order = useMemo(() => stepOrder(lanes, models), [lanes, models]);
-  return { lanes, span: spanOf(lanes), order };
+  const span = useMemo(() => spanOf(lanes), [lanes]);
+  return { lanes, span, order };
 }
 
 export type Timeline = ReturnType<typeof useTimeline>;

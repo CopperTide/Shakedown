@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ApproximateMark, StatusChip } from '@/components/marks';
 import { PageBody, PageGate, PageHeader, Stat } from '@/components/ui/page';
@@ -24,7 +24,7 @@ import { type ForkChoice, forkChoiceOf } from './architecture';
 import BestSoFar from './BestSoFar';
 import { studyOf } from './candidates';
 import EventLog from './EventLog';
-import { logRows, matching, parseFilter } from './logFilter';
+import { logRows } from './logFilter';
 import { LogFilters, useLogFilter } from './LogFilters';
 import { forkShiftMs, onForkClock } from '@/model/forkTime';
 import { pausesOf } from './flow';
@@ -56,7 +56,7 @@ export function runnerLine(events: Event[]): string {
 }
 
 /** The figures that say how it went: time, cost, the check, safety and any refusal. */
-function Stats({ detail }: { detail: BranchDetail }) {
+const Stats = memo(function Stats({ detail }: { detail: BranchDetail }) {
   const sm = summarize(detail, detail.events);
   const st = runStats(detail.events, detail.start_seq);
   const cost = formatCost(sm.cost_usd, sm.cost_source, teamProviders(detail.team).some(costIsUnknown));
@@ -69,10 +69,10 @@ function Stats({ detail }: { detail: BranchDetail }) {
       {st.abnormal > 0 && <Stat label="Refused or failed actions" value={`⚠ ${st.abnormal}`} abnormal />}
     </div>
   );
-}
+});
 
 /** The rest, folded: the world, how the agents ran, the disruption, tokens, steps, and the deployment estimate. */
-function More({ detail }: { detail: BranchDetail }) {
+const More = memo(function More({ detail }: { detail: BranchDetail }) {
   const sm = summarize(detail, detail.events);
   const st = runStats(detail.events, detail.start_seq);
   const scenario = recordedLine(runStartOf(detail.events)?.scenario);
@@ -92,7 +92,7 @@ function More({ detail }: { detail: BranchDetail }) {
       </div>
     </details>
   );
-}
+});
 
 function Header({ runId, detail, siblings, title, step }: { runId: string; detail: BranchDetail; siblings: Branch[]; title: string; step: number | null }) {
   return (
@@ -126,12 +126,12 @@ function Main({ detail, timeline: { lanes, span }, selected, onSelect, models, s
   detail: BranchDetail; timeline: Timeline; selected: number | null; onSelect: (s: number) => void; models: boolean; setModels: (m: boolean) => void;
 }) {
   const live = detail.status === 'running';
-  const now = Date.now();
+
   // Pause bands sit on the same clock as the timeline's marks (a fork's own steps move back).
   const pauses = useMemo(() => {
     const shift = forkShiftMs(detail.events, detail.start_seq);
-    return pausesOf(onForkClock(detail.events, detail.start_seq), now - shift);
-  }, [detail.events, detail.start_seq, now]);
+    return pausesOf(onForkClock(detail.events, detail.start_seq), Date.now() - shift);
+  }, [detail.events, detail.start_seq]);
   const study = useMemo(() => studyOf(detail.events), [detail.events]);
   const rows = useMemo(() => logRows(lanes, models), [lanes, models]);
   const { filter, setFilter, matches } = useLogFilter(rows);
@@ -165,7 +165,8 @@ function useRunView(branchId: string, timeline: Timeline, models: boolean) {
   const [selected, setSelected] = useStepParam();
   const [notice, setNotice] = useState<string | null>((loc.state as { notice?: string } | null)?.notice ?? null);
   useEffect(() => { setNotice((loc.state as { notice?: string } | null)?.notice ?? null); }, [branchId]); // eslint-disable-line react-hooks/exhaustive-deps
-  const matches = useMemo(() => matching(logRows(timeline.lanes, models), parseFilter(sp)), [timeline.lanes, models, sp]);
+  const rows = useMemo(() => logRows(timeline.lanes, models), [timeline.lanes, models]);
+  const { matches } = useLogFilter(rows);
   const order = useMemo(() => matches ? timeline.order.filter((seq) => matches.has(seq)) : timeline.order, [timeline.order, matches]);
   useStepKeys(order, setSelected);
   const setForking = (on: boolean) => setSp((prev) => { const out = new URLSearchParams(prev); if (on) out.set('fork', '1'); else { out.delete('fork'); out.delete('change'); } return out; }, { replace: true });

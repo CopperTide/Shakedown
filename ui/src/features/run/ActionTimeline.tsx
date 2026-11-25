@@ -1,5 +1,5 @@
 import { Minus, MoreHorizontal, Plus, Radio } from 'lucide-react';
-import { type CSSProperties, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { type CSSProperties, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -11,6 +11,7 @@ import type { Pause } from './flow';
 import { LANE_H, type Layout, type Placed, type Shape, layoutTimeline, shapeOf, shortLabel } from './timelineLayout';
 import { MAX_ZOOM, MIN_ZOOM, type View, clampScroll, endScroll, holdTimeWindow, onWheel, stepZoom, trackWidth } from './zoom';
 const RULER_H = 22;
+const NO_PAUSES: Pause[] = [];
 
 /** Each shape's look: hollow reads, solid (heavier) writes, diamonds for approvals, a triangle in alarm colour for refusals and errors. */
 const SHAPE: Record<Shape, string> = {
@@ -46,7 +47,7 @@ function labelClass(p: Placed, shape: Shape, selected: boolean): string {
   return cn('rounded-sm px-0.5 text-2xs whitespace-nowrap', tone, selected && 'bg-raised text-fg shadow-pop ring-1 ring-accent');
 }
 
-function MarkButton({ p, selected, onSelect }: { p: Placed; selected: boolean; onSelect: (seq: number) => void }) {
+const MarkButton = memo(function MarkButton({ p, selected, onSelect }: { p: Placed; selected: boolean; onSelect: (seq: number) => void }) {
   const shape = shapeOf(p.mark);
   const text = textOf(p, selected);
   const style: CSSProperties = { left: p.x, top: RULER_H + p.lane * LANE_H + LANE_H / 2 };
@@ -60,9 +61,9 @@ function MarkButton({ p, selected, onSelect }: { p: Placed; selected: boolean; o
       {text && <span className={labelClass(p, shape, selected)}>{text}</span>}
     </button>
   );
-}
+});
 
-function Ruler({ layout }: { layout: Layout }) {
+const Ruler = memo(function Ruler({ layout }: { layout: Layout }) {
   return (
     <div className="absolute inset-x-0 top-0 border-b border-line" style={{ height: RULER_H }}>
       {layout.ticks.map((t) => (
@@ -70,7 +71,7 @@ function Ruler({ layout }: { layout: Layout }) {
       ))}
     </div>
   );
-}
+});
 
 /** Lane guides, each lane's active span (its waits for work faint), and the connectors of messages, handoffs, delegations and reports between lanes. */
 function Wires({ layout, lanes, width, selected }: { layout: Layout; lanes: number; width: number; selected: number | null }) {
@@ -100,7 +101,7 @@ function Wires({ layout, lanes, width, selected }: { layout: Layout; lanes: numb
   );
 }
 
-function LaneLabels({ lanes, team, width }: { lanes: LaneRow[]; team: Team; width: number }) {
+const LaneLabels = memo(function LaneLabels({ lanes, team, width }: { lanes: LaneRow[]; team: Team; width: number }) {
   return (
     <div className="sticky left-0 z-30 shrink-0 border-r border-line bg-surface" style={{ width }}>
       <div className="border-b border-line" style={{ height: RULER_H }} />
@@ -115,7 +116,7 @@ function LaneLabels({ lanes, team, width }: { lanes: LaneRow[]; team: Team; widt
       })}
     </div>
   );
-}
+});
 
 function useWidth() {
   const ref = useRef<HTMLDivElement>(null);
@@ -285,7 +286,7 @@ function Bands({ layout, height }: { layout: Layout; height: number }) {
 }
 
 /** Swim lanes per agent on one time axis: every action labelled by system kind and read/write, messages drawn between lanes. */
-export default function ActionTimeline({ lanes, team, span, selected, onSelect, models, onModels, live = false, pauses = [], matches = null }: TimelineProps) {
+export default function ActionTimeline({ lanes, team, span, selected, onSelect, models, onModels, live = false, pauses = NO_PAUSES, matches = null }: TimelineProps) {
   const box = useWidth();
   const labelW = box.width && box.width < 640 ? 112 : 184;
   // A phone gets a track wider than the screen, to scroll; a desktop fits the run at 1×.

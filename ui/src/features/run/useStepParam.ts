@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useLayoutEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
 /** A `?step=` value as a step number, or null. */
@@ -17,14 +17,16 @@ type Next = number | null | ((s: number | null) => number | null);
 export function useStepParam(): [number | null, (next: Next) => void] {
   const [sp, setSp] = useSearchParams();
   const step = parseStep(sp.get('step'));
+  const navigate = useRef(setSp);
+  useLayoutEffect(() => { navigate.current = setSp; }, [setSp]);
   const set = useCallback((next: Next) => {
-    setSp((prev) => {
+    navigate.current((prev) => {
       const v = typeof next === 'function' ? next(parseStep(prev.get('step'))) : next;
       const out = new URLSearchParams(prev);
       if (v == null) out.delete('step');
       else out.set('step', String(v));
       return out;
     }, { replace: true });
-  }, [setSp]);
+  }, []);
   return [step, set];
 }
