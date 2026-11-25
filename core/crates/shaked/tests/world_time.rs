@@ -214,19 +214,24 @@ fn a_clock_start_with_its_offset_gives_the_exact_epoch_and_records_the_offset() 
             .unwrap();
         assert_eq!(evs[0].payload["world_epoch_ms"], 1_773_136_800_000i64);
         assert_eq!(evs[0].payload["world_utc_offset_min"], -240);
-        let (_, v) = fx
-            .fx
-            .get(&format!("/api/branches/{}/clock", fx.branch))
-            .await;
-        assert_eq!(v["utc_offset_min"], -240, "{v}");
-        let (status, lean) = fx
-            .fx
-            .get(&format!("/api/branches/{}?lean=1", fx.branch))
-            .await;
-        assert_eq!(status, 200, "{lean}");
-        assert_eq!(lean["events"][0]["payload"]["world_utc_offset_min"], -240);
+        assert_offset_served(&fx).await;
         assert_eq!(fx.on(&fx.branch, "finish").await.0, 200);
     })
+}
+
+/// The clock route and the lean branch read both give the world's offset, -240.
+async fn assert_offset_served(fx: &TimeFx) {
+    let (_, v) = fx
+        .fx
+        .get(&format!("/api/branches/{}/clock", fx.branch))
+        .await;
+    assert_eq!(v["utc_offset_min"], -240, "{v}");
+    let (status, lean) = fx
+        .fx
+        .get(&format!("/api/branches/{}?lean=1", fx.branch))
+        .await;
+    assert_eq!(status, 200, "{lean}");
+    assert_eq!(lean["events"][0]["payload"]["world_utc_offset_min"], -240);
 }
 
 /// Finishing a run on a wall clock first moves its clock parts on to the frozen clock, and records

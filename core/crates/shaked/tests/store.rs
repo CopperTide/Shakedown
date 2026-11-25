@@ -296,6 +296,19 @@ fn an_uncommitted_tx_never_returns_its_connection() {
     })
 }
 
+/// A model call read lean: no bodies, its usage and cost kept.
+fn assert_lean_call(p: &serde_json::Value) {
+    assert_eq!(
+        (&p["request"], &p["response"]),
+        (&json!(null), &json!(null))
+    );
+    assert!(p.get("provider_response").is_none(), "{p}");
+    assert_eq!(
+        (&p["usage"], &p["cost_usd"]),
+        (&json!({"prompt_tokens": 7}), &json!(0.5))
+    );
+}
+
 /// The world's reading of a branch leaves out each model call's request and response (the bulk of
 /// a long run) and keeps every event, every other payload whole and each call's usage and cost.
 #[test]
@@ -317,16 +330,7 @@ fn a_lean_read_leaves_out_model_call_bodies_and_keeps_the_rest() {
             .unwrap();
         let lean = records(&store).events_lean(&b).await.unwrap();
         assert_eq!(lean.len(), 2);
-        let p = &lean[0].payload;
-        assert_eq!(
-            (&p["request"], &p["response"]),
-            (&json!(null), &json!(null))
-        );
-        assert!(p.get("provider_response").is_none(), "{p}");
-        assert_eq!(
-            (&p["usage"], &p["cost_usd"]),
-            (&json!({"prompt_tokens": 7}), &json!(0.5))
-        );
+        assert_lean_call(&lean[0].payload);
         assert_eq!(lean[1].payload, tool);
         let version = records(&store).events_version(&b).await.unwrap();
         assert_eq!(version, (2, 2));

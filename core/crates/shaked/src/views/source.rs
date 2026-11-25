@@ -266,13 +266,15 @@ async fn recorded_docs(
     Ok(docs)
 }
 
-async fn read_recorded(
+/// The point `parts` (those the world has) are read at for `asked`, and the fallback when it isn't
+/// `asked` itself.
+async fn point_for(
     state: &AppState,
     branch: &str,
     events: &[Event],
     parts: &BTreeSet<String>,
     asked: Point,
-) -> Result<Read> {
+) -> Result<(Point, Option<Fallback>)> {
     let world = world_of(&state.hub, events).await?;
     let kept: BTreeSet<String> = (parts.iter())
         .filter(|p| part_named(&world, p).is_some())
@@ -286,6 +288,17 @@ async fn read_recorded(
         }),
         _ => None,
     };
+    Ok((point, fallback))
+}
+
+async fn read_recorded(
+    state: &AppState,
+    branch: &str,
+    events: &[Event],
+    parts: &BTreeSet<String>,
+    asked: Point,
+) -> Result<Read> {
+    let (point, fallback) = point_for(state, branch, events, parts, asked).await?;
     let docs = recorded_docs(state, branch, events, parts, point).await?;
     let (name, seq) = match point {
         Point::Step(seq) => ("step", Some(seq)),
