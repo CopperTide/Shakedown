@@ -9,7 +9,7 @@ import { agentModelLine } from '@/model/providers';
 import type { Team } from '@/model/types';
 import type { Pause } from './flow';
 import { LANE_H, type Layout, type Placed, type Shape, layoutTimeline, shapeOf, shortLabel } from './timelineLayout';
-import { type MarkGroup, groupMarks, visibleGroups } from './timelineVisibility';
+import { groupMarks, marksToDraw, visibleGroups } from './timelineVisibility';
 import { MAX_ZOOM, MIN_ZOOM, type View, clampScroll, endScroll, holdTimeWindow, onWheel, stepZoom, trackWidth } from './zoom';
 const RULER_H = 22;
 const NO_PAUSES: Pause[] = [];
@@ -277,7 +277,7 @@ function Tools({ t, viewW, minW, models, onModels }: {
           <Button size="sm" variant="ghost" className="w-12 font-mono" onClick={() => t.move({ zoom: 1, scroll: 0 })} title="Fit the run to the width">{view.zoom <= 1.01 ? 'Fit' : `${view.zoom.toFixed(view.zoom < 10 ? 1 : 0)}×`}</Button>
           <Button size="icon" variant="ghost" className="size-6" aria-label="Zoom in" disabled={view.zoom >= MAX_ZOOM} onClick={() => t.move(stepZoom(view, 1, viewW, minW))}><Plus /></Button>
         </div>
-        <p className="text-faint">Scroll to move · Ctrl + scroll or pinch to zoom · drag to pan</p>
+        <p className="text-faint">Scroll to move · Ctrl + scroll or pinch to zoom · drag to pan. Zoom in to reveal overlapping steps. Double-click a step to deselect.</p>
       </PopoverContent>
     </Popover>
   );
@@ -302,27 +302,6 @@ function Bands({ layout, height }: { layout: Layout; height: number }) {
   ));
 }
 
-function GroupMark({ g, selected, onSelect, onClear, t, viewW, minW }: {
-  g: MarkGroup; selected: number | null; onSelect: (seq: number) => void; onClear?: () => void;
-  t: ReturnType<typeof useTrackView>; viewW: number; minW: number;
-}) {
-  const active = g.marks.find((p) => p.mark.seq === selected);
-  if (g.marks.length === 1 || active) {
-    const p = active ?? g.marks[0];
-    return <MarkButton key={p.mark.seq} p={p} selected={selected === p.mark.seq} onSelect={onSelect} onClear={onClear} />;
-  }
-  return <button data-event-count={g.marks.length} key={`group-${g.lane}-${g.marks[0].mark.seq}`} aria-label={`${g.marks.length} events; zoom in to explore`}
-    title={`${g.marks.length} overlapping events. Click to zoom in.`}
-    className="absolute z-10 h-5 min-w-5 rounded bg-raised px-1 text-[9px] tabular-nums text-muted ring-1 ring-line hover:ring-accent"
-    style={{ left: g.x - 10, top: RULER_H + g.lane * LANE_H + LANE_H / 2 - 10 }}
-    onClick={() => {
-      const zoom = Math.min(MAX_ZOOM, t.view.zoom * 4);
-      if (zoom === t.view.zoom) { onSelect(g.marks[0].mark.seq); return; }
-      const width = trackWidth(viewW, zoom, minW);
-      t.move({ zoom, scroll: clampScroll(g.x / t.trackW * width - viewW / 2, width, viewW) });
-    }}>{g.marks.length}</button>;
-}
-
 /** Swim lanes per agent on one time axis: every action labelled by system kind and read/write, messages drawn between lanes. */
 export default function ActionTimeline({ lanes, team, span, selected, onSelect, onClear, models, onModels, live = false, pauses = NO_PAUSES, matches = null }: TimelineProps) {
   const box = useWidth();
@@ -337,10 +316,11 @@ export default function ActionTimeline({ lanes, team, span, selected, onSelect, 
   const layout = useMemo(() => (span ? layoutTimeline(visibleLanes, span, t.trackW, models, pauses) : null), [visibleLanes, span, t.trackW, models, pauses]);
   const groups = useMemo(() => groupMarks(layout?.placed ?? []), [layout]);
   const visible = useMemo(() => visibleGroups(groups, t.view.scroll, viewW || t.trackW), [groups, t.view.scroll, viewW, t.trackW]);
-  const drawing = useMemo(() => layout ? { ...layout, connectors: layout.connectors.filter((c) =>
-    c.x >= t.view.scroll - 80 && c.x <= t.view.scroll + (viewW || t.trackW) + 80 &&
-    (c.seq === selected || visible.some((g) => g.marks.length === 1 && g.marks[0].mark.seq === c.seq))) } : null,
-  [layout, visible, selected, t.view.scroll, viewW, t.trackW]);
+  const marks = useMemo(() => marksToDraw(visible, selected), [visible, selected]);
+  const drawing = useMemo(() => {
+    const shown = new Set(marks.map((p) => p.mark.seq));
+    return layout ? { ...layout, connectors: layout.connectors.filter((c) => shown.has(c.seq)) } : null;
+  }, [layout, marks]);
   const mouse = useMouse(box.ref.current, labelW, t);
   useNativeScroll(box.ref.current, t);
   useShowSelected(selected, layout, t);
@@ -356,7 +336,7 @@ export default function ActionTimeline({ lanes, team, span, selected, onSelect, 
             <Ruler layout={layout} />
             <Bands layout={layout} height={height} />
             <Wires layout={drawing ?? layout} lanes={visibleLanes.length} width={t.trackW} selected={selected} />
-            {visible.map((g) => <GroupMark key={`${g.lane}-${g.marks[0].mark.seq}`} g={g} selected={selected} onSelect={onSelect} onClear={onClear} t={t} viewW={viewW} minW={minW} />)}
+            {marks.map((p) => <MarkButton key={p.mark.seq} p={p} selected={selected === p.mark.seq} onSelect={onSelect} onClear={onClear} />)}
           </div>
         )}
       </div>

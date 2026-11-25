@@ -38,3 +38,18 @@ it('step navigation reuses layout and renders only the two changed marks', () =>
   fireEvent.doubleClick(container.querySelector('[data-seq="6"]')!);
   expect(container.querySelector('[aria-pressed="true"]')).toBeNull();
 });
+
+
+it('renders a selected hidden event individually without a count badge', () => {
+  const mark = buildLanes(events, team)[0].marks[0];
+  const lanes = [{ id: 'dense', name: 'Dense', marks: Array.from({ length: 100 }, (_, seq) => ({ ...mark, seq, at: seq })) }];
+  const span = { start: 0, end: 10000 };
+  const onSelect = vi.fn();
+  const props = { lanes, team, span, onSelect, models: true, onModels: () => {} };
+  const { container, rerender } = render(<ActionTimeline {...props} selected={null} />);
+  expect(container.querySelectorAll('button[data-seq]')).toHaveLength(1);
+  expect(container.querySelector('[data-event-count]')).toBeNull();
+  rerender(<ActionTimeline {...props} selected={42} />);
+  expect(container.querySelector('[data-seq="42"]')?.getAttribute('aria-pressed')).toBe('true');
+  expect(container.querySelectorAll('button[data-seq]')).toHaveLength(1);
+});
