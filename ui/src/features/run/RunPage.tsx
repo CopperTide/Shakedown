@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ApproximateMark, StatusChip } from '@/components/marks';
 import { PageBody, PageGate, PageHeader, Stat } from '@/components/ui/page';
@@ -123,9 +123,10 @@ function Side({ runId, detail, event, forking, setForking, autoRows, choice, onS
 }
 
 function Main({ detail, timeline: { lanes, span }, selected, onSelect, models, setModels }: {
-  detail: BranchDetail; timeline: Timeline; selected: number | null; onSelect: (s: number) => void; models: boolean; setModels: (m: boolean) => void;
+  detail: BranchDetail; timeline: Timeline; selected: number | null; onSelect: (s: number | null) => void; models: boolean; setModels: (m: boolean) => void;
 }) {
   const live = detail.status === 'running';
+  const clearSelection = useCallback(() => onSelect(null), [onSelect]);
 
   // Pause bands sit on the same clock as the timeline's marks (a fork's own steps move back).
   const pauses = useMemo(() => {
@@ -145,7 +146,7 @@ function Main({ detail, timeline: { lanes, span }, selected, onSelect, models, s
           <div className="flex items-center gap-3 border-b border-line pl-3">
             <TabsList className="border-b-0"><TabsTrigger value="timeline">Timeline</TabsTrigger><TabsTrigger value="log">Event log</TabsTrigger><TabsTrigger value="coordination">Coordination</TabsTrigger></TabsList>
           </div>
-          <TabsContent value="timeline">{filters}<ActionTimeline lanes={lanes} team={detail.team} span={span} selected={selected} onSelect={onSelect} models={models} onModels={setModels} live={live} pauses={pauses} matches={matches} /></TabsContent>
+          <TabsContent value="timeline">{filters}<ActionTimeline onClear={clearSelection} lanes={lanes} team={detail.team} span={span} selected={selected} onSelect={onSelect} models={models} onModels={setModels} live={live} pauses={pauses} matches={matches} /></TabsContent>
           <TabsContent value="log">{filters}<EventLog rows={rows} matches={matches} span={span} selected={selected} onSelect={onSelect} /></TabsContent>
           <TabsContent value="coordination"><Coordination events={detail.events} onSelect={onSelect} /></TabsContent>
         </Tabs>

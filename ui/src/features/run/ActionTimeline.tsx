@@ -9,6 +9,7 @@ import { agentModelLine } from '@/model/providers';
 import type { Team } from '@/model/types';
 import type { Pause } from './flow';
 import { LANE_H, type Layout, type Placed, type Shape, layoutTimeline, shapeOf, shortLabel } from './timelineLayout';
+import { type MarkGroup, groupMarks, visibleGroups } from './timelineVisibility';
 import { MAX_ZOOM, MIN_ZOOM, type View, clampScroll, endScroll, holdTimeWindow, onWheel, stepZoom, trackWidth } from './zoom';
 const RULER_H = 22;
 const NO_PAUSES: Pause[] = [];
@@ -47,12 +48,12 @@ function labelClass(p: Placed, shape: Shape, selected: boolean): string {
   return cn('rounded-sm px-0.5 text-2xs whitespace-nowrap', tone, selected && 'bg-raised text-fg shadow-pop ring-1 ring-accent');
 }
 
-const MarkButton = memo(function MarkButton({ p, selected, onSelect }: { p: Placed; selected: boolean; onSelect: (seq: number) => void }) {
+const MarkButton = memo(function MarkButton({ p, selected, onSelect, onClear }: { p: Placed; selected: boolean; onSelect: (seq: number) => void; onClear?: () => void }) {
   const shape = shapeOf(p.mark);
   const text = textOf(p, selected);
   const style: CSSProperties = { left: p.x, top: RULER_H + p.lane * LANE_H + LANE_H / 2 };
   return (
-    <button data-seq={p.mark.seq} title={hint(p.mark)} aria-label={hint(p.mark)} aria-pressed={selected} onClick={() => onSelect(p.mark.seq)}
+    <button data-seq={p.mark.seq} title={hint(p.mark)} aria-label={hint(p.mark)} aria-pressed={selected} onClick={() => onSelect(p.mark.seq)} onDoubleClick={onClear}
       className={cn('group absolute flex items-center gap-1 rounded-sm outline-none', p.mark.inherited && 'opacity-40', selected ? 'z-20' : 'z-10')}
       style={{ ...style, transform: 'translate(-6px, -50%)' }}>
       <span className="grid size-3 place-items-center">
@@ -138,6 +139,7 @@ export interface TimelineProps {
   span: Span | null;
   selected: number | null;
   onSelect: (seq: number) => void;
+  onClear?: () => void;
   models: boolean;
   onModels: (show: boolean) => void;
   /** A live run: the track follows the newest step until the user scrolls or zooms away. */
@@ -170,7 +172,19 @@ function useTrackView(el: HTMLDivElement | null, viewW: number, minW: number, li
   const latest = useRef({ view: { ...view, scroll }, viewW, minW });
   latest.current = { view: { ...view, scroll }, viewW, minW };
   /** A move the user made: it stops following. */
-  const move = useCallback((next: View) => { setView(next); setFollow(false); }, []);
+  const frame = useRef<number | null>(null);
+  const pending = useRef<View | null>(null);
+  useEffect(() => () => { if (frame.current != null) cancelAnimationFrame(frame.current); }, []);
+  const move = useCallback((next: View) => {
+    latest.current.view = next;
+    pending.current = next;
+    if (frame.current != null) return;
+    frame.current = requestAnimationFrame(() => {
+      frame.current = null;
+      if (pending.current) setView(pending.current);
+      setFollow(false);
+    });
+  }, []);
   return { view: { ...view, scroll }, trackW, following, move, latest, follow: () => setFollow(true), setFollow };
 }
 
@@ -223,7 +237,10 @@ function useNativeScroll(el: HTMLDivElement | null, t: ReturnType<typeof useTrac
 /** Scrolls the selected mark into the middle of the view when it is out of sight. */
 function useShowSelected(selected: number | null, layout: Layout | null, t: ReturnType<typeof useTrackView>) {
   const { latest, move } = t;
+  const previous = useRef<number | null>(null);
   useEffect(() => {
+    if (!layout || previous.current === selected) return;
+    previous.current = selected;
     const x = layout?.placed.find((p) => p.mark.seq === selected)?.x;
     const { view, viewW, minW } = latest.current;
     if (x == null || (x >= view.scroll + 24 && x <= view.scroll + viewW - 24)) return;
@@ -285,8 +302,29 @@ function Bands({ layout, height }: { layout: Layout; height: number }) {
   ));
 }
 
+function GroupMark({ g, selected, onSelect, onClear, t, viewW, minW }: {
+  g: MarkGroup; selected: number | null; onSelect: (seq: number) => void; onClear?: () => void;
+  t: ReturnType<typeof useTrackView>; viewW: number; minW: number;
+}) {
+  const active = g.marks.find((p) => p.mark.seq === selected);
+  if (g.marks.length === 1 || active) {
+    const p = active ?? g.marks[0];
+    return <MarkButton key={p.mark.seq} p={p} selected={selected === p.mark.seq} onSelect={onSelect} onClear={onClear} />;
+  }
+  return <button data-event-count={g.marks.length} key={`group-${g.lane}-${g.marks[0].mark.seq}`} aria-label={`${g.marks.length} events; zoom in to explore`}
+    title={`${g.marks.length} overlapping events. Click to zoom in.`}
+    className="absolute z-10 h-5 min-w-5 rounded bg-raised px-1 text-[9px] tabular-nums text-muted ring-1 ring-line hover:ring-accent"
+    style={{ left: g.x - 10, top: RULER_H + g.lane * LANE_H + LANE_H / 2 - 10 }}
+    onClick={() => {
+      const zoom = Math.min(MAX_ZOOM, t.view.zoom * 4);
+      if (zoom === t.view.zoom) { onSelect(g.marks[0].mark.seq); return; }
+      const width = trackWidth(viewW, zoom, minW);
+      t.move({ zoom, scroll: clampScroll(g.x / t.trackW * width - viewW / 2, width, viewW) });
+    }}>{g.marks.length}</button>;
+}
+
 /** Swim lanes per agent on one time axis: every action labelled by system kind and read/write, messages drawn between lanes. */
-export default function ActionTimeline({ lanes, team, span, selected, onSelect, models, onModels, live = false, pauses = NO_PAUSES, matches = null }: TimelineProps) {
+export default function ActionTimeline({ lanes, team, span, selected, onSelect, onClear, models, onModels, live = false, pauses = NO_PAUSES, matches = null }: TimelineProps) {
   const box = useWidth();
   const labelW = box.width && box.width < 640 ? 112 : 184;
   // A phone gets a track wider than the screen, to scroll; a desktop fits the run at 1×.
@@ -297,6 +335,12 @@ export default function ActionTimeline({ lanes, team, span, selected, onSelect, 
     ...lane, marks: lane.marks.filter((mark) => matches.has(mark.seq)),
   })).filter((lane) => lane.marks.length > 0) : lanes, [lanes, matches]);
   const layout = useMemo(() => (span ? layoutTimeline(visibleLanes, span, t.trackW, models, pauses) : null), [visibleLanes, span, t.trackW, models, pauses]);
+  const groups = useMemo(() => groupMarks(layout?.placed ?? []), [layout]);
+  const visible = useMemo(() => visibleGroups(groups, t.view.scroll, viewW || t.trackW), [groups, t.view.scroll, viewW, t.trackW]);
+  const drawing = useMemo(() => layout ? { ...layout, connectors: layout.connectors.filter((c) =>
+    c.x >= t.view.scroll - 80 && c.x <= t.view.scroll + (viewW || t.trackW) + 80 &&
+    (c.seq === selected || visible.some((g) => g.marks.length === 1 && g.marks[0].mark.seq === c.seq))) } : null,
+  [layout, visible, selected, t.view.scroll, viewW, t.trackW]);
   const mouse = useMouse(box.ref.current, labelW, t);
   useNativeScroll(box.ref.current, t);
   useShowSelected(selected, layout, t);
@@ -311,8 +355,8 @@ export default function ActionTimeline({ lanes, team, span, selected, onSelect, 
           <div className="relative shrink-0" style={{ width: t.trackW, height: RULER_H + height }}>
             <Ruler layout={layout} />
             <Bands layout={layout} height={height} />
-            <Wires layout={layout} lanes={visibleLanes.length} width={t.trackW} selected={selected} />
-            {layout.placed.map((p) => <MarkButton key={p.mark.seq} p={p} selected={selected === p.mark.seq} onSelect={onSelect} />)}
+            <Wires layout={drawing ?? layout} lanes={visibleLanes.length} width={t.trackW} selected={selected} />
+            {visible.map((g) => <GroupMark key={`${g.lane}-${g.marks[0].mark.seq}`} g={g} selected={selected} onSelect={onSelect} onClear={onClear} t={t} viewW={viewW} minW={minW} />)}
           </div>
         )}
       </div>

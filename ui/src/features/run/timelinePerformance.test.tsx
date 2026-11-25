@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render } from '@testing-library/react';
+import { useCallback } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, expect, it, vi } from 'vitest';
 import { events, team } from '@/model/fixtures';
@@ -20,7 +21,8 @@ it('step navigation reuses layout and renders only the two changed marks', () =>
   const onModels = () => {};
   function Timeline() {
     const [selected, onSelect] = useStepParam();
-    return <ActionTimeline lanes={lanes} team={team} span={span} selected={selected} onSelect={onSelect} models onModels={onModels} />;
+    const clear = useCallback(() => onSelect(null), [onSelect]);
+    return <ActionTimeline lanes={lanes} team={team} span={span} selected={selected} onSelect={onSelect} onClear={clear} models onModels={onModels} />;
   }
   const { container } = render(<MemoryRouter initialEntries={['/?step=6']}><Timeline /></MemoryRouter>);
   vi.mocked(layoutTimeline).mockClear();
@@ -33,4 +35,6 @@ it('step navigation reuses layout and renders only the two changed marks', () =>
   fireEvent.click(container.querySelector('[data-seq="6"]')!);
   expect(container.querySelector('[data-seq="6"]')?.getAttribute('aria-pressed')).toBe('true');
   expect(shapeOf).toHaveBeenCalledTimes(4);
+  fireEvent.doubleClick(container.querySelector('[data-seq="6"]')!);
+  expect(container.querySelector('[aria-pressed="true"]')).toBeNull();
 });
