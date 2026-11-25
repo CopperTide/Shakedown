@@ -21,10 +21,11 @@ use crate::{
 
 /// Bytes the shakedown keeps: the `usage` of each integration `benchmark`'s world uses, plus the
 /// save folders. An integration that is not installed keeps nothing and is skipped; so does a
-/// benchmark that is not (a hosted shaked has none: its packages run in sandboxes).
+/// benchmark that is not. A hub that starts no program (packages run in sandboxes) counts the
+/// save folders alone: its integrations keep nothing here.
 pub async fn usage(hub: &Hub, benchmark: &str) -> Result<u64> {
     let mut bytes = hub.saves_bytes();
-    if hub.registry().get(benchmark).is_none() {
+    if !hub.runs_programs() || hub.registry().get(benchmark).is_none() {
         return Ok(bytes);
     }
     let world = integrations(hub, benchmark).await?;

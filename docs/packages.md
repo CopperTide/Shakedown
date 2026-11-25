@@ -46,6 +46,17 @@ transport (`docs/protocol.md`, "Benchmark calls"). It answers:
 - `gold_actions`: the tool calls that solve a task. shaked applies them to the base world once per task to make
   the gold world that branches are scored against.
 
+### The description file
+
+A benchmark may ship `describe.json` beside its `shakedown-package.toml`: exactly what its `describe` answers. A
+shaked whose packages run only in sandboxes (a hosted control box) never starts a package program, so it reads a
+benchmark's tasks, world and metadata from this file instead (health, `GET /api/tasks`, a run's scenario). A
+benchmark without one answers 409 there ("benchmark … has no description file"); a shaked that runs packages
+itself ignores the file. So a control box needs only each package's manifest and, for a benchmark, its
+`describe.json`, never its program. `benchmarks/retail/describe.json` is checked against retail's live `describe`
+by `retails_description_file_is_its_live_describe` (`core/crates/shaked/tests/hosting.rs`); after changing retail's
+tasks, tools, team or scenario options, write it again with `SHAKEDOWN_WRITE_DESCRIBE=1` set on that test.
+
 A benchmark's tools reach parts only through the parts' `connect` info (for `postgres`, `{url}`), so only parts
 with exact saves may be connected. In Rust, implement `shakedown_part::Benchmark` and end `main` with
 `serve_benchmark(..)`. In Python, the kit's `Benchmark` (`kits/python/shakedown_part/benchmark.py`) does the same;

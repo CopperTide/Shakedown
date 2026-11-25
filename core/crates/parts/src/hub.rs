@@ -26,6 +26,9 @@ pub struct Hub {
     /// Extra environment for command-mode programs (e.g. `SHAKEDOWN_PG_URL`).
     env: Vec<(String, String)>,
     slots: Mutex<HashMap<String, Slot>>,
+    /// Package programs start here (else `client` refuses, and benchmarks are described from
+    /// their description files).
+    programs: bool,
 }
 
 impl Hub {
@@ -37,7 +40,21 @@ impl Hub {
             saves_root,
             env: vec![],
             slots: Mutex::default(),
+            programs: true,
         }
+    }
+
+    /// Whether package programs start here. A hub without them never starts one: `client`
+    /// refuses, and a benchmark is described from its description file ([`crate::described`]).
+    /// For a shaked whose packages run only in sandboxes.
+    pub fn with_programs(mut self, programs: bool) -> Hub {
+        self.programs = programs;
+        self
+    }
+
+    /// Whether package programs start here ([`with_programs`](Self::with_programs)).
+    pub fn runs_programs(&self) -> bool {
+        self.programs
     }
 
     /// Sets environment variables every command-mode program gets, over the passed-through ones.
@@ -75,6 +92,11 @@ impl Hub {
 
     /// The program of a package: started on first use, started again when it has stopped.
     pub async fn client(&self, name: &str) -> Result<Arc<Client>> {
+        if !self.programs {
+            return Err(anyhow!(
+                "{name}: this shaked runs packages only in sandboxes"
+            ));
+        }
         let mut slots = self.slots.lock().await;
         if let Some(s) = slots.get(name) {
             if !s.client.is_stopped() {
@@ -107,8 +129,12 @@ impl Hub {
         Ok(d)
     }
 
-    /// `describe` of a benchmark, cached until the program is respawned.
+    /// `describe` of a benchmark, cached until the program is respawned; from its description
+    /// file where programs don't start here.
     pub async fn bench_describe(&self, name: &str) -> Result<BenchDescribe> {
+        if !self.programs {
+            return self.described(name);
+        }
         let client = self.client(name).await?;
         if let Some(d) = self.cached(name, &client, |s| s.bench.clone()).await {
             return Ok(d);
@@ -117,6 +143,13 @@ impl Hub {
         self.store(name, &client, |s| s.bench = Some(d.clone()))
             .await;
         Ok(d)
+    }
+
+    /// The description file of the benchmark `name`.
+    fn described(&self, name: &str) -> Result<BenchDescribe> {
+        let m = (self.registry().get(name).cloned())
+            .ok_or_else(|| anyhow!("no package named {name}"))?;
+        crate::described::read(&m)
     }
 
     async fn cached<T>(

@@ -1,0 +1,604 @@
+{
+  "name": "retail",
+  "version": "0.1.0",
+  "protocol": 1,
+  "world": [
+    {
+      "part": "retail",
+      "integration": "postgres",
+      "config": {}
+    }
+  ],
+  "tasks": [
+    {
+      "id": "27",
+      "reason": "From a recent order, you want to return the hose, backpack, and exchange the hiking boots to the exact same item but a waterproof variant. Make sure you mention the two requests at the same time, and if the agent says they can only do one, you prefer to do the exchange.",
+      "ticket": "# Customer ticket\n\n**Reason for contact:** From a recent order, you want to return the hose, backpack, and exchange the hiking boots to the exact same item but a waterproof variant. Make sure you mention the two requests at the same time, and if the agent says they can only do one, you prefer to do the exchange.\n\n**What the customer told us about themselves:** You are Isabella Johansson, and you live in zipcode 32286.\n\n**What the customer does not know:** You do not remember your email address\n\n**Notes on the customer:** You are a bit anxious and want to get things done quickly.\n\nThe customer has confirmed in advance that every change described above may be made.\n"
+    },
+    {
+      "id": "72",
+      "reason": "You made some mistake and sent an order your son's address in Washington DC, and you want to modify it to your default address in Charlotte instead (you do not want to mention it, but it is in your user profile the agent can look up) because he is coming back home. You also want to adjust the desk lamp to be black color, and the backpack to be medium size and polyester material instead. If multiple colors are available for the backpack, you prefer grey. If the agent asks for payment method, you say gift card initially, but when the agent asks you to confirm before proceeding, you change your mind to using PayPal, and also decide to only modify the backpack. Make sure you briefly mention the two things at the same time at the beginning, but first mention the modification then the address.",
+      "ticket": "# Customer ticket\n\n**Reason for contact:** You made some mistake and sent an order your son's address in Washington DC, and you want to modify it to your default address in Charlotte instead (you do not want to mention it, but it is in your user profile the agent can look up) because he is coming back home. You also want to adjust the desk lamp to be black color, and the backpack to be medium size and polyester material instead. If multiple colors are available for the backpack, you prefer grey. If the agent asks for payment method, you say gift card initially, but when the agent asks you to confirm before proceeding, you change your mind to using PayPal, and also decide to only modify the backpack. Make sure you briefly mention the two things at the same time at the beginning, but first mention the modification then the address.\n\n**What the customer told us about themselves:** You name is Ivan Khan and your zip code is 28243.\n\n**What the customer does not know:** You do not remember your email address.\n\n**Notes on the customer:** You are polite, optimistic, organized.\n\nThe customer has confirmed in advance that every change described above may be made.\n"
+    },
+    {
+      "id": "81",
+      "reason": "Due to some life changes, you no longer need hiking boots, watch, keyboard, charger, jacket, and running shoes. If cancelling part of the order is not possible, you don't care, just cancel the whole order.",
+      "ticket": "# Customer ticket\n\n**Reason for contact:** Due to some life changes, you no longer need hiking boots, watch, keyboard, charger, jacket, and running shoes. If cancelling part of the order is not possible, you don't care, just cancel the whole order.\n\n**What the customer told us about themselves:** You name is James Kim and your email is james.kim1995@example.com.\n\n**What the customer does not know:** nothing noted\n\n**Notes on the customer:** You are sad, independent, polite.\n\nThe customer has confirmed in advance that every change described above may be made.\n"
+    },
+    {
+      "id": "86",
+      "reason": "You want to exchange your Fleece Jacket to red color and half zipper. You also want to want to change your default address to your Washington DC address (which you do not want to reveal but is in one of the orders).",
+      "ticket": "# Customer ticket\n\n**Reason for contact:** You want to exchange your Fleece Jacket to red color and half zipper. You also want to want to change your default address to your Washington DC address (which you do not want to reveal but is in one of the orders).\n\n**What the customer told us about themselves:** You name is Yusuf Hernandez and your email is yusuf.hernandez8836@example.com.\n\n**What the customer does not know:** nothing noted\n\n**Notes on the customer:** You are shy, rigid.\n\nThe customer has confirmed in advance that every change described above may be made.\n"
+    },
+    {
+      "id": "88",
+      "reason": "You want to change the book shelf to 4 foot but with the same material and color. If it is not available, cancel the whole order and you will buy again. If the agent asks for the cancellation reason, you say you ordered by mistake.",
+      "ticket": "# Customer ticket\n\n**Reason for contact:** You want to change the book shelf to 4 foot but with the same material and color. If it is not available, cancel the whole order and you will buy again. If the agent asks for the cancellation reason, you say you ordered by mistake.\n\n**What the customer told us about themselves:** You name is Daiki Silva and your email is daiki.silva6295@example.com.\n\n**What the customer does not know:** nothing noted\n\n**Notes on the customer:** You are insecure, creative, direct, relaxing.\n\nThe customer has confirmed in advance that every change described above may be made.\n"
+    },
+    {
+      "id": "91",
+      "reason": ".You are angry about the quality of the two skateboards you just bought. You want to return them and refund to credit card. If the agent asks for confirmation, do not say yes immediately, because you also want to return the smart watch. You also want to return the e-reader you just bought. If the same item is available online, you're willing to exchange it to the same item. If the agent doesn't allow the exchange, get the 32GB storage E-Reader instead.",
+      "ticket": "# Customer ticket\n\n**Reason for contact:** .You are angry about the quality of the two skateboards you just bought. You want to return them and refund to credit card. If the agent asks for confirmation, do not say yes immediately, because you also want to return the smart watch. You also want to return the e-reader you just bought. If the same item is available online, you're willing to exchange it to the same item. If the agent doesn't allow the exchange, get the 32GB storage E-Reader instead.\n\n**What the customer told us about themselves:** You name is Mei Ahmed and your zip code is 78705.\n\n**What the customer does not know:** You do not remember your email address\n\n**Notes on the customer:** You are polite, outgoing.\n\nThe customer has confirmed in advance that every change described above may be made.\n"
+    },
+    {
+      "id": "93",
+      "reason": "You received a laptop and you want to exchange it to i7 processor, 8GB, 1TB SSD. If the agent asks for which laptop, it is 15-inch, 32GB.",
+      "ticket": "# Customer ticket\n\n**Reason for contact:** You received a laptop and you want to exchange it to i7 processor, 8GB, 1TB SSD. If the agent asks for which laptop, it is 15-inch, 32GB.\n\n**What the customer told us about themselves:** You name is Lei Wilson and your zip code is 32255.\n\n**What the customer does not know:** You do not remember your email address\n\n**Notes on the customer:** You are confident, organized, creative, impatient.\n\nThe customer has confirmed in advance that every change described above may be made.\n"
+    },
+    {
+      "id": "94",
+      "reason": "You received a laptop and you want to exchange it to i7 processor, 8GB, 1TB SSD. If the agent asks for which laptop, it is 15-inch, 16GB.",
+      "ticket": "# Customer ticket\n\n**Reason for contact:** You received a laptop and you want to exchange it to i7 processor, 8GB, 1TB SSD. If the agent asks for which laptop, it is 15-inch, 16GB.\n\n**What the customer told us about themselves:** You name is Lei Wilson and your zip code is 32255.\n\n**What the customer does not know:** You do not remember your email address\n\n**Notes on the customer:** You are confident, organized, creative, impatient.\n\nThe customer has confirmed in advance that every change described above may be made.\n"
+    },
+    {
+      "id": "96",
+      "reason": "You want to change your LA order to your NYC address (you prefer not to reveal it but it is in your other order). You also want to exchange Bluetooth Speaker to be the cheapest green type.",
+      "ticket": "# Customer ticket\n\n**Reason for contact:** You want to change your LA order to your NYC address (you prefer not to reveal it but it is in your other order). You also want to exchange Bluetooth Speaker to be the cheapest green type.\n\n**What the customer told us about themselves:** You name is Yusuf Li and your zip code is 91148.\n\n**What the customer does not know:** You do not remember your email address.\n\n**Notes on the customer:** You are cautious, insecure, organized.\n\nThe customer has confirmed in advance that every change described above may be made.\n"
+    },
+    {
+      "id": "102",
+      "reason": "You just placed an order with two watches, you want to change its address to your New York address (you don't want to reveal it but it's in your other order). You also want to modify the silicone watch to a metal one. If multiple colors available, you prefer white. For the air purifier you received along with sneakers, you want to exchange the purifier to large size and night mode, but still with HEPA filter.",
+      "ticket": "# Customer ticket\n\n**Reason for contact:** You just placed an order with two watches, you want to change its address to your New York address (you don't want to reveal it but it's in your other order). You also want to modify the silicone watch to a metal one. If multiple colors available, you prefer white. For the air purifier you received along with sneakers, you want to exchange the purifier to large size and night mode, but still with HEPA filter.\n\n**What the customer told us about themselves:** You name is Noah Ito and your zip code is 98187.\n\n**What the customer does not know:** You do not remember your email address.\n\n**Notes on the customer:** You are logical but also impatient. You like to say things in pieces.\n\nThe customer has confirmed in advance that every change described above may be made.\n"
+    }
+  ],
+  "instructions": "# Retail agent policy\n\nAs a retail agent, you can help users:\n\n- **cancel or modify pending orders**\n- **return or exchange delivered orders**\n- **modify their default user address**\n- **provide information about their own profile, orders, and related products**\n\nAt the beginning of the conversation, you have to authenticate the user identity by locating their user id via email, or via name + zip code. This has to be done even when the user already provides the user id.\n\nOnce the user has been authenticated, you can provide the user with information about order, product, profile information, e.g. help the user look up order id.\n\nYou can only help one user per conversation (but you can handle multiple requests from the same user), and must deny any requests for tasks related to any other user.\n\nBefore taking any action that updates the database (cancel, modify, return, exchange), you must list the action details and obtain explicit user confirmation (yes) to proceed.\n\nYou should not make up any information or knowledge or procedures not provided by the user or the tools, or give subjective recommendations or comments.\n\nYou should at most make one tool call at a time, and if you take a tool call, you should not respond to the user at the same time. If you respond to the user, you should not make a tool call at the same time.\n\nYou should deny user requests that are against this policy.\n\nYou should transfer the user to a human agent if and only if the request cannot be handled within the scope of your actions. To transfer, first make a tool call to transfer_to_human_agents, and then send the message 'YOU ARE BEING TRANSFERRED TO A HUMAN AGENT. PLEASE HOLD ON.' to the user.\n\n## Domain basic\n\n- All times in the database are EST and 24 hour based. For example \"02:30:00\" means 2:30 AM EST.\n\n### User\n\nEach user has a profile containing:\n\n- unique user id\n- email\n- default address\n- payment methods.\n\nThere are three types of payment methods: **gift card**, **paypal account**, **credit card**.\n\n### Product\n\nOur retail store has 50 types of products.\n\nFor each **type of product**, there are **variant items** of different **options**.\n\nFor example, for a 't-shirt' product, there could be a variant item with option 'color blue size M', and another variant item with option 'color red size L'.\n\nEach product has the following attributes:\n\n- unique product id\n- name\n- list of variants\n\nEach variant item has the following attributes:\n\n- unique item id\n- information about the value of the product options for this item.\n- availability\n- price\n\nNote: Product ID and Item ID have no relations and should not be confused!\n\n### Order\n\nEach order has the following attributes:\n\n- unique order id\n- user id\n- address\n- items ordered\n- status\n- fullfilments info (tracking id and item ids)\n- payment history\n\nThe status of an order can be: **pending**, **processed**, **delivered**, or **cancelled**.\n\nOrders can have other optional attributes based on the actions that have been taken (cancellation reason, which items have been exchanged, what was the exchane price difference etc)\n\n## Generic action rules\n\nGenerally, you can only take action on pending or delivered orders.\n\nExchange or modify order tools can only be called once per order. Be sure that all items to be changed are collected into a list before making the tool call!!!\n\n## Cancel pending order\n\nAn order can only be cancelled if its status is 'pending', and you should check its status before taking the action.\n\nThe user needs to confirm the order id and the reason (either 'no longer needed' or 'ordered by mistake') for cancellation. Other reasons are not acceptable.\n\nAfter user confirmation, the order status will be changed to 'cancelled', and the total will be refunded via the original payment method immediately if it is gift card, otherwise in 5 to 7 business days.\n\n## Modify pending order\n\nAn order can only be modified if its status is 'pending', and you should check its status before taking the action.\n\nFor a pending order, you can take actions to modify its shipping address, payment method, or product item options, but nothing else.\n\n### Modify payment\n\nThe user can only choose a single payment method different from the original payment method.\n\nIf the user wants the modify the payment method to gift card, it must have enough balance to cover the total amount.\n\nAfter user confirmation, the order status will be kept as 'pending'. The original payment method will be refunded immediately if it is a gift card, otherwise it will be refunded within 5 to 7 business days.\n\n### Modify items\n\nThis action can only be called once, and will change the order status to 'pending (items modifed)'. The agent will not be able to modify or cancel the order anymore. So you must confirm all the details are correct and be cautious before taking this action. In particular, remember to remind the customer to confirm they have provided all the items they want to modify.\n\nFor a pending order, each item can be modified to an available new item of the same product but of different product option. There cannot be any change of product types, e.g. modify shirt to shoe.\n\nThe user must provide a payment method to pay or receive refund of the price difference. If the user provides a gift card, it must have enough balance to cover the price difference.\n\n## Return delivered order\n\nAn order can only be returned if its status is 'delivered', and you should check its status before taking the action.\n\nThe user needs to confirm the order id and the list of items to be returned.\n\nThe user needs to provide a payment method to receive the refund.\n\nThe refund must either go to the original payment method, or an existing gift card.\n\nAfter user confirmation, the order status will be changed to 'return requested', and the user will receive an email regarding how to return items.\n\n## Exchange delivered order\n\nAn order can only be exchanged if its status is 'delivered', and you should check its status before taking the action. In particular, remember to remind the customer to confirm they have provided all items to be exchanged.\n\nFor a delivered order, each item can be exchanged to an available new item of the same product but of different product option. There cannot be any change of product types, e.g. modify shirt to shoe.\n\nThe user must provide a payment method to pay or receive refund of the price difference. If the user provides a gift card, it must have enough balance to cover the price difference.\n\nAfter user confirmation, the order status will be changed to 'exchange requested', and the user will receive an email regarding how to return items. There is no need to place a new order.\n",
+  "instructions_title": "Store policy",
+  "team": {
+    "id": "triage-resolver",
+    "name": "Triage and resolver",
+    "agents": [
+      {
+        "id": "triage",
+        "name": "Triage",
+        "prompt": "You are the triage agent of a retail customer-service team. Read the customer ticket and the store policy in your input.\nUsing only the read tools, identify the customer (user_id), the orders and items involved, and exactly what\nthe customer wants, including any conditions they gave. Do not change anything: writes are refused for you.\nThen call the handoff tool with your note for the resolver agent: the user_id, the relevant order ids, item ids and payment\nmethods you found, and the customer's request and conditions in full. Keep it factual.\nUse only the tools you have been given; do not edit the database in any other way.",
+        "read_only": true
+      },
+      {
+        "id": "resolver",
+        "name": "Resolver",
+        "prompt": "You are the resolver agent of a retail customer-service team. Your input holds the handoff note from the\ntriage agent, the customer ticket and the store policy. Resolve the customer's request completely by calling the tools,\nfollowing the policy. The customer has already confirmed every action described in the ticket, so do not\nwait for confirmation. Verify details with read tools before writing. When done, end with a short summary\nlisting each change you made.\nUse only the tools you have been given; do not edit the database in any other way."
+      }
+    ],
+    "runner": "chain"
+  },
+  "tools": [
+    {
+      "name": "calculate",
+      "description": "Evaluate an arithmetic expression and return the result rounded to 2 decimals.",
+      "inputSchema": {
+        "properties": {
+          "expression": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "expression"
+        ],
+        "type": "object"
+      },
+      "effect": "read"
+    },
+    {
+      "name": "find_user_id_by_name_zip",
+      "description": "Find a user id by first name, last name and zip code.",
+      "inputSchema": {
+        "properties": {
+          "first_name": {
+            "type": "string"
+          },
+          "last_name": {
+            "type": "string"
+          },
+          "zip": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "first_name",
+          "last_name",
+          "zip"
+        ],
+        "type": "object"
+      },
+      "effect": "read"
+    },
+    {
+      "name": "find_user_id_by_email",
+      "description": "Find a user id by email address.",
+      "inputSchema": {
+        "properties": {
+          "email": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "type": "object"
+      },
+      "effect": "read"
+    },
+    {
+      "name": "get_order_details",
+      "description": "Get the details of an order (order ids start with '#').",
+      "inputSchema": {
+        "properties": {
+          "order_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "order_id"
+        ],
+        "type": "object"
+      },
+      "effect": "read"
+    },
+    {
+      "name": "get_product_details",
+      "description": "Get the details of a product (product ids differ from item ids).",
+      "inputSchema": {
+        "properties": {
+          "product_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "product_id"
+        ],
+        "type": "object"
+      },
+      "effect": "read"
+    },
+    {
+      "name": "get_item_details",
+      "description": "Get the details of a product item (variant) by item id.",
+      "inputSchema": {
+        "properties": {
+          "item_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "item_id"
+        ],
+        "type": "object"
+      },
+      "effect": "read"
+    },
+    {
+      "name": "get_user_details",
+      "description": "Get the details of a user, including payment methods and orders.",
+      "inputSchema": {
+        "properties": {
+          "user_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id"
+        ],
+        "type": "object"
+      },
+      "effect": "read"
+    },
+    {
+      "name": "list_all_product_types",
+      "description": "List every product type with its product id.",
+      "inputSchema": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "effect": "read"
+    },
+    {
+      "name": "transfer_to_human_agents",
+      "description": "Transfer the customer to a human agent with a summary of the issue.",
+      "inputSchema": {
+        "properties": {
+          "summary": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "summary"
+        ],
+        "type": "object"
+      },
+      "effect": "read"
+    },
+    {
+      "name": "cancel_pending_order",
+      "description": "Cancel a pending order; reason is 'no longer needed' or 'ordered by mistake'.",
+      "inputSchema": {
+        "properties": {
+          "order_id": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "order_id",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "effect": "write"
+    },
+    {
+      "name": "exchange_delivered_order_items",
+      "description": "Request an exchange of delivered order items for new items of the same product.",
+      "inputSchema": {
+        "properties": {
+          "item_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "new_item_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "order_id": {
+            "type": "string"
+          },
+          "payment_method_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "order_id",
+          "item_ids",
+          "new_item_ids",
+          "payment_method_id"
+        ],
+        "type": "object"
+      },
+      "effect": "write"
+    },
+    {
+      "name": "modify_pending_order_address",
+      "description": "Change the shipping address of a pending order.",
+      "inputSchema": {
+        "properties": {
+          "address1": {
+            "type": "string"
+          },
+          "address2": {
+            "type": "string"
+          },
+          "city": {
+            "type": "string"
+          },
+          "country": {
+            "type": "string"
+          },
+          "order_id": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "zip": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "order_id",
+          "address1",
+          "address2",
+          "city",
+          "state",
+          "country",
+          "zip"
+        ],
+        "type": "object"
+      },
+      "effect": "write"
+    },
+    {
+      "name": "modify_pending_order_items",
+      "description": "Replace items of a pending order with other variants of the same product (one-time).",
+      "inputSchema": {
+        "properties": {
+          "item_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "new_item_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "order_id": {
+            "type": "string"
+          },
+          "payment_method_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "order_id",
+          "item_ids",
+          "new_item_ids",
+          "payment_method_id"
+        ],
+        "type": "object"
+      },
+      "effect": "write"
+    },
+    {
+      "name": "modify_pending_order_payment",
+      "description": "Change the payment method of a pending order.",
+      "inputSchema": {
+        "properties": {
+          "order_id": {
+            "type": "string"
+          },
+          "payment_method_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "order_id",
+          "payment_method_id"
+        ],
+        "type": "object"
+      },
+      "effect": "write"
+    },
+    {
+      "name": "modify_user_address",
+      "description": "Change the default address of a user.",
+      "inputSchema": {
+        "properties": {
+          "address1": {
+            "type": "string"
+          },
+          "address2": {
+            "type": "string"
+          },
+          "city": {
+            "type": "string"
+          },
+          "country": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "user_id": {
+            "type": "string"
+          },
+          "zip": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "address1",
+          "address2",
+          "city",
+          "state",
+          "country",
+          "zip"
+        ],
+        "type": "object"
+      },
+      "effect": "write"
+    },
+    {
+      "name": "return_delivered_order_items",
+      "description": "Request a return of delivered order items.",
+      "inputSchema": {
+        "properties": {
+          "item_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "order_id": {
+            "type": "string"
+          },
+          "payment_method_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "order_id",
+          "item_ids",
+          "payment_method_id"
+        ],
+        "type": "object"
+      },
+      "effect": "write"
+    },
+    {
+      "name": "retail_scenario",
+      "description": "Schedules the scenario's disruptions (a scenario's setup calls it).",
+      "inputSchema": {
+        "properties": {
+          "disruptions": {
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "disruptions"
+        ],
+        "type": "object"
+      },
+      "effect": "write"
+    }
+  ],
+  "scenario_options": {
+    "base": [
+      "27",
+      "72",
+      "81",
+      "86",
+      "88",
+      "91",
+      "93",
+      "94",
+      "96",
+      "102"
+    ],
+    "disruptions": [
+      {
+        "id": "stale-order-status",
+        "label": "Order status reads stale",
+        "description": "The agents' get_order_details call after the first {after} reports a delivered order as pending and a pending one as delivered; the agents are not told",
+        "part": "retail",
+        "params": [
+          {
+            "name": "after",
+            "label": "After how many get_order_details calls",
+            "kind": "int",
+            "min": 0,
+            "max": 20,
+            "default": 0
+          }
+        ],
+        "template": {
+          "do": {
+            "kind": "stale_status"
+          },
+          "id": "stale-order-status",
+          "text": "get_order_details reports a stale order status",
+          "when": {
+            "after_calls": "{after}",
+            "tool": "get_order_details"
+          }
+        }
+      },
+      {
+        "id": "order-read-timeout",
+        "label": "Order lookup times out",
+        "description": "The agents' get_order_details call after the first {after} isn't made and answers that it timed out and may not have been processed; the agents are not told",
+        "part": "retail",
+        "params": [
+          {
+            "name": "after",
+            "label": "After how many get_order_details calls",
+            "kind": "int",
+            "min": 0,
+            "max": 20,
+            "default": 0
+          }
+        ],
+        "template": {
+          "do": {
+            "kind": "timeout"
+          },
+          "id": "order-read-timeout",
+          "text": "get_order_details times out",
+          "when": {
+            "after_calls": "{after}",
+            "tool": "get_order_details"
+          }
+        }
+      },
+      {
+        "id": "variant-out-of-stock",
+        "label": "A variant in stock reads out of stock",
+        "description": "The agents' get_product_details call after the first {after} reports the product's first variant in stock as out of stock; the agents are not told",
+        "part": "retail",
+        "params": [
+          {
+            "name": "after",
+            "label": "After how many get_product_details calls",
+            "kind": "int",
+            "min": 0,
+            "max": 20,
+            "default": 0
+          }
+        ],
+        "template": {
+          "do": {
+            "kind": "variant_unavailable"
+          },
+          "id": "variant-out-of-stock",
+          "text": "get_product_details reports a variant in stock as out of stock",
+          "when": {
+            "after_calls": "{after}",
+            "tool": "get_product_details"
+          }
+        }
+      },
+      {
+        "id": "lost-write",
+        "label": "A write is lost",
+        "description": "The agents' write call after the first {after} answers as if it was made but changes nothing; the agents are not told",
+        "part": "retail",
+        "params": [
+          {
+            "name": "after",
+            "label": "After how many write calls",
+            "kind": "int",
+            "min": 0,
+            "max": 20,
+            "default": 0
+          }
+        ],
+        "template": {
+          "do": {
+            "kind": "lost_write"
+          },
+          "id": "lost-write",
+          "text": "A write answers as if made but changes nothing",
+          "when": {
+            "after_calls": "{after}",
+            "tool": [
+              "cancel_pending_order",
+              "exchange_delivered_order_items",
+              "modify_pending_order_address",
+              "modify_pending_order_items",
+              "modify_pending_order_payment",
+              "modify_user_address",
+              "return_delivered_order_items"
+            ]
+          }
+        }
+      }
+    ],
+    "setup": {
+      "retail": {
+        "tool": "retail_scenario",
+        "args": {}
+      }
+    }
+  }
+}

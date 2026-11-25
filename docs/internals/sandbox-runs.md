@@ -163,6 +163,12 @@ stateDiagram-v2
    its world, so no package program starts on the control box: the sandbox's worker does both in
    `stand_up`, and a task the benchmark lacks, or tools that clash, end the branch there, saying why. A run
    that names no benchmark when none is chosen is refused 422 (`NO_BENCHMARK`).
+   What the request reads before that never starts a program either: a sandbox-only layer's hub is made
+   `Hub::with_programs(false)` (`serve::hub`), so `Hub::client` refuses to start any package program,
+   `Hub::bench_describe` reads the benchmark's description file (`describe.json` beside its manifest,
+   `parts::described`; missing, it is 409 `NoDescription`), and `gc::usage` (the disk check, health) counts the
+   save folders alone. So the control box installs each package's manifest and each benchmark's
+   `describe.json`, and nothing else of them (`docs/packages.md`, "The description file").
 3. `Hosting::start`: `links.expect(plan)`, then `backend.create(spec)`. A world built on this control box (the
    benchmark's folder is in `Config::worlds_dir`, as the world builder makes it; the template has only the
    installed packages) is copied into the sandbox's `SANDBOX_WORLDS` (`/var/lib/shakedown/worlds`, the

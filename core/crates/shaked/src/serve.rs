@@ -104,8 +104,9 @@ fn program_env(pg_url: &str) -> Vec<(String, String)> {
     env
 }
 
-/// The hub over `SHAKEDOWN_PACKAGES` and the built worlds, `SHAKEDOWN_BIN_DIR` and `SHAKEDOWN_SAVES`.
-fn hub(pg_url: &str, worlds: &std::path::Path) -> anyhow::Result<Hub> {
+/// The hub over `SHAKEDOWN_PACKAGES` and the built worlds, `SHAKEDOWN_BIN_DIR` and `SHAKEDOWN_SAVES`;
+/// it starts package programs when `programs` (else it describes benchmarks from their files).
+fn hub(pg_url: &str, worlds: &std::path::Path, programs: bool) -> anyhow::Result<Hub> {
     let shakedown = repo_dir();
     let mut roots: Vec<PathBuf> = match parts::settings::var("SHAKEDOWN_PACKAGES") {
         Ok(p) if !p.is_empty() => std::env::split_paths(&p).collect(),
@@ -118,13 +119,14 @@ fn hub(pg_url: &str, worlds: &std::path::Path) -> anyhow::Result<Hub> {
     let registry = Registry::scan(&roots)?;
     Ok(Hub::new(registry, bin_dir, saves)
         .with_repo_dir(shakedown)
-        .with_env(program_env(pg_url)))
+        .with_env(program_env(pg_url))
+        .with_programs(programs))
 }
 
 /// The hub a `shaked worker` runs its branch's world on: the one `shaked` would serve with, from
 /// the same environment.
 pub(crate) async fn worker_hub() -> anyhow::Result<Hub> {
-    hub(&crate::pg::configured_url().await, &worlds_dir()?)
+    hub(&crate::pg::configured_url().await, &worlds_dir()?, true)
 }
 
 /// The stores `SHAKEDOWN_OBJECT_STORE` names; where the layer serves others, the write store is
@@ -147,7 +149,8 @@ async fn app_state(store: Store, opts: &ServeOptions) -> anyhow::Result<Arc<AppS
     let (url, bind) = (&opts.pg_url, &opts.bind);
     let store = Arc::new(store);
     let worlds = worlds_dir()?;
-    let hub = Arc::new(hub(url, &worlds)?);
+    let here = store.layer().policy().runs_packages_here;
+    let hub = Arc::new(hub(url, &worlds, here)?);
     let mut config = Config::new();
     config.self_base = format!("http://{}", loopback_of(bind.addr));
     config.public_url = bind.public_url.to_string();

@@ -93,9 +93,13 @@ impl ApiError {
 impl From<anyhow::Error> for ApiError {
     /// A write the database refused for this caller (SQLSTATE 42501, insufficient privilege: a
     /// hosting layer's policies) is 403; a unique violation (23505) is 409, naming the constraint;
-    /// anything else is 500 (its text hidden where the layer serves others, see `app::router`).
+    /// a benchmark without the description file a shaked whose packages run in sandboxes reads is
+    /// 409; anything else is 500 (its text hidden where the layer serves others, see `app::router`).
     fn from(e: anyhow::Error) -> ApiError {
         use tokio_postgres::error::SqlState;
+        if let Some(n) = (e.chain()).find_map(|c| c.downcast_ref::<parts::NoDescription>()) {
+            return ApiError::conflict(n.to_string());
+        }
         let pg = (e.chain()).find_map(|c| c.downcast_ref::<tokio_postgres::Error>());
         match pg.and_then(|p| p.code()) {
             Some(c) if *c == SqlState::INSUFFICIENT_PRIVILEGE => {
