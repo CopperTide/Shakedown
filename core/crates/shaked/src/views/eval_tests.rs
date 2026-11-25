@@ -17,6 +17,8 @@ styles:
     - {tone: active}
   big:
     - {where: {value: {">": 1}}, tone: warn}
+  said:
+    - {where: {flagged: true}, tone: critical, label: Flagged}
 panels:
   figures:
     kind: kpis
@@ -65,12 +67,26 @@ panels:
   feed:
     kind: feed
     kinds: [alert]
+  talk:
+    kind: chat
+    data: {find: "msg/*"}
+    from: role
+    text: [content, text]
+    right: [agent]
+    style: said
+    top: 3
+  talk_by_turn:
+    kind: chat
+    data: {find: "msg/*"}
+    from: role
+    text: content
+    sort: {field: turn, desc: true}
   broken:
     kind: board
     data: {part: other, find: "x/*"}
     columns: [{field: a, label: A}]
 screens:
-  - {id: all, label: All, areas: ["figures map", "board lanes", "duty feed"]}
+  - {id: all, label: All, areas: ["figures map", "board lanes", "duty feed", "talk talk_by_turn"]}
 "#;
 
 fn view() -> ViewFile {
@@ -90,6 +106,10 @@ fn docs() -> WorldDocs {
         "crew/c1": {"id": "c1", "report": "1970-01-01T00:00:00Z", "max": 120},
         "crew/c2": {"id": "c2", "report": "1970-01-01T01:00:00Z", "max": 120},
         "score": {"pct": 91.5},
+        "msg/2": {"role": "agent", "content": "Which order?", "turn": 3},
+        "msg/10": {"role": "customer", "text": "W1, please.\nThanks", "turn": 1, "flagged": true},
+        "msg/1": {"role": "customer", "content": "Hi", "turn": 2},
+        "msg/0": {"role": "agent", "content": "Hello", "turn": 0},
     });
     WorldDocs::from([("sim".to_string(), sim.as_object().unwrap().clone())])
 }
@@ -192,6 +212,43 @@ fn a_feed_shows_its_kinds_newest_first() {
         .collect();
     assert_eq!(seqs, [3, 1]);
     assert_eq!(rows[0][2], 1030);
+}
+
+#[test]
+fn a_chat_keeps_the_last_messages_in_key_order_with_digits_as_numbers() {
+    let out = &evaluated()["talk"];
+    assert_eq!(
+        out["columns"],
+        json!(["key", "from", "text", "tone", "chip"])
+    );
+    assert_eq!(
+        (&out["right"], &out["total"]),
+        (&json!(["agent"]), &json!(4))
+    );
+    assert_eq!(
+        out["rows"],
+        json!([
+            ["msg/1", "customer", "Hi", "neutral", null],
+            ["msg/2", "agent", "Which order?", "neutral", null],
+            [
+                "msg/10",
+                "customer",
+                "W1, please.\nThanks",
+                "critical",
+                "Flagged"
+            ],
+        ])
+    );
+}
+
+#[test]
+fn a_chat_sorts_by_a_field_when_told() {
+    let rows = evaluated()["talk_by_turn"]["rows"].clone();
+    let keys: Vec<&str> = (rows.as_array().unwrap().iter())
+        .map(|r| r[0].as_str().unwrap())
+        .collect();
+    assert_eq!(keys, ["msg/2", "msg/1", "msg/10", "msg/0"]);
+    assert_eq!(rows[2][2], Value::Null, "msg/10 has no content");
 }
 
 #[test]
