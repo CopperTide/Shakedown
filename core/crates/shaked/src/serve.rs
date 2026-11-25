@@ -71,14 +71,19 @@ pub async fn run(store: Store, opts: ServeOptions) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// `<repo>`: `SHAKEDOWN_DIR`, else the folder above `core` this shaked was built in.
 fn repo_dir() -> PathBuf {
-    let here = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    here.canonicalize().unwrap_or(here)
+    let built = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    env_path("SHAKEDOWN_DIR", built.canonicalize().unwrap_or(built))
 }
 
 fn env_path(key: &str, default: PathBuf) -> PathBuf {
-    parts::settings::var_os(key)
-        .filter(|v| !v.is_empty())
+    path_or(parts::settings::var_os(key), default)
+}
+
+/// `set` as a path unless it is unset or empty, else `default`.
+fn path_or(set: Option<std::ffi::OsString>, default: PathBuf) -> PathBuf {
+    set.filter(|v| !v.is_empty())
         .map(PathBuf::from)
         .unwrap_or(default)
 }
@@ -267,4 +272,19 @@ async fn local_start(state: &AppState) -> anyhow::Result<BenchDescribe> {
     let bench = state.startup_bench().await?;
     crate::gc::run_startup_gc(&state.store, &state.hub, &state.benchmark()).await?;
     Ok(bench)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::path_or;
+    use std::path::PathBuf;
+
+    #[test]
+    fn a_set_folder_overrides_the_default_and_an_empty_one_does_not() {
+        let built = PathBuf::from("/build/repo");
+        let set = Some("/opt/shakedown".into());
+        assert_eq!(path_or(set, built.clone()), PathBuf::from("/opt/shakedown"));
+        assert_eq!(path_or(Some("".into()), built.clone()), built);
+        assert_eq!(path_or(None, built.clone()), built);
+    }
 }

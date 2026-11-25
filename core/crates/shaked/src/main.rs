@@ -29,9 +29,11 @@
 //! - `SHAKEDOWN_TEMPLATES`: more template folders for the world builder (passed on to it).
 //! - `SHAKEDOWN_RUN_<PACKAGE>`: a command line (`/bin/sh -c`) run in place of a package's `run`,
 //!   e.g. `ssh <host> -- <command>` for a part on another machine (`docs/protocol.md`).
+//! - `SHAKEDOWN_DIR`: `<repo>`, for a shaked run away from the checkout it was built in (a
+//!   sandbox's is `/opt/shakedown`).
 //!
-//! `<repo>` is the folder above `core`, fixed when shaked is built (from `CARGO_MANIFEST_DIR`,
-//! which is `<repo>/core/crates/shaked`), so
+//! `<repo>` is by default the folder above `core`, fixed when shaked is built (from
+//! `CARGO_MANIFEST_DIR`, which is `<repo>/core/crates/shaked`), so
 //! the defaults hold wherever shaked is started from.
 
 use std::sync::Arc;
