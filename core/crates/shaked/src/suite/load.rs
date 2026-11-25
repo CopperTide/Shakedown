@@ -70,7 +70,7 @@ pub async fn listed(store: Scoped<'_>, suite: Suite) -> Result<Listed> {
     }
     let ended = statuses
         .iter()
-        .filter(|(_, b)| b.is_some_and(|b| b != BranchStatus::Running));
+        .filter(|(_, b)| b.is_some_and(|b| !b.goes_on()));
     let passed = statuses
         .iter()
         .filter(|(_, b)| *b == Some(BranchStatus::Passed));

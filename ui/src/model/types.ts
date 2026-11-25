@@ -40,7 +40,7 @@ export interface ProviderStatus {
   models?: string[];
 }
 /** `stopped`: someone stopped the run before it ended (`POST /api/branches/{id}/stop`); unscored. */
-export type BranchStatus = 'running' | 'passed' | 'failed' | 'infra_error' | 'interrupted' | 'stopped';
+export type BranchStatus = 'running' | 'queued' | 'passed' | 'failed' | 'infra_error' | 'interrupted' | 'stopped';
 export type EventKind =
   | 'run_start'
   | 'agent_start'
@@ -432,6 +432,8 @@ export interface Metrics {
 export interface BranchDetail extends Branch {
   events: Event[];
   metrics?: Metrics;
+  /** A queued cloud run's place in line, from 1. */
+  queue_position?: number | null;
 }
 
 export interface RunSummary {

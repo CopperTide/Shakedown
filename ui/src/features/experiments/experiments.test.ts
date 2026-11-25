@@ -48,6 +48,12 @@ describe('experiment columns', () => {
     expect(c.team).toBe('2 agents · Claude Code, Codex · Sonnet, Default model');
   });
 
+  it('shows a cloud run waiting for its slot as queued', () => {
+    const q = columnOf(report('Q', [row(1, 'running', null), row(2, 'queued', null)], 0));
+    expect(q.runs.map((r) => r.state)).toEqual(['running', 'queued']);
+    expect(q.runs[1].title).toBe('Run 2 · Queued for a cloud slot');
+  });
+
   it('puts a 95% range around the pass rate that narrows with more runs', () => {
     const [lo, hi] = wilson(3, 5)!;
     expect(lo).toBeCloseTo(0.231, 2);

@@ -19,7 +19,7 @@ use crate::{
     app::AppState,
     external::Started,
     launch::{launch, LaunchSpec},
-    model::{BranchStatus, Rules, Runner},
+    model::{Rules, Runner},
     runner::RunError,
 };
 
@@ -80,6 +80,7 @@ pub(crate) async fn run_next(
     if let Some(id) = experiment {
         if state.store.at(scope).experiment_ended(id).await? {
             state.live.stop(state, &branch).await;
+            crate::hosting::stop_queued(state, scope, &branch).await?;
         }
     }
     wait_ended(state, scope, &branch).await?;
@@ -124,11 +125,11 @@ pub(crate) fn slot_spec<'a>(
     }
 }
 
-/// Waits until the branch is no longer running (or shaked shuts down).
+/// Waits until the branch is no longer running or queued (or shaked shuts down).
 async fn wait_ended(state: &AppState, scope: &Caller, branch: &str) -> Result<()> {
     while !shutting_down(state) {
         match state.store.at(scope).find_branch(branch).await? {
-            Some(b) if b.status == BranchStatus::Running => tokio::time::sleep(POLL).await,
+            Some(b) if b.status.goes_on() => tokio::time::sleep(POLL).await,
             _ => return Ok(()),
         }
     }

@@ -235,7 +235,7 @@ without a reader for the old shape.
 | `Team`, `AgentSpec`, `AgentKind` | `src/model.rs`, `src/model/team.rs`, `src/model/agent_in.rs` | A team and its agents (`claude_code`, `codex`, `open`, `external`, `http`, Bedrock read as `open`). |
 | `Change` | `src/model.rs` | One agent's change in a fork: prompt, model, kind, provider, read_only, tools. |
 | `Rules`, `Runner` | `src/model.rs` | runner, handoff_required, max_cost_usd, connection, world_minutes. |
-| `BranchStatus` | `src/model.rs` | `running`, `passed`, `failed`, `infra_error`, `interrupted`, `stopped`, `budget_exceeded`. |
+| `BranchStatus` | `src/model.rs` | `running`, `queued` (a cloud run waiting for its sandbox slot), `passed`, `failed`, `infra_error`, `interrupted`, `stopped`, `budget_exceeded`. |
 | `Hold` | `src/model/hold.rs` | `Running`, `Paused`, `Stopping(status)`, stored as `branches.hold`. |
 | `BranchPlan` | `src/runner/start.rs` | Serialisable: everything a worker needs to stand a branch up. Travels in `Start`. |
 | `LaunchSpec`, `Launched` | `src/launch.rs` | What a new run is, and what starting it returned. |

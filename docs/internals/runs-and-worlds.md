@@ -94,6 +94,10 @@ stateDiagram-v2
     running --> stopped: someone stopped it (not scored)
     running --> infra_error: world program stopped, setup failed, runner panicked
     running --> interrupted: shaked stopped while it ran (marked at next start)
+    running --> queued: a cloud run with no sandbox slot free (hosting)
+    queued --> running: its turn came
+    queued --> stopped: stopped while it waited
+    queued --> interrupted: shaked restarted while it waited
 ```
 
 Rules for the end:

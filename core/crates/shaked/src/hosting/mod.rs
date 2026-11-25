@@ -2,7 +2,9 @@
 //! its own: it records the branch, creates the sandbox, hands its `shaked worker` a ticket at
 //! [`TICKET_PATH`], and kills the sandbox once the branch has ended ([`watch`]); a branch whose
 //! sandbox vanished ends `infra_error`, one past the longest run ends `stopped`. A scope (the
-//! layer's `object_prefix`) runs at most [`PER_SCOPE`] sandboxes at a time ([`slots`]). Every minute a [`sweep`] kills this control box's
+//! layer's `object_prefix`) runs at most [`PER_SCOPE`] sandboxes at a time ([`slots`]); a run
+//! beyond that is recorded `queued` and starts when its turn comes ([`Hosting::queue`]). Every
+//! minute a [`sweep`] kills this control box's
 //! sandboxes whose branch no longer runs, or that outlived their timeout (a watcher a restart
 //! lost, a create whose answer was lost). A backend creates a sandbox, writes a file into it,
 //! kills it, says whether it still runs and lists sandboxes by label: E2B (`e2b`), or processes
@@ -16,7 +18,7 @@ mod sweep;
 mod watch;
 mod worlds;
 
-pub use slots::{Slot, BUSY, PER_SCOPE};
+pub use slots::{Slot, Turn, BUSY, PER_SCOPE, QUEUE_PER_SCOPE};
 pub use sweep::{sweep, sweep_every};
 pub use worlds::{WorldNotCopied, SANDBOX_WORLDS};
 
@@ -176,15 +178,78 @@ impl Hosting {
         Hosting { poll, ..self }
     }
 
+    /// At most `bound` runs of a scope wait for a slot (tests; else [`QUEUE_PER_SCOPE`]).
+    pub fn with_queue_bound(self, bound: usize) -> Hosting {
+        let slots = slots::Slots::bounded(bound);
+        Hosting { slots, ..self }
+    }
+
     /// A sandbox's timeout: the longest run plus [`END_GRACE`], never past [`SANDBOX_CAP`].
     pub fn sandbox_timeout(&self) -> Duration {
         (self.longest_run + END_GRACE).min(SANDBOX_CAP)
     }
 
-    /// A sandbox slot of `caller`'s scope (the layer's `object_prefix`), refused when the scope
-    /// runs [`PER_SCOPE`] already. Taken before the run is recorded.
-    pub fn reserve(&self, state: &AppState, caller: &Caller) -> Result<Slot, Refusal> {
+    /// A sandbox slot of `caller`'s scope (the layer's `object_prefix`) now, else a turn later;
+    /// refused when [`QUEUE_PER_SCOPE`] of its runs wait already. Asked before the run is
+    /// recorded.
+    pub fn reserve(&self, state: &AppState, caller: &Caller) -> Result<Turn, Refusal> {
         self.slots.take(&state.store.layer().object_prefix(caller))
+    }
+
+    /// Queues `plan`'s branch (just recorded) for `caller`: it is `queued` until its scope's
+    /// slot is its, then runs ([`start_or_fail`](Self::start_or_fail)), unless it was stopped
+    /// meanwhile ([`Hosting::stop_queued`]).
+    pub async fn queue(
+        &self,
+        state: &Arc<AppState>,
+        plan: BranchPlan,
+        caller: Arc<Caller>,
+    ) -> anyhow::Result<()> {
+        let branch = &plan.branch_id;
+        let records = state.store.at(&caller);
+        let running = (BranchStatus::Running, BranchStatus::Queued);
+        anyhow::ensure!(
+            records.turn_status(branch, running).await?,
+            "{branch} no longer runs"
+        );
+        let turn = self
+            .slots
+            .wait(&state.store.layer().object_prefix(&caller), branch);
+        let state = state.clone();
+        tokio::spawn(async move {
+            let Ok(slot) = turn.await else {
+                return;
+            };
+            let queued = (BranchStatus::Queued, BranchStatus::Running);
+            let records = state.store.at(&caller);
+            let started = records.turn_status(&plan.branch_id, queued).await;
+            match (started, state.hosting.get()) {
+                (Ok(true), Some(h)) => h.start_or_fail(&state, &plan, &caller, slot).await,
+                (Ok(_), _) => {}
+                (Err(e), _) => eprintln!("hosting: starting queued {}: {e:#}", plan.branch_id),
+            }
+        });
+        Ok(())
+    }
+
+    /// Ends `branch` `stopped` and takes it out of its queue when it is `queued`: whether it was.
+    pub async fn stop_queued(
+        &self,
+        state: &AppState,
+        caller: &Caller,
+        branch: &str,
+    ) -> anyhow::Result<bool> {
+        let stopped = (BranchStatus::Queued, BranchStatus::Stopped);
+        let was = state.store.at(caller).turn_status(branch, stopped).await?;
+        if was {
+            self.slots.cancel(branch);
+        }
+        Ok(was)
+    }
+
+    /// `branch`'s place in its scope's queue, from 1; None when it does not wait.
+    pub fn queue_position(&self, branch: &str) -> Option<usize> {
+        self.slots.position(branch)
     }
 
     /// The label every sandbox of this control box has.
@@ -295,6 +360,15 @@ impl Hosting {
         let shown = e.downcast_ref::<WorldNotCopied>().map(ToString::to_string);
         let why = shown.as_deref().unwrap_or(NO_SANDBOX);
         end_branch(state, &plan.branch_id, BranchStatus::InfraError, why).await;
+    }
+}
+
+/// Stops `branch` of `caller`'s when it is a queued cloud run (see [`Hosting::stop_queued`]):
+/// whether it was. False without hosting.
+pub async fn stop_queued(state: &AppState, caller: &Caller, branch: &str) -> anyhow::Result<bool> {
+    match state.hosting.get() {
+        Some(h) => h.stop_queued(state, caller, branch).await,
+        None => Ok(false),
     }
 }
 

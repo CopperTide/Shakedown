@@ -59,7 +59,7 @@ async fn drive(
 }
 
 /// Stops the experiment: no further run starts, its suites end, and the run that is running now
-/// is stopped. Stopping one that ended changes nothing.
+/// (or queued for a cloud slot) is stopped. Stopping one that ended changes nothing.
 pub async fn stop(state: &AppState, scope: &Caller, id: &str) -> Result<()> {
     let records = state.store.at(scope);
     records.end_experiment(id, Some(STOPPED)).await?;
@@ -67,6 +67,7 @@ pub async fn stop(state: &AppState, scope: &Caller, id: &str) -> Result<()> {
         for slot in records.slots(&s.id).await? {
             if let Some(branch) = &slot.branch_id {
                 state.live.stop(state, branch).await;
+                crate::hosting::stop_queued(state, scope, branch).await?;
             }
         }
     }

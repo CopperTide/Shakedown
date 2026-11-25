@@ -46,8 +46,8 @@ function MainSwitch({ main, setMain }: { main: Main; setMain: (m: Main) => void 
  * Pause or Resume, Stop, the status and the time so far (the task and team are its tooltip), and
  * the Timeline | Digital Twin switch; once the run has ended, its result takes the status's place.
  */
-function Toolbar({ flow, seconds, title, main, setMain, onPause, onStop, busy, result }: {
-  flow: Flow; seconds: number | null; title: string; main: Main; setMain: (m: Main) => void;
+function Toolbar({ flow, place, seconds, title, main, setMain, onPause, onStop, busy, result }: {
+  flow: Flow; place?: number | null; seconds: number | null; title: string; main: Main; setMain: (m: Main) => void;
   onPause: (paused: boolean) => void; onStop: () => void; busy: boolean; result?: ReactNode;
 }) {
   const live = isLive(flow);
@@ -55,9 +55,9 @@ function Toolbar({ flow, seconds, title, main, setMain, onPause, onStop, busy, r
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
       {live && (flow === 'paused'
         ? <Button variant="primary" onClick={() => onPause(false)} disabled={busy}><Play />Resume</Button>
-        : <Button onClick={() => onPause(true)} disabled={busy || flow === 'starting'}><Pause />Pause</Button>)}
+        : <Button onClick={() => onPause(true)} disabled={busy || flow === 'starting' || flow === 'queued'}><Pause />Pause</Button>)}
       {live && <Button variant="ghost" onClick={onStop} disabled={busy || flow === 'starting'}><CircleStop />Stop</Button>}
-      {result ?? <StatusMark mark={flowMark(flow)} className="text-sm" title={title} />}
+      {result ?? <StatusMark mark={flowMark(flow, place)} className="text-sm" title={title} />}
       {seconds != null && <span className="font-mono text-sm text-muted" title={title}>{clockText(seconds)}</span>}
       <MainSwitch main={main} setMain={setMain} />
     </div>
@@ -167,7 +167,7 @@ export function LiveRun({ runId, branchId, nameOf }: { runId: string; branchId: 
   const title = d ? `${nameOf(taskOf(d.events))} · ${d.team.name}` : '';
   return (
     <div className="flex flex-col gap-3">
-      <Toolbar flow={flow} seconds={d ? summarize(d, d.events, now).seconds : null} title={title} main={main} setMain={setMain} busy={c.busy}
+      <Toolbar flow={flow} place={d?.queue_position} seconds={d ? summarize(d, d.events, now).seconds : null} title={title} main={main} setMain={setMain} busy={c.busy}
         onPause={c.pause} onStop={() => c.setStopping(true)} result={d ? endedLine(d, runId, selected) : null} />
       <RunErrorBanner error={error} onRetry={reload} />
       {c.error && <ErrorState error={c.error} hint="The run carries on as it was." />}

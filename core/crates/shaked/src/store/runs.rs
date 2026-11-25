@@ -110,6 +110,19 @@ impl Scoped<'_> {
         Ok(())
     }
 
+    /// Turns branch `id` from status `from` to `to` (ended now unless `to` goes on): whether
+    /// it was `from`.
+    pub async fn turn_status(
+        &self,
+        id: &str,
+        (from, to): (BranchStatus, BranchStatus),
+    ) -> Result<bool> {
+        let sql = "UPDATE branches SET status = $3,
+                 ended_at = CASE WHEN $4 THEN NULL ELSE now() END WHERE id = $1 AND status = $2";
+        let (from, to, goes_on) = (from.as_str(), to.as_str(), to.goes_on());
+        Ok(self.execute(sql, &[&id, &from, &to, &goes_on]).await? == 1)
+    }
+
     pub async fn branch(&self, id: &str) -> Result<Branch> {
         self.find_branch(id)
             .await?

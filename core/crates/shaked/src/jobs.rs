@@ -8,13 +8,26 @@ use crate::{
     store::Store,
 };
 
-/// What was running when shaked last stopped won't go on: branches are interrupted, built-in
+/// [`QUEUED_LOST`], for `concat!`.
+macro_rules! queued_lost {
+    () => {
+        "shaked restarted before this queued cloud run started: start it again"
+    };
+}
+/// What a cloud run still queued when shaked stopped ends with (`interrupted`).
+pub const QUEUED_LOST: &str = queued_lost!();
+
+/// What was running when shaked last stopped won't go on: queued cloud runs end (their queue
+/// was in memory), branches are interrupted, built-in
 /// suites and experiments get no more runs, and reviews won't finish. A branch a sandbox's worker
 /// runs (it has a live worker token, counted in unpaused time: a long pause keeps it) goes on:
 /// its worker reconnects to this shaked. It stays running, and so do the suites and experiments
 /// it belongs to (a worker that never comes back is the sandbox reconciler's to end).
 const INTERRUPT: &str = concat!(
     "
+UPDATE branches SET status = 'interrupted', ended_at = now(), error = '",
+    queued_lost!(),
+    "' WHERE status = 'queued';
 UPDATE branches b SET status = 'interrupted', ended_at = now() WHERE b.status = 'running'
  AND NOT EXISTS (SELECT 1 FROM run_tokens t WHERE t.branch_id = b.id AND t.kind = 'worker' AND ",
     token_live!(),

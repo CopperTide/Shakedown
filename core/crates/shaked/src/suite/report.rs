@@ -249,7 +249,7 @@ fn ratio(a: i64, b: i64) -> Option<f64> {
 fn summary(runs: &[SlotRun]) -> Summary {
     let done: Vec<&RunOutcome> = scored(runs.iter()).collect();
     let ended = runs.iter().filter_map(|r| r.outcome.as_ref());
-    let ended = ended.filter(|o| o.status != BranchStatus::Running).count();
+    let ended = ended.filter(|o| !o.status.goes_on()).count();
     let passed = done
         .iter()
         .filter(|o| o.status == BranchStatus::Passed)
@@ -286,7 +286,7 @@ fn task_spreads(suite: &Suite, runs: &[SlotRun]) -> Vec<TaskSpread> {
 pub fn status(suite: &Suite, slots: &[(&Slot, Option<BranchStatus>)]) -> &'static str {
     let waiting = slots.iter().any(|(s, _)| !s.claimed);
     let busy = |(s, b): &(&Slot, Option<BranchStatus>)| match b {
-        Some(b) => *b == BranchStatus::Running,
+        Some(b) => b.goes_on(),
         None => s.claimed && s.branch_id.is_none() && s.error.is_none(),
     };
     match (waiting, suite.error.is_some()) {

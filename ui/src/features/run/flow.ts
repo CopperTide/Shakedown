@@ -1,12 +1,13 @@
 // Where a run stands in plain words (Starting, Running, Paused, Passed, Failed, Stopped), and the
 // pauses it had, from its record: `pause` and `resume` events, and its status.
-import { MARK, type Mark, alarmMark } from '@/lib/mark';
+import { MARK, type Mark, alarmMark, mark } from '@/lib/mark';
 import type { BranchDetail, Event } from '@/model/types';
 
-export type Flow = 'starting' | 'running' | 'paused' | 'passed' | 'failed' | 'stopped' | 'error' | 'interrupted';
+export type Flow = 'starting' | 'queued' | 'running' | 'paused' | 'passed' | 'failed' | 'stopped' | 'error' | 'interrupted';
 
 const FLOW: Record<Flow, Mark> = {
   starting: MARK.starting,
+  queued: MARK.queued,
   running: MARK.running,
   paused: MARK.paused,
   passed: MARK.passed,
@@ -16,7 +17,9 @@ const FLOW: Record<Flow, Mark> = {
   interrupted: MARK.interrupted,
 };
 
-export const flowMark = (f: Flow): Mark => FLOW[f];
+/** The flow's mark; a queued run's says its place in line. */
+export const flowMark = (f: Flow, place?: number | null): Mark =>
+  f === 'queued' && place ? mark(MARK.queued.glyph, `Queued (#${place} in line)`) : FLOW[f];
 
 /** True when the last of the branch's `pause` and `resume` events is a pause. */
 export function pausedIn(events: Event[]): boolean {
@@ -34,7 +37,7 @@ export function flowOf(d: Pick<BranchDetail, 'status' | 'events'> | null): Flow 
   }
 }
 
-export const isLive = (f: Flow) => f === 'starting' || f === 'running' || f === 'paused';
+export const isLive = (f: Flow) => f === 'starting' || f === 'queued' || f === 'running' || f === 'paused';
 
 export interface Pause {
   start: number;

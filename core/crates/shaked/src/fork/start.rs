@@ -245,7 +245,7 @@ fn spawn_child(state: &Arc<AppState>, ctx: BranchCtx, plan: ForkPlan) -> ForkRes
 async fn finished_branch(records: Scoped<'_>, branch_id: &str) -> Result<Branch, ForkError> {
     match records.find_branch(branch_id).await? {
         None => Err(ForkError::UnknownBranch(branch_id.to_string())),
-        Some(b) if b.status == BranchStatus::Running => Err(ForkError::BranchRunning),
+        Some(b) if b.status.goes_on() => Err(ForkError::BranchRunning),
         Some(b) => Ok(b),
     }
 }

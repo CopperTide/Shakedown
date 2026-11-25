@@ -32,7 +32,7 @@ export default function PassRate({ c }: { c: Column }) {
       <div className="flex flex-col gap-3">
         <span className="text-3xl font-semibold tracking-tight text-faint">–</span>
         <div className="h-2.5 w-full rounded-full bg-line" />
-        <span className="text-xs text-muted">{c.runs.some((r) => r.state === 'running') ? 'First run in progress' : 'No run scored yet'}</span>
+        <span className="text-xs text-muted">{c.runs.some((r) => r.state === 'running') ? 'First run in progress' : c.runs.some((r) => r.state === 'queued') ? 'First run queued' : 'No run scored yet'}</span>
       </div>
     );
   }

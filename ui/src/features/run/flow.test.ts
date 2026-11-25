@@ -18,6 +18,8 @@ describe('run flow', () => {
     expect(flowOf({ status: 'stopped', events })).toBe('stopped');
     expect(flowMark('paused').word).toBe('Paused');
     expect(flowMark('failed').abnormal).toBe(true);
+    expect(flowOf({ status: 'queued', events: [] })).toBe('queued');
+    expect([flowMark('queued').word, flowMark('queued', 2).word]).toEqual(['Queued', 'Queued (#2 in line)']);
   });
 
   it('lists each pause, an open one ending now', () => {

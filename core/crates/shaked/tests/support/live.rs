@@ -246,7 +246,7 @@ pub const BRANCH_TIMEOUT: Duration = Duration::from_secs(20 * 60);
 pub async fn ended(state: &AppState, branch: &str) -> Branch {
     let over = async || {
         let b = crate::support::records(&state.store).branch(branch).await;
-        Some(b.unwrap()).filter(|b| b.status != BranchStatus::Running)
+        Some(b.unwrap()).filter(|b| !b.status.goes_on())
     };
     let b = crate::support::poll_until(BRANCH_TIMEOUT, Duration::from_millis(500), over).await;
     b.unwrap_or_else(|| panic!("branch {branch} still running after {BRANCH_TIMEOUT:?}"))

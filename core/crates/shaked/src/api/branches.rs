@@ -49,6 +49,8 @@ async fn get_branch(
     v["events"] = serde_json::to_value(events)?;
     v["metrics"] = serde_json::to_value(m)?;
     v["paused"] = json!(flow::is_paused(&state, &id));
+    let queued = state.hosting.get().and_then(|h| h.queue_position(&id));
+    v["queue_position"] = json!(queued);
     Ok(Json(v))
 }
 
@@ -86,9 +88,7 @@ struct ForkReq {
 async fn forkable(state: &AppState, caller: &Caller, id: &str) -> Result<Branch, ApiError> {
     match state.store.at(caller).find_branch(id).await? {
         None => Err(ApiError::missing("branch", id)),
-        Some(b) if b.status == BranchStatus::Running => {
-            Err(ApiError::conflict("the branch is still running"))
-        }
+        Some(b) if b.status.goes_on() => Err(ApiError::conflict("the branch is still running")),
         Some(b) => Ok(b),
     }
 }

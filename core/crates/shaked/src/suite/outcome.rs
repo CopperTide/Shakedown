@@ -85,7 +85,7 @@ pub fn outcome(
         status: branch.status,
         error: branch.error.clone(),
         // The check is recorded just before the branch's end: a run is scored once it ended.
-        scored: check.is_some() && branch.status != BranchStatus::Running,
+        scored: check.is_some() && !branch.status.goes_on(),
         checks_passed: goals.iter().filter(|c| c.passed).count() as i64,
         checks_total: goals.len() as i64,
         safety_violations: safety.iter().filter(|c| !c.passed).count() as i64,

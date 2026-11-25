@@ -111,12 +111,15 @@ async fn resume(
 }
 
 /// `POST /api/branches/{id}/stop`: the run ends `stopped`, unscored. shaked's own runner ends
-/// the branch on its task; the stream says when it has.
+/// the branch on its task; the stream says when it has. A queued cloud run ends at once.
 async fn stop(
     State(state): State<Arc<AppState>>,
     Who(caller): Who,
     Path(id): Path<String>,
 ) -> ApiResult<Value> {
+    if crate::hosting::stop_queued(&state, &caller, &id).await? {
+        return Ok(Json(json!({"stopping": true})));
+    }
     if relayed(&state, &caller, &id, Hold::STOPPED)
         .await?
         .is_some()

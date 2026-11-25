@@ -29,7 +29,7 @@ pub(super) async fn finished_branch(
     id: &str,
 ) -> Result<Branch, ApiError> {
     let b = branch_or_404(state, caller, id).await?;
-    if b.status == BranchStatus::Running {
+    if b.status.goes_on() {
         return Err(ApiError::conflict(format!(
             "branch \"{id}\" is still running"
         )));

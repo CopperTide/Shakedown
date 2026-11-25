@@ -42,7 +42,7 @@ in sandboxes only when the binary embedding shaked sets `ServeOptions::hosting`.
 | `src/hosting/mod.rs` | `Hosting` (start a branch in a sandbox), `SandboxSpec`, `ProviderRef`, `ProviderState`, the `SandboxBackend` trait, `TICKET_PATH` (`/run/shaked/ticket`), the caps. |
 | `src/hosting/watch.rs` | A sandbox's watcher: kills the sandbox once its branch has ended; ends the branch `infra_error` when the sandbox vanished. |
 | `src/hosting/worlds.rs` | A world built on the control box, copied into the branch's sandbox before the ticket. |
-| `src/hosting/slots.rs` | At most `PER_SCOPE` (1) sandboxes per scope (`object_prefix`: an org on hosted) at a time, counted on this control box. |
+| `src/hosting/slots.rs` | At most `PER_SCOPE` (1) sandboxes per scope (`object_prefix`: an org on hosted) at a time, counted on this control box; the runs beyond it wait in a FIFO queue per scope, at most `QUEUE_PER_SCOPE` (50). |
 | `src/hosting/sweep.rs` | The sandbox sweep: kills this control box's sandboxes whose branch ended or that outlived their timeout. |
 | `src/hosting/e2b.rs` | `E2bBackend`: sandboxes on E2B. |
 | `src/hosting/fake.rs` | `FakeBackend` (tests, `harness` feature): each sandbox a folder and a local `shaked worker`. |
@@ -159,9 +159,10 @@ stateDiagram-v2
 1. A run an external system or a Code connection drives is refused 422 (`NOT_IN_A_SANDBOX`): those agents
    run on a person's machine, not in a sandbox (not yet).
 2. The layer admits the run, and `Hosting::reserve` takes a slot of the caller's scope (the layer's
-   `object_prefix`, an org on hosted). A scope runs at most `PER_SCOPE` (1) sandboxes at a time: a run beyond
-   that is refused 429 with `BUSY` ("a cloud run of yours is already going (one at a time for now): start
-   this one when it ends") before anything is recorded. The watcher gives the slot back once it has killed the sandbox. Then
+   `object_prefix`, an org on hosted), or a turn in its queue. A scope runs at most `PER_SCOPE` (1) sandboxes
+   at a time; the runs beyond that wait, first come first served (see [The queue](#the-queue)), and when
+   `QUEUE_PER_SCOPE` (50) wait already the run is refused 429 with `BUSY` before anything is recorded. The
+   watcher gives the slot back once it has killed the sandbox. Then
    `runner::record_unplanned` records the run, its branch and its rules, and the run is metered. Unlike
    `record_start` (which a sandbox-only layer refuses 403), it neither describes the benchmark nor plans
    its world, so no package program starts on the control box: the sandbox's worker does both in
@@ -197,6 +198,27 @@ stateDiagram-v2
    still running at the longest run (`LONGEST_RUN`, or `with_longest_run`) ends `stopped` with
    `LONGEST_REACHED`, and its sandbox is killed: the hard wall-clock cap of a cloud run.
 
+### The queue
+
+A run that gets no slot at once is recorded as usual, then turned to status `queued` (`Hosting::queue`) and
+put last in its scope's queue (`Slots::wait`, in memory). When a slot is given back (`Slot`'s drop) it goes
+straight to the first run still waiting, whose task turns the branch `queued` → `running` and starts it
+(`start_or_fail`, step 3). Each turn is one conditional update, so a run stopped meanwhile never starts:
+
+- **Stop.** `POST /api/branches/{id}/stop` and an experiment's stop end a queued branch `stopped` at once
+  (`hosting::stop_queued`) and take it out of the queue; no sandbox is made for it.
+- **Position.** `GET /api/branches/{id}` answers `queue_position` (1 = next), null when the run does not wait.
+- **Restart.** The queue lives in memory, so `jobs::interrupt_at_start` ends every `queued` branch
+  `interrupted` with `QUEUED_LOST` ("shaked restarted before this queued cloud run started: start it
+  again"), before it ends the experiments and suites that no longer run anything.
+- **Experiments.** An experiment makes its runs one at a time, and a run's slot is given back only once its
+  sandbox is killed (the watcher's next poll), so the next run usually waits a few seconds in the queue. A
+  suite waits on a queued run as on a running one (`BranchStatus::goes_on`).
+
+Tests: `runs_beyond_the_slot_wait_their_turn_and_all_finish`,
+`a_queued_run_stops_at_once_and_never_gets_a_sandbox`,
+`a_full_queue_refuses_and_a_restart_ends_the_queued_runs` in `tests/hosting.rs`.
+
 ### The sandbox sweep
 
 Watchers live in the control box's memory, so `hosting::sweep_every` (spawned by `serve::run` when hosting is
@@ -212,8 +234,7 @@ asks `jobs::running_among` (a system job of the link sweep's) which of their bra
 
 E2B's own timeout ends a sandbox even when the control box is down.
 
-**Not built yet (lean M2a):** runs beyond the scope's slot are refused, not queued (`Admission::Queue`, Task 10's
-queue); slots and deadlines live in memory, so a restarted control box counts no sandboxes and arms no
+**Not built yet (lean M2a):** slots, the queue and deadlines live in memory, so a restarted control box counts no sandboxes and arms no
 deadline for branches already running (the sweep and E2B's timeout still end their sandboxes, and the link
 sweep ends their branches when the worker token dies); a running branch whose sandbox vanished while no
 watcher ran ends only by that token sweep; quotas from `quotas.toml` (sandbox-hours per month, a global

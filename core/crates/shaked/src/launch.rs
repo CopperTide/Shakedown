@@ -12,6 +12,7 @@ use crate::{
     driver::{self, RunIds},
     exec::BranchCtx,
     external::{self, Endpoints},
+    hosting::Turn,
     model::*,
     runner::{self, RunError, StartPoint},
     scenario::Scenario,
@@ -138,9 +139,10 @@ pub const NOT_IN_A_SANDBOX: &str =
     "runs an external system or a Code connection drives don't run in the cloud yet";
 
 /// [`launch`] on a control box with [`Hosting`](crate::hosting::Hosting): the run admitted,
-/// given a sandbox slot of its scope (refused 429 beyond [`PER_SCOPE`](crate::hosting::PER_SCOPE)),
-/// recorded here without starting a package program (`record_unplanned`) and metered, its
-/// branch run in a sandbox. When the sandbox can't start, the branch ends `infra_error`.
+/// given a sandbox slot of its scope or a turn in its queue (refused 429 beyond
+/// [`QUEUE_PER_SCOPE`](crate::hosting::QUEUE_PER_SCOPE) waiting), recorded here without
+/// starting a package program (`record_unplanned`) and metered, its branch run in a sandbox,
+/// now or `queued` until its turn. When the sandbox can't start, the branch ends `infra_error`.
 async fn hosted(
     state: &Arc<AppState>,
     hosting: &crate::hosting::Hosting,
@@ -152,14 +154,18 @@ async fn hosted(
         return Err(RunError::Refused(refusal));
     }
     let warning = admit_run(state, spec).await?;
-    let slot = hosting.reserve(state, &spec.scope)?;
+    let turn = hosting.reserve(state, &spec.scope)?;
     // No package program starts here: the sandbox's worker describes and plans the world.
     let plan = runner::record_unplanned(state, spec).await?;
     meter_run(state, spec, &plan.run_id, &plan.branch_id).await;
-    hosting.start_or_fail(state, &plan, &spec.scope, slot).await;
+    let (run_id, branch_id) = (plan.run_id.clone(), plan.branch_id.clone());
+    match turn {
+        Turn::Now(slot) => hosting.start_or_fail(state, &plan, &spec.scope, slot).await,
+        Turn::Later => hosting.queue(state, plan, spec.scope.clone()).await?,
+    }
     Ok(Launched {
-        run_id: plan.run_id,
-        branch_id: plan.branch_id,
+        run_id,
+        branch_id,
         agents: vec![],
         driver: None,
         run_token: None,

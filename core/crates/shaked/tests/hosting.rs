@@ -438,32 +438,104 @@ fn the_sweep_kills_sandboxes_whose_branch_ended_or_that_outlived_their_timeout()
     });
 }
 
+/// The status `branch` has now.
+async fn status_of(fx: &AppFx, branch: &str) -> BranchStatus {
+    records(&fx.state.store)
+        .branch(branch)
+        .await
+        .unwrap()
+        .status
+}
+
+/// `n` runs of `team` posted at once: their branches, the first running, the rest queued.
+async fn posted(fx: &AppFx, team: &Team, n: usize) -> Vec<String> {
+    let mut ids = vec![];
+    for _ in 0..n {
+        ids.push(start(fx, team).await);
+    }
+    ids
+}
+
 #[test]
-fn a_second_run_for_the_org_is_refused_until_the_first_ends() {
+fn runs_beyond_the_slot_wait_their_turn_and_all_finish() {
     run(async {
-        let (fx, fake) = hosted("busy", |h| h).await;
+        let (fx, fake) = hosted("queue", |h| h).await;
         let gate = Arc::new(Semaphore::new(0));
         let team = scripted_team(gated(&gate)).await;
-        let first = start(&fx, &team).await;
-        let (status, v) = post_run(&fx, &team).await;
-        assert_eq!(status, 429, "{v}");
-        assert!(v.to_string().contains(BUSY), "{v}");
-        assert_eq!(fake.created(), 1, "nothing started for the refused run");
-        gate.add_permits(1);
-        let b = live::ended(&fx.state, &first).await;
+        let ids = posted(&fx, &team, 4).await;
+        linked(&fx, &*fake, &ids[0]).await;
+        assert_eq!(fake.created(), 1, "one sandbox at a time");
+        for id in &ids[1..] {
+            assert_eq!(status_of(&fx, id).await, BranchStatus::Queued);
+        }
+        let (_, v) = fx.get(&format!("/api/branches/{}", ids[2])).await;
+        assert_eq!(v["queue_position"], 2, "{v}");
+        gate.add_permits(4);
+        for id in &ids {
+            let b = live::ended(&fx.state, id).await;
+            assert_eq!(b.status, BranchStatus::Passed, "{:?}", b.error);
+        }
+        killed(&fake, 4).await;
+        assert_eq!(fake.created(), 4);
+    });
+}
+
+#[test]
+fn a_queued_run_stops_at_once_and_never_gets_a_sandbox() {
+    run(async {
+        let (fx, fake) = hosted("unqueue", |h| h).await;
+        let gate = Arc::new(Semaphore::new(0));
+        let team = scripted_team(gated(&gate)).await;
+        let ids = posted(&fx, &team, 2).await;
+        let (status, v) = fx
+            .post(&format!("/api/branches/{}/stop", ids[1]), json!({}))
+            .await;
+        assert_eq!(status, 200, "{v}");
+        assert_eq!(status_of(&fx, &ids[1]).await, BranchStatus::Stopped);
+        gate.add_permits(2);
+        let b = live::ended(&fx.state, &ids[0]).await;
         assert_eq!(b.status, BranchStatus::Passed, "{:?}", b.error);
-        gate.add_permits(1);
-        // Its slot is given back once its sandbox has been killed.
-        let free = async || {
-            let (status, v) = post_run(&fx, &team).await;
-            (status == 200).then(|| v["branch_id"].as_str().unwrap().to_string())
-        };
-        let next = poll_until(WAIT, STEP, free).await.expect("a slot again");
+        let next = start(&fx, &team).await;
         assert_eq!(
             live::ended(&fx.state, &next).await.status,
             BranchStatus::Passed
         );
         killed(&fake, 2).await;
+        assert_eq!(fake.created(), 2, "none for the stopped run");
+    });
+}
+
+#[test]
+fn a_full_queue_refuses_and_a_restart_ends_the_queued_runs() {
+    run(async {
+        let (fx, fake) = hosted("full", |h| h.with_queue_bound(1)).await;
+        let gate = Arc::new(Semaphore::new(0));
+        let team = scripted_team(gated(&gate)).await;
+        let ids = posted(&fx, &team, 2).await;
+        let (status, v) = post_run(&fx, &team).await;
+        assert_eq!(status, 429, "{v}");
+        assert!(v.to_string().contains(BUSY), "{v}");
+        linked(&fx, &*fake, &ids[0]).await;
+        // What a restart does first: the queue was in memory, so its runs end saying why.
+        shaked::jobs::interrupt_at_start(&fx.state.store)
+            .await
+            .unwrap();
+        let b = records(&fx.state.store).branch(&ids[1]).await.unwrap();
+        let ended = (b.status, b.error.as_deref());
+        assert_eq!(
+            ended,
+            (BranchStatus::Interrupted, Some(shaked::jobs::QUEUED_LOST))
+        );
+        assert_eq!(
+            status_of(&fx, &ids[0]).await,
+            BranchStatus::Running,
+            "its worker goes on"
+        );
+        gate.add_permits(1);
+        let b = live::ended(&fx.state, &ids[0]).await;
+        assert_eq!(b.status, BranchStatus::Passed, "{:?}", b.error);
+        killed(&fake, 1).await;
+        assert_eq!(fake.created(), 1, "none for the ended queued run");
     });
 }
 

@@ -312,6 +312,9 @@ named_enum! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub enum BranchStatus {
         Running = "running",
+        /// A cloud run waiting for its scope's sandbox slot (`hosting::slots`); it runs once
+        /// the runs before it are done.
+        Queued = "queued",
         Passed = "passed",
         Failed = "failed",
         InfraError = "infra_error",
@@ -321,6 +324,13 @@ named_enum! {
         /// The run's model-spend estimate passed its `max_cost_usd`: its agents were stopped and
         /// the world scored as it stood (a failure).
         BudgetExceeded = "budget_exceeded",
+    }
+}
+
+impl BranchStatus {
+    /// True while the branch has not ended: running, or queued to run.
+    pub fn goes_on(self) -> bool {
+        matches!(self, BranchStatus::Running | BranchStatus::Queued)
     }
 }
 
@@ -515,8 +525,9 @@ mod tests {
         "reasoning",
         "save_point",
     ];
-    const STATUSES: [&str; 7] = [
+    const STATUSES: [&str; 8] = [
         "running",
+        "queued",
         "passed",
         "failed",
         "infra_error",
