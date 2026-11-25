@@ -7,7 +7,7 @@ control box talk is in [docs/internals/sandbox-runs.md](../../docs/internals/san
 ## What a sandbox holds
 
 - Ubuntu 24.04 with Docker Engine, Buildx and Compose.
-- `shaked` and the package programs (release builds) in `/opt/shakedown/bin`, and the packages
+- `shaked` and the package programs (release builds) in `/opt/shakedown/bin`, the shared `data/` folder (retail reads `data/retail`), and the packages
   (`integrations/`, `benchmarks/`, `kits/python`) in `/opt/shakedown`. Each Python package's
   environment is synced at build time, so `uv` runs offline. `benchmarks/` includes the prebuilt
   worlds (`software-factory`); `SHAKEDOWN_DIR=/opt/shakedown` (`worker.env`) is what their

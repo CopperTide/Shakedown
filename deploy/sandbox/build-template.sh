@@ -30,7 +30,7 @@ find "$bin" -maxdepth 1 -type f -perm -u+x \
 # Each package's own tests stay out (`/*/*/tests/`); a world template's repositories keep theirs.
 skip=(--exclude .venv --exclude __pycache__ --exclude .pytest_cache --exclude target
   --exclude node_modules --exclude '/*/*/tests/')
-rsync -a "${skip[@]}" "$repo/integrations" "$repo/benchmarks" "$ctx/shakedown/"
+rsync -a "${skip[@]}" "$repo/integrations" "$repo/benchmarks" "$repo/data" "$ctx/shakedown/"
 rsync -a "${skip[@]}" "$repo/kits/python" "$ctx/shakedown/kits/"
 mkdir -p "$ctx/shakedown/designs" "$ctx/shakedown/tools/worldclock-gateway"
 rsync -a "$repo/designs/software-factory" "$ctx/shakedown/designs/"
