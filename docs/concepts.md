@@ -442,6 +442,14 @@ A world can also ship how it is watched: view files in its folder (`views:` in `
 `format: shakedown-view/1`) declare maps, boards, timelines, bars, feeds and figures over its parts' docs, and one
 generic renderer draws them on the run's World page, live while the run goes and at any step afterwards. A world
 never ships UI code ([protocol.md](protocol.md#declarative-views-world-files)).
+
+A run's World tab draws them live while it runs, and afterwards at any recorded step. Play runs a virtual world clock
+from the step on screen, at 1× (an hour of world time in 10 s), 4× or 16×: moving things (aircraft on a map) are placed
+by that clock every frame, so they move between the recorded steps along their routes, and each step's screen is
+fetched ahead and swapped in as the clock reaches it (boards, figures and the feed change at steps; the timeline's
+now line follows the clock). Pause keeps the time on screen; a step or a scrub shows that step's own time. Every time
+is shown in the world's zone, the UTC offset its task's `clock_start` gives ([protocol.md](protocol.md#a-tasks-clock)),
+labelled `UTC−4`; a world without one shows UTC (`14:05Z`).
 Each tool call also records `duration_ms`, how long the tool ran in the world (gate checks and saves left out;
 absent for a call that reached no part, and in older runs).
 

@@ -186,14 +186,18 @@ start from the same base.
 ### A task's clock
 
 A task whose world keeps its own calendar (a plant dated March 2026 while the model's environment says it is November)
-names `clock_start`: the world's date and time at clock 0, `YYYY-MM-DDTHH:MM:SS` in the world's local time. shaked then
+names `clock_start`: the world's date and time at clock 0, `YYYY-MM-DDTHH:MM[:SS]` in the world's local time, ending in
+the world's UTC offset when it has one (`2026-08-13T00:00:00-04:00`, or `Z`). The offset is the world's one statement of
+its time zone: the epoch is then exact (local time less the offset), and the agents' world clock and the views show
+world times local with it (`UTC-04:00`). Without an offset the local time is read as UTC. Scenario times (`at`,
+`known_at`, `team_start`, `horizon`) are world local times either way, placed against the local start. shaked then
 opens every agent's first input with a "World clock" section (the world's date and time now, which is `clock_start`
 plus the branch clock, how fast that clock runs, and that it is not today's date), ends each later input of a dispatch
 run with the world time then, and gives `clock_start` in `GET /api/tasks` for external agents. It is the same for every
 team and setup. Without it, agents get no clock and read dates against their own environment's.
 
 ```json
-{"id": "shift", "reason": "...", "ticket": "...", "clock_start": "2026-03-10T06:00:00"}
+{"id": "shift", "reason": "...", "ticket": "...", "clock_start": "2026-03-10T06:00:00-05:00"}
 ```
 
 ### A run's scenario
@@ -325,7 +329,12 @@ at a point of the branch.
 - **Evaluation**: `GET /api/branches/{id}/world-views/{view}?screen=&at=live|final|<seq>` reads the docs of the parts
   the screen's panels name, at `live` (the live instances now), `final` (the check's final saves) or just after a step
   (a clock part moved on to the step's clock, as `rows` reads it), and answers `{view, screen, at: {point, seq,
-  clock_ms, world_ms, epoch_ms, speed, paused}, panels}`. Each panel is `{kind, columns, rows, ...}` with only the
+  clock_ms, world_ms, epoch_ms, speed, paused, utc_offset_min, fallback?}, panels}`. Only those parts are restored:
+  another part's unsaved write never blanks a view. When a part the view reads was written without a save at the step
+  (a part that saves at points, between two), the step just before that write is read and `fallback: {asked, why}`
+  says so; `seq` is the step shown. `utc_offset_min` is the world's offset (null: UTC); the UI shows every time in it.
+  The record is read without model-call bodies and kept in memory while it doesn't change, and the last few points'
+  docs are kept too, so a step reads in well under a second. Each panel is `{kind, columns, rows, ...}` with only the
   fields the view names, times as epoch ms, and per row a `tone` and `chip` from its style (a board row also carries
   `filters`, a bitmask of the filters it passes); a panel that can't be evaluated is `{kind, error}` alone.
   `docs/examples/airline-occ-view.yaml` is a whole operations-centre view.
@@ -497,11 +506,14 @@ part whose save is costly (a whole stack) and whose writes come in bursts betwee
 ## World time
 
 `start` gives a part `world_time: {epoch_ms, speed}` when shaked knows the world's time: `epoch_ms` is the unix time
-in ms of clock 0 (the task's `clock_start` read as UTC, else the run's start; a fork keeps its run's), and `speed`
+in ms of clock 0 (the task's `clock_start`: its local time less its UTC offset, read as UTC without one; else the run's
+start; a fork keeps its run's), and `speed`
 how many world ms pass per wall ms. A part stamps what it emits (metrics, logs, traces) with
 `epoch_ms + clock_ms`, so its telemetry follows the world clock and stands still while the branch is paused.
-The epoch is recorded in `RunStart.world_epoch_ms` (a run recorded before world time takes its `RunStart`'s time).
-Base and gold worlds get no `world_time`.
+The epoch is recorded in `RunStart.world_epoch_ms` (a run recorded before world time takes its `RunStart`'s time),
+and the offset in `RunStart.world_utc_offset_min`. Base and gold worlds get no `world_time`, so a part that computes
+clock 0 itself (for its base save) reads `clock_start` the same way, offset included; started with a `world_time`, it
+takes `epoch_ms`.
 
 The kits turn this into stamps: Rust `shakedown_part::helpers::world_time::WorldTime` and Python
 `shakedown_part.world_time.WorldTime` (`at(clock_ms)`, `observe(clock_ms, now)`, `now_ms(now)`), with the formats
