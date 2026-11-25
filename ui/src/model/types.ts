@@ -481,7 +481,7 @@ export interface BenchmarkInfo {
 export interface BenchmarkDescription {
   name: string;
   version: string;
-  tasks: { id: string; reason: string }[];
+  tasks: TaskSummary[];
   /** The disruptions a run can be started with (null when the benchmark offers none). */
   scenario_options: ScenarioOptions | null;
   /** True when the benchmark draws the world's view. */
@@ -491,6 +491,8 @@ export interface BenchmarkDescription {
 export interface TaskSummary {
   id: string;
   reason: string;
+  /** The group it is listed under (a benchmark's split, such as `test` or `train`). */
+  group?: string;
 }
 
 /** One of `GET /api/tasks` (`api.rs` `tasks`): a task with its ticket and the benchmark's instructions. */

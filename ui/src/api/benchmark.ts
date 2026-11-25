@@ -1,8 +1,10 @@
 import type { BenchmarkDescription, Task, Team } from '@/model/types';
-import { get } from './client';
+import { get, qs } from './client';
 
 /** What the scenario builder and the world view need of the benchmark. */
 export const benchmark = () => get<BenchmarkDescription>('/api/benchmark');
+/** The benchmark that runs the project world `world` (its `package:`), with its tasks. */
+export const worldBenchmark = (world: string) => get<BenchmarkDescription>(`/api/benchmark${qs({ world })}`);
 
 export const tasks = () => get<Task[]>('/api/tasks');
 export const defaultTeam = () => get<Team>('/api/team/default');
