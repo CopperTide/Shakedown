@@ -1,3 +1,4 @@
+import { asRecord } from '@/lib/record';
 import { payloadOf } from '@/model/events';
 import { LOCAL_COST_SOURCE, providerId } from '@/model/providers';
 import type { AgentKind, AgentSpec, Branch, Change, Event } from '@/model/types';
@@ -73,17 +74,30 @@ export function summarize(
   };
 }
 
-/** Tokens and cost from the branch's own `agent_end`s; the cost is unknown once any part is. */
+/**
+ * Tokens and cost of the branch's own events: each agent's `agent_end` once it has ended, and the
+ * model calls so far of an agent still running (so a live run doesn't read $0). The cost is unknown
+ * once any part is.
+ */
 function ownSpend(events: Event[], from: number): { tokens: number; cost: number | null; sources: string[] } {
+  const own = events.filter((e) => e.seq >= from);
+  const ended = new Set(own.filter((e) => e.kind === 'agent_end').map((e) => e.agent));
   let tokens = 0;
   let cost: number | null = 0;
   const sources: string[] = [];
-  for (const e of events) {
-    const p = payloadOf(e, 'agent_end');
-    if (e.seq < from || !p) continue;
-    tokens += p.tokens ?? 0;
-    cost = cost != null && p.cost_usd != null ? cost + p.cost_usd : null;
-    if (p.cost_source && !sources.includes(p.cost_source)) sources.push(p.cost_source);
+  const add = (t: number, c: number | null | undefined, source: string | null | undefined) => {
+    tokens += t;
+    cost = cost != null && c != null ? cost + c : null;
+    if (source && !sources.includes(source)) sources.push(source);
+  };
+  for (const e of own) {
+    const end = payloadOf(e, 'agent_end');
+    if (end) { add(end.tokens ?? 0, end.cost_usd, end.cost_source); continue; }
+    if (e.kind !== 'model_call' || ended.has(e.agent)) continue;
+    const p = asRecord(e.payload);
+    const usage = asRecord(p.usage);
+    add(typeof usage.total_tokens === 'number' ? usage.total_tokens : 0,
+      typeof p.cost_usd === 'number' ? p.cost_usd : null, typeof p.cost_source === 'string' ? p.cost_source : null);
   }
   return { tokens, cost, sources };
 }

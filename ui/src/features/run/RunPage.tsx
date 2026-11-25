@@ -23,6 +23,7 @@ import { type ForkChoice, forkChoiceOf } from './architecture';
 import BestSoFar from './BestSoFar';
 import { studyOf } from './candidates';
 import EventLog from './EventLog';
+import { forkShiftMs, onForkClock } from '@/model/forkTime';
 import { pausesOf } from './flow';
 import { forkNotice } from './forkNotice';
 import ForkPanel from './ForkPanel';
@@ -122,7 +123,11 @@ function Main({ detail, timeline: { lanes, span }, selected, onSelect, models, s
 }) {
   const live = detail.status === 'running';
   const now = Date.now();
-  const pauses = useMemo(() => pausesOf(detail.events, now), [detail.events, now]);
+  // Pause bands sit on the same clock as the timeline's marks (a fork's own steps move back).
+  const pauses = useMemo(() => {
+    const shift = forkShiftMs(detail.events, detail.start_seq);
+    return pausesOf(onForkClock(detail.events, detail.start_seq), now - shift);
+  }, [detail.events, detail.start_seq, now]);
   const study = useMemo(() => studyOf(detail.events), [detail.events]);
   return (
     <div className="flex min-w-0 flex-col gap-3">

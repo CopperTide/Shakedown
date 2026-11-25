@@ -41,6 +41,17 @@ describe('summarize', () => {
       Date.parse('2026-01-01T00:00:03Z'));
     expect(s).toMatchObject({ tokens: 7, cost_usd: 1, seconds: 3, live: true, scope: 'since fork at step 4' });
   });
+  it('counts what an agent still running has spent, from its model calls', () => {
+    const call = (seq: number, agent: string, cost: number) =>
+      ev(seq, agent, 'model_call', { cost_usd: cost, cost_source: 'openrouter', usage: { total_tokens: 100 } });
+    const live = { ...br, start_seq: 4, ended_at: null, status: 'running' as const };
+    // Nobody has ended yet: the fork's own model calls, not the inherited one at step 2.
+    const s = summarize(live, [call(2, 'triage', 5), call(5, 'triage', 0.3), call(6, 'lead', 0.2)]);
+    expect(s).toMatchObject({ cost_usd: 0.5, tokens: 200, cost_source: 'openrouter' });
+    // An agent that ended counts its agent_end once; one still running counts its calls.
+    const m = summarize(live, [call(5, 'triage', 0.3), end(7, { tokens: 7, cost_usd: 1, cost_source: 'openrouter' }), call(8, 'lead', 0.25)]);
+    expect(m).toMatchObject({ cost_usd: 1.25, tokens: 107 });
+  });
 });
 
 describe('changedFields', () => {
