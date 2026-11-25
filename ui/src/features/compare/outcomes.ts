@@ -1,6 +1,7 @@
 // The compare page's outcome table: what each branch achieved, read from what the API already
 // returns (the check's named checks, the metrics, the events and the last view of the twin).
 import { costLabel } from '@/features/run/timeline';
+import { usd as dollars } from '@/lib/format';
 import { viewsFromEvents } from '@/features/world/twin';
 import { actionsOf } from '@/model/actions';
 import { lastPayload } from '@/model/events';
@@ -89,8 +90,7 @@ export function agentCost(s: CompareSide): Figure {
   const source = s.cost_source ?? s.metrics?.cost.source ?? null;
   const tokens = s.tokens != null ? ` · ${s.tokens.toLocaleString('en-US')} tokens` : '';
   if (usd == null) return { text: `not reported${tokens}`, value: null, abnormal: false };
-  const money = `$${usd.toFixed(usd < 0.1 ? 4 : 2)}`;
-  return { text: `${money} (${costLabel(source) || 'reported'})${tokens}`, value: usd, abnormal: false, title: source ?? undefined };
+  return { text: `${dollars(usd)} (${costLabel(source) || 'reported'})${tokens}`, value: usd, abnormal: false, title: source ?? undefined };
 }
 
 /** Approval requests: every write an agent made to the approvals system, refused or not. */

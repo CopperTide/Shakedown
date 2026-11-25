@@ -1,4 +1,5 @@
 import { Table, Td, Th, Tr } from '@/components/ui/table';
+import { usd } from '@/lib/format';
 import { agentModelLine } from '@/model/providers';
 import type { Cost, Metrics, Overhead } from '@/model/types';
 
@@ -28,9 +29,8 @@ export function overheadLines(o: Overhead): [string, string][] {
 /** A cost as text: dollars with their label (and a list price's date), or the label alone. */
 export function costText(c: Cost): string {
   if (c.usd == null || c.label === 'no API charge') return c.label;
-  const usd = `$${c.usd.toFixed(c.usd < 0.1 ? 4 : 2)}`;
   const when = c.as_of ? `, prices of ${c.as_of}` : '';
-  return `${usd} (${c.label}${when})`;
+  return `${usd(c.usd)} (${c.label}${when})`;
 }
 
 /** The estimate line: production time, or why there is none. */

@@ -1,6 +1,7 @@
 import { AlertTriangle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Card } from '@/components/ui/card';
+import { usd } from '@/lib/format';
 import type { ExperimentBody, Problem } from '@/model/project';
 
 /** Setups, repeats, budget and parent of a file experiment, with any problems in its file. */
@@ -32,8 +33,8 @@ export default function FileOverview({ body, labels, problems }: {
       </Card>
       <Card title="Budget">
         <p className="px-[18px] py-3 text-sm text-muted">
-          {body.budget?.per_run_usd != null ? `$${body.budget.per_run_usd.toFixed(2)} a run` : 'No cap per run'}
-          {body.budget?.per_deployment_usd != null && ` · $${body.budget.per_deployment_usd.toFixed(2)} a deployment`}
+          {body.budget?.per_run_usd != null ? `${usd(body.budget.per_run_usd)} a run` : 'No cap per run'}
+          {body.budget?.per_deployment_usd != null && ` · ${usd(body.budget.per_deployment_usd)} a deployment`}
         </p>
       </Card>
       {body.parent && <p className="text-sm text-muted">Branched from <Link className="text-accent" to={`/experiments/file/${body.parent}`}>{labels[body.parent] ?? body.parent}</Link></p>}

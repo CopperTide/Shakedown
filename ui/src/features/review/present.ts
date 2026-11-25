@@ -1,3 +1,4 @@
+import { usd } from '@/lib/format';
 import { path } from '@/lib/url';
 import type { StoredReview } from '@/model/review';
 
@@ -11,7 +12,7 @@ export function modelName(label: string): string {
 /** The small print under a review: who reviewed, what it cost, how long it took. */
 export function smallPrint(s: StoredReview): string {
   const parts = [`Reviewed by ${modelName(s.model)}`];
-  if (s.cost_usd != null) parts.push(`$${s.cost_usd.toFixed(s.cost_usd < 0.1 ? 3 : 2)}${s.cost_source === 'api_equivalent_estimate' ? ' (API-equivalent)' : ''}`);
+  if (s.cost_usd != null) parts.push(`${usd(s.cost_usd)}${s.cost_source === 'api_equivalent_estimate' ? ' (API-equivalent)' : ''}`);
   else if (s.tokens != null) parts.push(`${s.tokens.toLocaleString()} tokens`);
   if (s.seconds != null) parts.push(`${Math.round(s.seconds)} s`);
   return parts.join(' · ');

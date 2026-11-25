@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { duration, fmt } from '@/lib/format';
+import { duration, fmt, usd } from '@/lib/format';
 import type { RunOutcome, RunRow, SetupReport, Spread } from '@/model/report';
 import type { Team } from '@/model/types';
 import { MAX_RUNS, METRICS, bestOf, checkLabel, checkMatrix, columnOf, newDraft, runsProblem, settleDrafts, setupLetter, setupTeam, setupsProblem, wilson } from './model';
@@ -111,6 +111,10 @@ describe('figures', () => {
   it('formats money, tokens and time one way', () => {
     expect([fmt(0.0412, 'usd'), fmt(0.56, 'usd'), fmt(12_400, 'tok'), fmt(3, 's'), fmt(null, 'n')]).toEqual(['$0.041', '$0.56', '12.4k', '3.0 s', '–']);
     expect([duration(45.4), duration(188), duration(null)]).toEqual(['45 s', '3.1 min', '–']);
+  });
+  it('never rounds a sub-cent cost to zero', () => {
+    expect([0.0005, 0.00049, 0.0123, 0.1, 12.345, 0, 0.00004].map(usd))
+      .toEqual(['$0.0005', '$0.00049', '$0.012', '$0.10', '$12.35', '$0.00', '<$0.0001']);
   });
 });
 

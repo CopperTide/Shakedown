@@ -5,6 +5,7 @@ import { deployExperiment } from '@/api/project';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogActions, DialogContent } from '@/components/ui/dialog';
 import { errorMessage } from '@/lib/errors';
+import { usd } from '@/lib/format';
 import type { ExperimentBody } from '@/model/project';
 
 export default function DeployDialog({ id, body, onDeployed }: { id: string; body: ExperimentBody; onDeployed: () => void }) {
@@ -31,7 +32,7 @@ export default function DeployDialog({ id, body, onDeployed }: { id: string; bod
       <DialogContent title={`Deploy ${runs} runs`} description="Every run calls a real model and restores the world from its start.">
         <div className="grid gap-2 px-4 py-3 text-sm">
           <p>{body.setups.length} setups × {body.repeats.per_setup} runs each{body.repeats.paired_seeds === false ? '' : ', paired seeds'}.</p>
-          {body.budget?.per_run_usd != null && <p className="text-muted">Each run stops at ${body.budget.per_run_usd.toFixed(2)}.</p>}
+          {body.budget?.per_run_usd != null && <p className="text-muted">Each run stops at {usd(body.budget.per_run_usd)}.</p>}
           {error && <p role="alert" className="text-alarm">{error}</p>}
         </div>
         <DialogActions onCancel={() => setOpen(false)} onGo={() => { void go(); }} disabled={busy} label={`Deploy ${runs} runs`} />

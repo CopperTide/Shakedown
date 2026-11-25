@@ -1,3 +1,4 @@
+import { usd as dollars } from '@/lib/format';
 import { asRecord } from '@/lib/record';
 import { payloadOf } from '@/model/events';
 import { LOCAL_COST_SOURCE, providerId } from '@/model/providers';
@@ -20,7 +21,7 @@ export function formatCost(usd: number | null | undefined, source: string | null
   if (usd == null) return unknown ? 'unknown' : 'tokens only';
   if (usd === 0 && source === LOCAL_COST_SOURCE) return 'no API charge';
   const l = costLabel(source);
-  return `$${usd.toFixed(usd < 0.1 ? 4 : 2)}${l ? ` (${l})` : ''}`;
+  return `${dollars(usd)}${l ? ` (${l})` : ''}`;
 }
 
 /** Line-based diff of two pretty-printed JSON values (LCS). */

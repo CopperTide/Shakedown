@@ -16,7 +16,7 @@ describe('outcome comparison', () => {
       ['Safety violations', '◆ 1 of 4', '0 of 4'],
       ['Orders on time', '2 of 10', '4 of 10'],
       ['Transport cost', 'USD 3,410', 'USD 4,660'],
-      ['Agent cost', '$0.22 (reported) · 61,240 tokens', '$0.0861 (reported) · 23,410 tokens'],
+      ['Agent cost', '$0.22 (reported) · 61,240 tokens', '$0.086 (reported) · 23,410 tokens'],
       ['Escalations', '3', '3'],
     ]);
     expect(row('valid').a).toMatchObject({ abnormal: true, title: 'Failed: eligible_stock_allocated' });
@@ -54,7 +54,7 @@ describe('outcome comparison', () => {
     expect(agentCost(side(null, null)).text).toBe('not reported · 1,200 tokens');
     const cost = { usd: 0.012, label: 'reported', source: 'my-gateway', as_of: null };
     const m = { measured_s: 1, overhead_ms: {}, overhead_s: 0, overhead_recorded: true, estimated_s: 1, tokens: 1200, cost, agents: [] };
-    expect(agentCost(side(null, null, m))).toMatchObject({ text: '$0.0120 (reported) · 1,200 tokens', value: 0.012 });
+    expect(agentCost(side(null, null, m))).toMatchObject({ text: '$0.012 (reported) · 1,200 tokens', value: 0.012 });
   });
 
   it('counts approval requests by agents, not the decisions links make', () => {
