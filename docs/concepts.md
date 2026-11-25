@@ -87,7 +87,9 @@ experiments, and an experiment's page shows World › Scenario › Experiment.
 maps the files onto an engine experiment: the world's `package` is the benchmark it runs on, the scenario's `preset` is
 the task, each event's `fault` and `params` become the package's disruptions, each setup becomes a team (runner
 `chain`; a built-in agent's `key` becomes its provider `key:<name>`, and an `http` setup's `auth` becomes a
-reference the endpoint's requests are signed from), and `repeats.per_setup` and `budget.per_run_usd` become runs per setup and each run's spend limit. Until
+reference the endpoint's requests are signed from), and `repeats.per_setup` and `budget.per_run_usd` become runs per setup and each run's spend limit (see [Spend limits](#spend-limits); in the app,
+the **Spend cap per run (USD)** field of New experiment and of the experiment's Settings tab, a positive number or empty
+for no cap). Until
 worlds run from their files alone, nothing else in the files reaches a run: a world's connectors, flows, data, people
 and observability; a scenario's `task` text (runs get the preset task's ticket), `changes`, `gates`, `checks` and each
 event's `at`, `after_calls` and `effects`; an experiment's `per_deployment_usd` (seeds are always paired). A `key` that is not stored, or is another

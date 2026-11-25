@@ -6,6 +6,7 @@ import { ErrorState } from '@/components/ui/state';
 import { useQuery } from '@/hooks/useQuery';
 import { errorMessage } from '@/lib/errors';
 import type { ExperimentBody } from '@/model/project';
+import { capProblem } from './budget';
 import { loadChoices } from './choices';
 import ExperimentFields from './ExperimentFields';
 
@@ -25,7 +26,7 @@ export default function ExperimentSettings({ id, body, onSaved }: { id: string; 
       {error && <p role="alert" className="text-sm text-alarm">{error}</p>}
       <div className="flex justify-end gap-2">
         <Button disabled={!dirty} onClick={() => setDraft(body)}>Discard</Button>
-        <Button variant="primary" disabled={!dirty} onClick={() => { void save(); }}>Save</Button>
+        <Button variant="primary" disabled={!dirty || !!capProblem(draft)} onClick={() => { void save(); }}>Save</Button>
       </div>
     </div>
   );
