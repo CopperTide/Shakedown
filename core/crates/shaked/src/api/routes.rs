@@ -87,6 +87,7 @@ pub const ROUTES: &[RouteCase] = &[
     r("GET", "/api/branches/{id}", Read, Branch),
     r("GET", "/api/branches/{id}/stream", Read, Branch),
     r("GET", "/api/branches/{id}/rows", Read, Branch),
+    r("GET", "/api/branches/{id}/events/{seq}", Read, Branch),
     r("GET", "/api/branches/{id}/restore-plan", Read, Branch),
     r("GET", "/api/branches/{id}/clock", Read, Branch),
     r("GET", "/api/branches/{id}/recording", Read, Branch),

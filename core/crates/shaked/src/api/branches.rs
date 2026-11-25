@@ -29,6 +29,7 @@ use crate::{
 pub(super) fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/api/branches/{id}", get(get_branch))
+        .route("/api/branches/{id}/events/{seq}", get(get_event))
         .route("/api/branches/{id}/stream", get(stream::stream))
         .route("/api/branches/{id}/rows", get(rows::rows))
         .route("/api/branches/{id}/fork", post(fork_branch))
@@ -61,6 +62,22 @@ async fn get_branch(
     let queued = state.hosting.get().and_then(|h| h.queue_position(&id));
     v["queue_position"] = json!(queued);
     Ok(Json(v))
+}
+
+/// Load the full body of one selected step without downloading the entire run.
+async fn get_event(
+    State(state): State<Arc<AppState>>,
+    Who(caller): Who,
+    Path((id, seq)): Path<(String, i64)>,
+) -> ApiResult<Event> {
+    branch_or_404(&state, &caller, &id).await?;
+    let event = state
+        .store
+        .at(&caller)
+        .event(&id, seq)
+        .await?
+        .ok_or_else(|| ApiError::not_found("no such step"))?;
+    Ok(Json(event))
 }
 
 /// A branch's spend limit (from its `RunStart`) and, while it runs, its live estimate.

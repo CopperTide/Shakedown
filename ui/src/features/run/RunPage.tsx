@@ -176,7 +176,7 @@ function useRunView(branchId: string, timeline: Timeline, models: boolean) {
 
 export default function Run() {
   const { runId = '', branchId = '' } = useParams();
-  const { detail, siblings, error, reload } = useBranch(branchId, runId);
+  const { detail, siblings, error, reload } = useBranch(branchId, runId, { lean: true });
   const [models, setModels] = useState(true);
   const nameOf = useTaskNames();
   const timeline = useTimeline(detail, models);

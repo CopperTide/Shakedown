@@ -23,6 +23,11 @@ class FakeEventSource {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('api', () => {
+  it('starts a lean stream after the events already loaded by the page', () => {
+    vi.stubGlobal('EventSource', FakeEventSource);
+    stream('b1', () => {}, () => {}, { after: 800, lean: true });
+    expect(FakeEventSource.last.url).toBe('/api/branches/b1/stream?after=800&lean=1');
+  });
   it('stream_parses_events', () => {
     vi.stubGlobal('EventSource', FakeEventSource);
     const events: Event[] = [];

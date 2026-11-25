@@ -209,6 +209,8 @@ export interface ToolCallPayload {
 }
 
 export interface ModelCallPayload {
+  /** A lean event retains request.model but loads message/response bodies on selection. */
+  bodies_omitted?: boolean;
   request: unknown;
   response: unknown;
   usage: unknown;

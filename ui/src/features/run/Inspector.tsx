@@ -1,11 +1,12 @@
 import { type ReactElement, useEffect, useState } from 'react';
-import { rows } from '@/api/branches';
+import { branchEvent, rows } from '@/api/branches';
 import { Button } from '@/components/ui/button';
 import { CodeBlock } from '@/components/ui/code-block';
-import { EmptyState, ErrorState } from '@/components/ui/state';
+import { EmptyState, ErrorState, LoadingState } from '@/components/ui/state';
 import { StatusMark, Tag } from '@/components/ui/status';
 import { StepLabel } from '@/components/ui/step-label';
 import { cn } from '@/lib/cn';
+import { useQuery } from '@/hooks/useQuery';
 import { errorMessage } from '@/lib/errors';
 import { pretty } from '@/lib/format';
 import { MARK, alarmMark, mark, passMark } from '@/lib/mark';
@@ -280,14 +281,22 @@ function Head({ event, events = [] }: { event: Event; events?: Event[] }) {
 
 /** One step in full: what it did, on which system, under which permit, and what it returned. */
 export default function Inspector(props: InspectorProps) {
-  const { event } = props;
+  const selected = props.event;
+  const needsBody = selected?.kind === 'model_call' && (selected.payload.bodies_omitted || (selected.payload.request == null && selected.payload.response == null));
+  const full = useQuery(needsBody ? `step:${props.branchId}:${selected.seq}` : null,
+    () => branchEvent(props.branchId, selected!.seq));
+  const event = full.data ?? selected;
   if (!event) {
     return <EmptyState title="Pick a step on the timeline" />;
   }
   return (
     <div className="min-w-0">
       <Head event={event} events={props.events} />
-      <Body {...props} event={event} />
+      {needsBody && !full.data
+        ? full.error
+          ? <ErrorState error={full.error} hint="The timeline is available. Retry loading this step’s full details." onRetry={full.retry} />
+          : <LoadingState label="Loading this model call’s details…" rows={3} />
+        : <Body {...props} event={event} />}
     </div>
   );
 }

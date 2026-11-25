@@ -5,7 +5,8 @@ use crate::auth::{Caller, Who};
 use std::{sync::Arc, time::Duration};
 
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
+    http::HeaderMap,
     response::{
         sse::{Event as SseEvent, KeepAlive, Sse},
         IntoResponse, Response,
@@ -27,6 +28,31 @@ fn sse_event(name: &str, data: &impl serde::Serialize) -> SseEvent {
         .unwrap_or_else(|_| SseEvent::default().event(name).data("null"))
 }
 
+/// Frame ids let EventSource resume without replaying history after a disconnect.
+fn event_frame(event: &Event, lean: bool) -> SseEvent {
+    let mut event = event.clone();
+    if lean && event.kind == EventKind::ModelCall {
+        if let Some(payload) = event.payload.as_object_mut() {
+            let model = payload.get("request").and_then(|r| r.get("model")).cloned();
+            payload.insert(
+                "request".into(),
+                model.map_or(serde_json::Value::Null, |m| json!({"model": m})),
+            );
+            payload.insert("bodies_omitted".into(), json!(true));
+            payload.insert("response".into(), serde_json::Value::Null);
+            payload.remove("provider_response");
+        }
+    }
+    sse_event("event", &event).id(event.seq.to_string())
+}
+
+#[derive(Default, serde::Deserialize)]
+pub(super) struct StreamQuery {
+    #[serde(default)]
+    after: i64,
+    lean: Option<String>,
+}
+
 type SseTx = mpsc::Sender<Result<SseEvent, std::convert::Infallible>>;
 
 /// Feeds one branch's events and final status to an SSE client.
@@ -36,6 +62,7 @@ struct Pump {
     id: String,
     /// The last event seq sent.
     last: i64,
+    lean: bool,
     tx: SseTx,
 }
 
@@ -68,13 +95,19 @@ fn unless_gone(ok: bool, then: Next) -> Next {
 impl Pump {
     /// Sends the stored events after `last`; false when the client is gone or the store failed.
     async fn catch_up(&mut self) -> bool {
-        let Ok(events) = self.state.store.at(&self.caller).events(&self.id).await else {
+        let Ok(events) = self
+            .state
+            .store
+            .at(&self.caller)
+            .events_after(&self.id, self.last, self.lean)
+            .await
+        else {
             return false;
         };
         let from = self.last;
         for e in events.into_iter().filter(|e| e.seq > from) {
             self.last = e.seq;
-            if self.tx.send(Ok(sse_event("event", &e))).await.is_err() {
+            if self.tx.send(Ok(event_frame(&e, self.lean))).await.is_err() {
                 return false;
             }
         }
@@ -103,7 +136,7 @@ impl Pump {
     async fn on_event(&mut self, e: &Event) -> Next {
         let ok = if e.seq == self.last + 1 {
             self.last = e.seq;
-            self.tx.send(Ok(sse_event("event", e))).await.is_ok()
+            self.tx.send(Ok(event_frame(e, self.lean))).await.is_ok()
         } else {
             e.seq <= self.last || self.catch_up().await
         };
@@ -159,17 +192,30 @@ pub(super) async fn stream(
     State(state): State<Arc<AppState>>,
     Who(caller): Who,
     Path(id): Path<String>,
+    Query(query): Query<StreamQuery>,
+    headers: HeaderMap,
 ) -> Result<Response, ApiError> {
     branch_or_404(&state, &caller, &id).await?;
     // Subscribe before reading the stored events so nothing falls between the two.
     let rx = state.store.subscribe();
     let (tx, out) = mpsc::channel(64);
+    let last = headers
+        .get("last-event-id")
+        .and_then(|h| h.to_str().ok())
+        .and_then(|s| s.parse::<i64>().ok())
+        .unwrap_or(0)
+        .max(query.after)
+        .max(0);
     tokio::spawn(
         Pump {
             state,
             caller,
             id,
-            last: 0,
+            last,
+            lean: query
+                .lean
+                .as_deref()
+                .is_some_and(|v| v == "1" || v == "true"),
             tx,
         }
         .run(rx),

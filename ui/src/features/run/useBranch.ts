@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { branch as fetchBranch, stream } from '@/api/branches';
 import { runs as fetchRuns } from '@/api/runs';
 import { useQuery } from '@/hooks/useQuery';
@@ -12,7 +12,7 @@ export function withEvent(d: BranchDetail | null, id: string, e: Event): BranchD
 
 /**
  * A branch with its events, live while it runs; with `runId`, its run's other branches too. `lean` reads model calls
- * without their request and response (most of a long run's record), for pages that show the world, not the calls.
+ * without their request and response (most of a long run's record). The run inspector fetches its selected call separately.
  */
 export function useBranch(branchId: string, runId?: string, { lean = false }: { lean?: boolean } = {}) {
   // A failed read keeps what is on screen; a response lands only if it is still for the branch on screen.
@@ -23,10 +23,14 @@ export function useBranch(branchId: string, runId?: string, { lean = false }: { 
   const { reload: reloadOthers } = others;
   const reload = useCallback(() => { reloadBranch(); reloadOthers(); }, [reloadBranch, reloadOthers]);
   const running = branch.data?.status === 'running';
+  const latest = useRef(branch.data);
+  latest.current = branch.data;
   useEffect(() => {
     if (!running) return;
-    return stream(branchId, (e) => update((d) => withEvent(d, branchId, e)), reload);
-  }, [running, branchId, update, reload]);
+    return stream(branchId, (e) => update((d) => withEvent(d, branchId, e)), reload, {
+      after: latest.current?.events.at(-1)?.seq ?? 0, lean,
+    });
+  }, [running, branchId, update, reload, lean]);
   return { detail: branch.data, siblings: others.data ?? NO_BRANCHES, error: branch.error, reload };
 }
 

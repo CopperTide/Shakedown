@@ -271,7 +271,7 @@ fn an_uncommitted_tx_never_returns_its_connection() {
 fn assert_lean_call(p: &serde_json::Value) {
     assert_eq!(
         (&p["request"], &p["response"]),
-        (&json!(null), &json!(null))
+        (&json!({"model": "test-model"}), &json!(null))
     );
     assert!(p.get("provider_response").is_none(), "{p}");
     assert_eq!(
@@ -287,7 +287,7 @@ fn a_lean_read_leaves_out_model_call_bodies_and_keeps_the_rest() {
     run(async {
         let (admin, name, store, _clean) = fresh("lean").await;
         let (_, b) = root_branch(&store).await;
-        let call = json!({"request": {"messages": ["x".repeat(1000)]}, "response": {"text": "y"},
+        let call = json!({"request": {"model": "test-model", "messages": ["x".repeat(1000)]}, "response": {"text": "y"},
                           "provider_response": {"raw": 1}, "usage": {"prompt_tokens": 7}, "cost_usd": 0.5});
         let tool =
             json!({"part": "box", "writes": ["box/n"], "saves": {"box": "s2"}, "clock_ms": 100});
@@ -302,6 +302,10 @@ fn a_lean_read_leaves_out_model_call_bodies_and_keeps_the_rest() {
         let lean = records(&store).events_lean(&b).await.unwrap();
         assert_eq!(lean.len(), 2);
         assert_lean_call(&lean[0].payload);
+        let full = records(&store).event(&b, 1).await.unwrap().unwrap();
+        assert_eq!(full.payload["response"], json!({"text": "y"}));
+        assert!(records(&store).event(&b, 999).await.unwrap().is_none());
+        assert!(records(&store).event("missing", 1).await.unwrap().is_none());
         assert_eq!(lean[1].payload, tool);
         let version = records(&store).events_version(&b).await.unwrap();
         assert_eq!(version, (2, 2));

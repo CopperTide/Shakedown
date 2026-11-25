@@ -12,7 +12,10 @@ pub(super) const EVENT_COLS: &str = "branch_id, seq, at, agent, kind, payload";
 
 /// An event's payload without a model call's bodies (`Scoped::events_lean`).
 const LEAN_PAYLOAD: &str = "CASE WHEN kind = 'model_call'
-    THEN (payload - 'provider_response') || '{\"request\": null, \"response\": null}'::jsonb
+    THEN (payload - 'provider_response') || jsonb_build_object(
+        'request', CASE WHEN payload->'request'->>'model' IS NOT NULL
+            THEN jsonb_build_object('model', payload->'request'->'model') ELSE NULL END,
+        'response', NULL, 'bodies_omitted', true)
     ELSE payload END";
 
 impl Store {
@@ -77,9 +80,22 @@ impl Scoped<'_> {
         rows.iter().map(event_from).collect()
     }
 
-    /// `events`, with each model call's `request` and `response` read as null and its
-    /// `provider_response` left out: the world's reading of a branch (its views, its world page),
-    /// without the bodies that are most of a long run's record. Usage and cost stay.
+    /// One full event, scoped to a visible branch, for lazy step inspection.
+    pub async fn event(&self, branch_id: &str, seq: i64) -> Result<Option<Event>> {
+        let sql = format!(
+            "SELECT {EVENT_COLS} FROM events WHERE branch_id = $1 AND seq = $2
+                        AND EXISTS ({VISIBLE_BRANCH})"
+        );
+        self.query(&sql, &[&branch_id, &seq])
+            .await?
+            .first()
+            .map(event_from)
+            .transpose()
+    }
+
+    /// `events`, retaining `request.model` for pricing but omitting message and response bodies,
+    /// which are most of a long run's record. Usage and cost stay; `bodies_omitted` tells the
+    /// inspector to load this event in full when selected.
     pub async fn events_lean(&self, branch_id: &str) -> Result<Vec<Event>> {
         let sql = format!(
             "SELECT branch_id, seq, at, agent, kind, {LEAN_PAYLOAD} AS payload FROM events
@@ -87,6 +103,25 @@ impl Scoped<'_> {
         );
         let rows = self.query(&sql, &[&branch_id]).await?;
         rows.iter().map(event_from).collect()
+    }
+
+    /// Incremental stream catch-up; skip already loaded rows and optionally omit model bodies.
+    pub async fn events_after(
+        &self,
+        branch_id: &str,
+        after: i64,
+        lean: bool,
+    ) -> Result<Vec<Event>> {
+        let payload = if lean { LEAN_PAYLOAD } else { "payload" };
+        let sql = format!(
+            "SELECT branch_id, seq, at, agent, kind, {payload} AS payload FROM events
+             WHERE branch_id = $1 AND seq > $2 AND EXISTS ({VISIBLE_BRANCH}) ORDER BY seq"
+        );
+        self.query(&sql, &[&branch_id, &after])
+            .await?
+            .iter()
+            .map(event_from)
+            .collect()
     }
 
     /// `(count, last seq)` of the branch's events: a recorded branch's record is the same while

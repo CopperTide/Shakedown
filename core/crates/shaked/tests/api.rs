@@ -718,3 +718,86 @@ async fn invalid_run_names(fx: &AppFx, url: &str) {
         .unwrap();
     assert_eq!(response.status(), 404);
 }
+
+#[test]
+fn selected_event_returns_full_body_and_missing_steps_are_404() {
+    run(async {
+        let fx = setup("selected-event").await;
+        let records = records(&fx.state.store);
+        let run_id = records.create_run("27", &team()).await.unwrap();
+        let branch = records
+            .create_branch(&run_id, None, &team(), &json!([]), None)
+            .await
+            .unwrap();
+        let payload = json!({"request": {"messages": ["hello"]}, "response": "answer"});
+        let event = records
+            .append(
+                &branch,
+                Some("triage"),
+                EventKind::ModelCall,
+                payload.clone(),
+            )
+            .await
+            .unwrap();
+        let (status, found) = fx
+            .get(&format!("/api/branches/{branch}/events/{}", event.seq))
+            .await;
+        assert_eq!(status, 200);
+        assert_eq!(found["payload"], payload);
+        assert_eq!(
+            fx.get(&format!("/api/branches/{branch}/events/999"))
+                .await
+                .0,
+            404
+        );
+        assert_eq!(fx.get("/api/branches/missing/events/1").await.0, 404);
+    })
+}
+
+#[test]
+fn lean_stream_resumes_after_loaded_events_and_eventsource_cursor() {
+    run(async {
+        let fx = setup("lean-stream").await;
+        let records = records(&fx.state.store);
+        let run_id = records.create_run("27", &team()).await.unwrap();
+        let branch = records
+            .create_branch(&run_id, None, &team(), &json!([]), None)
+            .await
+            .unwrap();
+        for seq in 1..=3 {
+            records.append(&branch, Some("triage"), EventKind::ModelCall,
+                json!({"request": {"model": "test-model", "messages": ["large history"]}, "response": seq, "provider_response": "raw"})).await.unwrap();
+        }
+        records
+            .set_status(&branch, BranchStatus::Passed, None)
+            .await
+            .unwrap();
+        let response = fx
+            .http
+            .get(format!(
+                "{}/api/branches/{branch}/stream?after=1&lean=1",
+                fx.base
+            ))
+            .header("Last-Event-ID", "2")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), 200);
+        let body = response.text().await.unwrap();
+        let events: Vec<Value> = frames(&body)
+            .into_iter()
+            .filter(|(name, _)| name == "event")
+            .map(|(_, body)| serde_json::from_str(&body).unwrap())
+            .collect();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0]["seq"], 3);
+        assert_eq!(
+            events[0]["payload"]["request"],
+            json!({"model": "test-model"})
+        );
+        assert_eq!(events[0]["payload"]["bodies_omitted"], true);
+        assert!(events[0]["payload"]["response"].is_null());
+        assert!(events[0]["payload"].get("provider_response").is_none());
+        assert!(body.contains("id: 3"));
+    })
+}

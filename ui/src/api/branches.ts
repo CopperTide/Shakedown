@@ -6,8 +6,11 @@ import { get, path, post, qs } from './client';
 import { api } from './core';
 import { tracked } from '@/lib/productAnalytics';
 
-/** A branch with its events; `lean` leaves each model call's request and response out (a page that shows the world). */
+/** A branch with its events; `lean` leaves model bodies out; fetch a selected call with `branchEvent`. */
 export const branch = (id: string, lean = false) => get<BranchDetail>(path`/api/branches/${id}` + (lean ? qs({ lean: 1 }) : ''));
+
+/** A selected step's full payload; the run page initially loads lean events. */
+export const branchEvent = (id: string, seq: number) => get<Event>(path`/api/branches/${id}/events/${seq}`);
 
 export const rows = (id: string, seq: number, keys: string[]) =>
   get<RowsResponse>(path`/api/branches/${id}/rows` + qs({ seq, keys: keys.join(',') }));
@@ -38,8 +41,10 @@ export function stream(
   id: string,
   onEvent: (e: Event) => void,
   onStatus: (s: StatusEvent) => void,
+  options: { after?: number; lean?: boolean } = {},
 ): () => void {
-  const es = new EventSource(api(path`/api/branches/${id}/stream`));
+  const suffix = options.after == null && !options.lean ? '' : qs({ ...(options.after == null ? {} : { after: options.after }), ...(options.lean ? { lean: 1 } : {}) });
+  const es = new EventSource(api(path`/api/branches/${id}/stream` + suffix));
   const listen = <T>(name: string, fn: (v: T) => void) =>
     es.addEventListener(name, (m) => {
       try {
