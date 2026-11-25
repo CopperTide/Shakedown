@@ -1,5 +1,5 @@
-// A timeline's geometry: rows by lane, the UTC axis's ticks, and where a time falls.
-import { toMs, utcTime } from './format';
+// A timeline's geometry: rows by lane, the axis's ticks in the world's zone, and where a time falls.
+import { UTC, type Zone, timeIn, toMs } from './format';
 import { cols } from './rows';
 import { type Tone, type TimelineData, asTone } from './types';
 
@@ -47,14 +47,15 @@ export interface Tick {
   major: boolean;
 }
 
-/** Ticks on round UTC times across `[t0, t1]`, at least `minGap` px apart on a `width` px axis. */
-export function ticks(t0: number, t1: number, width: number, minGap = 64): Tick[] {
+/** Ticks on round local times of `zone` across `[t0, t1]`, at least `minGap` px apart on a `width` px axis. */
+export function ticks(t0: number, t1: number, width: number, minGap = 64, zone: Zone = UTC): Tick[] {
   if (!(t1 > t0) || width <= 0) return [];
   const perPx = (t1 - t0) / width;
   const step = STEPS.find((s) => s / perPx >= minGap) ?? STEPS[STEPS.length - 1];
+  const off = zone.offsetMin * MIN;
   const out: Tick[] = [];
-  for (let t = Math.ceil(t0 / step) * step; t <= t1; t += step) {
-    out.push({ ms: t, label: utcTime(t).replace('Z', ''), major: t % (60 * MIN) === 0 });
+  for (let t = Math.ceil((t0 + off) / step) * step; t <= t1 + off; t += step) {
+    out.push({ ms: t - off, label: timeIn(t - off, zone).replace('Z', ''), major: t % (60 * MIN) === 0 });
   }
   return out;
 }

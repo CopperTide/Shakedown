@@ -7,9 +7,10 @@ import { areaNames, gridStyle, stackedStyle } from './layout';
 import MapPanel from './MapPanel';
 import { PanelErrorBody, PanelFrame } from './PanelFrame';
 import TimelinePanel from './TimelinePanel';
+import { useWorldNow } from './useWorldNow';
 import {
   type At, type BarsData, type BoardData, type FeedData, type KpisData, type MapData, type PanelData, type PanelDef, type PanelError,
-  type ScreenData, type ScreenDef, type TimelineData, type ViewDef, isPanelError,
+  type ScreenData, type ScreenDef, type TimelineData, type TimelineDef, type ViewDef, isPanelError,
 } from './types';
 
 export interface PanelProps {
@@ -20,11 +21,16 @@ export interface PanelProps {
   fetchedAt: number;
 }
 
+/** A timeline whose now line follows the world clock while it runs. */
+function TimelineNow({ id, def, data, at, fetchedAt }: { id: string; def: TimelineDef; data: TimelineData; at: At | null; fetchedAt: number }) {
+  return <TimelinePanel id={id} def={def} data={data} now={useWorldNow(at, fetchedAt)} />;
+}
+
 /** One panel, by its kind. */
 export function PanelBody({ id, def, data, at, fetchedAt }: PanelProps) {
   switch (def.kind) {
     case 'board': return <BoardPanel id={id} def={def} data={data as BoardData} />;
-    case 'timeline': return <TimelinePanel id={id} def={def} data={data as TimelineData} now={at?.world_ms ?? null} />;
+    case 'timeline': return <TimelineNow id={id} def={def} data={data as TimelineData} at={at} fetchedAt={fetchedAt} />;
     case 'map': return <MapPanel id={id} def={def} data={data as MapData} at={at} fetchedAt={fetchedAt} />;
     case 'kpis': return <PanelFrame id={id} title={def.title}><KpisPanel def={def} data={data as KpisData} /></PanelFrame>;
     case 'bars': return <PanelFrame id={id} title={def.title} meta={(data as BarsData).rows.length}><BarsPanel def={def} data={data as BarsData} /></PanelFrame>;

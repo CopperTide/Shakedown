@@ -1,4 +1,5 @@
-// A view's value formats: what a number or a time reads as on screen. Times are UTC ("14:05Z").
+// A view's value formats: what a number or a time reads as on screen. Times are the world's local time, in
+// its zone (`Zone`); a world that gives no zone is shown in UTC ("14:05Z").
 import { toNum } from './rows';
 import type { Format } from './types';
 
@@ -19,21 +20,38 @@ export function toMs(v: unknown): number | null {
   return null;
 }
 
-/** "14:05Z". */
-export function utcTime(ms: number): string {
-  const d = new Date(ms);
-  return `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}Z`;
+/**
+ * The world's time zone as its views show it: its UTC offset in minutes and its label ("UTC−4"). A world that
+ * gives no offset (its `clock_start` has none) is shown in UTC, its times marked "Z".
+ */
+export interface Zone {
+  offsetMin: number;
+  label: string;
 }
 
-/** "14:05:30Z". */
-export function utcTimeSec(ms: number): string {
-  const d = new Date(ms);
-  return `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}Z`;
+export const UTC: Zone = { offsetMin: 0, label: 'Z' };
+
+/** The zone of a world whose offset is `offsetMin` (`at.utc_offset_min`); UTC ("Z") without one. */
+export function zoneOf(offsetMin: number | null | undefined): Zone {
+  if (offsetMin == null || !Number.isFinite(offsetMin)) return UTC;
+  const m = Math.abs(offsetMin), h = Math.floor(m / 60), rest = m % 60;
+  const sign = offsetMin < 0 ? '−' : '+';
+  return { offsetMin, label: m === 0 ? 'UTC' : `UTC${sign}${h}${rest ? `:${pad(rest)}` : ''}` };
 }
 
-/** "Sun 22 Nov 2026". */
-export function utcDate(ms: number): string {
-  const d = new Date(ms);
+/** `ms` as the world's wall clock: a Date whose UTC fields read the zone's local time. */
+const local = (ms: number, zone: Zone) => new Date(ms + zone.offsetMin * 60_000);
+
+/** "10:05" in the world's zone ("14:05Z" in UTC), with seconds when asked. */
+export function timeIn(ms: number, zone: Zone = UTC, seconds = false): string {
+  const d = local(ms, zone);
+  const hm = `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}${seconds ? `:${pad(d.getUTCSeconds())}` : ''}`;
+  return zone === UTC ? `${hm}Z` : hm;
+}
+
+/** "Sun 22 Nov 2026", the world's local date. */
+export function dateIn(ms: number, zone: Zone = UTC): string {
+  const d = local(ms, zone);
   return `${DAYS[d.getUTCDay()]} ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
 }
 
@@ -51,8 +69,8 @@ function usd(n: number, decimals?: number): string {
   return `${n < 0 ? '-' : ''}$${grouped(Math.abs(n), d)}`;
 }
 
-/** A number in a format; null when the format isn't numeric. */
-function numeric(n: number, format: Format, decimals?: number): string | null {
+/** A number in a format (a time in `zone`); null when the format isn't numeric. */
+function numeric(n: number, format: Format, decimals?: number, zone?: Zone): string | null {
   switch (format) {
     case 'int': return grouped(Math.round(n), 0);
     case 'number': return grouped(n, decimals ?? (Number.isInteger(n) ? 0 : 1));
@@ -60,7 +78,7 @@ function numeric(n: number, format: Format, decimals?: number): string | null {
     case 'ratio_pct': return `${grouped(n * 100, decimals ?? 0)}%`;
     case 'usd': return usd(n, decimals);
     case 'minutes': return minutes(n);
-    case 'time': return utcTime(n);
+    case 'time': return timeIn(n, zone);
     default: return null;
   }
 }
@@ -71,16 +89,17 @@ function textOf(v: unknown, decimals?: number): string {
 }
 
 /**
- * A value as a view's `format` shows it; `chip` shows the chip label, else the value. Nothing (null or
- * absent) reads as a dash; a number format given text that isn't a number shows the text as it is.
+ * A value as a view's `format` shows it; `chip` shows the chip label, else the value; a time reads in the world's
+ * `zone`. Nothing (null or absent) reads as a dash; a number format given text that isn't a number shows the text
+ * as it is.
  */
-export function formatValue(v: unknown, format: Format = 'text', decimals?: number, chip?: string | null): string {
+export function formatValue(v: unknown, format: Format = 'text', decimals?: number, chip?: string | null, zone?: Zone): string {
   if (format === 'chip') return chip || (v == null || v === '' ? DASH : String(v));
   if (v == null || v === '') return DASH;
   if (format === 'text') return textOf(v, decimals);
   const n = format === 'time' ? toMs(v) : toNum(v);
   if (n == null) return String(v);
-  return numeric(n, format, decimals) ?? String(v);
+  return numeric(n, format, decimals, zone) ?? String(v);
 }
 
 /** Whether a column's values read as numbers (right-aligned, sorted as numbers). */

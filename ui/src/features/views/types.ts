@@ -102,6 +102,10 @@ export interface At {
   world_ms: number | null;
   speed: number;
   paused: boolean;
+  /** The world's UTC offset in minutes: its times are shown local with it (absent or null: UTC). */
+  utc_offset_min?: number | null;
+  /** Set when the step asked for couldn't be restored and an earlier one is shown. */
+  fallback?: { asked: number; why: string };
 }
 
 export interface KpisData { kind: 'kpis'; items: { value: unknown; tone?: Tone; chip?: string | null }[] }

@@ -55,7 +55,7 @@ function TwinWorld({ runId, branchId, detail }: { runId: string; branchId: strin
  */
 export default function World() {
   const { runId = '', branchId = '' } = useParams();
-  const { detail, error, reload } = useBranch(branchId, runId);
+  const { detail, error, reload } = useBranch(branchId, runId, { lean: true });
   const worldViews = useWorldViews(branchId);
   if (!detail || !worldViews.settled) return <PageGate title="World" label="Loading the world…" rows={6} error={error} onRetry={reload} />;
   if (worldViews.defs?.views?.length) return <ViewsWorld runId={runId} d={detail} defs={worldViews.defs} />;

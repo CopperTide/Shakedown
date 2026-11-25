@@ -1,4 +1,5 @@
-// A run's world drawn from its world's view files: the view's screens as tabs, live or scrubbed.
+// A run's world drawn from its world's view files: the view's screens as tabs, live, scrubbed or played back, every
+// time in the world's own zone.
 import { useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { StatusChip } from '@/components/marks';
@@ -6,13 +7,16 @@ import { cn } from '@/lib/cn';
 import RunMenu from '@/features/run/RunMenu';
 import { useStepParam } from '@/features/run/useStepParam';
 import { moveStop, trackMarks } from '@/features/world/scrub';
-import { usePlay, useStopKeys } from '@/features/world/useWorld';
+import { useStopKeys } from '@/features/world/useWorld';
 import type { BranchDetail } from '@/model/types';
+import { zoneOf } from './format';
 import { atFor, isLive, viewStops } from './points';
-import type { ScreenDef, ViewDef, WorldViews } from './types';
+import type { At, ScreenDef, ViewDef, WorldViews } from './types';
+import { usePlayback } from './usePlayback';
 import { useScreen } from './useViews';
 import ViewScreen from './ViewScreen';
 import ViewScrubber, { LiveClock, WorldTime } from './ViewScrubber';
+import { ZoneContext } from './zone';
 
 function useParam(name: string): [string | null, (v: string) => void] {
   const [sp, setSp] = useSearchParams();
@@ -44,17 +48,18 @@ function ViewPicker({ views, view, onView }: { views: ViewDef[]; view: ViewDef; 
   );
 }
 
-/** The recorded branch's stops, the one on screen, and the scrubber's controls (←/→, space). */
-function useStops(d: BranchDetail) {
+/** The recorded branch's stops, the one on screen, playback and the scrubber's controls (←/→, space). */
+function useStops(d: BranchDetail, view: string, screen: string | null) {
   const stops = useMemo(() => viewStops(d.events), [d.events]);
   const seqs = useMemo(() => stops.map((s) => s.seq), [stops]);
   const marks = useMemo(() => trackMarks(d.events, d.start_seq), [d.events, d.start_seq]);
   const [step, setStep] = useStepParam();
   const point = atFor(stops, step);
-  const play = usePlay(seqs, step, setStep);
-  const { pause } = play;
-  const move = useCallback((dir: 'prev' | 'next') => { pause(); setStep((cur) => moveStop(seqs, cur, dir)); }, [pause, setStep, seqs]);
-  useStopKeys(seqs, setStep, play.toggle, pause);
+  const shown = stops.findIndex((s) => s.seq === point.seq);
+  const play = usePlayback({ branchId: d.id, view, screen, stops, shown, setStep });
+  const { leave } = play;
+  const move = useCallback((dir: 'prev' | 'next') => { leave(); setStep((cur) => moveStop(seqs, cur, dir)); }, [leave, setStep, seqs]);
+  useStopKeys(seqs, setStep, play.toggle, leave);
   return { stops, marks, point, play, move, setStep };
 }
 
@@ -67,37 +72,58 @@ function useChosen(defs: WorldViews) {
   return { view, screen, setView, setScreen };
 }
 
-function Clock({ live, sd }: { live: boolean; sd: ReturnType<typeof useScreen> }) {
-  if (live) return <LiveClock at={sd.data?.at ?? null} fetchedAt={sd.fetchedAt} />;
-  return <WorldTime ms={sd.data?.at.world_ms ?? null} className={cn(sd.pending && 'opacity-60')} />;
+function Clock({ live, playing, at, fetchedAt, pending }: { live: boolean; playing: boolean; at: At | null; fetchedAt: number; pending: boolean }) {
+  if (live || playing) return <LiveClock at={at} fetchedAt={fetchedAt} label={live ? 'Live' : 'Playing'} />;
+  return <WorldTime ms={at?.world_ms ?? null} className={cn(pending && 'opacity-60')} />;
+}
+
+/** "Shown at step 12996": the step asked for couldn't be restored, and why. */
+function Fallback({ at }: { at: At | null }) {
+  if (!at?.fallback) return null;
+  return <span className="truncate text-xs text-tone-warn" title={at.fallback.why}>Shown at step {at.seq}</span>;
+}
+
+/** The screen to draw: its data with the `at` the clock shows (playback's virtual clock), and the world's zone. */
+function useShown(live: boolean, sd: ReturnType<typeof useScreen>, play: ReturnType<typeof usePlayback>) {
+  const at = sd.data?.at ?? null;
+  const shown = live ? { at, fetchedAt: sd.fetchedAt } : play.shownAt(at, sd.fetchedAt);
+  const data = sd.data && shown.at ? { ...sd.data, at: shown.at } : sd.data;
+  return { ...shown, data, zone: zoneOf(at?.utc_offset_min) };
 }
 
 /** The world's declarative views for a branch: header, screen tabs, the screen, and the live clock or the scrubber. */
 export default function ViewsWorld({ runId, d, defs }: { runId: string; d: BranchDetail; defs: WorldViews }) {
   const { view, screen, setView, setScreen } = useChosen(defs);
   const live = isLive(d.status);
-  const s = useStops(d);
-  const sd = useScreen(d.id, view.id, screen?.id ?? null, s.point.at, live, d.events.length);
+  const screenId = screen?.id ?? null;
+  const s = useStops(d, view.id, screenId);
+  const sd = useScreen(d.id, view.id, screenId, s.point.at, live, d.events.length);
+  const shown = useShown(live, sd, s.play);
+  const playing = s.play.playing;
   return (
-    <div className="flex flex-col md:h-[calc(100dvh-48px)] md:min-h-[560px]">
-      <header className="flex min-h-11 shrink-0 flex-wrap items-center gap-x-4 gap-y-1 border-b border-line px-4 py-1 sm:px-5">
-        <h1 className="truncate font-display text-[24px] leading-none" title={defs.world ?? undefined}>{view.label}</h1>
-        <StatusChip status={d.status} />
-        <ViewPicker views={defs.views} view={view} onView={setView} />
-        <ScreenTabs view={view} screen={screen} onScreen={setScreen} />
-        <div className="ml-auto flex min-w-0 items-center gap-3">
-          {sd.error && <span className="truncate text-xs text-tone-critical" title={sd.error}>✕ {sd.error}</span>}
-          <Clock live={live} sd={sd} />
-          <RunMenu runId={runId} d={d} page="world" step={s.point.seq} />
-        </div>
-      </header>
-      {screen
-        ? <ViewScreen view={view} screen={screen} data={sd.data} fetchedAt={sd.fetchedAt} />
-        : <div className="flex-1 px-5 py-4 text-sm text-muted">This view has no screens.</div>}
-      {!live && s.stops.length > 0 && (
-        <ViewScrubber stops={s.stops} marks={s.marks} current={s.point.seq} playing={s.play.playing} pending={sd.pending}
-          onPlay={s.play.toggle} onStep={(seq) => { s.play.pause(); s.setStep(seq); }} onMove={s.move} />
-      )}
-    </div>
+    <ZoneContext.Provider value={shown.zone}>
+      <div className="flex flex-col md:h-[calc(100dvh-48px)] md:min-h-[560px]">
+        <header className="flex min-h-11 shrink-0 flex-wrap items-center gap-x-4 gap-y-1 border-b border-line px-4 py-1 sm:px-5">
+          <h1 className="truncate font-display text-[24px] leading-none" title={defs.world ?? undefined}>{view.label}</h1>
+          <StatusChip status={d.status} />
+          <ViewPicker views={defs.views} view={view} onView={setView} />
+          <ScreenTabs view={view} screen={screen} onScreen={setScreen} />
+          <div className="ml-auto flex min-w-0 items-center gap-3">
+            {sd.error && <span className="truncate text-xs text-tone-critical" title={sd.error}>✕ {sd.error}</span>}
+            <Fallback at={shown.at} />
+            <Clock live={live} playing={playing} at={shown.at} fetchedAt={shown.fetchedAt} pending={sd.pending && !playing} />
+            <RunMenu runId={runId} d={d} page="world" step={s.point.seq} />
+          </div>
+        </header>
+        {screen
+          ? <ViewScreen view={view} screen={screen} data={shown.data} fetchedAt={shown.fetchedAt} />
+          : <div className="flex-1 px-5 py-4 text-sm text-muted">This view has no screens.</div>}
+        {!live && s.stops.length > 0 && (
+          <ViewScrubber stops={s.stops} marks={s.marks} current={s.point.seq} playing={playing} pending={sd.pending}
+            rate={s.play.rate} onRate={s.play.setRate}
+            onPlay={s.play.toggle} onStep={(seq) => { s.play.leave(); s.setStep(seq); }} onMove={s.move} />
+        )}
+      </div>
+    </ZoneContext.Provider>
   );
 }

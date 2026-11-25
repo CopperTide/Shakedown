@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { fillOf } from './BarsPanel';
 import { feedTime } from './FeedPanel';
+import { zoneOf } from './format';
 import type { ScreenData, ViewDef } from './types';
 import ViewScreen, { slotOf } from './ViewScreen';
 
@@ -96,5 +97,6 @@ describe('panel slots and helpers', () => {
     expect(feedTime(90 * 60_000, { world_ms: T0 + 2 * H, clock_ms: 2 * H })).toBe('01:30Z');
     expect(feedTime(90 * 60_000, null)).toBe('+1:30');
     expect(feedTime(null, null)).toBe('');
+    expect(feedTime(90 * 60_000, { world_ms: T0 + 2 * H, clock_ms: 2 * H }, zoneOf(-240))).toBe('21:30');
   });
 });

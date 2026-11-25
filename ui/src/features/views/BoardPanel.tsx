@@ -1,12 +1,14 @@
 import { memo, useMemo, useState } from 'react';
 import { cn } from '@/lib/cn';
 import { type BoardColumn, type Sort, boardColumns, boardRows, cellText, columnWidths, defaultSort, filterCounts, nextSort } from './board';
+import type { Zone } from './format';
 import { PanelEmpty, PanelFrame } from './PanelFrame';
 import { type Cols, cols } from './rows';
 import { Chip, TONE_RULE } from './tones';
 import { type BoardData, type BoardDef, asTone } from './types';
 import { useScroll, useSize } from './useSize';
 import { windowOf } from './virtual';
+import { useZone } from './zone';
 
 const ROW = 22;
 /** IBM Plex Mono's advance at the board's 11.5 px, and a cell's side padding. */
@@ -44,13 +46,13 @@ function Header({ columns, template, sort, onSort }: { columns: BoardColumn[]; t
 }
 
 /** A row; the same row isn't drawn again as the board scrolls. */
-const Row = memo(function Row({ c, row, columns, template }: { c: Cols; row: unknown[]; columns: BoardColumn[]; template: string }) {
+const Row = memo(function Row({ c, row, columns, template, zone }: { c: Cols; row: unknown[]; columns: BoardColumn[]; template: string; zone: Zone }) {
   const tone = asTone(c.get(row, 'tone'));
   return (
     <div className={cn('grid border-b border-l-[3px] border-b-line/70 hover:bg-hover', tone === 'neutral' ? 'border-l-transparent' : TONE_RULE[tone])}
       style={{ gridTemplateColumns: template, height: ROW }}>
       {columns.map((col, i) => {
-        const text = cellText(c, row, col);
+        const text = cellText(c, row, col, zone);
         return (
           <div key={i} className={cn('flex min-w-0 items-center px-2 font-mono text-[11.5px] leading-none whitespace-nowrap tabular-nums', col.numeric && 'justify-end', i === 0 && 'font-medium')}>
             {col.format === 'chip' && col.name != null ? <Chip tone={tone}>{text}</Chip> : <span className="truncate" title={text}>{text}</span>}
@@ -61,14 +63,14 @@ const Row = memo(function Row({ c, row, columns, template }: { c: Cols; row: unk
   );
 });
 
-function useBoard(def: BoardDef, data: BoardData) {
+function useBoard(def: BoardDef, data: BoardData, zone: Zone) {
   const c = useMemo(() => cols(data.columns), [data.columns]);
   const columns = useMemo(() => boardColumns(def, c), [def, c]);
   const [sort, setSort] = useState<Sort | null>(null);
   const [on, setOn] = useState<number[]>([]);
   const [search, setSearch] = useState('');
   const sorting = sort ?? defaultSort(def, columns, c);
-  const order = useMemo(() => boardRows(data, columns, { sort: sorting, filters: on, search }), [data, columns, sorting, on, search]);
+  const order = useMemo(() => boardRows(data, columns, { sort: sorting, filters: on, search, zone }), [data, columns, sorting, on, search, zone]);
   const counts = useMemo(() => filterCounts(data, def.filters?.length ?? 0), [data, def.filters]);
   const template = useMemo(() => gridColumns(columnWidths(data, columns)), [data, columns]);
   const toggle = (i: number) => setOn((xs) => (xs.includes(i) ? xs.filter((x) => x !== i) : [...xs, i]));
@@ -78,7 +80,8 @@ function useBoard(def: BoardDef, data: BoardData) {
 
 /** A dense table: a sticky header that sorts, quick filters, a search over its text, rows drawn only where they show. */
 export default function BoardPanel({ id, def, data }: { id: string; def: BoardDef; data: BoardData }) {
-  const b = useBoard(def, data);
+  const zone = useZone();
+  const b = useBoard(def, data, zone);
   const size = useSize<HTMLDivElement>();
   const scroll = useScroll();
   const win = windowOf(scroll.top, size.height || 600, ROW, b.order.length);
@@ -97,7 +100,7 @@ export default function BoardPanel({ id, def, data }: { id: string; def: BoardDe
         <div className="w-max min-w-full">
           <Header columns={b.columns} template={b.template} sort={b.sorting} onSort={b.onSort} />
           <div style={{ paddingTop: win.before, paddingBottom: win.after }}>
-            {b.order.slice(win.start, win.end).map((ri) => <Row key={ri} c={b.c} row={data.rows[ri]} columns={b.columns} template={b.template} />)}
+            {b.order.slice(win.start, win.end).map((ri) => <Row key={ri} c={b.c} row={data.rows[ri]} columns={b.columns} template={b.template} zone={zone} />)}
           </div>
           {!b.order.length && <PanelEmpty>{data.rows.length ? 'No rows match.' : 'No rows.'}</PanelEmpty>}
         </div>

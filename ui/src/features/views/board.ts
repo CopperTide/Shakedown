@@ -1,5 +1,5 @@
 // A board's rows: its columns as the file names them, sorted, quick-filtered and searched.
-import { DASH, formatValue, isNumericFormat, toMs } from './format';
+import { DASH, UTC, type Zone, formatValue, isNumericFormat, toMs } from './format';
 import { type Cols, cols, columnOf, toNum } from './rows';
 import type { BoardData, BoardDef, Field, Format } from './types';
 
@@ -19,11 +19,11 @@ export function boardColumns(def: BoardDef, c: Cols): BoardColumn[] {
   });
 }
 
-/** A cell's text as shown: chip columns show the row's chip (else the value). */
-export function cellText(c: Cols, row: unknown[], col: BoardColumn): string {
+/** A cell's text as shown: chip columns show the row's chip (else the value); times read in the world's `zone`. */
+export function cellText(c: Cols, row: unknown[], col: BoardColumn, zone: Zone = UTC): string {
   if (col.name == null) return DASH;
   const chip = col.format === 'chip' ? (c.get(row, `${col.name}:chip`) as string | undefined) ?? c.str(row, 'chip') : null;
-  return formatValue(c.get(row, col.name), col.format, col.decimals, chip);
+  return formatValue(c.get(row, col.name), col.format, col.decimals, chip, zone);
 }
 
 export interface Sort {
@@ -57,15 +57,17 @@ export interface BoardQuery {
   /** Indexes into the def's filters that are on: a row shows when it matches any of them. */
   filters: number[];
   search: string;
+  /** The zone times are searched in (as they are shown). */
+  zone?: Zone;
 }
 
 /** A row's filter bits (bit i: the def's filters[i] matched). */
 export const filterBits = (c: Cols, row: unknown[]) => toNum(c.get(row, 'filters')) ?? 0;
 
-function matchesSearch(c: Cols, row: unknown[], columns: BoardColumn[], needle: string): boolean {
+function matchesSearch(c: Cols, row: unknown[], columns: BoardColumn[], needle: string, zone: Zone): boolean {
   if (!needle) return true;
   if (c.str(row, 'key').toLowerCase().includes(needle) || c.str(row, 'chip').toLowerCase().includes(needle)) return true;
-  return columns.some((col) => !col.numeric && col.name != null && cellText(c, row, col).toLowerCase().includes(needle));
+  return columns.some((col) => !col.numeric && col.name != null && cellText(c, row, col, zone).toLowerCase().includes(needle));
 }
 
 /** The indexes of the rows to show, in order. */
@@ -76,7 +78,7 @@ export function boardRows(data: BoardData, columns: BoardColumn[], q: BoardQuery
   const out: number[] = [];
   data.rows.forEach((row, i) => {
     if (mask && !(filterBits(c, row) & mask)) return;
-    if (matchesSearch(c, row, columns, needle)) out.push(i);
+    if (matchesSearch(c, row, columns, needle, q.zone ?? UTC)) out.push(i);
   });
   const col = q.sort ? columns[q.sort.column] : undefined;
   if (q.sort && col?.name) {

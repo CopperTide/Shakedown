@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { boardColumns, boardRows, cellText, columnWidths, defaultSort, filterCounts, nextSort } from './board';
 import { cols } from './rows';
+import { zoneOf } from './format';
 import { barsByLane, rangeOf, ticks, xOf, zoomStep } from './timeline';
 import type { BoardData, BoardDef, TimelineData } from './types';
 import { windowOf } from './virtual';
@@ -110,6 +111,14 @@ describe('timeline', () => {
     expect(ts[1].ms - ts[0].ms).toBe(2 * H);
     expect(ticks(0, H, 1200)[1].label).toBe('00:05');
     expect(ticks(5, 5, 100)).toEqual([]);
+  });
+
+  it('ticks_on_round_local_times_in_the_worlds_zone', () => {
+    const ist = zoneOf(330);
+    const ts = ticks(0, 24 * H, 1200, 64, ist);
+    expect(ts[0]).toMatchObject({ label: '06:00', major: true });
+    expect(ts[0].ms).toBe(30 * 60_000);
+    expect(ticks(0, 24 * H, 1200, 64, zoneOf(-240))[0].label).toBe('20:00');
   });
 
   it('x_and_zoom', () => {

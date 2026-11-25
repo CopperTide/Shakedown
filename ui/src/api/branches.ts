@@ -5,7 +5,8 @@ import type {
 import { get, path, post, qs } from './client';
 import { api } from './core';
 
-export const branch = (id: string) => get<BranchDetail>(path`/api/branches/${id}`);
+/** A branch with its events; `lean` leaves each model call's request and response out (a page that shows the world). */
+export const branch = (id: string, lean = false) => get<BranchDetail>(path`/api/branches/${id}` + (lean ? qs({ lean: 1 }) : ''));
 
 export const rows = (id: string, seq: number, keys: string[]) =>
   get<RowsResponse>(path`/api/branches/${id}/rows` + qs({ seq, keys: keys.join(',') }));

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DASH, formatValue, isNumericFormat, minutes, toMs, utcDate, utcTime } from './format';
+import { DASH, UTC, dateIn, formatValue, isNumericFormat, minutes, timeIn, toMs, zoneOf } from './format';
 import { cols, columnOf, fieldNames, toNum } from './rows';
 
 const T = Date.UTC(2026, 10, 22, 14, 5, 30);
@@ -25,11 +25,26 @@ describe('formats', () => {
   });
 
   it('formats_times_in_utc', () => {
-    expect(utcTime(T)).toBe('14:05Z');
-    expect(utcDate(T)).toBe('Sun 22 Nov 2026');
+    expect(timeIn(T)).toBe('14:05Z');
+    expect(timeIn(T, UTC, true)).toBe('14:05:30Z');
+    expect(dateIn(T)).toBe('Sun 22 Nov 2026');
     expect(formatValue(T, 'time')).toBe('14:05Z');
     expect(formatValue('2026-11-22T09:30:00Z', 'time')).toBe('09:30Z');
     expect(toMs('not a time')).toBeNull();
+  });
+
+  it('formats_times_in_the_worlds_local_time_with_its_offset_never_a_false_z', () => {
+    const edt = zoneOf(-240);
+    expect(edt).toEqual({ offsetMin: -240, label: 'UTC−4' });
+    expect(timeIn(T, edt)).toBe('10:05');
+    expect(timeIn(T, edt, true)).toBe('10:05:30');
+    expect(formatValue(T, 'time', undefined, null, edt)).toBe('10:05');
+    expect(formatValue('2026-11-22T02:30:00Z', 'time', undefined, null, edt)).toBe('22:30');
+    expect(dateIn(Date.UTC(2026, 10, 22, 2, 0), edt)).toBe('Sat 21 Nov 2026');
+    expect(zoneOf(330).label).toBe('UTC+5:30');
+    expect(zoneOf(0).label).toBe('UTC');
+    expect(zoneOf(null)).toBe(UTC);
+    expect(zoneOf(undefined)).toBe(UTC);
   });
 
   it('chip_shows_its_label_else_the_value', () => {
