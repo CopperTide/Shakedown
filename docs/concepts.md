@@ -179,7 +179,7 @@ that ends a turn without reporting has what it said last passed on to the lead a
 shows is recorded as a `model_call` reported by the client), and an API-mode agent keeps its conversation in
 shaked's loop. Codex can't keep a session yet, so a dispatch team refuses it.
 
-An API-mode agent's turn makes at most 40 model calls. A turn that reaches the limit ends like any other turn,
+An API-mode agent's turn makes at most 40 model calls (`SHAKEDOWN_AGENT_MAX_MODEL_CALLS`). A turn that reaches the limit ends like any other turn,
 with `note: "turn ended at the model-call limit"` on its `idle`, instead of failing the agent (a chain or concurrent
 run, one turn per agent, still fails it). The agent's next input begins by saying so and, on a stepped clock, that
 the world only moves when the team waits: to wait for something, end the turn. Every agent's first input on a

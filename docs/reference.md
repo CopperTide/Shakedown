@@ -149,6 +149,9 @@ Environment variables, read once at startup by shaked (each also under its old n
 - `SHAKEDOWN_CONTEXT_TURNS`: how many of an API-mode dispatch agent's latest turns keep their tool results whole
   (default 4; `0` never trims); older results longer than 400 characters become a placeholder before each turn
   ([concepts](concepts.md#dispatch-runs)). Read when an agent's session starts.
+- `SHAKEDOWN_AGENT_MAX_MODEL_CALLS`: how many model calls an API-mode agent's turn makes at most (default 40). A
+  dispatch turn that reaches it ends with a note; a chain or concurrent agent fails ([concepts](concepts.md#dispatch-runs)).
+  Read once, at the first turn. A value that isn't a whole number above 0 counts as unset.
 - `SHAKEDOWN_CLOCK_SPEED`: speed of the world clock (default 1, real time; 0 stops it; anything that isn't a number
   of at least 0 counts as 1). Unlike the others, it is read each time a run or fork starts a branch, not once at
   startup.

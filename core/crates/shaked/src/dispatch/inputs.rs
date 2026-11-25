@@ -116,7 +116,7 @@ pub const STEPPED: &str = "\n# World time\n\nThe world's clock moves when the te
 /// What opens the next turn of an agent whose last turn ended at the model-call limit. On a
 /// stepped clock it says plainly that the world waits for the team: waiting means ending the turn.
 pub fn turn_cut(stepped: bool) -> String {
-    let max = crate::agents::open::MAX_MODEL_CALLS;
+    let max = crate::agents::open::max_model_calls();
     let mut s = format!(
         "\n# Your last turn was ended\n\nYour last turn made {max} model calls without ending, so \
          Shakedown ended it. Keep turns short: act, then end your turn."
@@ -153,7 +153,8 @@ mod tests {
     #[test]
     fn a_cut_turn_tells_the_agent_that_waiting_means_ending_its_turn() {
         let stepped = turn_cut(true);
-        assert!(stepped.contains("40 model calls") && stepped.contains("To wait, end your turn"));
+        let calls = format!("{} model calls", crate::agents::open::max_model_calls());
+        assert!(stepped.contains(&calls) && stepped.contains("To wait, end your turn"));
         assert!(!turn_cut(false).contains("clock"), "no world-time advice without a stepped clock");
         assert!(STEPPED.contains("To let time pass, end your turn"));
         assert!(LEAD_STEPPED.contains("ends your team's watch, not the day"));

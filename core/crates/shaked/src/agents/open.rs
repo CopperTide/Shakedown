@@ -18,8 +18,10 @@ use crate::{
     providers::Provider,
 };
 
+/// How many model calls an API-mode agent's turn makes at most, unless
+/// `SHAKEDOWN_AGENT_MAX_MODEL_CALLS` says otherwise (see [`max_model_calls`]).
 pub const MAX_MODEL_CALLS: usize = 40;
-/// The idle note of a dispatch turn cut at [`MAX_MODEL_CALLS`].
+/// The idle note of a dispatch turn cut at [`max_model_calls`].
 pub const CALL_LIMIT_NOTE: &str = "turn ended at the model-call limit";
 /// How many of a session's latest turns keep their tool results whole (`SHAKEDOWN_CONTEXT_TURNS`).
 pub const CONTEXT_TURNS: usize = 4;
@@ -38,7 +40,7 @@ enum Fault {
     Infra(String),
     /// The run's spend estimate passed its limit (`crate::budget`).
     Budget(String),
-    /// The turn made [`MAX_MODEL_CALLS`] calls without ending; what the agent said last.
+    /// The turn made [`max_model_calls`] calls without ending; what the agent said last.
     CallLimit(String),
 }
 
@@ -49,7 +51,7 @@ impl Fault {
             Fault::Model(e) => (e, Some(FailureKind::Model)),
             Fault::Budget(e) => (e, Some(FailureKind::Budget)),
             Fault::CallLimit(_) => (
-                format!("agent exceeded {MAX_MODEL_CALLS} model calls"),
+                format!("agent exceeded {} model calls", max_model_calls()),
                 Some(FailureKind::Model),
             ),
             Fault::Infra(e) => (e, None),
@@ -319,7 +321,7 @@ fn gateway_url(state: &AppState, branch: &str, agent: &str) -> String {
     )
 }
 
-/// How a session's turn ended. A turn that reached [`MAX_MODEL_CALLS`] ends like any other, with a
+/// How a session's turn ended. A turn that reached [`max_model_calls`] ends like any other, with a
 /// note (the agent waits for its next wake), where a one-shot run fails.
 fn session_turn(done: Result<String, Fault>) -> Turn {
     match done {
@@ -333,6 +335,20 @@ fn session_turn(done: Result<String, Fault>) -> Turn {
             Turn::failed(e, failure)
         }
     }
+}
+
+/// How many model calls an API-mode agent's turn makes at most: `SHAKEDOWN_AGENT_MAX_MODEL_CALLS`,
+/// read once, else [`MAX_MODEL_CALLS`].
+pub fn max_model_calls() -> usize {
+    static MAX: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
+    let read = || call_limit(std::env::var("SHAKEDOWN_AGENT_MAX_MODEL_CALLS").ok().as_deref());
+    *MAX.get_or_init(read)
+}
+
+/// The call limit a setting gives: a whole number above 0, else [`MAX_MODEL_CALLS`].
+fn call_limit(setting: Option<&str>) -> usize {
+    let n = setting.and_then(|v| v.trim().parse().ok());
+    n.filter(|n: &usize| *n > 0).unwrap_or(MAX_MODEL_CALLS)
 }
 
 /// `SHAKEDOWN_CONTEXT_TURNS`, read when a session starts: a whole number, else [`CONTEXT_TURNS`].
@@ -438,7 +454,7 @@ impl Loop {
         let exec = ToolExec::new(self.state.store.clone());
         let base = self.state.config.retry_base;
         let mut said = String::new();
-        for _ in 0..MAX_MODEL_CALLS {
+        for _ in 0..max_model_calls() {
             let body = call_body(messages, &self.tools, &self.model, self.reasoning.as_ref(), self.max_tokens);
             let v = model_call(&self.state.http, &self.url, &body, base).await?;
             totals.add(&self.provider, &v["usage"]);
@@ -591,6 +607,15 @@ mod tests {
             m.push(json!({"role": "tool", "tool_call_id": format!("c{t}"), "content": "x".repeat(result_len)}));
         }
         m
+    }
+
+    #[test]
+    fn the_call_limit_is_a_whole_number_above_zero_else_forty() {
+        assert_eq!(call_limit(None), 40);
+        assert_eq!(call_limit(Some(" 100 ")), 100);
+        for bad in ["0", "-3", "many", ""] {
+            assert_eq!(call_limit(Some(bad)), MAX_MODEL_CALLS, "{bad:?}");
+        }
     }
 
     #[test]
