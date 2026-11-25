@@ -148,7 +148,7 @@ fn same_folder_shares_state() {
 
 /// Larkspur with its plant world run by the toy benchmark, and a world `bare` with no package.
 fn larkspur_with_packages() -> tempfile::TempDir {
-    let dir = larkspur();
+    let dir = project_copy();
     let worlds = dir.path().join("worlds");
     let plant = worlds.join("larkspur-plant/world.yaml");
     let text = std::fs::read_to_string(&plant).unwrap();

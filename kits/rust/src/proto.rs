@@ -140,6 +140,21 @@ pub struct WorldTimeParams {
     pub speed: f64,
 }
 
+/// Where a part (or a benchmark's scoring) calls models on a branch: an OpenAI-compatible endpoint,
+/// `POST {base_url}/chat/completions` with `Authorization: Bearer <token>`. shaked records each
+/// call, pays it with the instance's provider keys and charges it to the run.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ModelsParams {
+    pub base_url: String,
+    pub token: String,
+}
+
+/// The header a world's model call names its provider with (absent: the default provider).
+pub const PROVIDER_HEADER: &str = "x-shakedown-provider";
+/// The header a world's model call names who speaks with (`[a-z0-9_-]{1,40}`), for a part that
+/// plays several people: the call is recorded under `world.<part>.<name>`.
+pub const ACTOR_HEADER: &str = "x-shakedown-actor";
+
 /// The header an upstream answers a proxied request with to say whether it read or wrote
 /// (`read` or `write`); shaked strips it before the client sees the answer.
 pub const EFFECT_HEADER: &str = "x-shakedown-effect";
@@ -235,6 +250,9 @@ pub struct StartParams {
     /// The world's time (absent: the part is not told it).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub world_time: Option<WorldTimeParams>,
+    /// Where the instance may call models (absent: it may not).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub models: Option<ModelsParams>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -567,6 +585,9 @@ pub struct GoldActions {
 pub struct ScoreParams {
     pub task: String,
     pub docs: Map<String, Value>,
+    /// Where the scoring may call models, a judge's (absent: it may not).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub models: Option<ModelsParams>,
 }
 
 /// One named pass-or-fail check of a branch's end state.
@@ -761,11 +782,10 @@ mod tests {
             clock_ms: 0,
             from: None,
             world_time: None,
+            models: None,
         };
-        assert!(serde_json::to_value(&s)
-            .unwrap()
-            .get("world_time")
-            .is_none());
+        let v = serde_json::to_value(&s).unwrap();
+        assert!(v.get("world_time").is_none() && v.get("models").is_none());
         s.world_time = Some(WorldTimeParams {
             epoch_ms: 1_773_122_400_000,
             speed: 3.0,
@@ -774,6 +794,31 @@ mod tests {
             serde_json::to_value(&s).unwrap()["world_time"],
             serde_json::json!({"epoch_ms": 1_773_122_400_000i64, "speed": 3.0})
         );
+    }
+
+    #[test]
+    fn models_go_to_start_and_score_only_when_given() {
+        let models = ModelsParams {
+            base_url: "http://h/gateway/b/world.shop/v1".into(),
+            token: "sdw_x".into(),
+        };
+        let p: StartParams = serde_json::from_value(serde_json::json!({
+            "instance": "i", "seed": 1, "clock_ms": 0,
+            "models": {"base_url": "http://h/gateway/b/world.shop/v1", "token": "sdw_x"}}))
+        .unwrap();
+        assert_eq!(p.models.as_ref(), Some(&models));
+        let score = ScoreParams {
+            task: "t".into(),
+            docs: Map::new(),
+            models: None,
+        };
+        assert!(serde_json::to_value(&score)
+            .unwrap()
+            .get("models")
+            .is_none());
+        let old: ScoreParams =
+            serde_json::from_value(serde_json::json!({"task": "t", "docs": {}})).unwrap();
+        assert_eq!(old, score);
     }
 
     #[test]

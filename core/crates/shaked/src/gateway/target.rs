@@ -77,6 +77,10 @@ pub(super) async fn resolve(
     route: &Route,
 ) -> Result<(CallFor, Option<String>), Box<Response>> {
     let refused = |(status, why)| Box::new(error_response(status, why));
+    if super::world::is_world(route) {
+        let (ctx, provider) = super::world::live_world(state, headers, route).map_err(refused)?;
+        return Ok((CallFor::Live(ctx), provider));
+    }
     let (branch, agent) = (route.branch.as_str(), route.agent.as_str());
     match credential(headers) {
         Some(t)

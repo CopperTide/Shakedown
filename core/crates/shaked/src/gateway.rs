@@ -11,6 +11,9 @@
 //!       ─ chat | passthrough → raw_call (sent, answered, a stream relayed)
 //!       ─ book   (billed: charge on a linked branch; one model_call; metered) → settle
 //! ```
+//!
+//! The world's own calls (a part's simulated person, the scoring's judge) come in as the actor
+//! `world.<who>` with the branch's world token ([`world`]).
 
 mod admit;
 mod book;
@@ -22,6 +25,7 @@ mod passthrough;
 mod raw_call;
 mod sse;
 mod target;
+mod world;
 
 use std::{future::Future, sync::Arc};
 
@@ -160,6 +164,13 @@ async fn serve_call(
     headers: HeaderMap,
     body: Body,
 ) -> Response {
+    let route = match world::is_world(&route) {
+        true => match world::routed(route, &headers) {
+            Ok(r) => r,
+            Err(refused) => return *refused,
+        },
+        false => route,
+    };
     match route.api {
         Api::Chat => chat::chat(state, route, headers, body).await,
         Api::Messages | Api::Responses => passthrough::pass(state, route, headers, body).await,

@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 
 from . import errors
+from .models import Models
 from .serve import _need, announced, serve
 
 
@@ -31,6 +32,11 @@ class Benchmark:
 
     def view(self, connections, docs):
         raise errors.method_not_found("view")
+
+    def models(self):
+        """The model client of the `score` call in progress (a judge's calls, recorded as `world.scoring`), when
+        shaked gave it an endpoint; else None."""
+        return getattr(self, "_scoring_models", None)
 
 
 def load(path: Path) -> dict:
@@ -100,12 +106,21 @@ def _seed(bench, params):
     return {}
 
 
+def _score(bench, params):
+    """`score`, with the call's model client set while it runs."""
+    bench._scoring_models = Models.of(params.get("models")) if isinstance(params, dict) else None
+    try:
+        return bench.score(*_need(params, "task", "docs"))
+    finally:
+        bench._scoring_models = None
+
+
 _METHODS = {
     "describe": lambda b, p: announced(b.describe()),
     "seed": _seed,
     "call_tool": lambda b, p: b.call_tool(*_need(p, "name", "args", "connections")),
     "gold_actions": lambda b, p: b.gold_actions(*_need(p, "task")),
-    "score": lambda b, p: b.score(*_need(p, "task", "docs")),
+    "score": _score,
     "view": lambda b, p: b.view(*_need(p, "connections", "docs")),
 }
 

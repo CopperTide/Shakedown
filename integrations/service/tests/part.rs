@@ -19,6 +19,7 @@ fn start(instance: &str, config: Value) -> StartParams {
         clock_ms: 0,
         from: None,
         world_time: None,
+        models: None,
     }
 }
 

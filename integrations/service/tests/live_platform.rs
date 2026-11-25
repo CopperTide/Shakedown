@@ -104,6 +104,7 @@ fn start_params(id: &str, from: Option<&str>, clock_ms: i64, epoch_ms: i64) -> S
             epoch_ms,
             speed: 1.0,
         }),
+        models: None,
     }
 }
 

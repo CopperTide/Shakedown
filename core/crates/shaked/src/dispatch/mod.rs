@@ -312,7 +312,10 @@ impl Crew {
     fn wake_input(&mut self, agent: &str, reason: Reason, mail: &[Mail]) -> String {
         let input = self.input_for(agent, reason, mail);
         match self.cut.remove(agent) {
-            true => format!("{}{input}", inputs::turn_cut(self.ctx.rules.stepped.is_some())),
+            true => format!(
+                "{}{input}",
+                inputs::turn_cut(self.ctx.rules.stepped.is_some())
+            ),
             false => input,
         }
     }

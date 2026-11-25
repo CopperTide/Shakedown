@@ -27,7 +27,7 @@ use crate::{
 };
 
 /// The call on `route`, let through to its body: whom it is for, not held back by its branch,
-/// and (a model call) saved before and noted. Its body is read only then: a call nobody may make
+/// and (an agent's model call) saved before and noted. Its body is read only then: a call nobody may make
 /// never has it read.
 pub(super) async fn let_through(
     state: &Arc<AppState>,
@@ -38,7 +38,9 @@ pub(super) async fn let_through(
     if let Some(refused) = target.held_back(state).await {
         return Err(Box::new(refused));
     }
-    if route.kind() == Kind::ModelCall {
+    // A world's call is made inside a tool call or the scoring, which hold the branch: no save
+    // point (it would wait for them), and no driver's request is the world's.
+    if route.kind() == Kind::ModelCall && !super::world::is_world(route) {
         target.save_point(state).await;
         target.note_model_call(&route.agent);
     }

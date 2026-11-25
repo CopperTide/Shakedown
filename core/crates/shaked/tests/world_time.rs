@@ -471,7 +471,7 @@ fn step_cost(read_ms: i64, write_ms: i64) -> shaked::clock::StepCost {
 async fn stepped_branch(
     root: &packages::ToyRoot,
     saves: &std::path::Path,
-    store: &shaked::store::Store,
+    store: &std::sync::Arc<shaked::store::Store>,
     cost: shaked::clock::StepCost,
 ) -> shaked::exec::BranchCtx {
     std::fs::create_dir_all(saves).unwrap();
@@ -491,8 +491,9 @@ async fn stepped_branch(
     let from = shaked::world::WorldFrom::Base;
     let world = shaked::world::World::start(hub.clone(), &bench, &branch, 1, from).await;
     let world = std::sync::Arc::new(world.unwrap());
-    shaked::exec::BranchCtx::new(branch, world, team, "t1".into())
-        .with_clock(shaked::clock::BranchClock::stepped(0, cost))
+    let ctx = shaked::exec::BranchCtx::new(branch, world, team, "t1".into())
+        .with_clock(shaked::clock::BranchClock::stepped(0, cost));
+    support::in_store(ctx, store)
 }
 
 impl Drop for SteppedFx {
@@ -840,10 +841,16 @@ fn a_late_team_start_runs_the_world_alone_until_then() {
         let first = evs.iter().find(|e| e.kind == EventKind::Wake).unwrap();
         let started = |e: &&Event| e.payload["data"]["reason"] == "team_start";
         let start = evs.iter().find(started).unwrap();
-        assert!(first.seq > start.seq, "no agent works before the team starts");
+        assert!(
+            first.seq > start.seq,
+            "no agent works before the team starts"
+        );
         let input = first.payload["input"].as_str().unwrap();
         let told = input.contains("ends your team's watch, not the day");
-        assert!(told, "the lead is told what finish means on a stepped clock");
+        assert!(
+            told,
+            "the lead is told what finish means on a stepped clock"
+        );
         assert!(
             evs.iter().any(|e| e.kind == EventKind::Check),
             "scored at the horizon"

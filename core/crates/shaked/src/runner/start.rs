@@ -373,8 +373,12 @@ async fn start_world(
     crate::bind::local_only(state.store.layer().policy(), "starting a world's parts")
         .map_err(anyhow::Error::msg)?;
     let bench = state.bench_named(&plan.benchmark).await?;
-    let planned = world::plan(&state.hub, &bench).await?;
+    let mut planned = world::plan(&state.hub, &bench).await?;
     let (branch_id, hub) = (plan.branch_id.as_str(), state.hub.clone());
+    planned.models = Some(world::models::WorldModels::for_branch(
+        &state.config,
+        branch_id,
+    ));
     let seed = plan.scenario.seed.unwrap_or_else(new_seed);
     let clock_start = task_clock_start(&bench, &plan.task_id);
     let world_time = world_time_of(clock_start, &plan.rules);

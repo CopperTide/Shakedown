@@ -95,6 +95,7 @@ fn start(e: &Env, instance: &str, from: Option<&str>) -> StartParams {
             mode: Mode::Exact,
         }),
         world_time: None,
+        models: None,
     }
 }
 

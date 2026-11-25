@@ -52,7 +52,7 @@ fn write(root: &Path, file: &str, text: &str) {
 
 /// The project files of the fixture repo, for packages named `<p>-...`.
 fn project_files(p: &str) -> Vec<(&'static str, String)> {
-    let setup = "format: shakedown-setup/1\nlabel: Solo\nteam:\n  kind: builtin\n  agents:\n    - {id: planner, role: You poke boxes., model: claude-sonnet, key: anthropic-main, tools: [\"*\"]}\n";
+    let setup = "format: shakedown-setup/1\nlabel: Solo\nteam:\n  kind: builtin\n  agents:\n    - {id: planner, role: You poke boxes., model: claude-sonnet, tools: [\"*\"]}\n";
     vec![
         ("shakedown.yaml", "format: shakedown-project/1\nname: Toy ops\ndefaults:\n  world: box\n".into()),
         ("worlds/box/world.yaml", format!("format: shakedown-world/3\nlabel: The box\npackage: {p}-bench\n")),

@@ -53,6 +53,7 @@ async fn start_from(part: &Sculptured, save: &str) -> shakedown_part::PartError 
             mode: Mode::Exact,
         }),
         world_time: None,
+        models: None,
     };
     part.start(p).await.unwrap_err()
 }

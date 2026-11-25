@@ -326,11 +326,15 @@ pub async fn start_world(
     events: &[Event],
     new_id: &str,
     rerun: &Rerun,
-    planned: Plan,
+    mut planned: Plan,
 ) -> Result<World, ForkError> {
     let from = WorldFrom::Saves(start_saves(rerun)?);
     let (hub, seed) = (state.hub.clone(), rerun.run.seed);
     let world_time = crate::recorded::world_time_of(events);
+    planned.models = Some(crate::world::models::WorldModels::for_branch(
+        &state.config,
+        new_id,
+    ));
     let world = World::start_branch(hub, &rerun.bench, planned, new_id, seed, from, world_time)
         .await
         .map_err(start_error)?;

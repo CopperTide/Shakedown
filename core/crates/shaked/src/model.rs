@@ -69,6 +69,11 @@ pub enum AgentKind {
     /// An agent deployed anywhere, behind a URL: shaked POSTs it the run (the task, its MCP
     /// endpoint and a token) and it answers when it is done (see `crate::agents::http`).
     Http,
+    /// The world's own model use, never a team member: a person a part plays or the scoring's
+    /// judge (`world.<who>`, see `crate::world::models`). It is written in metrics and never
+    /// read, so no team, fork or request can name it.
+    #[serde(skip_deserializing)]
+    World,
 }
 
 /// A team member. Read through [`agent_in::AgentSpecIn`], which also takes a Bedrock agent

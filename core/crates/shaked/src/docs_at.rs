@@ -177,6 +177,7 @@ fn scratch_start(events: &[Event], part: &WorldPart, at: &SaveAt) -> StartParams
             mode: Mode::Exact,
         }),
         world_time: Some(world_time_of(events)),
+        models: None,
     }
 }
 

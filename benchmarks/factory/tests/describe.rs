@@ -45,6 +45,7 @@ async fn seeding_and_scoring_without_it_say_where_it_should_be() {
     let score = ScoreParams {
         task: TASK.into(),
         docs: Map::new(),
+        models: None,
     };
     let e = f.score(score).await.unwrap_err();
     assert!(e.message.contains("/no/such/file"), "{}", e.message);

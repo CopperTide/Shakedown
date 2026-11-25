@@ -100,6 +100,7 @@ fn start(instance: &str, config: &Value, from: Option<&str>) -> StartParams {
             mode: Mode::Exact,
         }),
         world_time: None,
+        models: None,
     }
 }
 

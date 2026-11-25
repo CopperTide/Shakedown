@@ -14,6 +14,7 @@ use crate::{
     overhead::Overhead,
     prices::{self, Prices},
     providers::LOCAL_COST_SOURCE,
+    world::models::is_world_actor,
 };
 
 pub const REPORTED: &str = "reported";
@@ -249,27 +250,58 @@ fn parsed<P: serde::de::DeserializeOwned>(e: &Event) -> Option<P> {
 
 /// The run an agent's event `e` belongs to: its latest in `runs`, else, for a model call or an
 /// end, one carried over from its `AgentStart` in `inherited` (a fork's agent resumed without
-/// starting again).
+/// starting again). A world actor's model calls (which start no agent) make a run of their own
+/// per model.
 fn run_of<'r>(
     runs: &'r mut Vec<(AgentUse, Tally)>,
     inherited: &[&Event],
     e: &Event,
 ) -> Option<&'r mut Tally> {
-    let agent = e.agent.as_deref();
-    let i = match runs
-        .iter()
-        .rposition(|(u, _)| Some(u.agent.as_str()) == agent)
-    {
+    let i = match position_of(runs, e) {
         Some(i) => i,
         None => {
-            matches!(e.kind, EventKind::AgentEnd | EventKind::ModelCall).then_some(())?;
-            let start = (inherited.iter().rev())
-                .find(|e| e.kind == EventKind::AgentStart && e.agent.as_deref() == agent)?;
-            runs.push((agent_use(start), Tally::default()));
+            runs.push((new_use(inherited, e)?, Tally::default()));
             runs.len() - 1
         }
     };
     Some(&mut runs[i].1)
+}
+
+/// Where `e`'s run is in `runs`: its agent's latest, a world actor's of the same model.
+fn position_of(runs: &[(AgentUse, Tally)], e: &Event) -> Option<usize> {
+    let agent = e.agent.as_deref();
+    let same = |u: &AgentUse| Some(u.agent.as_str()) == agent;
+    if !is_world_actor(agent) {
+        return runs.iter().rposition(|(u, _)| same(u));
+    }
+    let model = e.payload["request"]["model"].as_str();
+    runs.iter()
+        .rposition(|(u, _)| same(u) && u.model.as_deref() == model)
+}
+
+/// The run `e` starts when none has it yet: a world actor's model call, or a model call or end
+/// of an agent whose start is inherited.
+fn new_use(inherited: &[&Event], e: &Event) -> Option<AgentUse> {
+    let agent = e.agent.as_deref();
+    if is_world_actor(agent) && e.kind == EventKind::ModelCall {
+        return Some(world_use(e));
+    }
+    matches!(e.kind, EventKind::AgentEnd | EventKind::ModelCall).then_some(())?;
+    let start = (inherited.iter().rev())
+        .find(|e| e.kind == EventKind::AgentStart && e.agent.as_deref() == agent)?;
+    Some(agent_use(start))
+}
+
+/// A world actor's use of one model, from its first call: kind `world`, the model it asked for
+/// and the provider that answered.
+fn world_use(e: &Event) -> AgentUse {
+    let text = |v: &Value| v.as_str().map(str::to_string);
+    AgentUse {
+        kind: Some(AgentKind::World),
+        model: text(&e.payload["request"]["model"]),
+        provider: text(&e.payload["provider"]),
+        ..agent_use(e)
+    }
 }
 
 /// The agent runs of `events`, each with what it used. `inherited` are the events before them
@@ -597,6 +629,36 @@ as_of = "2026-11-04""#,
             (Some(4000), Some(41))
         );
         assert_eq!(a.tokens, 4041);
+    }
+
+    /// A model call of the world actor `actor` with `model`, `tokens` and `cost`.
+    fn world_call(seq: i64, actor: &str, model: &str, cost: f64) -> Event {
+        let p = json!({"request": {"model": model}, "response": {}, "provider": "openrouter",
+                       "usage": {"prompt_tokens": 7, "completion_tokens": 3, "total_tokens": 10},
+                       "cost_usd": cost, "cost_source": "openrouter"});
+        ev(seq, Some(actor), EventKind::ModelCall, p)
+    }
+
+    #[test]
+    fn a_world_actors_calls_are_its_own_use_per_model_and_count_in_the_branch() {
+        let evs = vec![
+            start(1, "a", "open", "m", Some("anthropic")),
+            world_call(2, "world.shop.customer", "cust", 0.25),
+            world_call(3, "world.shop.customer", "cust", 0.25),
+            world_call(4, "world.scoring", "judge", 0.5),
+            end(5, "a", Some((60, 40)), Some((1.0, "openrouter"))),
+        ];
+        let m = metrics(&branch(None, 9), &evs, &table(), Utc::now());
+        let of = |id: &str| m.agents.iter().find(|a| a.agent == id).unwrap();
+        let customer = of("world.shop.customer");
+        assert_eq!(customer.kind, Some(AgentKind::World));
+        assert_eq!(customer.model.as_deref(), Some("cust"));
+        assert_eq!((customer.tokens, customer.model_calls), (20, 2));
+        assert_eq!(customer.cost.usd, Some(0.5));
+        assert_eq!(of("world.scoring").model.as_deref(), Some("judge"));
+        assert_eq!((m.tokens, m.cost.usd), (130, Some(2.0)));
+        let v = serde_json::to_value(customer).unwrap();
+        assert_eq!(v["kind"], "world");
     }
 
     #[test]

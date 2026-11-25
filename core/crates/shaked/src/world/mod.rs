@@ -7,6 +7,7 @@ mod gates;
 mod hosts;
 mod ids;
 mod links;
+pub mod models;
 mod part;
 mod plan;
 mod saving;
@@ -30,7 +31,7 @@ use parts::{
 };
 use serde_json::{Map, Value};
 
-use part::{http_routes, request, start_part, stop_instances, Instance, Part, StartedPart};
+use part::{http_routes, request, start_part, stop_instances, Given, Instance, Part, StartedPart};
 
 pub use clocked::PartEvent;
 pub use hosts::{HostRoute, Hosts, HTTP_TOOL};
@@ -178,6 +179,8 @@ pub struct World {
     /// The hosts its parts serve through the proxy (asked again after a routed part's save).
     hosts: RwLock<Hosts>,
     track: Mutex<Track>,
+    /// Where the branch's parts and scoring call models (None: they may not).
+    models: Option<models::WorldModels>,
 }
 
 impl World {
@@ -239,6 +242,7 @@ impl World {
             connections: Map::new(),
             hosts: RwLock::default(),
             track: Mutex::default(),
+            models: plan.models,
         }
     }
 
@@ -256,8 +260,12 @@ impl World {
         let mut planned = planned;
         let parts = std::mem::take(&mut planned.parts);
         let bench_client = hub.client(&bench.name).await?;
-        let wt = planned.world_time;
-        let starts = (parts.into_iter()).map(|p| start_part(&hub, p, branch_id, seed, from, wt));
+        let models = planned.models.clone();
+        let given = Given {
+            world_time: planned.world_time,
+            models: models.as_ref(),
+        };
+        let starts = (parts.into_iter()).map(|p| start_part(&hub, p, branch_id, seed, from, given));
         let started = futures_util::future::join_all(starts).await;
         let mut world = World::new(hub, &bench.name, Some(bench_client), planned);
         if let Some(e) = world.take_all_started(started) {
@@ -304,6 +312,11 @@ impl World {
             self.parts.push(part);
         }
         s.error
+    }
+
+    /// Where the branch's parts and scoring call models, when they may.
+    pub fn models(&self) -> Option<&models::WorldModels> {
+        self.models.as_ref()
     }
 
     pub fn bench(&self) -> &str {

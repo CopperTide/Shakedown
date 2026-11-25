@@ -91,6 +91,14 @@ impl StartedPart {
     }
 }
 
+/// What a branch's parts are given at `start` besides their config: the world's time and where
+/// they may call models (both None for base, gold and scratch worlds).
+#[derive(Clone, Copy, Default)]
+pub(super) struct Given<'a> {
+    pub world_time: Option<WorldTimeParams>,
+    pub models: Option<&'a super::models::WorldModels>,
+}
+
 /// Starts `p`'s instance for `branch_id` (from its save in `from`, if any) and connects it when a
 /// benchmark may reach it.
 pub(super) async fn start_part(
@@ -99,9 +107,9 @@ pub(super) async fn start_part(
     branch_id: &str,
     seed: u64,
     from: Option<&StartSaves>,
-    world_time: Option<WorldTimeParams>,
+    given: Given<'_>,
 ) -> StartedPart {
-    let (part, save) = match begin_part(hub, p, branch_id, seed, from, world_time).await {
+    let (part, save) = match begin_part(hub, p, branch_id, seed, from, given).await {
         Ok(begun) => begun,
         Err(e) => return StartedPart::failed(None, None, e),
     };
@@ -128,11 +136,12 @@ async fn begin_part(
     branch_id: &str,
     seed: u64,
     from: Option<&StartSaves>,
-    world_time: Option<WorldTimeParams>,
+    given: Given<'_>,
 ) -> Result<(Part, Option<String>)> {
     let instance = instance_id(branch_id, &p.part.part);
     let (mut params, save) = start_params(&p, &instance, seed, from)?;
-    params.world_time = world_time;
+    params.world_time = given.world_time;
+    params.models = given.models.map(|m| m.of(&p.part.part));
     let part = Part {
         client: hub.client(&p.part.integration).await?,
         name: p.part.part,
@@ -176,6 +185,7 @@ fn start_params(
         clock_ms: 0,
         from: None,
         world_time: None,
+        models: None,
     };
     let Some(f) = part_start(p, from)? else {
         return Ok((params, None));

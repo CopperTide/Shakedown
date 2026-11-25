@@ -6,7 +6,7 @@
               [--gc-waits-for FILE] [--tool-event KIND] [--system JSON] [--internal-peeks]
               [--http-route HOST=URL ... [--route-env K=V ...] [--route-reads PATTERN ...]
               [--route-honours-readonly] [--route-after-save URL]] [--save-at step|points]
-              [--log-time FILE] [--alert-at MS] [--clock-doc]
+              [--log-time FILE] [--alert-at MS] [--clock-doc] [--ask-model PROVIDER [--ask-actor NAME]]
       An integration with one counter per instance and tools `poke` (write, adds 1) and `peek`
       (read), named `<P>poke` and `<P>peek` with --prefix. It exits on its N-th call_tool (only
       once across restarts when FILE marks that it did); every `save` after the first N is an
@@ -30,11 +30,15 @@
       "advance <instance> <clock_ms> <wall unix ms>" per `advance` to FILE. With --alert-at MS (and
       --uses-clock), `advance` reports `wake_at_ms` MS until the clock reaches it, then an `alert` event
       once per instance. With --clock-doc (and --uses-clock), `inspect` also has `box/clock` ({"ms": the clock the
-      instance was advanced to}), saves keep the clock and a start from a save takes it back.
+      instance was advanced to}), saves keep the clock and a start from a save takes it back. With --ask-model,
+      `poke` asks the model `customer` on the `models` endpoint its instance got at `start` (on PROVIDER, as NAME
+      with --ask-actor) and answers what it said (`said`), and the status of the same call with another token
+      (`bad_token`).
   toy.py bench [--name NAME] --integration NAME [--part NAME=INTEGRATION ...] [--gold TOOL [--gold-args JSON]]
                [--config PART=JSON ...] [--clash] [--bench-tool [--tool-part PART]] [--link JSON ...]
                [--gate JSON ...] [--setup JSON ...] [--scored [--two-tasks] [--safety]]
                [--view PART [--view-fails]] [--scenario-options JSON] [--clock-start ISO] [--group NAME]
+               [--judge]
       A benchmark (named `toybench`, or --name) with one task `t1` whose world is one part `box` of integration NAME, or the
       --part list; each part's config is `{}` or the --config given for it. Tools: none; with --clash a `poke`; with --bench-tool a `ring` that reports it
       ran on PART (default `box`). --link adds a link to the world, --gate a gate, --setup a call to `t1`'s setup. With --scored,
@@ -45,7 +49,8 @@
       view from PART's docs: one area `box` with one item `n` whose status is box/n (abnormal above 1);
       --view-fails makes `view` an error. --scenario-options puts JSON in `describe.scenario_options`.
       --clock-start gives `t1` a `clock_start` (the world's date and time at clock 0). --group puts `t1` in the
-      group NAME.
+      group NAME. With --judge (and --scored), `score` asks the model `judge` on the `models` endpoint the call
+      got (the default provider) and adds the check `judged`: it said "fair".
 """
 import json
 import os
@@ -53,6 +58,30 @@ import sys
 import time
 
 ARGS = sys.argv[1:]
+
+
+def ask(models, model, actor=None, token=None):
+    """The status and answer of one chat call to the `models` endpoint shaked gave, on --ask-model's
+    provider, as `actor`; `token` stands in for the one given."""
+    import urllib.error
+    import urllib.request
+    body = json.dumps({"model": model, "messages": [{"role": "user", "content": "hello"}]}).encode()
+    headers = {"Content-Type": "application/json", "Authorization": "Bearer " + (token or models["token"])}
+    if opt("--ask-model", None):
+        headers["X-Shakedown-Provider"] = opt("--ask-model", None)
+    if actor:
+        headers["X-Shakedown-Actor"] = actor
+    req = urllib.request.Request(models["base_url"] + "/chat/completions", data=body, headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            return r.status, json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        return e.code, json.loads(e.read() or b"{}")
+
+
+def said(answer):
+    """What a chat answer said."""
+    return answer["choices"][0]["message"]["content"]
 
 
 class RpcError(Exception):
@@ -89,6 +118,7 @@ class Part:
         self.alerted = set()
         self.saved_instances = set()
         self.peeks, self.peek_saves = {}, {}
+        self.models = {}
 
     def describe(self, p):
         if "--describe-hangs" in ARGS:
@@ -122,6 +152,7 @@ class Part:
         self.peeks[p["instance"]] = self.peek_saves.get(src.get("save"), 0)
         if CLOCK_DOC and src:
             self.clocks[p["instance"]] = self.clock_saves.get(src["save"], 0)
+        self.models[p["instance"]] = p.get("models")
         world = p.get("world_time") or {}
         log_time("start %s %s %s" % (p["instance"], world.get("epoch_ms", "none"), world.get("speed", "none")))
         return {}
@@ -155,6 +186,11 @@ class Part:
         if p["name"] == PREFIX + "poke":
             self.counters[i] = n + 1
             out = {"result": {"n": n + 1}, "reads": [], "writes": ["box/n"]}
+            if "--ask-model" in ARGS and self.models.get(i):
+                actor = opt("--ask-actor", None)
+                status, answer = ask(self.models[i], "customer", actor)
+                out["result"]["said"] = said(answer) if status == 200 else answer
+                out["result"]["bad_token"] = ask(self.models[i], "customer", actor, "sdw_wrong")[0]
             if "--tool-event" in ARGS:
                 out["events"] = [{"kind": opt("--tool-event", ""), "text": "poked", "data": {"n": n + 1}}]
             return out
@@ -290,6 +326,9 @@ class Bench:
         checks = [{"name": "poked", "passed": n >= need, "detail": "n is %d" % n}]
         if "--safety" in ARGS:
             checks.append({"name": "not_overpoked", "passed": n <= need, "safety": True})
+        if "--judge" in ARGS and p.get("models"):
+            status, answer = ask(p["models"], "judge")
+            checks.append({"name": "judged", "passed": status == 200 and said(answer) == "fair"})
         return {"checks": checks}
 
     def gold_actions(self, p):

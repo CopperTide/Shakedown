@@ -218,6 +218,33 @@ fn open_model_call_stays_and_resumes_messages() {
     assert_eq!((p.start_seq, p.moved_from), (11, None));
 }
 
+/// `evs` with a model call of the part `box`'s customer at 12, inside the resolver's write
+/// (then at 13).
+fn with_world_call(mut evs: Vec<Event>) -> Vec<Event> {
+    evs.iter_mut()
+        .filter(|e| e.seq >= 12)
+        .for_each(|e| e.seq += 1);
+    let customer = mc(12, "world.box.customer", "customer");
+    evs.insert(evs.iter().position(|e| e.seq > 12).unwrap(), customer);
+    evs
+}
+
+#[test]
+fn a_fork_at_a_worlds_model_call_starts_with_the_step_it_was_made_in() {
+    let open = team(AgentKind::Open);
+    let p = plan_fork(&with_world_call(events()), &open, 12, &no_changes()).unwrap();
+    assert_eq!((p.start_seq, p.moved_from), (11, Some(12)));
+    assert_eq!(p.reason.as_deref(), Some(REASON_TOOL));
+    assert_eq!(p.resume, Some(msgs("m11")), "never the customer's messages");
+    // Where the fork starts at the step itself, it starts before the step's world calls.
+    let external = with_world_call(events_of("external"));
+    let p = plan_fork(&external, &open, 13, &no_changes()).unwrap();
+    assert_eq!((p.start_seq, p.moved_from), (12, Some(13)));
+    assert_eq!(p.reason.as_deref(), Some(REASON_WORLD_CALL));
+    let p = plan_fork(&external, &open, 12, &no_changes()).unwrap();
+    assert_eq!((p.start_seq, p.moved_from, p.reason), (12, None, None));
+}
+
 #[test]
 fn change_to_finished_agent_moves_back() {
     let c = change(

@@ -620,3 +620,21 @@ A `counter` part (`kits/rust/examples/counter.rs`). `>` is shaked to the part, `
 > {"jsonrpc":"2.0","id":5,"method":"start","params":{"instance":"Bad Id","config":{},"seed":1,"clock_ms":0}}
 < {"jsonrpc":"2.0","id":5,"error":{"code":-32602,"message":"instance and save ids must match [a-z0-9_]{1,63}"}}
 ```
+
+## World model calls
+
+A branch may supply optional `models: {base_url, token}` with integration `start` and benchmark
+`score` requests. Base, gold and scratch worlds do not receive a model endpoint. Integrations
+should handle its absence. The token is private to the branch; do not save it in world state.
+
+Send OpenAI-shaped chat completion requests to `POST {base_url}/chat/completions` with
+`Authorization: Bearer {token}`. `X-Shakedown-Provider` selects a configured provider; when omitted,
+the default provider is used. An optional `X-Shakedown-Actor` names the speaker and must match
+`[a-z0-9_-]{1,40}`. Calls are recorded as `world.<part>[.<actor>]`, or `world.scoring[.<actor>]`
+for scoring, and count toward the run's model usage and cost. They do not create agent save
+points or change the last agent model caller.
+
+The Python kit exposes `Part.models(instance)` and `Benchmark.models()` (during scoring).
+Both return a `Models` client or `None`. `Models.chat(messages, model, provider=..., actor=...)`
+returns the chat completion response and raises `ModelError` on failure. The client retries
+rate limits and transient transport/server failures with bounded backoff.

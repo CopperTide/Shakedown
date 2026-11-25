@@ -10,7 +10,7 @@ use super::ForkError;
 use crate::{
     model::*,
     recorded::{self, run_info, saves_at_except},
-    world::Saves,
+    world::{models::is_world_actor, Saves},
 };
 
 // Why a fork starts elsewhere than asked (`ForkPlan::reason`).
@@ -24,6 +24,10 @@ pub const REASON_FINISHED: &str = "the lead had finished the run: the fork start
 pub const REASON_AGENT_RESTART: &str = "the agent restarts from its first start";
 pub const REASON_LAST_MODEL_CALL: &str =
     "the step is redone from the agent's last model call before it";
+/// The fork was asked at a world's own model call, made inside a step: it starts with that step.
+pub const REASON_WORLD_CALL: &str =
+    "a world's model call belongs to the step it was made in, so the fork starts with that step";
+
 /// The world was not saved where the fork was asked (a part that saves at points changed since).
 pub const REASON_SAVED: &str =
     "the world was last saved before an earlier step, so the fork starts there";
@@ -319,10 +323,16 @@ pub fn plan_fork_with(
     }
     let changed = changed_agents(team, changes)?;
     let rules = recorded::rules(events);
-    let mut asked = at_seq;
+    // A world's own model call (or its reasoning) is part of the step it was made in.
+    let step = step_of(events, at_seq);
+    let mut asked = step.seq;
     loop {
         let planner = Planner::at(events, team, asked)?;
-        let start = planner.start_with(rules.clone(), changes, &changed)?;
+        let mut start = planner.start_with(rules.clone(), changes, &changed)?;
+        let before_world = start.seq == step.seq && step.first != step.seq;
+        if before_world {
+            start.seq = step.first; // the step's world calls are made again with it
+        }
         let base = run_info(events).base;
         match saves_at_except(events, start.seq - 1, &base, replayed) {
             Ok(restore) => {
@@ -331,14 +341,43 @@ pub fn plan_fork_with(
                     // An agent's input then has the notes recorded before its start.
                     false => vec![],
                 };
-                let saved = (asked != at_seq).then_some(REASON_SAVED);
-                return Ok(finish_plan(start, at_seq, restore, notes, saved));
+                let saved = (asked != step.seq).then_some(REASON_SAVED);
+                let world = (step.seq != at_seq || before_world) && start.reason.is_none();
+                let why = saved.or(world.then_some(REASON_WORLD_CALL));
+                return Ok(finish_plan(start, at_seq, restore, notes, why));
             }
             Err(n) if save_failed(events, n.seq) => {
                 return Err(ForkError::NoRestorePoint { seq: n.seq })
             }
             Err(n) => asked = saved_point_before(events, n.seq, asked)?,
         }
+    }
+}
+
+/// The step a fork point belongs to: `seq`, and `first`, the first of the world's model calls
+/// made in it (`seq` when it has none).
+struct StepOf {
+    seq: i64,
+    first: i64,
+}
+
+/// The step `at_seq` belongs to: `at_seq` itself, or for an event of a world actor (a model call
+/// a part or the scoring made inside a step, see `crate::world::models`) the first later event
+/// of no world actor, the step it was made in. Its world calls are those right before it.
+fn step_of(events: &[Event], at_seq: i64) -> StepOf {
+    let world = |e: &Event| is_world_actor(e.agent.as_deref());
+    let at = events.iter().position(|e| e.seq == at_seq);
+    let i = at.and_then(|i| (i..events.len()).find(|&j| !world(&events[j])));
+    let Some(i) = i else {
+        return StepOf {
+            seq: at_seq,
+            first: at_seq,
+        };
+    };
+    let calls = events[..i].iter().rev().take_while(|e| world(e)).last();
+    StepOf {
+        seq: events[i].seq,
+        first: calls.map_or(events[i].seq, |e| e.seq),
     }
 }
 
@@ -354,7 +393,8 @@ fn save_failed(events: &[Event], seq: i64) -> bool {
 fn saved_point_before(events: &[Event], seq: i64, asked: i64) -> Result<i64, ForkError> {
     let point = |e: &&Event| {
         let kind = matches!(e.kind, EventKind::ModelCall | EventKind::AgentStart);
-        e.seq < seq.min(asked) && (kind || e.kind == EventKind::RunStart)
+        let agents = kind && !is_world_actor(e.agent.as_deref());
+        e.seq < seq.min(asked) && (agents || e.kind == EventKind::RunStart)
     };
     let found = events.iter().rev().find(point).map(|e| e.seq);
     found.ok_or(ForkError::NoRestorePoint { seq })

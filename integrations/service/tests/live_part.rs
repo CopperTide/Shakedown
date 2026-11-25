@@ -37,6 +37,7 @@ fn live_start(id: &str, config: Value) -> StartParams {
             epoch_ms: EPOCH,
             speed: 1.0,
         }),
+        models: None,
         ..start(id, config)
     }
 }

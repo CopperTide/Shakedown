@@ -37,6 +37,8 @@ pub struct Plan {
     pub world_time: Option<WorldTimeParams>,
     /// The benchmark's tools a setup calls on a part (the world's own, so not in `tools`).
     pub setup_bench_tools: BTreeSet<String>,
+    /// Where a branch's parts and scoring call models (None for base, gold and scratch worlds).
+    pub models: Option<super::models::WorldModels>,
 }
 
 /// The parts of `bench`'s world and its tool table: the benchmark's tools, then each part's.
@@ -68,6 +70,7 @@ pub async fn plan(hub: &Hub, bench: &BenchDescribe) -> Result<Plan> {
         view: bench.view.clone(),
         world_time: None,
         setup_bench_tools,
+        models: None,
     })
 }
 

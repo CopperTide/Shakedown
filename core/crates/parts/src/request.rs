@@ -147,6 +147,7 @@ mod tests {
             clock_ms: 0,
             from: None,
             world_time: None,
+            models: None,
         };
         let want = json!({"instance": "i", "config": {"k": 1}, "seed": 1, "clock_ms": 0});
         assert_eq!(sent(&start), ("start", want));

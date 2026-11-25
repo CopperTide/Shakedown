@@ -5,6 +5,7 @@ import sys
 
 from . import errors
 from .errors import PartError
+from .models import Models
 from .world_time import WorldTime
 
 #: The protocol's name, as `describe` announces it; shaked also takes `1`.
@@ -57,6 +58,11 @@ class Part:
     def world_time(self, instance):
         """The instance's world time (a `WorldTime`), when shaked gave one at `start`; else None."""
         return getattr(self, "_world_times", {}).get(instance)
+
+    def models(self, instance):
+        """The instance's model client (a `models.Models`), when shaked gave it an endpoint at `start`; else
+        None. Its calls are recorded, paid and charged to the run (docs/protocol.md, "World model calls")."""
+        return getattr(self, "_models", {}).get(instance)
 
     def http_routes(self, instance):
         """The hosts the instance serves through shaked's proxy: `{"routes": [{host, upstream,
@@ -118,6 +124,15 @@ def _keep_world_time(part, instance, given, clock_ms):
         times[instance].observe(clock_ms)
 
 
+def _keep_models(part, instance, given):
+    """Keeps the instance's model client from `start` (None: forgotten)."""
+    clients = part.__dict__.setdefault("_models", {})
+    clients.pop(instance, None)
+    client = Models.of(given)
+    if client is not None:
+        clients[instance] = client
+
+
 def _observe(part, params):
     """Tells the instance's world time the clock a call carries."""
     w = part.world_time(params.get("instance")) if isinstance(params, dict) else None
@@ -129,10 +144,12 @@ def _start(part, params):
     """Keeps the world time first, so what `start` makes (a twin's seed) is stamped in world time."""
     instance, config, seed, clock_ms = _need(params, "instance", "config", "seed", "clock_ms")
     _keep_world_time(part, instance, params.get("world_time"), clock_ms)
+    _keep_models(part, instance, params.get("models"))
     try:
         part.start(instance, config, seed, clock_ms, params.get("from"))
     except BaseException:
         _keep_world_time(part, instance, None, clock_ms)
+        _keep_models(part, instance, None)
         raise
     return {}
 
