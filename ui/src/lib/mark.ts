@@ -23,6 +23,7 @@ export const MARK = {
   stopped: mark('■', 'Stopped'),
   interrupted: mark('■', 'Interrupted', true),
   infraError: mark('⚠', 'Infra error', true),
+  budgetExceeded: mark('$', 'Over budget', true),
 } as const;
 
 /** ✓ when it passed, ✕ (abnormal) when not, each with its word. */
@@ -40,6 +41,7 @@ const RUN: Record<BranchStatus, Mark> = {
   infra_error: MARK.infraError,
   interrupted: MARK.interrupted,
   stopped: MARK.stopped,
+  budget_exceeded: MARK.budgetExceeded,
 };
 
 /** A run's status. */

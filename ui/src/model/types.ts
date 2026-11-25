@@ -40,7 +40,7 @@ export interface ProviderStatus {
   models?: string[];
 }
 /** `stopped`: someone stopped the run before it ended (`POST /api/branches/{id}/stop`); unscored. */
-export type BranchStatus = 'running' | 'queued' | 'passed' | 'failed' | 'infra_error' | 'interrupted' | 'stopped';
+export type BranchStatus = 'running' | 'queued' | 'passed' | 'failed' | 'infra_error' | 'interrupted' | 'stopped' | 'budget_exceeded';
 export type EventKind =
   | 'run_start'
   | 'agent_start'

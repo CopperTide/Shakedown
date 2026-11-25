@@ -33,6 +33,7 @@ export function flowOf(d: Pick<BranchDetail, 'status' | 'events'> | null): Flow 
   switch (d.status) {
     case 'running': return pausedIn(d.events) ? 'paused' : 'running';
     case 'infra_error': return 'error';
+    case 'budget_exceeded': return 'stopped';
     default: return d.status;
   }
 }
