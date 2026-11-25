@@ -564,6 +564,13 @@ change (a prompt, the team, a tool, the model or the process; for a prompt chang
 went well; for two runs or two suites, the few differences that matter and which did better. shaked checks every
 citation against the record and stores the review. Details in [reference.md](reference.md#ai-review).
 
+**Ask about a step.** On any step of the run page, ask a model a question about it ("why did the agent say
+this?"). It answers from what the agent actually had at that step (the messages and tool results sent to its
+model, its prompt, the ticket, the steps before), keeping *evidence*, quotes of the record checked word for word
+and each citing its step and field, apart from *speculation*, its labelled guess at how the model got there. It
+runs on your own model key, and the answers stay listed under the step with who asked, the model and the cost.
+Details in [reference.md](reference.md#ask-about-a-step).
+
 ## Cost labels
 
 - `openrouter`: the cost OpenRouter reports (API mode on OpenRouter).

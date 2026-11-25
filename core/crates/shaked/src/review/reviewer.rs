@@ -8,7 +8,10 @@ use serde_json::{json, Value};
 use tokio::io::AsyncWriteExt;
 
 use super::{output::json_in, prompt::Prompt, settings::ReviewerModel};
-use crate::{metrics, prices, providers::ProviderConfig};
+use crate::{
+    metrics, prices,
+    providers::{Provider, ProviderConfig},
+};
 
 /// How long a review may take.
 pub const TIMEOUT_SECS: u64 = 600;
@@ -31,13 +34,33 @@ pub async fn ask(
     providers: &ProviderConfig,
     http: &reqwest::Client,
 ) -> Result<Answer> {
-    let start = Instant::now();
-    let mut a = match model {
-        ReviewerModel::ClaudeCode { model } => claude(model, prompt).await?,
+    match model {
+        ReviewerModel::ClaudeCode { model } => ask_claude(model, prompt).await,
         ReviewerModel::Provider { provider, model } => {
-            provider_call(provider, model, prompt, providers, http).await?
+            let p = providers.resolve(Some(provider)).map_err(|e| anyhow!(e))?;
+            ask_provider(&p, model, prompt, http).await
         }
-    };
+    }
+}
+
+/// Asks Claude Code headless, timed.
+pub async fn ask_claude(model: &str, prompt: &Prompt) -> Result<Answer> {
+    timed(claude(model, prompt)).await
+}
+
+/// Asks `model` on the resolved provider `p` (one chat-completions call), timed.
+pub async fn ask_provider(
+    p: &Provider,
+    model: &str,
+    prompt: &Prompt,
+    http: &reqwest::Client,
+) -> Result<Answer> {
+    timed(provider_call(p, model, prompt, http)).await
+}
+
+async fn timed(f: impl std::future::Future<Output = Result<Answer>>) -> Result<Answer> {
+    let start = Instant::now();
+    let mut a = f.await?;
     a.seconds = start.elapsed().as_secs_f64();
     Ok(a)
 }
@@ -135,13 +158,12 @@ fn chat_request(model: &str, prompt: &Prompt) -> Value {
 }
 
 async fn provider_call(
-    provider: &str,
+    p: &Provider,
     model: &str,
     prompt: &Prompt,
-    providers: &ProviderConfig,
     http: &reqwest::Client,
 ) -> Result<Answer> {
-    let p = providers.resolve(Some(provider)).map_err(|e| anyhow!(e))?;
+    let provider = &p.id;
     let up = (p.send(http, &chat_request(model, prompt)).await)
         .map_err(|e| anyhow!("{provider}: {e}"))?;
     if !(200..300).contains(&up.status) {

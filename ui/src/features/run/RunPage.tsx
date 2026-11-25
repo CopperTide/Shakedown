@@ -19,6 +19,7 @@ import { costIsUnknown, teamProviders } from '@/model/providers';
 import { worldLine } from '@/model/restore';
 import type { Branch, BranchDetail, Event } from '@/model/types';
 import ActionTimeline from './ActionTimeline';
+import AskStep from './AskStep';
 import { type ForkChoice, forkChoiceOf } from './architecture';
 import BestSoFar from './BestSoFar';
 import { studyOf } from './candidates';
@@ -103,8 +104,8 @@ function Header({ runId, detail, siblings, title, step }: { runId: string; detai
   );
 }
 
-function Side({ runId, detail, event, forking, setForking, autoRows, choice }: {
-  runId: string; detail: BranchDetail; event: Event | null; forking: boolean; setForking: (f: boolean) => void; autoRows: boolean; choice: ForkChoice;
+function Side({ runId, detail, event, forking, setForking, autoRows, choice, onSelect }: {
+  runId: string; detail: BranchDetail; event: Event | null; forking: boolean; setForking: (f: boolean) => void; autoRows: boolean; choice: ForkChoice; onSelect: (s: number) => void;
 }) {
   const nav = useNavigate();
   return (
@@ -116,6 +117,7 @@ function Side({ runId, detail, event, forking, setForking, autoRows, choice }: {
         </div>
       )}
       <Inspector branchId={detail.id} event={event} team={detail.team} autoRows={autoRows} events={detail.events} />
+      {event && <AskStep key={`${detail.id}:${event.seq}`} branchId={detail.id} seq={event.seq} onStep={onSelect} />}
     </StepSidePanel>
   );
 }
@@ -185,7 +187,7 @@ export default function Run() {
         <RunErrorBanner error={error} onRetry={reload} detail={detail} />
         <RunReview d={detail} onStep={v.setSelected} />
         <Split storageKey="shakedown.run.side" main={<Main detail={detail} timeline={timeline} selected={v.selected} onSelect={v.setSelected} models={models} setModels={setModels} />}
-          side={<Side runId={runId} detail={detail} event={event} forking={v.forking} setForking={v.setForking} autoRows={v.autoRows} choice={v.choice} />} />
+          side={<Side runId={runId} detail={detail} event={event} forking={v.forking} setForking={v.setForking} autoRows={v.autoRows} choice={v.choice} onSelect={v.setSelected} />} />
         <More detail={detail} />
       </PageBody>
     </>

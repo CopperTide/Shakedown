@@ -260,8 +260,14 @@ pub async fn authorize_route(
     }
 }
 
-/// The target of `c` for `id`, and the answer to it.
-async fn ask(state: &AppState, caller: &Caller, c: &RouteCase, id: &str) -> Result<(), ApiError> {
+/// The target of `c` for `id`, and the answer to it (an MCP call of an operation is asked the
+/// same as its route).
+pub(crate) async fn ask(
+    state: &AppState,
+    caller: &Caller,
+    c: &RouteCase,
+    id: &str,
+) -> Result<(), ApiError> {
     let run = match c.on {
         On::Branch => (state.store.at(caller).find_branch(id).await?)
             .map(|b| b.run_id)

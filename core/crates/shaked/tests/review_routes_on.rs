@@ -18,7 +18,7 @@ async fn post(fx: &AppFx, path: &str) -> (u16, String) {
 fn with_review_on_posts_check_their_subject_before_starting() {
     setup::review("on");
     run(async {
-        let fx = setup::app("on").await;
+        let fx = setup::app("on", None).await;
         let (_, s) = fx.get("/api/review/settings").await;
         assert_eq!(s["enabled"], true, "{s}");
         let (st, e) = post(&fx, "/api/compare/review?a=x").await;

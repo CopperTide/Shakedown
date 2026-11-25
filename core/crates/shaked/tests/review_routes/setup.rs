@@ -17,9 +17,15 @@ pub fn review(switch: &str) {
     }
 }
 
-/// An app that runs no agent.
-pub async fn app(tag: &str) -> AppFx {
-    AppFx::idle("review_routes", tag).start().await
+/// An app that runs no agent; with `upstream`, its local provider (`local:custom`) is there.
+pub async fn app(tag: &str, upstream: Option<String>) -> AppFx {
+    let fx = AppFx::idle("review_routes", tag);
+    match upstream {
+        Some(base) => fx.config(move |c| c.providers.set_upstream(&base)),
+        None => fx,
+    }
+    .start()
+    .await
 }
 
 /// A new branch with no agent: running, or ended with `status`.

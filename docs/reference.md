@@ -85,11 +85,13 @@ All JSON on `http://127.0.0.1:4510`, except the event stream. Errors are `{error
 | `GET /api/suites/{id}` | the suite's report: `{id, name, team, tasks, repeats, runner, benchmark, created_at, ended_at, error, status, finished_s, runs, checks, summary, spread}`. `status` is `running`, `finished` or `stopped` (a built-in suite that ended before its last run: shaked stopped, or the saves reached the limit); `finished_s` the seconds from its creation to its last run's end. `runs`: per task × variant × repeat `{task_id, variant, repeat, run_id, branch_id, status, error, outcome}` (`variant`: the index in `variants`, 0 without them), `status` being `pending`, `starting`, `error` (it could not start), `missing` (its run was deleted) or the branch's status, and `outcome` `{status, scored, checks, checks_passed, checks_total, safety_violations, denials, flags, measured_s, estimated_s, tokens, cost_usd, peak_context}`. `checks`: per task and check `{task_id, name, safety, passed, runs, pass_rate}`. `summary`: `{runs, ended, scored, unscored, passed, pass_rate, score, safety_violations, runs_with_violation, denials, runs_with_denial, flags, runs_with_flag}` (`denials` and `flags` as [docs/protocol.md](protocol.md#denials-and-flags) defines them, summed over the scored runs) and the spread of each figure; `spread`: per task `{task_id, runs}` and the spread of each figure. A figure (`checks_passed`, `measured_s`, `estimated_s`, `tokens`, `cost_usd`, `peak_context`) is `{n, unknown, min, max, mean}` over the scored runs (`unknown`: runs without the figure, such as an unknown cost) |
 | `POST /api/suites/{id}/claim` | external suites: claims the next run and starts it as an external run; returns `{done: false, task_id, variant, repeat, run_id, branch_id, agents}` (driven as any external run), or `{done: true}` when every run is claimed. 409 for a suite shaked runs itself |
 | `GET /api/suites/compare?a=<suite>&b=<suite>` | suite `b` against suite `a`: `{a, b, verdict, checks, pass_rate, score, safety, measured_s, estimated_s, tokens, cost_usd, peak_context}`. Each is `{a, b, change, verdict}` (`checks` per task and check, with `task_id`, `name`, `safety`); `verdict` is `improved`, `regressed`, `same`, or `incomparable` when one side lacks the figure. Pass rates and `safety` (failed safety checks per scored run) count any change; time, tokens and cost (means over the scored runs) count a change beyond 10% of `a`'s. The top `verdict` is `regressed` when a check, the pass rate or safety regressed, `improved` when one improved and none regressed |
-| `GET /api/review/settings` | `{enabled, model, why?}`: whether AI review is on and with which reviewer (see [AI review](#ai-review)) |
+| `GET /api/review/settings` | `{enabled, model, why?, ask}`: whether AI review is on and with which reviewer (see [AI review](#ai-review)); `ask`, whether asking about a step is on (off only by `SHAKEDOWN_REVIEW=off`: it runs on the asker's own key) |
 | `POST /api/branches/{id}/review[?again=1]` | starts an AI review of an ended branch, or returns the stored one (a failed one is tried again; `again=1` always makes a new one); answers at once with the stored row, `status: running` until the model answers. 404 for an unknown branch, 409 while it runs or when AI review is off |
 | `GET /api/branches/{id}/review` | the stored review: `{key, kind, status, model, review, issues, error, cost_usd, cost_source, tokens, seconds, digest_bytes, created_at, finished_at}` (`status` `running`, `done` or `error`); 404 before any. `review` is `{verdict, went_wrong: [{title, why, steps, severity, unverified?}], suggestions: [{change, why, kind, agent?, prompt_text?, step?}], went_well, confidence}` |
 | `POST`/`GET /api/compare/review?a=&b=[&again=1]` | the same for two ended branches; `review` is `{headline, differences: [{title, a, b, why_it_matters, steps_a, steps_b, unverified?}], which_is_better, why}` |
 | `POST`/`GET /api/suites/compare/review?a=&b=[&again=1]` | the same for suite `b` against `a`; `steps_a` and `steps_b` are example runs (branch ids) of each suite |
+| `POST /api/branches/{id}/questions` | `{seq, question, model?, wait?}`: asks about step `seq` (operation `questions.ask`, see [Ask about a step](#ask-about-a-step)); answers at once with the stored row (as a review's, `kind: ask`, `status: running`), or with `wait: true` once answered. 400 for a blank question (or over 2000 characters) or a bad `model`, 404 for no such branch or step, 409 when asking is off or the model would not run on your own key |
+| `GET /api/branches/{id}/questions[?seq=]` | the questions asked about the branch's steps (or step `seq`'s), oldest first (operation `questions.list`): `{questions: [row]}`, each `review` being `{question, step, agent, asked_by, mine, answer?, evidence?: [{source, step, field, quote, why}], speculation?: [{text, based_on}], sources?, sources_left_out?}` |
 | `GET /api/world` | the benchmark's parts with what each integration reports (version, restore, clock use, tool names, and `system` when it says what kind of system it is) and whether it answered (each gets 5 s; a silent one shows `did not answer within 5 s`) |
 | `GET /api/usage` | `{integrations: [{integration, parts, bytes, error?}], total_bytes, limit_bytes}`: the bytes each integration keeps (its own `usage` plus its save folders) and the world parts that use it. An integration whose `usage` fails or doesn't answer within 5 s has `bytes: 0` and an `error`, and adds nothing to `total_bytes` |
 | `POST /api/gc` | runs the startup cleanup and returns `{removed, freed_bytes, errors}`; it keeps every save a recorded run names and the shared base and gold saves; 409 while agents are running, and new runs and forks answer 409 while it runs. It has no deadline: it answers when every integration's `gc` has (an integration that never answers keeps the cleanup on until it exits), and a client that stops waiting does not end it |
@@ -420,6 +422,32 @@ Optional. A real model reads a compact digest of the record and answers in JSON,
   "Review this run" button. Each cited step selects it; a prompt or team suggestion has "Rewind and try this",
   which opens "Change and rerun" at the suggested step with the text added to the agent's prompt. The compare pages
   show "What matters" above the outcome, reviewed when the page opens.
+
+### Ask about a step
+
+On the run page's step panel, **Ask about this step** sends a question about that step ("Why did the agent make
+this reasoning statement?") to a model, the *explainer*, which answers from what the agent had at that step:
+
+- **What it reads.** The step; the ticket and the agent's prompt; the messages sent to the agent's model for the
+  step (the model call a thought names, the step itself for a model call, else the agent's latest call before it:
+  its system prompt, the conversation and the tool results), that call's response; the 40 steps before it and the
+  run's scenario. Each is a *source* with an id (`s<seq>`, `m<seq>.<i>`, `m<seq>.response`, `ticket`, `prompt`,
+  `scenario`), its step and its field (`request.messages[0] (system)`). Texts are cut (4 000 bytes; the step 8 000,
+  earlier steps 1 200) and the sources kept to 60 000 bytes, the step first, then the ticket and prompt, then the
+  call's first and last six messages and its response, then the earlier steps; `sources_left_out` counts the rest.
+  The prompt is `core/crates/shaked/src/review/ask_prompt.md`.
+- **What is kept.** `answer`, a few plain sentences; `evidence`, each a quote of one source with why it bears on the
+  question, kept only when that source's full text has the quote word for word (whitespace aside), with the
+  source's step and field: any other is dropped and said in `issues`; `speculation`, the explainer's hypotheses,
+  labelled as inference, citing only sources there are. Each question is stored as a review row (key
+  `ask:<branch>:<seq>:<id>`, kind `ask`) with who asked (`asked_by`, the layer's principal; `mine` when it was
+  you), when, the model, its cost and tokens; hosted, rows are the org's under row-level security.
+- **Whose key.** The explainer runs on your own key: the model picked (default the AI review model,
+  `SHAKEDOWN_REVIEW_MODEL`) is resolved as agents' providers are, and refused (409) when it would run on the
+  layer's fallback key, or, where the layer lends no environment keys (hosted), on the environment's key or
+  Claude Code. Locally the environment's keys and Claude Code are yours.
+- **From the assistant or MCP.** The operations `questions.ask` (spend: the assistant asks you to confirm; `wait`
+  answers once done) and `questions.list`, authorized as the branch's routes are.
 
 Checked on the pharma demo (2026-11-08) with Claude Code Sonnet: the failed six-agent haiku run ($0.11, 19 s),
 the single Sonnet agent ($0.07, 9 s) and their comparison ($0.10, 13 s for the model after about 45 s comparing

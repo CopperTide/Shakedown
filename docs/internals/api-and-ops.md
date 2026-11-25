@@ -38,7 +38,7 @@ shaked serves one HTTP API. The UI, the Python SDK, scripts and CI all use it. O
 | `src/project_state.rs` | The project folder, re-read when its files change. |
 | `src/suite/` | `mod.rs` (slots), `drive.rs` (`run_next`, built-in loop, external claim), `slots.rs` (permit, paired seeds), `outcome.rs`, `safety.rs`, `report.rs`, `load.rs`, `compare.rs`. |
 | `src/experiment/` | `mod.rs` (setups, `run_order`), `drive.rs`, `view.rs`. |
-| `src/review/` | `jobs.rs` (`Subject`, jobs), `digest.rs`, `pair.rs`, `suites.rs`, `prompt.rs`, `reviewer.rs`, `output.rs` (citations checked), `settings.rs`. |
+| `src/review/` | `jobs.rs` (`Subject`, jobs), `digest.rs`, `pair.rs`, `suites.rs`, `prompt.rs`, `reviewer.rs`, `output.rs` (citations checked), `settings.rs`; `ask.rs` (a step's sources, the answer's quotes checked), `asking.rs` (the question stored, the explainer on the asker's key), `ask_prompt.md`. |
 | `src/metrics.rs`, `src/compare.rs` | Time, overhead, tokens and cost per agent. Branch summary, first divergent step, differing rows. |
 | `src/gc.rs` | Disk usage, deleting a run's saves, startup and manual cleanup. |
 
@@ -109,7 +109,7 @@ All three end in `launch::launch` ([runs and worlds](runs-and-worlds.md)).
 
 ```mermaid
 flowchart LR
-    subgraph registry["ops::all(): 30 operations"]
+    subgraph registry["ops::all(): 32 operations"]
       P["project_ops<br/>status, init, update"]
       I["item_ops<br/>worlds, scenarios, setups, experiments<br/>x list, get, put, delete, dependents<br/>(delete and dependents in delete_ops)<br/>data_ops: worlds.data"]
       G["group_ops<br/>worlds.rename_group"]
@@ -117,6 +117,7 @@ flowchart LR
       D["deploy_ops<br/>experiments.deploy, experiments.runs"]
       M["madl_ops<br/>setups.madl"]
       X["import_ops<br/>project.import"]
+      Q["step_ops<br/>questions.list, questions.ask"]
     end
     registry --> HTTP["ops/http.rs router<br/>input = body + query + {id}"]
     registry --> ROWS["ops/http.rs route_rows"]
@@ -149,6 +150,10 @@ any change, leaves first) and the trash (`trash.rs`); see [concepts](../concepts
 (relative path and size, up to 500), or with `path` reads one: `{path, size, text, truncated}` for UTF-8 text (cut at
 1 MiB), `{path, size, binary: true}` otherwise. A `path` that leaves the folder (`..`, absolute, or a symlink pointing
 out) is 400 (`core/crates/shaked/src/ops/data_ops.rs`).
+
+An operation under `/api/branches/{id}/` (`questions.list`, `questions.ask`) acts on that branch: its route row is
+`On::Branch`, and an MCP call is asked the same as the route (`api::routes::ask`), so a hosted caller reaches only
+its org's branches.
 
 What the registry does not cover yet: runs, forks, branches, suites, engine experiments, reviews,
 connections, keys and tokens are HTTP routes only. MCP clients and the assistant cannot use them. This is the

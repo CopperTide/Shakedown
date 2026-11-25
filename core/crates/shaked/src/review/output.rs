@@ -137,7 +137,7 @@ fn object(v: Value) -> Result<Value> {
     }
 }
 
-fn text(v: &Value, key: &str) -> Option<String> {
+pub(super) fn text(v: &Value, key: &str) -> Option<String> {
     let s = v.get(key)?.as_str()?.trim();
     (!s.is_empty()).then(|| crate::text::cut(s, MAX_TEXT))
 }
@@ -146,7 +146,7 @@ fn required(v: &Value, key: &str) -> Result<String> {
     text(v, key).ok_or_else(|| anyhow!("the review has no {key}"))
 }
 
-fn list<'a>(v: &'a Value, key: &str) -> &'a [Value] {
+pub(super) fn list<'a>(v: &'a Value, key: &str) -> &'a [Value] {
     v.get(key)
         .and_then(Value::as_array)
         .map_or(&[], Vec::as_slice)

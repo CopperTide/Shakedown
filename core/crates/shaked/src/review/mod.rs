@@ -8,7 +8,11 @@
 //! - [`prompt`]: what it is told, and the schema of its answer.
 //! - [`reviewer`]: the call to the model (Claude Code headless, or one of shaked's providers).
 //! - [`output`]: the answer checked: fields validated, citations checked against the record.
+//! - [`ask`], [`asking`]: a question about one step, answered from what the agent had there,
+//!   evidence (quotes checked against the record) kept apart from speculation.
 
+pub mod ask;
+pub mod asking;
 pub mod digest;
 pub mod jobs;
 pub mod output;
@@ -96,6 +100,15 @@ pub fn check(answer: &serde_json::Value, job: &Job) -> Result<(serde_json::Value
     Ok((v, issues.0))
 }
 
+/// A checked answer, ready to store: the review (or explanation), what checking found, what
+/// the model cost, and the size of what it read.
+pub struct Checked {
+    pub review: serde_json::Value,
+    pub issues: Vec<String>,
+    pub answer: reviewer::Answer,
+    pub bytes: usize,
+}
+
 /// Asks the reviewer and stores its checked answer under `key`, or why it failed.
 pub async fn run(
     state: Arc<AppState>,
@@ -104,38 +117,44 @@ pub async fn run(
     model: ReviewerModel,
     job: Result<Job>,
 ) {
-    let outcome = answer(&state, &scope, &key, &model, job).await;
-    if let Err(e) = outcome {
-        if let Err(e2) = state
-            .store
-            .at(&scope)
-            .fail_review(&key, &format!("{e:#}"))
-            .await
-        {
+    let outcome = answer(&state, &model, job).await;
+    settle(&state, &scope, &key, outcome).await;
+}
+
+/// Stores how answering `key` ended: its checked answer, or why it (or storing it) failed.
+pub async fn settle(state: &AppState, scope: &Caller, key: &str, outcome: Result<Checked>) {
+    let records = state.store.at(scope);
+    let stored = match outcome {
+        Ok(c) => {
+            let done = ReviewDone {
+                review: &c.review,
+                issues: &c.issues,
+                cost_usd: c.answer.cost_usd,
+                cost_source: c.answer.cost_source.as_deref(),
+                tokens: c.answer.tokens,
+                seconds: c.answer.seconds,
+                digest_bytes: c.bytes,
+            };
+            records.finish_review(key, done).await
+        }
+        Err(e) => Err(e),
+    };
+    if let Err(e) = stored {
+        if let Err(e2) = records.fail_review(key, &format!("{e:#}")).await {
             eprintln!("review {key}: {e:#}; storing that failed too: {e2:#}");
         }
     }
 }
 
-async fn answer(
-    state: &AppState,
-    scope: &Caller,
-    key: &str,
-    model: &ReviewerModel,
-    job: Result<Job>,
-) -> Result<()> {
+async fn answer(state: &AppState, model: &ReviewerModel, job: Result<Job>) -> Result<Checked> {
     let job = job?;
     let cfg = &state.config.providers;
     let a = reviewer::ask(model, &job.prompt, cfg, &state.http).await?;
     let (review, issues) = check(&a.value, &job)?;
-    let done = ReviewDone {
-        review: &review,
-        issues: &issues,
-        cost_usd: a.cost_usd,
-        cost_source: a.cost_source.as_deref(),
-        tokens: a.tokens,
-        seconds: a.seconds,
-        digest_bytes: job.prompt.user.len(),
-    };
-    state.store.at(scope).finish_review(key, done).await
+    Ok(Checked {
+        review,
+        issues,
+        answer: a,
+        bytes: job.prompt.user.len(),
+    })
 }

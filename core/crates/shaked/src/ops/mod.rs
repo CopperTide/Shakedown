@@ -17,6 +17,7 @@ mod migrate;
 mod project_ops;
 mod restore_ops;
 pub mod stdio;
+mod step_ops;
 mod view;
 
 use std::ops::ControlFlow;
@@ -133,6 +134,7 @@ pub fn all() -> &'static [Operation] {
         ops.extend(deploy_ops::ops());
         ops.extend(madl_ops::ops());
         ops.extend(import_ops::ops());
+        ops.extend(step_ops::ops());
         ops
     })
 }

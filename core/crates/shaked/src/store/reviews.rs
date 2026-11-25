@@ -1,5 +1,6 @@
 //! AI reviews in the metadata database: one row per reviewed branch (`branch:<id>`), pair of
-//! branches (`compare:<a>:<b>`) or pair of suites (`suites:<a>:<b>`), kept until asked again.
+//! branches (`compare:<a>:<b>`) or pair of suites (`suites:<a>:<b>`), kept until asked again; and
+//! one row per question asked about a step (`ask:<branch>:<seq>:<id>`, kind `ask`), kept.
 
 use anyhow::Result;
 use chrono::{DateTime, Utc};
@@ -93,6 +94,32 @@ impl Scoped<'_> {
         );
         let row = self.query_opt(&sql, &[&key, &kind, &model]).await?;
         Ok(row.as_ref().map(review_from))
+    }
+
+    /// Starts answering a question about a step: a new row, `running`, whose `review` holds the
+    /// question until the checked answer replaces it.
+    pub async fn start_ask(
+        &self,
+        key: &str,
+        model: &str,
+        question: &Value,
+    ) -> Result<StoredReview> {
+        let sql = format!(
+            "INSERT INTO reviews (key, kind, status, model, review)
+             VALUES ($1, 'ask', 'running', $2, $3) RETURNING {COLS}"
+        );
+        let row = self.query_one(&sql, &[&key, &model, question]).await?;
+        Ok(review_from(&row))
+    }
+
+    /// The questions asked under `prefix` (a branch's, or one step's), oldest first.
+    pub async fn asks(&self, prefix: &str) -> Result<Vec<StoredReview>> {
+        let sql = format!(
+            "SELECT {COLS} FROM reviews WHERE kind = 'ask' AND left(key, length($1)) = $1
+             ORDER BY created_at, key"
+        );
+        let rows = self.query(&sql, &[&prefix]).await?;
+        Ok(rows.iter().map(review_from).collect())
     }
 
     pub async fn finish_review(&self, key: &str, done: ReviewDone<'_>) -> Result<()> {

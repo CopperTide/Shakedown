@@ -58,7 +58,7 @@ fn access_classes_follow_the_verb() {
                 Access::Read
             }
             "delete" => Access::Delete,
-            "deploy" => Access::Spend,
+            "deploy" | "ask" => Access::Spend,
             _ => Access::Edit,
         };
         assert_eq!(op.access, want, "{}", op.name);

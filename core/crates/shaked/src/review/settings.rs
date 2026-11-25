@@ -73,6 +73,9 @@ pub struct ReviewSettings {
     /// Why it is off, when it is.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub why: Option<String>,
+    /// Whether asking about a step is on: unless the switch is off. It runs on the asker's own
+    /// key, so a reviewer this shaked can't run doesn't turn it off.
+    pub ask: bool,
     #[serde(skip)]
     pub reviewer: Option<ReviewerModel>,
 }
@@ -87,29 +90,42 @@ pub fn decide(
         .map(str::trim)
         .filter(|m| !m.is_empty())
         .unwrap_or(DEFAULT_MODEL);
-    let off = |why: String| ReviewSettings {
-        enabled: false,
-        model: label.to_string(),
-        why: Some(why),
-        reviewer: None,
-    };
-    match switch.map(|s| s.trim().to_lowercase()).as_deref() {
-        None | Some("" | "on" | "1" | "true") => {}
-        Some("off" | "0" | "false") => return off(format!("{SWITCH_ENV} is off")),
-        Some(other) => return off(format!("{SWITCH_ENV} must be on or off, not {other:?}")),
+    if let Err(why) = switched_on(switch) {
+        return off(label, why, false);
     }
     let reviewer = match ReviewerModel::parse(label) {
         Ok(r) => r,
-        Err(why) => return off(why),
+        Err(why) => return off(label, why, true),
     };
     if let Err(why) = available(&reviewer) {
-        return off(why);
+        return off(label, why, true);
     }
     ReviewSettings {
         enabled: true,
         model: reviewer.label(),
         why: None,
+        ask: true,
         reviewer: Some(reviewer),
+    }
+}
+
+/// Whether the switch is on (unset is on), else why not.
+fn switched_on(switch: Option<&str>) -> Result<(), String> {
+    match switch.map(|s| s.trim().to_lowercase()).as_deref() {
+        None | Some("" | "on" | "1" | "true") => Ok(()),
+        Some("off" | "0" | "false") => Err(format!("{SWITCH_ENV} is off")),
+        Some(other) => Err(format!("{SWITCH_ENV} must be on or off, not {other:?}")),
+    }
+}
+
+/// Review off with `model`, saying why; asking about a step stays on with `ask`.
+fn off(model: &str, why: String, ask: bool) -> ReviewSettings {
+    ReviewSettings {
+        enabled: false,
+        model: model.to_string(),
+        why: Some(why),
+        ask,
+        reviewer: None,
     }
 }
 
@@ -181,13 +197,13 @@ mod tests {
         assert!(s.enabled);
         assert_eq!(s.model, DEFAULT_MODEL);
         let s = decide(Some("off"), None, yes);
-        assert!(!s.enabled && s.reviewer.is_none());
+        assert!(!s.enabled && s.reviewer.is_none() && !s.ask);
         assert_eq!(s.why.as_deref(), Some("SHAKEDOWN_REVIEW is off"));
         // On, but the model can't run: off, saying why.
         let s = decide(Some("on"), Some("anthropic:claude-x"), |_| {
             Err("ANTHROPIC_API_KEY is not set".into())
         });
-        assert!(!s.enabled);
+        assert!(!s.enabled && s.ask, "asking runs on the asker's key");
         assert_eq!(s.why.as_deref(), Some("ANTHROPIC_API_KEY is not set"));
         assert_eq!(s.model, "anthropic:claude-x");
         assert!(!decide(Some("maybe"), None, yes).enabled);
