@@ -1,5 +1,6 @@
 import { type ReactElement, useEffect, useState } from 'react';
 import { branchEvent, rows } from '@/api/branches';
+import Markdown from '@/components/Markdown';
 import { Button } from '@/components/ui/button';
 import { CodeBlock } from '@/components/ui/code-block';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/state';
@@ -125,9 +126,35 @@ function ToolCall({ branchId, event, events, auto }: { branchId: string; event: 
   );
 }
 
-function messageText(m: unknown): string {
-  const c = (m as { content?: unknown })?.content;
-  return typeof c === 'string' ? c : pretty(c ?? m);
+/** The prose in a message's or a reply's content: a string, or the text of its `{type: "text"}` parts (null when it has none). */
+export function proseOf(c: unknown): string | null {
+  if (typeof c === 'string') return c;
+  if (!Array.isArray(c)) return null;
+  const texts = c.map((part) => asRecord(part)).filter((part) => part.type === 'text' && typeof part.text === 'string').map((part) => part.text as string);
+  return texts.length ? texts.join('\n\n') : null;
+}
+
+/** What a model answered, as prose: OpenAI-style `choices[0].message.content` or Anthropic-style `content` parts. */
+export function replyOf(response: unknown): string | null {
+  const r = asRecord(response);
+  const choice = Array.isArray(r.choices) ? asRecord(r.choices[0]) : null;
+  return proseOf(choice ? asRecord(choice.message).content : r.content);
+}
+
+/** One message of a request: its prose as Markdown, anything else (tool calls, images) as JSON below it. */
+function Message({ m }: { m: unknown }) {
+  const c = asRecord(m).content;
+  const prose = proseOf(c);
+  const rest = typeof c === 'string' ? null : Array.isArray(c) ? c.filter((part) => asRecord(part).type !== 'text') : c ?? m;
+  const extra = Array.isArray(rest) ? (rest.length ? rest : null) : rest;
+  const calls = asRecord(m).tool_calls;
+  return (
+    <div className="flex flex-col gap-1 pt-1">
+      {prose !== null && <Markdown text={prose} />}
+      {extra !== null && extra !== undefined && <Json value={extra} />}
+      {calls !== undefined && <Json value={calls} />}
+    </div>
+  );
 }
 
 /** "OpenAI · gpt-x": who answered a model call (absent in calls recorded before providers: OpenRouter). */
@@ -146,10 +173,11 @@ function ModelCall({ p }: { p: ModelCallPayload }) {
         {msgs.map((m, i) => (
           <details key={i} open={i === msgs.length - 1} className="text-xs">
             <summary className="cursor-pointer font-mono text-muted">{(m as { role?: string })?.role ?? '?'}</summary>
-            <Json value={messageText(m)} />
+            <Message m={m} />
           </details>
         ))}
       </Section>
+      {replyOf(p.response) !== null && <Section title="Reply"><Markdown text={replyOf(p.response) as string} /></Section>}
       <Block title="Response" value={p.response} />
       <Block title="Usage" value={p.usage} />
       <Section title="Cost"><span className="text-xs">{formatCost(p.cost_usd, p.cost_source, costIsUnknown(providerId(p.provider)))}</span></Section>
@@ -230,7 +258,7 @@ function Reasoning({ p }: { p: ReasoningPayload }) {
   const from = SOURCE[String(p.source)] ?? String(p.source ?? '');
   return (
     <Section title={`${reasoningWord(p.kind)} (${from}${call})`}>
-      <p className="whitespace-pre-wrap break-words text-sm">{String(p.text ?? '')}</p>
+      <Markdown text={String(p.text ?? '')} />
       {p.truncated === true && <p className="mt-1 text-xs text-muted">Cut at 32,768 characters.</p>}
     </Section>
   );
