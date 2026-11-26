@@ -25,6 +25,14 @@
 
 ### Added
 
+- **Analytics.** A new Analytics page (sidebar, under Experiments) shows figures across runs: runs, passes, pass
+  rate, total cost, cost per passed run and median run time; pass rate over time per setup or model; cost per run
+  against pass rate, one dot per setup or model; and a sortable setup × scenario leaderboard. Filters (7, 30 or 90
+  days or all time, world, scenario, setup, model) stay in the address, and a dot or a row opens its runs (the runs
+  list now takes `setup`, `scenario`, `model`, `from` and `to`). The same figures are `GET /api/analytics/summary`
+  and the `analytics.summary` operation for the assistant and MCP. Each ended branch's figures are worked out once
+  by a background job and kept in the new `branches.stats` column (migration 7), old runs included. See
+  [docs/analytics.md](docs/analytics.md).
 - **Observability.** Settings → Observability sends every run as an OpenTelemetry trace (OTLP/HTTP protobuf) to
   Langfuse, Arize Phoenix or any OTLP collector: run, branch, agent turns, model calls (GenAI semantic conventions
   and OpenInference), tool calls with rows read and written, reasoning and the check; content only where the target
