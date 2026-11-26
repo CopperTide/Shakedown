@@ -25,3 +25,5 @@ ui/src/lib/productAnalytics.ts:if (body?.user) await analytics.start(body.postho
 ui/src/lib/productAnalytics.ts:import { productAnalytics, routeTemplater, type Org, type Person, type PostHogSettings } from './posthogShared';
 ui/src/lib/productAnalytics.ts:/** Starts PostHog when this shaked is hosted: the person, their org and the settings come from the gateway. */
 ui/src/lib/productAnalytics.ts:type GatewayMe = { user?: Person; org?: Org | null; posthog?: PostHogSettings | null };
+# The Postgres documentation link in the world editor's part catalog (a domain, not an org).
+ui/src/features/editors/world/catalog/catalog.ts:"docs": "https://www.postgresql.org/docs/current/",
