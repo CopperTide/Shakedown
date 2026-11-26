@@ -91,7 +91,7 @@ function Chips({ label, facets, picked, name, onToggle }: {
 function Snippet({ text }: { text: string }) {
   return (
     <p className="line-clamp-3 break-words text-sm text-muted">
-      {snippetParts(text).map((p, i) => (p.hit ? <mark key={i} className="rounded-sm bg-accent-soft px-0.5 text-fg">{p.text}</mark> : <span key={i}>{p.text}</span>))}
+      {snippetParts(text).map((p, i) => (p.hit ? <mark key={i} className="rounded-sm bg-accent-soft text-fg">{p.text}</mark> : <span key={i}>{p.text}</span>))}
     </p>
   );
 }
