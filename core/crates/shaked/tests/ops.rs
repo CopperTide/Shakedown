@@ -54,9 +54,8 @@ fn schemas_are_objects() {
 fn access_classes_follow_the_verb() {
     for op in ops::all() {
         let want = match op.name.rsplit('.').next().unwrap() {
-            "list" | "get" | "status" | "runs" | "madl" | "dependents" | "deleted" | "data" => {
-                Access::Read
-            }
+            "list" | "get" | "status" | "runs" | "madl" | "dependents" | "deleted" | "data"
+            | "summary" => Access::Read,
             "delete" => Access::Delete,
             // Deploying and asking spend; exporting sends a run's record out: all are asked for.
             "deploy" | "ask" | "export" => Access::Spend,

@@ -89,7 +89,7 @@ mod tests {
             .iter()
             .enumerate()
             .map(|(i, m)| {
-                let mut a = AgentSpec::new(&format!("a{i}"), AgentKind::Open);
+                let mut a = AgentSpec::new(format!("a{i}"), AgentKind::Open);
                 a.model = Some((*m).into());
                 a
             })
