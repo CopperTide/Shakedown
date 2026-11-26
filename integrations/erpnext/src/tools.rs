@@ -25,14 +25,15 @@ fn object<'a>(args: &'a Value, field: &str) -> Result<&'a Map<String, Value>, St
         .ok_or_else(|| format!("{field} is required (an object)"))
 }
 
-fn failed(error: String, reads: Vec<String>) -> ToolOutput {
-    ToolOutput {
+/// A failed call's output, boxed: `ToolOutput` is too large to return as a bare `Err`.
+fn failed(error: String, reads: Vec<String>) -> Box<ToolOutput> {
+    Box::new(ToolOutput {
         result: None,
         error: Some(error),
         reads,
         writes: vec![],
         ..ToolOutput::default()
-    }
+    })
 }
 
 /// Runs tool `name` on `site`.
@@ -50,13 +51,13 @@ pub async fn call(
         "submit_doc" => submit_doc(rest, site, args).await?,
         _ => Err(failed(format!("unknown tool {name}"), vec![])),
     };
-    Ok(out.unwrap_or_else(|o| o))
+    Ok(out.unwrap_or_else(|o| *o))
 }
 
 /// A tool's outcome: `Ok` its output, `Err` its output when it failed.
-type Outcome = Result<ToolOutput, ToolOutput>;
+type Outcome = Result<ToolOutput, Box<ToolOutput>>;
 
-fn doc_name(args: &Value) -> Result<(&str, &str), ToolOutput> {
+fn doc_name(args: &Value) -> Result<(&str, &str), Box<ToolOutput>> {
     let pair = text(args, "doctype").and_then(|d| Ok((d, text(args, "name")?)));
     pair.map_err(|e| failed(e, vec![]))
 }

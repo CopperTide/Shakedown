@@ -820,6 +820,18 @@ fn a_stepped_run_on_another_runner_is_refused() {
     })
 }
 
+/// The lead's first turn, which opens only after the clock's `team_start` move.
+fn first_turn_after_team_start(evs: &[Event]) -> &Event {
+    let first = evs.iter().find(|e| e.kind == EventKind::Wake).unwrap();
+    let started = |e: &&Event| e.payload["data"]["reason"] == "team_start";
+    let start = evs.iter().find(started).unwrap();
+    assert!(
+        first.seq > start.seq,
+        "no agent works before the team starts"
+    );
+    first
+}
+
 /// A team that starts later than the clock: the world runs on alone to `team_start_ms`, through
 /// its parts' wakes, and the lead's first turn opens there; the run is still scored at the horizon.
 #[test]
@@ -838,13 +850,7 @@ fn a_late_team_start_runs_the_world_alone_until_then() {
         assert_eq!(m.first(), Some(&("wake".to_string(), HOUR)), "{m:?}");
         assert!(m.contains(&("team_start".to_string(), 2 * HOUR)), "{m:?}");
         assert_eq!(m.last(), Some(&("horizon".to_string(), 3 * HOUR)), "{m:?}");
-        let first = evs.iter().find(|e| e.kind == EventKind::Wake).unwrap();
-        let started = |e: &&Event| e.payload["data"]["reason"] == "team_start";
-        let start = evs.iter().find(started).unwrap();
-        assert!(
-            first.seq > start.seq,
-            "no agent works before the team starts"
-        );
+        let first = first_turn_after_team_start(&evs);
         let input = first.payload["input"].as_str().unwrap();
         let told = input.contains("ends your team's watch, not the day");
         assert!(

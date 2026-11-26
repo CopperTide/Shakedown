@@ -23,6 +23,15 @@ async fn setup(tag: &str) -> AppFx {
     AppFx::idle("api", tag).start().await
 }
 
+/// A new run of `team()` on task `task_id` and its first branch: the branch's id.
+async fn run_branch(records: &shaked::store::Scoped<'_>, task_id: &str) -> String {
+    let run_id = records.create_run(task_id, &team()).await.unwrap();
+    records
+        .create_branch(&run_id, None, &team(), &json!([]), None)
+        .await
+        .unwrap()
+}
+
 /// An app on the configured providers and Claude Code, for live tests.
 async fn live_setup(tag: &str) -> AppFx {
     AppFx::configured("api", tag).bench("retail").start().await
@@ -547,11 +556,7 @@ impl Toy {
     /// `events`. Its id.
     async fn branch(&self, parts: &[&str], base: Value, events: Vec<(EventKind, Value)>) -> String {
         let store = &self.fx.state.store;
-        let run_id = records(store).create_run("t1", &team()).await.unwrap();
-        let b = records(store)
-            .create_branch(&run_id, None, &team(), &json!([]), None)
-            .await
-            .unwrap();
+        let b = run_branch(&records(store), "t1").await;
         let world: Vec<Value> = parts
             .iter()
             .map(|p| json!({"part": p, "integration": self.part, "config": {}}))
@@ -724,11 +729,7 @@ fn selected_event_returns_full_body_and_missing_steps_are_404() {
     run(async {
         let fx = setup("selected-event").await;
         let records = records(&fx.state.store);
-        let run_id = records.create_run("27", &team()).await.unwrap();
-        let branch = records
-            .create_branch(&run_id, None, &team(), &json!([]), None)
-            .await
-            .unwrap();
+        let branch = run_branch(&records, "27").await;
         let payload = json!({"request": {"messages": ["hello"]}, "response": "answer"});
         let event = records
             .append(
@@ -754,16 +755,29 @@ fn selected_event_returns_full_body_and_missing_steps_are_404() {
     })
 }
 
+/// The data of a stream body's `event` frames, parsed.
+fn event_frames(body: &str) -> Vec<Value> {
+    frames(body)
+        .into_iter()
+        .filter(|(name, _)| name == "event")
+        .map(|(_, data)| serde_json::from_str(&data).unwrap())
+        .collect()
+}
+
+/// A lean model call's payload: the request keeps its model, and no bodies.
+fn assert_lean(payload: &Value) {
+    assert_eq!(payload["request"], json!({"model": "test-model"}));
+    assert_eq!(payload["bodies_omitted"], true);
+    assert!(payload["response"].is_null());
+    assert!(payload.get("provider_response").is_none());
+}
+
 #[test]
 fn lean_stream_resumes_after_loaded_events_and_eventsource_cursor() {
     run(async {
         let fx = setup("lean-stream").await;
         let records = records(&fx.state.store);
-        let run_id = records.create_run("27", &team()).await.unwrap();
-        let branch = records
-            .create_branch(&run_id, None, &team(), &json!([]), None)
-            .await
-            .unwrap();
+        let branch = run_branch(&records, "27").await;
         for seq in 1..=3 {
             records.append(&branch, Some("triage"), EventKind::ModelCall,
                 json!({"request": {"model": "test-model", "messages": ["large history"]}, "response": seq, "provider_response": "raw"})).await.unwrap();
@@ -784,20 +798,10 @@ fn lean_stream_resumes_after_loaded_events_and_eventsource_cursor() {
             .unwrap();
         assert_eq!(response.status(), 200);
         let body = response.text().await.unwrap();
-        let events: Vec<Value> = frames(&body)
-            .into_iter()
-            .filter(|(name, _)| name == "event")
-            .map(|(_, body)| serde_json::from_str(&body).unwrap())
-            .collect();
+        let events = event_frames(&body);
         assert_eq!(events.len(), 1);
         assert_eq!(events[0]["seq"], 3);
-        assert_eq!(
-            events[0]["payload"]["request"],
-            json!({"model": "test-model"})
-        );
-        assert_eq!(events[0]["payload"]["bodies_omitted"], true);
-        assert!(events[0]["payload"]["response"].is_null());
-        assert!(events[0]["payload"].get("provider_response").is_none());
+        assert_lean(&events[0]["payload"]);
         assert!(body.contains("id: 3"));
     })
 }

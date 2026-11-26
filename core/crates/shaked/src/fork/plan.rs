@@ -329,10 +329,7 @@ pub fn plan_fork_with(
     loop {
         let planner = Planner::at(events, team, asked)?;
         let mut start = planner.start_with(rules.clone(), changes, &changed)?;
-        let before_world = start.seq == step.seq && step.first != step.seq;
-        if before_world {
-            start.seq = step.first; // the step's world calls are made again with it
-        }
+        let before_world = step.redo_world_calls(&mut start);
         let base = run_info(events).base;
         match saves_at_except(events, start.seq - 1, &base, replayed) {
             Ok(restore) => {
@@ -341,9 +338,7 @@ pub fn plan_fork_with(
                     // An agent's input then has the notes recorded before its start.
                     false => vec![],
                 };
-                let saved = (asked != step.seq).then_some(REASON_SAVED);
-                let world = (step.seq != at_seq || before_world) && start.reason.is_none();
-                let why = saved.or(world.then_some(REASON_WORLD_CALL));
+                let why = step.why_moved(asked, at_seq, before_world, &start);
                 return Ok(finish_plan(start, at_seq, restore, notes, why));
             }
             Err(n) if save_failed(events, n.seq) => {
@@ -359,6 +354,33 @@ pub fn plan_fork_with(
 struct StepOf {
     seq: i64,
     first: i64,
+}
+
+impl StepOf {
+    /// Moves `start` back to the step's first world call when it starts at the step itself, so
+    /// the step's world calls are made again with it; true when it moved.
+    fn redo_world_calls(&self, start: &mut Start) -> bool {
+        let before = start.seq == self.seq && self.first != self.seq;
+        if before {
+            start.seq = self.first;
+        }
+        before
+    }
+
+    /// Why a fork asked at `at_seq`, planned from `asked`, moved: `REASON_SAVED` when it went back
+    /// to an earlier save, else `REASON_WORLD_CALL` when the step's world calls moved it and the
+    /// planner gave no reason of its own.
+    fn why_moved(
+        &self,
+        asked: i64,
+        at_seq: i64,
+        before_world: bool,
+        start: &Start,
+    ) -> Option<&'static str> {
+        let saved = (asked != self.seq).then_some(REASON_SAVED);
+        let world = (self.seq != at_seq || before_world) && start.reason.is_none();
+        saved.or(world.then_some(REASON_WORLD_CALL))
+    }
 }
 
 /// The step `at_seq` belongs to: `at_seq` itself, or for an event of a world actor (a model call

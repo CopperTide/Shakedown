@@ -188,6 +188,17 @@ impl Pump {
     }
 }
 
+/// The event id to resume after: the larger of `Last-Event-ID` and `?after=`, never below 0.
+fn resume_after(headers: &HeaderMap, query: &StreamQuery) -> i64 {
+    headers
+        .get("last-event-id")
+        .and_then(|h| h.to_str().ok())
+        .and_then(|s| s.parse::<i64>().ok())
+        .unwrap_or(0)
+        .max(query.after)
+        .max(0)
+}
+
 pub(super) async fn stream(
     State(state): State<Arc<AppState>>,
     Who(caller): Who,
@@ -199,23 +210,18 @@ pub(super) async fn stream(
     // Subscribe before reading the stored events so nothing falls between the two.
     let rx = state.store.subscribe();
     let (tx, out) = mpsc::channel(64);
-    let last = headers
-        .get("last-event-id")
-        .and_then(|h| h.to_str().ok())
-        .and_then(|s| s.parse::<i64>().ok())
-        .unwrap_or(0)
-        .max(query.after)
-        .max(0);
+    let last = resume_after(&headers, &query);
+    let lean = query
+        .lean
+        .as_deref()
+        .is_some_and(|v| v == "1" || v == "true");
     tokio::spawn(
         Pump {
             state,
             caller,
             id,
             last,
-            lean: query
-                .lean
-                .as_deref()
-                .is_some_and(|v| v == "1" || v == "true"),
+            lean,
             tx,
         }
         .run(rx),

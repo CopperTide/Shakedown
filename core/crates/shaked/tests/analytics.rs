@@ -153,29 +153,33 @@ fn totals_count_first_branches_and_leave_stopped_and_platform_failures_out_of_th
     });
 }
 
+/// The fixture runs' leaderboard: each setup's runs, passes, pass rate and costs.
+fn assert_leaderboard(s: &Summary) {
+    let row = |setup: &str| s.leaderboard.iter().find(|r| r.setup == setup).unwrap();
+    let alpha = row("alpha");
+    assert_eq!(
+        (alpha.world.as_str(), alpha.scenario.as_str()),
+        ("retail", "refund")
+    );
+    assert_eq!((alpha.runs, alpha.judged, alpha.passed), (3, 3, 2));
+    assert!(close(alpha.pass_rate, 2.0 / 3.0));
+    assert!(close(alpha.cost_per_run, 0.5));
+    assert!(close(alpha.cost_per_pass, 0.75), "$1.50 for 2 passes");
+    let beta = row("beta");
+    assert_eq!((beta.runs, beta.judged, beta.passed), (3, 1, 1));
+    assert!(close(beta.pass_rate, 1.0));
+    assert!(close(beta.cost_per_pass, 3.0));
+    let gamma = row("gamma");
+    assert_eq!((gamma.scenario.as_str(), gamma.passed), ("exchange", 0));
+    assert_eq!(gamma.cost_per_pass, None);
+    assert_eq!(s.leaderboard.len(), 3);
+}
+
 #[test]
 fn the_leaderboard_and_points_give_pass_rate_cost_per_run_and_cost_per_pass() {
     run(async {
         let (store, _clean, _) = filled("analytics_board").await;
-        let s = summary(&store, json!({})).await;
-        let row = |setup: &str| s.leaderboard.iter().find(|r| r.setup == setup).unwrap();
-        let alpha = row("alpha");
-        assert_eq!(
-            (alpha.world.as_str(), alpha.scenario.as_str()),
-            ("retail", "refund")
-        );
-        assert_eq!((alpha.runs, alpha.judged, alpha.passed), (3, 3, 2));
-        assert!(close(alpha.pass_rate, 2.0 / 3.0));
-        assert!(close(alpha.cost_per_run, 0.5));
-        assert!(close(alpha.cost_per_pass, 0.75), "$1.50 for 2 passes");
-        let beta = row("beta");
-        assert_eq!((beta.runs, beta.judged, beta.passed), (3, 1, 1));
-        assert!(close(beta.pass_rate, 1.0));
-        assert!(close(beta.cost_per_pass, 3.0));
-        let gamma = row("gamma");
-        assert_eq!((gamma.scenario.as_str(), gamma.passed), ("exchange", 0));
-        assert_eq!(gamma.cost_per_pass, None);
-        assert_eq!(s.leaderboard.len(), 3);
+        assert_leaderboard(&summary(&store, json!({})).await);
 
         let m = summary(&store, json!({"group": "model"})).await;
         let groups: Vec<_> = m

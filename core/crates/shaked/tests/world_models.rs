@@ -85,6 +85,17 @@ fn calls_of<'a>(evs: &'a [Event], actor: &str) -> Vec<&'a Event> {
     mine.filter(|e| e.agent.as_deref() == Some(actor)).collect()
 }
 
+/// The branch's check holds the scoring's `judged` check, passed.
+fn assert_judged_passed(evs: &[Event]) {
+    let check = evs.iter().find(|e| e.kind == EventKind::Check).unwrap();
+    let judged = check.payload["checks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["name"] == "judged");
+    assert_eq!(judged.unwrap()["passed"], true, "{}", check.payload);
+}
+
 #[test]
 fn a_parts_and_the_scorings_model_calls_are_recorded_under_world_actors() {
     run(async {
@@ -113,18 +124,9 @@ fn a_parts_and_the_scorings_model_calls_are_recorded_under_world_actors() {
             1,
             "the judge is the scoring's"
         );
-        let check = evs.iter().find(|e| e.kind == EventKind::Check).unwrap();
-        let judged = check.payload["checks"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .find(|c| c["name"] == "judged");
-        assert_eq!(judged.unwrap()["passed"], true, "{}", check.payload);
-        let points = evs
-            .iter()
-            .filter(|e| e.kind == EventKind::SavePoint)
-            .count();
-        assert_eq!(points, 0, "no save point before a world's call");
+        assert_judged_passed(&evs);
+        let points = evs.iter().filter(|e| e.kind == EventKind::SavePoint);
+        assert_eq!(points.count(), 0, "no save point before a world's call");
     })
 }
 

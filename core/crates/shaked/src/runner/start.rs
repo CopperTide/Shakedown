@@ -390,13 +390,25 @@ async fn start_world(
     let mut start = run_start(&bench, &world, seed, plan);
     start.world_epoch_ms = Some(world_time.epoch_ms);
     start.world_utc_offset_min = utc_offset_min(clock_start);
+    let (seq, took) = record_run_start(records, &world, &start, restored).await?;
+    Ok((bench, world, seq, took))
+}
+
+/// Records `start` as the branch's `RunStart`, with the world's restore as its overhead, and stops
+/// the world when the append fails: `RunStart`'s seq and how long recording it took.
+async fn record_run_start(
+    records: &dyn BranchRecords,
+    world: &World,
+    start: &RunStartPayload,
+    restored: Option<Overhead>,
+) -> Result<(i64, f64)> {
     let since = Instant::now();
-    let payload = serde_json::to_value(&start)?;
+    let payload = serde_json::to_value(start)?;
     match records
         .append(None, EventKind::RunStart, payload, restored)
         .await
     {
-        Ok(e) => Ok((bench, world, e.seq, overhead::ms_since(since))),
+        Ok(e) => Ok((e.seq, overhead::ms_since(since))),
         Err(e) => {
             world.stop().await;
             Err(e)
