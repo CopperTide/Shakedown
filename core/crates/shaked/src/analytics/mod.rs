@@ -10,6 +10,7 @@
 //! Reading the events at query time instead takes seconds on a long run's record (its model
 //! calls' bodies are most of it), so the figures are kept.
 
+mod failures;
 pub mod filter;
 pub mod stats;
 

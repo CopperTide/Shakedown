@@ -271,3 +271,186 @@ fn the_summary_operation_reads_as_the_caller_over_http() {
         assert_eq!(code, 400);
     });
 }
+
+/// Replace only cached figures, retaining the real record's identity and freshness marker.
+async fn cached(store: &Store, branch: &str, fields: Value) {
+    let rec = store.stats_record(branch).await.unwrap().unwrap();
+    let stats = analytics::stats_of(&rec.branch, &rec.task_id, &rec.events);
+    let mut value = serde_json::to_value(stats).unwrap();
+    value
+        .as_object_mut()
+        .unwrap()
+        .extend(fields.as_object().unwrap().clone());
+    assert!(store
+        .put_stats(branch, rec.branch.ended_at.unwrap(), &value)
+        .await
+        .unwrap());
+}
+
+#[test]
+fn cost_series_distinguishes_unknown_zero_and_partial_known_cost() {
+    run(async {
+        let (store, _clean, ids) = filled("analytics_cost_series").await;
+        cached(&store, &ids[0].1, json!({"cost_usd":null})).await;
+        cached(&store, &ids[6].1, json!({"cost_usd":null})).await;
+        let s = summary(&store, json!({})).await;
+        assert_eq!(s.series.iter().map(|p| p.runs).sum::<i64>(), 7);
+        assert_eq!(s.series.iter().map(|p| p.tokens).sum::<i64>(), 1050);
+        assert_eq!(s.series.iter().map(|p| p.uncosted).sum::<i64>(), 2);
+        assert!(close(
+            Some(s.series.iter().filter_map(|p| p.cost_usd).sum()),
+            4.0
+        ));
+        let unknown = summary(&store, json!({"setup":"gamma"})).await;
+        assert_eq!(unknown.series[0].cost_usd, None);
+        assert_eq!(unknown.series[0].uncosted, 1);
+        let zero = summary(&store, json!({"status":"infra_error"})).await;
+        assert_eq!(zero.series[0].cost_usd, Some(0.0));
+        assert_eq!(zero.series[0].uncosted, 0);
+        let partial = summary(&store, json!({"setup":"alpha"})).await;
+        assert!(close(partial.series[0].cost_usd, 1.0));
+        assert_eq!(partial.series[0].uncosted, 1);
+    });
+}
+
+async fn duration_records(store: &Store) {
+    for seconds in [0.0, 9.99, 10.0, 30.0, 60.0, 300.0, 900.0, 3600.0] {
+        let status = if seconds == 3600.0 {
+            BranchStatus::BudgetExceeded
+        } else {
+            BranchStatus::Passed
+        };
+        let (_, b) = record(store, &fx("alpha", "m1", status, 0.5)).await;
+        cached(store, &b, json!({"seconds":seconds})).await;
+    }
+    for status in [
+        BranchStatus::Stopped,
+        BranchStatus::InfraError,
+        BranchStatus::Interrupted,
+    ] {
+        let (_, b) = record(store, &fx("beta", "m2", status, 0.0)).await;
+        cached(store, &b, json!({"seconds":10.0})).await;
+    }
+}
+
+#[test]
+fn duration_bins_have_exact_half_open_boundaries_and_only_judged_runs() {
+    run(async {
+        let (_db, store, _clean) = pg::fresh_store("analytics_duration").await;
+        duration_records(&store).await;
+        let s = summary(&store, json!({})).await;
+        assert_eq!(
+            s.duration.iter().map(|b| b.runs).collect::<Vec<_>>(),
+            [2, 1, 1, 1, 1, 1, 1]
+        );
+        assert_eq!(
+            s.duration
+                .iter()
+                .map(|b| b.lower_seconds)
+                .collect::<Vec<_>>(),
+            [0.0, 10.0, 30.0, 60.0, 300.0, 900.0, 3600.0]
+        );
+        assert_eq!(s.duration.last().unwrap().upper_seconds, None);
+        assert_eq!(s.duration[0].upper_seconds, Some(10.0));
+        assert_eq!(
+            s.duration.iter().map(|b| b.runs).sum::<i64>(),
+            s.totals.judged
+        );
+        let excluded = summary(&store, json!({"setup":"beta"})).await;
+        assert!(excluded.duration.iter().all(|b| b.runs == 0));
+    });
+}
+
+async fn failing_events(store: &Store, b: &str) {
+    let s = records(store);
+    for payload in [
+        json!({"checks":[{"name":"superseded","passed":false}]}),
+        json!({"checks":[{"name":"safety","passed":false},{"name":"safety","passed":false},
+                         {"name":"success","passed":true}]}),
+    ] {
+        s.append(b, None, EventKind::Check, payload).await.unwrap();
+    }
+    for _ in 0..2 {
+        s.append(
+            b,
+            Some("a"),
+            EventKind::ToolCall,
+            json!({"name":"book", "error":"book refused: private customer record"}),
+        )
+        .await
+        .unwrap();
+    }
+}
+
+async fn failure_records(store: &Store) {
+    let ids = record_all(store).await;
+    failing_events(store, &ids[2].1).await;
+    failing_events(store, &ids[6].1).await;
+    let t = team("alpha", "m1");
+    let fork = records(store)
+        .create_branch(&ids[0].0, Some((&ids[0].1, 1)), &t, &json!([]), None)
+        .await
+        .unwrap();
+    steps(store, &fork, &RUNS[2]).await;
+    failing_events(store, &fork).await;
+    analytics::fill(store, 100).await.unwrap();
+}
+
+fn assert_failures(s: &Summary) {
+    let checks = &s.failures.checks;
+    let gates = &s.failures.gates;
+    assert_eq!(checks.len(), 1);
+    assert_eq!((checks[0].name.as_str(), checks[0].runs), ("safety", 2));
+    assert_eq!(gates.len(), 1);
+    assert_eq!((gates[0].name.as_str(), gates[0].runs), ("book", 2));
+    let reasons: Vec<_> = s
+        .failures
+        .reasons
+        .iter()
+        .map(|r| (r.name.as_str(), r.runs))
+        .collect();
+    assert_eq!(
+        reasons,
+        [("Failed", 2), ("Platform failure", 1), ("Stopped", 1)]
+    );
+}
+
+#[test]
+fn failures_count_affected_first_branches_with_final_check_names_and_filters() {
+    run(async {
+        let (_db, store, _clean) = pg::fresh_store("analytics_failures").await;
+        failure_records(&store).await;
+        let s = summary(&store, json!({})).await;
+        assert_failures(&s);
+        let only = summary(
+            &store,
+            json!({"scenario":"exchange","model":"m1","world":"retail"}),
+        )
+        .await;
+        assert_eq!(only.failures.checks[0].runs, 1);
+        assert_eq!(only.failures.gates[0].runs, 1);
+        assert_eq!(only.failures.reasons[0].runs, 1);
+        let empty = summary(&store, json!({"world":"factory"})).await;
+        assert!(
+            empty.failures.checks.is_empty()
+                && empty.failures.gates.is_empty()
+                && empty.failures.reasons.is_empty()
+        );
+        assert_eq!(empty.duration.len(), 7);
+        assert!(empty.duration.iter().all(|b| b.runs == 0));
+    });
+}
+
+#[test]
+fn old_stats_are_backfilled_for_the_new_failure_shape() {
+    run(async {
+        let (_db, store, _clean) = pg::fresh_store("analytics_version").await;
+        let (_, b) = record(&store, &RUNS[2]).await;
+        failing_events(&store, &b).await;
+        cached(&store, &b, json!({"v":1})).await;
+        assert_eq!(summary(&store, json!({})).await.pending.unprocessed, 1);
+        assert_eq!(analytics::fill(&store, 100).await.unwrap(), 1);
+        assert_eq!(summary(&store, json!({})).await.failures.checks[0].runs, 1);
+        assert_eq!(analytics::fill(&store, 100).await.unwrap(), 0);
+    });
+}

@@ -33,10 +33,12 @@ fn current() -> String {
 /// are a [`Query`]'s filters ([`bind`]).
 fn facts() -> String {
     format!(
-        "SELECT b.created_at AS at, b.stats->>'world' AS world, b.stats->>'scenario' AS scenario,
+        "SELECT b.id AS branch_id, b.status, b.created_at AS at, b.stats->>'world' AS world, b.stats->>'scenario' AS scenario,
        b.stats->>'setup' AS setup, b.stats->>'model' AS model,
        (b.stats->>'seconds')::float8 AS seconds, (b.stats->>'cost_usd')::float8 AS cost,
        (b.stats->>'tokens')::bigint AS tokens,
+       coalesce(b.stats->'failed_checks', '[]'::jsonb) AS failed_checks,
+       coalesce(b.stats->'refused_tools', '[]'::jsonb) AS refused_tools,
        b.status IN ('passed', 'failed', 'budget_exceeded') AS judged, b.status = 'passed' AS passed
   FROM {BRANCHES_OF_RUNS}
  WHERE b.parent_id IS NULL AND {}
@@ -60,7 +62,8 @@ const TOTALS: &str =
 /// `$8` the bucket (`day`, `week`), `$9` the group (`setup`, `model`).
 const SERIES: &str = "SELECT date_trunc($8::text, at, 'UTC'),
        CASE $9::text WHEN 'model' THEN model ELSE setup END AS g,
-       count(*) FILTER (WHERE judged), count(*) FILTER (WHERE passed)
+       count(*) FILTER (WHERE judged), count(*) FILTER (WHERE passed),
+       count(*), sum(cost)::float8, count(*) - count(cost), coalesce(sum(tokens), 0)::bigint
   FROM f GROUP BY 1, 2 ORDER BY 1, 2";
 const POINTS: &str = "SELECT CASE $8::text WHEN 'model' THEN model ELSE setup END AS g,
        count(*), count(*) FILTER (WHERE judged), count(*) FILTER (WHERE passed),
@@ -70,6 +73,25 @@ const BOARD: &str = "SELECT setup, world, scenario, count(*), count(*) FILTER (W
        count(*) FILTER (WHERE passed), coalesce(sum(cost), 0)::float8, count(cost),
        percentile_cont(0.5) WITHIN GROUP (ORDER BY seconds) FILTER (WHERE judged)
   FROM f GROUP BY 1, 2, 3 ORDER BY 1, 2, 3 LIMIT 500";
+
+const CHECK_FAILURES: &str = "SELECT name, count(*) FROM
+  (SELECT DISTINCT branch_id, name FROM f CROSS JOIN LATERAL jsonb_array_elements_text(f.failed_checks) AS names(name)) x
+  GROUP BY name ORDER BY count(*) DESC, name";
+const GATE_FAILURES: &str = "SELECT name, count(*) FROM
+  (SELECT DISTINCT branch_id, name FROM f CROSS JOIN LATERAL jsonb_array_elements_text(f.refused_tools) AS names(name)) x
+  GROUP BY name ORDER BY count(*) DESC, name";
+const FAILURE_REASONS: &str = "SELECT CASE status
+    WHEN 'failed' THEN 'Failed' WHEN 'budget_exceeded' THEN 'Budget exceeded'
+    WHEN 'infra_error' THEN 'Platform failure' WHEN 'interrupted' THEN 'Interrupted'
+    WHEN 'stopped' THEN 'Stopped' END AS reason, count(*)
+  FROM f WHERE status IN ('failed', 'budget_exceeded', 'infra_error', 'interrupted', 'stopped')
+  GROUP BY 1 ORDER BY count(*) DESC, reason";
+/// Half-open wall-clock ranges. Zero-count bins stay present so boundaries never shift.
+const DURATION: &str = "SELECT bins.lo, bins.hi, count(f.branch_id)
+  FROM (VALUES (0.0::float8,10.0::float8), (10,30), (30,60), (60,300),
+               (300,900), (900,3600), (3600,NULL)) bins(lo,hi)
+  LEFT JOIN f ON f.judged AND f.seconds >= bins.lo AND (bins.hi IS NULL OR f.seconds < bins.hi)
+  GROUP BY bins.lo, bins.hi ORDER BY bins.lo";
 
 /// Every value each filter can take among the runs made in the time range (`$1`, `$2`).
 fn options() -> String {
@@ -138,6 +160,11 @@ pub struct Pending {
 /// One group's pass rate in one bucket.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct SeriesPoint {
+    pub runs: i64,
+    /// None when every run in this bucket has unknown cost; zero is a known zero.
+    pub cost_usd: Option<f64>,
+    pub uncosted: i64,
+    pub tokens: i64,
     pub t: DateTime<Utc>,
     pub group: String,
     pub judged: i64,
@@ -183,6 +210,29 @@ pub struct Options {
     pub status: Vec<String>,
 }
 
+/// The number of affected runs, not the number of repeated events.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct FailureCount {
+    pub name: String,
+    pub runs: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Failures {
+    pub checks: Vec<FailureCount>,
+    /// Recorded refused tools; older events do not distinguish gates from integration refusals.
+    pub gates: Vec<FailureCount>,
+    /// Bounded terminal outcome categories; no free-text errors.
+    pub reasons: Vec<FailureCount>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct DurationBin {
+    pub lower_seconds: f64,
+    pub upper_seconds: Option<f64>,
+    pub runs: i64,
+}
+
 /// Everything the Analytics overview shows, for one filter.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Summary {
@@ -196,6 +246,8 @@ pub struct Summary {
     pub points: Vec<GroupPoint>,
     pub leaderboard: Vec<BoardRow>,
     pub options: Options,
+    pub failures: Failures,
+    pub duration: Vec<DurationBin>,
 }
 
 /// A branch's record as the analytics job reads it: model-call bodies left out.
@@ -254,6 +306,10 @@ fn totals(r: &Row) -> Totals {
 fn series_point(r: &Row) -> SeriesPoint {
     let (judged, passed) = (r.get(2), r.get::<_, i64>(3));
     SeriesPoint {
+        runs: r.get(4),
+        cost_usd: r.get(5),
+        uncosted: r.get(6),
+        tokens: r.get(7),
         t: r.get(0),
         group: text(r, 1),
         judged,
@@ -328,6 +384,29 @@ async fn read<T>(
     Ok(over(tx, q, sql, more).await?.iter().map(each).collect())
 }
 
+fn failure_count(r: &Row) -> FailureCount {
+    FailureCount {
+        name: r.get(0),
+        runs: r.get(1),
+    }
+}
+
+fn duration_bin(r: &Row) -> DurationBin {
+    DurationBin {
+        lower_seconds: r.get(0),
+        upper_seconds: r.get(1),
+        runs: r.get(2),
+    }
+}
+
+async fn failures(tx: &Tx, q: &Query) -> Result<Failures> {
+    Ok(Failures {
+        checks: read(tx, q, CHECK_FAILURES, &[], failure_count).await?,
+        gates: read(tx, q, GATE_FAILURES, &[], failure_count).await?,
+        reasons: read(tx, q, FAILURE_REASONS, &[], failure_count).await?,
+    })
+}
+
 /// The summary of `q`, in `tx`.
 async fn summary_in(tx: &Tx, q: &Query) -> Result<Summary> {
     let rows = over(tx, q, TOTALS, &[]).await?;
@@ -348,6 +427,8 @@ async fn summary_in(tx: &Tx, q: &Query) -> Result<Summary> {
         points: read(tx, q, POINTS, &[&group], group_point).await?,
         leaderboard: read(tx, q, BOARD, &[], board_row).await?,
         options: options_of(&tx.query(&options(), &[&q.from, &q.to]).await?),
+        failures: failures(tx, q).await?,
+        duration: read(tx, q, DURATION, &[], duration_bin).await?,
     })
 }
 

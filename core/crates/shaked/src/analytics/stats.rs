@@ -14,7 +14,7 @@ use crate::{
 };
 
 /// The version of [`BranchStats`]' shape: a row of another version is worked out again.
-pub const VERSION: u32 = 1;
+pub const VERSION: u32 = 2;
 
 /// What an ended branch came to (`branches.stats`, plus the `ended_at` it was worked out for).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -33,6 +33,10 @@ pub struct BranchStats {
     pub tokens: i64,
     /// None when some call's cost is not known.
     pub cost_usd: Option<f64>,
+    /// Explicit failed names from the last scoring event, once per run.
+    pub failed_checks: Vec<String>,
+    /// Tool names with a recorded refusal, once per run (not individual gate ids).
+    pub refused_tools: Vec<String>,
 }
 
 /// The stats of `branch`, a branch of a run of `task`, from its `events` (model-call bodies may be
@@ -49,6 +53,8 @@ pub fn stats_of(branch: &Branch, task: &str, events: &[Event]) -> BranchStats {
         seconds: m.measured_s,
         tokens: m.tokens,
         cost_usd: m.cost.usd,
+        failed_checks: super::failures::failed_checks(events),
+        refused_tools: super::failures::refused_tools(events),
     }
 }
 

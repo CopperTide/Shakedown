@@ -15,12 +15,13 @@ const TEAM = 'OCC team (duty manager, four controllers)';
 const EMPTY: Summary = {
   group: 'setup', bucket: 'day', pending: { unprocessed: 0, running: 0 }, series: [], points: [], leaderboard: [],
   options: { world: [], scenario: [], setup: [], model: [], status: [] },
+  failures: { checks: [], gates: [], reasons: [] }, duration: [],
   totals: { runs: 0, judged: 0, passed: 0, pass_rate: null, cost_usd: 0, cost_per_run: null, cost_per_pass: null, median_seconds: null, tokens: 0, uncosted: 0 },
 };
 const SOME: Summary = {
   ...EMPTY,
   totals: { runs: 3, judged: 3, passed: 2, pass_rate: 2 / 3, cost_usd: 1.5, cost_per_run: 0.5, cost_per_pass: 0.75, median_seconds: 64, tokens: 450, uncosted: 0 },
-  series: [{ t: '2026-11-24T00:00:00Z', group: TEAM, judged: 3, passed: 2, pass_rate: 2 / 3 }],
+  series: [{ t: '2026-11-24T00:00:00Z', group: TEAM, judged: 3, passed: 2, pass_rate: 2 / 3, runs: 3, cost_usd: 1.5, uncosted: 0, tokens: 450 }],
   points: [{ group: TEAM, runs: 3, judged: 3, passed: 2, pass_rate: 2 / 3, cost_usd: 1.5, cost_per_run: 0.5, tokens: 450 }],
   leaderboard: [{ setup: TEAM, world: 'airline-hub-day', scenario: 'recover-the-bank', runs: 3, judged: 3, passed: 2, pass_rate: 2 / 3, cost_per_run: 0.5, median_seconds: 64, cost_per_pass: 0.75 }],
   options: { world: ['airline-hub-day'], scenario: ['recover-the-bank'], setup: [TEAM], model: ['m1'], status: ['passed', 'failed'] },

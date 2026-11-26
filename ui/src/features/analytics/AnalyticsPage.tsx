@@ -13,6 +13,7 @@ import CostScatter from './CostScatter';
 import FilterBar from './FilterBar';
 import { type AnalyticsFilter, apiQuery, DEFAULT_RANGE, isNarrowed, parseFilter, runsHref, writeFilter } from './filters';
 import Kpis from './Kpis';
+import MoreCharts from './MoreCharts';
 import Leaderboard from './Leaderboard';
 import { Card } from './parts';
 import PassRateChart from './PassRateChart';
@@ -58,6 +59,7 @@ function Overview({ s, filter, setFilter, now }: { s: Summary; filter: Analytics
             <PassRateChart summary={s} onGroup={(group) => setFilter({ ...filter, group })} />
             <CostScatter summary={s} onOpen={(g) => nav(runsHref(filter, now, s.group === 'model' ? { model: g } : { setup: g }))} />
           </div>
+          <MoreCharts summary={s} />
           <Card title="Leaderboard" hint="Each setup on each scenario. Click a row to see its runs; click a heading to sort.">
             <div className="-mx-4 -mb-3 border-t border-line">
               <Leaderboard rows={s.leaderboard} onOpen={(r) => nav(runsHref(filter, now, { setup: r.setup, scenario: r.scenario }))} />

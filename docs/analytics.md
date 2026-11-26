@@ -66,3 +66,37 @@ so shaked works out each ended branch's figures once, from its record without th
 branch (`branches.stats`). A background job does this for every branch that ends, and for older runs after an
 upgrade; a branch that ends again (resumed, or its status changed) is worked out again. The summary then
 aggregates those small rows in SQL, in the caller's own transaction, so it counts only the runs the caller may see.
+
+
+## Additional charts (Slice 2)
+
+The overview also shows these views, using the same URL filters and the same first-branch population:
+
+| View | Meaning |
+|---|---|
+| Failed checks | Number of runs whose final scoring result explicitly failed each named check. Repeated occurrences within a run count once. A run can fail several checks, so bars are not additive. |
+| Refused tools / gates | Number of runs with a recorded refusal for each tool, counted once per tool per run. The event record does not identify individual gate IDs. Refusals may occur in runs that ultimately pass. |
+| Non-passing outcomes | Recorded terminal status categories for runs that did not pass; these are outcomes, not inferred root causes or raw error messages. |
+| Cost over time | Total known cost per UTC day/week across the selected runs. Unknown costs are excluded and counted explicitly; an all-unknown bucket is missing, not zero. |
+| Tokens over time | Total recorded tokens per UTC day/week across the selected runs. |
+| Run-time distribution | Judged runs in labeled duration ranges: under 10 seconds, 10–30 seconds, 30–60 seconds, 1–5 minutes, 5–15 minutes, 15–60 minutes, and one hour or longer. Bounds are lower-inclusive and upper-exclusive. Bar length represents run count, not time-range width. |
+
+Cost/token timelines total across the selected setups/models; the Setup/Model toggle still controls the
+original per-group pass-rate and scatter charts. Exact chart values are available without hover through
+labels and expandable data tables. On narrow screens the new panels form one column.
+
+The response extends each `series` point with `runs`, nullable `cost_usd`, `uncosted`, and `tokens`, and adds
+`failures` (`checks`, `gates`, `reasons`, each containing `name`/`runs`) and `duration` bins
+(`lower_seconds`, nullable `upper_seconds`, `runs`). No new endpoint or database migration is needed.
+Cached branch stats are versioned so old runs are recomputed by the existing background job after upgrade.
+The summary continues to aggregate in the caller's database transaction under row-level security.
+
+### Slice 2 verification
+
+Analytics extraction unit tests and Postgres integration tests cover final check names, repeated refusals,
+first-branch counting, shared filters, empty results, duration boundaries, unknown/zero/mixed costs, and
+version-1 cache backfill. Rust checks run on the build box. UI tests cover bucket totals, missing costs,
+labels and responsive geometry; TypeScript, lint and a production build also pass. Desktop (1280 px)
+and mobile (390 px) browser checks used explicitly labeled synthetic fixtures, including the expandable
+exact-value tables. Hosted organization RLS is preserved through the existing caller transaction; a
+closed-source multi-tenant test harness was not run as part of this slice.

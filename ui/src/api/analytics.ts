@@ -19,7 +19,12 @@ export interface Totals {
   uncosted: number;
 }
 
-export interface SeriesPoint { t: string; group: string; judged: number; passed: number; pass_rate: number | null }
+export interface SeriesPoint {
+  t: string; group: string; judged: number; passed: number; pass_rate: number | null;
+  runs: number; cost_usd: number | null; uncosted: number; tokens: number;
+}
+export interface FailureCount { name: string; runs: number }
+export interface DurationBin { lower_seconds: number; upper_seconds: number | null; runs: number }
 
 export interface GroupPoint {
   group: string; runs: number; judged: number; passed: number; pass_rate: number | null;
@@ -43,6 +48,8 @@ export interface Summary {
   points: GroupPoint[];
   leaderboard: BoardRow[];
   options: Options;
+  failures: { checks: FailureCount[]; gates: FailureCount[]; reasons: FailureCount[] };
+  duration: DurationBin[];
 }
 
 /** The summary for a query string the filters made (`?from=…&setup=a,b&group=model`). */
