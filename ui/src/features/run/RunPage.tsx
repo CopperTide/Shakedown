@@ -19,6 +19,7 @@ import { costIsUnknown, teamProviders } from '@/model/providers';
 import { worldLine } from '@/model/restore';
 import type { Branch, BranchDetail, Event } from '@/model/types';
 import ActionTimeline from './ActionTimeline';
+import AgentInspector from './agent/AgentInspector';
 import AskStep from './AskStep';
 import { type ForkChoice, forkChoiceOf } from './architecture';
 import BestSoFar from './BestSoFar';
@@ -144,11 +145,12 @@ function Main({ detail, timeline: { lanes, span }, selected, onSelect, models, s
       <Panel>
         <Tabs defaultValue="timeline">
           <div className="flex items-center gap-3 border-b border-line pl-3">
-            <TabsList className="border-b-0"><TabsTrigger value="timeline">Timeline</TabsTrigger><TabsTrigger value="log">Event log</TabsTrigger><TabsTrigger value="coordination">Coordination</TabsTrigger></TabsList>
+            <TabsList className="border-b-0"><TabsTrigger value="timeline">Timeline</TabsTrigger><TabsTrigger value="log">Event log</TabsTrigger><TabsTrigger value="coordination">Coordination</TabsTrigger><TabsTrigger value="agent">Agent</TabsTrigger></TabsList>
           </div>
           <TabsContent value="timeline">{filters}<ActionTimeline onClear={clearSelection} lanes={lanes} team={detail.team} span={span} selected={selected} onSelect={onSelect} models={models} onModels={setModels} live={live} pauses={pauses} matches={matches} /></TabsContent>
           <TabsContent value="log">{filters}<EventLog rows={rows} matches={matches} span={span} selected={selected} onSelect={onSelect} /></TabsContent>
           <TabsContent value="coordination"><Coordination events={detail.events} onSelect={onSelect} /></TabsContent>
+          <TabsContent value="agent"><AgentInspector events={detail.events} team={detail.team} startSeq={detail.start_seq} selected={selected} onSelect={onSelect} /></TabsContent>
         </Tabs>
       </Panel>
       {selected != null && <Panel><PanelHeader title="Trace" /><Waterfall events={detail.events} selected={selected} onSelect={onSelect} /></Panel>}
