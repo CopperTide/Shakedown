@@ -33,6 +33,13 @@
   and the `analytics.summary` operation for the assistant and MCP. Each ended branch's figures are worked out once
   by a background job and kept in the new `branches.stats` column (migration 7), old runs included. See
   [docs/analytics.md](docs/analytics.md).
+- **Search every run's steps.** Analytics › Search (or the ⌘K palette's *Search every run's steps for …*) finds
+  any step across runs by its words: reasoning, messages, reports and delegations, tool calls' names, arguments,
+  results and errors, checks. Results come newest first, grouped by run, each with a snippet of the match; Kind and
+  Agent chips narrow them, and a click opens the run page at that step. The same search is
+  `GET /api/analytics/search` and the `analytics.search` operation for the assistant and MCP. A full-text index on
+  the events (migration shakedown 8, an expression GIN index: no table rewrite) keeps it fast. See
+  [docs/analytics.md](docs/analytics.md#search).
 - **Observability.** Settings → Observability sends every run as an OpenTelemetry trace (OTLP/HTTP protobuf) to
   Langfuse, Arize Phoenix or any OTLP collector: run, branch, agent turns, model calls (GenAI semantic conventions
   and OpenInference), tool calls with rows read and written, reasoning and the check; content only where the target

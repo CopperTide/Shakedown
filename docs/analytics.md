@@ -3,12 +3,15 @@
 The Analytics page (sidebar, under Experiments) shows how your agent setups do across every run you can see:
 how often they pass, what they cost and how long they take. The same figures are `GET /api/analytics/summary`
 and the `analytics.summary` operation, so the assistant and any agent over MCP can read them too
-([reference.md](reference.md)).
+([reference.md](reference.md)). Its **Search** tab finds any step of any run by its words
+([Search](#search)).
 
 What was checked: the aggregates on fixture runs (pass rate, cost per passed run, the leaderboard, every filter,
 figures worked out again when a run ends again) and the operation over HTTP
 (`core/crates/shaked/tests/analytics.rs`); the page's filters in the address, its empty states and its drill-down
-links (`ui/src/features/analytics/*.test.*`).
+links (`ui/src/features/analytics/*.test.*`). Search: what a step is found by, the snippet, every filter, pages, the
+planner using the index and the operation over HTTP (`core/crates/shaked/tests/search.rs`); the address, the API
+query, snippets, grouping by run and the links to steps (`ui/src/features/analytics/search/*.test.*`).
 
 ## What counts
 
@@ -67,6 +70,36 @@ branch (`branches.stats`). A background job does this for every branch that ends
 upgrade; a branch that ends again (resumed, or its status changed) is worked out again. The summary then
 aggregates those small rows in SQL, in the caller's own transaction, so it counts only the runs the caller may see.
 
+## Search
+
+Analytics › **Search** (or type in the ⌘K palette and pick *Search every run's steps for …*) finds any step of
+any run you can see by its words, newest first, grouped by run. Click a step to open its run page at that step
+(`/runs/<run>/<branch>?step=N`). The same search is `GET /api/analytics/search` and the `analytics.search`
+operation, so the assistant and any agent over MCP can search too.
+
+| Kind of step | Found by |
+|---|---|
+| Reasoning | What the agent thought or said it would do. |
+| Message, Report, Delegation, Handoff | The text sent, the task given, the note left. |
+| Tool call | The tool's name, its arguments, its result and its error (a refused call is found by why it was refused). |
+| Wake, Turn end, Finish, Agent end | The input a turn started with, what an agent said as it ended its turn, the lead's summary, an agent's error. |
+| Check | The checks' names and details. |
+
+Model calls (whose text the reasoning steps already carry) and world events are not searched.
+
+- **Words** match their other forms (*crew* finds *crews*). `"exact phrase"` for a phrase, `or` for either word,
+  `-word` to leave one out. Identifiers such as flight numbers and ids are found as written.
+- **Kind and Agent** chips narrow the results; each shows how many steps match, whatever else is picked. They stay
+  in the address (`/analytics?tab=search&q=crew&kind=reasoning&agent=ops-controller`), so a link shows the same search.
+- **Pages:** 50 steps at a time, *Show more* for the next. Matches are counted up to 10,000.
+- The API also takes `run` and `experiment` (ids) to search within some runs.
+
+Each step is found through a full-text index on the events (migration shakedown 8): `shakedown.step_text(kind,
+payload)` picks the text above (at most 60,000 characters of a step) and a GIN index covers
+`to_tsvector('english', …)` of it. It is an expression index, not a stored column, so adding it rewrites no event;
+building it reads the events table once while shaked starts (about 4 seconds for 40,000 events, a 5 MB index). The
+snippet is made only for the page of results shown, and the search runs in the caller's own transaction, so it
+finds only the runs the caller may see.
 
 ## Additional charts (Slice 2)
 

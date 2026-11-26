@@ -32,7 +32,7 @@ shaked serves one HTTP API. The UI, the Python SDK, scripts and CI all use it. O
 | `src/ops/http.rs` | Mounts every operation at its route, one route-table row each (`route_rows`). |
 | `src/ops/mcp.rs` | The control MCP server: `POST /mcp`, operations as tools (`scenarios.put` is `scenarios_put`), `allowed`. |
 | `src/ops/stdio.rs` | `shaked mcp`: the same handler over stdio, project folder only. |
-| `src/ops/{project_ops,item_ops,data_ops,group_ops,restore_ops,deploy_ops,madl_ops,import_ops,observability_ops,analytics_ops}.rs` | The operations, each module one area (`runs.export` sends a run to its observability targets; `analytics.summary` reads the figures across runs). |
+| `src/ops/{project_ops,item_ops,data_ops,group_ops,restore_ops,deploy_ops,madl_ops,import_ops,observability_ops,analytics_ops}.rs` | The operations, each module one area (`runs.export` sends a run to its observability targets; `analytics.summary` reads the figures across runs, `analytics.search` finds steps across runs by their text). |
 | `src/ops/{deploy,migrate,view,error}.rs` | Project experiment → engine mapping. Earlier work → project files. Item JSON. Errors. |
 | `src/assistant/` | The Ask chat: `mod.rs` loop, `prompt.rs`, `tools.rs` (registry as tools, cards). |
 | `src/project_state.rs` | The project folder, re-read when its files change. |
