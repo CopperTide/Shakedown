@@ -47,6 +47,14 @@
   --flow-strong: #514a42;
   --series: #514a42;
   --series-2: #a59d92;
+  /* Analytics' categories (a setup, a model), in this order, never cycled: copper first, then hues
+     stepped for this surface (dataviz validator: adjacent CVD ΔE >= 11.8, contrast >= 3:1). */
+  --cat-1: #c8611d;
+  --cat-2: #3d6fb6;
+  --cat-3: #1f9a84;
+  --cat-4: #b07f10;
+  --cat-5: #a2508f;
+  --cat-other: #a59d92;
   --shadow: 0 1px 0 rgb(27 24 21 / 4%), 0 1px 3px rgb(27 24 21 / 3%);
   --shadow-pop: 0 12px 40px rgb(16 14 12 / 16%), 0 2px 6px rgb(16 14 12 / 6%);
   /* World views: the tones a view file names (never colours), and the base map's warm grays. */
@@ -94,6 +102,13 @@
   --flow-strong: #e2dcd2;
   --series: #e2dcd2;
   --series-2: #8c857c;
+  /* Stepped for the dark surface (adjacent CVD ΔE >= 11.5, contrast >= 3:1). */
+  --cat-1: #dc6a2c;
+  --cat-2: #5f8fd6;
+  --cat-3: #24a68d;
+  --cat-4: #c39327;
+  --cat-5: #bd6bab;
+  --cat-other: #6f685f;
   --shadow: none;
   --shadow-pop: 0 12px 32px rgb(0 0 0 / 55%), 0 0 0 1px var(--line);
   --tone-neutral: #81796f;

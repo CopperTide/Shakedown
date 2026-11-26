@@ -7,6 +7,8 @@ export interface ChartColors {
   grid: string;
   /** Points drawn in the alarm colour (refusals, errors). */
   alarm: string;
+  /** The chart's surface: the ring around a marker. */
+  surface: string;
 }
 
 /** "12k", "950": an axis value in few characters. */
@@ -37,5 +39,5 @@ export function lineOptions(width: number, height: number, c: ChartColors, label
 export function themeColors(el: Element = document.documentElement): ChartColors {
   const css = getComputedStyle(el);
   const v = (n: string) => css.getPropertyValue(n).trim();
-  return { series: v('--series'), axis: v('--muted'), grid: v('--line'), alarm: v('--alarm') };
+  return { series: v('--series'), axis: v('--muted'), grid: v('--line'), alarm: v('--alarm'), surface: v('--surface') };
 }

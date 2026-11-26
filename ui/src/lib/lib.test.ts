@@ -42,7 +42,7 @@ describe('split', () => {
 });
 
 describe('chart options', () => {
-  const c = { series: '#111', axis: '#222', grid: '#333', alarm: '#f00' };
+  const c = { series: '#111', axis: '#222', grid: '#333', alarm: '#f00', surface: '#fff' };
   it('a sparkline has no axes, legend or cursor', () => {
     const o = sparkOptions(200, 28, c);
     expect([o.width, o.height, o.legend?.show, o.cursor?.show]).toEqual([200, 28, false, false]);

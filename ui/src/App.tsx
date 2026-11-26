@@ -30,6 +30,7 @@ const ConnectPage = lazy(() => import('@/features/connect/ConnectPage'));
 const BuildPage = lazy(() => import('@/features/build/BuildPage'));
 const Run = lazy(() => import('@/features/run/RunPage'));
 const Runs = lazy(() => import('@/features/runs/RunsPage'));
+const AnalyticsPage = lazy(() => import('@/features/analytics/AnalyticsPage'));
 const Team = lazy(() => import('@/features/team/TeamPage'));
 const World = lazy(() => import('@/features/world/WorldPage'));
 const SettingsModels = lazy(() => import('@/features/settings/ModelsPage'));
@@ -49,6 +50,14 @@ function NotFound() {
 function Moved({ to }: { to: (p: Record<string, string | undefined>) => string }) {
   return <Navigate to={to(useParams())} replace />;
 }
+
+/** Old addresses (history, suites), sent on to their new ones. */
+const MOVED = [
+  <Route key="history" path="/history" element={<Navigate to="/runs" replace />} />,
+  <Route key="suites" path="/suites" element={<Navigate to="/" replace />} />,
+  <Route key="suites-compare" path="/suites/compare/:a/:b" element={<Moved to={(p) => `/experiments/compare?ids=${p.a},${p.b}`} />} />,
+  <Route key="suite" path="/suites/:id" element={<Moved to={(p) => `/experiments/${p.id}`} />} />,
+];
 
 function AppRoutes() {
   return (
@@ -70,21 +79,19 @@ function AppRoutes() {
         <Route path="/experiments/:id" element={<ExperimentPage />} />
         <Route path="/run" element={<Home />} />
         <Route path="/runs" element={<Runs />} />
+        <Route path="/analytics" element={<AnalyticsPage />} />
         <Route path="/runs/:runId/:branchId" element={<Run />} />
         <Route path="/team" element={<Team />} />
         <Route path="/connect" element={<ConnectPage />} />
         <Route path="/worlds/new" element={<BuildPage />} />
         <Route path="/compare/:a/:b" element={<Compare />} />
-        <Route path="/history" element={<Navigate to="/runs" replace />} />
-        <Route path="/suites" element={<Navigate to="/" replace />} />
-        <Route path="/suites/compare/:a/:b" element={<Moved to={(p) => `/experiments/compare?ids=${p.a},${p.b}`} />} />
-        <Route path="/suites/:id" element={<Moved to={(p) => `/experiments/${p.id}`} />} />
         <Route path="/control/:runId/:branchId" element={<ProcessPage />} />
         <Route path="/world/:runId/:branchId" element={<World />} />
         <Route path="/settings" element={<Navigate to="/settings/models" replace />} />
         <Route path="/settings/models" element={<SettingsModels />} />
         <Route path="/settings/tokens" element={<SettingsTokens />} />
         <Route path="/settings/observability" element={<SettingsObservability />} />
+        {MOVED}
         <Route path="*" element={<NotFound />} />
       </Routes>
     </Suspense>

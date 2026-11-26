@@ -3,10 +3,10 @@ import uPlot from 'uplot';
 import { useTheme } from '@/app/theme';
 import { lineOptions, sparkOptions, themeColors } from '@/lib/chart';
 
-type Make = (width: number, colors: ReturnType<typeof themeColors>) => uPlot.Options;
+export type Make = (width: number, colors: ReturnType<typeof themeColors>) => uPlot.Options;
 
 /** Mounts a uPlot chart that fills its box's width and follows the theme. */
-function usePlot(data: uPlot.AlignedData, make: Make) {
+export function usePlot(data: uPlot.AlignedData, make: Make) {
   const box = useRef<HTMLDivElement>(null);
   const theme = useTheme().resolved;
   useEffect(() => {

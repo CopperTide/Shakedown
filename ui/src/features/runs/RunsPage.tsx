@@ -1,7 +1,7 @@
 import type { ColumnDef } from '@tanstack/react-table';
 import { MoreHorizontal, Play } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { deleteRun, runs as fetchRuns } from '@/api/runs';
 import { ApproximateMark, StatusChip } from '@/components/marks';
@@ -11,7 +11,7 @@ import { Dialog, DialogActions, DialogContent } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { PageBody, PageHeader } from '@/components/ui/page';
 import { Panel } from '@/components/ui/panel';
-import { EmptyState, ErrorState } from '@/components/ui/state';
+import { EmptyState, ErrorState, Notice } from '@/components/ui/state';
 import { useAction } from '@/hooks/useAction';
 import { DISK_CHANGED } from '@/hooks/useHealth';
 import { pollWhile, useQuery } from '@/hooks/useQuery';
@@ -19,6 +19,7 @@ import { useTaskNames } from '@/hooks/useTasks';
 import { ago, formatTime } from '@/lib/time';
 import { qs } from '@/lib/url';
 import type { RunSummary } from '@/model/types';
+import { describeRunFilter, filterRuns, isFiltered, parseRunFilter } from './runFilter';
 import { type BranchRow, branchRows, runIsRunning, runTitle } from './runsTable';
 
 /** The runs, read again every 3 s while any of them runs. */
@@ -99,7 +100,11 @@ export default function Runs() {
   const { runs, error, refresh } = useRuns();
   const taskNames = useTaskNames();
   const [deleting, setDeleting] = useState<RunSummary | null>(null);
-  const rows = useMemo(() => (runs ? branchRows(runs) : null), [runs]);
+  const [sp, setSp] = useSearchParams();
+  const filter = useMemo(() => parseRunFilter(sp), [sp]);
+  const filtered = isFiltered(filter);
+  const rows = useMemo(() => (runs ? branchRows(filterRuns(runs, filter)) : null), [runs, filter]);
+  const clear = () => setSp({}, { replace: true });
   const nameOf = useCallback((r: BranchRow) => runTitle(r.run, taskNames), [taskNames]);
   const cols = useMemo(() => columns(nameOf, setDeleting), [nameOf]);
   const newRun = <Button variant="primary" asChild><Link to="/run"><Play />Run once</Link></Button>;
@@ -108,10 +113,18 @@ export default function Runs() {
       <PageHeader title="Runs" width="default" actions={runs?.length ? newRun : null} />
       <PageBody width="default">
         {error && runs && <ErrorState error={error} onRetry={refresh} />}
+        {filtered && (
+          <Notice>
+            Showing the runs of {describeRunFilter(filter)}, and their reruns.{' '}
+            <button type="button" onClick={clear} className="text-accent underline-offset-2 hover:underline">Show every run</button>
+          </Notice>
+        )}
         <Panel>
           <DataTable label="Runs" columns={cols} data={rows} getRowId={(r) => r.branch.id} loadingLabel="Loading runs…"
             error={error} onRetry={refresh} onOpen={(r) => nav(openOf(r))}
-            empty={<EmptyState title="No runs yet" action={newRun} />} />
+            empty={filtered && runs?.length
+              ? <EmptyState title="No runs match" hint={describeRunFilter(filter)} action={<Button onClick={clear}>Show every run</Button>} />
+              : <EmptyState title="No runs yet" action={newRun} />} />
         </Panel>
       </PageBody>
       <DeleteRunDialog run={deleting} onClose={() => setDeleting(null)} onDone={refresh} />

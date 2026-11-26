@@ -3,7 +3,7 @@
 export interface NavItem {
   to: string;
   label: string;
-  icon: 'home' | 'flask' | 'globe' | 'film' | 'users' | 'plug' | 'gear' | 'rocket' | 'code' | 'book';
+  icon: 'home' | 'flask' | 'chart' | 'globe' | 'film' | 'users' | 'plug' | 'gear' | 'rocket' | 'code' | 'book';
   /** Which addresses belong to it (default: the address and everything under it). */
   match?: RegExp;
 }
@@ -18,6 +18,7 @@ export const NAV: NavGroup[] = [
     items: [
       { to: '/', label: 'Home', icon: 'home', match: /^\/$/ },
       { to: '/experiments', label: 'Experiments', icon: 'flask', match: /^\/(experiments|runs?|compare|control|world)(\/|$)/ },
+      { to: '/analytics', label: 'Analytics', icon: 'chart' },
     ],
   },
   {
