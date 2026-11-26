@@ -40,13 +40,23 @@ async fn collect(
         .lock()
         .unwrap()
         .push((uri.path().to_string(), team, body));
-    match g
-        .fail
-        .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| n.checked_sub(1))
-    {
-        Ok(_) => axum::http::StatusCode::SERVICE_UNAVAILABLE,
-        Err(_) => axum::http::StatusCode::OK,
+    match take_failure(&g.fail) {
+        true => axum::http::StatusCode::SERVICE_UNAVAILABLE,
+        false => axum::http::StatusCode::OK,
     }
+}
+
+/// Takes one of the planned 503s: true when one was left. (A compare-exchange loop, since
+/// `fetch_update` is deprecated on newer Rust and its new name is missing on older.)
+fn take_failure(fail: &AtomicUsize) -> bool {
+    let mut n = fail.load(Ordering::SeqCst);
+    while n > 0 {
+        match fail.compare_exchange(n, n - 1, Ordering::SeqCst, Ordering::SeqCst) {
+            Ok(_) => return true,
+            Err(now) => n = now,
+        }
+    }
+    false
 }
 
 /// A fake OTLP/HTTP collector: its state and base URL.
