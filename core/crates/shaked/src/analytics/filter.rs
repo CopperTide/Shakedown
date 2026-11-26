@@ -111,7 +111,7 @@ fn time(v: Option<&str>, name: &str) -> Result<Option<DateTime<Utc>>, String> {
 
 /// A list as a JSON array of strings, or as one query-string value: a JSON array (for names with
 /// commas, as the Analytics page sends them) or comma-separated text.
-fn list<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<String>, D::Error> {
+pub(super) fn list<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<String>, D::Error> {
     #[derive(Deserialize)]
     #[serde(untagged)]
     enum List {

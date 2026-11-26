@@ -9,9 +9,12 @@
 //!
 //! Reading the events at query time instead takes seconds on a long run's record (its model
 //! calls' bodies are most of it), so the figures are kept.
+//!
+//! [`search`] finds steps across runs by their text, through a full-text index on the events.
 
 mod failures;
 pub mod filter;
+pub mod search;
 pub mod stats;
 
 use std::{sync::Arc, time::Duration};
@@ -19,6 +22,7 @@ use std::{sync::Arc, time::Duration};
 use anyhow::Result;
 
 pub use filter::{Filter, Group, Query};
+pub use search::{SearchInput, SearchQuery};
 pub use stats::{stats_of, BranchStats};
 
 use crate::{app::AppState, store::Store};

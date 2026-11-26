@@ -34,6 +34,7 @@ mod reviews;
 mod run_tokens;
 mod runs;
 mod saves;
+mod search;
 mod suites;
 mod tx;
 pub use analytics::{
@@ -56,6 +57,7 @@ pub use reviews::{ReviewDone, StoredReview};
 pub(crate) use run_tokens::REVOKE;
 pub(crate) use saves::{repoint_saves, saves_on};
 pub use saves::{NewSave, SaveRow, SAVE_RETENTION};
+pub use search::{FacetCount, SearchHit, SearchResults};
 pub use suites::NewSuite;
 use tx::Params;
 pub use tx::Tx;
