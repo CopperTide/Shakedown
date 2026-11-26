@@ -11,7 +11,7 @@ use crate::{auth::SystemScope, model::*, overhead::Overhead};
 pub(super) const EVENT_COLS: &str = "branch_id, seq, at, agent, kind, payload";
 
 /// An event's payload without a model call's bodies (`Scoped::events_lean`).
-const LEAN_PAYLOAD: &str = "CASE WHEN kind = 'model_call'
+pub(super) const LEAN_PAYLOAD: &str = "CASE WHEN kind = 'model_call'
     THEN (payload - 'provider_response') || jsonb_build_object(
         'request', CASE WHEN payload->'request'->>'model' IS NOT NULL
             THEN jsonb_build_object('model', payload->'request'->'model') ELSE NULL END,

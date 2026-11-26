@@ -61,6 +61,8 @@ pub async fn run(store: Store, opts: ServeOptions) -> anyhow::Result<()> {
     tokio::spawn(crate::worker::holds::sweep_every(state.clone()));
     // Ended runs to their observability targets, from the records (never from a sandbox).
     tokio::spawn(crate::otel::exporter::every(state.clone()));
+    // Each ended run's figures for Analytics, from its record.
+    tokio::spawn(crate::analytics::every(state.clone()));
     if state.hosting.get().is_some() {
         // This control box's sandboxes whose branch ended or that outlived their timeout.
         tokio::spawn(crate::hosting::sweep_every(state.clone()));

@@ -2,6 +2,7 @@
 //! class and input schema. The HTTP routes and the control MCP server are both generated from it,
 //! so the buttons, the API, the assistant and any agent can do the same things.
 
+mod analytics_ops;
 mod data_ops;
 mod delete_ops;
 mod deploy;
@@ -141,6 +142,7 @@ pub fn all() -> &'static [Operation] {
         ops.extend(import_git_ops::ops());
         ops.extend(step_ops::ops());
         ops.extend(observability_ops::ops());
+        ops.extend(analytics_ops::ops());
         ops
     })
 }

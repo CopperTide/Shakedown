@@ -19,6 +19,8 @@ pub enum SystemJob {
     LinkSweep,
     /// Sending ended branches to their observability targets, and recording how it went.
     ObservabilityExport,
+    /// Working out ended branches' figures for analytics, and keeping them on the branch.
+    AnalyticsStats,
 }
 
 /// Permission to open one system job's transactions (`Store::system_tx`). Built only in this
@@ -72,6 +74,13 @@ impl SystemScope {
     pub(crate) fn observability_export() -> SystemScope {
         SystemScope {
             job: SystemJob::ObservabilityExport,
+        }
+    }
+
+    /// Working out and keeping the figures of every owner's ended branches.
+    pub(crate) fn analytics_stats() -> SystemScope {
+        SystemScope {
+            job: SystemJob::AnalyticsStats,
         }
     }
 }

@@ -1,4 +1,5 @@
 pub mod agents;
+pub mod analytics;
 pub mod api;
 pub mod app;
 pub mod assistant;

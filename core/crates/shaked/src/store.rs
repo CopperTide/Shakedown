@@ -18,6 +18,7 @@ use crate::{
     pg::Admin,
 };
 
+mod analytics;
 mod api_tokens;
 mod connections;
 mod control;
@@ -35,6 +36,9 @@ mod runs;
 mod saves;
 mod suites;
 mod tx;
+pub use analytics::{
+    BoardRow, GroupPoint, Options, Pending, SeriesPoint, StatsRecord, Summary, Totals,
+};
 pub use api_tokens::ApiTokenRow;
 pub use connections::{is_secret, Connection, NewConnection, REDACTED};
 pub use control::Controlled;
