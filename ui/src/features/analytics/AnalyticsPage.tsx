@@ -1,7 +1,7 @@
-// Analytics: figures across runs. Tabs from the start (Overview now; Search joins it), the filter
-// in the address, and the Overview's tiles, charts and leaderboard over one summary.
+// Analytics: figures across runs, and search over every run's steps. The tab (`?tab=search`) and
+// each tab's filter live in the address; the Overview's tiles, charts and leaderboard read one summary.
 import { useCallback, useMemo, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { analyticsSummary, type Summary } from '@/api/analytics';
 import { Button } from '@/components/ui/button';
 import { PageBody, PageHeader } from '@/components/ui/page';
@@ -17,6 +17,7 @@ import MoreCharts from './MoreCharts';
 import Leaderboard from './Leaderboard';
 import { Card } from './parts';
 import PassRateChart from './PassRateChart';
+import SearchTab from './search/SearchTab';
 
 /** Below this many runs the page says the charts are still filling in. */
 const FEW = 5;
@@ -72,7 +73,8 @@ function Overview({ s, filter, setFilter, now }: { s: Summary; filter: Analytics
   );
 }
 
-export default function AnalyticsPage() {
+/** The Overview tab: its filter, and the summary it reads (only while it is shown). */
+function OverviewTab() {
   const { filter, setFilter } = useFilter();
   const [now] = useState(() => new Date());
   const query = apiQuery(filter, now);
@@ -81,18 +83,45 @@ export default function AnalyticsPage() {
   });
   return (
     <>
-      <PageHeader title="Analytics" width="wide" meta={filter.range === DEFAULT_RANGE ? 'The last 30 days, each run counted once (reruns left out).' : 'Each run counted once (reruns left out).'} />
+      <FilterBar filter={filter} options={data?.options ?? null} onChange={setFilter} />
+      {error && data && <ErrorState error={error} onRetry={reload} />}
+      {!data && (error ? <ErrorState error={error} onRetry={retry} /> : <Panel><LoadingState label="Loading analytics…" rows={4} /></Panel>)}
+      {data && <Overview s={data} filter={filter} setFilter={setFilter} now={now} />}
+    </>
+  );
+}
+
+type Tab = 'overview' | 'search';
+
+/** The tab shown, kept in the address. */
+function useTab(): [Tab, (t: string) => void] {
+  const [sp, setSp] = useSearchParams();
+  const tab: Tab = sp.get('tab') === 'search' ? 'search' : 'overview';
+  const setTab = useCallback((t: string) => setSp((prev) => {
+    const out = new URLSearchParams(prev);
+    if (t === 'search') out.set('tab', 'search');
+    else out.delete('tab');
+    return out;
+  }, { replace: true }), [setSp]);
+  return [tab, setTab];
+}
+
+export default function AnalyticsPage() {
+  const [tab, setTab] = useTab();
+  const range = parseFilter(new URLSearchParams(useLocation().search)).range;
+  const meta = tab === 'search' ? 'Every step of every run you can see, newest first.'
+    : range === DEFAULT_RANGE ? 'The last 30 days, each run counted once (reruns left out).' : 'Each run counted once (reruns left out).';
+  return (
+    <>
+      <PageHeader title="Analytics" width="wide" meta={meta} />
       <PageBody width="wide">
-        <Tabs defaultValue="overview">
+        <Tabs value={tab} onValueChange={setTab}>
           <TabsList className="px-0">
             <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="search">Search</TabsTrigger>
           </TabsList>
-          <TabsContent value="overview" className="flex flex-col gap-4 pt-4">
-            <FilterBar filter={filter} options={data?.options ?? null} onChange={setFilter} />
-            {error && data && <ErrorState error={error} onRetry={reload} />}
-            {!data && (error ? <ErrorState error={error} onRetry={retry} /> : <Panel><LoadingState label="Loading analytics…" rows={4} /></Panel>)}
-            {data && <Overview s={data} filter={filter} setFilter={setFilter} now={now} />}
-          </TabsContent>
+          <TabsContent value="overview" className="flex flex-col gap-4 pt-4"><OverviewTab /></TabsContent>
+          <TabsContent value="search" className="pt-4"><SearchTab /></TabsContent>
         </Tabs>
       </PageBody>
     </>

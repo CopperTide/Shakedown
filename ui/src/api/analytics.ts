@@ -54,3 +54,27 @@ export interface Summary {
 
 /** The summary for a query string the filters made (`?from=…&setup=a,b&group=model`). */
 export const analyticsSummary = (query: string) => get<Summary>(`/api/analytics/summary${query}`);
+
+// Search over every run's steps (`GET /api/analytics/search`, operation `analytics.search`).
+
+/** One step found; `snippet` marks each match between U+E000 and U+E001. */
+export interface SearchHit {
+  run_id: string; run_name: string; branch_id: string; seq: number;
+  kind: string; agent: string | null; at: string; snippet: string;
+}
+export interface FacetCount { name: string; count: number }
+
+export interface SearchResults {
+  hits: SearchHit[];
+  /** Matches in all, counted up to 10,000 (`total_capped` when there are more). */
+  total: number;
+  total_capped: boolean;
+  /** The next page's offset; null on the last. */
+  next_offset: number | null;
+  /** Matches per kind and per agent, whatever kinds and agents are picked. */
+  kinds: FacetCount[];
+  agents: FacetCount[];
+}
+
+/** One page of steps for a query string the search made (`?q=crew&kind=["reasoning"]&offset=50`). */
+export const searchSteps = (query: string) => get<SearchResults>(`/api/analytics/search${query}`);
