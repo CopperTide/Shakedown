@@ -38,13 +38,13 @@ function ExpandButton({ expanded, onExpand }: { expanded: boolean; onExpand: (on
 }
 
 /**
- * The side panel that follows the page down on wide screens: the selected step, in full. With
- * `onExpand`, it can take the page's whole width and give it back.
+ * The side panel that follows the page down on wide screens: the selected step, in full. `nav`
+ * (previous and next step) sits in its header; with `onExpand`, it can take the page's whole width and give it back.
  */
-export function StepSidePanel({ children, expanded = false, onExpand }: { children: ReactNode; expanded?: boolean; onExpand?: (on: boolean) => void }) {
+export function StepSidePanel({ children, nav, expanded = false, onExpand }: { children: ReactNode; nav?: ReactNode; expanded?: boolean; onExpand?: (on: boolean) => void }) {
   return (
     <Panel className="lg:sticky lg:top-16 lg:max-h-[calc(100vh-88px)] lg:overflow-auto">
-      <PanelHeader title="Step">{onExpand && <ExpandButton expanded={expanded} onExpand={onExpand} />}</PanelHeader>
+      <PanelHeader title="Step">{nav}{onExpand && <ExpandButton expanded={expanded} onExpand={onExpand} />}</PanelHeader>
       {children}
     </Panel>
   );

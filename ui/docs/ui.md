@@ -155,7 +155,8 @@ These are shadcn-style components: the code is ours, built on Radix primitives w
   and the step's kind.
 - `tabs`, `tooltip`, `popover`, `dialog` (with `DialogActions`) and `dropdown-menu`: Radix.
 - `command`: cmdk, used by the palette. `toaster`: sonner.
-- `split`: a main area and a side panel that can be resized by dragging or with ←/→ on the handle.
+- `split`: a main area and a side panel that can be resized by dragging or with ←/→ on the handle; `expanded`
+  gives the side panel the whole width.
   Its width is kept per page. The two stack on narrow screens.
 - `chart`: `Sparkline` and `LineChart` on uPlot, which follow the theme and the box width.
 
@@ -200,7 +201,10 @@ Logic lives in pure modules with tests, and components only render. For example:
   - Labels: an action carries its system kind ("ERP") where the label fits. The selected mark shows
     the full "ERP write".
   - Messages and handoffs are drawn as arrows between lanes.
-  - ←/→, ↑/↓, j/k and h/l move through the steps.
+  - ←/→, ↑/↓, j/k and h/l move through the steps (not while typing in a field or with a tab focused, whose
+    arrows switch tabs). The step panel's header has the same moves as buttons, ‹ 12 of 340 ›
+    (`features/run/StepStepper.tsx`), on the run page, the process view and Run once's step drawer; they follow
+    the timeline's order as filtered.
   - The Event log tab lists the same steps as rows (`features/run/EventLog.tsx`), the detail last and
     taking the rest of the width: each step's whole text, wrapped (a tool call with its arguments, a model
     call's reply or its model and tokens, a message in full). **Compact rows** keeps one line per step.

@@ -25,6 +25,9 @@
 
 ### Added
 
+- **Previous and next step buttons.** The step panel on the run page and the process view, and Run once's step
+  drawer, have ‹ › buttons with where the step sits ("12 of 340"), the same moves as ←/→. Arrow keys no longer
+  also move the step while a tab has focus.
 - **The event log shows each step's whole text, and the step panel renders Markdown and can go full width.**
   The detail column comes last and wraps the full text: a tool call's arguments, a model call's reply (or its
   model and tokens), a message in full. In the step panel, messages, reports and other prose render as

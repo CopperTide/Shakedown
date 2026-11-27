@@ -9,6 +9,7 @@ import Inspector from '@/features/run/Inspector';
 import RunMenu from '@/features/run/RunMenu';
 import { RunErrorBanner, StepSidePanel, useExpanded } from '@/features/run/RunShell';
 import { taskOf } from '@/features/run/runStats';
+import StepStepper from '@/features/run/StepStepper';
 import { useBranch } from '@/features/run/useBranch';
 import { useStepKeys } from '@/features/run/useStepKeys';
 import { useStepParam } from '@/features/run/useStepParam';
@@ -64,7 +65,7 @@ export default function ProcessPage() {
       <PageBody>
         <RunErrorBanner error={error} onRetry={reload} detail={d} />
         <Split storageKey="shakedown.process.side" expanded={expanded} main={<Main d={d} timeline={timeline} selected={selected} onSelect={setSelected} models={models} setModels={setModels} />}
-          side={<StepSidePanel expanded={expanded} onExpand={setExpanded}><Inspector branchId={d.id} event={d.events.find((e) => e.seq === selected) ?? null} team={d.team} events={d.events} /></StepSidePanel>} />
+          side={<StepSidePanel nav={<StepStepper order={timeline.order} selected={selected} onSelect={setSelected} />} expanded={expanded} onExpand={setExpanded}><Inspector branchId={d.id} event={d.events.find((e) => e.seq === selected) ?? null} team={d.team} events={d.events} /></StepSidePanel>} />
       </PageBody>
     </>
   );

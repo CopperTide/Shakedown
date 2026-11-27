@@ -16,12 +16,13 @@ import { type Result, resultOf } from '@/features/run/result';
 import RunMenu from '@/features/run/RunMenu';
 import { RunErrorBanner } from '@/features/run/RunShell';
 import { taskOf } from '@/features/run/runStats';
+import StepStepper from '@/features/run/StepStepper';
 import { stepSummary } from '@/features/run/stepSummary';
 import { summarize } from '@/features/run/timeline';
 import { useBranch } from '@/features/run/useBranch';
 import { useStepKeys } from '@/features/run/useStepKeys';
 import { useStepParam, withStep } from '@/features/run/useStepParam';
-import { useTimeline } from '@/features/run/useTimeline';
+import { type Timeline, useTimeline } from '@/features/run/useTimeline';
 import TwinView, { useWorldView } from '@/features/world/TwinView';
 import { useViews } from '@/features/world/useWorld';
 import { useAction } from '@/hooks/useAction';
@@ -80,10 +81,10 @@ function ResultLine({ r, details, menu }: { r: Result; details: string; menu: Re
 }
 
 /** The step in a sentence or two; the raw record behind Details. */
-function StepDrawer({ d, event, onClose }: { d: BranchDetail; event: Event; onClose: () => void }) {
+function StepDrawer({ d, event, onClose, nav }: { d: BranchDetail; event: Event; onClose: () => void; nav: ReactNode }) {
   const s = stepSummary(event, d.events, d.team);
   return (
-    <SidePanel title={s.title} onClose={onClose} className="w-full rounded-lg border lg:w-[360px] lg:shrink-0">
+    <SidePanel title={s.title} meta={nav} onClose={onClose} className="w-full rounded-lg border lg:w-[360px] lg:shrink-0">
       <p className={cn('px-3 py-3 text-sm leading-6', s.abnormal && 'font-medium text-alarm')}>{s.text}</p>
       <details className="border-t border-line">
         <summary className="cursor-pointer px-3 py-2 text-xs font-medium text-muted hover:text-fg">Details</summary>
@@ -103,14 +104,15 @@ function Restoring({ line }: { line: string }) {
   );
 }
 
+const NO_STEPS: number[] = [];
+
 type SetStep = (next: number | null | ((s: number | null) => number | null)) => void;
 
-function TimelineMain({ d, now, selected, onSelect }: { d: BranchDetail; now: number; selected: number | null; onSelect: SetStep }) {
-  const [models, setModels] = useState(true);
-  const { lanes, span, order } = useTimeline(d, models);
+function TimelineMain({ d, now, selected, onSelect, timeline: { lanes, span }, models, setModels }: {
+  d: BranchDetail; now: number; selected: number | null; onSelect: SetStep; timeline: Timeline; models: boolean; setModels: (m: boolean) => void;
+}) {
   const live = d.status === 'running';
   const pauses = useMemo(() => pausesOf(d.events, now), [d.events, now]);
-  useStepKeys(order, onSelect);
   return (
     <Panel>
       {span ? <ActionTimeline lanes={lanes} team={d.team} span={span} selected={selected} onSelect={onSelect} models={models} onModels={setModels} live={live} pauses={pauses} />
@@ -138,13 +140,16 @@ function useControls(branchId: string, reload: () => void) {
 function MainArea({ d, main, flow, now, selected, onSelect }: {
   d: BranchDetail; main: Main; flow: Flow; now: number; selected: number | null; onSelect: SetStep;
 }) {
+  const [models, setModels] = useState(true);
+  const timeline = useTimeline(d, models);
   const event = main === 'timeline' ? d.events.find((e) => e.seq === selected) : undefined;
+  useStepKeys(main === 'timeline' ? timeline.order : NO_STEPS, onSelect);
   return (
     <div className="flex flex-col gap-3 lg:flex-row lg:items-start">
       <div className="min-w-0 flex-1">
-        {main === 'timeline' ? <TimelineMain d={d} now={now} selected={selected} onSelect={onSelect} /> : <TwinMain d={d} scrub={!isLive(flow) || flow === 'paused'} />}
+        {main === 'timeline' ? <TimelineMain d={d} now={now} selected={selected} onSelect={onSelect} timeline={timeline} models={models} setModels={setModels} /> : <TwinMain d={d} scrub={!isLive(flow) || flow === 'paused'} />}
       </div>
-      {event && <StepDrawer d={d} event={event} onClose={() => onSelect(null)} />}
+      {event && <StepDrawer d={d} event={event} onClose={() => onSelect(null)} nav={<StepStepper order={timeline.order} selected={selected} onSelect={onSelect} />} />}
     </div>
   );
 }
