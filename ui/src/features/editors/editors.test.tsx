@@ -19,7 +19,7 @@ function mockFetch({ put = { status: 200, body: WORLD as unknown }, items = [WOR
     if (init?.method === 'PUT') { puts.push(JSON.parse(String(init.body))); return new Response(JSON.stringify(put.body), { status: put.status }); }
     if (u.endsWith('/api/project/worlds')) return new Response(JSON.stringify({ items }));
     if (u.endsWith('/api/project/worlds/plant')) return new Response(JSON.stringify(WORLD));
-    if (u.endsWith('/api/worlds')) return new Response(JSON.stringify([{ name: 'tau-airline', title: 'tau airline', built: false }]));
+    if (u.endsWith('/api/runtimes')) return new Response(JSON.stringify({ hosted: false, builtin: [], installs: [{ id: 'tau', source: 'git', url: 'u', ref: 'HEAD', path: '', commit: 'c', installed_at: '', runtime: true, items: 0, packages: [{ name: 'tau-airline', kind: 'benchmark', used_by: [] }] }] }));
     return new Response(JSON.stringify({ error: 'not found' }), { status: 404 });
   }));
 }
@@ -88,7 +88,7 @@ describe('editing layer', () => {
     render(<MemoryRouter><ItemListPage kind="worlds" /></MemoryRouter>);
     fireEvent.click(await screen.findByRole('button', { name: /New world/ }));
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Airline' } });
-    await screen.findByRole('option', { name: 'tau airline (tau-airline)' });
+    await screen.findByRole('option', { name: 'tau-airline · tau' });
     fireEvent.change(screen.getByLabelText('Runtime'), { target: { value: 'tau-airline' } });
     fireEvent.click(screen.getByRole('button', { name: 'Create' }));
     await waitFor(() => expect(puts.length).toBe(1));

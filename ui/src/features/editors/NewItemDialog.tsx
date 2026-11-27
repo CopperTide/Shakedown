@@ -3,11 +3,9 @@
 import { Plus } from 'lucide-react';
 import { useState } from 'react';
 import { putItem } from '@/api/project';
-import { worlds } from '@/api/worlds';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogActions, DialogContent } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { useQuery } from '@/hooks/useQuery';
 import { errorMessage } from '@/lib/errors';
 import { CREATED, track } from '@/lib/productAnalytics';
 import type { ItemKind } from '@/model/project';
@@ -15,12 +13,12 @@ import { ID_RULE, idFor, isValidId } from './idRule';
 import { KINDS } from './kinds';
 import { TEMPLATES } from './templates';
 import { ChoiceField } from './fields';
-import { runtimeOptions } from './world/RuntimeSection';
+import { runtimeOptions, useRuntimes } from './world/RuntimeSection';
 
 /** A new world's runtime: one of the installed ones, or none yet. */
 function RuntimeChoice({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const installed = useQuery('installed-worlds', worlds);
-  return <ChoiceField label="Runtime" value={value} options={runtimeOptions(installed.data ?? [])} onChange={onChange} />;
+  const installed = useRuntimes();
+  return <ChoiceField label="Runtime" value={value} options={runtimeOptions(installed.data)} onChange={onChange} />;
 }
 
 /** Why `id` can't be used, or null when it can. */

@@ -108,9 +108,15 @@ Other languages use the [HTTP API](docs/reference.md#http-api) and its event str
 already run, give each one an MCP endpoint and a model gateway with `sd.external_run(...)`, or add it to a
 team as an `http` or `bedrock` agent ([docs/agents.md](docs/agents.md)).
 
-### Import from git
+### Runtimes and import from git
 
-`shaked import <repo-url-or-path>` (or **Import from git** on the Worlds page) brings in a repo's packages and
+A world runs on a runtime package. **Build → Runtimes → Install a runtime** installs one from a git URL (one folder of
+the repo if you like) or an uploaded `.zip`/`.tar.gz`, checks it and lists it; then **New world** picks it, the world's
+Data section uploads the files every run starts from, and the scenario's task picker lists the runtime's tasks. All of
+it works from the app on a Shakedown with nothing installed; see [Runtimes](docs/reference.md#runtimes) and
+[World data](docs/protocol.md#world-data). A runtime is code that runs on your machine.
+
+`shaked import <repo-url-or-path>` (or **Import from git** on the Worlds page) brings in a repo's packages and its
 project files as they are, so a world runs the systems you already have; see
 [Import from git](docs/reference.md#import-from-git).
 
@@ -181,7 +187,8 @@ API-mode providers, `http` and Bedrock agents and the framework adapters are tes
 <summary><b>Limits and not built yet</b></summary>
 
 - A world runs through a runtime package: an installed benchmark or a built world, named in the world file's
-  `package:`. Runs don't read a world file's connectors, flows, data, people or observability yet, nor a
+  `package:`. Its data files marked "Every run starts from this" reach every part of a run. Runs don't read a
+  world file's connectors, flows, other data, people or observability yet, nor a
   scenario's `changes`, `gates`, `checks` or event timing. Runs get the preset task's ticket. Setups of kind
   `code` and `madl` don't deploy from a file yet. See [docs/concepts.md](docs/concepts.md#project-files).
 - Every project operation is on the MCP server and the assistant. Runs, forks and compare are HTTP API only.
@@ -190,7 +197,7 @@ API-mode providers, `http` and Bedrock agents and the framework adapters are tes
 - API mode has not been measured against a live provider. Costs a provider doesn't report are estimated only
   for the models in [`docs/prices.toml`](docs/prices.toml). Other costs show as unknown.
 - A world made only of replay-only parts has no final save to compare, so its branches can't be scored.
-- Not built: community publishing of packages (they install from a local folder), process checkpointing,
+- Not built: community publishing of packages (they install from a git URL, an archive or a local folder), process checkpointing,
   fault search and design search.
 
 </details>

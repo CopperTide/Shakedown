@@ -15,6 +15,10 @@ All JSON on `http://127.0.0.1:4510`, except the event stream. Errors are `{error
 | `GET /api/project` | `project.status`: `{name, counts: {worlds, scenarios, setups, experiments}, problems, root, imports}` for the project folder `SHAKEDOWN_PROJECT` names; 409 when none is open, with `folder`: true when a project made here is a folder on disk (git can track it), false when there is no folder or projects are kept in a database (hosted). `problems` lists unreadable files and broken references (`{kind, id, pointer, message}`); a problem never stops the rest of the project from loading. `imports` lists the project's git imports, `[{id, url, ref, commit, imported_at, packages, items}]` |
 | `POST /api/project` | `project.init`: `{name, git?}` creates a project in the configured folder; 409 when one is already there; 400 when `git` is asked for and the project is not a folder on disk (`folder` false above) |
 | `POST /api/project/import-git` | `project.import_git`: `{url, ref?, id?, confirm?}` imports a git repo, its packages and its project items (see [Import from git](#import-from-git)). Without `confirm` the ref is fetched and the plan answered, and nothing is installed, registered or written: `{proposed: true, id, url, ref, commit, checkout, project: {name, problems}, packages: [{name, kind, dir, python}], items: [{kind, id, label, action: write\|replace\|same\|keep\|remove, reason}], views: [{world, file}], compose: [{file, services, volumes, part}], python: [{root, env}], edits, notes, problems, conflicts, previous_commit}`. With `confirm` the same, plus `registered` (true when shaked runs), `written` and `removed` (the last import's items the repo no longer has, removed to the trash). 400 for a URL other than https, ssh, `git@host:path`, `file://` or an absolute path, or a ref starting with `-`; 409 when a package name is installed already; 422 when git or uv fails; 403 on a shaked that serves others |
+| `GET /api/runtimes` | `runtimes.list`: `{installs: [{id, source: git\|archive, url, ref, path, commit, installed_at, runtime, items, packages: [{name, kind, version, dir, used_by, registered, check}]}], builtin: [{name, kind, version, dir, used_by}], hosted}`. `runtime` is false for an Import from git (which also wrote project files); `check` is the package's last conformance check at this commit, `{package, passed, steps: [{name, ok, detail}], skipped, checked_at}`, or null; `used_by` the project's worlds whose runtime it is; `builtin` the packages in `SHAKEDOWN_PACKAGES` folders (see [Runtimes](#runtimes)) |
+| `POST /api/runtimes` | `runtimes.install`: `{url, ref?, path?, id?, confirm?}` or `{archive: {name, data}, path?, id?, confirm?}` (`data` base64, a `.zip`, `.tar.gz` or `.tgz`; the body may be up to 256 MiB). Without `confirm` the plan, as `project.import_git` answers it, with `source` and `packages_only` (the folder); with it, installed and registered, plus `checks` (each package's conformance check). An install's `id` updates it. 400 for a bad URL, folder or archive, or both or neither of `url` and `archive`; 409 for a taken package name, or an `id` imported with its project files; 422 when git or uv fails; 403 on a shaked that serves others |
+| `POST /api/runtimes/{id}/check` | `runtimes.check`: runs the install's conformance checks again: `{id, checks}`. 404 for no such install; 403 on a shaked that serves others |
+| `DELETE /api/runtimes/{id}` | `runtimes.delete`: unregisters the install's packages and deletes its checkout and environments: `{removed, packages}`. 409 while a world's runtime is one of its packages (naming the worlds), or for an Import from git; 404 for no such install; 403 on a shaked that serves others |
 | `GET /api/project/{worlds\|scenarios\|setups\|experiments}` | `{items: [{kind, id, label, hash, problems, …}]}`; each item also says where it belongs: a world its `group` (null when none), a scenario its `world`, an experiment its `world`, `scenario`, `parent` and how many `setups` it compares |
 | `GET /api/project/{kind}/{id}` | one item with its `body` (the file's contents as JSON) |
 | `PUT /api/project/{kind}/{id}` | `{body, confirm?}` creates or replaces the item's file. `body` is checked exactly like the file: unknown fields, a wrong `format:` and credentials written inline are 422 with a JSON pointer (a credential's value is never echoed). Unless `confirm` is true and while the project's `permissions.edit` is `diff_first` (the default), nothing is written and the answer is `{proposed: true, diff}`. Writes are atomic: a file is never left half-written. Needs the `admin` token scope |
@@ -25,7 +29,10 @@ All JSON on `http://127.0.0.1:4510`, except the event stream. Errors are `{error
 | `POST /api/project/world-groups/rename` | `worlds.rename_group`: `{from, to?, confirm?}` moves every world in group `from` to `to` (empty or missing: no group; an existing group merges), checking every file before writing any, with a diff first under `diff_first` as for a put; answers `{moved, diff}`. 404 when no world is in `from` |
 | `PUT /api/project` | `project.update`: `{body, confirm?}` replaces `shakedown.yaml` (name, defaults, permissions, assistant), with a diff first under `diff_first` as for an item |
 | `POST /api/project/import` | `project.import`: `{confirm?}`. Without `confirm`, `{proposed: true, files, skipped}`: what moving installed benchmarks, built worlds and earlier experiments into the project would write (nothing existing is overwritten). With it, writes them and links each earlier experiment as its file's first deployment |
-| `POST /api/project/experiments/{id}/deploy` | `experiments.deploy`: runs the file experiment on its world's runtime package (see [concepts](concepts.md#project-files)); answers the engine experiment's detail. 422 when the world has no `package`, the scenario no `preset`, an item it names has a problem, or a setup is of kind `code` or `madl`; 400 when a setup's `key` names no stored key (or another member's key that names its own server), or its `auth` names a key that is not your own custom key, is empty, names both `key` and `env`, or names an environment variable that may not be sent (`SHAKEDOWN_AGENT_*` on a local engine only). A built-in agent's `key` becomes its provider `key:<name>`; an `http` setup's `auth` becomes a reference read from your keys on each request and sent as `Authorization: Bearer` |
+| `GET /api/project/worlds/{id}/data` | `worlds.data`: `?path=` reads one file of the world's folder, `{path, size, text, truncated}` (text up to 1 MiB, or 10 MiB with `full=true`) or `{path, size, binary: true}`; without `path`, `{files: [{path, size}], truncated}` (at most 500). 400 for a path outside the folder |
+| `POST /api/project/worlds/{id}/data` | `worlds.data_put`: `{path, data}` (base64), `{path, text}`, or `{path, pointer, value}` (one value of a JSON file set at a JSON pointer) writes a data file into the world's folder through the project store: `{path, size, replaced}`. JSON, CSV, TSV, YAML, text or Markdown, at most 10 MiB (413 above), checked to parse; 400 for a path outside the folder, `world.yaml` or a view file, another kind of file, or a value with nothing at its pointer. The body may be up to 256 MiB |
+| `DELETE /api/project/worlds/{id}/data` | `worlds.data_delete`: `?path=` deletes a data file: `{deleted}`; 404 when there is none |
+| `POST /api/project/experiments/{id}/deploy` | `experiments.deploy`: runs the file experiment on its world's runtime package (see [concepts](concepts.md#project-files)), its parts given the world's start data ([protocol](protocol.md#world-data)); answers the engine experiment's detail. 409 on a shaked that serves others when the world has start data; 422 when a marked data file is missing, the world has no `package`, the scenario no `preset`, an item it names has a problem, or a setup is of kind `code` or `madl`; 400 when a setup's `key` names no stored key (or another member's key that names its own server), or its `auth` names a key that is not your own custom key, is empty, names both `key` and `env`, or names an environment variable that may not be sent (`SHAKEDOWN_AGENT_*` on a local engine only). A built-in agent's `key` becomes its provider `key:<name>`; an `http` setup's `auth` becomes a reference read from your keys on each request and sent as `Authorization: Bearer` |
 | `GET /api/project/experiments/{id}/runs` | `experiments.runs`: `{deployments}`, the experiment's deployments newest first, each as `GET /api/experiments/{id}` answers |
 | `GET /api/project/setups/{id}/madl` | `setups.madl`: a MADL setup's `{valid, diagnostics: [{code, severity, pointer, message}], graph: {agents, edges}}` (patterns expanded) |
 | `POST /api/assistant/chat` | the Ask drawer: `{messages, page?}` answered by the assistant on the project's model (at most 8 model turns): reads run at once; every edit that takes `confirm` comes back as a diff card under `diff_first` (written at once under `apply_then_tell`); deploys, other edits and deletes come back as cards the person confirms. A delete card drops the model's `cascade` and shows the delete dialog's choice: alone if unused, or with what uses it |
@@ -384,6 +391,46 @@ through uv, is imported, registered and deployed; a new commit keeps the project
 what the repo dropped unless the project changed or uses it) and, on this machine,
 `live_airline_world_imports` against the airline repo (11 packages, 2 worlds with their views, 2 scenarios, 2
 setups, 2 experiments, no problems; its benchmark describes itself from the import's environment).
+
+## Runtimes
+
+A runtime is the package that runs a world (its parts, tasks and scoring; a world names it in `package`). From a fresh
+Shakedown with no packages, everything is done in the app: **Build → Runtimes → Install a runtime** (also in a world's
+Runtime section and in Get started's world step), then **New world** with the runtime picked. The API is
+`/api/runtimes` ([HTTP API](#http-api)); MCP and the assistant have `runtimes_list`, `runtimes_install`,
+`runtimes_check` and `runtimes_delete`.
+
+- **Sources:** a git URL (as [Import from git](#import-from-git) takes it, with a ref) or an uploaded `.zip`, `.tar.gz`
+  or `.tgz` of a package folder or of a repo holding packages. An archive is unpacked into
+  `<project>/.shakedown/imports/<id>/<sha12>/`, named after its SHA-256 (which stands for the commit); only regular
+  files and folders are unpacked, never outside that folder, at most 50,000 entries and 2 GiB, and an archive whose
+  entries all sit in one top folder (as GitHub's downloads do) is that folder. **Folder** limits the install to the
+  packages under one folder of the repo or archive; a package's uv workspace may still be above it.
+- **Install:** the import machinery with packages only: each `shakedown-package.toml` is read and checked, the Python
+  packages get their uv environment (Shakedown's own kit pointed at this Shakedown's), the packages are registered, and
+  no world, scenario, setup or experiment is written. The id is the repo's (or archive's) name unless given; installing
+  with an existing install's id updates it (a new commit or archive replaces its packages, the one before is kept for
+  runs still going). An id that Import from git used with its project files is refused: update that one there.
+- **Conformance check:** each package is checked on a hub of its own, its saves in a temporary folder. An integration
+  gets `shakedown-part-check`'s check (`parts::check`) with an empty config (it needs at least one `[[example]]` in its
+  manifest); a benchmark is described and must have a task and every part's integration installed. The reports are
+  kept in `check.json` beside the install's record, for its commit, and shown on the Runtimes page (Check again reruns
+  them). A failed check is reported, not enforced.
+- **Listing:** each install with its source, packages, versions, check and the worlds that run on each package;
+  packages installed from `SHAKEDOWN_PACKAGES` folders are listed as installed with Shakedown.
+- **Remove:** refused (409) while a world's runtime is one of the install's packages, naming the worlds; otherwise the
+  packages are unregistered and the install's checkout and environments deleted.
+- **Startup:** shaked starts with no benchmark when none is chosen (none installed, as in a fresh Shakedown, or several
+  and `SHAKEDOWN_BENCHMARK` names none), saying so; each project world names its own runtime.
+- **Trust:** a runtime is code that runs on this machine, with your access: installing runs `uv sync` (and the
+  packages' build backends), the check and every run run its programs. The app says so before every install. A shaked
+  that serves others (hosted) refuses to install, check or remove one (403), as it refuses Import from git: hosted runs
+  package code only in a run's sandbox, which can't install a runtime yet.
+
+Verified: `core/crates/shaked/tests/runtimes.rs` (a folder of a repo installs its packages only and is checked; an
+archive installs, and a world that uses it keeps it installed; bad archives and folders are refused; hosted refuses)
+and, on this machine, installing `CopperTide/tau-world` from an archive and from its git URL on a fresh Shakedown
+through the app.
 
 ## Use Shakedown from an agent (MCP)
 

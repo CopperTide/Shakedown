@@ -47,7 +47,7 @@ pub async fn run(store: Store, opts: ServeOptions) -> anyhow::Result<()> {
         state.vault().map_err(anyhow::Error::msg)?;
     }
     let bench = match here {
-        true => Some(local_start(&state).await?),
+        true => local_start(&state).await?,
         false => None,
     };
     app::install_default_drivers(&state);
@@ -229,7 +229,9 @@ async fn shutdown_on_ctrl_c(state: Arc<AppState>) {
 /// exists. `store`'s layer runs packages here and serves no one else.
 pub(crate) async fn build_base(store: Store, opts: &ServeOptions) -> anyhow::Result<()> {
     let state = app_state(store, opts).await?;
-    let bench = local_start(&state).await?;
+    let bench = local_start(&state)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("no benchmark is installed: install a runtime first"))?;
     let saves = crate::world::ensure_base(&state.hub, &bench).await?;
     println!(
         "shaked: base of {} {}: {saves:?}",
@@ -269,9 +271,11 @@ fn listening_line(
     bench: Option<&BenchDescribe>,
     ui: Option<&std::path::Path>,
 ) -> String {
-    let bench = bench.map_or("none (packages run in sandboxes)".to_string(), |b| {
-        format!("{} {}", b.name, b.version)
-    });
+    let none = match state.store.layer().policy().runs_packages_here {
+        true => "none installed yet: install a runtime from the Runtimes page",
+        false => "none (packages run in sandboxes)",
+    };
+    let bench = bench.map_or(none.to_string(), |b| format!("{} {}", b.name, b.version));
     format!(
         "shaked: listening on http://{} as {} (benchmark: {bench}; modes: {}; ui: {})",
         bind.addr,
@@ -283,12 +287,20 @@ fn listening_line(
 
 /// The start where packages run here: the project's git imports registered, its benchmark, and
 /// before any run can save, dropping the saves no event names (left by crashes and aborted
-/// tests).
-async fn local_start(state: &AppState) -> anyhow::Result<BenchDescribe> {
+/// tests). With none chosen (none installed yet, as in a fresh Shakedown, or several and
+/// `SHAKEDOWN_BENCHMARK` names none), shaked starts with none: runtimes are installed from the
+/// UI and each project world names its own.
+async fn local_start(state: &AppState) -> anyhow::Result<Option<BenchDescribe>> {
     register_imports(state).await;
+    if state.benchmark().is_empty() {
+        if let Err(why) = state.bench_named("").await {
+            eprintln!("shaked: {why:#}; starting without a current benchmark");
+        }
+        return Ok(None);
+    }
     let bench = state.startup_bench().await?;
     crate::gc::run_startup_gc(&state.store, &state.hub, &state.benchmark()).await?;
-    Ok(bench)
+    Ok(Some(bench))
 }
 
 #[cfg(test)]

@@ -29,7 +29,7 @@ function mockFetch(body: Record<string, unknown> = BODY) {
     if (u.endsWith('/api/project/worlds/plant')) return new Response(JSON.stringify({ kind: 'world', id: 'plant', label: 'L', hash: 'h', problems: [], body }));
     if (u.includes('/api/project/worlds/plant/data?path=')) return new Response(JSON.stringify(u.includes('b.bin') ? { path: 'b.bin', size: 2048, binary: true } : { path: 'a.csv', size: 9, text: 'id,name\n1,x', truncated: true }));
     if (u.endsWith('/api/project/worlds/plant/data')) return new Response(JSON.stringify({ files: [{ path: 'a.csv', size: 9 }, { path: 'b.bin', size: 2048 }, { path: 'data/db.json', size: 90 }], truncated: false }));
-    if (u.endsWith('/api/worlds')) return new Response(JSON.stringify([{ name: 'toybench', title: 'Toy bench', built: false }]));
+    if (u.endsWith('/api/runtimes')) return new Response(JSON.stringify({ hosted: false, builtin: [], installs: [{ id: 'tau', source: 'git', url: 'u', ref: 'HEAD', path: '', commit: 'c', installed_at: '', runtime: true, items: 0, packages: [{ name: 'toybench', kind: 'benchmark', used_by: [] }] }] }));
     return new Response(JSON.stringify({ error: 'not found' }), { status: 404 });
   }));
 }

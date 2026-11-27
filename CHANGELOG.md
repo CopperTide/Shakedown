@@ -31,6 +31,24 @@
   file's contents as JSON, with a revision so a stale write is refused, and a delete only marks the row. The store
   reads and writes them (`store/project_items.rs`, `store/project_history.rs`). Projects still live in their folder.
 
+- **Install a runtime from the app, and build a world from scratch.** **Build → Runtimes** installs the package that
+  runs a world from a git URL (optionally one folder of the repo) or an uploaded `.zip`/`.tar.gz`: its Python
+  dependencies with uv, its packages registered, and each package's conformance check (`shakedown-part-check`) shown.
+  Each install lists its source, packages, versions, check and the worlds it runs, with Check again, Update and Remove
+  (refused while a world uses it, naming the worlds). The app warns that a runtime is code that runs on this machine;
+  a hosted shaked refuses installs (403), as it refuses Import from git. **New world** picks an installed runtime, the
+  world's Runtime section and Get started's world step can install one, and shaked starts with no benchmark when none is
+  chosen, so a fresh Shakedown with nothing installed is built from the app alone. API `GET/POST /api/runtimes`,
+  `POST /api/runtimes/{id}/check`, `DELETE /api/runtimes/{id}`; MCP `runtimes_*`.
+- **Worlds run from their own data files.** The world's Data section uploads JSON, CSV, YAML or text files (10 MiB
+  each) into its folder through the project store, views JSON records as tables where a value is edited in place,
+  replaces and deletes them (`worlds.data_put`, `worlds.data_delete`). Files marked "Every run starts from this" reach
+  every part of each run as `world_data` in its `start` config, and the benchmark in `gold_actions` and `score`
+  (protocol: [World data](docs/protocol.md#world-data)); the data's digest names the base and gold saves and joins each
+  part's recorded fingerprint, and forks keep the data their run started on. The kits read it:
+  `shakedown_part::world_data` (Rust) and `shakedown_part.worlddata` (Python). A world without data runs as before.
+  A hosted shaked refuses to deploy a world that has start data (409) until sandboxes can fetch it.
+
 - **Get started can't be skipped.** Until a project, a model, a world, agents and a first scenario exist (read
   from shaked, never the browser), every page sends you to Get started; **Ready** opens the rest. Connections &
   models, the item editors the steps open and the account menu stay reachable meanwhile. "Skip for now" is gone.

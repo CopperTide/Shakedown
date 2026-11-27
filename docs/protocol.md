@@ -82,6 +82,8 @@ real product. Each tool's `effect` already says whether it reads or writes.
 
 - `ToolSchema` is the MCP shape (`name`, `description`, `inputSchema`) plus `effect: "read"|"write"`. Tool
   names must be unique across a world; a world that has a clash is refused.
+- `start`'s `config` is the part's config from the benchmark's world, plus `world_data` when the project world gives
+  its own start data ([World data](#world-data)).
 - `dir` is a folder shaked creates for that save under `SHAKEDOWN_SAVES/<part>/<save>/`. A part that keeps
   saves natively (Postgres `snap_` databases) ignores it and reports `bytes` itself.
 - **Save folders by convention:** a part finds any save's folder at `$SHAKEDOWN_SAVES/<package name>/<save>/`.
@@ -120,8 +122,8 @@ A benchmark program speaks the same transport.
 | `describe` | `{}` | `{name, version, protocol, world: [{part, integration, config}], tasks: [{id, reason, ticket, setup?: [{part, tool, args}], clock_start?, group?}], instructions, instructions_title?, team?, teams?, tools: [ToolSchema], links?: [Link], gates?: [Gate], scored?: bool, scenario_options?: ScenarioOptions, view?: {docs: [part]}}` |
 | `seed` | `{connections: {part: info}}` | `{}` (loads the starting data into fresh instances) |
 | `call_tool` | `{name, args, connections}` | `{result?, error?, part, reads, writes, events?: [{kind, text, data}]}` (`events` as a part's `call_tool` gives them) |
-| `gold_actions` | `{task}` | `{actions: [{name, args}]}` |
-| `score` (with `scored: true`) | `{task, docs: {part: {key: doc}}}` | `{checks: [{name, passed, detail?, safety?, measure?}]}` (`safety: true`: a hard safety check, an unsafe action rather than a missed goal, reported apart from the score; `measure`: a number the check measured, see [Scoring by named checks](#scoring-by-named-checks)) |
+| `gold_actions` | `{task, world_data?}` | `{actions: [{name, args}]}` |
+| `score` (with `scored: true`) | `{task, docs: {part: {key: doc}}, models?, world_data?}` | `{checks: [{name, passed, detail?, safety?, measure?}]}` (`safety: true`: a hard safety check, an unsafe action rather than a missed goal, reported apart from the score; `measure`: a number the check measured, see [Scoring by named checks](#scoring-by-named-checks)) |
 | `view` (with `view`) | `{connections: {part: info}, docs: {part: {key: doc}}}` | `{view: TwinView}`: the world's digital twin now ([The world's view](#the-worlds-view)) |
 
 - `instructions_title` is the heading over `instructions` in each agent's input; shaked uses
@@ -548,6 +550,42 @@ take the unix ms as it is. Between clocks, `now_ms` runs on at `speed` for at mo
 clock seen (a paused branch sends none), and never goes back. The Python kit keeps each instance's `WorldTime` from
 `start` (`Part.world_time(instance)`, None without one) and shows it every `call_tool` and `advance` clock.
 
+## World data
+
+A project world can carry its own start data: files in its folder (`worlds/<id>/`, uploaded in the world's Data
+section) that it marks "Every run starts from this" (`data: [{file, seeds?, default_state: true}]`). When an
+experiment on that world is deployed, shaked reads those files from the project's store, keeps them as a snapshot named
+after their digest, and gives every part of each run the same object in its `start` config, under the reserved key
+`world_data`:
+
+```json
+{"world_data": {"digest": "<sha256>", "dir": "/abs/path/of/the/snapshot", "world": "airline",
+                "files": [{"path": "data/db.json", "seeds": "airline", "size": 5318906, "sha256": "<sha256>"}]}}
+```
+
+- `files` are at their paths in the world's folder, under `dir`; `seeds` is the connector a file seeds, when the world
+  says. `dir` never changes once written: an edited file is a new digest and a new snapshot, so a run's forks start
+  from the data the run started from.
+- The benchmark gets the same object in `gold_actions` and `score` (`world_data` in their params), so its gold and its
+  checks start from the same data as the parts.
+- `digest` is part of each part's fingerprint as shaked records it (`RunStart.fingerprints[part].world_data`), and it
+  names the benchmark's base and gold saves (their version gets `-data-<digest12>`): saves, restores and forks never
+  mix two versions of the data, and an exact rerun of a run started on other data is refused (the part's recorded
+  config differs).
+- A package's `config_schema` must not use the key `world_data`. A world that marks no file gives no `world_data`,
+  and its runs start exactly as before. A part that ignores the key starts from its own data, as before.
+
+The kits read it: Rust `shakedown_part::world_data::WorldData::of(&config)` and Python
+`shakedown_part.worlddata.of(config)` give `digest`, `dir`, `world`, `files`, and `find(name)`, `path(name)`,
+`read_text(name)` and `read_json(name)` (a file by its path, or by its last segment when that is unique). In a Python
+benchmark, `self.world_data()` is the data of the `gold_actions` or `score` call in progress.
+
+Data files are JSON, CSV, YAML or text, at most 10 MiB each, the same on a local shaked (files in the project folder)
+and a hosted one (rows of its project store). Verified locally: `core/crates/shaked/tests/world_data.rs` (an upload
+reaches a run's parts, an edit is a new digest, the first run's snapshot stays). A hosted shaked refuses to deploy a
+world that has start data (409): its runs' sandboxes can't fetch the snapshot yet, and nothing is kept on the control
+box.
+
 ## Stepped clock
 
 A scenario may run on a stepped clock (`clock: {mode: stepped}`, see [concepts.md](concepts.md#stepped-clock)).
@@ -600,7 +638,8 @@ replay is refused when the `fingerprint` differs from the one recorded at the ru
 check (`shakedown-part-check`) tests this.
 
 So anything that changes how the part behaves must be in its `fingerprint` (its code, data files, the
-version of a program it drives) or checked at `start`: a `config` that points at other code or data than
+version of a program it drives; a world's own data is added by shaked, see [World data](#world-data)) or checked at
+`start`: a `config` that points at other code or data than
 `describe` hashed is refused with `-32003` there. shaked also refuses an exact rerun when a replayed part's
 `{integration, config}` in the benchmark's world differs from the one the run recorded.
 

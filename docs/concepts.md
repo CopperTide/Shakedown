@@ -39,9 +39,22 @@ lowercase letters, digits and dashes. Writes are atomic (in hosted Shakedown a c
 as a cascading delete or a group rename, is saved in one transaction); with `edit: diff_first` a put answers a diff
 and writes only when confirmed.
 
-**World data.** A file source in a world's `data` is a path in its data folder, `worlds/<id>/`. The world editor's Data
-section has a View button on each file source that shows the file (or the files of a folder) read-only: text up to
-1 MiB, or the size of a binary file. The same is `worlds.data` for MCP, the assistant and the API.
+**Runtimes.** A world runs on a **runtime**: an installed benchmark package (or a built world) whose parts are the
+systems agents work against, with its tasks and its scoring. The world names it in `package`. Runtimes are installed
+from **Build → Runtimes** (also from a world's Runtime section and Get started's world step): from a git URL, one folder
+of the repo if you like, or an uploaded `.zip`/`.tar.gz`; Shakedown installs their Python dependencies with uv, registers
+their packages and runs each package's conformance check. A runtime is code that runs on this machine. Details in
+[reference.md](reference.md#runtimes). A new world starts empty, from **New world** with a runtime picked; a
+scenario's task picker then lists that runtime's tasks.
+
+**World data.** A file source in a world's `data` is a path in its folder, `worlds/<id>/`. The world editor's Data
+section uploads files there (JSON, CSV, YAML or text, at most 10 MiB; `data/<name>`), replaces and deletes them, and
+views them: a JSON file of records as tables (a database's sections as tabs), where clicking a value changes it in the
+file at once; other files as text. A file marked **Every run starts from this** (`default_state: true`) is given to
+every part of each run as `world_data` ([protocol.md](protocol.md#world-data)), so an edit changes what the next run
+starts from, and the runs before keep the data they started on. The same is `worlds.data` (list, read),
+`worlds.data_put` (upload, or set one JSON value at a pointer) and `worlds.data_delete` for MCP, the assistant and the
+API. A world with no marked file runs as before, from its runtime's own data.
 
 **Groups.** A world's optional `group` is the name lists show it under, so the worlds of one customer sit together:
 the Worlds page lists groups A to Z, the worlds in no group last, and worlds by label within each. A file without `group` loads and saves exactly as before (the
@@ -90,9 +103,9 @@ the task, each event's `fault` and `params` become the package's disruptions, ea
 `chain`; a built-in agent's `key` becomes its provider `key:<name>`, and an `http` setup's `auth` becomes a
 reference the endpoint's requests are signed from), and `repeats.per_setup` and `budget.per_run_usd` become runs per setup and each run's spend limit (see [Spend limits](#spend-limits); in the app,
 the **Spend cap per run (USD)** field of New experiment and of the experiment's Settings tab, a positive number or empty
-for no cap). Until
-worlds run from their files alone, nothing else in the files reaches a run: a world's connectors, flows, data, people
-and observability; a scenario's `task` text (runs get the preset task's ticket), `changes`, `gates`, `checks` and each
+for no cap). The world's files marked "Every run starts from this" reach every part as `world_data` (see World data
+above). Nothing else in the files reaches a run yet: a world's connectors, flows, other data, people and
+observability; a scenario's `task` text (runs get the preset task's ticket), `changes`, `gates`, `checks` and each
 event's `at`, `after_calls` and `effects`; an experiment's `per_deployment_usd` (seeds are always paired). A `key` that is not stored, or is another
 member's and names its own server, refuses the deploy with a 400 that names it and the setup. An `auth` is checked the
 same way: `auth.key` must name one of your own stored keys of kind `custom` (a model provider key or a key shared with
