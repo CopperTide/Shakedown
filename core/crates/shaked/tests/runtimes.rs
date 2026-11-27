@@ -80,8 +80,8 @@ fn a_folder_of_a_repo_installs_its_packages_only_and_is_checked() {
         let (_, listed) = fx.get("/api/runtimes").await;
         let install = &listed["installs"][0];
         assert_eq!(
-            (install["id"].as_str(), install["source"].as_str()),
-            (Some("rta"), Some("git"))
+            (&install["id"], install["source"].as_str()),
+            (&done["id"], Some("git"))
         );
         assert_eq!(
             (install["path"].as_str(), install["runtime"].as_bool()),
@@ -91,7 +91,12 @@ fn a_folder_of_a_repo_installs_its_packages_only_and_is_checked() {
             install["packages"][0]["check"]["passed"], check["passed"],
             "{listed}"
         );
-        let (status, again) = fx.post("/api/runtimes/rta/check", json!({})).await;
+        let (status, again) = fx
+            .post(
+                &format!("/api/runtimes/{}/check", done["id"].as_str().unwrap()),
+                json!({}),
+            )
+            .await;
         assert_eq!(
             (status, again["checks"][0]["package"].as_str()),
             (200, Some("rta-part")),
