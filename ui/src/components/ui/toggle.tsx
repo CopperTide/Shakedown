@@ -1,6 +1,6 @@
 import { cn } from '@/lib/cn';
 
-/** An on/off switch: green when on. The label names it for screen readers and clicks. */
+/** An on/off switch: green when on, its light knob left when off and right when on. The label names it for screen readers and clicks. */
 export function Toggle({ checked, onChange, label, description, disabled }: {
   checked: boolean;
   onChange: (on: boolean) => void;
@@ -23,7 +23,7 @@ export function Toggle({ checked, onChange, label, description, disabled }: {
           checked ? 'border-ok bg-ok' : 'border-line-strong bg-sunken',
         )}
       >
-        <span className={cn('absolute top-0.5 size-3.5 rounded-full bg-surface shadow-panel transition-transform', checked ? 'translate-x-4' : 'translate-x-0.5')} />
+        <span className={cn('absolute left-0 top-0.5 size-3.5 rounded-full border border-line-strong bg-[#fbf8f3] shadow-panel transition-transform', checked ? 'translate-x-4' : 'translate-x-0.5')} />
       </button>
       <span className="grid gap-0.5">
         <span className="text-sm font-medium text-fg">{label}</span>

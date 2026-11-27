@@ -107,6 +107,8 @@
 
 ### Fixed
 
+- **Switches show their knob**: it sat off the right edge (the button centred it) and was dark on dark, so an on switch looked like a plain green pill.
+
 - **Creating a hosted project with git answers 400, not 500, and Get started no longer offers git there.**
   A project kept in a database cannot be tracked with git; `POST /api/project` with `git: true` now says so
   with a 400. `GET /api/project`'s 409 (no project yet) carries `folder`, whether a project made here is a
