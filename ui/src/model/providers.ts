@@ -8,6 +8,10 @@ export const MODE_LABEL: Record<AgentKind, string> = { claude_code: 'Claude Code
 /** A Bedrock provider (`bedrock:<region>`): shaked calls it with the machine's AWS credentials, and lists it nowhere. */
 export const isBedrock = (id: string | null | undefined) => !!id?.trim().startsWith('bedrock:');
 
+/** A saved key named as the provider (`key:<name>`, from Settings → Models): shaked resolves it when a run starts, and
+ * `/api/providers` lists it nowhere, so it is never "not configured" here. */
+export const isSavedKey = (id: string | null | undefined) => !!id?.trim().startsWith('key:');
+
 /** `bedrock:us-east-1` → `us-east-1`. */
 export const bedrockRegion = (id: string) => id.trim().slice('bedrock:'.length);
 
@@ -138,7 +142,8 @@ export function providerOptions(list: ProviderStatus[], current: string): Provid
     return { id: s.id, text, disabled: st === 'unavailable' && s.id !== current };
   });
   if (!list.some((s) => s.id === current)) {
-    const text = isBedrock(current) ? `Bedrock (${bedrockRegion(current)})` : list.length ? `${current} (not configured)` : providerName(current);
+    const text = isBedrock(current) ? `Bedrock (${bedrockRegion(current)})`
+      : isSavedKey(current) || !list.length ? providerName(current) : `${current} (not configured)`;
     out.push({ id: current, text, disabled: false });
   }
   return out;
@@ -148,6 +153,8 @@ export function providerOptions(list: ProviderStatus[], current: string): Provid
 export function modelProblem(provider: string, model: string | null | undefined, list: ProviderStatus[]): string | null {
   // Bedrock is listed nowhere: only a model is needed (Connect your agent tested the rest).
   if (isBedrock(provider)) return model?.trim() ? null : 'Name a model for Bedrock';
+  // A saved key is listed nowhere either: only a model is needed (the run's start checks the key is stored).
+  if (isSavedKey(provider)) return model?.trim() ? null : `Name a model for the ${providerName(provider)}`;
   return listedModelProblem(provider, model, list);
 }
 

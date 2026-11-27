@@ -132,6 +132,12 @@ describe('connected agents elsewhere in the UI', () => {
     expect(providerOptions([{ id: 'openrouter', kind: 'openrouter', label: 'OpenRouter', available: true, checked: true }], 'bedrock:us-east-1').at(-1))
       .toEqual({ id: 'bedrock:us-east-1', text: 'Bedrock (us-east-1)', disabled: false });
   });
+  it('a saved key named as the provider is ready with a model, as a deployed setup names it', () => {
+    const listed = [{ id: 'openrouter', kind: 'openrouter' as const, label: 'OpenRouter', available: true, checked: true }];
+    expect(modelProblem('key:openrouter', 'openai/gpt-6-luna', listed)).toBeNull();
+    expect(modelProblem('key:openrouter', '', listed)).toBe('Name a model for the openrouter key');
+    expect(providerOptions(listed, 'key:openrouter').at(-1)).toEqual({ id: 'key:openrouter', text: 'openrouter key', disabled: false });
+  });
   it('an HTTP agent cannot run with a lead dispatching', () => {
     expect(runnerProblem(team(http()), 'dispatch')).toContain("HTTP agent can't run with a lead dispatching");
     expect(runnerProblem(team(http()), 'chain')).toBeNull();
