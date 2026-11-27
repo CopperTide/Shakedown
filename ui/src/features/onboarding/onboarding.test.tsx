@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 // Get started: each step ticks itself off from live state, nothing is preselected, a project is
-// created only on a click, and the assistant opens with a question already written.
+// created only on a click, git is offered only for a folder, there is no skipping, and the
+// assistant opens with a question already written.
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -25,7 +26,8 @@ function mockFetch(project: { status: number; body: unknown }, providers: unknow
   }));
 }
 
-const NOT_A_PROJECT = { status: 409, body: { error: 'no project is open: this folder is not a Shakedown project (no shakedown.yaml)' } };
+const NOT_A_PROJECT = { status: 409, body: { error: 'no project is open: this folder is not a Shakedown project (no shakedown.yaml)', folder: true } };
+const NOT_IN_DB = { status: 409, body: { error: 'no project is open: this folder is not a Shakedown project (no shakedown.yaml)', folder: false } };
 const NOT_CONFIGURED = { status: 409, body: { error: 'no project is open: start shaked with SHAKEDOWN_PROJECT set to a project folder' } };
 const OPEN = { status: 200, body: { name: 'Larkspur Ops', counts: { worlds: 1, scenarios: 0, setups: 2, experiments: 0 }, problems: [] } };
 
@@ -58,6 +60,31 @@ describe('get started', () => {
     const name = await screen.findByLabelText('Project name');
     expect((name as HTMLInputElement).value).toBe('');
     expect(screen.getByRole('switch', { name: 'Track with git' }).getAttribute('aria-checked')).toBe('false');
+  });
+
+  it('git_hidden_when_not_a_folder', async () => {
+    mockFetch(NOT_IN_DB);
+    show();
+    fireEvent.change(await screen.findByLabelText('Project name'), { target: { value: 'Larkspur Ops' } });
+    expect(screen.queryByRole('switch', { name: 'Track with git' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Create project' }));
+    await waitFor(() => expect(posts.length).toBe(1));
+    expect(posts[0].body).toEqual({ name: 'Larkspur Ops', git: false });
+  });
+
+  it('no_skip', async () => {
+    mockFetch(NOT_A_PROJECT);
+    show();
+    await screen.findByLabelText('Project name');
+    expect(screen.queryByRole('link', { name: /skip/i })).toBeNull();
+  });
+
+  it('ready_waits_for_every_step', async () => {
+    mockFetch(OPEN);
+    show();
+    fireEvent.click(await screen.findByRole('button', { name: /Ready/ }));
+    expect(screen.getByText('Finish the steps above to open Shakedown.')).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'Create an experiment' })).toBeNull();
   });
 
   it('create_project_posts', async () => {

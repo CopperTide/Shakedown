@@ -1,8 +1,9 @@
-// Step 6: what is set up, the next thing to do, and Shakedown from an agent.
+// Step 6: what is set up, the next thing to do, and Shakedown from an agent. Until every step is
+// done the rest of Shakedown stays closed, so there is nothing to go on to yet.
 import { Check, Circle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import type { StepState } from './steps';
+import { coreDone, type StepState } from './steps';
 
 export default function StepReady({ steps }: { steps: StepState[] }) {
   return (
@@ -12,7 +13,9 @@ export default function StepReady({ steps }: { steps: StepState[] }) {
           <li key={s.id} className="flex items-center gap-2">{s.done ? <Check className="size-4 text-ok" /> : <Circle className="size-4 text-faint" />}{s.title}</li>
         ))}
       </ul>
-      <Button variant="primary" asChild className="justify-self-start"><Link to="/experiments/new">Create an experiment</Link></Button>
+      {coreDone(steps)
+        ? <Button variant="primary" asChild className="justify-self-start"><Link to="/experiments/new">Create an experiment</Link></Button>
+        : <p className="text-muted">Finish the steps above to open Shakedown.</p>}
       <p className="text-muted">Use Shakedown from Claude Code: <code className="font-mono">claude mcp add shakedown -- shaked mcp</code></p>
     </div>
   );

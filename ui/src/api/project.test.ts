@@ -20,6 +20,11 @@ describe('project client', () => {
 
   it('status_409_is_not_open', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: 'no project is open' }), { status: 409 })));
-    expect(await loadProject()).toEqual({ open: false, message: 'no project is open' });
+    expect(await loadProject()).toEqual({ open: false, message: 'no project is open', folder: false });
+  });
+
+  it('status_409_says_whether_projects_are_folders', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: 'no project is open', folder: true }), { status: 409 })));
+    expect(await loadProject()).toEqual({ open: false, message: 'no project is open', folder: true });
   });
 });

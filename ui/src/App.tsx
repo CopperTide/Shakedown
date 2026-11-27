@@ -3,6 +3,7 @@ import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-do
 import CommandPalette, { usePaletteShortcut } from './app/CommandPalette';
 import { type Mode, PALETTE_EVENT } from './app/palette';
 import AskDrawer from './features/assistant/AskDrawer';
+import OnboardingGate from './features/onboarding/gate';
 import AppShell from './features/shell/AppShell';
 import { PageBody, PageHeader } from './components/ui/page';
 import { EmptyState } from './components/ui/state';
@@ -113,13 +114,15 @@ export default function App() {
   }, []);
   return (
     <TooltipProvider delayDuration={300}>
-      {bare ? (
-        <><Suspense fallback={null}><GetStartedPage /></Suspense><AskDrawer /></>
-      ) : (
-        <AppShell onPalette={(m) => { setStart(m); setPalette(true); }}>
-          <AppRoutes />
-        </AppShell>
-      )}
+      <OnboardingGate>
+        {bare ? (
+          <><Suspense fallback={null}><GetStartedPage /></Suspense><AskDrawer /></>
+        ) : (
+          <AppShell onPalette={(m) => { setStart(m); setPalette(true); }}>
+            <AppRoutes />
+          </AppShell>
+        )}
+      </OnboardingGate>
       <CommandPalette open={palette} onOpenChange={setPalette} start={start} />
       <Toaster />
     </TooltipProvider>

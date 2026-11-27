@@ -1,8 +1,9 @@
 // Get started: from nothing to a first scenario, one step at a time. Each step ticks itself off
-// from what exists; nothing is filled in for you.
+// from what exists; nothing is filled in for you. There is no skipping: the rest of Shakedown opens
+// once the steps are done (see gate.tsx).
 import { Check } from 'lucide-react';
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { AccountMenu, useMe } from '@/app/AccountMenu';
 import { Mark } from '@/components/brand/Mark';
 import { useProject } from '@/hooks/useProject';
 import { useProviderList } from '@/hooks/useProviders';
@@ -28,29 +29,31 @@ function Rail({ steps, active, onSelect }: { steps: StepState[]; active: string;
   );
 }
 
-function Body({ id, steps, ctx }: { id: StepState['id']; steps: StepState[]; ctx: { stage: ReturnType<typeof stageOf>; name?: string; counts: Record<string, number>; providersOk: boolean; reload: () => void } }) {
+function Body({ id, steps, ctx }: { id: StepState['id']; steps: StepState[]; ctx: { stage: ReturnType<typeof stageOf>; name?: string; folder: boolean; counts: Record<string, number>; providersOk: boolean; reload: () => void } }) {
   switch (id) {
     case 'model': return <StepModel ready={ctx.providersOk} />;
     case 'world': return <StepItems kind="worlds" count={ctx.counts.worlds ?? 0} about="Your production systems before any agent: connectors, software flows and the data every run starts from." prompt="Draft a world for my systems. Here is what we run: " />;
     case 'agents': return <StepItems kind="setups" count={ctx.counts.setups ?? 0} about="The agent team you want to test: built-in agents, your own code, an endpoint, Claude Code or Codex. A MADL file gets the full graph." prompt="Set up an agent team that " />;
     case 'scenario': return <StepItems kind="scenarios" count={ctx.counts.scenarios ?? 0} about="An incident to replay. Paste a postmortem or a ticket and the assistant drafts the inputs, events and checks." prompt="Draft a scenario from this incident: " />;
     case 'ready': return <StepReady steps={steps} />;
-    default: return <StepProject stage={ctx.stage} name={ctx.name} onCreated={ctx.reload} />;
+    default: return <StepProject stage={ctx.stage} name={ctx.name} folder={ctx.folder} onCreated={ctx.reload} />;
   }
 }
 
 export default function GetStartedPage() {
   const project = useProject();
+  const me = useMe();
   const providers = useProviderList();
   const [active, setActive] = useState<StepState['id']>('project');
   const open = project.data?.open ? project.data.status : null;
-  const stage = stageOf(!!open, project.data && !project.data.open ? project.data.message : undefined);
-  const ctx = { stage, name: open?.name, counts: open?.counts ?? {}, providersOk: providers.list.some((p) => p.available), reload: project.reload };
+  const closed = project.data && !project.data.open ? project.data : undefined;
+  const stage = stageOf(!!open, closed?.message);
+  const ctx = { stage, name: open?.name, folder: !!closed?.folder, counts: open?.counts ?? {}, providersOk: providers.list.some((p) => p.available), reload: project.reload };
   const steps = stepStates({ project: stage, counts: ctx.counts, providersOk: ctx.providersOk });
   const current = steps.find((s) => s.id === active);
   return (
     <div className="min-h-full bg-bg">
-      <header className="flex items-center gap-2 border-b border-line px-7 py-3"><Mark /><span className="font-display text-lg">Shakedown</span><span className="flex-1" /><Link to="/" className="text-sm text-muted hover:text-fg">Skip for now</Link></header>
+      <header className="flex items-center gap-2 border-b border-line px-7 py-3"><Mark /><span className="font-display text-lg">Shakedown</span><span className="flex-1" /><AccountMenu me={me} /></header>
       <div className="mx-auto grid max-w-5xl gap-10 px-7 py-10 md:grid-cols-[240px_minmax(0,1fr)]">
         <Rail steps={steps} active={active} onSelect={setActive} />
         <main><h1 className="mb-6 font-display text-[34px] leading-tight">{current?.title}</h1><Body id={active} steps={steps} ctx={ctx} /></main>

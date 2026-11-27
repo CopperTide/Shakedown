@@ -6,6 +6,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '@/App';
 import { forgetShared } from '@/hooks/query';
+import { resetProviders } from '@/hooks/useProviders';
 import Sidebar from './Sidebar';
 import TopBar, { ASK_EVENT } from './TopBar';
 
@@ -21,7 +22,7 @@ function mockFetch(answers: Record<string, unknown>) {
   }));
 }
 
-beforeEach(() => { fetched.length = 0; forgetShared(); });
+beforeEach(() => { fetched.length = 0; forgetShared(); resetProviders(); });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 describe('shell', () => {
@@ -59,7 +60,8 @@ describe('shell', () => {
   });
 
   it('old_routes_still_resolve', async () => {
-    mockFetch({ '/api/project': null });
+    const counts = { worlds: 1, scenarios: 1, setups: 1, experiments: 0 };
+    mockFetch({ '/api/project': { name: 'P', counts, problems: [] }, '/api/providers': [{ id: 'anthropic', available: true }] });
     render(<MemoryRouter initialEntries={['/experiments/abc']}><App /></MemoryRouter>);
     await waitFor(() => expect(fetched.some((u) => u.endsWith('/api/experiments/abc'))).toBe(true));
   });

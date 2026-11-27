@@ -75,8 +75,9 @@ In a second terminal, start the web UI:
 cd ui && npm install && npm run dev               # UI on http://127.0.0.1:4520, proxying /api to :4510
 ```
 
-Open <http://127.0.0.1:4520> and follow **Get started** at the bottom of the sidebar. It creates the project,
-connects a model, and walks you through a world (runtime `retail`), an agent setup and a scenario. Then
+Open <http://127.0.0.1:4520>: it opens on **Get started**, and the rest of the app opens once its steps are done.
+It creates the project, connects a model, and walks you through a world (runtime `retail`), an agent setup and a
+scenario. Then
 **Experiments → New experiment** and **Deploy**. Click any run to read its timeline. A run's **⋯** menu rewinds
 it to a step and reruns it with a change. The [user guide's quickstart](https://docs.coppertide.ai/quickstart)
 has every step.

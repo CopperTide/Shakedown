@@ -25,6 +25,10 @@
 
 ### Added
 
+- **Get started can't be skipped.** Until a project, a model, a world, agents and a first scenario exist (read
+  from shaked, never the browser), every page sends you to Get started; **Ready** opens the rest. Connections &
+  models, the item editors the steps open and the account menu stay reachable meanwhile. "Skip for now" is gone.
+
 - **Switch runs from the run page, and compare three or more.** A run of an experiment has a folded switcher under
   its header: hop to the previous or next run, or open it for every setup's runs and this run's reruns. Tick
   runs there and **Compare** opens `/compare?branches=a,b,c`: a column per run with the best of each row in
@@ -102,6 +106,11 @@
   suite, an experiment, a suite's claim) is admitted and metered through it.
 
 ### Fixed
+
+- **Creating a hosted project with git answers 400, not 500, and Get started no longer offers git there.**
+  A project kept in a database cannot be tracked with git; `POST /api/project` with `git: true` now says so
+  with a 400. `GET /api/project`'s 409 (no project yet) carries `folder`, whether a project made here is a
+  folder on disk, and **Track with git** shows only when it is.
 
 - **←/→ and the step buttons stay on the selected agent's lane**: they go to that agent's previous or next step, not the next step by anyone. ↑/↓ still move through every step in order, and the buttons say whose steps they move through (‹ Planner · 4 of 37 ›).
 

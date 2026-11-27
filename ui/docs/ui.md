@@ -10,6 +10,15 @@ secondary metadata lines, few borders, plenty of whitespace.
 - **Top bar** (`app/TopBar.tsx`): the wordmark, **Experiments** and **Runs**, and one **⋯** with Run
   once, Compare two runs, World view of a run, the Team editor, AI review on or off, the command
   palette, the theme and which Shakedown core is in use.
+- **Get started** (`/get-started`, `features/onboarding/`): the steps from nothing to a first scenario: your
+  project, a model, a world, agents and a first scenario, each ticked off from what shaked says exists
+  (`steps.ts`), then **Ready**. There is no skipping: until the five are done, the gate (`gate.tsx`, around
+  every page in `App.tsx`) sends any other page here. It reads `GET /api/project` and `/api/providers` again
+  on each navigation while shut, never browser storage; a failed read opens it rather than lock you out.
+  Open while shut: Get started, **Connections & models** (`/settings/models`, `/settings/tokens`) and the
+  item editors a step opens (`/worlds/:id`, `/scenarios/:id`, `/setups/:id`, so also `/worlds/new`). The
+  header has the account menu, so a hosted user can still sign out. **Track with git** shows only where a
+  project is a folder on disk (`folder` in the no-project answer); hosted projects live in a database.
 - **Experiments** (`/experiments`, `features/experiments/ExperimentsListPage.tsx`): every experiment file,
   sub-experiments under their parent; each row the name (with any problems), whether it ran
   (`features/experiments/runStatus.ts`, read from each experiment's deployments: ■ Has results, ◐ Running,

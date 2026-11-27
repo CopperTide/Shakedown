@@ -23,3 +23,6 @@ export function stepStates({ project, counts, providersOk }: { project: ProjectS
   ];
   return [...steps, { id: 'ready', title: 'Ready', done: steps.every((s) => s.done) }];
 }
+
+/** Whether every step before Ready is done: what opens the rest of Shakedown. */
+export const coreDone = (steps: StepState[]) => steps.every((s) => s.id === 'ready' || s.done);
