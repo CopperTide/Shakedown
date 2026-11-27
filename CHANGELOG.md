@@ -73,6 +73,11 @@
 
 ### Fixed
 
+- **Compare shows only the rows the two runs have.** The outcome table read a fixed list from one
+  world (valid plan, orders on time, transport cost), so other worlds' runs showed rows of "–".
+  Its rows now come from the runs: checks passed, safety violations when a check is a safety one, a
+  row per figure a check measured (Total cost, Late orders, ...), the twin's KPIs when there is a
+  twin, agent cost, and escalations when an agent asked for approval.
 - **Claude Code, Codex and the AI reviewer get an allowlisted environment.** Of shaked's
   environment they now get only `PATH`, `HOME`, `USER`, `LOGNAME`, `SHELL`, `LANG`, `LC_*`, `TERM`,
   `TZ`, `TMPDIR`, `XDG_*`, `SSL_CERT_FILE`, `SSL_CERT_DIR`, `NODE_EXTRA_CA_CERTS` and their own

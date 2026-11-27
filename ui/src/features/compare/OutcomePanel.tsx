@@ -18,7 +18,7 @@ function Row({ r }: { r: OutcomeRow }) {
       <th scope="row" className="py-2 pr-3 pl-4 text-left text-sm font-medium" title={r.hint}>{r.label}</th>
       <td className="px-2 py-2"><Value f={r.a} better={v === 'a'} /></td>
       <td className="px-2 py-2"><Value f={r.b} better={v === 'b'} /></td>
-      <td className="py-2 pr-4 pl-2 text-right text-xs whitespace-nowrap text-muted">{v ? `${v.toUpperCase()} better` : 'same'}</td>
+      <td className="py-2 pr-4 pl-2 text-right text-xs whitespace-nowrap text-muted">{v ? `${v.toUpperCase()} better` : r.a.text === r.b.text ? 'same' : ''}</td>
     </tr>
   );
 }

@@ -1,5 +1,7 @@
 // The compare page's outcome table: what each branch achieved, read from what the API already
-// returns (the check's named checks, the metrics, the events and the last view of the twin).
+// returns (the check's named checks and what they measured, the metrics, the events and the last
+// view of the twin). The rows are the ones either branch has: no world's figures are built in.
+import { measureText } from '@/features/experiments/measures';
 import { costLabel } from '@/features/run/timeline';
 import { usd as dollars } from '@/lib/format';
 import { viewsFromEvents } from '@/features/world/twin';
@@ -17,11 +19,12 @@ export interface Figure {
 }
 
 export interface OutcomeRow {
-  id: 'valid' | 'safety' | 'on_time' | 'transport' | 'agent_cost' | 'escalations';
+  /** Stable per row: `checks`, `safety`, `measure:<check>`, `kpi:<id>`, `agent_cost` or `escalations`. */
+  id: string;
   label: string;
   hint: string;
-  /** Which way is better, for the verdict. */
-  better: 'higher' | 'lower';
+  /** Which way is better, for the verdict; null when neither is (a count, a twin's figure). */
+  better: 'higher' | 'lower' | null;
   a: Figure;
   b: Figure;
 }
@@ -35,16 +38,15 @@ export function namedChecks(events: Event[]): { passed: boolean; checks: NamedCh
   return { passed: !!check.passed, checks: Array.isArray(check.checks) ? check.checks : [] };
 }
 
-/** "✓ valid 9/9" when every goal check (the non-safety ones) passed. */
-export function validPlan(events: Event[]): Figure {
+/** "✓ 9/9" when every goal check (the non-safety ones) passed, "✕ 8/9" when one failed. */
+export function checksPassed(events: Event[]): Figure {
   const c = namedChecks(events);
   if (!c) return { ...NONE, text: 'not scored' };
   const goals = c.checks.filter((x) => !x.safety);
-  if (!goals.length) return { text: c.passed ? '✓ valid' : '✕ not valid', value: c.passed ? 1 : 0, abnormal: !c.passed };
+  if (!goals.length) return { text: c.passed ? '✓ passed' : '✕ failed', value: c.passed ? 1 : 0, abnormal: !c.passed };
   const ok = goals.filter((x) => x.passed).length;
   const failed = goals.filter((x) => !x.passed).map((x) => x.name);
-  const valid = ok === goals.length;
-  return { text: `${valid ? '✓ valid' : '✕ not valid'} ${ok}/${goals.length}`, value: valid ? 1 : 0, abnormal: !valid, title: failed.length ? `Failed: ${failed.join(', ')}` : undefined };
+  return { text: `${failed.length ? '✕' : '✓'} ${ok}/${goals.length}`, value: ok / goals.length, abnormal: failed.length > 0, title: failed.length ? `Failed: ${failed.join(', ')}` : undefined };
 }
 
 /** "◆ 1 of 4" safety checks violated. */
@@ -70,16 +72,18 @@ export function leadingNumber(s: string): number | null {
 }
 
 /** A KPI of the twin as a figure; "–" when the twin has none of that id. */
-function kpiFigure(view: TwinView | null, id: string): Figure {
+export function kpiFigure(view: TwinView | null, id: string): Figure {
   const k = kpi(view, id);
   return k ? { text: k.value, value: leadingNumber(k.value), abnormal: k.abnormal } : NONE;
 }
 
-/** Orders on time: the twin's `orders_covered` (orders whose booking arrives by their due date). */
-export const ordersOnTime = (view: TwinView | null): Figure => kpiFigure(view, 'orders_covered');
-
-/** Transport cost: the twin's `transport_cost` (the shipments booked). */
-export const transportCost = (view: TwinView | null): Figure => kpiFigure(view, 'transport_cost');
+/** What check `name` measured in the branch, as a figure (abnormal when the check failed); "–" when it measured nothing. */
+export function measureFigure(events: Event[], name: string): Figure {
+  const check = namedChecks(events)?.checks.find((c) => c.name === name);
+  const m = check?.measure;
+  if (!m) return NONE;
+  return { text: measureText(m.value, m.unit ?? ''), value: m.value, abnormal: !check.passed, title: check.detail || undefined };
+}
 
 /**
  * What the agents cost as they reported it: the branch's own agent ends (their `cost_usd`), else
@@ -110,23 +114,59 @@ type Spec = Pick<OutcomeRow, 'id' | 'label' | 'hint' | 'better'> & { of: (s: Sid
 
 const viewOf = (s: SideInput) => (s.view === undefined ? lastView(s.detail.events) : s.view);
 
-const SPECS: Spec[] = [
-  { id: 'valid', label: 'Valid plan', hint: 'every goal check passes', better: 'higher', of: (s) => validPlan(s.detail.events) },
-  { id: 'safety', label: 'Safety violations', hint: 'safety checks failed', better: 'lower', of: (s) => safetyViolations(s.detail.events) },
-  { id: 'on_time', label: 'Orders on time', hint: 'the twin at the end', better: 'higher', of: (s) => ordersOnTime(viewOf(s)) },
-  { id: 'transport', label: 'Transport cost', hint: 'shipments booked', better: 'lower', of: (s) => transportCost(viewOf(s)) },
-  { id: 'agent_cost', label: 'Agent cost', hint: 'as the agents reported it', better: 'lower', of: (s) => agentCost(s.side) },
-  { id: 'escalations', label: 'Escalations', hint: 'approval requests', better: 'lower', of: (s) => escalations(s.detail.events) },
-];
+const CHECKS: Spec = { id: 'checks', label: 'Checks passed', hint: 'the goal checks (not safety) that passed', better: 'higher', of: (s) => checksPassed(s.detail.events) };
+const SAFETY: Spec = { id: 'safety', label: 'Safety violations', hint: 'safety checks failed', better: 'lower', of: (s) => safetyViolations(s.detail.events) };
+const AGENT_COST: Spec = { id: 'agent_cost', label: 'Agent cost', hint: 'as the agents reported it', better: 'lower', of: (s) => agentCost(s.side) };
+const ESCALATIONS: Spec = { id: 'escalations', label: 'Escalations', hint: 'approval requests', better: 'lower', of: (s) => escalations(s.detail.events) };
+
+/** A row per figure a check measured in either branch, in the order the checks first appear. */
+function measureSpecs(checks: NamedCheck[]): Spec[] {
+  const seen = new Map<string, Spec>();
+  for (const c of checks) {
+    if (!c.measure || seen.has(c.name)) continue;
+    const { label, better } = c.measure;
+    seen.set(c.name, { id: `measure:${c.name}`, label, hint: c.name, better: better ?? null, of: (s) => measureFigure(s.detail.events, c.name) });
+  }
+  return [...seen.values()];
+}
+
+/** A row per KPI either branch's twin shows at the end (a twin's figure says no better way). */
+function kpiSpecs(views: (TwinView | null)[]): Spec[] {
+  const seen = new Map<string, Spec>();
+  for (const k of views.flatMap((v) => v?.kpis ?? [])) {
+    if (seen.has(k.id)) continue;
+    seen.set(k.id, { id: `kpi:${k.id}`, label: k.label, hint: 'the twin at the end', better: null, of: (s) => kpiFigure(viewOf(s), k.id) });
+  }
+  return [...seen.values()];
+}
+
+/**
+ * The rows the two branches have: their checks (passed, safety, each figure a check measured), the
+ * KPIs of their twins, what the agents cost and, when an agent asked for approval, the escalations.
+ */
+function specsOf(a: SideInput, b: SideInput): Spec[] {
+  const sides = [a, b];
+  const scored = sides.map((s) => namedChecks(s.detail.events));
+  const checks = scored.flatMap((c) => c?.checks ?? []);
+  const asked = sides.some((s) => (escalations(s.detail.events).value ?? 0) > 0);
+  return [
+    ...(scored.some(Boolean) ? [CHECKS] : []),
+    ...(checks.some((c) => c.safety) ? [SAFETY] : []),
+    ...measureSpecs(checks),
+    ...kpiSpecs(sides.map(viewOf)),
+    AGENT_COST,
+    ...(asked ? [ESCALATIONS] : []),
+  ];
+}
 
 export function outcomeRows(a: SideInput, b: SideInput): OutcomeRow[] {
-  return SPECS.map(({ of, ...spec }) => ({ ...spec, a: of(a), b: of(b) }));
+  return specsOf(a, b).map(({ of, ...spec }) => ({ ...spec, a: of(a), b: of(b) }));
 }
 
 /** Which side did better on a row, or null when equal or not comparable. */
 export function verdict(row: OutcomeRow): 'a' | 'b' | null {
   const { a, b } = row;
-  if (a.value == null || b.value == null || a.value === b.value) return null;
+  if (!row.better || a.value == null || b.value == null || a.value === b.value) return null;
   const bHigher = b.value > a.value;
   return (row.better === 'higher') === bHigher ? 'b' : 'a';
 }

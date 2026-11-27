@@ -248,11 +248,13 @@ Logic lives in pure modules with tests, and components only render. For example:
 - **Scenario builder** (`scenario/`). On Run once and New experiment as a picker, from the benchmark's
   `scenario_options` (`GET /api/benchmark`): a toggle and parameters per disruption (label and
   description filled with them, as shaked fills the template), and a plain-words preview.
-- **Outcome comparison** (`compare/`). Under What matters on the compare page: valid plan, safety
-  violations, orders on time and transport cost (the twin's `orders_covered` and `transport_cost`
-  KPIs at the end), agent cost (as the agents reported it, labelled reported, and illustrative for
-  scripted usage) and escalations for both branches (what each row means is its tooltip); the
-  divergence strip on one step axis is under Details. World
+- **Outcome comparison** (`compare/`). Under What matters on the compare page, the rows the two
+  branches have, for both: checks passed (the goal checks), safety violations (when a check is a
+  safety one), a row per figure a check measured (its label and unit, better side by the measure's
+  `better`), a row per KPI of the twin at the end (no better side), agent cost (as the agents
+  reported it, labelled reported, and illustrative for scripted usage) and escalations (when an
+  agent asked for approval). No world's figures are built in, so a row neither branch has never
+  shows; what each row means is its tooltip. The divergence strip on one step axis is under Details. World
   views are not steps: the timeline, run figures, process view and divergence skip them.
 - **Fixtures.** A build with `VITE_SHAKEDOWN_FIXTURES=1` answers `/api` from the pharma fixtures
   (`dev/fixtureApi.ts`), for screenshots without shaked.

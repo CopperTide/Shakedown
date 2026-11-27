@@ -17,9 +17,9 @@ describe('outcome panel', () => {
       <MemoryRouter><OutcomePanel a={{ detail: v1Detail, side: comparison.a }} b={{ detail: v2Detail, side: comparison.b }} /></MemoryRouter>,
     );
     const html = text(raw);
-    expect(html).toContain('Valid plan ✕ not valid 8/9 ✓ valid 9/9 B better');
+    expect(html).toContain('Checks passed ✕ 8/9 ✓ 9/9 B better');
     expect(html).toContain('Escalations 3 3 same');
-    expect(raw).toContain('title="every goal check passes"');
+    expect(raw).toContain('title="the goal checks (not safety) that passed"');
     expect(html).toContain('Demo: Coordinated team v2');
     expect(html).not.toContain('first divergence');
   });
