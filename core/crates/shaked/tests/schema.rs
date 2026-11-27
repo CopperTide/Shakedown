@@ -74,7 +74,7 @@ fn a_fresh_database_has_only_shakedown_s_schemas() {
                          FROM schema_meta.migrations";
         assert_eq!(
             rows(&name, history).await,
-            ["shakedown 1,shakedown 2,shakedown 3,shakedown 4,shakedown 5,shakedown 6,shakedown 7,shakedown 8,shakedown 9"]
+            ["shakedown 1,shakedown 2,shakedown 3,shakedown 4,shakedown 5,shakedown 6,shakedown 7,shakedown 8,shakedown 9,shakedown 10"]
         );
     })
 }

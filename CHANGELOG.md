@@ -25,6 +25,12 @@
 
 ### Added
 
+- **Tables for a project's state (internal; nothing reads them yet).** Migration shakedown 10 adds `projects`,
+  `project_scenarios`, `project_setups`, `project_setup_files`, `project_experiments`, `project_changes`,
+  `project_change_items` and `project_imports`, plus `experiments.project_experiment_id`. Each item's row keeps its
+  file's contents as JSON, with a revision so a stale write is refused, and a delete only marks the row. The store
+  reads and writes them (`store/project_items.rs`, `store/project_history.rs`). Projects still live in their folder.
+
 - **Get started can't be skipped.** Until a project, a model, a world, agents and a first scenario exist (read
   from shaked, never the browser), every page sends you to Get started; **Ready** opens the rest. Connections &
   models, the item editors the steps open and the account menu stay reachable meanwhile. "Skip for now" is gone.

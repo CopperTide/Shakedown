@@ -22,6 +22,7 @@ migrations on top (`tests/no_orgs.rs` keeps the engine free of them).
 | `src/store/tx.rs` | `Tx`: `BEGIN` then the layer's `begin` hook. Dropped without commit, its connection closes. |
 | `src/store/runs.rs`, `events.rs`, `linked.rs`, `control.rs` | Runs and branches, the event log, worker events, rules and holds. |
 | `src/store/{suites,experiments,reviews,connections,provider_keys,api_tokens,run_tokens,saves}.rs` | The other tables, one file each. |
+| `src/store/project_items.rs`, `project_history.rs` | A project's state (shakedown 10): settings and items with a revision check per row; changes and import records. Nothing reads them yet. |
 | `src/model.rs`, `src/model/` | `Event`, `EventKind`, `Branch`, `RunSummary`, `Team`, `AgentSpec`, `Change`, `Rules`, `Runner`, `BranchStatus`. `hold.rs`, `team.rs`, `agent_in.rs`, `payloads.rs`. |
 
 ## Migrations
@@ -34,6 +35,7 @@ migrations on top (`tests/no_orgs.rs` keeps the engine free of them).
 | 4 | `0004_event_link_n.sql` | `events.link_n` and the unique partial index `(branch_id, link_n) WHERE link_n IS NOT NULL`. |
 | 5 | `0005_branch_rules_hold.sql` | `branches.rules`, `branches.hold` (`paused`, `stopping`, `budget_exceeded`), `branches.paused_at`. |
 | 6 | `0006_observability.sql` | Tables `observability_targets` (headers sealed, `header_names` listed) and `observability_exports` (one row per target and branch: state, attempts, next try). See [observability](observability.md). |
+| 10 | `0010_project_state.sql` | A project's state in tables: `projects`, `project_scenarios`, `project_setups`, `project_setup_files`, `project_experiments`, `project_changes`, `project_change_items`, `project_imports`; `experiments.project_experiment_id`. See [project state tables](#project-state-tables). |
 
 How they are applied (`core/crates/shakedown-schema/src/lib.rs`, `migrator.rs`):
 
@@ -174,6 +176,33 @@ What each table is for, and who writes it:
 | `reviews` | `store/reviews.rs` | One row per subject, kept until asked again. |
 | `connections` | `store/connections.rs` | Code connections. |
 
+## Project state tables
+
+Migration 10 makes the tables a project's state moves into (plan `2026-11-27-project-state-in-databases`). In this
+release nothing reads them: projects still live in their folder, or in a hosting layer's files.
+
+- `projects` holds `shakedown.yaml` in typed columns. The store reads and writes it as a `ProjectFile`.
+- `project_scenarios`, `project_setups` and `project_experiments` hold each item's `body`: the item exactly as its
+  file says, `format:` included. Generated columns (`label`, `world`, `scenario`, `parent`, `team_kind`) are there
+  for lists.
+  - References between items stay names inside `body`, with no foreign keys, so export and import round-trip.
+  - A slug is unique among a project's live items. A delete sets `deleted_at` and frees the slug.
+- Every write names the `revision` it read. When the row has moved past it, the write is refused with `Stale`, and
+  a duplicate slug is refused with `SlugTaken`.
+- `project_changes` and `project_change_items` hold the undo history, and will replace `.shakedown/trash`. Each item
+  keeps a row's body before and after (with the revision the change left), or a file's bytes.
+- `project_imports` holds one record per git import, and will replace `import.json`. A re-import replaces it.
+- A local shaked will keep scenarios and setups as files, so their tables stay empty there. A hosting layer keeps
+  them as rows, and adds its own columns and keys on top.
+
+```text
+Scoped::put_project_item ─► in_tx ─► put_item_in ─► INSERT, or UPDATE … WHERE revision = base
+                                                     ├─ no row ─────────► Stale { based_on, current }
+                                                     └─ unique violation ► SlugTaken
+```
+
+The `_in` functions take an open `Tx`, so a later change set can write several rows in one transaction.
+
 ## How an event is written
 
 ```mermaid
@@ -272,6 +301,7 @@ without a reader for the old shape.
 | `core/crates/shakedown-schema/tests/files.rs`, `migrate.rs` | File names, headers, the contract rule, applying and checksums. |
 | `tests/schema.rs` | shaked's database after migration. |
 | `tests/store.rs`, `tests/records.rs` | Store records, order of appends. |
+| `tests/project_items.rs` | Project settings and items: revision checks, slugs, soft deletes, changes, import records. |
 | `src/model/payloads/tests.rs` | Payload JSON, written and read back byte for byte. |
 | `tests/no_orgs.rs` | No owner columns or org code in the open-source engine. |
 | `tests/objects.rs` | Object stores and `shaked store copy`. |

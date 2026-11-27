@@ -128,6 +128,10 @@ pub const BASE_FILES: Files = Files {
             "0009_explore.sql",
             include_str!("../migrations/shakedown/0009_explore.sql"),
         ),
+        (
+            "0010_project_state.sql",
+            include_str!("../migrations/shakedown/0010_project_state.sql"),
+        ),
     ],
     also_accept: &[],
 };
