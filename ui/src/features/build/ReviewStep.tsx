@@ -3,8 +3,8 @@ import { CodeBlock } from '@/components/ui/code-block';
 import { Panel, PanelHeader } from '@/components/ui/panel';
 import type { Preview, TemplateForm } from '@/model/world';
 import { type Draft, keptRoles, memoryLine } from './builder';
+import { plural } from '@/lib/plural';
 
-const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 function Row({ term, children }: { term: string; children: ReactNode }) {
   return <><dt className="text-xs text-muted">{term}</dt><dd className="text-sm">{children}</dd></>;

@@ -6,6 +6,7 @@ import type { CheckRate, RunRow, SetupReport } from '@/model/report';
 import { runLine } from '@/model/summary';
 import { withRules } from '@/model/team';
 import type { Team } from '@/model/types';
+import { plural } from '@/lib/plural';
 
 export type RunState = 'passed' | 'failed' | 'running' | 'queued' | 'pending' | 'unscored';
 
@@ -69,7 +70,6 @@ function stateOf(r: RunRow): RunState {
   return LIVE.has(r.status) ? 'running' : 'unscored';
 }
 
-const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 const STATE_WORD: Record<RunState, string> = { passed: 'Passed', failed: 'Failed', running: 'Running', queued: 'Queued for a cloud slot', pending: 'Not run yet', unscored: 'Not scored' };
 

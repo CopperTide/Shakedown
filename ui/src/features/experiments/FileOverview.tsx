@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Card } from '@/components/ui/card';
 import { usd } from '@/lib/format';
 import type { ExperimentBody, Problem } from '@/model/project';
+import { plural } from '@/lib/plural';
 
 /** Setups, repeats, budget and parent of a file experiment, with any problems in its file. */
 export default function FileOverview({ body, labels, problems }: {
@@ -24,7 +25,7 @@ export default function FileOverview({ body, labels, problems }: {
           </ul>
         </Card>
       )}
-      <Card title="Setups" description={`${body.repeats.per_setup} runs each${body.repeats.paired_seeds === false ? '' : ', paired seeds'}`} footer={<span>{total} runs</span>}>
+      <Card title="Setups" description={`${plural(body.repeats.per_setup, 'run')} each${body.repeats.paired_seeds === false ? '' : ', paired seeds'}`} footer={<span>{plural(total, 'run')}</span>}>
         <ul className="divide-y divide-line">
           {body.setups.map((s) => (
             <li key={s} className="px-[18px] py-2.5 text-sm font-medium">{labels[s] ?? s}</li>

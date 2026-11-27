@@ -272,7 +272,7 @@ fn listening_line(
     ui: Option<&std::path::Path>,
 ) -> String {
     let none = match state.store.layer().policy().runs_packages_here {
-        true => "none installed yet: install a runtime from the Runtimes page",
+        true => "none chosen: each world names its runtime, installed from the Runtimes page",
         false => "none (packages run in sandboxes)",
     };
     let bench = bench.map_or(none.to_string(), |b| format!("{} {}", b.name, b.version));

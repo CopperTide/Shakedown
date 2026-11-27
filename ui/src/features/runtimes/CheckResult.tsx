@@ -2,14 +2,14 @@
 import type { RuntimeCheck } from '@/api/runtimes';
 import { cn } from '@/lib/cn';
 
-/** "Passed" / "Failed" with the first failing step, the steps behind a disclosure. */
-export default function CheckResult({ check }: { check: RuntimeCheck }) {
+/** "Passed" / "Failed" with the first failing step (and the package, when `named`), the steps behind a disclosure. */
+export default function CheckResult({ check, named = true }: { check: RuntimeCheck; named?: boolean }) {
   const failed = check.steps.find((s) => !s.ok);
   return (
     <details className="text-xs">
       <summary className="cursor-pointer">
         <span className={cn('font-medium', check.passed ? 'text-ok' : 'text-alarm')}>{check.passed ? 'Check passed' : 'Check failed'}</span>
-        <span className="text-muted"> · {check.package}{failed ? ` · ${failed.name}: ${failed.detail}` : ''}</span>
+        <span className="text-muted">{named ? ` · ${check.package}` : ''}{failed ? ` · ${failed.name}: ${failed.detail}` : ''}</span>
       </summary>
       <ul className="mt-1 grid gap-0.5 pl-3">
         {check.steps.map((s) => (

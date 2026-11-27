@@ -28,15 +28,15 @@ function UsedBy({ worlds }: { worlds: string[] }) {
 function PackageRows({ packages }: { packages: RuntimePackage[] }) {
   return (
     <table className="w-full text-sm">
-      <thead><tr className="text-left text-2xs text-muted"><th className="px-[18px] py-1.5 font-medium">Package</th><th className="font-medium">Kind</th><th className="font-medium">Version</th><th className="font-medium">Runs</th><th className="pr-[18px] font-medium">Check</th></tr></thead>
+      <thead><tr className="text-left text-2xs text-muted"><th className="px-[18px] py-1.5 font-medium">Package</th><th className="pr-4 font-medium">Kind</th><th className="pr-4 font-medium">Version</th><th className="pr-4 font-medium">Worlds</th><th className="pr-[18px] font-medium">Check</th></tr></thead>
       <tbody className="divide-y divide-line">
         {packages.map((p) => (
           <tr key={p.name} className="align-top">
             <td className="px-[18px] py-2 font-mono text-xs">{p.name}{p.registered === false && <span className="ml-1 text-warn">(not registered)</span>}</td>
-            <td className="py-2 text-muted">{p.kind}</td>
-            <td className="py-2 font-mono text-xs text-muted">{p.version ?? '—'}</td>
-            <td className="py-2"><UsedBy worlds={p.used_by} /></td>
-            <td className="py-2 pr-[18px]">{p.check ? <CheckResult check={p.check} /> : <span className="text-xs text-faint">not checked</span>}</td>
+            <td className="py-2 pr-4 text-muted">{p.kind}</td>
+            <td className="py-2 pr-4 font-mono text-xs text-muted">{p.version ?? '—'}</td>
+            <td className="py-2 pr-4"><UsedBy worlds={p.used_by} /></td>
+            <td className="py-2 pr-[18px]">{p.check ? <CheckResult check={p.check} named={false} /> : <span className="text-xs text-faint">not checked</span>}</td>
           </tr>
         ))}
       </tbody>

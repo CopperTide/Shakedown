@@ -7,9 +7,7 @@ import { Dialog, DialogActions, DialogContent } from '@/components/ui/dialog';
 import { errorMessage } from '@/lib/errors';
 import { usd } from '@/lib/format';
 import type { ExperimentBody } from '@/model/project';
-
-/** `n thing`, or `n things` when n is not 1. */
-const plural = (n: number, thing: string) => `${n} ${thing}${n === 1 ? '' : 's'}`;
+import { plural } from '@/lib/plural';
 
 export default function DeployDialog({ id, body, onDeployed }: { id: string; body: ExperimentBody; onDeployed: () => void }) {
   const [open, setOpen] = useState(false);
