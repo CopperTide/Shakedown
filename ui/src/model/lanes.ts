@@ -4,6 +4,7 @@
 // interlock.
 import { asRecord } from '@/lib/record';
 import { type Action, type Outcome, actionWord, classify, kindWord, worldInfo } from './actions';
+import { replyOf } from './prose';
 import type { Effect } from './report';
 import type { Event, Team } from './types';
 
@@ -15,7 +16,7 @@ export interface TimelineMark {
   kind: MarkKind;
   /** What the mark says: "ERP write", "message → quality", "model call". */
   label: string;
-  /** The tool, the note, or the event's text: shown on hover. */
+  /** The event's text in full: the tool and its arguments, the note, the reply. The event log shows it; the timeline on hover. */
   detail: string;
   effect?: Effect | 'unknown';
   outcome: Outcome;
@@ -52,11 +53,18 @@ export const CHECK_LANE = 'check';
 
 const APPROVALS = 'approvals';
 
-function actionMark(a: Action): TimelineMark {
+/** The arguments of a call on one line; empty when there are none. */
+function argsLine(args: unknown): string {
+  if (args == null || (typeof args === 'object' && Object.keys(args).length === 0)) return '';
+  return typeof args === 'string' ? args : JSON.stringify(args);
+}
+
+function actionMark(a: Action, args: unknown): TimelineMark {
   const interlock = a.system?.kind === APPROVALS || a.outcome === 'refused';
+  const call = [a.tool, argsLine(args)].filter(Boolean).join(' ');
   return {
     seq: a.seq, at: a.at, kind: interlock ? 'interlock' : 'action',
-    label: actionWord(a), detail: a.error ? `${a.tool}: ${a.error}` : a.tool,
+    label: actionWord(a), detail: a.error ? `${a.tool}: ${a.error}` : call,
     effect: a.effect, outcome: a.outcome, durationMs: a.durationMs, inherited: a.inherited, saved: a.saved,
     system: kindWord(a.system),
   };
@@ -98,10 +106,18 @@ export function wakeWord(p: { reason?: unknown; idle_wake?: unknown; mail?: unkn
   }
 }
 
+/** What a model call said: its reply when recorded, else the model and the tokens it used ("" when neither is). */
+function modelLine(p: Payload): string {
+  const reply = replyOf(p.response);
+  if (reply) return reply;
+  const tokens = asRecord(p.usage).total_tokens;
+  return [typeof p.model === 'string' ? p.model : '', typeof tokens === 'number' ? `${tokens.toLocaleString('en-US')} tokens` : ''].filter(Boolean).join(' · ');
+}
+
 /** A model call: one the provider rate-limited (429) or that failed says so (the agent loop tries a 429 again). */
 function modelMark(p: Payload, base: Base): TimelineMark {
   const r = asRecord(p.response);
-  if (typeof r.error !== 'string') return { ...base, kind: 'model', label: 'Model call', detail: '' };
+  if (typeof r.error !== 'string') return { ...base, kind: 'model', label: 'Model call', detail: modelLine(p) };
   const status = typeof r.status === 'number' ? r.status : null;
   const said = asRecord(asRecord(r.body).error).message;
   const detail = typeof said === 'string' ? said : r.error;
@@ -151,7 +167,7 @@ export function buildLanes(events: Event[], team: Team, startSeq: number | null 
     if (e.kind === 'run_start') continue;
     const inherited = startSeq != null && e.seq < startSeq;
     const action = classify(e, info, startSeq);
-    const mark = action ? actionMark(action) : stepMark(e, inherited);
+    const mark = action ? actionMark(action, asRecord(e.payload).args) : stepMark(e, inherited);
     if (!mark) continue;
     const id = laneOf(e);
     if (!rows.has(id)) rows.set(id, { id, name: id === WORLD_LANE ? 'World' : id === CHECK_LANE ? 'Check' : id, marks: [] });

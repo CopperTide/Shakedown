@@ -7,7 +7,7 @@ import { Split } from '@/components/ui/split';
 import ActionTimeline from '@/features/run/ActionTimeline';
 import Inspector from '@/features/run/Inspector';
 import RunMenu from '@/features/run/RunMenu';
-import { RunErrorBanner, StepSidePanel } from '@/features/run/RunShell';
+import { RunErrorBanner, StepSidePanel, useExpanded } from '@/features/run/RunShell';
 import { taskOf } from '@/features/run/runStats';
 import { useBranch } from '@/features/run/useBranch';
 import { useStepKeys } from '@/features/run/useStepKeys';
@@ -52,6 +52,7 @@ export default function ProcessPage() {
   const nameOf = useTaskNames();
   const timeline = useTimeline(d, models);
   const [selected, setSelected] = useSelection(timeline.order);
+  const [expanded, setExpanded] = useExpanded();
   if (!d) return <PageGate title="Process" label="Loading the run…" rows={5} error={error} onRetry={reload} />;
   const task = taskOf(d.events);
   const info = worldInfo(d.events);
@@ -62,8 +63,8 @@ export default function ProcessPage() {
         actions={<RunMenu runId={runId} d={d} page="process" step={selected} />} />
       <PageBody>
         <RunErrorBanner error={error} onRetry={reload} detail={d} />
-        <Split storageKey="shakedown.process.side" main={<Main d={d} timeline={timeline} selected={selected} onSelect={setSelected} models={models} setModels={setModels} />}
-          side={<StepSidePanel><Inspector branchId={d.id} event={d.events.find((e) => e.seq === selected) ?? null} team={d.team} events={d.events} /></StepSidePanel>} />
+        <Split storageKey="shakedown.process.side" expanded={expanded} main={<Main d={d} timeline={timeline} selected={selected} onSelect={setSelected} models={models} setModels={setModels} />}
+          side={<StepSidePanel expanded={expanded} onExpand={setExpanded}><Inspector branchId={d.id} event={d.events.find((e) => e.seq === selected) ?? null} team={d.team} events={d.events} /></StepSidePanel>} />
       </PageBody>
     </>
   );

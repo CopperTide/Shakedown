@@ -201,14 +201,19 @@ Logic lives in pure modules with tests, and components only render. For example:
     the full "ERP write".
   - Messages and handoffs are drawn as arrows between lanes.
   - ←/→, ↑/↓, j/k and h/l move through the steps.
-  - The Event log tab lists the same steps as rows.
+  - The Event log tab lists the same steps as rows (`features/run/EventLog.tsx`), the detail last and
+    taking the rest of the width: each step's whole text, wrapped (a tool call with its arguments, a model
+    call's reply or its model and tokens, a message in full). **Compact rows** keeps one line per step.
 - **Trace waterfall** (`features/run/Waterfall.tsx`). It shows the selected step's turn: the agent's model call
   and every step up to its next model call. Each bar ends when its step was recorded and starts that
   step's `duration_ms` earlier. Shakedown's own work in a step (gate check, recording, save) is listed
   under it.
 - **Inspector.** This is the step in full: the system it touched and its effect, the permit the write
   ran under (or the change it named that approvals never recorded), the arguments, reads and writes,
-  the world rows at that step, and the result or error. Change and rerun opens in the same panel.
+  the world rows at that step, and the result or error. Change and rerun opens in the same panel. A step's
+  prose (messages, handoffs, reports, delegations, a finish's summary, a text result) renders as Markdown;
+  data, and text that is JSON, shows as JSON. **Full width** in the panel's header gives the step the whole
+  page (the timeline stays where it was, hidden); **Side panel** or Esc puts it back beside the timeline.
 - **Process view** (`features/process/ProcessDiagram.tsx`, React Flow). Agents are units on the left and the
   world's systems are equipment on the right. Each kind of system has a simple shape: a cylinder for
   data stores, a box for applications, a diamond for approvals, a hexagon for APIs and a truck for

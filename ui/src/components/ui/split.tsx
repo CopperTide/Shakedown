@@ -29,21 +29,24 @@ function useSideWidth(storageKey: string, initial: number, limits: Limits) {
   return { width, root, onPointerDown, onKeyDown };
 }
 
-/** A main area and a side panel on the right that the reader can resize; stacked on narrow screens. */
-export function Split({ main, side, storageKey, initial = 420, limits = { min: 300, max: 760 }, className }: {
-  main: ReactNode; side: ReactNode; storageKey: string; initial?: number; limits?: Limits; className?: string;
+/**
+ * A main area and a side panel on the right that the reader can resize; stacked on narrow screens.
+ * `expanded` gives the side panel the whole width (the main area stays mounted, hidden).
+ */
+export function Split({ main, side, storageKey, initial = 420, limits = { min: 300, max: 760 }, className, expanded = false }: {
+  main: ReactNode; side: ReactNode; storageKey: string; initial?: number; limits?: Limits; className?: string; expanded?: boolean;
 }) {
   const s = useSideWidth(storageKey, initial, limits);
   return (
     <div ref={s.root} className={cn('flex min-h-0 flex-col gap-3 lg:flex-row lg:gap-0', className)} style={{ ['--side-w' as string]: `${s.width}px` }}>
-      <div className="min-w-0 flex-1">{main}</div>
+      <div className={cn('min-w-0 flex-1', expanded && 'hidden')}>{main}</div>
       <div role="separator" aria-orientation="vertical" aria-label="Resize the side panel" aria-valuenow={s.width}
         aria-valuemin={limits.min} aria-valuemax={limits.max} tabIndex={0}
         onPointerDown={s.onPointerDown} onKeyDown={s.onKeyDown}
-        className="group hidden w-3 shrink-0 cursor-col-resize touch-none justify-center lg:flex">
+        className={cn('group hidden w-3 shrink-0 cursor-col-resize touch-none justify-center', !expanded && 'lg:flex')}>
         <span className="h-full w-px bg-line group-hover:w-0.5 group-hover:bg-accent group-focus-visible:w-0.5 group-focus-visible:bg-accent" />
       </div>
-      <aside className="min-w-0 lg:w-[var(--side-w)] lg:shrink-0">{side}</aside>
+      <aside className={cn('min-w-0', expanded ? 'flex-1' : 'lg:w-[var(--side-w)] lg:shrink-0')}>{side}</aside>
     </div>
   );
 }

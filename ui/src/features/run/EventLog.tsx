@@ -14,7 +14,10 @@ function usePref(key: string, initial: boolean): [boolean, (v: boolean) => void]
 
 const offset = (at: number, span: Span | null) => (span && !Number.isNaN(at) ? `+${((at - span.start) / 1000).toFixed(1)} s` : '–');
 
-/** Every step as a row (only those in `matches` when filtered): the record behind the timeline, in step order. */
+/**
+ * Every step as a row (only those in `matches` when filtered): the record behind the timeline, in step order.
+ * The detail comes last and takes the rest of the width, so the short columns always show and the text wraps in full.
+ */
 export default function EventLog({ rows: all, matches, span, selected, onSelect }: {
   rows: LogRow[]; matches: ReadonlySet<number> | null; span: Span | null; selected: number | null; onSelect: (seq: number) => void;
 }) {
@@ -23,6 +26,8 @@ export default function EventLog({ rows: all, matches, span, selected, onSelect 
   const [full, setFull] = usePref('shakedown.eventlog.full', true);
   const [tall, setTall] = usePref('shakedown.eventlog.tall', false);
   const rows = matches ? all.filter((r) => matches.has(r.m.seq)) : all;
+  // The short cells: one line each, level with the detail's first line when it wraps.
+  const cell = full ? 'py-1.5' : 'h-7';
   useEffect(() => { box.current?.querySelector('[data-active]')?.scrollIntoView({ block: 'nearest' }); }, [selected]);
   return (
     <div>
@@ -32,17 +37,17 @@ export default function EventLog({ rows: all, matches, span, selected, onSelect 
     </div>
     <div ref={box} className={cn('overflow-auto', tall ? 'max-h-[80vh]' : 'max-h-[420px]')}>
       <Table className="text-xs" wrapperClassName="overflow-visible">
-        <thead className="sticky top-0 z-10"><tr><Th>Step</Th><Th>Time</Th><Th>Agent</Th><Th>Action</Th><Th>Detail</Th><Th className="text-right">Took</Th><Th title="The world was saved after this step">Saved</Th><Th>Outcome</Th></tr></thead>
+        <thead className="sticky top-0 z-10"><tr><Th>Step</Th><Th>Time</Th><Th>Agent</Th><Th>Action</Th><Th className="text-right">Took</Th><Th title="The world was saved after this step">Saved</Th><Th>Outcome</Th><Th className="w-full">Detail</Th></tr></thead>
         <tbody>{rows.map(({ lane, m }) => (
           <tr key={m.seq} data-active={selected === m.seq || undefined} onClick={() => onSelect(m.seq)}
-            className={cn('cursor-pointer hover:bg-hover data-[active]:bg-accent-soft', m.inherited && 'opacity-50')}>
-            <Td className="h-7 font-mono">{m.seq}</Td><Td className="h-7 font-mono text-muted">{offset(m.at, span)}</Td>
-            <Td className="h-7">{lane}</Td>
-            <Td className={cn('h-7', m.effect === 'write' && 'font-semibold')}>{m.label}</Td>
-            <Td className={cn('font-mono text-2xs text-muted', full ? 'min-w-[32ch] max-w-[72ch] py-1.5 align-top whitespace-pre-wrap break-words' : 'h-7 max-w-[28ch] truncate')} title={full ? undefined : m.detail}>{m.detail}</Td>
-            <Td className="h-7 text-right font-mono text-muted">{formatDuration(m.durationMs)}</Td>
-            <Td className="h-7 text-center text-muted">{m.saved && <span title="saved after this step">◉</span>}</Td>
-            <Td className="h-7">{m.outcome === 'ok' ? <span className="text-faint">ok</span> : <StatusMark mark={alarmMark(m.outcome)} />}</Td>
+            className={cn('cursor-pointer hover:bg-hover data-[active]:bg-accent-soft', full && '[&>td]:align-top', m.inherited && 'opacity-50')}>
+            <Td className={cn(cell, 'font-mono')}>{m.seq}</Td><Td className={cn(cell, 'font-mono text-muted')}>{offset(m.at, span)}</Td>
+            <Td className={cn(cell, full && 'whitespace-normal')}>{lane}</Td>
+            <Td className={cn(cell, full && 'whitespace-normal', m.effect === 'write' && 'font-semibold')}>{m.label}</Td>
+            <Td className={cn(cell, 'text-right font-mono text-muted')}>{formatDuration(m.durationMs)}</Td>
+            <Td className={cn(cell, 'text-center text-muted')}>{m.saved && <span title="saved after this step">◉</span>}</Td>
+            <Td className={cell}>{m.outcome === 'ok' ? <span className="text-faint">ok</span> : <StatusMark mark={alarmMark(m.outcome)} />}</Td>
+            <Td className={cn('min-w-[24ch] font-mono text-2xs text-muted', full ? 'py-1.5 whitespace-pre-wrap wrap-anywhere' : 'h-7 max-w-0 truncate')} title={full ? undefined : m.detail}>{m.detail}</Td>
           </tr>
         ))}</tbody>
       </Table>

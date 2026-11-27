@@ -20,6 +20,15 @@ describe('lanes', () => {
     ]);
   });
 
+  it('gives_each_step_its_whole_text', () => {
+    const evs = [runStart,
+      ev(2, 10, 'lead', 'model_call', { model: 'm-1', usage: { total_tokens: 12767 } }),
+      ev(3, 11, 'lead', 'model_call', { response: { content: [{ type: 'text', text: 'Ship it.' }] } }),
+      ev(4, 12, 'lead', 'tool_call', { name: 'erp.read', args: { order: 'SO-1' } }),
+      ev(5, 13, 'lead', 'tool_call', { name: 'erp.list', args: {} })];
+    expect(buildLanes(evs, team)[0].marks.map((m) => m.detail)).toEqual(['m-1 · 12,767 tokens', 'Ship it.', 'erp.read {"order":"SO-1"}', 'erp.list']);
+  });
+
   it('marks_approvals_and_refusals_as_interlocks_and_keeps_writes_apart_from_reads', () => {
     const q = buildLanes(events, team)[1].marks.filter((m) => m.kind === 'action' || m.kind === 'interlock');
     expect(q.map((m) => [m.label, m.kind, m.effect, m.outcome])).toEqual([

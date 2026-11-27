@@ -25,6 +25,11 @@
 
 ### Added
 
+- **The event log shows each step's whole text, and the step panel renders Markdown and can go full width.**
+  The detail column comes last and wraps the full text: a tool call's arguments, a model call's reply (or its
+  model and tokens), a message in full. In the step panel, messages, reports and other prose render as
+  Markdown (JSON stays JSON), and **Full width** gives the step the whole page; **Side panel** or Esc puts it
+  back. The process view's step panel has the same toggle.
 - **A scenario's page lists its experiments in their own section.** Experiments (N) lists every experiment
   that plays the scenario, sub-experiments under their parent, each with a link and whether it has run.
 - **Experiments show whether they ran.** The experiments list has a Status column: has results, running, ran

@@ -16,6 +16,7 @@ import { actionWord, classify, systemLine, worldInfo } from '@/model/actions';
 import { reasoningWord, wakeWord } from '@/model/lanes';
 import { missingPermit, permitOf } from '@/model/permit';
 import { costIsUnknown, providerId, providerName, providerOf } from '@/model/providers';
+import { proseOf, replyOf } from '@/model/prose';
 import { notComparedLine, savedLine } from '@/model/restore';
 import type { AgentEndPayload, CheckPayload, Event, ModelCallPayload, ReasoningPayload, Team, WakePayload } from '@/model/types';
 import { formatCost, rowKeys } from './timeline';
@@ -33,8 +34,22 @@ function Json({ value, error = false }: { value: unknown; error?: boolean }) {
   return <CodeBlock className={cn('max-h-72 leading-4 whitespace-pre-wrap break-all', error && 'text-alarm')}>{pretty(value)}</CodeBlock>;
 }
 
+/** The value of a JSON text; undefined when the text is not one (prose stays prose). */
+export function jsonIn(text: string): unknown {
+  const t = text.trim();
+  if (!/^[[{]/.test(t)) return undefined;
+  try { return JSON.parse(t) as unknown; } catch { return undefined; }
+}
+
+/** A step's text as it reads best: prose as Markdown, data (or a JSON text) as JSON. */
+function Text({ value }: { value: unknown }) {
+  if (typeof value !== 'string') return <Json value={value} />;
+  const data = jsonIn(value);
+  return data === undefined ? <Markdown text={value} /> : <Json value={data} />;
+}
+
 function Block({ title, value }: { title: string; value: unknown }) {
-  return <Section title={title}><Json value={value} /></Section>;
+  return <Section title={title}><Text value={value} /></Section>;
 }
 
 function keysOf(v: unknown): string[] {
@@ -126,20 +141,7 @@ function ToolCall({ branchId, event, events, auto }: { branchId: string; event: 
   );
 }
 
-/** The prose in a message's or a reply's content: a string, or the text of its `{type: "text"}` parts (null when it has none). */
-export function proseOf(c: unknown): string | null {
-  if (typeof c === 'string') return c;
-  if (!Array.isArray(c)) return null;
-  const texts = c.map((part) => asRecord(part)).filter((part) => part.type === 'text' && typeof part.text === 'string').map((part) => part.text as string);
-  return texts.length ? texts.join('\n\n') : null;
-}
-
-/** What a model answered, as prose: OpenAI-style `choices[0].message.content` or Anthropic-style `content` parts. */
-export function replyOf(response: unknown): string | null {
-  const r = asRecord(response);
-  const choice = Array.isArray(r.choices) ? asRecord(r.choices[0]) : null;
-  return proseOf(choice ? asRecord(choice.message).content : r.content);
-}
+export { proseOf, replyOf } from '@/model/prose';
 
 /** One message of a request: its prose as Markdown, anything else (tool calls, images) as JSON below it. */
 function Message({ m }: { m: unknown }) {

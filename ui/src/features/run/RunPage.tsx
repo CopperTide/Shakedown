@@ -34,7 +34,7 @@ import ForkPanel from './ForkPanel';
 import Inspector from './Inspector';
 import MetricsPanel from './Metrics';
 import RunMenu from './RunMenu';
-import { RunErrorBanner, StepSidePanel } from './RunShell';
+import { RunErrorBanner, StepSidePanel, useExpanded } from './RunShell';
 import { checkMark, runStats, safetyLine, taskOf } from './runStats';
 import { formatCost, summarize } from './timeline';
 import { useBranch } from './useBranch';
@@ -105,12 +105,13 @@ function Header({ runId, detail, siblings, title, step }: { runId: string; detai
   );
 }
 
-function Side({ runId, detail, event, forking, setForking, autoRows, choice, onSelect }: {
+function Side({ runId, detail, event, forking, setForking, autoRows, choice, onSelect, expanded, onExpand }: {
   runId: string; detail: BranchDetail; event: Event | null; forking: boolean; setForking: (f: boolean) => void; autoRows: boolean; choice: ForkChoice; onSelect: (s: number) => void;
+  expanded: boolean; onExpand: (on: boolean) => void;
 }) {
   const nav = useNavigate();
   return (
-    <StepSidePanel>
+    <StepSidePanel expanded={expanded} onExpand={onExpand}>
       {forking && event && (
         <div className="border-b border-line bg-raised">
           <ForkPanel key={`${detail.id}:${event.seq}`} branch={detail} seq={event.seq} choice={choice} onClose={() => setForking(false)}
@@ -183,6 +184,7 @@ export default function Run() {
   const nameOf = useTaskNames();
   const timeline = useTimeline(detail, models);
   const v = useRunView(branchId, timeline, models);
+  const [expanded, setExpanded] = useExpanded();
   if (!detail) return <PageGate title="Run" label="Loading the run's steps…" rows={5} error={error} onRetry={reload} />;
   const event = detail.events.find((e) => e.seq === v.selected) ?? null;
   return (
@@ -192,8 +194,8 @@ export default function Run() {
         {v.notice && <Notice onDismiss={() => v.setNotice(null)}>{v.notice}</Notice>}
         <RunErrorBanner error={error} onRetry={reload} detail={detail} />
         <RunReview d={detail} onStep={v.setSelected} />
-        <Split storageKey="shakedown.run.side" main={<Main detail={detail} timeline={timeline} selected={v.selected} onSelect={v.setSelected} models={models} setModels={setModels} />}
-          side={<Side runId={runId} detail={detail} event={event} forking={v.forking} setForking={v.setForking} autoRows={v.autoRows} choice={v.choice} onSelect={v.setSelected} />} />
+        <Split storageKey="shakedown.run.side" expanded={expanded} main={<Main detail={detail} timeline={timeline} selected={v.selected} onSelect={v.setSelected} models={models} setModels={setModels} />}
+          side={<Side runId={runId} detail={detail} event={event} forking={v.forking} setForking={v.setForking} autoRows={v.autoRows} choice={v.choice} onSelect={v.setSelected} expanded={expanded} onExpand={setExpanded} />} />
         <More detail={detail} />
       </PageBody>
     </>
