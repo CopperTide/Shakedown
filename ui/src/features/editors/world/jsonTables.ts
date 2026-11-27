@@ -30,9 +30,15 @@ function rowsOf(v: unknown, at: string): Row[] | null {
   return null;
 }
 
+/** Whether column `k` holds nested values (objects, lists) in the sample rows. */
+const nested = (rows: Row[], k: string) => rows.some((r) => typeof r.record[k] === 'object' && r.record[k] !== null);
+
+/** A table of `rows`: every key in the sample is a column, plain values first, then nested ones, each in first-seen order. */
 function table(title: string, pointer: string, rows: Row[]): Table {
-  const columns: string[] = [];
-  for (const r of rows.slice(0, SAMPLE)) for (const k of Object.keys(r.record)) if (!columns.includes(k)) columns.push(k);
+  const sample = rows.slice(0, SAMPLE);
+  const seen: string[] = [];
+  for (const r of sample) for (const k of Object.keys(r.record)) if (!seen.includes(k)) seen.push(k);
+  const columns = [...seen.filter((k) => !nested(sample, k)), ...seen.filter((k) => nested(sample, k))];
   return { title, pointer, columns, rows };
 }
 

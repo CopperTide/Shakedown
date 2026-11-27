@@ -4,8 +4,8 @@ import { cellText, matching, parsedCell, tablesOf } from './jsonTables';
 
 describe('tablesOf', () => {
   it('reads a list of records as one table with every key a column', () => {
-    const [t] = tablesOf([{ id: 'a', n: 1 }, { id: 'b', extra: true }], 'rates.json');
-    expect(t.columns).toEqual(['id', 'n', 'extra']);
+    const [t] = tablesOf([{ id: 'a', n: 1, tags: ['x'] }, { id: 'b', extra: true }], 'rates.json');
+    expect(t.columns).toEqual(['id', 'n', 'extra', 'tags']);
     expect(t.rows[1]).toMatchObject({ key: '1', pointer: '/1' });
   });
 

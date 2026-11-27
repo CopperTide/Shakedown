@@ -36,7 +36,7 @@ function TableView({ table, onSet }: { table: Table; onSet: (row: Row, column: s
   const [query, setQuery] = useState('');
   const rows = matching(table, query);
   return (
-    <div className="grid min-h-0 gap-2">
+    <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-2">
       <div className="flex items-center gap-2 px-4">
         <Input type="search" aria-label={`Search ${table.title}`} placeholder="Search by id or any value" value={query} onChange={(e) => setQuery(e.target.value)} className="max-w-xs" />
         <span className="text-xs text-muted">{rows.length} of {table.rows.length} rows{rows.length > SHOWN_ROWS ? ` · showing ${SHOWN_ROWS}` : ''}</span>
@@ -72,7 +72,7 @@ function Tables({ world, file, tables, onSaved }: { world: string; file: string;
   };
   const t = tables[Math.min(at, tables.length - 1)];
   return (
-    <div className="grid min-h-0 flex-1 grid-rows-[auto_auto_minmax(0,1fr)] gap-2 py-3">
+    <div className="grid min-h-0 flex-1 grid-rows-[auto_auto_minmax(0,1fr)] content-start gap-2 py-3">
       {tables.length > 1 && (
         <div role="tablist" aria-label="Tables" className="flex flex-wrap gap-1 px-4">
           {tables.map((x, i) => <Button key={x.title} size="sm" variant={i === at ? 'primary' : 'default'} role="tab" aria-selected={i === at} onClick={() => setAt(i)}>{x.title} · {x.rows.length}</Button>)}
@@ -140,7 +140,7 @@ export default function DataFileViewer({ world, source }: { world: string; sourc
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <button type="button" className="text-xs text-primary" onClick={() => setOpen(true)}>View</button>
-      <DialogContent title={source} description="The file in the world's folder. A value changed here is saved at once; the next run starts from it." className="top-[6vh] flex max-h-[88vh] w-[min(1100px,calc(100vw-24px))] flex-col">
+      <DialogContent title={source} description="The file in the world's folder. A value changed here is saved at once; the next run starts from it." className="top-[6vh] flex h-[88vh] w-[min(1100px,calc(100vw-24px))] flex-col">
         <Files world={world} source={source} />
       </DialogContent>
     </Dialog>
