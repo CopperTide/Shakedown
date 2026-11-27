@@ -380,7 +380,9 @@ a restore mode.
   history before the fork point (its wakes with their input, its tool calls with their results, the work it gave,
   its reports and messages, and how its turns ended). The agents that were working at the fork point (woken, their
   turn not ended) carry on at once; mail recorded before the fork point that no turn of its agent had taken is
-  delivered; the others wait for work; the lead's idle wakes so far still count. Shakedown's own notices to the lead
+  delivered (on a stepped clock, so is a world's alert the lead had not been woken with: a fork at the wake an
+  alert gave the lead wakes it with that alert again, with the fork's changes); the others wait for work; the
+  lead's idle wakes so far still count. Shakedown's own notices to the lead
   (an agent failed) are in the input of the turn that got them, not recorded on their own. A fork of an
   `external` run starts where asked: how its agents resume is its design's choice
   ([External designs](#external-designs)).

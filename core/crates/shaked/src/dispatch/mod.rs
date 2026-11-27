@@ -157,7 +157,8 @@ impl Crew {
     /// A new run starts the lead; a fork (its inherited record has agent starts) restarts every
     /// agent from it ([`resume`]). The starts are recorded first.
     async fn begin(&mut self, events: &[Event]) -> Result<Vec<Action>> {
-        let Some(r) = resume::resumed(events, &self.ctx.roster.team) else {
+        let stepped = self.ctx.rules.stepped.is_some();
+        let Some(r) = resume::resumed(events, &self.ctx.roster.team, stepped) else {
             let all = agent_ids(&self.ctx.roster.team);
             self.record_starts(&all).await?;
             return Ok(self.board.start());

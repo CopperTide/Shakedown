@@ -739,6 +739,34 @@ fn alert_wakes_lead_with_mail() {
     })
 }
 
+/// A fork at the wake an alert gave the lead delivers the alert again, so the lead acts on it
+/// (before, the fork's lead stayed idle and the world ran to its horizon with no one deciding).
+#[test]
+fn a_fork_at_an_alerts_wake_wakes_the_lead_with_it_again() {
+    run(async {
+        let clock = json!({"write_ms": 120_000, "horizon_ms": 3 * HOUR});
+        let part = ["--uses-clock", "--alert-at", "3600000"];
+        let (fx, evs) = stepped_run("alert-fork", &part, clock, vec![says("Waiting.")]).await;
+        let mut wakes = evs.iter().filter(|e| e.kind == EventKind::Wake);
+        let alerted = wakes.nth(1).unwrap();
+        let (status, f) = fx
+            .fork(&alerted.branch_id, json!({"at_seq": alerted.seq}))
+            .await;
+        assert_eq!(status, 200, "{f}");
+        assert_eq!(f["start_seq"], alerted.seq, "{f}");
+        let fork = ended(&fx, f["branch_id"].as_str().unwrap()).await;
+        let own: Vec<&Event> = fork.iter().filter(|e| e.seq >= alerted.seq).collect();
+        let again = own.iter().find(|e| e.kind == EventKind::Wake).unwrap();
+        assert_eq!(again.payload["reason"], "mail");
+        assert_eq!(again.payload["mail"], alerted.payload["mail"]);
+        assert!(again.payload["input"]
+            .as_str()
+            .unwrap()
+            .contains("the toy needs a look"));
+        assert!(own.iter().any(|e| e.kind == EventKind::ModelCall));
+    })
+}
+
 /// A lead that finishes before the world's events still has them land: the world runs on, with
 /// no agent, through each wake to the horizon, recorded, and is scored there.
 #[test]

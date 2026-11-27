@@ -73,6 +73,11 @@
 
 ### Fixed
 
+- **A fork at the step where an alert woke the lead now wakes it with the alert again.** On a stepped clock,
+  forking a dispatch run at the lead's wake for a world's alert restarted the lead idle: the alert was not
+  delivered again and the world ran to its horizon with no one deciding (forking one step later worked). The
+  fork now delivers an alert the lead had not been woken with, as it delivers mail, so the lead acts on it with
+  the fork's changes.
 - **Compare shows only the rows the two runs have.** The outcome table read a fixed list from one
   world (valid plan, orders on time, transport cost), so other worlds' runs showed rows of "–".
   Its rows now come from the runs: checks passed, safety violations when a check is a safety one, a

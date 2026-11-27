@@ -1,19 +1,25 @@
 //! A fork of a dispatch run, read from the record it inherits (the events before the fork point):
 //! every agent restarts in a new session with its own history as the start of its first turn;
 //! the agents that were working at the fork point carry on at once, mail sent but not yet
-//! delivered is delivered, and the lead's idle wakes so far still count.
+//! delivered is delivered (on a stepped clock, a world's alerts the lead had not been woken with
+//! too), and the lead's idle wakes so far still count.
 
 use std::collections::{HashMap, HashSet};
 
 use serde_json::Value;
 
 use super::board::{Mail, MailKind};
-use crate::{exec::said_text, model::*, text::cut_chars};
+use crate::{
+    exec::{said_text, ALERT},
+    model::*,
+    text::cut_chars,
+};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Resumed {
     pub idle_wakes: u32,
-    /// Mail recorded for an agent before the fork point that no turn of it had taken.
+    /// Mail recorded for an agent before the fork point that no turn of it had taken (a fork at
+    /// the wake that took it delivers it again).
     pub pending: Vec<(String, Mail)>,
     /// The agents working at the fork point (woken, their turn not ended).
     pub working: Vec<String>,
@@ -32,8 +38,9 @@ fn str_of<'a>(e: &'a Event, key: &str) -> &'a str {
     e.payload.get(key).and_then(Value::as_str).unwrap_or("")
 }
 
-/// `None` when the record has no agent start yet: the run begins afresh.
-pub fn resumed(events: &[Event], team: &Team) -> Option<Resumed> {
+/// `None` when the record has no agent start yet: the run begins afresh. On a `stepped` clock
+/// the world's alerts were mail for the lead.
+pub fn resumed(events: &[Event], team: &Team, stepped: bool) -> Option<Resumed> {
     if !events.iter().any(|e| e.kind == EventKind::AgentStart) {
         return None;
     }
@@ -44,7 +51,7 @@ pub fn resumed(events: &[Event], team: &Team) -> Option<Resumed> {
     };
     Some(Resumed {
         idle_wakes: idle_wakes(events),
-        pending: pending(events, &ids),
+        pending: pending(events, &ids, stepped.then(|| lead_of(team))),
         working: agents_where(working),
         history: ids
             .iter()
@@ -53,6 +60,12 @@ pub fn resumed(events: &[Event], team: &Team) -> Option<Resumed> {
         restart: agents_where(balanced),
         woke: events.iter().any(|e| e.kind == EventKind::Wake),
     })
+}
+
+fn lead_of(team: &Team) -> &str {
+    team.agents
+        .get(team.lead_index())
+        .map_or("", |a| a.id.as_str())
 }
 
 fn idle_wakes(events: &[Event]) -> u32 {
@@ -115,27 +128,33 @@ fn delivered(events: &[Event]) -> HashSet<(String, i64)> {
     each.collect()
 }
 
-fn pending(events: &[Event], ids: &[&str]) -> Vec<(String, Mail)> {
+/// The mail event `e` is, and who it went to: an agent's delegation, report or message, or a
+/// world's alert for `lead` (given on a stepped clock only, as `exec::links` tells it live).
+fn mail_in(e: &Event, ids: &[&str], lead: Option<&str>) -> Option<(Vec<String>, Mail)> {
+    let mail = |kind, from: &str, text: &str| Mail {
+        seq: e.seq,
+        from: from.to_string(),
+        kind,
+        text: text.to_string(),
+    };
+    if let Some(kind) = mail_kind(e.kind) {
+        let text = said_text(e).and_then(Value::as_str).unwrap_or("");
+        let from = e.agent.as_deref().unwrap_or("");
+        return Some((recipients(e, ids), mail(kind, from, text)));
+    }
+    let alert = e.kind == EventKind::WorldEvent && str_of(e, "kind") == ALERT;
+    let lead = lead.filter(|_| alert)?;
+    let alert = mail(MailKind::Alert, str_of(e, "part"), str_of(e, "text"));
+    Some((vec![lead.to_string()], alert))
+}
+
+fn pending(events: &[Event], ids: &[&str], lead: Option<&str>) -> Vec<(String, Mail)> {
     let taken = delivered(events);
     let mut out = vec![];
-    for e in events {
-        let Some(kind) = mail_kind(e.kind) else {
-            continue;
-        };
-        let text = said_text(e)
-            .and_then(Value::as_str)
-            .unwrap_or("")
-            .to_string();
-        for to in recipients(e, ids) {
-            if !taken.contains(&(to.clone(), e.seq)) {
-                let from = e.agent.clone().unwrap_or_default();
-                let mail = Mail {
-                    seq: e.seq,
-                    from,
-                    kind,
-                    text: text.clone(),
-                };
-                out.push((to, mail));
+    for (to, mail) in events.iter().filter_map(|e| mail_in(e, ids, lead)) {
+        for to in to {
+            if !taken.contains(&(to.clone(), mail.seq)) {
+                out.push((to, mail.clone()));
             }
         }
     }
@@ -331,12 +350,12 @@ mod tests {
 
     #[test]
     fn a_fresh_run_has_nothing_to_resume() {
-        assert_eq!(resumed(&record()[..1], &team()), None);
+        assert_eq!(resumed(&record()[..1], &team(), false), None);
     }
 
     #[test]
     fn a_fork_knows_who_worked_what_waited_and_the_idle_wakes() {
-        let r = resumed(&record(), &team()).unwrap();
+        let r = resumed(&record(), &team(), false).unwrap();
         assert_eq!(r.idle_wakes, 1);
         assert_eq!(r.working, ["lead", "supply"]);
         let pending: Vec<(&str, i64)> = r
@@ -355,7 +374,7 @@ mod tests {
 
     #[test]
     fn each_agent_gets_its_own_history() {
-        let r = resumed(&record(), &team()).unwrap();
+        let r = resumed(&record(), &team(), false).unwrap();
         let qa = &r.history["qa"];
         assert!(
             qa.contains("You were woken (mail) with:\n# Work\nhold CVX-2611"),
@@ -379,7 +398,48 @@ mod tests {
     fn an_agent_whose_end_is_inherited_starts_again() {
         let mut evs = record();
         evs.push(ev(16, "qa", EventKind::AgentEnd, json!({"ok": true})));
-        let r = resumed(&evs, &team()).unwrap();
+        let r = resumed(&evs, &team(), false).unwrap();
         assert_eq!(r.restart, ["qa"]);
+    }
+
+    /// A stepped world raised an alert for the idle lead at step 17, and the lead's wake with it
+    /// was step 18: a fork at that wake gives the lead the alert again.
+    fn alerted() -> Vec<Event> {
+        let mut evs = starts();
+        evs.push(ev(
+            6,
+            "lead",
+            EventKind::Idle,
+            json!({"ok": true, "text": "plan holds"}),
+        ));
+        let alert = json!({"kind": "alert", "part": "oms", "text": "PO-7731 slips 48 hours"});
+        evs.push(ev(17, "", EventKind::WorldEvent, alert));
+        evs
+    }
+
+    #[test]
+    fn a_fork_at_an_alerts_wake_delivers_the_alert_again() {
+        let r = resumed(&alerted(), &team(), true).unwrap();
+        assert!(r.working.is_empty(), "the lead was idle before its wake");
+        let want = Mail {
+            seq: 17,
+            from: "oms".into(),
+            kind: MailKind::Alert,
+            text: "PO-7731 slips 48 hours".into(),
+        };
+        assert_eq!(r.pending, [("lead".to_string(), want)]);
+    }
+
+    #[test]
+    fn an_alert_the_lead_took_or_a_running_clock_is_not_mail() {
+        let mut evs = alerted();
+        let wake = json!({"reason": "mail", "mail": [17], "input": "# Alert"});
+        evs.push(ev(18, "lead", EventKind::Wake, wake));
+        assert!(resumed(&evs, &team(), true).unwrap().pending.is_empty());
+        let running = resumed(&alerted(), &team(), false).unwrap();
+        assert!(
+            running.pending.is_empty(),
+            "alerts are mail on a stepped clock only"
+        );
     }
 }
