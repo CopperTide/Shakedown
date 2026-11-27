@@ -58,16 +58,16 @@ function TableView({ table, onSet }: { table: Table; onSet: (row: Row, column: s
   );
 }
 
-/** The file's tables, one at a time, with a value set in place written to the file. */
-function Tables({ world, file, tables, onSaved }: { world: string; file: string; tables: Table[]; onSaved: () => void }) {
+/** The file's tables, one at a time, with a value set in place written to the file (and to the table shown). */
+function Tables({ world, file, tables }: { world: string; file: string; tables: Table[] }) {
   const [at, setAt] = useState(0);
   const [note, setNote] = useState('');
   const set = async (row: Row, column: string, value: unknown) => {
     setNote('');
     try {
       await putWorldData(world, file, { pointer: `${row.pointer}/${segment(column)}`, value });
+      row.record[column] = value;
       setNote(`Saved ${row.key}.${column}: the next run starts from it.`);
-      onSaved();
     } catch (e) { setNote(errorMessage(e)); }
   };
   const t = tables[Math.min(at, tables.length - 1)];
@@ -87,8 +87,7 @@ function Tables({ world, file, tables, onSaved }: { world: string; file: string;
 function FileContents({ world, file }: { world: string; file: string }) {
   const [shown, setShown] = useState<Shown>();
   const [error, setError] = useState('');
-  const [version, setVersion] = useState(0);
-  useEffect(() => { worldDataFile(world, file, true).then(setShown, (e: unknown) => setError(errorMessage(e))); }, [world, file, version]);
+  useEffect(() => { worldDataFile(world, file, true).then(setShown, (e: unknown) => setError(errorMessage(e))); }, [world, file]);
   if (error) return <p role="alert" className="p-4 text-sm text-alarm">{error}</p>;
   if (!shown) return <p className="p-4 text-sm text-faint">Loading…</p>;
   if (shown.binary) return <p className="p-4 text-sm text-muted">Binary file · {kb(shown.size)}</p>;
@@ -96,7 +95,7 @@ function FileContents({ world, file }: { world: string; file: string }) {
     let doc: unknown;
     try { doc = JSON.parse(shown.text ?? ''); } catch { doc = undefined; }
     const tables = doc === undefined ? [] : tablesOf(doc, file.split('/').pop() ?? file);
-    if (tables.length) return <Tables world={world} file={file} tables={tables} onSaved={() => setVersion(version + 1)} />;
+    if (tables.length) return <Tables world={world} file={file} tables={tables} />;
   }
   return (
     <>

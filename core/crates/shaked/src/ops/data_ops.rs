@@ -12,7 +12,7 @@ use shakedown_project::format::Kind;
 use shakedown_project::store::{check_path, Store};
 use shakedown_project::{Id, ProjectError};
 
-use super::{flag, input, schema, Access, OpCtx, OpError, OpFuture, Operation};
+use super::{flag, input, schema, Access, OpCtx, OpError, OpFn, OpFuture, Operation};
 use crate::world_data;
 
 /// Most files a listing shows.
@@ -22,43 +22,33 @@ const MAX_BYTES: u64 = 1 << 20;
 /// The data files a world takes, by extension.
 const KINDS: [&str; 7] = ["json", "csv", "yaml", "yml", "txt", "md", "tsv"];
 
+/// An operation on a world's data files, all at one path.
+fn op(
+    name: &'static str,
+    summary: &'static str,
+    (access, method): (Access, &'static str),
+    input_schema: fn() -> Value,
+    run: OpFn,
+) -> Operation {
+    let (area, path, target) = ("Worlds", "/api/project/worlds/{id}/data", Some(Kind::World));
+    Operation {
+        name,
+        area,
+        summary,
+        access,
+        method,
+        path,
+        target,
+        input_schema,
+        run,
+    }
+}
+
 pub(super) fn ops() -> Vec<Operation> {
-    let path = "/api/project/worlds/{id}/data";
-    let target = Some(Kind::World);
     vec![
-        Operation {
-            name: "worlds.data",
-            area: "Worlds",
-            summary: "Lists a world's data files, or reads one (text up to 1 MiB, or 10 MiB with full; binary files only their size)",
-            access: Access::Read,
-            method: "GET",
-            path,
-            target,
-            input_schema: schema::<DataInput>,
-            run: data,
-        },
-        Operation {
-            name: "worlds.data_put",
-            area: "Worlds",
-            summary: "Uploads a data file into a world's folder (JSON, CSV, YAML or text, at most 10 MiB; base64 or text), replacing one there, or sets one value of a JSON data file at a JSON pointer",
-            access: Access::Edit,
-            method: "POST",
-            path,
-            target,
-            input_schema: schema::<PutInput>,
-            run: put,
-        },
-        Operation {
-            name: "worlds.data_delete",
-            area: "Worlds",
-            summary: "Deletes a data file from a world's folder",
-            access: Access::Delete,
-            method: "DELETE",
-            path,
-            target,
-            input_schema: schema::<PathInput>,
-            run: delete,
-        },
+        op("worlds.data", "Lists a world's data files, or reads one (text up to 1 MiB, or 10 MiB with full; binary files only their size)", (Access::Read, "GET"), schema::<DataInput>, data),
+        op("worlds.data_put", "Uploads a data file into a world's folder (JSON, CSV, YAML or text, at most 10 MiB; base64 or text), replacing one there, or sets one value of a JSON data file at a JSON pointer", (Access::Edit, "POST"), schema::<PutInput>, put),
+        op("worlds.data_delete", "Deletes a data file from a world's folder", (Access::Delete, "DELETE"), schema::<PathInput>, delete),
     ]
 }
 

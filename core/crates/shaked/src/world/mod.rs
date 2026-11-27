@@ -231,17 +231,16 @@ impl World {
         World::start_planned(hub, bench, planned, branch_id, seed, from).await
     }
 
-    fn new(hub: Arc<Hub>, bench: &str, bench_client: Option<Arc<Client>>, plan: Plan) -> World {
-        let parts = plan
-            .parts
-            .iter()
-            .map(|p| p.part.clone())
-            .collect::<Vec<_>>();
-        let world_data = crate::world_data::of_world(&parts).cloned();
+    fn new(
+        hub: Arc<Hub>,
+        bench: &BenchDescribe,
+        bench_client: Option<Arc<Client>>,
+        plan: Plan,
+    ) -> World {
         World {
-            world_data,
+            world_data: crate::world_data::of_world(&bench.world).cloned(),
             hub,
-            bench: bench.to_string(),
+            bench: bench.name.clone(),
             bench_client,
             parts: vec![],
             tools: plan.tools,
@@ -277,7 +276,7 @@ impl World {
         };
         let starts = (parts.into_iter()).map(|p| start_part(&hub, p, branch_id, seed, from, given));
         let started = futures_util::future::join_all(starts).await;
-        let mut world = World::new(hub, &bench.name, Some(bench_client), planned);
+        let mut world = World::new(hub, bench, Some(bench_client), planned);
         if let Some(e) = world.take_all_started(started) {
             world.stop().await;
             return Err(e);

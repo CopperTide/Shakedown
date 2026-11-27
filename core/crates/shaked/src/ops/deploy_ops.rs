@@ -80,7 +80,7 @@ fn world_data(
         };
     }
     let saves = app.hub.saves_root();
-    crate::world_data::snapshot(&**project.store(), &world_id, world, saves).map_err(|e| {
+    crate::world_data::snapshot(&**project.store(), world_id, world, saves).map_err(|e| {
         OpError::new(
             axum::http::StatusCode::UNPROCESSABLE_ENTITY,
             format!("{e:#}"),

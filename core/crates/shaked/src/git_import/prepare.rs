@@ -46,32 +46,23 @@ pub async fn prepare(
     req: Request,
     hub: Option<&Hub>,
 ) -> Result<Prepared, ImportError> {
-    let id = checked_id(
-        req.id
-            .clone()
-            .unwrap_or_else(|| default_id(source_name(&req.source))),
-    )?;
+    let id = id_of(&req)?;
     let dir = imports_dir(project).join(&id);
     let last = record::read(&dir);
     let packages_only = scope(&req, last.as_ref())?;
     let (source, url, git_ref, fetched) = fetched(req.source, &dir).await?;
-    let checkout = fetched.dir.canonicalize().unwrap_or(fetched.dir);
-    let mut found = detect::detect(&checkout);
-    if let Some(folder) = &packages_only {
-        only_packages_under(&mut found, &checkout, folder);
-    }
-    let items = match &found.project {
-        Some(repo) => items::plan(repo, project, last.as_ref()),
-        None => vec![],
-    };
-    let (envs, sources) = python_plan(&dir, &fetched.commit, &checkout, &found);
+    let (checkout, commit) = (fetched.dir, fetched.commit);
+    let found = found_in(&checkout, packages_only.as_deref());
+    let items =
+        (found.project.as_ref()).map_or(vec![], |repo| items::plan(repo, project, last.as_ref()));
+    let (envs, sources) = python_plan(&dir, &commit, &checkout, &found);
     let conflicts = conflicts(&id, &found, hub);
     Ok(Prepared {
         id,
         source,
         url,
         git_ref,
-        commit: fetched.commit,
+        commit,
         packages_only,
         dir,
         checkout,
@@ -82,6 +73,12 @@ pub async fn prepare(
         conflicts,
         last,
     })
+}
+
+/// The import's id: the one asked for, else the repo's or archive's name; checked.
+fn id_of(req: &Request) -> Result<String, ImportError> {
+    let default = || default_id(source_name(&req.source));
+    checked_id(req.id.clone().unwrap_or_else(default))
 }
 
 /// What names the import by default: the git URL or the archive's file name.
@@ -101,13 +98,22 @@ async fn fetched(
     match source {
         Source::Git { url, git_ref } => {
             let (git, r) = (git_url(&url)?, checked_ref(git_ref)?);
-            let fetched = fetch::fetch(&git, &r, dir).await?;
+            let fetched = canonical(fetch::fetch(&git, &r, dir).await?);
             Ok(("git", url, r, fetched))
         }
         Source::Archive { name, bytes } => {
-            let fetched = archive::unpack(&name, &bytes, dir)?;
+            let fetched = canonical(archive::unpack(&name, &bytes, dir)?);
             Ok(("archive", name, String::new(), fetched))
         }
+    }
+}
+
+/// `f` with its checkout's path made canonical (as packages' folders are compared with it).
+fn canonical(f: fetch::Fetched) -> fetch::Fetched {
+    let dir = f.dir.canonicalize().unwrap_or(f.dir);
+    fetch::Fetched {
+        dir,
+        commit: f.commit,
     }
 }
 
@@ -133,6 +139,15 @@ fn scope(req: &Request, last: Option<&Record>) -> Result<Option<String>, ImportE
             "{folder:?} is not a folder of the repo: give a relative path such as packages/desk"
         ))),
     }
+}
+
+/// What the checkout holds; for a runtime install, only the packages under its folder.
+fn found_in(checkout: &Path, packages_only: Option<&str>) -> detect::Found {
+    let mut found = detect::detect(checkout);
+    if let Some(folder) = packages_only {
+        only_packages_under(&mut found, checkout, folder);
+    }
+    found
 }
 
 /// Keeps only the packages under `folder` of the checkout, and no project or Compose files.

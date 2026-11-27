@@ -50,7 +50,8 @@
       --view-fails makes `view` an error. --scenario-options puts JSON in `describe.scenario_options`.
       --clock-start gives `t1` a `clock_start` (the world's date and time at clock 0). --group puts `t1` in the
       group NAME. With --judge (and --scored), `score` asks the model `judge` on the `models` endpoint the call
-      got (the default provider) and adds the check `judged`: it said "fair".
+      got (the default provider) and adds the check `judged`: it said "fair". When `score` is given the world's own
+      data (`world_data`), it adds the passing check `world_data` whose detail is the data's digest.
 """
 import json
 import os
@@ -326,6 +327,8 @@ class Bench:
         checks = [{"name": "poked", "passed": n >= need, "detail": "n is %d" % n}]
         if "--safety" in ARGS:
             checks.append({"name": "not_overpoked", "passed": n <= need, "safety": True})
+        if p.get("world_data"):  # the world's own data reached the scoring (docs/protocol.md, "World data")
+            checks.append({"name": "world_data", "passed": True, "detail": p["world_data"]["digest"]})
         if "--judge" in ARGS and p.get("models"):
             status, answer = ask(p["models"], "judge")
             checks.append({"name": "judged", "passed": status == 200 and said(answer) == "fair"})
