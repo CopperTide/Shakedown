@@ -92,15 +92,10 @@ function KeyList({ keys, testing, onTest, onDelete }: { keys: KeyRow[]; testing:
   );
 }
 
-export function ModelsView({ keys, form, testing, error, onChange, onAdd, onTest, onDelete }: {
-  keys: KeyRow[]; form: KeyForm; testing: string | null; error: string | null;
-  onChange: (f: KeyForm) => void; onAdd: () => void; onTest: (id: string) => void; onDelete: (id: string) => void;
-}) {
+/** The add-a-key form: Settings → Models and Get started's model step both show it. */
+export function AddKeyForm({ form, error, onChange, onAdd }: { form: KeyForm; error: string | null; onChange: (f: KeyForm) => void; onAdd: () => void }) {
   const set = (p: Partial<KeyForm>) => onChange({ ...form, ...p });
   return (
-    <>
-      <Panel>
-        <PanelHeader title="Add a key or server" />
         <form className="flex flex-col gap-3 p-4" onSubmit={(e) => { e.preventDefault(); onAdd(); }}>
           <Segmented label="Kind" value={form.kind} options={KINDS} onChange={(kind) => onChange(withKind(form, kind))} />
           <Field label="Name" hint={form.kind === 'custom' ? `Agents pick it as custom:${form.name || '<name>'}` : 'Lowercase letters, digits, - and _'}>
@@ -111,6 +106,18 @@ export function ModelsView({ keys, form, testing, error, onChange, onAdd, onTest
           {error && <p className="text-xs text-alarm">⚠ {error}</p>}
           <Button type="submit" disabled={!form.name.trim()} className="self-start">Save</Button>
         </form>
+  );
+}
+
+export function ModelsView({ keys, form, testing, error, onChange, onAdd, onTest, onDelete }: {
+  keys: KeyRow[]; form: KeyForm; testing: string | null; error: string | null;
+  onChange: (f: KeyForm) => void; onAdd: () => void; onTest: (id: string) => void; onDelete: (id: string) => void;
+}) {
+  return (
+    <>
+      <Panel>
+        <PanelHeader title="Add a key or server" />
+        <AddKeyForm form={form} error={error} onChange={onChange} onAdd={onAdd} />
       </Panel>
       <Panel>
         <PanelHeader title="Your keys" />
@@ -120,11 +127,12 @@ export function ModelsView({ keys, form, testing, error, onChange, onAdd, onTest
   );
 }
 
-export default function ModelsPage() {
+/** Your keys and the add form's state, with add, Test and delete; each change re-checks the providers. */
+export function useModelKeys(start: KeyForm = emptyKeyForm()) {
   const keys = useQuery('model-keys', listKeys);
-  // The provider list (status bar, agent forms) applies these keys: ask for it again.
+  // The provider list (status bar, agent forms, Get started) applies these keys: ask for it again.
   const changed = () => { keys.reload(); checkProviders().catch(() => {}); };
-  const [form, setForm] = useState<KeyForm>(emptyKeyForm);
+  const [form, setForm] = useState<KeyForm>(start);
   const [testing, setTesting] = useState<string | null>(null);
   const add = useAction(async () => {
     await addKey(keyBody(form));
@@ -136,6 +144,11 @@ export default function ModelsPage() {
     try { await testKey(id); } finally { setTesting(null); keys.reload(); }
   });
   const remove = useAction(async (id: string) => { await deleteKey(id); changed(); });
+  return { keys, form, setForm, testing, add, test, remove };
+}
+
+export default function ModelsPage() {
+  const { keys, form, setForm, testing, add, test, remove } = useModelKeys();
   const failed = keys.error ?? test.error ?? remove.error;
   return (
     <SettingsPage>

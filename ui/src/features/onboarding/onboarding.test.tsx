@@ -1,13 +1,14 @@
 // @vitest-environment jsdom
-// Get started: each step ticks itself off from live state, the page opens on and moves to the first open step, nothing is preselected, a project is
+// Get started: setup is the project and a model key, both done on the page; each step ticks itself off from live state, the page opens on and moves to the first open step and opens Shakedown when both are done, nothing is preselected, a project is
 // created only on a click, git is offered only for a folder, there is no skipping, and the
 // assistant opens with a question already written.
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import AskDrawer from '@/features/assistant/AskDrawer';
 import { ASK_EVENT } from '@/features/shell/TopBar';
 import { forgetShared } from '@/hooks/query';
+import { resetProviders } from '@/hooks/useProviders';
 import GetStartedPage from './GetStartedPage';
 import { firstOpen, stepStates } from './steps';
 
@@ -16,6 +17,7 @@ const posts: { url: string; body: unknown }[] = [];
 function mockFetch(project: { status: number; body: unknown }, providers: unknown[] = []) {
   posts.length = 0;
   forgetShared();
+  resetProviders();
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
     const u = String(url);
     if (init?.method === 'POST') { posts.push({ url: u, body: JSON.parse(String(init.body)) }); return new Response(JSON.stringify({ name: 'New', counts: {}, problems: [] })); }
@@ -37,8 +39,8 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 describe('get started', () => {
   it('step_states_from_live_state', () => {
-    const states = stepStates({ project: 'open', counts: { worlds: 1, scenarios: 0, setups: 2, experiments: 0 }, providersOk: false });
-    expect(states.map((s) => [s.id, s.done])).toEqual([['project', true], ['model', false], ['world', true], ['agents', true], ['scenario', false], ['ready', false]]);
+    const states = stepStates({ project: 'open', providersOk: false });
+    expect(states.map((s) => [s.id, s.done])).toEqual([['project', true], ['model', false]]);
   });
 
   it('not_configured_explains', async () => {
@@ -65,10 +67,23 @@ describe('get started', () => {
     expect(await screen.findByRole('heading', { name: 'Connect a model' })).toBeTruthy();
   });
 
-  it('first_open_is_ready_once_all_are_done', () => {
-    const all = stepStates({ project: 'open', counts: { worlds: 1, scenarios: 1, setups: 1 }, providersOk: true });
-    expect(firstOpen(all)).toBe('ready');
-    expect(firstOpen(stepStates({ project: 'create', counts: {}, providersOk: false }))).toBe('project');
+  it('first_open_step', () => {
+    expect(firstOpen(stepStates({ project: 'create', providersOk: false }))).toBe('project');
+    expect(firstOpen(stepStates({ project: 'open', providersOk: false }))).toBe('model');
+  });
+
+  it('the_key_is_added_on_the_model_step', async () => {
+    mockFetch(OPEN);
+    show();
+    await screen.findByRole('heading', { name: 'Connect a model' });
+    expect((screen.getByPlaceholderText('my-key') as HTMLInputElement).value).toBe('openrouter');
+    expect(screen.queryByRole('link', { name: /Connections/ })).toBeNull();
+  });
+
+  it('setup_done_opens_shakedown', async () => {
+    mockFetch(OPEN, [{ id: 'openrouter', kind: 'openrouter', label: 'OpenRouter', available: true, checked: true }]);
+    render(<MemoryRouter initialEntries={['/get-started']}><Routes><Route path="/get-started" element={<GetStartedPage />} /><Route path="/" element={<p>home</p>} /></Routes></MemoryRouter>);
+    expect(await screen.findByText('home')).toBeTruthy();
   });
 
   it('nothing_preselected', async () => {
@@ -94,14 +109,6 @@ describe('get started', () => {
     show();
     await screen.findByLabelText('Project name');
     expect(screen.queryByRole('link', { name: /skip/i })).toBeNull();
-  });
-
-  it('ready_waits_for_every_step', async () => {
-    mockFetch(OPEN);
-    show();
-    fireEvent.click(await screen.findByRole('button', { name: /Ready/ }));
-    expect(screen.getByText('Finish the steps above to open Shakedown.')).toBeTruthy();
-    expect(screen.queryByRole('link', { name: 'Create an experiment' })).toBeNull();
   });
 
   it('create_project_posts', async () => {

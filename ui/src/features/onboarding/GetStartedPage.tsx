@@ -1,18 +1,18 @@
-// Get started: from nothing to a first scenario, one step at a time. Each step ticks itself off
-// from what exists, and the page moves on to the next open step by itself; nothing is filled in for you. There is no skipping: the rest of Shakedown opens
-// once the steps are done (see gate.tsx).
+// Get started: setup is the project and a model key, both done on this page. Each step ticks
+// itself off from what shaked says exists, the page moves on to the next open step by itself, and once
+// both are done it opens Shakedown. There is no skipping (see gate.tsx); worlds, agents and scenarios
+// are made in the app.
 import { Check } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { Navigate } from 'react-router-dom';
 import { AccountMenu, useMe } from '@/app/AccountMenu';
 import { Mark } from '@/components/brand/Mark';
 import { useProject } from '@/hooks/useProject';
 import { useProviderList } from '@/hooks/useProviders';
 import { cn } from '@/lib/cn';
-import StepItems from './StepItems';
 import StepModel from './StepModel';
 import StepProject from './StepProject';
-import StepReady from './StepReady';
-import { type StepState, firstOpen, stageOf, stepStates } from './steps';
+import { coreDone, firstOpen, type StepState, stageOf, stepStates } from './steps';
 
 function Rail({ steps, active, onSelect }: { steps: StepState[]; active: string; onSelect: (id: StepState['id']) => void }) {
   return (
@@ -27,17 +27,6 @@ function Rail({ steps, active, onSelect }: { steps: StepState[]; active: string;
       ))}
     </nav>
   );
-}
-
-function Body({ id, steps, ctx }: { id: StepState['id']; steps: StepState[]; ctx: { stage: ReturnType<typeof stageOf>; name?: string; folder: boolean; counts: Record<string, number>; providersOk: boolean; reload: () => void } }) {
-  switch (id) {
-    case 'model': return <StepModel ready={ctx.providersOk} />;
-    case 'world': return <StepItems kind="worlds" count={ctx.counts.worlds ?? 0} about="Your production systems before any agent: connectors, software flows and the data every run starts from." prompt="Draft a world for my systems. Here is what we run: " />;
-    case 'agents': return <StepItems kind="setups" count={ctx.counts.setups ?? 0} about="The agent team you want to test: built-in agents, your own code, an endpoint, Claude Code or Codex. A MADL file gets the full graph." prompt="Set up an agent team that " />;
-    case 'scenario': return <StepItems kind="scenarios" count={ctx.counts.scenarios ?? 0} about="An incident to replay. Paste a postmortem or a ticket and the assistant drafts the inputs, events and checks." prompt="Draft a scenario from this incident: " />;
-    case 'ready': return <StepReady steps={steps} />;
-    default: return <StepProject stage={ctx.stage} name={ctx.name} folder={ctx.folder} onCreated={ctx.reload} />;
-  }
 }
 
 /**
@@ -57,7 +46,7 @@ function useActiveStep(steps: StepState[]) {
 function contextOf(project: ReturnType<typeof useProject>, providersOk: boolean) {
   const open = project.data?.open ? project.data.status : null;
   const closed = project.data && !project.data.open ? project.data : undefined;
-  return { stage: stageOf(!!open, closed?.message), name: open?.name, folder: !!closed?.folder, counts: open?.counts ?? {}, providersOk, reload: project.reload };
+  return { stage: stageOf(!!open, closed?.message), name: open?.name, folder: !!closed?.folder, providersOk, reload: project.reload };
 }
 
 export default function GetStartedPage() {
@@ -65,16 +54,17 @@ export default function GetStartedPage() {
   const me = useMe();
   const providers = useProviderList();
   const ctx = contextOf(project, providers.list.some((p) => p.available));
-  const steps = stepStates({ project: ctx.stage, counts: ctx.counts, providersOk: ctx.providersOk });
+  const steps = stepStates({ project: ctx.stage, providersOk: ctx.providersOk });
   const [active, pick] = useActiveStep(steps);
   const current = steps.find((s) => s.id === active);
-  const loading = !project.data && !project.error;
+  if (project.data && coreDone(steps)) return <Navigate to="/" replace />;
   return (
     <div className="min-h-full bg-bg">
       <header className="flex items-center gap-2 border-b border-line px-7 py-3"><Mark /><span className="font-display text-lg">Shakedown</span><span className="flex-1" /><AccountMenu me={me} /></header>
       <div className="mx-auto grid max-w-5xl gap-10 px-7 py-10 md:grid-cols-[240px_minmax(0,1fr)]">
         <Rail steps={steps} active={active} onSelect={pick} />
-        {!loading && <main><h1 className="mb-6 font-display text-[34px] leading-tight">{current?.title}</h1><Body id={active} steps={steps} ctx={ctx} /></main>}
+        {project.data && <main><h1 className="mb-6 font-display text-[34px] leading-tight">{current?.title}</h1>
+          {active === 'model' ? <StepModel ready={ctx.providersOk} /> : <StepProject stage={ctx.stage} name={ctx.name} folder={ctx.folder} onCreated={ctx.reload} />}</main>}
       </div>
     </div>
   );

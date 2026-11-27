@@ -1,6 +1,5 @@
-// The onboarding gate: until the core steps are done (a project, a model, a world, agents and a
-// first scenario, as shaked reports them), every page but those the steps need sends you to Get
-// started. The state comes from the server on every navigation while the gate is shut, never from
+// The onboarding gate: until setup is done (a project and a model, as shaked reports them), every
+// page but Get started sends you there; setup is done entirely on that page. The state comes from the server on every navigation while the gate is shut, never from
 // the browser.
 import { type ReactNode, useEffect, useRef } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
@@ -9,12 +8,8 @@ import { checkProviders, useCheckedProviders } from '@/hooks/useProviders';
 import type { ProviderStatus } from '@/model/types';
 import { coreDone, stageOf, stepStates } from './steps';
 
-/** Pages open before the steps are done: Get started itself, model keys, and the editors a step opens. */
-export const EXEMPT: RegExp[] = [
-  /^\/get-started(\/|$)/,
-  /^\/settings\/(models|tokens)(\/|$)/,
-  /^\/(worlds|scenarios|setups)\/[^/]+$/,
-];
+/** Pages open before setup is done: only Get started itself. */
+export const EXEMPT: RegExp[] = [/^\/get-started(\/|$)/];
 
 export const exempt = (pathname: string) => EXEMPT.some((r) => r.test(pathname));
 
@@ -28,8 +23,7 @@ export function gateOf(project: ProjectState | null, providers: ProviderStatus[]
   if (failed) return 'open';
   if (!project || !providers) return 'wait';
   const stage = stageOf(project.open, project.open ? undefined : project.message);
-  const counts = project.open ? project.status.counts : {};
-  return coreDone(stepStates({ project: stage, counts, providersOk: providers.some((p) => p.available) })) ? 'open' : 'shut';
+  return coreDone(stepStates({ project: stage, providersOk: providers.some((p) => p.available) })) ? 'open' : 'shut';
 }
 
 export default function OnboardingGate({ children }: { children: ReactNode }) {

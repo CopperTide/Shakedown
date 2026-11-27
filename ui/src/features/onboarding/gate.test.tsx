@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-// The onboarding gate: every page but Get started, model keys and the step editors sends you to
-// Get started until the core steps are done, by what shaked says exists.
+// The onboarding gate: every page but Get started sends you there until setup (a project and a
+// model) is done, by what shaked says exists. Worlds, agents and scenarios don't hold it shut.
 import { cleanup, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -11,6 +11,7 @@ import OnboardingGate, { exempt, gateOf } from './gate';
 
 const MODEL: ProviderStatus = { id: 'anthropic', kind: 'anthropic', label: 'Anthropic', available: true, checked: true } as ProviderStatus;
 const ALL = { worlds: 1, scenarios: 1, setups: 1, experiments: 0 };
+const EMPTY = { worlds: 0, scenarios: 0, setups: 0, experiments: 0 };
 const open = (counts: Record<string, number>) => ({ open: true as const, status: { name: 'P', counts, problems: [] } as never });
 
 function mockFetch(project: { status: number; body: unknown }, providers: unknown[]) {
@@ -35,19 +36,19 @@ describe('onboarding gate', () => {
   it('gate_from_server_state', () => {
     expect(gateOf(null, null, false)).toBe('wait');
     expect(gateOf(open(ALL), [MODEL], false)).toBe('open');
-    expect(gateOf(open({ ...ALL, scenarios: 0 }), [MODEL], false)).toBe('shut');
+    expect(gateOf(open(EMPTY), [MODEL], false)).toBe('open');
     expect(gateOf(open(ALL), [{ ...MODEL, available: false }], false)).toBe('shut');
     expect(gateOf({ open: false, message: 'no project', folder: true }, [MODEL], false)).toBe('shut');
     expect(gateOf(null, null, true)).toBe('open');
   });
 
   it('exempt_pages', () => {
-    for (const p of ['/get-started', '/settings/models', '/settings/tokens', '/worlds/mill', '/scenarios/slip', '/setups/team']) expect(exempt(p)).toBe(true);
-    for (const p of ['/', '/experiments', '/worlds', '/runs', '/settings/project', '/analytics']) expect(exempt(p)).toBe(false);
+    expect(exempt('/get-started')).toBe(true);
+    for (const p of ['/', '/experiments', '/worlds/mill', '/settings/models', '/runs', '/analytics']) expect(exempt(p)).toBe(false);
   });
 
-  it('unfinished_sends_to_get_started', async () => {
-    mockFetch({ status: 200, body: { name: 'P', counts: { ...ALL, scenarios: 0 }, problems: [] } }, [MODEL]);
+  it('no_model_sends_to_get_started', async () => {
+    mockFetch({ status: 200, body: { name: 'P', counts: ALL, problems: [] } }, [{ ...MODEL, available: false }]);
     show('/experiments');
     expect(await screen.findByText('get started')).toBeTruthy();
   });
@@ -58,15 +59,15 @@ describe('onboarding gate', () => {
     expect(await screen.findByText('get started')).toBeTruthy();
   });
 
-  it('finished_opens_the_app', async () => {
-    mockFetch({ status: 200, body: { name: 'P', counts: ALL, problems: [] } }, [MODEL]);
+  it('a_project_and_a_model_open_the_app_with_nothing_else', async () => {
+    mockFetch({ status: 200, body: { name: 'P', counts: EMPTY, problems: [] } }, [MODEL]);
     show('/experiments');
     expect(await screen.findByText('the app')).toBeTruthy();
   });
 
-  it('exempt_page_stays_while_unfinished', () => {
+  it('get_started_stays_while_unfinished', () => {
     mockFetch({ status: 409, body: { error: 'no project is open', folder: true } }, []);
-    show('/settings/models');
-    expect(screen.getByText('the app')).toBeTruthy();
+    show('/get-started');
+    expect(screen.getByText('get started')).toBeTruthy();
   });
 });

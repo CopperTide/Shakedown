@@ -113,6 +113,8 @@
 
 ### Fixed
 
+- **Setup is the project and a model key, both done in Get started**: the key is added on the model step itself (no trip to Settings), and once both are done Shakedown opens. Worlds, agents and scenarios no longer hold the app shut or send you back and forth.
+
 - **Get started moves on by itself**: it opens on the first step not done and goes to the next one when a step is done, rather than staying on "Your project is ready".
 - **A key's name can't be refused for its letters**: the Name field turns what you type into lowercase letters, digits, `-` and `_` ("OpenRouter Key" becomes `openrouter-key`), and a new key is named after its kind until you name it.
 

@@ -10,15 +10,15 @@ secondary metadata lines, few borders, plenty of whitespace.
 - **Top bar** (`app/TopBar.tsx`): the wordmark, **Experiments** and **Runs**, and one **⋯** with Run
   once, Compare two runs, World view of a run, the Team editor, AI review on or off, the command
   palette, the theme and which Shakedown core is in use.
-- **Get started** (`/get-started`, `features/onboarding/`): the steps from nothing to a first scenario: your
-  project, a model, a world, agents and a first scenario, each ticked off from what shaked says exists
-  (`steps.ts`), then **Ready**. It opens on the first step not done and moves on by itself when the step it
-  shows gets done (`firstOpen`); a done step picked from the rail stays until another is picked. There is no skipping: until the five are done, the gate (`gate.tsx`, around
-  every page in `App.tsx`) sends any other page here. It reads `GET /api/project` and `/api/providers` again
-  on each navigation while shut, never browser storage; a failed read opens it rather than lock you out.
-  Open while shut: Get started, **Connections & models** (`/settings/models`, `/settings/tokens`) and the
-  item editors a step opens (`/worlds/:id`, `/scenarios/:id`, `/setups/:id`, so also `/worlds/new`). The
-  header has the account menu, so a hosted user can still sign out. **Track with git** shows only where a
+- **Get started** (`/get-started`, `features/onboarding/`): setup is two steps, both done on this page: **Your
+  project** and **Connect a model**, where the key is added in place (`StepModel` shows the same add form as
+  Settings → Models, `AddKeyForm` and `useModelKeys`, starting on OpenRouter). Each is ticked off from what shaked
+  says exists (`steps.ts`); the page opens on the first step not done, moves on by itself when the step it
+  shows gets done (`firstOpen`), and opens Shakedown (`/`) once both are. Worlds, agents and scenarios are made
+  in the app. There is no skipping: until setup is done, the gate (`gate.tsx`, around every page in `App.tsx`)
+  sends every page but Get started here. It reads `GET /api/project` and `/api/providers` again on each
+  navigation while shut, never browser storage; a failed read opens it rather than lock you out. The header
+  has the account menu, so a hosted user can still sign out. **Track with git** shows only where a
   project is a folder on disk (`folder` in the no-project answer); hosted projects live in a database.
 - **Experiments** (`/experiments`, `features/experiments/ExperimentsListPage.tsx`): every experiment file,
   sub-experiments under their parent; each row the name (with any problems), whether it ran
