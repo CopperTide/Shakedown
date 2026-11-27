@@ -1,16 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { StatusMark } from '@/components/ui/status';
 import { Table, Td, Th } from '@/components/ui/table';
+import { usePref } from '@/hooks/usePref';
 import { cn } from '@/lib/cn';
 import { alarmMark } from '@/lib/mark';
 import { type Span, formatDuration } from '@/model/lanes';
 import type { LogRow } from './logFilter';
-
-/** A remembered view choice (this browser only; the default when storage is unavailable). */
-function usePref(key: string, initial: boolean): [boolean, (v: boolean) => void] {
-  const [v, setV] = useState(() => { try { const s = localStorage.getItem(key); return s === null ? initial : s === '1'; } catch { return initial; } });
-  return [v, (next) => { setV(next); try { localStorage.setItem(key, next ? '1' : '0'); } catch { /* storage unavailable */ } }];
-}
 
 const offset = (at: number, span: Span | null) => (span && !Number.isNaN(at) ? `+${((at - span.start) / 1000).toFixed(1)} s` : '–');
 

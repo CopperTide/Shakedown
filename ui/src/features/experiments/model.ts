@@ -20,6 +20,9 @@ export interface RunCell {
   flags: number;
   /** The run's page; null before it started. */
   href: string | null;
+  /** The run and its branch; null before it started. */
+  runId: string | null;
+  branchId: string | null;
   title: string;
 }
 
@@ -87,6 +90,12 @@ function cellTitle(i: number, state: RunState, r: RunRow): string {
   return why ? `${line}\n${why}` : line;
 }
 
+/** The run's page and ids once it started (both ids set), else nulls. */
+function placeOf(r: RunRow): Pick<RunCell, 'href' | 'runId' | 'branchId'> {
+  if (!r.run_id || !r.branch_id) return { href: null, runId: null, branchId: null };
+  return { href: `/runs/${r.run_id}/${r.branch_id}`, runId: r.run_id, branchId: r.branch_id };
+}
+
 function cell(r: RunRow, i: number): RunCell {
   const o = r.outcome;
   const state = stateOf(r);
@@ -97,7 +106,7 @@ function cell(r: RunRow, i: number): RunCell {
     violations: o?.safety_violations ?? 0,
     denials: o?.denials ?? 0,
     flags: o?.flags ?? 0,
-    href: r.run_id && r.branch_id ? `/runs/${r.run_id}/${r.branch_id}` : null,
+    ...placeOf(r),
     title: cellTitle(i, state, r),
   };
 }

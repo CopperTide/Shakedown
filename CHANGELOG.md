@@ -25,6 +25,10 @@
 
 ### Added
 
+- **Switch runs from the run page, and compare three or more.** A run of an experiment has a folded switcher under
+  its header: hop to the previous or next run, or open it for every setup's runs and this run's reruns. Tick
+  runs there and **Compare** opens `/compare?branches=a,b,c`: a column per run with the best of each row in
+  bold, and where each run first leaves the first one, built from the pairwise compare (no API change).
 - **Previous and next step buttons.** The step panel on the run page and the process view, and Run once's step
   drawer, have ‹ › buttons with where the step sits ("12 of 340"), the same moves as ←/→. Arrow keys no longer
   also move the step while a tab has focus.

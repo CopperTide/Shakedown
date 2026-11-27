@@ -1,6 +1,7 @@
-// The compare page's outcome table: what each branch achieved, read from what the API already
+// The compare pages' outcome table: what each branch achieved, read from what the API already
 // returns (the check's named checks and what they measured, the metrics, the events and the last
-// view of the twin). The rows are the ones either branch has: no world's figures are built in.
+// view of the twin). The rows are the ones any branch has: no world's figures are built in. Two
+// branches (A and B) or any number side by side.
 import { measureText } from '@/features/experiments/measures';
 import { costLabel } from '@/features/run/timeline';
 import { usd as dollars } from '@/lib/format';
@@ -141,11 +142,10 @@ function kpiSpecs(views: (TwinView | null)[]): Spec[] {
 }
 
 /**
- * The rows the two branches have: their checks (passed, safety, each figure a check measured), the
+ * The rows the branches have: their checks (passed, safety, each figure a check measured), the
  * KPIs of their twins, what the agents cost and, when an agent asked for approval, the escalations.
  */
-function specsOf(a: SideInput, b: SideInput): Spec[] {
-  const sides = [a, b];
+function specsOf(sides: SideInput[]): Spec[] {
   const scored = sides.map((s) => namedChecks(s.detail.events));
   const checks = scored.flatMap((c) => c?.checks ?? []);
   const asked = sides.some((s) => (escalations(s.detail.events).value ?? 0) > 0);
@@ -159,14 +159,32 @@ function specsOf(a: SideInput, b: SideInput): Spec[] {
   ];
 }
 
+/** One outcome across any number of branches: a figure per branch, in their order. */
+export interface OutcomeLine extends Pick<OutcomeRow, 'id' | 'label' | 'hint' | 'better'> {
+  values: Figure[];
+}
+
+/** The outcome rows of any number of branches side by side. */
+export function outcomeLines(sides: SideInput[]): OutcomeLine[] {
+  return specsOf(sides).map(({ of, ...spec }) => ({ ...spec, values: sides.map(of) }));
+}
+
+/** Which branch did best on a row (its index): null when no way is better, fewer than two compare, or the best ties. */
+export function bestOf(row: Pick<OutcomeLine, 'better' | 'values'>): number | null {
+  const sign = row.better === 'higher' ? 1 : row.better === 'lower' ? -1 : 0;
+  const scored = row.values.flatMap((f, i) => (f.value == null ? [] : [{ i, v: f.value * sign }]));
+  if (!sign || scored.length < 2) return null;
+  const top = Math.max(...scored.map((x) => x.v));
+  const at = scored.filter((x) => x.v === top);
+  return at.length === 1 ? at[0].i : null;
+}
+
 export function outcomeRows(a: SideInput, b: SideInput): OutcomeRow[] {
-  return specsOf(a, b).map(({ of, ...spec }) => ({ ...spec, a: of(a), b: of(b) }));
+  return outcomeLines([a, b]).map(({ values: [fa, fb], ...spec }) => ({ ...spec, a: fa, b: fb }));
 }
 
 /** Which side did better on a row, or null when equal or not comparable. */
 export function verdict(row: OutcomeRow): 'a' | 'b' | null {
-  const { a, b } = row;
-  if (!row.better || a.value == null || b.value == null || a.value === b.value) return null;
-  const bHigher = b.value > a.value;
-  return (row.better === 'higher') === bHigher ? 'b' : 'a';
+  const best = bestOf({ better: row.better, values: [row.a, row.b] });
+  return best == null ? null : best === 0 ? 'a' : 'b';
 }

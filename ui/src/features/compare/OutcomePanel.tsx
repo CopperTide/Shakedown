@@ -5,7 +5,7 @@ import type { TrackMark } from '@/features/world/scrub';
 import { cn } from '@/lib/cn';
 import type { BranchDetail } from '@/model/types';
 import type { Strip } from './divergence';
-import { type Figure, type OutcomeRow, type SideInput, outcomeRows, verdict } from './outcomes';
+import { type Figure, type OutcomeRow, type SideInput, bestOf, outcomeLines, outcomeRows, verdict } from './outcomes';
 
 function Value({ f, better }: { f: Figure; better: boolean }) {
   return <span title={f.title} className={cn('text-sm tabular-nums', f.abnormal && 'font-semibold text-alarm', better && !f.abnormal && 'font-semibold')}>{f.text}</span>;
@@ -23,7 +23,7 @@ function Row({ r }: { r: OutcomeRow }) {
   );
 }
 
-function SideHead({ label, d }: { label: string; d: BranchDetail }) {
+export function SideHead({ label, d }: { label: string; d: BranchDetail }) {
   return (
     <th scope="col" className="px-2 py-1.5 text-left align-bottom font-normal">
       <span className="flex flex-wrap items-center gap-1.5"><span className="text-xs font-semibold">{label}</span><StatusChip status={d.status} /></span>
@@ -72,6 +72,27 @@ export default function OutcomePanel({ a, b }: { a: SideInput; b: SideInput }) {
       <table className="w-full min-w-[340px] border-collapse">
         <thead><tr><th scope="col" className="w-[34%]" /><SideHead label="A" d={a.detail} /><SideHead label="B" d={b.detail} /><th scope="col" /></tr></thead>
         <tbody>{rows.map((r) => <Row key={r.id} r={r} />)}</tbody>
+      </table>
+    </Panel>
+  );
+}
+
+/** Any number of branches side by side: a column each, the best figure of a row in bold. */
+export function OutcomeTable({ sides, labels }: { sides: SideInput[]; labels: string[] }) {
+  const lines = outcomeLines(sides);
+  return (
+    <Panel className="overflow-x-auto py-1">
+      <table className="w-full min-w-[340px] border-collapse">
+        <thead><tr><th scope="col" className="w-[24%]" />{sides.map((s, i) => <SideHead key={s.detail.id} label={labels[i]} d={s.detail} />)}</tr></thead>
+        <tbody>{lines.map((r) => {
+          const best = bestOf(r);
+          return (
+            <tr key={r.id} className="border-t border-line align-baseline">
+              <th scope="row" className="py-2 pr-3 pl-4 text-left text-sm font-medium" title={r.hint}>{r.label}</th>
+              {r.values.map((f, i) => <td key={sides[i].detail.id} className="px-2 py-2"><Value f={f} better={best === i} /></td>)}
+            </tr>
+          );
+        })}</tbody>
       </table>
     </Panel>
   );

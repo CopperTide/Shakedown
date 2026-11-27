@@ -81,7 +81,17 @@ secondary metadata lines, few borders, plenty of whitespace.
 - **World picker** (`features/start/WorldPicker.tsx`, on Run once and New experiment above the task): the worlds
   by title, the current one chosen; choosing one makes it current (`POST /api/worlds/{name}/use`) and reloads the
   page; the last option is "Build a world…".
-- **Compare runs** (`/compare/:a/:b`), **World view** (`/world/…`), **Process view** (`/control/…`)
+- **Run switcher** (`features/run/RunSwitcher.tsx`, on the run page under the header): for a run of an experiment, one
+  folded line, "Experiment · <name>", ‹ Setup · run 2 of 3 › to hop through the experiment's started runs, and
+  **Results**. Opened (remembered in `shakedown.run.switcher`), a strip of squares per setup (the experiment page's,
+  the run on screen ringed) and this run's original and reruns; **Pick runs to compare** starts with the run on
+  screen ticked, a click ticks another, and **Compare N** opens them side by side. The experiment is found from
+  the experiments list (`features/run/experimentOf.ts`: the newest that ran the run's task and started before it,
+  at most five read). A run outside an experiment shows only its reruns, or nothing.
+- **Compare runs**: two at `/compare/:a/:b`; three or more at `/compare?branches=a,b,c`
+  (`features/compare/CompareManyPage.tsx`): the outcome table with a column per run (A, B, C…, the best of a row in
+  bold), and **Against A**: where each run first leaves A and how many final rows differ, from the pairwise
+  `GET /api/compare` per run, with a link to that pair in detail. **World view** (`/world/…`), **Process view** (`/control/…`)
   and the **Team editor** (`/team`) are one click away under ⋯ and ⌘K.
 
 **Which core.** The UI talks to the Shakedown core (shaked) it is served from. A build can name another

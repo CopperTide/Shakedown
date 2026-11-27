@@ -34,6 +34,7 @@ import ForkPanel from './ForkPanel';
 import Inspector from './Inspector';
 import MetricsPanel from './Metrics';
 import RunMenu from './RunMenu';
+import RunSwitcher from './RunSwitcher';
 import { RunErrorBanner, StepSidePanel, useExpanded } from './RunShell';
 import StepStepper from './StepStepper';
 import { checkMark, runStats, safetyLine, taskOf } from './runStats';
@@ -194,6 +195,7 @@ export default function Run() {
       <PageBody>
         {v.notice && <Notice onDismiss={() => v.setNotice(null)}>{v.notice}</Notice>}
         <RunErrorBanner error={error} onRetry={reload} detail={detail} />
+        <RunSwitcher runId={runId} detail={detail} siblings={siblings} />
         <RunReview d={detail} onStep={v.setSelected} />
         <Split storageKey="shakedown.run.side" expanded={expanded} main={<Main detail={detail} timeline={timeline} selected={v.selected} onSelect={v.setSelected} models={models} setModels={setModels} />}
           side={<Side runId={runId} detail={detail} event={event} forking={v.forking} setForking={v.setForking} autoRows={v.autoRows} choice={v.choice} onSelect={v.setSelected} order={v.order} expanded={expanded} onExpand={setExpanded} />} />

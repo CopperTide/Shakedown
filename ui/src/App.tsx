@@ -26,6 +26,7 @@ const ProjectSettingsPage = lazy(() => import('@/features/settings/ProjectSettin
 const GetStartedPage = lazy(() => import('@/features/onboarding/GetStartedPage'));
 const ProcessPage = lazy(() => import('@/features/process/ProcessPage'));
 const Compare = lazy(() => import('@/features/compare/ComparePage'));
+const CompareMany = lazy(() => import('@/features/compare/CompareManyPage'));
 const ConnectPage = lazy(() => import('@/features/connect/ConnectPage'));
 const BuildPage = lazy(() => import('@/features/build/BuildPage'));
 const Run = lazy(() => import('@/features/run/RunPage'));
@@ -84,6 +85,7 @@ function AppRoutes() {
         <Route path="/team" element={<Team />} />
         <Route path="/connect" element={<ConnectPage />} />
         <Route path="/worlds/new" element={<BuildPage />} />
+        <Route path="/compare" element={<CompareMany />} />
         <Route path="/compare/:a/:b" element={<Compare />} />
         <Route path="/control/:runId/:branchId" element={<ProcessPage />} />
         <Route path="/world/:runId/:branchId" element={<World />} />

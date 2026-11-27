@@ -110,9 +110,9 @@ interface Loaded {
 }
 
 /** The branch's last view from `GET /api/branches/{id}/views`; undefined when the endpoint fails. */
-const endView = (id: string) => fetchViews(id).then((v) => v, () => undefined);
+export const endView = (id: string) => fetchViews(id).then((v) => v, () => undefined);
 
-const lastOf = (raw: BranchView[] | undefined): TwinView | null | undefined =>
+export const lastOf = (raw: BranchView[] | undefined): TwinView | null | undefined =>
   raw === undefined ? undefined : normalizeViews(raw).at(-1)?.view ?? null;
 
 async function loadCompare(a: string, b: string): Promise<Loaded> {

@@ -14,13 +14,29 @@ const CELL: Record<RunState, string> = {
 
 const GLYPH: Partial<Record<RunState, string>> = { failed: '✕', unscored: '!' };
 
-function Square({ c }: { c: RunCell }) {
+/** How a strip on a run's page marks its own run and the runs ticked for comparing. */
+export interface StripPick {
+  /** The run on screen, ringed. */
+  current?: string | null;
+  /** The branches ticked; with `onPick` a click ticks a run instead of opening it. */
+  picked?: ReadonlySet<string>;
+  onPick?: (c: RunCell) => void;
+}
+
+function Square({ c, pick }: { c: RunCell; pick: StripPick }) {
+  const ticked = !!c.branchId && !!pick.picked?.has(c.branchId);
   const body = (
-    <span className={cn('relative grid size-6 place-items-center rounded-[4px] border text-xs leading-none font-bold', CELL[c.state])}>
+    <span className={cn('relative grid size-6 place-items-center rounded-[4px] border text-xs leading-none font-bold', CELL[c.state],
+      c.runId != null && c.runId === pick.current && 'ring-2 ring-fg ring-offset-1 ring-offset-surface', ticked && 'ring-2 ring-accent ring-offset-1 ring-offset-surface')}>
       {GLYPH[c.state]}
       {c.violations > 0 && <span aria-hidden="true" className="absolute -top-1 -right-1 size-2.5 rounded-full bg-alarm ring-2 ring-surface" />}
     </span>
   );
+  const label = ticked ? `${c.title} (ticked)` : c.title;
+  if (pick.onPick && c.branchId) {
+    const onPick = pick.onPick;
+    return <Tooltip content={c.title}><button type="button" aria-label={label} aria-pressed={ticked} onClick={() => onPick(c)} className="rounded-[4px]">{body}</button></Tooltip>;
+  }
   return (
     <Tooltip content={c.title}>
       {c.href
@@ -31,6 +47,6 @@ function Square({ c }: { c: RunCell }) {
 }
 
 /** One square per run: ink passed, red ✕ failed, ! not scored, pulsing while it runs, dashed not run yet; a dot for a safety violation. */
-export default function RunStrip({ runs }: { runs: RunCell[] }) {
-  return <div className="flex flex-wrap gap-1.5">{runs.map((c) => <Square key={c.key} c={c} />)}</div>;
+export default function RunStrip({ runs, pick = {} }: { runs: RunCell[]; pick?: StripPick }) {
+  return <div className="flex flex-wrap gap-1.5">{runs.map((c) => <Square key={c.key} c={c} pick={pick} />)}</div>;
 }
