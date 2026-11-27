@@ -110,6 +110,15 @@ pub(crate) fn request(
     })
 }
 
+/// The id and file of the world experiment `id` runs.
+pub(crate) fn world_of<'a>(
+    project: &'a Project,
+    id: &Id,
+) -> Result<(&'a str, &'a WorldFile), OpError> {
+    let exp = experiment_of(project, id)?;
+    Ok((exp.world.as_str(), named::<WorldFile>(project, &exp.world)?))
+}
+
 /// The package that runs the project's world `name`.
 pub(crate) fn world_package(project: &Project, name: &str) -> Result<String, OpError> {
     package_of(named::<WorldFile>(project, name)?)
@@ -183,6 +192,7 @@ fn scenario_req(
         timed: timed(scenario, start)?,
         generators: scenario.generators.clone(),
         clock,
+        world_data: None,
     };
     Ok((req != ScenarioRequest::default()).then_some(req))
 }

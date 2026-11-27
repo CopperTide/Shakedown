@@ -51,18 +51,10 @@ fn import_git<'a>(ctx: &'a OpCtx<'a>, _: &'static Operation, value: Value) -> Op
             id,
             confirm,
         } = input(value)?;
-        if ctx
-            .app
-            .is_some_and(|a| a.store.layer().policy().serves_others)
-        {
-            return Err(OpError::new(
-                StatusCode::FORBIDDEN,
-                "importing from git runs the repo's code on this server: hosted Shakedown will run it in a run's sandbox, which is not built yet",
-            ));
-        }
+        refuse_hosted(ctx, "importing from git runs the repo's code")?;
         let root = ctx.project.root().ok_or(NoProject::NotConfigured)?;
         let hub = ctx.app.map(|a| a.hub.as_ref());
-        let req = Request { url, git_ref, id };
+        let req = Request::git(url, git_ref, id);
         let out = git_import::import(root, req, confirm, hub)
             .await
             .map_err(op_error)?;
@@ -71,11 +63,27 @@ fn import_git<'a>(ctx: &'a OpCtx<'a>, _: &'static Operation, value: Value) -> Op
     })
 }
 
-fn op_error(e: ImportError) -> OpError {
+/// 403 where this shaked serves others (hosted), for an operation that `runs` outside code (e.g.
+/// "importing from git runs the repo's code").
+pub(super) fn refuse_hosted(ctx: &OpCtx<'_>, runs: &str) -> Result<(), OpError> {
+    if !ctx
+        .app
+        .is_some_and(|a| a.store.layer().policy().serves_others)
+    {
+        return Ok(());
+    }
+    Err(OpError::new(
+        StatusCode::FORBIDDEN,
+        format!("{runs} on this server: hosted Shakedown will run it in a run's sandbox, which is not built yet"),
+    ))
+}
+
+pub(super) fn op_error(e: ImportError) -> OpError {
     let status = match e {
         ImportError::Bad(_) => StatusCode::BAD_REQUEST,
         ImportError::Conflict(_) => StatusCode::CONFLICT,
         ImportError::Failed(_) => StatusCode::UNPROCESSABLE_ENTITY,
+        ImportError::NotFound(_) => StatusCode::NOT_FOUND,
         ImportError::Io(_) => StatusCode::INTERNAL_SERVER_ERROR,
     };
     OpError::new(status, e.message().to_string())

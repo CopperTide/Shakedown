@@ -1,18 +1,28 @@
-//! Fetching a repo and working out what importing it would do, without installing or writing.
+//! Fetching a repo (or unpacking an archive) and working out what importing it would do, without
+//! installing or writing.
 
 use std::path::{Path, PathBuf};
 
 use parts::Hub;
 
 use super::record::{self, imports_dir, Record};
-use super::{default_id, detect, fetch, git_url, items, python, ImportError, Request};
+use super::{
+    archive, default_id, detect, fetch, git_url, items, python, ImportError, Request, Source,
+};
 
 /// A fetched repo and what importing it would do.
 pub struct Prepared {
     pub id: String,
+    /// `git` or `archive`.
+    pub source: &'static str,
+    /// The git URL, or the archive's file name.
     pub url: String,
+    /// The git ref (empty for an archive).
     pub git_ref: String,
+    /// The commit, or the archive's SHA-256.
     pub commit: String,
+    /// A runtime install: the folder whose packages are installed (no project files).
+    pub packages_only: Option<String>,
     /// `.shakedown/imports/<id>`.
     pub dir: PathBuf,
     pub checkout: PathBuf,
@@ -36,12 +46,20 @@ pub async fn prepare(
     req: Request,
     hub: Option<&Hub>,
 ) -> Result<Prepared, ImportError> {
-    let (url, id, git_ref) = checked(&req)?;
+    let id = checked_id(
+        req.id
+            .clone()
+            .unwrap_or_else(|| default_id(source_name(&req.source))),
+    )?;
     let dir = imports_dir(project).join(&id);
-    let fetched = fetch::fetch(&url, &git_ref, &dir).await?;
-    let checkout = fetched.dir.canonicalize().unwrap_or(fetched.dir);
-    let found = detect::detect(&checkout);
     let last = record::read(&dir);
+    let packages_only = scope(&req, last.as_ref())?;
+    let (source, url, git_ref, fetched) = fetched(req.source, &dir).await?;
+    let checkout = fetched.dir.canonicalize().unwrap_or(fetched.dir);
+    let mut found = detect::detect(&checkout);
+    if let Some(folder) = &packages_only {
+        only_packages_under(&mut found, &checkout, folder);
+    }
     let items = match &found.project {
         Some(repo) => items::plan(repo, project, last.as_ref()),
         None => vec![],
@@ -50,9 +68,11 @@ pub async fn prepare(
     let conflicts = conflicts(&id, &found, hub);
     Ok(Prepared {
         id,
-        url: req.url,
+        source,
+        url,
         git_ref,
         commit: fetched.commit,
+        packages_only,
         dir,
         checkout,
         found,
@@ -64,11 +84,78 @@ pub async fn prepare(
     })
 }
 
-/// The git URL, the import id and the ref `req` asks for, each checked.
-fn checked(req: &Request) -> Result<(String, String, String), ImportError> {
-    let url = git_url(&req.url)?;
-    let id = checked_id(req.id.clone().unwrap_or_else(|| default_id(&req.url)))?;
-    Ok((url, id, checked_ref(req.git_ref.clone())?))
+/// What names the import by default: the git URL or the archive's file name.
+fn source_name(source: &Source) -> &str {
+    match source {
+        Source::Git { url, .. } => url,
+        Source::Archive { name, .. } => archive::stem(name),
+    }
+}
+
+/// The source fetched into the import folder `dir`: its kind, URL (or file name), ref and
+/// checkout.
+async fn fetched(
+    source: Source,
+    dir: &Path,
+) -> Result<(&'static str, String, String, fetch::Fetched), ImportError> {
+    match source {
+        Source::Git { url, git_ref } => {
+            let (git, r) = (git_url(&url)?, checked_ref(git_ref)?);
+            let fetched = fetch::fetch(&git, &r, dir).await?;
+            Ok(("git", url, r, fetched))
+        }
+        Source::Archive { name, bytes } => {
+            let fetched = archive::unpack(&name, &bytes, dir)?;
+            Ok(("archive", name, String::new(), fetched))
+        }
+    }
+}
+
+/// The folder a runtime install takes packages from, checked; refused into an import that wrote
+/// project files (that one is updated with Import from git).
+fn scope(req: &Request, last: Option<&Record>) -> Result<Option<String>, ImportError> {
+    let Some(folder) = &req.packages_only else {
+        return Ok(None);
+    };
+    if let Some(last) = last.filter(|l| !l.items.is_empty()) {
+        return Err(ImportError::Conflict(format!(
+            "{} was imported from git with its project files: update it with Import from git, or give this runtime another id",
+            last.id
+        )));
+    }
+    let folder = folder.trim().trim_matches('/');
+    let plain = folder
+        .split('/')
+        .all(|s| !s.is_empty() && s != "." && s != "..");
+    match folder.is_empty() || (plain && !folder.contains('\\')) {
+        true => Ok(Some(folder.to_string())),
+        false => Err(ImportError::Bad(format!(
+            "{folder:?} is not a folder of the repo: give a relative path such as packages/desk"
+        ))),
+    }
+}
+
+/// Keeps only the packages under `folder` of the checkout, and no project or Compose files.
+fn only_packages_under(found: &mut detect::Found, checkout: &Path, folder: &str) {
+    found.project = None;
+    found.compose.clear();
+    if !folder.is_empty() {
+        if !checkout.join(folder).is_dir() {
+            found
+                .problems
+                .push(format!("the repo has no folder {folder}"));
+        }
+        let under = |rel: &str| rel == folder || rel.starts_with(&format!("{folder}/"));
+        found.packages.retain(|p| under(&p.rel));
+    }
+    if found.packages.is_empty() {
+        let at = if folder.is_empty() {
+            "the repo"
+        } else {
+            folder
+        };
+        (found.problems).push(format!("{at} holds no package (no shakedown-package.toml)"));
+    }
 }
 
 /// An import id: an item-style id of at most 40 characters (it names a folder).

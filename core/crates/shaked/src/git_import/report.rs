@@ -24,6 +24,8 @@ pub fn plan_json(p: &Prepared) -> Value {
     problems.extend(p.sources.problems.iter().cloned());
     json!({
         "id": p.id,
+        "source": p.source,
+        "packages_only": p.packages_only,
         "url": p.url,
         "ref": p.git_ref,
         "commit": p.commit,

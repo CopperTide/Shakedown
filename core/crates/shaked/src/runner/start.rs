@@ -372,7 +372,10 @@ async fn start_world(
 ) -> Result<(BenchDescribe, World, i64, f64)> {
     crate::bind::local_only(state.store.layer().policy(), "starting a world's parts")
         .map_err(anyhow::Error::msg)?;
-    let bench = state.bench_named(&plan.benchmark).await?;
+    let mut bench = state.bench_named(&plan.benchmark).await?;
+    if let Some(data) = &plan.scenario.world_data {
+        crate::world_data::apply(&mut bench, data)?;
+    }
     let mut planned = world::plan(&state.hub, &bench).await?;
     let (branch_id, hub) = (plan.branch_id.as_str(), state.hub.clone());
     planned.models = Some(world::models::WorldModels::for_branch(

@@ -6,7 +6,7 @@ Subclass `Benchmark`, override what you need (`describe` always; `score` with `s
 import json
 from pathlib import Path
 
-from . import errors
+from . import errors, worlddata
 from .models import Models
 from .serve import _need, announced, serve
 
@@ -37,6 +37,11 @@ class Benchmark:
         """The model client of the `score` call in progress (a judge's calls, recorded as `world.scoring`), when
         shaked gave it an endpoint; else None."""
         return getattr(self, "_scoring_models", None)
+
+    def world_data(self):
+        """The world's data (`worlddata.WorldData`) of the `gold_actions` or `score` call in progress, when the
+        run's world has some; else None."""
+        return getattr(self, "_world_data", None)
 
 
 def load(path: Path) -> dict:
@@ -107,19 +112,30 @@ def _seed(bench, params):
 
 
 def _score(bench, params):
-    """`score`, with the call's model client set while it runs."""
+    """`score`, with the call's model client and world data set while it runs."""
     bench._scoring_models = Models.of(params.get("models")) if isinstance(params, dict) else None
+    bench._world_data = worlddata.of(params)
     try:
         return bench.score(*_need(params, "task", "docs"))
     finally:
         bench._scoring_models = None
+        bench._world_data = None
+
+
+def _gold_actions(bench, params):
+    """`gold_actions`, with the call's world data set while it runs."""
+    bench._world_data = worlddata.of(params)
+    try:
+        return bench.gold_actions(*_need(params, "task"))
+    finally:
+        bench._world_data = None
 
 
 _METHODS = {
     "describe": lambda b, p: announced(b.describe()),
     "seed": _seed,
     "call_tool": lambda b, p: b.call_tool(*_need(p, "name", "args", "connections")),
-    "gold_actions": lambda b, p: b.gold_actions(*_need(p, "task")),
+    "gold_actions": _gold_actions,
     "score": _score,
     "view": lambda b, p: b.view(*_need(p, "connections", "docs")),
 }

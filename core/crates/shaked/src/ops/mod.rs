@@ -20,6 +20,7 @@ mod migrate;
 mod observability_ops;
 mod project_ops;
 mod restore_ops;
+mod runtime_ops;
 pub mod stdio;
 mod step_ops;
 mod view;
@@ -141,6 +142,7 @@ pub fn all() -> &'static [Operation] {
         ops.extend(madl_ops::ops());
         ops.extend(import_ops::ops());
         ops.extend(import_git_ops::ops());
+        ops.extend(runtime_ops::ops());
         ops.extend(step_ops::ops());
         ops.extend(observability_ops::ops());
         ops.extend(analytics_ops::ops());

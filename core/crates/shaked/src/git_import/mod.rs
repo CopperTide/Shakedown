@@ -4,8 +4,12 @@
 //!
 //! Layout, under the importing project: `.shakedown/imports/<id>/import.json` (the record),
 //! `<commit12>/` (the checkout) and `env/<commit12>-<root>/` (a uv environment per workspace).
+//!
+//! The same machinery installs a runtime (`crate::runtimes`): packages only, from a git repo or
+//! an uploaded archive (whose checkout is named after its SHA-256), with no project files.
 
 mod apply;
+mod archive;
 mod detect;
 mod fetch;
 mod items;
@@ -20,8 +24,9 @@ use std::path::Path;
 use parts::Hub;
 use serde_json::{json, Value};
 
-pub use fetch::{default_id, git_url};
+pub use fetch::{default_id, git_url, short};
 pub use register::{listed, register};
+pub use report::package_kind;
 
 /// Why an import stopped.
 #[derive(Debug)]
@@ -32,6 +37,8 @@ pub enum ImportError {
     Conflict(String),
     /// git or uv failed.
     Failed(String),
+    /// No such import.
+    NotFound(String),
     /// A file could not be read or written.
     Io(String),
 }
@@ -46,6 +53,7 @@ impl ImportError {
             ImportError::Bad(m)
             | ImportError::Conflict(m)
             | ImportError::Failed(m)
+            | ImportError::NotFound(m)
             | ImportError::Io(m) => m,
         }
     }
@@ -57,14 +65,37 @@ impl std::fmt::Display for ImportError {
     }
 }
 
+/// Where an import comes from.
+pub enum Source {
+    Git {
+        /// A git URL or an absolute path.
+        url: String,
+        /// A branch, a tag or a full commit SHA (default `HEAD`).
+        git_ref: Option<String>,
+    },
+    /// An uploaded `.zip` or `.tar.gz` of a package folder or of a repo holding packages.
+    Archive { name: String, bytes: Vec<u8> },
+}
+
 /// What to import.
 pub struct Request {
-    /// A git URL or an absolute path.
-    pub url: String,
-    /// A branch, a tag or a full commit SHA (default `HEAD`).
-    pub git_ref: Option<String>,
-    /// The import's id (default: the repo's name).
+    pub source: Source,
+    /// The import's id (default: the repo's or the archive's name).
     pub id: Option<String>,
+    /// A runtime install: only the packages under this folder of the repo (`""` for all of
+    /// them), and none of its project files.
+    pub packages_only: Option<String>,
+}
+
+impl Request {
+    /// A whole repo from git, as Import from git asks for it.
+    pub fn git(url: String, git_ref: Option<String>, id: Option<String>) -> Request {
+        Request {
+            source: Source::Git { url, git_ref },
+            id,
+            packages_only: None,
+        }
+    }
 }
 
 /// Fetches `req` into the project at `project` and answers the plan; with `confirm`, installs,

@@ -76,7 +76,10 @@ async fn reset_to(url: &str, base: &Value) {
 /// Runs the benchmark's gold actions for `task` against the database at `url`.
 async fn run_gold(url: &str, task: &str) {
     let gold = retail()
-        .gold_actions(GoldParams { task: task.into() })
+        .gold_actions(GoldParams {
+            task: task.into(),
+            world_data: None,
+        })
         .await
         .unwrap();
     for a in gold.actions {
@@ -110,7 +113,10 @@ async fn gold_changes_match_for_all_68_tasks() {
 #[tokio::test]
 async fn gold_actions_for_27_nonempty() {
     let a = retail()
-        .gold_actions(GoldParams { task: "27".into() })
+        .gold_actions(GoldParams {
+            task: "27".into(),
+            world_data: None,
+        })
         .await
         .unwrap();
     assert!(!a.actions.is_empty());
@@ -118,6 +124,7 @@ async fn gold_actions_for_27_nonempty() {
     let e = retail()
         .gold_actions(GoldParams {
             task: "nope".into(),
+            world_data: None,
         })
         .await
         .unwrap_err();

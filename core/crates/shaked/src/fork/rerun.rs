@@ -192,7 +192,10 @@ pub async fn prepare(
         return Err(ForkError::UnknownSeq);
     }
     let run = run_info(events);
-    let bench = state.hub.bench_describe(&run.benchmark).await?;
+    let mut bench = state.hub.bench_describe(&run.benchmark).await?;
+    if let Some(data) = crate::world_data::of_world(&run.world) {
+        crate::world_data::apply(&mut bench, data).map_err(ForkError::Internal)?;
+    }
     let world = world::plan(&state.hub, &bench).await?;
     known_tools(&world, &req.changes)?;
     let mut parts = part_restores(&world, req.restore.parts_mode())?;

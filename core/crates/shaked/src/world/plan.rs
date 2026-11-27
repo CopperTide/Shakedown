@@ -185,12 +185,14 @@ async fn describe_parts(hub: &Hub, bench: &BenchDescribe) -> Result<Vec<PlannedP
                 wp.part
             );
         }
-        let describe = hub.describe(&wp.integration).await.with_context(|| {
+        let mut describe = hub.describe(&wp.integration).await.with_context(|| {
             format!(
                 "describing the {} integration of part {}",
                 wp.integration, wp.part
             )
         })?;
+        let fingerprint = std::mem::take(&mut describe.fingerprint);
+        describe.fingerprint = crate::world_data::fingerprint(fingerprint, &wp.config);
         parts.push(PlannedPart {
             part: wp.clone(),
             describe,

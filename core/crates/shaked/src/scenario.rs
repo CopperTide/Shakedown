@@ -43,6 +43,10 @@ pub struct Scenario {
     /// time. Forks read it back from `RunStart.scenario`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub clock: Option<SteppedClock>,
+    /// The world's data every part starts from ([`crate::world_data`]); forks read it back from
+    /// the configs `RunStart.world` records.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub world_data: Option<Value>,
 }
 
 impl Scenario {
@@ -77,6 +81,7 @@ pub fn expand(
         timed: req.timed.clone(),
         generators: req.generators.clone(),
         clock: req.clock.clone(),
+        world_data: req.world_data.clone(),
         ..Scenario::default()
     };
     if req.disruptions.is_empty() {

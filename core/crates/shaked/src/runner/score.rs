@@ -77,7 +77,10 @@ async fn score_by_checks(ctx: &BranchCtx) -> Result<CheckPayload> {
 /// Saves every part's final state and compares the world with the task's gold saves; parts not
 /// in them are listed as unchecked. A benchmark that scores itself has no gold saves.
 async fn score(state: &AppState, ctx: &BranchCtx) -> Result<CheckPayload> {
-    let bench = state.hub.bench_describe(ctx.world.bench()).await?;
+    let mut bench = state.hub.bench_describe(ctx.world.bench()).await?;
+    if let Some(data) = ctx.world.world_data() {
+        crate::world_data::apply(&mut bench, data)?;
+    }
     if bench.scored {
         return score_by_checks(ctx).await;
     }

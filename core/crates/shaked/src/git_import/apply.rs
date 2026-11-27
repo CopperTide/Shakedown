@@ -20,6 +20,9 @@ pub async fn apply(
     if !p.conflicts.is_empty() {
         return Err(ImportError::Conflict(p.conflicts.join("; ")));
     }
+    if p.packages_only.is_some() && p.found.packages.is_empty() {
+        return Err(ImportError::Bad(p.found.problems.join("; ")));
+    }
     install(&p).await?;
     let held = match &p.found.project {
         Some(repo) => {
@@ -64,6 +67,8 @@ fn record_of(
         .collect();
     Record {
         id: p.id.clone(),
+        source: p.source.to_string(),
+        packages_only: p.packages_only.clone(),
         url: p.url.clone(),
         git_ref: p.git_ref.clone(),
         commit: p.commit.clone(),

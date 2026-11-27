@@ -56,7 +56,7 @@ fn access_classes_follow_the_verb() {
         let want = match op.name.rsplit('.').next().unwrap() {
             "list" | "get" | "status" | "runs" | "madl" | "dependents" | "deleted" | "data"
             | "summary" | "search" | "schema" | "query" | "drill" | "sql" => Access::Read,
-            "delete" => Access::Delete,
+            "delete" | "data_delete" => Access::Delete,
             // Deploying and asking spend; exporting sends a run's record out: all are asked for.
             "deploy" | "ask" | "export" => Access::Spend,
             _ => Access::Edit,

@@ -14,6 +14,7 @@ pub mod live_world;
 pub mod packages;
 pub mod pg;
 pub mod project;
+pub mod repo;
 pub mod scripted;
 
 use std::{

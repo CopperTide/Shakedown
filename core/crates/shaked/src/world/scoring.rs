@@ -27,6 +27,7 @@ impl World {
             task: task.to_string(),
             docs: self.end_state().await?,
             models: self.models.as_ref().map(|m| m.of(SCORING)),
+            world_data: self.world_data.clone(),
         };
         let score: Score = request(self.bench_client()?, &self.bench_label(), &params).await?;
         Ok(score.checks)

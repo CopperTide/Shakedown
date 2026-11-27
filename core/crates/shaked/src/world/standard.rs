@@ -164,6 +164,7 @@ async fn set_up(world: &World, calls: &[SetupCall]) -> Result<()> {
 async fn apply_gold(world: &World, task: &str) -> Result<()> {
     let params = GoldParams {
         task: task.to_string(),
+        world_data: world.world_data.clone(),
     };
     let gold: GoldActions = request(world.bench_client()?, &world.bench_label(), &params).await?;
     let mut wrote = false;

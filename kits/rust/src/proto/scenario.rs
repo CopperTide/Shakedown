@@ -111,6 +111,10 @@ pub struct ScenarioRequest {
     /// A stepped world clock for the run; absent: the clock runs on wall time.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub clock: Option<SteppedClock>,
+    /// The world's data every part starts from (docs/protocol.md, "World data"), set by shaked
+    /// when it deploys a project world that has some.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub world_data: Option<Value>,
 }
 
 /// A disruption for `part`'s setup call, as it is: `{id, at, known_at, at_ms, known_at_ms, do,

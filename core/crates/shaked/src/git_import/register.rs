@@ -47,7 +47,7 @@ pub fn listed(project: &Path) -> Vec<Value> {
     record::all(project)
         .into_iter()
         .map(|(_, r)| {
-            json!({"id": r.id, "url": r.url, "ref": r.git_ref, "commit": r.commit,
+            json!({"id": r.id, "source": r.source, "url": r.url, "ref": r.git_ref, "commit": r.commit,
                    "imported_at": r.imported_at, "packages": r.packages.len(), "items": r.items.len()})
         })
         .collect()

@@ -181,6 +181,9 @@ pub struct World {
     track: Mutex<Track>,
     /// Where the branch's parts and scoring call models (None: they may not).
     models: Option<models::WorldModels>,
+    /// The world's data its parts were given ([`crate::world_data`]), passed on to `gold` and
+    /// `score`.
+    world_data: Option<Value>,
 }
 
 impl World {
@@ -229,7 +232,14 @@ impl World {
     }
 
     fn new(hub: Arc<Hub>, bench: &str, bench_client: Option<Arc<Client>>, plan: Plan) -> World {
+        let parts = plan
+            .parts
+            .iter()
+            .map(|p| p.part.clone())
+            .collect::<Vec<_>>();
+        let world_data = crate::world_data::of_world(&parts).cloned();
         World {
+            world_data,
             hub,
             bench: bench.to_string(),
             bench_client,
@@ -389,6 +399,11 @@ impl World {
             .filter(|p| !p.in_shared_saves())
             .map(|p| p.name.clone())
             .collect()
+    }
+
+    /// The world's data its parts were given, if any ([`crate::world_data`]).
+    pub fn world_data(&self) -> Option<&Value> {
+        self.world_data.as_ref()
     }
 
     /// Each part's integration `fingerprint`.

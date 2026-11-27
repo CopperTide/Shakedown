@@ -36,6 +36,10 @@ hyper-util = { version = "0.1", features = ["tokio"] }
 http-body-util = "0.1"
 bytes = "1"
 base64 = "0.22"
+# Unpacking an uploaded runtime archive (`git_import::archive`).
+flate2 = "1"
+tar = "0.4"
+zip = { version = "2", default-features = false, features = ["deflate"] }
 # OTLP/HTTP protobuf (the messages are written out in `otel::proto`).
 prost = "0.13"
 rcgen = { version = "0.13", default-features = false, features = ["ring", "pem"] }

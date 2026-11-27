@@ -48,9 +48,43 @@ fn deploy_one<'a>(ctx: &'a OpCtx<'a>, _: &'static Operation, value: Value) -> Op
         let (package, task) = deploy::runtime_of(&project, &id)?;
         let clock_start = task_clock_start(app, &package, &task).await;
         let creds = credentials(app, &ctx.caller, &deploy::needs(&project, &id)?).await?;
-        let req = deploy::request(&project, &id, &creds, clock_start.as_deref())?;
+        let mut req = deploy::request(&project, &id, &creds, clock_start.as_deref())?;
+        if let Some(data) = world_data(app, &project, &id)? {
+            req.scenario.get_or_insert_with(Default::default).world_data = Some(data);
+        }
         let detail = create_experiment(app, &ctx.caller, None, req).await?;
         serde_json::to_value(detail).map_err(|e| OpError::bad_request(e.to_string()))
+    })
+}
+
+/// The data the experiment's world gives its runs ([`crate::world_data`]), its snapshot kept
+/// with the hub's saves. Hosted Shakedown refuses a world that has some: its runs' sandboxes
+/// can't fetch the snapshot yet, and nothing is kept on the control box.
+fn world_data(
+    app: &AppState,
+    project: &shakedown_project::Project,
+    id: &Id,
+) -> Result<Option<Value>, OpError> {
+    let (world_id, world) = deploy::world_of(project, id)?;
+    if app.store.layer().policy().serves_others {
+        let has = world
+            .data
+            .iter()
+            .any(|d| d.default_state && d.file.is_some());
+        return match has {
+            true => Err(OpError::new(
+                axum::http::StatusCode::CONFLICT,
+                "a world's data files reach its runs only on a local shaked so far: hosted runs' sandboxes can't fetch them yet",
+            )),
+            false => Ok(None),
+        };
+    }
+    let saves = app.hub.saves_root();
+    crate::world_data::snapshot(&**project.store(), &world_id, world, saves).map_err(|e| {
+        OpError::new(
+            axum::http::StatusCode::UNPROCESSABLE_ENTITY,
+            format!("{e:#}"),
+        )
     })
 }
 

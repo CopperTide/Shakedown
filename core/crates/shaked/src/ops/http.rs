@@ -6,7 +6,7 @@ use std::sync::{Arc, OnceLock};
 
 use axum::{
     body::Bytes,
-    extract::{Query, RawPathParams, State},
+    extract::{DefaultBodyLimit, Query, RawPathParams, State},
     http::Method,
     routing::{on, MethodFilter},
     Json, Router,
@@ -23,18 +23,24 @@ use crate::{
     auth::{Action, ResourceKind, Target, Who},
 };
 
+/// The operations whose input carries a file, base64: a runtime's archive, a world's data file.
+pub const UPLOADS: [&str; 2] = ["runtimes.install", "worlds.data_put"];
+/// The largest body an upload takes; every other operation takes axum's default (2 MB).
+pub const UPLOAD_BODY: usize = 256 << 20;
+
 /// A router with every operation at its method and path.
 pub fn router() -> Router<Arc<AppState>> {
     all().iter().fold(Router::new(), |router, op| {
         let filter =
             MethodFilter::try_from(Method::from_bytes(op.method.as_bytes()).unwrap_or(Method::GET))
                 .unwrap_or(MethodFilter::GET);
-        router.route(
-            op.path,
-            on(filter, move |state, who, path, query, body| {
-                serve(op, state, who, path, query, body)
-            }),
-        )
+        let route = on(filter, move |state, who, path, query, body| {
+            serve(op, state, who, path, query, body)
+        });
+        match UPLOADS.contains(&op.name) {
+            true => router.route(op.path, route.layer(DefaultBodyLimit::max(UPLOAD_BODY))),
+            false => router.route(op.path, route),
+        }
     })
 }
 

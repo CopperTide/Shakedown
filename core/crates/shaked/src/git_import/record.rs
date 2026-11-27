@@ -12,9 +12,18 @@ use super::ImportError;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Record {
     pub id: String,
+    /// `git` or `archive`.
+    #[serde(default = "git")]
+    pub source: String,
+    /// A runtime install: the folder of the repo whose packages it installed (no project files).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub packages_only: Option<String>,
+    /// The git URL, or the archive's file name.
     pub url: String,
+    /// The git ref (empty for an archive).
     #[serde(rename = "ref")]
     pub git_ref: String,
+    /// The commit, or the archive's SHA-256.
     pub commit: String,
     /// RFC 3339.
     pub imported_at: String,
@@ -23,6 +32,10 @@ pub struct Record {
     /// The edits shaked made to the checkout (kit sources), as `<file>: <package> -> <folder>`.
     #[serde(default)]
     pub edits: Vec<String>,
+}
+
+fn git() -> String {
+    "git".into()
 }
 
 /// A package the import registered.

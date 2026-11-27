@@ -566,6 +566,10 @@ pub struct BenchToolOutput {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GoldParams {
     pub task: String,
+    /// The world's data the run's parts were given (docs/protocol.md, "World data"); absent when
+    /// the world has none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub world_data: Option<Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -588,6 +592,10 @@ pub struct ScoreParams {
     /// Where the scoring may call models, a judge's (absent: it may not).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub models: Option<ModelsParams>,
+    /// The world's data the run's parts were given (docs/protocol.md, "World data"); absent when
+    /// the world has none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub world_data: Option<Value>,
 }
 
 /// One named pass-or-fail check of a branch's end state.
@@ -811,6 +819,7 @@ mod tests {
             task: "t".into(),
             docs: Map::new(),
             models: None,
+            world_data: None,
         };
         assert!(serde_json::to_value(&score)
             .unwrap()

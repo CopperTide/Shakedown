@@ -78,6 +78,17 @@ impl Hub {
         self
     }
 
+    /// A hub over the package `m` alone, with this hub's program folders and environment and the
+    /// saves folder `saves_root`: for checking a package without touching the programs runs use.
+    pub fn alone(&self, m: Manifest, saves_root: PathBuf) -> Result<Hub> {
+        let mut registry = Registry::default();
+        registry.add(m)?;
+        Ok(Hub::new(registry, self.bin_dir.clone(), saves_root)
+            .with_repo_dir(self.repo_dir.clone())
+            .with_env(self.env.clone())
+            .with_programs(self.programs))
+    }
+
     /// The installed packages. Never hold the guard across an `.await`.
     pub fn registry(&self) -> RwLockReadGuard<'_, Registry> {
         self.registry.read().unwrap()

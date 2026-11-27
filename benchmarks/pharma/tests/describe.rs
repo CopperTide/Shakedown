@@ -42,12 +42,14 @@ async fn scoring_knows_its_tasks_and_an_empty_world_fails_the_goals() {
         task: "nope".into(),
         docs: Map::new(),
         models: None,
+        world_data: None,
     };
     assert!(p.score(unknown).await.is_err());
     let empty = ScoreParams {
         task: "carrier-no-capacity".into(),
         docs: Map::new(),
         models: None,
+        world_data: None,
     };
     let checks = p.score(empty).await.unwrap().checks;
     let missed = checks.iter().filter(|c| !c.passed && !c.safety).count();
