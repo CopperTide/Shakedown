@@ -1,3 +1,4 @@
+import type { LaneRow } from '@/model/lanes';
 import { useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { StatusChip } from '@/components/marks';
@@ -22,9 +23,9 @@ import ProcessDiagram from './ProcessDiagram';
 import TrendsPanel from './TrendsPanel';
 
 /** The selected step, in the address (`?step=`) the run page and the world view share. */
-function useSelection(order: number[]) {
+function useSelection(order: number[], lanes: LaneRow[]) {
   const [selected, setSelected] = useStepParam();
-  useStepKeys(order, setSelected);
+  useStepKeys(order, lanes, setSelected);
   return [selected, setSelected] as const;
 }
 
@@ -52,7 +53,7 @@ export default function ProcessPage() {
   const [models, setModels] = useState(true);
   const nameOf = useTaskNames();
   const timeline = useTimeline(d, models);
-  const [selected, setSelected] = useSelection(timeline.order);
+  const [selected, setSelected] = useSelection(timeline.order, timeline.lanes);
   const [expanded, setExpanded] = useExpanded();
   if (!d) return <PageGate title="Process" label="Loading the run…" rows={5} error={error} onRetry={reload} />;
   const task = taskOf(d.events);
@@ -65,7 +66,7 @@ export default function ProcessPage() {
       <PageBody>
         <RunErrorBanner error={error} onRetry={reload} detail={d} />
         <Split storageKey="shakedown.process.side" expanded={expanded} main={<Main d={d} timeline={timeline} selected={selected} onSelect={setSelected} models={models} setModels={setModels} />}
-          side={<StepSidePanel nav={<StepStepper order={timeline.order} selected={selected} onSelect={setSelected} />} expanded={expanded} onExpand={setExpanded}><Inspector branchId={d.id} event={d.events.find((e) => e.seq === selected) ?? null} team={d.team} events={d.events} /></StepSidePanel>} />
+          side={<StepSidePanel nav={<StepStepper order={timeline.order} lanes={timeline.lanes} selected={selected} onSelect={setSelected} />} expanded={expanded} onExpand={setExpanded}><Inspector branchId={d.id} event={d.events.find((e) => e.seq === selected) ?? null} team={d.team} events={d.events} /></StepSidePanel>} />
       </PageBody>
     </>
   );

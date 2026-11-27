@@ -1,3 +1,4 @@
+import type { LaneRow } from '@/model/lanes';
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ApproximateMark, StatusChip } from '@/components/marks';
@@ -107,13 +108,13 @@ function Header({ runId, detail, siblings, title, step }: { runId: string; detai
   );
 }
 
-function Side({ runId, detail, event, forking, setForking, autoRows, choice, onSelect, order, expanded, onExpand }: {
+function Side({ runId, detail, event, forking, setForking, autoRows, choice, onSelect, order, lanes, expanded, onExpand }: {
   runId: string; detail: BranchDetail; event: Event | null; forking: boolean; setForking: (f: boolean) => void; autoRows: boolean; choice: ForkChoice; onSelect: (s: number) => void;
-  order: number[]; expanded: boolean; onExpand: (on: boolean) => void;
+  order: number[]; lanes: LaneRow[]; expanded: boolean; onExpand: (on: boolean) => void;
 }) {
   const nav = useNavigate();
   return (
-    <StepSidePanel nav={<StepStepper order={order} selected={event?.seq ?? null} onSelect={onSelect} />} expanded={expanded} onExpand={onExpand}>
+    <StepSidePanel nav={<StepStepper order={order} lanes={lanes} selected={event?.seq ?? null} onSelect={onSelect} />} expanded={expanded} onExpand={onExpand}>
       {forking && event && (
         <div className="border-b border-line bg-raised">
           <ForkPanel key={`${detail.id}:${event.seq}`} branch={detail} seq={event.seq} choice={choice} onClose={() => setForking(false)}
@@ -174,7 +175,7 @@ function useRunView(branchId: string, timeline: Timeline, models: boolean) {
   const rows = useMemo(() => logRows(timeline.lanes, models), [timeline.lanes, models]);
   const { matches } = useLogFilter(rows);
   const order = useMemo(() => matches ? timeline.order.filter((seq) => matches.has(seq)) : timeline.order, [timeline.order, matches]);
-  useStepKeys(order, setSelected);
+  useStepKeys(order, timeline.lanes, setSelected);
   const setForking = (on: boolean) => setSp((prev) => { const out = new URLSearchParams(prev); if (on) out.set('fork', '1'); else { out.delete('fork'); out.delete('change'); } return out; }, { replace: true });
   return { selected, setSelected, order, forking: sp.get('fork') === '1', setForking, notice, setNotice, autoRows: sp.get('rows') === '1', choice: forkChoiceOf(sp.get('change')) };
 }
@@ -198,7 +199,7 @@ export default function Run() {
         <RunSwitcher runId={runId} detail={detail} siblings={siblings} />
         <RunReview d={detail} onStep={v.setSelected} />
         <Split storageKey="shakedown.run.side" expanded={expanded} main={<Main detail={detail} timeline={timeline} selected={v.selected} onSelect={v.setSelected} models={models} setModels={setModels} />}
-          side={<Side runId={runId} detail={detail} event={event} forking={v.forking} setForking={v.setForking} autoRows={v.autoRows} choice={v.choice} onSelect={v.setSelected} order={v.order} expanded={expanded} onExpand={setExpanded} />} />
+          side={<Side runId={runId} detail={detail} event={event} forking={v.forking} setForking={v.setForking} autoRows={v.autoRows} choice={v.choice} onSelect={v.setSelected} order={v.order} lanes={timeline.lanes} expanded={expanded} onExpand={setExpanded} />} />
         <More detail={detail} />
       </PageBody>
     </>

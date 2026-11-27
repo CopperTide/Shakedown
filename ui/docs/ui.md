@@ -211,10 +211,11 @@ Logic lives in pure modules with tests, and components only render. For example:
   - Labels: an action carries its system kind ("ERP") where the label fits. The selected mark shows
     the full "ERP write".
   - Messages and handoffs are drawn as arrows between lanes.
-  - ←/→, ↑/↓, j/k and h/l move through the steps (not while typing in a field or with a tab focused, whose
-    arrows switch tabs). The step panel's header has the same moves as buttons, ‹ 12 of 340 ›
-    (`features/run/StepStepper.tsx`), on the run page, the process view and Run once's step drawer; they follow
-    the timeline's order as filtered.
+  - ←/→ (h/l) move to the selected agent's previous or next step, staying on its lane; ↑/↓ (j/k), Home and End
+    move through every agent's steps in order (`features/run/laneSteps.ts`, `useStepKeys.ts`). Not while typing
+    in a field or with a tab focused, whose arrows switch tabs. The step panel's header has the lane moves as
+    buttons, ‹ Planner · 4 of 37 › (`features/run/StepStepper.tsx`), on the run page, the process view and Run
+    once's step drawer; both follow the timeline's order as filtered.
   - The Event log tab lists the same steps as rows (`features/run/EventLog.tsx`), the detail last and
     taking the rest of the width: each step's whole text, wrapped (a tool call with its arguments, a model
     call's reply or its model and tokens, a message in full). **Compact rows** keeps one line per step.

@@ -143,13 +143,13 @@ function MainArea({ d, main, flow, now, selected, onSelect }: {
   const [models, setModels] = useState(true);
   const timeline = useTimeline(d, models);
   const event = main === 'timeline' ? d.events.find((e) => e.seq === selected) : undefined;
-  useStepKeys(main === 'timeline' ? timeline.order : NO_STEPS, onSelect);
+  useStepKeys(main === 'timeline' ? timeline.order : NO_STEPS, timeline.lanes, onSelect);
   return (
     <div className="flex flex-col gap-3 lg:flex-row lg:items-start">
       <div className="min-w-0 flex-1">
         {main === 'timeline' ? <TimelineMain d={d} now={now} selected={selected} onSelect={onSelect} timeline={timeline} models={models} setModels={setModels} /> : <TwinMain d={d} scrub={!isLive(flow) || flow === 'paused'} />}
       </div>
-      {event && <StepDrawer d={d} event={event} onClose={() => onSelect(null)} nav={<StepStepper order={timeline.order} selected={selected} onSelect={onSelect} />} />}
+      {event && <StepDrawer d={d} event={event} onClose={() => onSelect(null)} nav={<StepStepper order={timeline.order} lanes={timeline.lanes} selected={selected} onSelect={onSelect} />} />}
     </div>
   );
 }

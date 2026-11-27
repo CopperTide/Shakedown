@@ -103,6 +103,8 @@
 
 ### Fixed
 
+- **←/→ and the step buttons stay on the selected agent's lane**: they go to that agent's previous or next step, not the next step by anyone. ↑/↓ still move through every step in order, and the buttons say whose steps they move through (‹ Planner · 4 of 37 ›).
+
 - **Connector logos are in their brand colours** in the world catalog, not black (Simple Icons' brand colours).
 
 - **Re-importing a repo removes what the repo no longer has.** A re-import kept every setup, experiment,
