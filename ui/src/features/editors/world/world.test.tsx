@@ -74,9 +74,9 @@ describe('world editor', () => {
     show();
     await section('Data');
     const masked = await screen.findByRole('switch', { name: 'Masked' });
-    expect(masked.hasAttribute('data-on')).toBe(false);
+    expect(masked.getAttribute('data-state')).toBe('unchecked');
     fireEvent.click(masked);
-    expect(screen.getByRole('switch', { name: 'Masked' }).hasAttribute('data-on')).toBe(true);
+    expect(screen.getByRole('switch', { name: 'Masked' }).getAttribute('data-state')).toBe('checked');
   });
 
   it('view_a_data_file_and_a_binary_one', async () => {

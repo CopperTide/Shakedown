@@ -1,6 +1,9 @@
+// An on/off switch on Radix's Switch (role, keyboard and state from the library), in our colours:
+// green when on, a light knob left when off and right when on.
+import * as SwitchPrimitive from '@radix-ui/react-switch';
+import { useId } from 'react';
 import { cn } from '@/lib/cn';
 
-/** An on/off switch: green when on, its light knob left when off and right when on. The label names it for screen readers and clicks. */
 export function Toggle({ checked, onChange, label, description, disabled }: {
   checked: boolean;
   onChange: (on: boolean) => void;
@@ -8,27 +11,20 @@ export function Toggle({ checked, onChange, label, description, disabled }: {
   description?: string;
   disabled?: boolean;
 }) {
+  const id = useId();
   return (
-    <label className="inline-flex cursor-pointer items-start gap-3">
-      <button
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        aria-label={label}
-        data-on={checked || undefined}
-        disabled={disabled}
-        onClick={() => onChange(!checked)}
+    <div className="inline-flex items-start gap-3">
+      <SwitchPrimitive.Root id={id} checked={checked} onCheckedChange={onChange} disabled={disabled} aria-label={label}
         className={cn(
-          'relative mt-0.5 h-5 w-9 shrink-0 rounded-full border transition-colors disabled:opacity-50',
-          checked ? 'border-ok bg-ok' : 'border-line-strong bg-sunken',
-        )}
-      >
-        <span className={cn('absolute left-0 top-0.5 size-3.5 rounded-full border border-line-strong bg-[#fbf8f3] shadow-panel transition-transform', checked ? 'translate-x-4' : 'translate-x-0.5')} />
-      </button>
-      <span className="grid gap-0.5">
+          'peer mt-0.5 inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border transition-colors disabled:cursor-not-allowed disabled:opacity-50',
+          'border-line-strong bg-sunken data-[state=checked]:border-ok data-[state=checked]:bg-ok',
+        )}>
+        <SwitchPrimitive.Thumb className="block size-3.5 translate-x-0.5 rounded-full border border-line-strong bg-[#fbf8f3] shadow-panel transition-transform data-[state=checked]:translate-x-4" />
+      </SwitchPrimitive.Root>
+      <label htmlFor={id} className="grid cursor-pointer gap-0.5">
         <span className="text-sm font-medium text-fg">{label}</span>
         {description && <span className="text-xs text-faint">{description}</span>}
-      </span>
-    </label>
+      </label>
+    </div>
   );
 }

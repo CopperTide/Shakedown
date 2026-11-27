@@ -14,11 +14,11 @@ describe('core components', () => {
     const { rerender } = render(<Toggle checked={false} onChange={onChange} label="Track with git" />);
     const sw = screen.getByRole('switch', { name: 'Track with git' });
     expect(sw.getAttribute('aria-checked')).toBe('false');
-    expect(sw.hasAttribute('data-on')).toBe(false);
+    expect(sw.getAttribute('data-state')).toBe('unchecked');
     fireEvent.click(sw);
     expect(onChange).toHaveBeenCalledWith(true);
     rerender(<Toggle checked onChange={onChange} label="Track with git" />);
-    expect(screen.getByRole('switch').hasAttribute('data-on')).toBe(true);
+    expect(screen.getByRole('switch').getAttribute('data-state')).toBe('checked');
     expect(screen.getByRole('switch').className).toContain('bg-ok');
   });
 
