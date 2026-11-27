@@ -28,12 +28,16 @@ pub const CALL_LIMIT_NOTE: &str = "turn ended at the model-call limit";
 pub const CONTEXT_TURNS: usize = 4;
 /// A tool result at most this long is never trimmed: a placeholder would be as long.
 const TRIM_MIN_CHARS: usize = 400;
-/// How many times a model call is tried again when its provider is overloaded or
-/// rate-limiting (statuses 429, 503 and 529); every try is recorded.
+/// How many times a model call is tried again when its provider is overloaded (statuses 503 and
+/// 529); every try is recorded.
 pub const MAX_RETRIES: u32 = 3;
+/// How many times a rate-limited call (429) is tried again: with [`MAX_RETRY_WAIT`], enough to
+/// outlast a per-minute limit (1 + 2 + 4 + 8 + 16 + 30 s with no wait asked).
+pub const MAX_RATE_LIMIT_RETRIES: u32 = 6;
 const RETRYABLE: [u16; 3] = [429, 503, 529];
+const RATE_LIMITED: u16 = 429;
 /// The longest wait before a retry, whatever the provider asks.
-pub const MAX_RETRY_WAIT: Duration = Duration::from_secs(20);
+pub const MAX_RETRY_WAIT: Duration = Duration::from_secs(30);
 
 /// How the loop ended badly: the model misbehaved, or something broke around it.
 enum Fault {
@@ -284,14 +288,16 @@ async fn post(http: &reqwest::Client, gw: &Gateway, body: &Value) -> Result<Gate
     })
 }
 
-/// One model call through the gateway, tried again (up to [`MAX_RETRIES`] times, after
-/// [`retry_wait`]) while the provider is overloaded or rate-limiting; the parsed response.
+/// One model call through the gateway, tried again (after [`retry_wait`]) while the provider is
+/// overloaded ([`MAX_RETRIES`] times) or rate-limiting ([`MAX_RATE_LIMIT_RETRIES`] times); the
+/// parsed response.
 async fn model_call(
     http: &reqwest::Client,
     gw: &Gateway,
     body: &Value,
     retry_base: Duration,
 ) -> Result<Value, Fault> {
+    let began = Instant::now();
     let mut retries = 0;
     loop {
         let a = post(http, gw, body).await?;
@@ -300,11 +306,24 @@ async fn model_call(
                 serde_json::from_str(&a.text).map_err(|e| format!("bad model response: {e}"))?
             );
         }
-        if retries == MAX_RETRIES || !RETRYABLE.contains(&a.status.as_u16()) {
+        let status = a.status.as_u16();
+        if !RETRYABLE.contains(&status) {
             return Err(failure(a.status, &a.text).into());
+        }
+        if retries == retries_for(status) {
+            let gave_up = failure(a.status, &a.text);
+            return Err(tried(&gave_up, status, retries + 1, began.elapsed()).into());
         }
         tokio::time::sleep(retry_wait(retry_base, retries, a.retry_after)).await;
         retries += 1;
+    }
+}
+
+/// How many retries a call that got `status` (one of [`RETRYABLE`]) gets.
+fn retries_for(status: u16) -> u32 {
+    match status {
+        RATE_LIMITED => MAX_RATE_LIMIT_RETRIES,
+        _ => MAX_RETRIES,
     }
 }
 
@@ -313,6 +332,15 @@ async fn model_call(
 fn retry_wait(base: Duration, retries: u32, asked: Option<u64>) -> Duration {
     let wait = asked.map_or_else(|| base.saturating_mul(1 << retries), Duration::from_secs);
     wait.min(MAX_RETRY_WAIT)
+}
+
+/// A call's failure after `tries` tries over `took`: a rate limit says so first.
+fn tried(failure: &str, status: u16, tries: u32, took: Duration) -> String {
+    let over = format!("{tries} tries over {} s", took.as_secs());
+    match status {
+        RATE_LIMITED => format!("rate-limited by the model provider ({over}): {failure}"),
+        _ => format!("{failure} ({over})"),
+    }
 }
 
 /// Why a model call failed, in plain words: the provider's own error message when it gave one.
@@ -740,6 +768,35 @@ mod tests {
         assert_eq!(retry_wait(base, 0, Some(7)).as_secs(), 7);
         assert_eq!(retry_wait(base, 0, Some(600)), MAX_RETRY_WAIT);
         assert_eq!(retry_wait(base, 30, None), MAX_RETRY_WAIT);
+    }
+
+    /// A rate limit gets retries enough to outlast a per-minute limit, bounded; an overload fewer.
+    #[test]
+    fn a_rate_limit_is_waited_out_for_a_minute_at_most() {
+        let base = Duration::from_secs(1);
+        let total = |status| -> u64 {
+            let waits = (0..retries_for(status)).map(|n| retry_wait(base, n, None).as_secs());
+            waits.sum()
+        };
+        assert_eq!(total(429), 61, "1 + 2 + 4 + 8 + 16 + 30");
+        assert_eq!(total(503), 7);
+        let said = tried(
+            "model call failed (429): slow down",
+            429,
+            7,
+            Duration::from_secs(61),
+        );
+        assert_eq!(
+            said,
+            "rate-limited by the model provider (7 tries over 61 s): model call failed (429): slow down"
+        );
+        let said = tried(
+            "model call failed (503): busy",
+            503,
+            4,
+            Duration::from_secs(7),
+        );
+        assert_eq!(said, "model call failed (503): busy (4 tries over 7 s)");
     }
 
     /// Arguments cut off mid-JSON (or not an object) are not run; none at all are `{}`.

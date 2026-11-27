@@ -97,6 +97,34 @@ fn gateway_url(fx: &Fx, branch: &str, agent: &str) -> String {
     )
 }
 
+/// A rate-limited call (429) is waited out until the limit resets (OpenRouter quotes the reset
+/// in its error body; here 2 s to wait, where the first retry would otherwise wait 1 s) and tried
+/// again: the agent goes on, and both tries are recorded, the first with its 429.
+#[test]
+fn a_rate_limited_call_waits_for_the_reset_and_is_tried_again() {
+    run(async {
+        let limited = json!({"error": {"code": 429, "message": "Rate limit exceeded",
+            "metadata": {"headers": {"X-RateLimit-Reset": "2"}}}});
+        let ok = support::fake_llm::gpt_oss("done", Some("All done."));
+        let llm = support::fake_llm::fake_llm(vec![(429, limited), (200, ok)]).await;
+        let providers = ProviderConfig::with_upstream(&llm.base);
+        let fx = setup("ratelimit", vec![agent("solo", Some("m"))], providers).await;
+        let r = OpenDriver::new(fx.state.clone())
+            .run(agent_run(&fx, 0, "hello", None))
+            .await;
+        assert!(r.ok, "{:?}", r.error);
+        let evs = events(&fx).await;
+        let calls: Vec<&Event> = (evs.iter())
+            .filter(|e| e.kind == EventKind::ModelCall)
+            .collect();
+        assert_eq!(calls.len(), 2);
+        assert_eq!(calls[0].payload["response"]["status"], 429);
+        let waited = calls[1].at - calls[0].at;
+        assert!(waited.num_milliseconds() >= 1_900, "{waited}");
+        teardown(fx).await;
+    })
+}
+
 /// A provider nothing answers on: the call is recorded as failed (no cost, no provider
 /// response) and the agent fails as an infrastructure problem, not the model's.
 #[test]

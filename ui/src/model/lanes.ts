@@ -98,6 +98,17 @@ export function wakeWord(p: { reason?: unknown; idle_wake?: unknown; mail?: unkn
   }
 }
 
+/** A model call: one the provider rate-limited (429) or that failed says so (the agent loop tries a 429 again). */
+function modelMark(p: Payload, base: Base): TimelineMark {
+  const r = asRecord(p.response);
+  if (typeof r.error !== 'string') return { ...base, kind: 'model', label: 'Model call', detail: '' };
+  const status = typeof r.status === 'number' ? r.status : null;
+  const said = asRecord(asRecord(r.body).error).message;
+  const detail = typeof said === 'string' ? said : r.error;
+  const label = status === 429 ? 'Model call rate-limited (429)' : `Model call failed${status ? ` (${status})` : ''}`;
+  return { ...base, kind: 'model', label, detail, outcome: 'error' };
+}
+
 function endMark(p: Payload, base: Base): TimelineMark {
   const failed = p.ok === false;
   return { ...base, kind: 'end', label: failed ? 'Ended: failed' : 'Ended', detail: String(p.error ?? ''), outcome: failed ? 'error' : 'ok' };
@@ -110,7 +121,7 @@ const MARKS: Partial<Record<Event['kind'], (e: Event, p: Payload, base: Base) =>
   report: dispatchMark,
   wake: (_e, p, base) => ({ ...base, kind: 'start', label: wakeWord(p), detail: '' }),
   finish: (_e, p, base) => ({ ...base, kind: 'end', label: 'Finished the run', detail: String(p.summary ?? '') }),
-  model_call: (_e, _p, base) => ({ ...base, kind: 'model', label: 'Model call', detail: '' }),
+  model_call: (_e, p, base) => modelMark(p, base),
   reasoning: (_e, p, base) => ({ ...base, kind: 'message', label: reasoningWord(p.kind), detail: String(p.text ?? '') }),
   agent_start: (_e, _p, base) => ({ ...base, kind: 'start', label: 'Start', detail: '' }),
   agent_end: (_e, p, base) => endMark(p, base),

@@ -9,6 +9,17 @@ describe('lanes', () => {
     expect(l[0].marks.map((m) => m.label)).toEqual(['Start', 'Model call', 'Message → quality']);
   });
 
+  it('marks_a_rate_limited_or_failed_model_call_as_an_error_with_the_providers_message', () => {
+    const limited = { error: 'upstream returned 429', status: 429, body: { error: { message: 'Rate limit exceeded' } } };
+    const evs = [runStart, ev(2, 10, 'lead', 'model_call', { response: limited }), ev(3, 12, 'lead', 'model_call', { response: { error: 'upstream request failed' } }), ev(4, 14, 'lead', 'model_call', { response: { choices: [] } })];
+    const marks = buildLanes(evs, team)[0].marks;
+    expect(marks.map((m) => [m.label, m.outcome, m.detail])).toEqual([
+      ['Model call rate-limited (429)', 'error', 'Rate limit exceeded'],
+      ['Model call failed', 'error', 'upstream request failed'],
+      ['Model call', 'ok', ''],
+    ]);
+  });
+
   it('marks_approvals_and_refusals_as_interlocks_and_keeps_writes_apart_from_reads', () => {
     const q = buildLanes(events, team)[1].marks.filter((m) => m.kind === 'action' || m.kind === 'interlock');
     expect(q.map((m) => [m.label, m.kind, m.effect, m.outcome])).toEqual([

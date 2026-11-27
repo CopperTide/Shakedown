@@ -73,6 +73,13 @@
 
 ### Fixed
 
+- **A rate limit (429) no longer ends a run in seconds.** The API-mode agent loop tried a 429 three times over
+  about 7 s, too short for a per-minute limit such as OpenRouter's 20 requests a minute on a new account, so a
+  team with two agents on one model ended `infra_error`. A 429 is now tried up to 6 times, each after the
+  provider's `retry-after`, else the time until its limit resets (its `x-ratelimit-reset`, also read from
+  OpenRouter's error body), else 1 s doubling, at most 30 s. The timeline marks each rate-limited try as
+  `Model call rate-limited (429)`, and a call that still fails says `rate-limited by the model provider (7 tries
+  over 61 s)` before the provider's message.
 - **A fork at the step where an alert woke the lead now wakes it with the alert again.** On a stepped clock,
   forking a dispatch run at the lead's wake for a world's alert restarted the lead idle: the alert was not
   delivered again and the world ran to its horizon with no one deciding (forking one step later worked). The

@@ -452,10 +452,13 @@ What the gateway does per provider:
 - Every call is recorded in the canonical (OpenAI) form, with `provider` (the id that answered) and, when the
   provider's own answer differs from the canonical one (Anthropic), `provider_response`. A 401 or 403 answer is
   recorded without its error message, which may quote the key.
-- A provider's error status is passed on to the agent loop; no answer is a 502. The loop tries a call that got
-  429, 503 or 529 again, up to 3 times, after the provider's `retry-after` or else 1 s, doubling each time, at
-  most 20 s; every try is recorded. A call that still fails, or fails another way, ends the agent with the
-  provider's message.
+- A provider's error status is passed on to the agent loop, with a `retry-after`: the provider's own, else for a
+  429 the time until its rate limit resets (its `x-ratelimit-reset` header, or the one OpenRouter quotes in its
+  error body); no answer is a 502. The loop tries a call that got 503 or 529 again up to 3 times, and one that
+  got 429 up to 6 times (enough to outlast a per-minute limit), each after that `retry-after` or else 1 s,
+  doubling each time, at most 30 s. Every try is recorded, and the timeline marks a rate-limited one as
+  `Model call rate-limited (429)`. A call that still fails, or fails another way, ends the agent with the
+  provider's message; a rate limit's says `rate-limited by the model provider (7 tries over 61 s)` first.
 - A model that refuses (`content_filter`, Claude's `refusal`) ends the agent as failed: `the model refused`,
   with the category when Claude gives one.
 
