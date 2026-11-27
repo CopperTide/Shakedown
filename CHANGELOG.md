@@ -57,6 +57,17 @@
   `GET /api/analytics/search` and the `analytics.search` operation for the assistant and MCP. A full-text index on
   the events (migration shakedown 8, an expression GIN index: no table rewrite) keeps it fast. See
   [docs/analytics.md](docs/analytics.md#search).
+- **Explore.** Analytics › Explore answers your own questions about runs. The builder takes measures (runs, pass
+  rate, cost, input, output and cached tokens, model and tool calls, refusals, errors, run time, thinking time,
+  steps) by up to two dimensions (agent, model, setup, scenario, world, experiment, tool, step kind, day), filtered
+  by time, experiment, setup and agent, as a table and a bar, stacked or line chart; every value drills through to
+  the runs or steps behind it. The SQL tab runs one read-only `SELECT` over documented views (`runs`, `steps`,
+  `model_calls`, `tool_calls`, `agents`) behind a SQL parser's check, a read-only transaction with a 5 s timeout, a
+  pinned search_path and a role that can read only those views, with a chart toggle and CSV download. Views of
+  either kind can be saved by name. All of it is the `explore.*` operations, so the assistant and MCP get it too.
+  Migration shakedown 9 adds `call_usage` (one lean row per model call, kept by the analytics job: no call body is
+  ever read), `saved_views`, the `explore` views and the `shakedown_explore` role; branch figures move to version 3,
+  so each ended branch is worked out once more after the upgrade. See [docs/analytics.md](docs/analytics.md#explore).
 - **Observability.** Settings → Observability sends every run as an OpenTelemetry trace (OTLP/HTTP protobuf) to
   Langfuse, Arize Phoenix or any OTLP collector: run, branch, agent turns, model calls (GenAI semantic conventions
   and OpenInference), tool calls with rows read and written, reasoning and the check; content only where the target
