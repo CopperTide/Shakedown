@@ -9,9 +9,11 @@ import { type Row, filterExperiments, ordered } from './list';
 
 const row = (id: string, extra: Partial<Row> = {}): Row => ({ id, label: id, scenario: 'supplier-slip', setups: 2, problems: [], ...extra });
 
-function mockFetch(items: Record<string, unknown>[], db: unknown[] = []) {
+function mockFetch(items: Record<string, unknown>[], db: unknown[] = [], deployments: Record<string, unknown[]> = {}) {
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     const u = String(url);
+    const runs = /\/api\/project\/experiments\/([^/]+)\/runs$/.exec(u);
+    if (runs) return new Response(JSON.stringify({ deployments: deployments[runs[1]] ?? [] }));
     if (u.endsWith('/api/project/experiments')) return new Response(JSON.stringify({ items }));
     if (u.endsWith('/api/experiments')) return new Response(JSON.stringify(db));
     return new Response(JSON.stringify({ error: 'not found' }), { status: 404 });
@@ -41,6 +43,18 @@ describe('experiments list', () => {
     const badge = await screen.findByText('1 problem');
     expect(badge.getAttribute('title')).toBe('no world named gone');
     expect(screen.getByRole('link', { name: 'Supplier slip' }).getAttribute('href')).toBe('/experiments/file/exp');
+  });
+
+  it('shows_whether_each_experiment_ran', async () => {
+    const item = (id: string) => ({ id, label: id, hash: 'h', problems: [], kind: 'experiment', scenario: 's', setups: 1, world: 'w', parent: null });
+    const done = { id: 'd1', status: 'finished', created_at: '2026-11-25T00:00:00Z', setups: [{ summary: { ended: 2 } }] };
+    mockFetch([item('ran'), item('fresh')], [], { ran: [done] });
+    render(<MemoryRouter><ExperimentsListPage /></MemoryRouter>);
+    expect(await screen.findByTitle(/^2 runs ended over 1 deployment/)).toBeTruthy();
+    expect(screen.getByTitle('Set up, never deployed').textContent).toContain('Not run yet');
+    fireEvent.change(screen.getByLabelText('Status'), { target: { value: 'not_run' } });
+    expect(screen.queryByRole('link', { name: 'ran' })).toBeNull();
+    expect(screen.getByRole('link', { name: 'fresh' })).toBeTruthy();
   });
 
   it('empty_project_shows_new_experiment', async () => {

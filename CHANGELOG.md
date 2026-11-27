@@ -25,6 +25,9 @@
 
 ### Added
 
+- **Experiments show whether they ran.** The experiments list has a Status column: has results, running, ran
+  with no results, or not run yet, read from each experiment's deployments. Filter by status, and sort with
+  the ones that have results first or by the last deployment.
 - **Analytics.** A new Analytics page (sidebar, under Experiments) shows figures across runs: runs, passes, pass
   rate, total cost, cost per passed run and median run time; pass rate over time per setup or model; cost per run
   against pass rate, one dot per setup or model; and a sortable setup × scenario leaderboard. Filters (7, 30 or 90

@@ -10,10 +10,13 @@ secondary metadata lines, few borders, plenty of whitespace.
 - **Top bar** (`app/TopBar.tsx`): the wordmark, **Experiments** and **Runs**, and one **⋯** with Run
   once, Compare two runs, World view of a run, the Team editor, AI review on or off, the command
   palette, the theme and which Shakedown core is in use.
-- **Experiments** (`/`, `features/experiments/ExperimentsPage.tsx`): newest first, each row the experiment's
-  name, its scenario in words, one small bar per setup (passed of runs asked) and when. Tick two or
-  more (the box shows on hover) to **Compare** their setups side by side. Empty: one line on what an
-  experiment is and **New experiment**.
+- **Experiments** (`/experiments`, `features/experiments/ExperimentsListPage.tsx`): every experiment file,
+  sub-experiments under their parent; each row the name (with any problems), whether it ran
+  (`features/experiments/runStatus.ts`, read from each experiment's deployments: ■ Has results, ◐ Running,
+  □ Ran, no results in alarm ink, ○ Not run yet; hover gives the runs ended and the last deployment), its
+  scenario and its setups. Search, **Any status** narrows to one status, and the sort is **Grouped** (parents
+  with their sub-experiments), **Has results first** or **Last deployed** (both flat). Below, the earlier
+  experiments made before the project folder. Empty: **New experiment**.
 - **New experiment** (`/experiments/new`): the name inline as the page title; **Scenario** (the
   task by plain name, then disruptions as a picker); **Agent setups**, 1 to 50 cards (name, team,
   model for Claude Code agents, rules added to every prompt; a dashed card adds one, copying the
