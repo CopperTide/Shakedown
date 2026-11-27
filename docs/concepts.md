@@ -81,7 +81,8 @@ undoing the delete links them again (`runs_relinked`). The files have moved by t
 `runs_unlinked: false` (or `runs_relinked: false`) and is logged rather than failing the request. The delete
 dialog, and the assistant's delete card, show all of this before anything is deleted. The Worlds page opens each world
 onto its scenarios and each scenario onto its experiments; a world's page lists its scenarios, a scenario's page its
-experiments, and an experiment's page shows World › Scenario › Experiment.
+experiments (in Overview and in its own Experiments section: sub-experiments under their parent, each with whether it
+has run), and an experiment's page shows World › Scenario › Experiment.
 
 **Deploying** a project experiment (`POST /api/project/experiments/{id}/deploy`, `core/crates/shaked/src/ops/deploy.rs`)
 maps the files onto an engine experiment: the world's `package` is the benchmark it runs on, the scenario's `preset` is

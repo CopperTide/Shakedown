@@ -14,14 +14,13 @@ import { Toggle } from '@/components/ui/toggle';
 import { useQuery } from '@/hooks/useQuery';
 import EarlierExperiments from './EarlierExperiments';
 import ExperimentRows from './ExperimentRows';
-import { type Row, type Sort, arrange, filterExperiments } from './list';
+import { type Row, type Sort, arrange, filterExperiments, rowOf } from './list';
 import { RUN_STATUSES, RUN_STATUS_MARK, type RunStatus } from './runStatus';
 import { useRunStatuses } from './useRunStatuses';
 
 /** Every file experiment with the fields the list needs, all in the list's one answer. */
 async function loadRows(): Promise<Row[]> {
-  const { items } = await listItems('experiments');
-  return items.map((s) => ({ id: s.id, label: s.label, scenario: s.scenario ?? '', setups: s.setups ?? 0, problems: s.problems, parent: s.parent ?? undefined }));
+  return (await listItems('experiments')).items.map(rowOf);
 }
 
 const SORTS: { id: Sort; label: string }[] = [{ id: 'tree', label: 'Grouped' }, { id: 'status', label: 'Has results first' }, { id: 'recent', label: 'Last deployed' }];

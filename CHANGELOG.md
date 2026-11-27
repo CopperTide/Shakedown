@@ -25,6 +25,8 @@
 
 ### Added
 
+- **A scenario's page lists its experiments in their own section.** Experiments (N) lists every experiment
+  that plays the scenario, sub-experiments under their parent, each with a link and whether it has run.
 - **Experiments show whether they ran.** The experiments list has a Status column: has results, running, ran
   with no results, or not run yet, read from each experiment's deployments. Filter by status, and sort with
   the ones that have results first or by the last deployment.

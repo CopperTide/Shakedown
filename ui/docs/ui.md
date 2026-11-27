@@ -17,6 +17,9 @@ secondary metadata lines, few borders, plenty of whitespace.
   scenario and its setups. Search, **Any status** narrows to one status, and the sort is **Grouped** (parents
   with their sub-experiments), **Has results first** or **Last deployed** (both flat). Below, the earlier
   experiments made before the project folder. Empty: **New experiment**.
+- **Scenario** (`/scenarios/:id`, `features/editors/scenario/ScenarioEditor.tsx`): Overview, Inputs, Events, Gates,
+  Checks and **Experiments (N)**: every experiment file that plays the scenario (`ScenarioExperiments.tsx`, also at
+  the foot of Overview), sub-experiments under their parent, each a link with whether it ran and its setups.
 - **New experiment** (`/experiments/new`): the name inline as the page title; **Scenario** (the
   task by plain name, then disruptions as a picker); **Agent setups**, 1 to 50 cards (name, team,
   model for Claude Code agents, rules added to every prompt; a dashed card adds one, copying the

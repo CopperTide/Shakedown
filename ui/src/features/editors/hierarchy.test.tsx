@@ -60,9 +60,9 @@ describe('hierarchy', () => {
     mockFetch();
     show('/scenarios/jam');
     expect(await screen.findByText('Experiments using this scenario')).toBeTruthy();
-    const link = await screen.findByRole('link', { name: 'Jam: solo vs team' });
+    const link = await screen.findByRole('link', { name: /^Jam: solo vs team/ });
     expect(link.getAttribute('href')).toBe('/experiments/file/e1');
-    expect(screen.queryByRole('link', { name: 'Leak test' })).toBeNull();
+    expect(screen.queryByRole('link', { name: /^Leak test/ })).toBeNull();
   });
 
   it('editor_pages_offer_delete', async () => {

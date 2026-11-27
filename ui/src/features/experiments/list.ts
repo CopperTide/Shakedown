@@ -1,6 +1,6 @@
 // The experiments list's rows: ordering sub-experiments under their parent, sorting by whether
 // they ran, and filtering. Pure.
-import type { Problem } from '@/model/project';
+import type { ItemSummary, Problem } from '@/model/project';
 import { RUN_STATUSES, type RunStatus, type RunStatusInfo } from './runStatus';
 
 export interface Row {
@@ -13,6 +13,10 @@ export interface Row {
   /** Whether it ran; absent until its deployments are read. */
   run?: RunStatusInfo;
 }
+
+/** A file experiment as the project lists it, as a row. */
+export const rowOf = (s: ItemSummary): Row =>
+  ({ id: s.id, label: s.label, scenario: s.scenario ?? '', setups: s.setups ?? 0, problems: s.problems, parent: s.parent ?? undefined });
 
 export interface OrderedRow extends Row {
   /** 0 for a top-level experiment, 1 for a sub-experiment, and so on. */

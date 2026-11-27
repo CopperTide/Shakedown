@@ -8,6 +8,8 @@ import { setTiming, timeline } from './events';
 import ScenarioEditor from './ScenarioEditor';
 
 const BODY = { format: 'shakedown-scenario/1', label: 'Supplier slip', world: 'plant', task: 'Keep SO-1001 on schedule.' };
+const experiment = (id: string, scenario: string, parent: string | null = null) => ({ kind: 'experiment', id, label: `Exp ${id}`, hash: 'h', problems: [], world: 'plant', scenario, setups: 2, parent });
+const EXPERIMENTS = [experiment('slip-team', 'slip'), experiment('slip-solo', 'slip', 'slip-team'), experiment('rush', 'rush')];
 let puts: { body: Record<string, unknown> }[] = [];
 
 function mockFetch(body: Record<string, unknown> = BODY) {
@@ -16,6 +18,9 @@ function mockFetch(body: Record<string, unknown> = BODY) {
     const u = String(url);
     if (init?.method === 'PUT') { const sent = JSON.parse(String(init.body)); puts.push(sent); return new Response(JSON.stringify({ kind: 'scenario', id: 'slip', label: 'S', hash: 'h', problems: [], body: sent.body })); }
     if (u.endsWith('/api/project/scenarios/slip')) return new Response(JSON.stringify({ kind: 'scenario', id: 'slip', label: 'S', hash: 'h', problems: [], body }));
+    if (u.endsWith('/api/project/experiments')) return new Response(JSON.stringify({ items: EXPERIMENTS }));
+    if (u.endsWith('/api/project/experiments/slip-team/runs')) return new Response(JSON.stringify({ deployments: [{ id: 'd', status: 'finished', created_at: '2026-11-25T00:00:00Z', setups: [{ summary: { ended: 2 } }] }] }));
+    if (/\/api\/project\/experiments\/[^/]+\/runs$/.test(u)) return new Response(JSON.stringify({ deployments: [] }));
     if (u.endsWith('/api/project/worlds')) return new Response(JSON.stringify({ items: [{ id: 'plant', label: 'Plant', problems: [] }] }));
     return new Response(JSON.stringify({ error: 'not found' }), { status: 404 });
   }));
@@ -56,6 +61,19 @@ describe('scenario editor', () => {
     await section('Checks');
     expect(within(await screen.findByRole('region', { name: 'Goals' })).getByText('SO-1001 ships')).toBeTruthy();
     expect(within(screen.getByRole('region', { name: 'Safety rules' })).getByText('No split purchase')).toBeTruthy();
+  });
+
+  it('lists_every_experiment_playing_it', async () => {
+    mockFetch();
+    show();
+    await section('Experiments \\(2\\)');
+    const card = await screen.findByText('Experiments using this scenario');
+    expect(card).toBeTruthy();
+    expect(screen.getByRole('link', { name: /Exp slip-team/ }).getAttribute('href')).toBe('/experiments/file/slip-team');
+    expect(screen.getByRole('link', { name: /Exp slip-solo/ }).getAttribute('href')).toBe('/experiments/file/slip-solo');
+    expect(screen.queryByRole('link', { name: /Exp rush/ })).toBeNull();
+    expect((await screen.findByTitle(/^2 runs ended/)).textContent).toContain('Has results');
+    expect(screen.getByTitle('Set up, never deployed').textContent).toContain('Not run yet');
   });
 
   it('add_event_after_calls', async () => {
