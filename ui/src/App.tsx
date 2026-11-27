@@ -23,6 +23,7 @@ const WorldEditor = lazy(() => import('@/features/editors/world/WorldEditor'));
 const ScenarioEditor = lazy(() => import('@/features/editors/scenario/ScenarioEditor'));
 const SetupEditor = lazy(() => import('@/features/editors/setup/SetupEditor'));
 const NewFileExperiment = lazy(() => import('@/features/editors/experiment/NewExperimentPage'));
+const RuntimesPage = lazy(() => import('@/features/runtimes/RuntimesPage'));
 const ProjectSettingsPage = lazy(() => import('@/features/settings/ProjectSettingsPage'));
 const GetStartedPage = lazy(() => import('@/features/onboarding/GetStartedPage'));
 const ProcessPage = lazy(() => import('@/features/process/ProcessPage'));
@@ -73,6 +74,7 @@ function AppRoutes() {
         <Route path="/scenarios/:id" element={<ScenarioEditor />} />
         <Route path="/setups" element={<ItemListPage kind="setups" />} />
         <Route path="/setups/:id" element={<SetupEditor />} />
+        <Route path="/runtimes" element={<RuntimesPage />} />
         <Route path="/settings/project" element={<ProjectSettingsPage />} />
         <Route path="/experiments/new" element={<NewFileExperiment />} />
         <Route path="/experiments/new/direct" element={<NewExperimentPage />} />

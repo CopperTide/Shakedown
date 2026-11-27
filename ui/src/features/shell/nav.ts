@@ -27,6 +27,7 @@ export const NAV: NavGroup[] = [
       { to: '/worlds', label: 'Worlds', icon: 'globe' },
       { to: '/scenarios', label: 'Scenarios', icon: 'film' },
       { to: '/setups', label: 'Agent setups', icon: 'users', match: /^\/(setups|team)(\/|$)/ },
+      { to: '/runtimes', label: 'Runtimes', icon: 'code' },
     ],
   },
   {

@@ -8,19 +8,27 @@ import WorldEditor from './WorldEditor';
 
 const BODY = { format: 'shakedown-world/3', label: 'Larkspur Valve Works' };
 let puts: { body: Record<string, unknown> }[] = [];
+let dataPosts: Record<string, unknown>[] = [];
+const DB = { users: { u1: { name: 'Ada', zip: '10001' } }, flights: [{ number: 'HAT001', price: 120 }] };
 
 function mockFetch(body: Record<string, unknown> = BODY) {
   puts = [];
+  dataPosts = [];
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
     const u = String(url);
+    if (u.endsWith('/api/project/worlds/plant/data') && init?.method === 'POST') {
+      dataPosts.push(JSON.parse(String(init.body)));
+      return new Response(JSON.stringify({ path: 'worlds/plant/data/db.json', size: 10, replaced: false }));
+    }
+    if (u.includes('/data?path=data%2Fdb.json')) return new Response(JSON.stringify({ path: 'data/db.json', size: 90, text: JSON.stringify(DB) }));
     if (init?.method === 'PUT') {
       const sent = JSON.parse(String(init.body));
       puts.push(sent);
       return new Response(JSON.stringify({ kind: 'world', id: 'plant', label: 'L', hash: 'h2', problems: [], body: sent.body }));
     }
     if (u.endsWith('/api/project/worlds/plant')) return new Response(JSON.stringify({ kind: 'world', id: 'plant', label: 'L', hash: 'h', problems: [], body }));
-    if (u.includes('/api/project/worlds/plant/data?path=')) return new Response(JSON.stringify(u.endsWith('b.bin') ? { path: 'b.bin', size: 2048, binary: true } : { path: 'a.csv', size: 9, text: 'id,name\n1,x', truncated: true }));
-    if (u.endsWith('/api/project/worlds/plant/data')) return new Response(JSON.stringify({ files: [{ path: 'a.csv', size: 9 }, { path: 'b.bin', size: 2048 }], truncated: false }));
+    if (u.includes('/api/project/worlds/plant/data?path=')) return new Response(JSON.stringify(u.includes('b.bin') ? { path: 'b.bin', size: 2048, binary: true } : { path: 'a.csv', size: 9, text: 'id,name\n1,x', truncated: true }));
+    if (u.endsWith('/api/project/worlds/plant/data')) return new Response(JSON.stringify({ files: [{ path: 'a.csv', size: 9 }, { path: 'b.bin', size: 2048 }, { path: 'data/db.json', size: 90 }], truncated: false }));
     if (u.endsWith('/api/worlds')) return new Response(JSON.stringify([{ name: 'toybench', title: 'Toy bench', built: false }]));
     return new Response(JSON.stringify({ error: 'not found' }), { status: 404 });
   }));
@@ -89,6 +97,35 @@ describe('world editor', () => {
     fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
     fireEvent.click((await screen.findAllByRole('button', { name: 'View' }))[1]);
     expect(await screen.findByText('Binary file · 2 KB')).toBeTruthy();
+  });
+
+  it('upload_a_file_every_run_starts_from', async () => {
+    mockFetch();
+    show();
+    await section('Data');
+    const file = new File(['{"users": {}}'], 'db.json', { type: 'application/json' });
+    fireEvent.change(await screen.findByLabelText('Data file'), { target: { files: [file] } });
+    fireEvent.click(screen.getByRole('button', { name: 'Upload' }));
+    await waitFor(() => expect(dataPosts.length).toBe(1));
+    expect(dataPosts[0]).toEqual({ path: 'data/db.json', data: btoa('{"users": {}}') });
+    fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(puts.length).toBe(1));
+    expect(puts[0].body.data).toEqual([{ file: 'data/db.json', default_state: true }]);
+  });
+
+  it('json_records_as_tables_and_a_value_set_in_place', async () => {
+    mockFetch({ ...BODY, data: [{ file: 'data/db.json', default_state: true }] });
+    show();
+    await section('Data');
+    fireEvent.click(await screen.findByRole('button', { name: 'View' }));
+    const users = await screen.findByRole('table', { name: 'users' });
+    fireEvent.click(within(users).getByRole('button', { name: '10001' }));
+    fireEvent.change(screen.getByLabelText('Value'), { target: { value: '94105' } });
+    fireEvent.click(within(users).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(dataPosts.length).toBe(1));
+    expect(dataPosts[0]).toEqual({ path: 'data/db.json', pointer: '/users/u1/zip', value: '94105' });
+    fireEvent.click(screen.getByRole('tab', { name: /flights/ }));
+    expect(await screen.findByRole('table', { name: 'flights' })).toBeTruthy();
   });
 
   it('runtime_lists_packages', async () => {

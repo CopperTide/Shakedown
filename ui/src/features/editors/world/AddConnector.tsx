@@ -4,7 +4,11 @@ import { Card } from '@/components/ui/card';
 import type { Connector } from '@/model/project';
 import { ChoiceField, TextField } from '../fields';
 
-const MODES = [{ value: 'real', label: 'Real system (requires configuration)' }, { value: 'replay', label: 'Record once, then replay' }, { value: 'stand-in', label: 'Stand-in (requires runtime support)' }] as const;
+/** How runs use a connector; a stand-in is played by the world's runtime, when it has one. */
+export function modes(runtime?: string) {
+  const standIn = runtime ? `Stand-in (played by the runtime ${runtime})` : 'Stand-in (pick a runtime that plays it)';
+  return [{ value: 'real', label: 'Real system (requires configuration)' }, { value: 'replay', label: 'Record once, then replay' }, { value: 'stand-in', label: standIn }] as { value: Connector['mode']; label: string }[];
+}
 
 /** The connector the form describes, without empty fields. */
 export function connectorOf(f: Record<string, string>): Connector {
@@ -18,7 +22,7 @@ export function connectorOf(f: Record<string, string>): Connector {
   return c;
 }
 
-export default function AddConnector({ onAdd, initial = {} }: { onAdd: (c: Connector) => string | void; initial?: Record<string, string> }) {
+export default function AddConnector({ onAdd, initial = {}, runtime }: { onAdd: (c: Connector) => string | void; initial?: Record<string, string>; runtime?: string }) {
   const [f, setF] = useState<Record<string, string>>({ mode: 'real', ...initial });
   const [error, setError] = useState('');
   const field = (k: string) => ({ value: f[k] ?? '', onChange: (v: string) => setF({ ...f, [k]: v }) });
@@ -28,7 +32,7 @@ export default function AddConnector({ onAdd, initial = {} }: { onAdd: (c: Conne
       <div className="grid gap-3 p-[18px] md:grid-cols-2">
         <TextField label="Connector id" mono placeholder="mes" {...field('id')} />
         <TextField label="Connector name" placeholder="Larkspur MES" {...field('label')} />
-        <ChoiceField label="How runs use it" value={(f.mode ?? 'real') as Connector['mode']} options={[...MODES]} onChange={(v) => setF({ ...f, mode: v })} />
+        <ChoiceField label="How runs use it" value={(f.mode ?? 'real') as Connector['mode']} options={modes(runtime)} onChange={(v) => setF({ ...f, mode: v })} />
         <TextField label="Product" placeholder="sap-s4hana (product identifier)" {...field('product')} />
         <TextField label="MCP server URL" mono placeholder="https://…/mcp" {...field('mcp')} />
         <TextField label="OpenAPI spec file" mono placeholder="carrier-rates.openapi.yaml" {...field('openapi')} />

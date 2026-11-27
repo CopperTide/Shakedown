@@ -32,10 +32,10 @@ export default function ConnectorsSection({ world, onChange }: { world: WorldBod
   return <div className="grid gap-4">
     <div className="flex flex-wrap items-start justify-between gap-3"><SectionHead title="Connectors" about="Inspect the systems in this world, or discover enterprise APIs and MCP servers in the catalog." /><Button onClick={() => setCatalog(true)}>Browse connector catalog</Button></div>
     {problem && <p role="alert" className="text-sm text-alarm">{problem}</p>}
-    <Card title={`In this world · ${list.length}`} description="Saved configuration. Runtime support and connectivity are not inferred from these declarations.">
+    <Card title={`In this world · ${list.length}`} description={world.package ? `The runtime ${world.package} plays the stand-ins; real systems need their configuration.` : 'Saved configuration. Stand-ins need a runtime that plays them: pick one in Runtime.'}>
       <ItemRows items={list} empty="No connectors yet. Browse the catalog or add a custom API below." onRemove={(i) => onChange({ ...world, connectors: removeAt(list, i) })} render={(c) => <ConnectorRow connector={c} onInspect={() => setInspect(c)} />} />
     </Card>
-    <AddConnector onAdd={add} />
+    <AddConnector onAdd={add} runtime={world.package} />
     <ConnectorCatalog open={catalog} onClose={() => setCatalog(false)} onAdd={add} />
     <Dialog open={!!inspect} onOpenChange={(open) => { if (!open) setInspect(null); }}><DialogContent title="Connector details" className="overflow-y-auto">{inspect && <ConnectorDetails connector={inspect} entry={catalogEntry(inspect.product, inspect.label)} />}</DialogContent></Dialog>
   </div>;

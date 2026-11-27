@@ -2,7 +2,7 @@
 import type { Experiment } from '@/model/experiment';
 import type { DeletePreview, Deleted, Dependent, Item, ItemKind, ItemSummary, LastDelete, ProjectSettings, ProjectStatus, Proposed } from '@/model/project';
 import { tracked } from '@/lib/productAnalytics';
-import { get, path, post, request } from './client';
+import { del, get, path, post, request } from './client';
 
 export const projectStatus = () => get<ProjectStatus>('/api/project');
 
@@ -106,6 +106,17 @@ export const importGit = (url: string, ref: string, confirm: boolean) =>
 export const worldDataFiles = (id: string) =>
   get<{ files: { path: string; size: number }[]; truncated: boolean }>(path`/api/project/worlds/${id}/data`);
 
-/** One data file: its text (cut at 1 MiB, then `truncated`), or `binary` with its size. */
-export const worldDataFile = (id: string, file: string) =>
-  get<{ path: string; size: number; text?: string; truncated?: boolean; binary?: boolean }>(path`/api/project/worlds/${id}/data?path=${file}`);
+/** One data file: its text (cut at 1 MiB, or 10 MiB with `full`, then `truncated`), or `binary` with its size. */
+export const worldDataFile = (id: string, file: string, full = false) =>
+  get<{ path: string; size: number; text?: string; truncated?: boolean; binary?: boolean }>(`${path`/api/project/worlds/${id}/data?path=${file}`}${full ? '&full=true' : ''}`);
+
+/** What a data file upload carries: its bytes (base64) or text, or one JSON value to set at a pointer. */
+export type DataPut = { data: string } | { text: string } | { pointer: string; value: unknown };
+
+/** Uploads a data file into the world's folder (or sets one value of a JSON one). */
+export const putWorldData = (id: string, file: string, put: DataPut) =>
+  post<{ path: string; size: number; replaced: boolean }>(path`/api/project/worlds/${id}/data`, { path: file, ...put });
+
+/** Deletes a data file from the world's folder. */
+export const deleteWorldData = (id: string, file: string) =>
+  del<{ deleted: string }>(path`/api/project/worlds/${id}/data?path=${file}`);
