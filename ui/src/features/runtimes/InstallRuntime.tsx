@@ -32,6 +32,7 @@ export function RuntimePlanView({ plan }: { plan: RuntimePlan }) {
     <div className="grid gap-3">
       <p className="text-xs text-muted"><span className="font-mono">{at}</span>{plan.packages_only ? <> · folder <span className="font-mono">{plan.packages_only}</span></> : null} · id <span className="font-mono text-fg">{plan.id}</span></p>
       {issues.length > 0 && <ul role="alert" className="grid gap-1 text-alarm">{issues.map((m) => <li key={m}>{m}</li>)}</ul>}
+      {plan.previous_commit && <p role="note" className="text-xs text-tone-warn">Updates the runtime {plan.id} installed before ({plan.previous_commit.slice(0, 12)}): its packages are replaced. To keep both, give this one another id.</p>}
       <Section title={`Packages (${plan.packages.length})`}>
         {plan.packages.length
           ? <ul className="grid gap-0.5">{plan.packages.map((p) => <li key={p.name}>{p.name} <span className="text-faint">· {p.kind} · <span className="font-mono text-2xs">{p.dir}</span>{p.python ? ' · Python dependencies installed with uv' : ''}</span></li>)}</ul>
@@ -48,11 +49,18 @@ export function RuntimePlanView({ plan }: { plan: RuntimePlan }) {
 }
 
 /** The source fields: a git URL, ref and folder, or an archive file and folder. */
-function SourceFields({ kind, git, onGit, file, onFile }: {
-  kind: Kind; git: { url: string; ref: string; path: string }; onGit: (g: Partial<{ url: string; ref: string; path: string }>) => void;
-  file: File | null; onFile: (f: File | null) => void;
+/** The fields of the dialog besides the file: the repo, its ref, a folder of it and the install's id. */
+type Fields = { url: string; ref: string; path: string; id: string };
+
+function SourceFields({ kind, git, onGit, file, onFile, fixedId }: {
+  kind: Kind; git: Fields; onGit: (g: Partial<Fields>) => void; file: File | null; onFile: (f: File | null) => void; fixedId?: string;
 }) {
-  const folder = <Field label="Folder (optional)" hint="Only the packages under it"><Input aria-label="Folder" value={git.path} onChange={(e) => onGit({ path: e.target.value })} placeholder="packages/desk" className="font-mono" /></Field>;
+  const folder = (
+    <>
+      <Field label="Folder (optional)" hint="Only the packages under it"><Input aria-label="Folder" value={git.path} onChange={(e) => onGit({ path: e.target.value })} placeholder="packages/desk" className="font-mono" /></Field>
+      {!fixedId && <Field label="Id (optional)" hint="Default: the repo's or archive's name"><Input aria-label="Install id" value={git.id} onChange={(e) => onGit({ id: e.target.value })} placeholder="desk-runtime" className="font-mono" /></Field>}
+    </>
+  );
   if (kind === 'archive') {
     return (
       <div className="grid gap-3 sm:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
@@ -66,7 +74,7 @@ function SourceFields({ kind, git, onGit, file, onFile }: {
     <div className="grid gap-3 sm:grid-cols-[minmax(0,3fr)_minmax(0,1fr)]">
       <Field label="Repository (git URL or path)"><Input aria-label="Repository" value={git.url} onChange={(e) => onGit({ url: e.target.value })} placeholder="git@github.com:acme/desk-runtime.git" className="font-mono" /></Field>
       <Field label="Ref"><Input aria-label="Ref" value={git.ref} onChange={(e) => onGit({ ref: e.target.value })} placeholder="HEAD" className="font-mono" /></Field>
-      <div className="sm:col-span-2">{folder}</div>
+      <div className="grid gap-3 sm:col-span-2 sm:grid-cols-2">{folder}</div>
     </div>
   );
 }
@@ -78,7 +86,7 @@ function label(plan: RuntimePlan | null, done: boolean, busy: boolean): string {
 }
 
 /** The git fields an install starts with: an update's own, else empty. */
-const gitOf = (u?: UpdateOf) => ({ url: u?.url ?? '', ref: u?.ref ?? '', path: u?.path ?? '' });
+const gitOf = (u?: UpdateOf): Fields => ({ url: u?.url ?? '', ref: u?.ref ?? '', path: u?.path ?? '', id: '' });
 
 /** The source the fields describe. */
 async function sourceOf(kind: Kind, git: { url: string; ref: string }, file: File | null): Promise<RuntimeSource> {
@@ -102,7 +110,7 @@ function useInstall(update: UpdateOf | undefined, onInstalled: () => void) {
   const run = async (confirm: boolean) => {
     setBusy(true); setError(null);
     try {
-      const out = await installRuntime(await sourceOf(kind, git, file), { path: git.path.trim(), id: update?.id ?? plan?.id }, confirm);
+      const out = await installRuntime(await sourceOf(kind, git, file), { path: git.path.trim(), id: update?.id ?? (git.id.trim() || plan?.id) }, confirm);
       setPlan(out);
       if (confirm) { setDone(true); onInstalled(); }
     } catch (e) { setError(errorMessage(e)); } finally { setBusy(false); }
@@ -128,7 +136,7 @@ export default function InstallRuntime({ onInstalled, update, trigger }: { onIns
         <div className="grid max-h-[64vh] gap-3 overflow-auto px-4 py-3 text-sm">
           <p role="note" className="rounded-md border border-warn/50 bg-warn-soft px-3 py-2 text-xs text-fg">{CODE_WARNING}</p>
           <Segmented label="Source" value={s.kind} options={KINDS} onChange={s.setKind} />
-          <SourceFields kind={s.kind} git={s.git} onGit={s.setGit} file={s.file} onFile={s.setFile} />
+          <SourceFields kind={s.kind} git={s.git} onGit={s.setGit} file={s.file} onFile={s.setFile} fixedId={update?.id} />
           {s.done && <p role="status" className="text-xs">Installed: {s.plan?.packages.length} packages registered.</p>}
           {s.plan && <RuntimePlanView plan={s.plan} />}
           {s.error && <p role="alert" className="text-alarm">{s.error}</p>}
