@@ -2,3 +2,4 @@ Brand icons: Simple Icons v14.0.0 (CC0), https://github.com/simple-icons/simple-
 Brand names and marks belong to their respective owners. Use does not imply endorsement or partnership.
 Missing icons use a text monogram.
 Oracle icon: Simple Icons v11.15.0 (CC0).
+Colours: each icon is filled with its brand colour from Simple Icons.

@@ -103,6 +103,8 @@
 
 ### Fixed
 
+- **Connector logos are in their brand colours** in the world catalog, not black (Simple Icons' brand colours).
+
 - **Re-importing a repo removes what the repo no longer has.** A re-import kept every setup, experiment,
   scenario and world an earlier import wrote, even once the repo had dropped them. Now an item the last import
   wrote that the repo no longer has is removed (to the project's trash, so it can be restored) when it is
