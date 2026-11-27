@@ -8,6 +8,9 @@ import { errorMessage } from '@/lib/errors';
 import { usd } from '@/lib/format';
 import type { ExperimentBody } from '@/model/project';
 
+/** `n thing`, or `n things` when n is not 1. */
+const plural = (n: number, thing: string) => `${n} ${thing}${n === 1 ? '' : 's'}`;
+
 export default function DeployDialog({ id, body, onDeployed }: { id: string; body: ExperimentBody; onDeployed: () => void }) {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -29,13 +32,13 @@ export default function DeployDialog({ id, body, onDeployed }: { id: string; bod
   return (
     <Dialog open={open} onOpenChange={(o) => { setOpen(o); setError(null); }}>
       <Button variant="primary" onClick={() => setOpen(true)}><Play />Deploy</Button>
-      <DialogContent title={`Deploy ${runs} runs`} description="Every run calls a real model and restores the world from its start.">
+      <DialogContent title={`Deploy ${plural(runs, 'run')}`} description="Every run calls a real model and restores the world from its start.">
         <div className="grid gap-2 px-4 py-3 text-sm">
-          <p>{body.setups.length} setups × {body.repeats.per_setup} runs each{body.repeats.paired_seeds === false ? '' : ', paired seeds'}.</p>
+          <p>{plural(body.setups.length, 'setup')} × {plural(body.repeats.per_setup, 'run')} each{body.repeats.paired_seeds === false ? '' : ', paired seeds'}.</p>
           {body.budget?.per_run_usd != null && <p className="text-muted">Each run stops at {usd(body.budget.per_run_usd)}.</p>}
           {error && <p role="alert" className="text-alarm">{error}</p>}
         </div>
-        <DialogActions onCancel={() => setOpen(false)} onGo={() => { void go(); }} disabled={busy} label={`Deploy ${runs} runs`} />
+        <DialogActions onCancel={() => setOpen(false)} onGo={() => { void go(); }} disabled={busy} label={`Deploy ${plural(runs, 'run')}`} />
       </DialogContent>
     </Dialog>
   );

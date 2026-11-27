@@ -46,7 +46,7 @@ export default function ExperimentFields({ body, choices, onChange }: { body: Ex
       <div className="grid gap-4 p-[18px] md:grid-cols-2">
         <ChoiceField label="World" value={body.world} options={worlds} onChange={(v) => onChange({ ...body, world: v, scenario: '' })} />
         <ChoiceField label="Scenario" value={body.scenario} options={scenarios} onChange={(v) => onChange({ ...body, scenario: v })} />
-        <Setups body={body} choices={choices} onChange={onChange} />
+        <div className="md:col-span-2"><Setups body={body} choices={choices} onChange={onChange} /></div>
         <label className="grid gap-1 text-sm"><span className="text-muted">Runs per setup</span>
           <Input aria-label="Runs per setup" type="number" min={1} value={body.repeats.per_setup}
             onChange={(e) => onChange(setIn(body, ['repeats', 'per_setup'], Math.max(1, Number(e.target.value) || 1)))} /></label>
