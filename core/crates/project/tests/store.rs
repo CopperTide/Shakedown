@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use shakedown_project::format::Kind;
 use shakedown_project::store::{Files, MemStore, Store};
-use shakedown_project::{Id, Project};
+use shakedown_project::{Id, Project, ProjectError};
 
 const FIXTURE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/larkspur");
 
@@ -117,5 +117,8 @@ fn a_regroup_and_a_new_project_write_the_same_files() {
     Project::init_in(mem.clone() as Arc<dyn Store>, "P", false).unwrap();
     same_files(fresh.path(), &mem);
     let no_git = Project::init_in(Arc::new(MemStore::default()), "P", true);
-    assert!(no_git.is_err(), "git needs a folder");
+    assert!(
+        matches!(no_git, Err(ProjectError::NoGitFolder)),
+        "git needs a folder"
+    );
 }

@@ -8,7 +8,9 @@ use serde_json::{json, Value};
 use shakedown_project::format::{parse, to_yaml, Kind, ProjectFile};
 use shakedown_project::Project;
 
-use super::{as_yaml, diff_first, flag, input, schema, view, Access, OpCtx, OpFuture, Operation};
+use super::{
+    as_yaml, diff_first, flag, input, schema, view, Access, OpCtx, OpError, OpFuture, Operation,
+};
 
 pub(super) fn ops() -> Vec<Operation> {
     vec![
@@ -76,8 +78,16 @@ struct InitInput {
     git: bool,
 }
 
+/// The project's status; with none open, the 409 also says whether a project made here is a
+/// folder on disk (`folder`), which git tracking needs.
 fn status<'a>(ctx: &'a OpCtx<'a>, _: &'static Operation, _: Value) -> OpFuture<'a> {
-    Box::pin(async move { Ok(status_of(&ctx.project.current().await?)) })
+    Box::pin(async move {
+        let folder = ctx.project.root().is_some();
+        match ctx.project.current().await {
+            Ok(project) => Ok(status_of(&project)),
+            Err(e) => Err(OpError::from(e).with("folder", json!(folder))),
+        }
+    })
 }
 
 fn init<'a>(ctx: &'a OpCtx<'a>, _: &'static Operation, value: Value) -> OpFuture<'a> {

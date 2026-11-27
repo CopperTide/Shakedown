@@ -121,3 +121,27 @@ async fn a_read_copy_refuses_writes() {
     assert!(copy.write_trash_note("1", "runs.json", "[]").is_err());
     assert!(copy.root().is_none() && s.root().is_none());
 }
+
+#[tokio::test]
+async fn git_on_a_database_is_400_and_saves_nothing() {
+    let (db, projects) = (Arc::new(FakeDb::default()), Projects::new(None));
+    let Err(e) = state(&db, &projects).init("Plant", true).await.unwrap() else {
+        panic!("git on a project kept in a database");
+    };
+    assert_eq!(crate::ops::OpError::from(e).status, StatusCode::BAD_REQUEST);
+    assert!(db.saves.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn no_project_in_a_database_says_it_is_no_folder() {
+    let (db, projects) = (Arc::new(FakeDb::default()), Projects::new(None));
+    let ctx = crate::ops::OpCtx {
+        project: state(&db, &projects),
+        app: None,
+        caller: Arc::new(crate::auth::Caller::person()),
+    };
+    let op = crate::ops::find("project.status").unwrap();
+    let err = (op.run)(&ctx, op, serde_json::json!({})).await.unwrap_err();
+    assert_eq!(err.status, StatusCode::CONFLICT);
+    assert_eq!(err.details.unwrap()["folder"], false);
+}

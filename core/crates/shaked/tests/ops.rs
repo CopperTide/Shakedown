@@ -173,6 +173,12 @@ fn no_project_is_409() {
         let fx = AppFx::idle("ops", "none").start().await;
         let err = call(&fx, "worlds.list", json!({})).await.unwrap_err();
         assert_eq!(err.status.as_u16(), 409);
+        let none = call(&fx, "project.status", json!({})).await.unwrap_err();
+        assert_eq!(
+            none.details.unwrap()["folder"],
+            false,
+            "no folder configured"
+        );
     });
 }
 
@@ -181,6 +187,8 @@ fn init_creates_a_project() {
     run(async {
         let dir = tempfile::tempdir().unwrap();
         let fx = AppFx::idle("ops", "init").project(dir.path()).start().await;
+        let before = call(&fx, "project.status", json!({})).await.unwrap_err();
+        assert_eq!(before.details.unwrap()["folder"], true);
         call(&fx, "project.init", json!({"name": "Fresh", "git": false}))
             .await
             .unwrap();

@@ -28,7 +28,8 @@ impl From<FormatError> for OpError {
 
 impl From<ProjectError> for OpError {
     /// An item still in use, or whose dependents changed since they were shown, is 409 with its
-    /// `dependents` as the dependents preview lists them.
+    /// `dependents` as the dependents preview lists them; git asked of a project kept in a
+    /// database is 400.
     fn from(e: ProjectError) -> OpError {
         let status = match &e {
             ProjectError::InUse { by, .. } | ProjectError::Stale { by, .. } => {
@@ -37,6 +38,7 @@ impl From<ProjectError> for OpError {
                     .with("dependents", dependents);
             }
             ProjectError::NotFound { .. } => StatusCode::NOT_FOUND,
+            ProjectError::NoGitFolder => StatusCode::BAD_REQUEST,
             ProjectError::InvalidId(_)
             | ProjectError::Format(_)
             | ProjectError::WrongKind { .. } => StatusCode::UNPROCESSABLE_ENTITY,

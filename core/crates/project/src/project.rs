@@ -221,10 +221,7 @@ fn git_folder(store: &dyn Store, git: bool) -> Result<Option<std::path::PathBuf>
     match (git, store.folder()) {
         (false, _) => Ok(None),
         (true, Some(root)) => Ok(Some(root.to_path_buf())),
-        (true, None) => {
-            let none = std::io::Error::other("this project is not a folder on disk");
-            Err(io("running git init in", ".", none))
-        }
+        (true, None) => Err(ProjectError::NoGitFolder),
     }
 }
 

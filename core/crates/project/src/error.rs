@@ -53,6 +53,9 @@ pub enum ProjectError {
     /// `init` was asked to create a project where one already exists.
     #[error("this folder is already a Shakedown project")]
     AlreadyAProject,
+    /// Git tracking was asked for on a project that is not a folder on disk.
+    #[error("git tracking needs a project folder on disk, and this project is kept in a database: create it without git")]
+    NoGitFolder,
     /// An id that is not lowercase letters, digits and dashes.
     #[error("{0:?} is not a valid id: use 1–64 lowercase letters, digits and dashes, starting with a letter or digit")]
     InvalidId(String),
