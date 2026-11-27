@@ -176,8 +176,9 @@ A query runs only behind several walls:
    without it shaked runs SQL as itself, behind walls 1–3.
 5. **Caps**: at most 5,000 rows, 8 MB of results and 100 columns; a longer result is cut and says so.
 
-The query runs in the caller's own transaction, so a hosting layer's row-level security applies to it as to
-every other read.
+The query runs in the caller's own transaction, with the caller's settings. A view reads its tables as its owner,
+so a hosting layer with row-level security gives the explore views an owner its policies cover (CopperTide Cloud
+does, with `shakedown_explore_owner`); a view owned by a superuser would read past them.
 
 ### Saved views
 

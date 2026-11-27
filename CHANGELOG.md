@@ -67,7 +67,9 @@
   either kind can be saved by name. All of it is the `explore.*` operations, so the assistant and MCP get it too.
   Migration shakedown 9 adds `call_usage` (one lean row per model call, kept by the analytics job: no call body is
   ever read), `saved_views`, the `explore` views and the `shakedown_explore` role; branch figures move to version 3,
-  so each ended branch is worked out once more after the upgrade. See [docs/analytics.md](docs/analytics.md#explore).
+  so each ended branch is worked out once more after the upgrade. A hosting layer with row-level security gives the
+  explore views an owner its policies cover, since a view reads its tables as its owner. See
+  [docs/analytics.md](docs/analytics.md#explore).
 - **Observability.** Settings → Observability sends every run as an OpenTelemetry trace (OTLP/HTTP protobuf) to
   Langfuse, Arize Phoenix or any OTLP collector: run, branch, agent turns, model calls (GenAI semantic conventions
   and OpenInference), tool calls with rows read and written, reasoning and the check; content only where the target
