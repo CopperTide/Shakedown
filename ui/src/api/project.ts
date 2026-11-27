@@ -86,7 +86,8 @@ export interface GitImport {
   commit: string;
   project: { name: string; problems: string[] } | null;
   packages: { name: string; kind: string; dir: string; python: string | null }[];
-  items: { kind: string; id: string; label: string; action: 'write' | 'replace' | 'same' | 'keep'; reason: string | null }[];
+  /** `remove`: the last import wrote it, the repo no longer has it, and it is unchanged: removed to the trash. */
+  items: { kind: string; id: string; label: string; action: 'write' | 'replace' | 'same' | 'keep' | 'remove'; reason: string | null }[];
   views: { world: string; file: string }[];
   compose: { file: string; services: string[]; volumes: string[] }[];
   notes: string[];
@@ -94,6 +95,8 @@ export interface GitImport {
   conflicts: string[];
   previous_commit: string | null;
   registered?: boolean;
+  /** Once imported: the items removed because the repo no longer has them. */
+  removed?: { kind: string; id: string; label: string }[];
 }
 
 /** Imports a git repo (a URL or a local path) at a ref; without `confirm`, only the plan. */

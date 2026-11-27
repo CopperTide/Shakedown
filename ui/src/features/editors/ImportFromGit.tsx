@@ -13,6 +13,7 @@ const ACTION: Record<GitImport['items'][number]['action'], string> = {
   replace: 'replaces the last import',
   same: 'already the same',
   keep: 'kept',
+  remove: 'no longer in the repo: removed (to the trash)',
 };
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
@@ -56,7 +57,8 @@ function primary(plan: GitImport | null, done: GitImport | null, busy: boolean):
 
 function Imported({ done }: { done: GitImport }) {
   const how = done.registered ? 'registered' : 'installed (registered at the next start)';
-  return <p role="status" className="text-xs">Imported: {done.packages.length} packages {how}, files written into the project.</p>;
+  const removed = done.removed?.length ? `, ${done.removed.length} no longer in the repo removed (to the trash)` : '';
+  return <p role="status" className="text-xs">Imported: {done.packages.length} packages {how}, files written into the project{removed}.</p>;
 }
 
 export default function ImportFromGit({ onImported }: { onImported: () => void }) {

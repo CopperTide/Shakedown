@@ -67,10 +67,21 @@ fn item_json(i: &items::ItemPlan) -> Value {
 
 /// The items written or replaced.
 pub fn written_json(p: &Prepared) -> Value {
-    let written = (p.items.iter())
-        .filter(|i| matches!(i.action, items::Action::Write | items::Action::Replace))
-        .map(|i| json!({"kind": kind_name(i.kind), "id": i.id.as_str(), "label": i.label}));
-    Value::Array(written.collect())
+    items_where(p, |a| {
+        matches!(a, items::Action::Write | items::Action::Replace)
+    })
+}
+
+/// The items removed: the last import's, gone from the repo (each to the project's trash).
+pub fn removed_json(p: &Prepared) -> Value {
+    items_where(p, |a| *a == items::Action::Remove)
+}
+
+fn items_where(p: &Prepared, keep: impl Fn(&items::Action) -> bool) -> Value {
+    let kept = (p.items.iter()).filter(|i| keep(&i.action));
+    let each =
+        kept.map(|i| json!({"kind": kind_name(i.kind), "id": i.id.as_str(), "label": i.label}));
+    Value::Array(each.collect())
 }
 
 fn project_json(repo: &Project) -> Value {

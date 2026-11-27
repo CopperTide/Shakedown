@@ -73,6 +73,11 @@
 
 ### Fixed
 
+- **Re-importing a repo removes what the repo no longer has.** A re-import kept every setup, experiment,
+  scenario and world an earlier import wrote, even once the repo had dropped them. Now an item the last import
+  wrote that the repo no longer has is removed (to the project's trash, so it can be restored) when it is
+  unchanged since, nothing left in the project uses it and no other import holds it; one you changed, or still
+  use, is kept and the plan says why. Items you made in the project, and runs, are never removed.
 - **A rate limit (429) no longer ends a run in seconds.** The API-mode agent loop tried a 429 three times over
   about 7 s, too short for a per-minute limit such as OpenRouter's 20 requests a minute on a new account, so a
   team with two agents on one model ended `infra_error`. A 429 is now tried up to 6 times, each after the

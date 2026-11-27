@@ -72,6 +72,15 @@ describe('import from git', () => {
     expect(posted[1]).toEqual({ url: '/repos/airline-world', ref: 'main', confirm: true });
   });
 
+  it('says_what_a_reimport_removes_because_the_repo_no_longer_has_it', async () => {
+    const gone = { kind: 'experiment', id: 'old-try', label: 'Old try', action: 'remove' as const, reason: null };
+    mockFetch({ ...PLAN, items: [...PLAN.items, gone], removed: [gone] });
+    await check('/repos/airline-world');
+    expect((await screen.findByText(/Old try/)).textContent).toContain('no longer in the repo: removed (to the trash)');
+    fireEvent.click(screen.getByRole('button', { name: 'Import' }));
+    expect((await screen.findByRole('status')).textContent).toContain('1 no longer in the repo removed (to the trash)');
+  });
+
   it('a_taken_package_name_blocks_the_import', async () => {
     mockFetch({ ...PLAN, conflicts: ['a package named airline-driver is installed already, from /x'] });
     await check('/repos/airline-world');

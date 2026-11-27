@@ -14,7 +14,7 @@ All JSON on `http://127.0.0.1:4510`, except the event stream. Errors are `{error
 | `GET /api/me` | `{mode, user: {name}, features}`: `mode` is `local` and `user.name` `You` for an open-source shaked; a deployment's layer may add `account` (the UI's account menu) |
 | `GET /api/project` | `project.status`: `{name, counts: {worlds, scenarios, setups, experiments}, problems, root, imports}` for the project folder `SHAKEDOWN_PROJECT` names; 409 when none is open. `problems` lists unreadable files and broken references (`{kind, id, pointer, message}`); a problem never stops the rest of the project from loading. `imports` lists the project's git imports, `[{id, url, ref, commit, imported_at, packages, items}]` |
 | `POST /api/project` | `project.init`: `{name, git?}` creates a project in the configured folder; 409 when one is already there |
-| `POST /api/project/import-git` | `project.import_git`: `{url, ref?, id?, confirm?}` imports a git repo, its packages and its project items (see [Import from git](#import-from-git)). Without `confirm` the ref is fetched and the plan answered, and nothing is installed, registered or written: `{proposed: true, id, url, ref, commit, checkout, project: {name, problems}, packages: [{name, kind, dir, python}], items: [{kind, id, label, action: write\|replace\|same\|keep, reason}], views: [{world, file}], compose: [{file, services, volumes, part}], python: [{root, env}], edits, notes, problems, conflicts, previous_commit}`. With `confirm` the same, plus `registered` (true when shaked runs) and `written`. 400 for a URL other than https, ssh, `git@host:path`, `file://` or an absolute path, or a ref starting with `-`; 409 when a package name is installed already; 422 when git or uv fails; 403 on a shaked that serves others |
+| `POST /api/project/import-git` | `project.import_git`: `{url, ref?, id?, confirm?}` imports a git repo, its packages and its project items (see [Import from git](#import-from-git)). Without `confirm` the ref is fetched and the plan answered, and nothing is installed, registered or written: `{proposed: true, id, url, ref, commit, checkout, project: {name, problems}, packages: [{name, kind, dir, python}], items: [{kind, id, label, action: write\|replace\|same\|keep\|remove, reason}], views: [{world, file}], compose: [{file, services, volumes, part}], python: [{root, env}], edits, notes, problems, conflicts, previous_commit}`. With `confirm` the same, plus `registered` (true when shaked runs), `written` and `removed` (the last import's items the repo no longer has, removed to the trash). 400 for a URL other than https, ssh, `git@host:path`, `file://` or an absolute path, or a ref starting with `-`; 409 when a package name is installed already; 422 when git or uv fails; 403 on a shaked that serves others |
 | `GET /api/project/{worlds\|scenarios\|setups\|experiments}` | `{items: [{kind, id, label, hash, problems, …}]}`; each item also says where it belongs: a world its `group` (null when none), a scenario its `world`, an experiment its `world`, `scenario`, `parent` and how many `setups` it compares |
 | `GET /api/project/{kind}/{id}` | one item with its `body` (the file's contents as JSON) |
 | `PUT /api/project/{kind}/{id}` | `{body, confirm?}` creates or replaces the item's file. `body` is checked exactly like the file: unknown fields, a wrong `format:` and credentials written inline are 422 with a JSON pointer (a credential's value is never echoed). Unless `confirm` is true and while the project's `permissions.edit` is `diff_first` (the default), nothing is written and the answer is `{proposed: true, diff}`. Writes are atomic: a file is never left half-written. Needs the `admin` token scope |
@@ -357,6 +357,14 @@ From the app (**Import from git** on the Worlds page: Check, then Import), the A
   registers any that are not (an import made with `shaked import` while shaked runs).
 - **Items:** copied under their own ids. An id the project has already is kept unless the last import of this repo
   wrote it and it is unchanged since; then it is replaced. Each item's action is in the plan.
+- **Items the repo no longer has:** the import record lists what each import wrote, with a digest. On a re-import,
+  an item the last import wrote that the repo no longer has is removed (action `remove`) when the project's copy is
+  unchanged since, nothing left in the project uses it and no other import of the project holds it. It goes to the
+  project's trash (`.shakedown/trash`), so it can be restored. One the project changed since is kept, the project's
+  own from then on; one something still uses (an experiment of yours on an imported setup) is kept and removed by a
+  later import once nothing does; one another import holds is kept. Items
+  made in the project are never removed, and neither are runs: they stay where they are, and their pages still open.
+  The answer lists what was removed under `removed`.
 - **A new commit:** a new checkout and environment; the packages are swapped once they are ready (a run going keeps
   its program). The commit before is kept, older ones removed. Fingerprints follow the code and the world folders,
   so old runs keep the fingerprint they recorded.
@@ -365,7 +373,8 @@ From the app (**Import from git** on the Worlds page: Check, then Import), the A
   shaked that serves others refuses imports (403) until a run's sandbox can run them.
 
 Verified: the tests in `core/crates/shaked/tests/git_import.rs` (a repo made in the test, with one Python part run
-through uv, is imported, registered and deployed; a new commit keeps the project's own edits) and, on this machine,
+through uv, is imported, registered and deployed; a new commit keeps the project's own edits; a re-import removes
+what the repo dropped unless the project changed or uses it) and, on this machine,
 `live_airline_world_imports` against the airline repo (11 packages, 2 worlds with their views, 2 scenarios, 2
 setups, 2 experiments, no problems; its benchmark describes itself from the import's environment).
 

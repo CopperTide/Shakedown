@@ -1,5 +1,6 @@
-//! Carrying out a prepared import: the kit edits, the uv environments, the project's items, the
-//! record and the registry, then removing checkouts two commits old.
+//! Carrying out a prepared import: the kit edits, the uv environments, the project's items (the
+//! last import's that the repo no longer has removed), the record and the registry, then removing
+//! checkouts two commits old.
 
 use std::path::{Path, PathBuf};
 
@@ -11,7 +12,11 @@ use super::prepare::Prepared;
 use super::record::{self, Record, RecordedPackage};
 use super::{detect, fetch, items, python, report, ImportError};
 
-pub async fn apply(project: &Path, p: Prepared, hub: Option<&Hub>) -> Result<Value, ImportError> {
+pub async fn apply(
+    project: &Path,
+    mut p: Prepared,
+    hub: Option<&Hub>,
+) -> Result<Value, ImportError> {
     if !p.conflicts.is_empty() {
         return Err(ImportError::Conflict(p.conflicts.join("; ")));
     }
@@ -19,7 +24,7 @@ pub async fn apply(project: &Path, p: Prepared, hub: Option<&Hub>) -> Result<Val
     let held = match &p.found.project {
         Some(repo) => {
             ensure_project(project, repo)?;
-            items::write(&p.checkout, project, &p.items)?
+            items::write(&p.checkout, project, &mut p.items)?
         }
         None => vec![],
     };
@@ -34,6 +39,7 @@ pub async fn apply(project: &Path, p: Prepared, hub: Option<&Hub>) -> Result<Val
     let mut out = report::plan_json(&p);
     out["registered"] = json!(hub.is_some());
     out["written"] = report::written_json(&p);
+    out["removed"] = report::removed_json(&p);
     Ok(out)
 }
 

@@ -314,6 +314,103 @@ fn a_new_commit_replaces_the_packages_and_keeps_the_projects_own_edits() {
     });
 }
 
+/// The repo drops its experiment, setup and scenario; the person made an experiment of their own
+/// on the setup and edited the scenario.
+fn drop_from_repo(repo: &Path, project: &Path) {
+    let ours = "format: shakedown-experiment/1\nlabel: Ours\nworld: box\nscenario: poke\nsetups: [solo]\nrepeats: {per_setup: 1}\n";
+    write(project, "experiments/ours.yaml", ours);
+    let scenario = project.join("scenarios/poke.yaml");
+    let mine = std::fs::read_to_string(&scenario)
+        .unwrap()
+        .replace("Poke it", "Poke it (ours)");
+    std::fs::write(&scenario, mine).unwrap();
+    let gone = [
+        "experiments/try.yaml",
+        "setups/solo.yaml",
+        "scenarios/poke.yaml",
+    ];
+    git(repo, &[&["rm", "-q"][..], &gone[..]].concat());
+    git(repo, &["commit", "-q", "-m", "drop"]);
+}
+
+/// The re-import after [`drop_from_repo`] removed the unchanged experiment, to the trash, and kept
+/// the setup the person's experiment uses and the scenario they changed.
+fn check_dropped(done: &Value, project: &Path) {
+    let actions = rows(done, "items", &["action", "id"]);
+    for want in ["same box", "remove try", "keep solo", "keep poke"] {
+        assert!(
+            actions.contains(&want.to_string()),
+            "{want} not in {actions:?}"
+        );
+    }
+    assert_eq!(rows(done, "removed", &["kind", "id"]), ["experiment try"]);
+    assert!(!project.join("experiments/try.yaml").exists());
+    assert!(
+        project.join(".shakedown/trash").is_dir(),
+        "a removal can be undone"
+    );
+    for kept in [
+        "setups/solo.yaml",
+        "scenarios/poke.yaml",
+        "experiments/ours.yaml",
+    ] {
+        assert!(project.join(kept).is_file(), "{kept}");
+    }
+}
+
+/// A re-import removes what the last import wrote and the repo no longer has, when it is unchanged
+/// and nothing left uses it (to the trash); it keeps what the person changed or still uses, and
+/// removes that once nothing does. The person's own items are never touched.
+#[test]
+fn a_reimport_removes_what_the_repo_dropped_unless_the_project_changed_or_uses_it() {
+    if !uv_found() {
+        return;
+    }
+    run(async {
+        let (repo, _) = fixture_repo("drop");
+        let project = tempfile::tempdir().unwrap();
+        let (url, p) = (repo.path().display().to_string(), project.path());
+        import_alone(p, &url).await;
+        drop_from_repo(repo.path(), p);
+        check_dropped(&import_alone(p, &url).await, p);
+        // Once the person's experiment is gone, nothing uses the setup: it goes too.
+        std::fs::remove_file(p.join("experiments/ours.yaml")).unwrap();
+        let done = import_alone(p, &url).await;
+        assert_eq!(rows(&done, "removed", &["kind", "id"]), ["setup solo"]);
+        assert!(
+            p.join("scenarios/poke.yaml").is_file(),
+            "the person's edit stays"
+        );
+    });
+}
+
+/// An item two imports of the project hold stays when one repo drops it: the other still has it.
+#[test]
+fn a_reimport_keeps_what_another_import_holds() {
+    if !uv_found() {
+        return;
+    }
+    run(async {
+        let (repo, _) = fixture_repo("two");
+        let project = tempfile::tempdir().unwrap();
+        let (url, p) = (repo.path().display().to_string(), project.path());
+        for id in ["one", "two"] {
+            import_with(p, json!({"url": url, "id": id, "confirm": true})).await;
+        }
+        git(repo.path(), &["rm", "-q", "experiments/try.yaml"]);
+        git(repo.path(), &["commit", "-q", "-m", "drop"]);
+        let done = import_with(p, json!({"url": url, "id": "one", "confirm": true})).await;
+        let kept = done["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|i| i["id"] == "try");
+        let why = kept.unwrap()["reason"].as_str().unwrap().to_string();
+        assert!(why.contains("the import two has it too"), "{why}");
+        assert!(p.join("experiments/try.yaml").is_file());
+    });
+}
+
 /// The text of a `tools/call` of `project_import_git` with `arguments`.
 async fn tool_text(ctx: &OpCtx<'_>, arguments: Value) -> String {
     let call = json!({"jsonrpc": "2.0", "id": 2, "method": "tools/call",
