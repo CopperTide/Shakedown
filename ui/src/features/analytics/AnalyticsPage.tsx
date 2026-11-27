@@ -1,4 +1,4 @@
-// Analytics: figures across runs, and search over every run's steps. The tab (`?tab=search`) and
+// Analytics: figures across runs, search over every run's steps, and Explore (builder and SQL). The tab (`?tab=search`) and
 // each tab's filter live in the address; the Overview's tiles, charts and leaderboard read one summary.
 import { useCallback, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
@@ -17,6 +17,7 @@ import MoreCharts from './MoreCharts';
 import Leaderboard from './Leaderboard';
 import { Card } from './parts';
 import PassRateChart from './PassRateChart';
+import ExploreTab from './explore/ExploreTab';
 import SearchTab from './search/SearchTab';
 
 /** Below this many runs the page says the charts are still filling in. */
@@ -91,15 +92,16 @@ function OverviewTab() {
   );
 }
 
-type Tab = 'overview' | 'search';
+type Tab = 'overview' | 'search' | 'explore';
+const OTHER_TABS: readonly Tab[] = ['search', 'explore'];
 
 /** The tab shown, kept in the address. */
 function useTab(): [Tab, (t: string) => void] {
   const [sp, setSp] = useSearchParams();
-  const tab: Tab = sp.get('tab') === 'search' ? 'search' : 'overview';
+  const tab: Tab = OTHER_TABS.find((t) => t === sp.get('tab')) ?? 'overview';
   const setTab = useCallback((t: string) => setSp((prev) => {
     const out = new URLSearchParams(prev);
-    if (t === 'search') out.set('tab', 'search');
+    if (OTHER_TABS.includes(t as Tab)) out.set('tab', t);
     else out.delete('tab');
     return out;
   }, { replace: true }), [setSp]);
@@ -110,6 +112,7 @@ export default function AnalyticsPage() {
   const [tab, setTab] = useTab();
   const range = parseFilter(new URLSearchParams(useLocation().search)).range;
   const meta = tab === 'search' ? 'Every step of every run you can see, newest first.'
+    : tab === 'explore' ? 'Any measure by any dimension over finished runs, or SQL over the documented views.'
     : range === DEFAULT_RANGE ? 'The last 30 days, each run counted once (reruns left out).' : 'Each run counted once (reruns left out).';
   return (
     <>
@@ -119,9 +122,11 @@ export default function AnalyticsPage() {
           <TabsList className="px-0">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="search">Search</TabsTrigger>
+            <TabsTrigger value="explore">Explore</TabsTrigger>
           </TabsList>
           <TabsContent value="overview" className="flex flex-col gap-4 pt-4"><OverviewTab /></TabsContent>
           <TabsContent value="search" className="pt-4"><SearchTab /></TabsContent>
+          <TabsContent value="explore" className="pt-4"><ExploreTab /></TabsContent>
         </Tabs>
       </PageBody>
     </>
