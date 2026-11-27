@@ -124,6 +124,10 @@ pub const BASE_FILES: Files = Files {
             "0008_step_search.sql",
             include_str!("../migrations/shakedown/0008_step_search.sql"),
         ),
+        (
+            "0009_explore.sql",
+            include_str!("../migrations/shakedown/0009_explore.sql"),
+        ),
     ],
     also_accept: &[],
 };

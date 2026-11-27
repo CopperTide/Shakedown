@@ -20,10 +20,12 @@ use crate::{
 
 mod analytics;
 mod api_tokens;
+mod call_usage;
 mod connections;
 mod control;
 mod events;
 mod experiments;
+mod explore;
 mod linked;
 mod obs_exports;
 mod obs_metrics;
@@ -45,6 +47,10 @@ pub use connections::{is_secret, Connection, NewConnection, REDACTED};
 pub use control::Controlled;
 pub(crate) use events::with_overhead;
 pub use experiments::{NewExperiment, NewSetup};
+pub use explore::{
+    Drill, DrillRun, DrillStep, ExploreOptions, OutColumn, QueryResult, SavedView,
+    QUERY_TIMEOUT_SECS,
+};
 pub use linked::Linked;
 pub use obs_exports::{backoff, Due, ExportRow, RunRecord, Tried, MAX_ATTEMPTS};
 pub use obs_metrics::{BranchLine, CallLine, Snapshot};

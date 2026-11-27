@@ -11,11 +11,17 @@
 //! calls' bodies are most of it), so the figures are kept.
 //!
 //! [`search`] finds steps across runs by their text, through a full-text index on the events.
+//!
+//! [`explore`] answers measures × dimensions and read-only SQL over the same records; the job keeps
+//! each model call's usage ([`usage`], `call_usage`) beside the branch's figures for it, in the
+//! same transaction.
 
+pub mod explore;
 mod failures;
 pub mod filter;
 pub mod search;
 pub mod stats;
+pub mod usage;
 
 use std::{sync::Arc, time::Duration};
 
@@ -24,6 +30,7 @@ use anyhow::Result;
 pub use filter::{Filter, Group, Query};
 pub use search::{SearchInput, SearchQuery};
 pub use stats::{stats_of, BranchStats};
+pub use usage::{calls_of, CallUsage};
 
 use crate::{app::AppState, store::Store};
 
@@ -40,7 +47,8 @@ pub async fn fill(store: &Store, limit: i64) -> Result<usize> {
         let figures = match store.stats_record(&id).await {
             Ok(Some(rec)) => {
                 let s = stats_of(&rec.branch, &rec.task_id, &rec.events);
-                Some((rec.branch.ended_at, serde_json::to_value(s)?))
+                let calls = calls_of(&rec.branch, &rec.events);
+                Some((rec.branch.ended_at, serde_json::to_value(s)?, calls))
             }
             Ok(None) => None,
             Err(e) => {
@@ -49,8 +57,8 @@ pub async fn fill(store: &Store, limit: i64) -> Result<usize> {
                 None
             }
         };
-        if let Some((Some(ended_at), value)) = figures {
-            if store.put_stats(&id, ended_at, &value).await? {
+        if let Some((Some(ended_at), value, calls)) = figures {
+            if store.put_figures(&id, ended_at, &value, &calls).await? {
                 kept += 1;
             }
         }

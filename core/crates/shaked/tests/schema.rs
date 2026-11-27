@@ -66,12 +66,15 @@ fn a_fresh_database_has_only_shakedown_s_schemas() {
         drop(store);
         let schemas = "SELECT string_agg(nspname, ',' ORDER BY nspname) FROM pg_namespace
                         WHERE nspname NOT LIKE 'pg\\_%' AND nspname <> 'information_schema'";
-        assert_eq!(rows(&name, schemas).await, ["public,schema_meta,shakedown"]);
+        assert_eq!(
+            rows(&name, schemas).await,
+            ["explore,public,schema_meta,shakedown"]
+        );
         let history = "SELECT string_agg(stream || ' ' || version, ',' ORDER BY stream, version)
                          FROM schema_meta.migrations";
         assert_eq!(
             rows(&name, history).await,
-            ["shakedown 1,shakedown 2,shakedown 3,shakedown 4,shakedown 5,shakedown 6,shakedown 7,shakedown 8"]
+            ["shakedown 1,shakedown 2,shakedown 3,shakedown 4,shakedown 5,shakedown 6,shakedown 7,shakedown 8,shakedown 9"]
         );
     })
 }

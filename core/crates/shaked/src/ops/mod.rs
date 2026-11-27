@@ -8,6 +8,7 @@ mod delete_ops;
 mod deploy;
 mod deploy_ops;
 mod error;
+mod explore_ops;
 mod group_ops;
 pub mod http;
 mod import_git_ops;
@@ -143,6 +144,7 @@ pub fn all() -> &'static [Operation] {
         ops.extend(step_ops::ops());
         ops.extend(observability_ops::ops());
         ops.extend(analytics_ops::ops());
+        ops.extend(explore_ops::ops());
         ops
     })
 }

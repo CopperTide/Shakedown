@@ -21,7 +21,7 @@ use crate::{
 
 /// An ended branch's figures are current: worked out, of this shape, for the end it has now.
 /// (`ended_at` is kept as epoch seconds, which read the same in every session's time zone.)
-fn current() -> String {
+pub(super) fn current() -> String {
     format!(
         "b.status NOT IN ('running', 'queued') AND b.ended_at IS NOT NULL
      AND b.stats ? 'setup' AND (b.stats->>'v')::int = {VERSION}
@@ -448,7 +448,7 @@ fn unfilled() -> String {
 }
 
 /// Keeps a branch's figures, for the end it was worked out for (`$3`): unless it ended again since.
-const PUT: &str = "UPDATE branches
+pub(super) const PUT: &str = "UPDATE branches
    SET stats = $2::jsonb || jsonb_build_object('ended_at', to_jsonb(extract(epoch FROM ended_at)))
  WHERE id = $1 AND ended_at = $3";
 

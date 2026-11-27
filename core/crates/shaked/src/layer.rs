@@ -80,7 +80,17 @@ pub trait Layer: Send + Sync + 'static {
     fn keeps_secrets(&self) -> bool {
         true
     }
+    /// The database role Explore's SQL runs as, after `begin` (`SET LOCAL ROLE`), when the
+    /// database has it and the session may take it: one that reads the explore views and nothing
+    /// else (migration `shakedown 9` makes `shakedown_explore`). None: the caller's own role, the
+    /// guard, the read-only transaction and the pinned search_path being the walls.
+    fn explore_role(&self) -> Option<&'static str> {
+        Some(EXPLORE_ROLE)
+    }
 }
+
+/// The role migration `shakedown 9` makes for Explore's SQL.
+pub const EXPLORE_ROLE: &str = "shakedown_explore";
 
 /// A deployment on personal use's hooks (everything allowed, nothing metered), told apart only by
 /// its policy and whether it keeps secrets: [`LocalLayer`] and a sandbox's [`WorkerLayer`].

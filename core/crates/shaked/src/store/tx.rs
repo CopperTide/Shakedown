@@ -51,6 +51,11 @@ impl Tx {
         Ok(self.conn().execute(sql, p).await?)
     }
 
+    /// Prepares `sql` without running it: its parameter and result columns.
+    pub async fn prepare(&self, sql: &str) -> Result<tokio_postgres::Statement> {
+        Ok(self.conn().prepare(sql).await?)
+    }
+
     /// Runs statements without parameters (simple-query protocol).
     pub async fn batch(&self, sql: &str) -> Result<()> {
         Ok(self.conn().batch_execute(sql).await?)

@@ -13,8 +13,9 @@ use crate::{
     prices,
 };
 
-/// The version of [`BranchStats`]' shape: a row of another version is worked out again.
-pub const VERSION: u32 = 2;
+/// The version of [`BranchStats`]' shape: a row of another version is worked out again. Version 3
+/// also keeps each model call's usage (`call_usage`), so every ended branch gets it once.
+pub const VERSION: u32 = 3;
 
 /// What an ended branch came to (`branches.stats`, plus the `ended_at` it was worked out for).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
