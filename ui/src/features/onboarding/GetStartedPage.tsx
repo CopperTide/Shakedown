@@ -1,8 +1,8 @@
 // Get started: from nothing to a first scenario, one step at a time. Each step ticks itself off
-// from what exists; nothing is filled in for you. There is no skipping: the rest of Shakedown opens
+// from what exists, and the page moves on to the next open step by itself; nothing is filled in for you. There is no skipping: the rest of Shakedown opens
 // once the steps are done (see gate.tsx).
 import { Check } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AccountMenu, useMe } from '@/app/AccountMenu';
 import { Mark } from '@/components/brand/Mark';
 import { useProject } from '@/hooks/useProject';
@@ -12,7 +12,7 @@ import StepItems from './StepItems';
 import StepModel from './StepModel';
 import StepProject from './StepProject';
 import StepReady from './StepReady';
-import { type StepState, stageOf, stepStates } from './steps';
+import { type StepState, firstOpen, stageOf, stepStates } from './steps';
 
 function Rail({ steps, active, onSelect }: { steps: StepState[]; active: string; onSelect: (id: StepState['id']) => void }) {
   return (
@@ -40,23 +40,41 @@ function Body({ id, steps, ctx }: { id: StepState['id']; steps: StepState[]; ctx
   }
 }
 
+/**
+ * The step shown: the one picked, else the first open one. A step picked while open hands over to
+ * the next open one as soon as it is done; one picked after it was done stays until another is picked.
+ */
+function useActiveStep(steps: StepState[]) {
+  const [picked, setPicked] = useState<{ id: StepState['id']; wasDone: boolean } | null>(null);
+  const done = (id?: StepState['id']) => !!steps.find((s) => s.id === id)?.done;
+  const handOver = !!picked && !picked.wasDone && done(picked.id);
+  useEffect(() => { if (handOver) setPicked(null); }, [handOver]);
+  const pick = (id: StepState['id']) => setPicked({ id, wasDone: done(id) });
+  return [picked?.id ?? firstOpen(steps), pick] as const;
+}
+
+/** What the steps read from the project answer and the providers. */
+function contextOf(project: ReturnType<typeof useProject>, providersOk: boolean) {
+  const open = project.data?.open ? project.data.status : null;
+  const closed = project.data && !project.data.open ? project.data : undefined;
+  return { stage: stageOf(!!open, closed?.message), name: open?.name, folder: !!closed?.folder, counts: open?.counts ?? {}, providersOk, reload: project.reload };
+}
+
 export default function GetStartedPage() {
   const project = useProject();
   const me = useMe();
   const providers = useProviderList();
-  const [active, setActive] = useState<StepState['id']>('project');
-  const open = project.data?.open ? project.data.status : null;
-  const closed = project.data && !project.data.open ? project.data : undefined;
-  const stage = stageOf(!!open, closed?.message);
-  const ctx = { stage, name: open?.name, folder: !!closed?.folder, counts: open?.counts ?? {}, providersOk: providers.list.some((p) => p.available), reload: project.reload };
-  const steps = stepStates({ project: stage, counts: ctx.counts, providersOk: ctx.providersOk });
+  const ctx = contextOf(project, providers.list.some((p) => p.available));
+  const steps = stepStates({ project: ctx.stage, counts: ctx.counts, providersOk: ctx.providersOk });
+  const [active, pick] = useActiveStep(steps);
   const current = steps.find((s) => s.id === active);
+  const loading = !project.data && !project.error;
   return (
     <div className="min-h-full bg-bg">
       <header className="flex items-center gap-2 border-b border-line px-7 py-3"><Mark /><span className="font-display text-lg">Shakedown</span><span className="flex-1" /><AccountMenu me={me} /></header>
       <div className="mx-auto grid max-w-5xl gap-10 px-7 py-10 md:grid-cols-[240px_minmax(0,1fr)]">
-        <Rail steps={steps} active={active} onSelect={setActive} />
-        <main><h1 className="mb-6 font-display text-[34px] leading-tight">{current?.title}</h1><Body id={active} steps={steps} ctx={ctx} /></main>
+        <Rail steps={steps} active={active} onSelect={pick} />
+        {!loading && <main><h1 className="mb-6 font-display text-[34px] leading-tight">{current?.title}</h1><Body id={active} steps={steps} ctx={ctx} /></main>}
       </div>
     </div>
   );

@@ -26,3 +26,6 @@ export function stepStates({ project, counts, providersOk }: { project: ProjectS
 
 /** Whether every step before Ready is done: what opens the rest of Shakedown. */
 export const coreDone = (steps: StepState[]) => steps.every((s) => s.id === 'ready' || s.done);
+
+/** The step Get started shows unless one is picked: the first not done, else Ready. */
+export const firstOpen = (steps: StepState[]): StepState['id'] => (steps.find((s) => !s.done) ?? steps[steps.length - 1]).id;

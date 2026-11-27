@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { KeyRow } from '@/api/models';
 import type { TokenRow } from '@/api/tokens';
-import { checkLine, emptyKeyForm, keyBody, ModelsView } from './ModelsPage';
+import { checkLine, emptyKeyForm, keyBody, keyName, ModelsView, withKind } from './ModelsPage';
 import { SCOPES, TokensView } from './TokensPage';
 
 const token: TokenRow = { id: 't1', name: 'ci', prefix: 'sd_1a2b3', scopes: ['run'], created_at: '2026-11-20T10:00:00Z', last_used_at: null, expires_at: null };
@@ -34,6 +34,16 @@ describe('API tokens', () => {
 });
 
 describe('Models', () => {
+  it('a key name is made valid as it is typed and named after its kind until named', () => {
+    expect(keyName('OpenRouter Key')).toBe('openrouter-key');
+    expect(keyName('  my key!')).toBe('my-key-');
+    expect(keyName('x'.repeat(80))).toHaveLength(60);
+    expect(keyBody({ ...emptyKeyForm(), kind: 'openrouter', name: 'my-key-' }).name).toBe('my-key');
+    const chosen = withKind(emptyKeyForm(), 'openrouter');
+    expect(chosen.name).toBe('openrouter');
+    expect(withKind(chosen, 'openai').name).toBe('openai');
+    expect(withKind({ ...chosen, name: 'team-key' }, 'openai').name).toBe('team-key');
+  });
   it('adds a custom server with a URL and runs Test', () => {
     const form = { ...emptyKeyForm(), kind: 'custom' as const, name: 'pod', base_url: ' http://127.0.0.1:8000/v1 ', model: 'llama3' };
     expect(keyBody(form)).toEqual({ kind: 'custom', name: 'pod', secret: '', base_url: 'http://127.0.0.1:8000/v1', model: 'llama3' });

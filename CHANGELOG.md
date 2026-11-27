@@ -113,6 +113,9 @@
 
 ### Fixed
 
+- **Get started moves on by itself**: it opens on the first step not done and goes to the next one when a step is done, rather than staying on "Your project is ready".
+- **A key's name can't be refused for its letters**: the Name field turns what you type into lowercase letters, digits, `-` and `_` ("OpenRouter Key" becomes `openrouter-key`), and a new key is named after its kind until you name it.
+
 - **Switches show their knob**: it sat off the right edge (the button centred it) and was dark on dark, so an on switch looked like a plain green pill.
 
 - **Creating a hosted project with git answers 400, not 500, and Get started no longer offers git there.**

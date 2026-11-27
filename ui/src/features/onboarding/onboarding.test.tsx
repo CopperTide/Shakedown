@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// Get started: each step ticks itself off from live state, nothing is preselected, a project is
+// Get started: each step ticks itself off from live state, the page opens on and moves to the first open step, nothing is preselected, a project is
 // created only on a click, git is offered only for a folder, there is no skipping, and the
 // assistant opens with a question already written.
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -9,7 +9,7 @@ import AskDrawer from '@/features/assistant/AskDrawer';
 import { ASK_EVENT } from '@/features/shell/TopBar';
 import { forgetShared } from '@/hooks/query';
 import GetStartedPage from './GetStartedPage';
-import { stepStates } from './steps';
+import { firstOpen, stepStates } from './steps';
 
 const posts: { url: string; body: unknown }[] = [];
 
@@ -48,10 +48,27 @@ describe('get started', () => {
     expect(screen.queryByRole('button', { name: 'Create project' })).toBeNull();
   });
 
-  it('existing_project_is_done', async () => {
+  it('opens_on_the_first_open_step', async () => {
     mockFetch(OPEN);
     show();
-    expect(await screen.findByText('Larkspur Ops is ready.')).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Connect a model' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Your project/ }));
+    expect(screen.getByText('Larkspur Ops is ready.')).toBeTruthy();
+  });
+
+  it('moves_on_when_the_step_is_done', async () => {
+    mockFetch(NOT_A_PROJECT);
+    show();
+    fireEvent.change(await screen.findByLabelText('Project name'), { target: { value: 'Larkspur Ops' } });
+    mockFetch(OPEN);
+    fireEvent.click(screen.getByRole('button', { name: 'Create project' }));
+    expect(await screen.findByRole('heading', { name: 'Connect a model' })).toBeTruthy();
+  });
+
+  it('first_open_is_ready_once_all_are_done', () => {
+    const all = stepStates({ project: 'open', counts: { worlds: 1, scenarios: 1, setups: 1 }, providersOk: true });
+    expect(firstOpen(all)).toBe('ready');
+    expect(firstOpen(stepStates({ project: 'create', counts: {}, providersOk: false }))).toBe('project');
   });
 
   it('nothing_preselected', async () => {

@@ -25,9 +25,18 @@ export interface KeyForm { kind: KeyKind; name: string; secret: string; base_url
 
 export const emptyKeyForm = (): KeyForm => ({ kind: 'custom', name: '', secret: '', base_url: '', model: '', access_key_id: '', region: 'us-east-1' });
 
+/** Typed text as a key name, as you type: lowercase letters, digits, `-` and `_`, at most 60 ("My Key" is "my-key"). */
+export const keyName = (typed: string) => typed.toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+/, '').slice(0, 60);
+
+/** Choosing a kind names a key not yet named (or still named after the last kind) after it. */
+export function withKind(f: KeyForm, kind: KeyKind): KeyForm {
+  const named = f.name !== '' && f.name !== f.kind;
+  return { ...f, kind, name: named ? f.name : kind };
+}
+
 /** What `POST /api/models/keys` gets for `f`. */
 export function keyBody(f: KeyForm): NewKey {
-  const base = { kind: f.kind, name: f.name.trim() };
+  const base = { kind: f.kind, name: f.name.replace(/-+$/, '') };
   const model = f.model.trim() ? { model: f.model.trim() } : {};
   if (f.kind === 'bedrock') {
     const secret = JSON.stringify({ access_key_id: f.access_key_id.trim(), secret_access_key: f.secret });
@@ -93,9 +102,9 @@ export function ModelsView({ keys, form, testing, error, onChange, onAdd, onTest
       <Panel>
         <PanelHeader title="Add a key or server" />
         <form className="flex flex-col gap-3 p-4" onSubmit={(e) => { e.preventDefault(); onAdd(); }}>
-          <Segmented label="Kind" value={form.kind} options={KINDS} onChange={(kind) => set({ kind })} />
-          <Field label="Name" hint={form.kind === 'custom' ? `Agents pick it as custom:${form.name.trim() || '<name>'}` : undefined}>
-            <Input value={form.name} placeholder="my-key" onChange={(e) => set({ name: e.target.value })} />
+          <Segmented label="Kind" value={form.kind} options={KINDS} onChange={(kind) => onChange(withKind(form, kind))} />
+          <Field label="Name" hint={form.kind === 'custom' ? `Agents pick it as custom:${form.name || '<name>'}` : 'Lowercase letters, digits, - and _'}>
+            <Input value={form.name} placeholder="my-key" onChange={(e) => set({ name: keyName(e.target.value) })} />
           </Field>
           <KindFields form={form} set={set} />
           <Field label="Model (optional, for Test)"><Input value={form.model} onChange={(e) => set({ model: e.target.value })} /></Field>
