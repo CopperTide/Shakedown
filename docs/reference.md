@@ -33,6 +33,7 @@ All JSON on `http://127.0.0.1:4510`, except the event stream. Errors are `{error
 | `POST /api/project/world-groups/rename` | `worlds.rename_group`: `{from, to?, confirm?}` moves every world in group `from` to `to` (empty or missing: no group; an existing group merges), checking every file before writing any, with a diff first under `diff_first` as for a put; answers `{moved, diff}`. 404 when no world is in `from` |
 | `PUT /api/project` | `project.update`: `{body, confirm?}` replaces `shakedown.yaml` (name, defaults, permissions, assistant), with a diff first under `diff_first` as for an item |
 | `POST /api/project/import` | `project.import`: `{confirm?}`. Without `confirm`, `{proposed: true, files, skipped}`: what moving installed benchmarks, built worlds and earlier experiments into the project would write (nothing existing is overwritten). With it, writes them and links each earlier experiment as its file's first deployment |
+| `POST /api/project/example` | `project.example`: `{key?, model?, confirm?}` adds a small, real example: a world on the built-in `retail` benchmark, a scenario (task `88`), an agent setup and a one-setup experiment, from the data in `core/crates/shaked/example/`. Its agent runs on the model key `key` (default: your newest own key that has not failed its test; with none stored, the default provider) and model `model` (default: the key's model, else the example's model for the key's provider kind, `example.yaml`'s `models`). Without `confirm`, `{proposed: true, items, summary, shows, experiment, agent: {key, model}}` and nothing is written; with it the same with `written` instead of `items`, all four items in one change. 409 with `taken` (e.g. `["world order-desk"]`) when any of its ids exists already: nothing is written or overwritten; 422 when no model can be worked out (a custom or Bedrock key without one: pass `model`) or `key` names no stored key |
 | `GET /api/project/worlds/{id}/data` | `worlds.data`: `?path=` reads one file of the world's folder, `{path, size, text, truncated}` (text up to 1 MiB, or 10 MiB with `full=true`) or `{path, size, binary: true}`; without `path`, `{files: [{path, size}], truncated}` (at most 500). 400 for a path outside the folder |
 | `POST /api/project/worlds/{id}/data` | `worlds.data_put`: `{path, data}` (base64), `{path, text}`, or `{path, pointer, value}` (one value of a JSON file set at a JSON pointer) writes a data file into the world's folder through the project store: `{path, size, replaced}`. JSON, CSV, TSV, YAML, text or Markdown, at most 10 MiB (413 above), checked to parse; 400 for a path outside the folder, `world.yaml` or a view file, another kind of file, or a value with nothing at its pointer. The body may be up to 256 MiB |
 | `DELETE /api/project/worlds/{id}/data` | `worlds.data_delete`: `?path=` deletes a data file: `{deleted}`; 404 when there is none |
@@ -438,7 +439,7 @@ through the app.
 
 ## Use Shakedown from an agent (MCP)
 
-Every project operation (the project's status, settings and import; listing, reading, writing and deleting worlds,
+Every project operation (the project's status, settings and import; adding the example; listing, reading, writing and deleting worlds,
 scenarios, setups and experiments, and what uses each; undoing a delete; renaming a world group; deploying an experiment and listing its deployments; reading a MADL setup) is
 defined once in shaked's operation registry and served two ways: as an HTTP route and as a tool of the control MCP
 server (tool names replace `.` with `_`: `worlds_put`, `experiments_deploy`), so the UI, the assistant, scripts and any
@@ -450,7 +451,7 @@ A test (`core/crates/shaked/tests/parity.rs`) fails if an operation is missing f
 - Over HTTP: `POST /mcp` with `Authorization: Bearer <token>`. A `read` token lists and reads; editing or
   deleting project files needs `admin`; starting runs needs `run`.
 - Edits follow the project's `permissions` in `shakedown.yaml`: with `edit: diff_first` every operation that takes
-  `confirm` (a put, `project_update`, `project_import`, `project_restore`, `worlds_rename_group`, and a cascading
+  `confirm` (a put, `project_update`, `project_import`, `project_example`, `project_restore`, `worlds_rename_group`, and a cascading
   delete) returns what it would change and writes only when sent again with `confirm: true`. `spend` is stored but not enforced yet: the assistant always
   asks before a deploy, and an MCP client's token scope alone decides.
 - `shaked mcp` (stdio) has no running engine, so `experiments_deploy` and `experiments_runs` answer that they need

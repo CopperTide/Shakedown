@@ -1,0 +1,17 @@
+# The agent's model and key are filled in when the example is created: the model key you connected.
+format: shakedown-setup/1
+label: Order desk agent
+team:
+  kind: builtin
+  agents:
+  - id: agent
+    model: ''
+    max_tokens: 4000
+    tools:
+    - '*'
+    role: >-
+      You are the order desk agent of an online store. Your input holds a customer ticket and the
+      store policy. Resolve the customer's request completely with your tools, following the policy.
+      The customer has already confirmed every action the ticket describes, so do not wait for
+      confirmation. Check the details with the read tools before you change anything. When you are
+      done, end with a short summary of each change you made.

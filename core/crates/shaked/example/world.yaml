@@ -1,0 +1,8 @@
+format: shakedown-world/3
+label: Order desk (example)
+group: Examples
+package: retail
+connectors:
+- id: retail
+  label: The store's customers, orders and products (a Postgres copy, restored for every run)
+  mode: stand-in

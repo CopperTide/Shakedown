@@ -154,6 +154,12 @@ impl Project {
         db.pending.take().filter(|c| !c.is_empty())
     }
 
+    /// Names the change the next writes are kept under, when none is pending yet: several writes
+    /// then show in the history as one change called `label`. No-op with no table kinds.
+    pub fn name_change(&mut self, label: &str) {
+        self.pending(label);
+    }
+
     /// The id the pending change will be kept under, made now if there is none.
     pub(crate) fn change_id(&mut self, label: &str) -> Option<Uuid> {
         self.pending(label).map(|c| c.id)

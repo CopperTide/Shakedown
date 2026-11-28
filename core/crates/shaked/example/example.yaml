@@ -1,0 +1,29 @@
+# "Start from an example" (the operation project.example, src/ops/example_ops.rs): one small, real
+# example a newcomer adds to their project with one click. It runs on the built-in retail benchmark
+# (benchmarks/retail), which ships with shaked locally and in hosted sandboxes, so it needs no
+# runtime installed, no git import and no data files. The items are the files next to this one.
+
+# One sentence on what the example creates.
+summary: >-
+  A tiny retail order desk: a world, one customer ticket and one agent on your own model, with an
+  experiment ready to deploy. A run takes about a minute.
+
+# What a run of it shows, said once it is created.
+shows: >-
+  One agent on your model works a real customer ticket against a fresh copy of the store's database,
+  following the store policy. The run passes only if the database ends exactly as it should: no model
+  judges it.
+
+# The id of each item, and its file here.
+items:
+  world: order-desk
+  scenario: order-desk-ticket
+  setup: order-desk-agent
+  experiment: order-desk-first-run
+
+# The model the agent runs on when neither the request nor the model key names one, by the key's
+# provider kind (or the default provider's, with no key stored). Kinds missing here need a model.
+models:
+  openrouter: deepseek/deepseek-chat-v3.1
+  anthropic: claude-haiku-5-5
+  openai: gpt-4.1-mini

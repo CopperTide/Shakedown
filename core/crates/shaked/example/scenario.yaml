@@ -1,0 +1,8 @@
+format: shakedown-scenario/1
+label: Bookshelf swap, or cancel the order
+world: order-desk
+task: >-
+  Daiki Silva (daiki.silva6295@example.com) wants the bookshelf in a pending order changed to the
+  4-foot one in the same material and colour. If there is none, cancel the whole order; the reason is
+  that it was ordered by mistake. The customer has confirmed both in advance.
+preset: '88'

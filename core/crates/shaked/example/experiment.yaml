@@ -1,0 +1,11 @@
+format: shakedown-experiment/1
+label: 'Order desk: first run'
+world: order-desk
+scenario: order-desk-ticket
+setups:
+- order-desk-agent
+repeats:
+  per_setup: 1
+  paired_seeds: true
+budget:
+  per_run_usd: 0.5
