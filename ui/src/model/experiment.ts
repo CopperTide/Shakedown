@@ -27,6 +27,12 @@ interface ExperimentBase {
   status: ExperimentStatus;
   /** A suite from before experiments, shown as a one-setup experiment. */
   legacy: boolean;
+  /** The seed the runs' seeds are made from. */
+  seed?: number;
+  /** Each run's world time window in minutes; null without one. */
+  world_minutes?: number | null;
+  /** The spend cap per run in USD; null without one. */
+  max_cost_usd?: number | null;
 }
 
 export interface ListedExperiment extends ExperimentBase {

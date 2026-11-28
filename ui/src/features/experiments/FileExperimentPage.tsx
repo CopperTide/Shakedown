@@ -1,5 +1,5 @@
-// A file experiment: where it sits (world, scenario), what it runs, its runs (after it is
-// deployed), its settings, and Delete.
+// A file experiment: where it sits (world, scenario), any problems in its file, its runs (after it
+// is deployed) with a link to each one's results, its configuration folded under them, and Delete.
 import { ChevronLeft } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
@@ -8,15 +8,13 @@ import { getItem } from '@/api/project';
 import { Button } from '@/components/ui/button';
 import { PageBody, PageHeader } from '@/components/ui/page';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/state';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useQuery } from '@/hooks/useQuery';
 import type { ExperimentBody, ItemKind } from '@/model/project';
 import DeleteItemDialog from '@/features/editors/DeleteItemDialog';
-import ExperimentSettings from '@/features/editors/experiment/ExperimentSettings';
 import DeployDialog from './DeployDialog';
 import Deployments from './Deployments';
 import ExperimentPath from './ExperimentPath';
-import FileOverview from './FileOverview';
+import FileConfig, { FileProblems } from './FileConfig';
 
 /** The experiment and the labels of everything it names; null when there is no such experiment. */
 async function load(id: string) {
@@ -62,12 +60,10 @@ export default function FileExperimentPage() {
     <>
       <PageHeader title={item.label} actions={actions} width="wide" meta={<ExperimentPath body={item.body} labels={labels} />} />
       <PageBody width="wide">
-        <Tabs defaultValue="overview">
-          <TabsList><TabsTrigger value="overview">Overview</TabsTrigger><TabsTrigger value="runs">Runs</TabsTrigger><TabsTrigger value="settings">Settings</TabsTrigger></TabsList>
-          <TabsContent value="overview"><FileOverview body={item.body} labels={labels} problems={item.problems} /></TabsContent>
-          <TabsContent value="runs"><Deployments id={id} version={version} /></TabsContent>
-          <TabsContent value="settings"><ExperimentSettings id={id} body={item.body} revision={item.revision} onSaved={q.reload} /></TabsContent>
-        </Tabs>
+        <FileProblems problems={item.problems} />
+        <h2 className="text-sm font-semibold">Runs</h2>
+        <Deployments id={id} version={version} />
+        <FileConfig id={id} body={item.body} revision={item.revision} labels={labels} onSaved={q.reload} />
       </PageBody>
     </>
   );

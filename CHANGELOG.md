@@ -147,6 +147,9 @@
   Settings. Settings has three tabs: Connections & models, Project settings and Advanced, which links Runtimes,
   Observability, API tokens and Connect an agent. Runtimes is also a world's Runtime section's *Manage runtimes*;
   Connect an agent is also a button on Agent setups. Every address still works.
+- **Experiment pages lead with results.** An experiment file's page shows its runs first and folds its configuration
+  (a one-line summary; open, the editor) instead of Overview, Runs and Settings tabs. An experiment's results page
+  gains a folded Configuration under the checks: seed, world time window, spend cap and each setup's agents.
 
 ### Fixed
 

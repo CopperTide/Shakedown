@@ -102,7 +102,7 @@ maps the files onto an engine experiment: the world's `package` is the benchmark
 the task, each event's `fault` and `params` become the package's disruptions, each setup becomes a team (runner
 `chain`; a built-in agent's `key` becomes its provider `key:<name>`, and an `http` setup's `auth` becomes a
 reference the endpoint's requests are signed from), and `repeats.per_setup` and `budget.per_run_usd` become runs per setup and each run's spend limit (see [Spend limits](#spend-limits); in the app,
-the **Spend cap per run (USD)** field of New experiment and of the experiment's Settings tab, a positive number or empty
+the **Spend cap per run (USD)** field of New experiment and of the experiment's Configuration (folded under its runs), a positive number or empty
 for no cap). The world's files marked "Every run starts from this" reach every part as `world_data` (see World data
 above). Nothing else in the files reaches a run yet: a world's connectors, flows, other data, people and
 observability; a scenario's `task` text (runs get the preset task's ticket), `changes`, `gates`, `checks` and each

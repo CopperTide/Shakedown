@@ -49,6 +49,11 @@ secondary metadata lines, few borders, plenty of whitespace.
 - **Scenario** (`/scenarios/:id`, `features/editors/scenario/ScenarioEditor.tsx`): Overview, Inputs, Events, Gates,
   Checks and **Experiments (N)**: every experiment file that plays the scenario (`ScenarioExperiments.tsx`, also at
   the foot of Overview), sub-experiments under their parent, each a link with whether it ran and its setups.
+- **An experiment file** (`/experiments/file/:id`, `features/experiments/FileExperimentPage.tsx`): where it sits
+  (world › scenario), **Delete** and **Deploy**; any problems in its file; then its **Runs** (each deployment with its
+  setups' passes and **Open results**); then **Configuration**, folded (`FileConfig.tsx`): closed, one line ("3 setups ×
+  5 runs = 15 runs · paired seeds · $1.50 cap a run"); open, its parent and the editor for its world, scenario, setups,
+  runs per setup and spend cap.
 - **New experiment** (`/experiments/new`): the name inline as the page title; **Scenario** (the
   task by plain name, then disruptions as a picker); **Agent setups**, 1 to 50 cards (name, team,
   model for Claude Code agents, rules added to every prompt; a dashed card adds one, copying the
@@ -66,7 +71,9 @@ secondary metadata lines, few borders, plenty of whitespace.
   reference as a dashed one, named once under the cards); then checks passed, cost and time, the best in bold. Safety
   violations, denied actions and flags are rows only when some setup has one; otherwise one quiet
   "No safety violations, denied actions or flags". Under the cards, the AI comparison for two
-  setups, then the checks that some run failed, side by side.
+  setups, then the checks that some run failed, side by side, then **Configuration**, folded
+  (`ExperimentConfig.tsx`): benchmark, runs per setup, seed, world time window, spend cap per run, when it
+  started and ended, and each setup's runner and agents with their models.
 - **Runs** (`/runs`, `features/runs/RunsPage.tsx`): name, team, result, when; reruns under their run as "↳
   Rerun". A row opens on Run once's live view; its menu has All details, Process view and Delete.
 - **Run once** (`/run`, `features/start/StartPage.tsx`): the world's name, a task picker, the team board

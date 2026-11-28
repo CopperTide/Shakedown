@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-// A file experiment's page: its scenario, setups and repeats, its problems, and a clear page for
-// an id that doesn't exist.
+// A file experiment's page: its runs first, its configuration folded under them, its problems, and
+// a clear page for an id that doesn't exist.
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -21,6 +21,8 @@ function mockFetch(experiment: unknown, deploy: { status: number; body: unknown 
     if (u.endsWith('/deploy') && init?.method === 'POST') { posted.push(u); return new Response(JSON.stringify(deploy.body), { status: deploy.status }); }
     if (u.endsWith('/api/project/experiments/slip/runs')) return new Response(JSON.stringify({ deployments }));
     if (u.endsWith('/api/project/experiments/slip') && experiment) return new Response(JSON.stringify(experiment));
+    const list = u.match(/\/api\/project\/(worlds|scenarios|setups)$/);
+    if (list) return new Response(JSON.stringify({ items: list[1] === 'setups' ? ['solo', 'team', 'rules'].map((id) => ({ id, label: `Label of ${id}` })) : [] }));
     const label = (id: string) => new Response(JSON.stringify({ id, label: `Label of ${id}`, problems: [], body: {} }));
     for (const kind of ['scenarios', 'worlds', 'setups']) {
       const m = u.match(new RegExp(`/api/project/${kind}/([a-z-]+)$`));
@@ -39,11 +41,15 @@ const show = (id: string) => render(
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 describe('file experiment page', () => {
-  it('shows_setups_and_repeats', async () => {
+  it('runs_first_configuration_folded', async () => {
     mockFetch(EXPERIMENT);
     show('slip');
-    expect(await screen.findByText('15 runs')).toBeTruthy();
-    expect(await screen.findByText('Label of team')).toBeTruthy();
+    const line = await screen.findByText('3 setups × 5 runs = 15 runs · paired seeds · $1.50 cap a run');
+    const config = line.closest('details')!;
+    expect(config.open).toBe(false);
+    expect(within(config).getByRole('checkbox', { name: 'Label of team' })).toBeTruthy();
+    const runs = screen.getByRole('heading', { name: 'Runs' });
+    expect(runs.compareDocumentPosition(config) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getByText('Label of supplier-slip')).toBeTruthy();
   });
 
@@ -98,12 +104,11 @@ describe('file experiment page', () => {
     expect(await screen.findByText('Larkspur Valve Works has no runtime yet')).toBeTruthy();
   });
 
-  it('runs_tab_lists_deployments', async () => {
+  it('lists_deployments', async () => {
     const deployment = { id: 'db1', name: 'Supplier slip', status: 'running', created_at: '2026-11-21T10:00:00Z', ended_at: null, error: null, runs: 5, tasks: ['t1'], benchmark: 'toybench', legacy: false,
       setups: [{ id: 's1', name: 'Solo planner', summary: { ended: 2, passed: 1 } }] };
     mockFetch(EXPERIMENT, undefined, [deployment]);
     show('slip');
-    fireEvent.mouseDown(await screen.findByRole('tab', { name: 'Runs' }));
     const link = await screen.findByRole('link', { name: /Open/ });
     expect(link.getAttribute('href')).toBe('/experiments/db1');
     expect(screen.getByText(/Solo planner/)).toBeTruthy();

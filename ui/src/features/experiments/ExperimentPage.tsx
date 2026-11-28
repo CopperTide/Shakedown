@@ -14,6 +14,7 @@ import { useTaskNames } from '@/hooks/useTasks';
 import { experimentMark } from '@/lib/mark';
 import { track } from '@/lib/productAnalytics';
 import type { Experiment } from '@/model/experiment';
+import ExperimentConfig from './ExperimentConfig';
 import { measureRows } from './measures';
 import { columnOf } from './model';
 import { Checks, Setups } from './Results';
@@ -90,6 +91,7 @@ function View({ ids }: { ids: string[] }) {
         <Setups cols={reports.map(columnOf)} measures={measureRows(reports)} />
         {reports.length === 2 && list.every((e) => e.status !== 'running') && <SetupsWhatMatters reports={[reports[0], reports[1]]} />}
         <Checks reports={reports} />
+        <ExperimentConfig list={list} />
       </PageBody>
     </>
   );
