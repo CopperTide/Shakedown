@@ -13,6 +13,7 @@ import { useProject } from '@/hooks/useProject';
 import { errorMessage } from '@/lib/errors';
 import { type SettingsForm, formFrom, settingsFrom } from './project';
 import LastDelete from './LastDelete';
+import { SettingsTabs } from './SettingsPage';
 import UseFromAgent from './UseFromAgent';
 
 const SECTIONS = [{ id: 'project', label: 'Project' }, { id: 'assistant', label: 'Assistant' }, { id: 'permissions', label: 'What agents may do' }, { id: 'mcp', label: 'Use from an agent' }, { id: 'trash', label: 'Deleted files' }];
@@ -58,7 +59,7 @@ export default function ProjectSettingsPage() {
   if (!settings || !f) return <LoadingState label="Loading the project's settings" />;
   const save = async () => { try { await updateSettings(settingsFrom(settings, f), project.data?.open ? project.data.status.revision : undefined); setError(null); project.reload(); } catch (e) { setError(errorMessage(e)); } };
   return (
-    <EditorFrame title="Project settings" sections={SECTIONS} active={active} onSelect={setActive} dirty={JSON.stringify(f) !== JSON.stringify(formFrom(settings))}
+    <EditorFrame title="Settings" nav={<SettingsTabs />} sections={SECTIONS} active={active} onSelect={setActive} dirty={JSON.stringify(f) !== JSON.stringify(formFrom(settings))}
       onSave={() => { void save(); }} onDiscard={() => setF(formFrom(settings))} saving={false} error={error ? { message: error } : null}>
       <Section id={active} f={f} set={(p) => setF({ ...f, ...p })} />
     </EditorFrame>

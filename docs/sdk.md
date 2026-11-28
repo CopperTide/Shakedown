@@ -48,7 +48,7 @@ call; from the SDK, start one `Shakedown.local` per benchmark (each on its own p
 server). `sd.health()`, `sd.providers()` and `sd.world()` say what the core can
 do: which CLIs it found, which model providers have keys, what each part of the world can restore.
 
-`Shakedown(url, token="sd_…")` sends an API token (from Settings → API tokens in the UI, or
+`Shakedown(url, token="sd_…")` sends an API token (from Settings › Advanced › API tokens in the UI, or
 `shaked token create --name ci --scope run`) as `Authorization: Bearer` on every call; without `token=` the
 SDK reads `SHAKEDOWN_TOKEN`, and with neither it calls as the person at this machine. A local shaked checks a
 token it is sent: an unknown or revoked one is 401, and a `read` token cannot start or change anything (403).

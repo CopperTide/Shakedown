@@ -26,7 +26,7 @@ and `drop_save`. It prints a JSON report and exits 0 if all passed, 1 if not, 2 
 
 The check needs at least one `[[example]]`; a write example also exercises the second save and the restore.
 
-Install a package from the app with **Build → Runtimes → Install a runtime**: a git URL (optionally one folder of the
+Install a package from the app with **Settings › Advanced › Runtimes › Install a runtime**: a git URL (optionally one folder of the
 repo) or an uploaded `.zip`/`.tar.gz`; it installs the package's Python dependencies, registers it and runs the same
 check on it ([reference](reference.md#runtimes)). A package that runs a project world reads the world's own start data
 from `world_data` in its config ([protocol](protocol.md#world-data)). Or put its folder under one of the

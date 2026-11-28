@@ -11,7 +11,7 @@ endpoints and headers; they were not run against a live Langfuse or Phoenix in t
 
 ## Add a target
 
-Settings → Observability, or `POST /api/observability/targets` ([reference](reference.md#http-api)). Keys and
+Settings › Advanced › Observability, or `POST /api/observability/targets` ([reference](reference.md#http-api)). Keys and
 headers are sealed with the vault key, like model keys: they are never shown again, never sent to a browser, an
 agent or a sandbox. Test sends one span and says what the collector answered.
 
@@ -62,7 +62,7 @@ keep only numbers and the attributes that name a step (model, tool, service, spa
 A target with **Every run** on gets each branch made after it was added, once the branch ends. The exporter runs
 in shaked every 5 seconds, from the stored record (in hosted Shakedown on the control box, never in a sandbox).
 A failed send is tried again after 30 s, 2, 10 and 30 minutes, then every 2 hours, 6 tries in all; each try is on
-the export's row (`GET /api/observability/exports`, and Settings → Observability, Recent exports). To send a past
+the export's row (`GET /api/observability/exports`, and Settings › Advanced › Observability, Recent exports). To send a past
 run, or send one again: `POST /api/branches/{id}/export`.
 
 ## Prometheus

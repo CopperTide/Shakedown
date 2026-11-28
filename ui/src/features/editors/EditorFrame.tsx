@@ -5,10 +5,12 @@ import { SaveBar } from '@/components/ui/save-bar';
 import { SubNav, type SubNavItem } from '@/components/ui/subnav';
 import type { SaveError } from './useItemEditor';
 
-export default function EditorFrame({ title, meta, actions, sections, active, onSelect, dirty, onSave, onDiscard, saving, error, children }: {
+export default function EditorFrame({ title, meta, actions, nav, sections, active, onSelect, dirty, onSave, onDiscard, saving, error, children }: {
   title: string;
   meta?: ReactNode;
   actions?: ReactNode;
+  /** Under the title: the tabs of the area the editor belongs to (Settings). */
+  nav?: ReactNode;
   sections: SubNavItem[];
   active: string;
   onSelect: (id: string) => void;
@@ -21,7 +23,7 @@ export default function EditorFrame({ title, meta, actions, sections, active, on
 }) {
   return (
     <>
-      <PageHeader title={title} meta={meta} actions={actions} width="wide" />
+      <PageHeader title={title} meta={meta} actions={actions} width="wide">{nav}</PageHeader>
       <PageBody width="wide">
         {error && <p role="alert" className="rounded-md border border-alarm bg-alarm-soft px-3 py-2 text-sm text-alarm">{error.message}</p>}
         <div className="grid gap-8 md:grid-cols-[200px_minmax(0,1fr)]">

@@ -72,6 +72,12 @@ describe('editing layer', () => {
     expect(link.closest('li')?.className).toContain('hover:bg-hover');
   });
 
+  it('setups_link_connect_an_agent', async () => {
+    mockFetch({ items: [] });
+    render(<MemoryRouter><ItemListPage kind="setups" /></MemoryRouter>);
+    expect((await screen.findByRole('link', { name: /Connect an agent/ })).getAttribute('href')).toBe('/connect');
+  });
+
   it('new_item_bad_id', async () => {
     mockFetch();
     render(<MemoryRouter><ItemListPage kind="worlds" /></MemoryRouter>);

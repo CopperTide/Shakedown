@@ -30,17 +30,22 @@ describe('shell', () => {
     mockFetch({ '/api/project': { name: 'Larkspur Ops', counts: {}, problems: [] } });
     render(<MemoryRouter initialEntries={['/scenarios']}><Sidebar /></MemoryRouter>);
     expect(screen.getByText('Build')).toBeTruthy();
-    expect(screen.getByText('Settings')).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Scenarios' }).getAttribute('aria-current')).toBe('page');
     expect(screen.getByRole('link', { name: 'Home' }).getAttribute('aria-current')).toBeNull();
   });
 
 
-  it('links directly to observability without marking models active', () => {
+  it('sidebar_shows_only_the_core', () => {
     mockFetch({ '/api/project': { name: 'Larkspur Ops', counts: {}, problems: [] } });
-    render(<MemoryRouter initialEntries={['/settings/observability']}><Sidebar /></MemoryRouter>);
-    expect(screen.getByRole('link', { name: 'Observability' }).getAttribute('aria-current')).toBe('page');
-    expect(screen.getByRole('link', { name: 'Connections & models' }).getAttribute('aria-current')).toBeNull();
+    render(<MemoryRouter><Sidebar /></MemoryRouter>);
+    const links = screen.getAllByRole('link').map((a) => a.textContent).filter((t) => t !== 'Shakedown');
+    expect(links).toEqual(['Home', 'Experiments', 'Worlds', 'Scenarios', 'Agent setups', 'Get started', 'Settings']);
+  });
+
+  it.each(['/settings/observability', '/settings/tokens', '/runtimes', '/connect'])('marks Settings on %s', (at) => {
+    mockFetch({ '/api/project': { name: 'Larkspur Ops', counts: {}, problems: [] } });
+    render(<MemoryRouter initialEntries={[at]}><Sidebar /></MemoryRouter>);
+    expect(screen.getByRole('link', { name: 'Settings' }).getAttribute('aria-current')).toBe('page');
   });
 
   it('shows_project_name', async () => {

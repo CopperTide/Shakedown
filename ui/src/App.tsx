@@ -38,6 +38,7 @@ const World = lazy(() => import('@/features/world/WorldPage'));
 const SettingsModels = lazy(() => import('@/features/settings/ModelsPage'));
 const SettingsTokens = lazy(() => import('@/features/settings/TokensPage'));
 const SettingsObservability = lazy(() => import('@/features/settings/ObservabilityPage'));
+const SettingsAdvanced = lazy(() => import('@/features/settings/AdvancedPage'));
 
 function NotFound() {
   return (
@@ -95,6 +96,7 @@ function AppRoutes() {
         <Route path="/settings/models" element={<SettingsModels />} />
         <Route path="/settings/tokens" element={<SettingsTokens />} />
         <Route path="/settings/observability" element={<SettingsObservability />} />
+        <Route path="/settings/advanced" element={<SettingsAdvanced />} />
         {MOVED}
         <Route path="*" element={<NotFound />} />
       </Routes>

@@ -3,7 +3,7 @@
 export interface NavItem {
   to: string;
   label: string;
-  icon: 'home' | 'flask' | 'chart' | 'globe' | 'film' | 'users' | 'plug' | 'gear' | 'rocket' | 'code' | 'book';
+  icon: 'home' | 'flask' | 'globe' | 'film' | 'users' | 'gear' | 'rocket';
   /** Which addresses belong to it (default: the address and everything under it). */
   match?: RegExp;
 }
@@ -13,6 +13,7 @@ export interface NavGroup {
   items: NavItem[];
 }
 
+/** The core of the product. Everything else (runtimes, telemetry, tokens, connecting an agent) is under Settings. */
 export const NAV: NavGroup[] = [
   {
     items: [
@@ -26,22 +27,13 @@ export const NAV: NavGroup[] = [
       { to: '/worlds', label: 'Worlds', icon: 'globe' },
       { to: '/scenarios', label: 'Scenarios', icon: 'film' },
       { to: '/setups', label: 'Agent setups', icon: 'users', match: /^\/(setups|team)(\/|$)/ },
-      { to: '/runtimes', label: 'Runtimes', icon: 'code' },
-    ],
-  },
-  {
-    label: 'Settings',
-    items: [
-      { to: '/settings/models', label: 'Connections & models', icon: 'plug', match: /^\/settings\/(models|tokens)/ },
-      { to: '/settings/observability', label: 'Observability', icon: 'plug' },
-      { to: '/settings/project', label: 'Project settings', icon: 'gear' },
     ],
   },
 ];
 
 export const FOOTER: NavItem[] = [
   { to: '/get-started', label: 'Get started', icon: 'rocket' },
-  { to: '/connect', label: 'Connect an agent', icon: 'code' },
+  { to: '/settings/models', label: 'Settings', icon: 'gear', match: /^\/(settings|runtimes|connect)(\/|$)/ },
 ];
 
 /** Whether `item` is the section `pathname` belongs to. */

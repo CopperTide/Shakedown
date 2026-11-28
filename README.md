@@ -110,7 +110,7 @@ team as an `http` or `bedrock` agent ([docs/agents.md](docs/agents.md)).
 
 ### Runtimes and import from git
 
-A world runs on a runtime package. **Build → Runtimes → Install a runtime** installs one from a git URL (one folder of
+A world runs on a runtime package. **Settings › Advanced › Runtimes › Install a runtime** installs one from a git URL (one folder of
 the repo if you like) or an uploaded `.zip`/`.tar.gz`, checks it and lists it; then **New world** picks it, the world's
 Data section uploads the files every run starts from, and the scenario's task picker lists the runtime's tasks. All of
 it works from the app on a Shakedown with nothing installed; see [Runtimes](docs/reference.md#runtimes) and

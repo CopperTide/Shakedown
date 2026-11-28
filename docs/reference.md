@@ -399,7 +399,7 @@ setups, 2 experiments, no problems; its benchmark describes itself from the impo
 ## Runtimes
 
 A runtime is the package that runs a world (its parts, tasks and scoring; a world names it in `package`). From a fresh
-Shakedown with no packages, everything is done in the app: **Build → Runtimes → Install a runtime** (also in a world's
+Shakedown with no packages, everything is done in the app: **Settings › Advanced › Runtimes › Install a runtime** (also in a world's
 Runtime section), then **New world** with the runtime picked. The API is
 `/api/runtimes` ([HTTP API](#http-api)); MCP and the assistant have `runtimes_list`, `runtimes_install`,
 `runtimes_check` and `runtimes_delete`.

@@ -41,7 +41,7 @@ and writes only when confirmed.
 
 **Runtimes.** A world runs on a **runtime**: an installed benchmark package (or a built world) whose parts are the
 systems agents work against, with its tasks and its scoring. The world names it in `package`. Runtimes are installed
-from **Build → Runtimes** (also from a world's Runtime section): from a git URL, one folder
+from **Settings › Advanced › Runtimes** (also from a world's Runtime section): from a git URL, one folder
 of the repo if you like, or an uploaded `.zip`/`.tar.gz`; Shakedown installs their Python dependencies with uv, registers
 their packages and runs each package's conformance check. A runtime is code that runs on this machine. Details in
 [reference.md](reference.md#runtimes). A new world starts empty, from **New world** with a runtime picked; a

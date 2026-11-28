@@ -1,7 +1,10 @@
 // A kind's list: every item with its problems, each row a link to its editor with Delete beside
-// it, and New (worlds also Import from git). Worlds are listed under their groups, each opening
-// onto its scenarios and experiments.
-import { useNavigate } from 'react-router-dom';
+// it, and New (worlds also Import from git, setups also Connect an agent). Worlds are listed under
+// their groups, each opening onto its scenarios and experiments.
+import { PlugZap } from 'lucide-react';
+import type { ReactNode } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { PageBody, PageHeader } from '@/components/ui/page';
 import { EmptyState, ErrorState } from '@/components/ui/state';
@@ -26,6 +29,13 @@ function Rows({ kind, items }: { kind: ItemKind; items: ItemSummary[] }) {
   );
 }
 
+/** Beside New: worlds import from git; setups can use an agent you already run. */
+function Actions({ kind, create, onImported }: { kind: ItemKind; create: ReactNode; onImported: () => void }) {
+  if (kind === 'worlds') return <div className="flex gap-2"><ImportFromGit onImported={onImported} />{create}</div>;
+  if (kind === 'setups') return <div className="flex gap-2"><Button asChild><Link to="/connect"><PlugZap />Connect an agent</Link></Button>{create}</div>;
+  return create;
+}
+
 function Worlds({ worlds }: { worlds: ItemSummary[] }) {
   const scenarios = useProjectItems('scenarios').data ?? [];
   const experiments = useProjectItems('experiments').data ?? [];
@@ -41,7 +51,7 @@ export default function ItemListPage({ kind }: { kind: ItemKind }) {
   const meta = kind === 'worlds' ? `${info.about} Drag a world onto a group to move it there.` : info.about;
   return (
     <>
-      <PageHeader title={info.many} meta={meta} actions={kind === 'worlds' ? <div className="flex gap-2"><ImportFromGit onImported={q.reload} />{create}</div> : create} width="wide" />
+      <PageHeader title={info.many} meta={meta} actions={<Actions kind={kind} create={create} onImported={q.reload} />} width="wide" />
       <PageBody width="wide">
         {q.error && <ErrorState error={q.error} onRetry={q.reload} />}
         <Card className="overflow-hidden">

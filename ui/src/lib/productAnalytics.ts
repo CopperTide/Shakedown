@@ -28,7 +28,7 @@ const PAGES = [
   '/', '/experiments', '/experiments/new', '/experiments/new/direct', '/experiments/compare', '/experiments/file/{id}', '/experiments/{id}',
   '/worlds', '/worlds/new', '/worlds/{id}', '/scenarios', '/scenarios/{id}', '/setups', '/setups/{id}', '/run', '/runs', '/runs/{run}/{branch}',
   '/team', '/connect', '/compare/{a}/{b}', '/control/{run}/{branch}', '/world/{run}/{branch}',
-  '/settings', '/settings/project', '/settings/models', '/settings/tokens',
+  '/settings', '/settings/project', '/settings/models', '/settings/tokens', '/settings/advanced',
 ];
 const BASE = basePath(import.meta.env.BASE_URL);
 

@@ -143,6 +143,10 @@
   and the ⌘K palette's *Analytics* and *Search every run's steps*; `/analytics` opens Experiments. The figures,
   step search and Explore stay as the `analytics.*` and `explore.*` operations and their API, for the assistant
   and MCP ([docs/analytics.md](docs/analytics.md)).
+- **The sidebar shows only the core:** Home, Experiments, Worlds, Scenarios, Agent setups, plus Get started and
+  Settings. Settings has three tabs: Connections & models, Project settings and Advanced, which links Runtimes,
+  Observability, API tokens and Connect an agent. Runtimes is also a world's Runtime section's *Manage runtimes*;
+  Connect an agent is also a button on Agent setups. Every address still works.
 
 ### Fixed
 

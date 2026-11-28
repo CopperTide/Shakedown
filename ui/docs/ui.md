@@ -10,6 +10,13 @@ secondary metadata lines, few borders, plenty of whitespace.
 - **Top bar** (`app/TopBar.tsx`): the wordmark, **Experiments** and **Runs**, and one **⋯** with Run
   once, Compare two runs, World view of a run, the Team editor, AI review on or off, the command
   palette, the theme and which Shakedown core is in use.
+- **Sidebar** (`features/shell/nav.ts`, `Sidebar.tsx`): only the core: **Home**, **Experiments**, then under Build
+  **Worlds**, **Scenarios** and **Agent setups**; at the foot **Get started** and **Settings**. Settings is marked on
+  every page it holds, Runtimes and Connect an agent included.
+- **Settings** (`features/settings/SettingsPage.tsx`): tabs **Connections & models** (`/settings/models`), **Project
+  settings** (`/settings/project`) and **Advanced** (`/settings/advanced`, `AdvancedPage.tsx`): one link each to
+  Runtimes, Observability (`/settings/observability`), API tokens (`/settings/tokens`) and Connect an agent; the
+  Advanced tab stays marked on the two that live under `/settings`.
 - **Get started** (`/get-started`, `features/onboarding/`): setup is two steps, both done on this page: **Your
   project** and **Connect a model**, where the key is added in place (`StepModel` shows the same add form as
   Settings → Models, `AddKeyForm` and `useModelKeys`, starting on OpenRouter). Each is ticked off from what shaked
@@ -27,7 +34,8 @@ secondary metadata lines, few borders, plenty of whitespace.
   scenario and its setups. Search, **Any status** narrows to one status, and the sort is **Grouped** (parents
   with their sub-experiments), **Has results first** or **Last deployed** (both flat). Below, the earlier
   experiments made before the project folder. Empty: **New experiment**.
-- **Runtimes** (`/runtimes`, `features/runtimes/`): Build → Runtimes. A plain warning that a runtime is code that
+- **Runtimes** (`/runtimes`, `features/runtimes/`): Settings › Advanced, or **Manage runtimes** in a world's Runtime
+  section. A plain warning that a runtime is code that
   runs on this machine (hosted says it installs none); each install as a card (its source: git URL, ref and commit, or
   archive name and SHA-256, and folder; **Check again**, **Update**, **Remove**, a refused removal saying which worlds
   use it) with its packages (kind, version, the worlds they run, the conformance check folded to its first failing
@@ -75,8 +83,8 @@ secondary metadata lines, few borders, plenty of whitespace.
 - **A run's ⋯** (`features/run/RunMenu.tsx`, on the run page, the world view, the process view and the live
   result): its other views, Compare with another run, its reruns, and under **Advanced** the only way
   to rewind: "Rewind to step N and rerun…" opens the fork panel in the step panel (`?fork=1`).
-- **Connect your agent** (`/connect`, `connect/`): from a setup's team picker ("Connect your agent…") or
-  Run once's Options (**Connect**). **HTTP | Bedrock**; a URL and optional headers (one `Name: value`
+- **Connect your agent** (`/connect`, `connect/`): from **Connect an agent** on Agent setups, Settings › Advanced, a
+  setup's team picker ("Connect your agent…") or Run once's Options (**Connect**). **HTTP | Bedrock**; a URL and optional headers (one `Name: value`
   per line, masked unless focused), or a Bedrock model and region; **Test connection**
   (`POST /api/agents/check`: the agent's name and round trip, or the reason with ⚠), then **Use this
   agent** goes back with a one-agent team selected. Any edit means testing again. This browser keeps
