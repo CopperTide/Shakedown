@@ -36,6 +36,16 @@ pub(super) fn ops() -> Vec<Operation> {
 
 fn last<'a>(ctx: &'a OpCtx<'a>, _: &'static Operation, _: Value) -> OpFuture<'a> {
     Box::pin(async move {
+        if !ctx.project.current().await?.tables().is_none() {
+            let change = table_delete(ctx, None).await?;
+            let files: Vec<_> = change
+                .items
+                .iter()
+                .filter(|i| !i.is_note())
+                .map(|i| i.file_name())
+                .collect();
+            return Ok(json!({"trash": change.id, "label": change.label, "files": files}));
+        }
         let (name, manifest) = ctx.project.current().await?.trashed(None)?;
         let files: Vec<&str> = manifest.files().collect();
         Ok(json!({ "trash": name, "label": manifest.label, "files": files }))
@@ -58,6 +68,9 @@ fn restore<'a>(ctx: &'a OpCtx<'a>, _: &'static Operation, value: Value) -> OpFut
     Box::pin(async move {
         let RestoreInput { trash, confirm } = input(value)?;
         let project = ctx.project.current().await?;
+        if !project.tables().is_none() {
+            return restore_table(ctx, trash.as_deref(), confirm).await;
+        }
         let (name, manifest) = project.trashed(trash.as_deref())?;
         let files: Vec<&str> = manifest.files().collect();
         let listing: String = files.iter().map(|f| format!("{f}\n")).collect();
@@ -93,4 +106,68 @@ async fn relink(ctx: &OpCtx<'_>, note: Option<String>) -> bool {
         }
     }
     true
+}
+
+async fn table_delete(
+    ctx: &OpCtx<'_>,
+    id: Option<&str>,
+) -> Result<crate::store::ChangeRow, super::OpError> {
+    ctx.project
+        .history(100)
+        .await?
+        .into_iter()
+        .find(|c| {
+            c.undone_at.is_none()
+                && id.map_or_else(
+                    || c.label.starts_with("delete "),
+                    |id| c.id.to_string() == id,
+                )
+        })
+        .ok_or_else(|| {
+            shakedown_project::ProjectError::NotFound {
+                kind: "delete to undo",
+                id: id.unwrap_or("recent").into(),
+            }
+            .into()
+        })
+}
+
+async fn restore_table(
+    ctx: &OpCtx<'_>,
+    id: Option<&str>,
+    confirm: bool,
+) -> Result<Value, super::OpError> {
+    let change = table_delete(ctx, id).await?;
+    let files: Vec<_> = change
+        .items
+        .iter()
+        .filter(|i| !i.is_note())
+        .map(|i| i.file_name())
+        .collect();
+    let listing = files.join("\n");
+    let policy = ctx.project.current().await?.config.permissions.edit;
+    if let ControlFlow::Break(mut proposal) = diff_first(policy, "", &listing, confirm) {
+        proposal["trash"] = json!(change.id);
+        return Ok(proposal);
+    }
+    let recorded = shakedown_project::history::Recorded {
+        id: change.id,
+        label: &change.label,
+        items: &change.items,
+    };
+    ctx.project.change(|p| p.undo(recorded)).await??;
+    let note = runs_note(&change);
+    let runs_relinked = relink(ctx, note).await;
+    Ok(
+        json!({"restored": change.label, "files": files, "trash": change.id, "runs_relinked": runs_relinked}),
+    )
+}
+
+fn runs_note(change: &crate::store::ChangeRow) -> Option<String> {
+    change
+        .items
+        .iter()
+        .find(|i| i.is_note() && i.name.ends_with(RUNS_NOTE))
+        .and_then(|i| i.after_bytes.as_ref())
+        .and_then(|b| String::from_utf8(b.clone()).ok())
 }

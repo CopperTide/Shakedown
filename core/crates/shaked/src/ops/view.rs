@@ -8,6 +8,9 @@ use shakedown_project::{kind_name, Dependent, Fate, Item, ItemBody, Problem, Pro
 /// An item with its body and its problems.
 pub(super) fn item(project: &Project, item: &Item) -> Value {
     let mut out = summary(project, item);
+    if let Some(revision) = project.revision(item.kind, &item.id) {
+        out["revision"] = json!(revision);
+    }
     out["body"] = serde_json::to_value(&item.body).unwrap_or(Value::Null);
     out
 }

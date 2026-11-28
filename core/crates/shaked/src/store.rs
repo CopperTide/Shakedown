@@ -31,6 +31,7 @@ mod obs_exports;
 mod obs_metrics;
 mod observability;
 mod open;
+mod project_apply;
 mod project_history;
 mod project_items;
 mod provider_keys;
@@ -60,9 +61,11 @@ pub use observability::{
     target_context, NewTarget, OpenTarget, TargetFlags, TargetKind, TargetRow,
 };
 pub use open::{prepare_db, template_key};
+pub use project_apply::apply_project_change_in;
 pub use project_history::{ChangeItem, ChangeKind, ChangeRow, ImportRecord};
 pub use project_items::{
-    Base, ItemKind, ItemWrite, ProjectItem, ProjectItems, ProjectRow, SlugTaken, Stale,
+    project_items_in, Base, ItemKind, ItemWrite, ProjectItem, ProjectItems, ProjectRow, SlugTaken,
+    Stale,
 };
 pub use provider_keys::{KeyKind, KeyRow, NameTaken, NewKey, OpenKey};
 pub use reviews::{ReviewDone, StoredReview};

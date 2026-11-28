@@ -25,7 +25,11 @@
 
 ### Added
 
-- **Tables for a project's state (internal; nothing reads them yet).** Migration shakedown 10 adds `projects`,
+- Per-kind project storage through `Snapshot` and `ChangeSet`, with transactional row revision
+  checks and history for typed homes. Default file homes remain unchanged. Project export/import
+  operations use a base64 file map; project and item history operations expose recent changes.
+
+- **Tables for a project's state (used by opt-in typed homes).** Migration shakedown 10 adds `projects`,
   `project_scenarios`, `project_setups`, `project_setup_files`, `project_experiments`, `project_changes`,
   `project_change_items` and `project_imports`, plus `experiments.project_experiment_id`. Each item's row keeps its
   file's contents as JSON, with a revision so a stale write is refused, and a delete only marks the row. The store

@@ -119,6 +119,7 @@ fn for_kind(kind: Kind) -> [Operation; 5] {
 struct PutInput {
     id: String,
     body: Value,
+    revision: Option<i64>,
     #[serde(default, deserialize_with = "flag")]
     confirm: bool,
 }
@@ -131,6 +132,8 @@ struct PutSchema<B: JsonSchema> {
     id: String,
     /// The item's contents.
     body: B,
+    /// Revision read by the editor, for items held in tables.
+    revision: Option<i64>,
     /// Write now, without showing a diff first.
     confirm: Option<bool>,
 }
@@ -166,7 +169,12 @@ fn get<'a>(ctx: &'a OpCtx<'a>, op: &'static Operation, value: Value) -> OpFuture
 fn put<'a>(ctx: &'a OpCtx<'a>, op: &'static Operation, value: Value) -> OpFuture<'a> {
     Box::pin(async move {
         let kind = kind_of(op)?;
-        let PutInput { id, body, confirm } = input(value)?;
+        let PutInput {
+            id,
+            body,
+            confirm,
+            revision,
+        } = input(value)?;
         let id = Id::parse(&id)?;
         // Checked exactly as the file would be checked when read back.
         let body = ItemBody::parse(kind, &item_file(kind, &id), &as_yaml(&body)?)?;
@@ -180,7 +188,10 @@ fn put<'a>(ctx: &'a OpCtx<'a>, op: &'static Operation, value: Value) -> OpFuture
             ControlFlow::Continue(diff) => diff,
             ControlFlow::Break(proposal) => return Ok(proposal),
         };
-        let item = ctx.project.change(|p| p.put(kind, &id, body)).await??;
+        let item = ctx
+            .project
+            .change(|p| p.put_at(kind, &id, body, revision))
+            .await??;
         let mut out = view::item(&ctx.project.current().await?, &item);
         out["diff"] = Value::String(diff);
         Ok(out)

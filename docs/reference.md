@@ -25,6 +25,10 @@ All JSON on `http://127.0.0.1:4510`, except the event stream. Errors are `{error
 | `DELETE /api/project/{kind}/{id}` | `{cascade?, expect?, confirm?}` (`cascade` and `confirm` also as `?cascade=true`) moves the item's file to the trash (a world's data folder and a setup's folder stay) and answers `{deleted, with, trash, runs_unlinked}`. While anything uses the item (see [concepts](concepts.md#project-files)) it is refused with 409 `{error, dependents}`. With `cascade: true` what uses it is deleted or rewritten first (`with` lists each with its `fates`); `expect`, the `dependents` a preview showed, makes it 409 with the fresh `dependents` if they changed; under `diff_first` an unconfirmed cascade answers `{proposed: true, dependents}`. A deleted experiment's deployments are unlinked and list as earlier experiments |
 | `GET /api/project/trash` | `project.deleted`: the most recent delete that can be undone, `{trash, label, files}`; 404 when there is none |
 | `POST /api/project/trash/restore` | `project.restore`: `{trash?, confirm?}` puts back the delete named `trash` (the most recent when missing): every file it removed or rewrote, and links its experiments' deployments again; answers `{restored, files, trash, runs_relinked}`. Under `diff_first`, unconfirmed, it answers `{proposed, diff, trash}`: send that `trash` back to restore the same delete. 404 when there is nothing to undo; 409 when a removed file's path is taken again or a rewritten file was edited since |
+| `GET /api/project/history` | `project.history`: `{limit?}` (1–100, default 50), returning `{changes}` newest first with id, label, created_at, undone_at and before/after items. Legacy file homes return an empty list; their deletes remain available through trash |
+| `GET /api/project/{kind}/{id}/history` | `<kind>.history`, where kind is worlds, scenarios, setups or experiments: recent project changes touching that item |
+| `GET /api/project/export` | `project.export`: `{files, encoding: "base64"}`; files maps relative paths to base64 bytes. Canonical item YAML, world data preserved, Git metadata and internal trash excluded |
+| `POST /api/project/import-files` | `project.import_files`: `{files, confirm?}` with the same base64 file map. Previews unless confirmed; returns proposed, items, problems and skipped paths. Merges supplied files and leaves omitted items intact |
 | `GET /api/project/{kind}/{id}/dependents` | `<kind>.dependents`: `{dependents: [{kind, id, label, fate, fates}], kept}`, what uses the item and what a cascading delete does to each (`fates`: `[deleted]`, or `setup_dropped` and/or `parent_cleared`; `fate` is the first), and the folder that stays (`kept`: a world's data folder, a setup's own folder, or null) |
 | `POST /api/project/world-groups/rename` | `worlds.rename_group`: `{from, to?, confirm?}` moves every world in group `from` to `to` (empty or missing: no group; an existing group merges), checking every file before writing any, with a diff first under `diff_first` as for a put; answers `{moved, diff}`. 404 when no world is in `from` |
 | `PUT /api/project` | `project.update`: `{body, confirm?}` replaces `shakedown.yaml` (name, defaults, permissions, assistant), with a diff first under `diff_first` as for an item |
@@ -660,3 +664,9 @@ CI (`.github/workflows/ci.yml`) runs the format, Clippy and test checks of both 
 kit's tests, an import check of the two Python integrations, and the UI's tests and build, but no `live_`
 test. See [CONTRIBUTING.md](../CONTRIBUTING.md) for the full list of
 checks before a pull request.
+
+Table-backed item get responses also carry `revision`. Send it on the corresponding put to
+reject an edit based on an older item (409); independent items can be saved concurrently.
+
+The existing operation registry classifies history as edit access and export as spend access.
+Project history and export perform no writes and invoke no models, but retain those access classes.

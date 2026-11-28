@@ -42,7 +42,8 @@ impl From<ProjectError> for OpError {
             ProjectError::InvalidId(_)
             | ProjectError::Format(_)
             | ProjectError::WrongKind { .. } => StatusCode::UNPROCESSABLE_ENTITY,
-            ProjectError::NotAProject
+            ProjectError::Changed { .. }
+            | ProjectError::NotAProject
             | ProjectError::AlreadyAProject
             | ProjectError::Occupied { .. }
             | ProjectError::EditedSince { .. } => StatusCode::CONFLICT,

@@ -59,3 +59,37 @@ flowchart LR
 (a project on disk and in memory stay equal), `core/crates/shaked/src/project_state/tests.rs` (a database project:
 one load per revision, nothing saved by a failed change, a stale save refused, a read copy refuses writes). The
 hosted Postgres store and its tests are in CopperTide Cloud (`crates/shaked-hosted/src/projects.rs`).
+
+## Typed homes
+
+A home can override `ProjectDb::table_kinds`, `snapshot`, `apply`, `history` and `note`.
+`TableKinds::NONE` preserves the existing folder and file-database behavior. `LOCAL` selects
+settings and experiments; scenarios and setups remain hand-editable YAML. `HOSTED` selects
+settings, scenarios, setups and experiments. Worlds always use the file store.
+
+`Snapshot` supplies the project revision, settings, live item rows and a file store.
+Database homes can use `Store::snapshot_tx` to read them in a repeatable, read-only transaction
+through the caller authorization hook. The model
+collects edits in a `ChangeSet`. `ProjectState` stages file writes in an `Overlay`, including
+writes made directly through the store by world-file operations. Failed operations discard it.
+A typed home must save those files and call `store::apply_project_change_in` in the same
+transaction, then commit. It must map `Stale` and `SlugTaken` to a 409. The helper checks each
+item revision, updates settings at their snapshot revision, writes history and bumps the project
+revision. It does not compare the project revision for edits to unrelated items. Auxiliary setup
+file edits also check and bump their owning setup row.
+
+Table homes currently read a fresh snapshot per operation. The existing file-home cache remains.
+Deletes produce history ids instead of trash-folder names; restore reads that history and refuses
+an item or file changed since. History retains at least 20 changes and all changes from 30 days.
+Export emits the current folder layout with canonical YAML and original file bytes, excluding
+`.git/` and `.shakedown/`. Import previews parsed items, reports unreadable files and skips paths
+outside the project layout. It merges supplied files; it does not delete omitted items.
+
+Verification on the build box with Rust 1.100.0: 631 tests passed and one was ignored (project
+crate, shaked library, project/ops integration suites, store rows, change sets, table-home parity
+and the no-org boundary). Root and core workspace formatting and clippy with warnings denied
+passed. The new Pg tests cover independent edits, stale-batch rollback, stable identities on
+undo, and operation parity including cascade, export/import and setup-file revisions.
+
+The adapted leakcheck used the build box’s `test-pg` container and only the new suites’ database
+prefixes, because other sessions were testing concurrently. Both suites left zero databases.

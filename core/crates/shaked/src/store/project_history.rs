@@ -1,8 +1,8 @@
 //! A project's undo history and git import records in Postgres (migration `shakedown 10`), as the
 //! caller. A change is one edit, delete, import or undo, with what it did to each item: a row's
 //! body before and after, or a file's bytes. An import record is what one git import fetched,
-//! registered and wrote; a re-import updates it in place. Nothing reads these yet: the trash and
-//! `import.json` still live in the project folder.
+//! registered and wrote; a re-import updates it in place. Typed homes use this history; legacy
+//! folder homes retain their trash and `import.json`.
 
 use anyhow::Result;
 use chrono::{DateTime, Utc};
@@ -12,105 +12,7 @@ use uuid::Uuid;
 
 use super::{Scoped, Tx};
 
-/// What a change item is.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ChangeKind {
-    /// The project's settings.
-    Project,
-    Scenario,
-    Setup,
-    Experiment,
-    /// A file of a setup described in MADL.
-    SetupFile,
-    /// A file of the project folder: a world's files, a local scenario or setup.
-    File,
-}
-
-impl ChangeKind {
-    const ALL: [ChangeKind; 6] = [
-        ChangeKind::Project,
-        ChangeKind::Scenario,
-        ChangeKind::Setup,
-        ChangeKind::Experiment,
-        ChangeKind::SetupFile,
-        ChangeKind::File,
-    ];
-
-    pub fn as_str(self) -> &'static str {
-        match self {
-            ChangeKind::Project => "project",
-            ChangeKind::Scenario => "scenario",
-            ChangeKind::Setup => "setup",
-            ChangeKind::Experiment => "experiment",
-            ChangeKind::SetupFile => "setup_file",
-            ChangeKind::File => "file",
-        }
-    }
-
-    fn parse(s: &str) -> Option<ChangeKind> {
-        ChangeKind::ALL.into_iter().find(|k| k.as_str() == s)
-    }
-}
-
-/// What one change did to one item. None before: it was made; None after: it was deleted. A row
-/// (project, scenario, setup, experiment) has `item_id`, its bodies and the revision the change
-/// left; a file has its bytes; a setup file has both its setup's id and its bytes.
-#[derive(Debug, Clone, PartialEq)]
-pub struct ChangeItem {
-    pub kind: ChangeKind,
-    pub item_id: Option<Uuid>,
-    /// The item's slug, or the file's path.
-    pub name: String,
-    pub before: Option<Value>,
-    pub after: Option<Value>,
-    pub before_bytes: Option<Vec<u8>>,
-    pub after_bytes: Option<Vec<u8>>,
-    pub revision: Option<i64>,
-}
-
-impl ChangeItem {
-    /// A row's change: `kind` is not a file kind.
-    pub fn row(
-        kind: ChangeKind,
-        id: Uuid,
-        slug: &str,
-        before: Option<Value>,
-        after: Option<Value>,
-    ) -> ChangeItem {
-        ChangeItem {
-            kind,
-            item_id: Some(id),
-            name: slug.to_string(),
-            before,
-            after,
-            before_bytes: None,
-            after_bytes: None,
-            revision: None,
-        }
-    }
-
-    /// A project folder file's change.
-    pub fn file(path: &str, before: Option<Vec<u8>>, after: Option<Vec<u8>>) -> ChangeItem {
-        ChangeItem {
-            kind: ChangeKind::File,
-            item_id: None,
-            name: path.to_string(),
-            before: None,
-            after: None,
-            before_bytes: before,
-            after_bytes: after,
-            revision: None,
-        }
-    }
-
-    /// The same, with the revision the change left its row at.
-    pub fn at_revision(self, revision: i64) -> ChangeItem {
-        ChangeItem {
-            revision: Some(revision),
-            ..self
-        }
-    }
-}
+pub use shakedown_project::history::{ChangeItem, ChangeKind};
 
 /// A change as the history lists it.
 #[derive(Debug, Clone, PartialEq)]
@@ -203,7 +105,16 @@ pub(super) async fn record_change_in(
     label: &str,
     items: &[ChangeItem],
 ) -> Result<Uuid> {
-    let id = Uuid::new_v4();
+    record_named_change_in(tx, project, Uuid::new_v4(), label, items).await
+}
+
+pub(super) async fn record_named_change_in(
+    tx: &Tx,
+    project: Uuid,
+    id: Uuid,
+    label: &str,
+    items: &[ChangeItem],
+) -> Result<Uuid> {
     let sql = "INSERT INTO project_changes (id, project_id, label) VALUES ($1, $2, $3)";
     tx.execute(sql, &[&id, &project, &label]).await?;
     let insert = format!(

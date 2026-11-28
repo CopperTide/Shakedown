@@ -39,6 +39,19 @@ impl Format for ProjectFile {
     const FORMAT: &'static str = "shakedown-project/1";
 }
 
+impl ProjectFile {
+    /// A new project's settings: named `name`, everything else the default.
+    pub fn named(name: &str) -> ProjectFile {
+        ProjectFile {
+            format: Self::FORMAT.into(),
+            name: name.into(),
+            defaults: Defaults::default(),
+            permissions: Permissions::default(),
+            assistant: None,
+        }
+    }
+}
+
 /// Defaults for new experiments.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]

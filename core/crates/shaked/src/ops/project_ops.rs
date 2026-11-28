@@ -49,6 +49,7 @@ fn project_op(
 #[derive(Deserialize)]
 struct UpdateInput {
     body: Value,
+    revision: Option<i64>,
     #[serde(default, deserialize_with = "flag")]
     confirm: bool,
 }
@@ -59,6 +60,8 @@ struct UpdateInput {
 struct UpdateSchema {
     /// The whole project file.
     body: shakedown_project::format::ProjectFile,
+    /// Revision returned by project.status for a typed home.
+    revision: Option<i64>,
     /// Write now, without showing a diff first.
     confirm: Option<bool>,
 }
@@ -100,7 +103,11 @@ fn init<'a>(ctx: &'a OpCtx<'a>, _: &'static Operation, value: Value) -> OpFuture
 
 fn update<'a>(ctx: &'a OpCtx<'a>, _: &'static Operation, value: Value) -> OpFuture<'a> {
     Box::pin(async move {
-        let UpdateInput { body, confirm } = input(value)?;
+        let UpdateInput {
+            body,
+            confirm,
+            revision,
+        } = input(value)?;
         let config: ProjectFile = parse("shakedown.yaml", &as_yaml(&body)?)?;
         let project = ctx.project.current().await?;
         let (old, new) = (to_yaml(&project.config)?, to_yaml(&config)?);
@@ -108,7 +115,9 @@ fn update<'a>(ctx: &'a OpCtx<'a>, _: &'static Operation, value: Value) -> OpFutu
         if let ControlFlow::Break(proposal) = diff_first(policy, &old, &new, confirm) {
             return Ok(proposal);
         }
-        ctx.project.change(|p| p.set_config(config)).await??;
+        ctx.project
+            .change(|p| update_at(p, config, revision))
+            .await??;
         Ok(status_of(&ctx.project.current().await?))
     })
 }
@@ -116,7 +125,7 @@ fn update<'a>(ctx: &'a OpCtx<'a>, _: &'static Operation, value: Value) -> OpFutu
 fn status_of(project: &Project) -> Value {
     let count = |kind: Kind| project.list(kind).len();
     let problems: Vec<Value> = project.problems.iter().map(view::problem).collect();
-    json!({
+    let mut out = json!({
         "name": project.config.name,
         "counts": {
             "worlds": count(Kind::World),
@@ -128,5 +137,27 @@ fn status_of(project: &Project) -> Value {
         "settings": project.config,
         "root": project.root().map(|r| r.display().to_string()),
         "imports": project.root().map(crate::git_import::listed).unwrap_or_default(),
-    })
+    });
+    if let Some(revision) = project.project_revision() {
+        out["revision"] = json!(revision);
+    }
+    out
+}
+
+fn update_at(
+    project: &mut Project,
+    config: ProjectFile,
+    revision: Option<i64>,
+) -> Result<(), shakedown_project::ProjectError> {
+    if let Some(based_on) =
+        revision.filter(|r| project.project_revision().is_some_and(|now| now != *r))
+    {
+        return Err(shakedown_project::ProjectError::Changed {
+            kind: "project",
+            id: config.name,
+            based_on,
+            current: project.project_revision(),
+        });
+    }
+    project.set_config(config)
 }

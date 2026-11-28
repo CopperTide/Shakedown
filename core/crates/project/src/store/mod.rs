@@ -1,16 +1,19 @@
 //! Where a project's files live. Everything above this module (formats, loading, references,
 //! deletes, the trash) reads and writes through [`Store`], by paths relative to the project:
 //! [`FsStore`] is a folder on disk (personal use), [`MemStore`] an in-memory copy whose changes a
-//! caller collects and saves elsewhere in one go (hosted Shakedown keeps them in Postgres).
+//! caller collects and saves elsewhere in one go (hosted Shakedown keeps them in Postgres), and
+//! [`Overlay`] holds a change's writes over another store until the caller flushes them.
 
 use std::io;
 use std::path::Path;
 
 mod fs;
 mod mem;
+mod overlay;
 
 pub use fs::FsStore;
 pub use mem::{Change, Files, MemStore};
+pub use overlay::Overlay;
 
 /// The longest path a store takes, in bytes.
 pub const MAX_PATH: usize = 1024;

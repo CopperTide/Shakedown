@@ -1,4 +1,5 @@
-//! A project: its settings, its items and the problems found in them, over a [`Store`].
+//! A project: its settings, its items and the problems found in them, over a [`Store`], with the
+//! kinds a home keeps as rows on the side ([`crate::rows`]).
 
 use std::path::Path;
 use std::sync::Arc;
@@ -7,22 +8,26 @@ use crate::error::ProjectError;
 use crate::format::{parse, to_yaml, Kind, ProjectFile};
 use crate::item::{kind_name, Item, ItemBody, KindFile, Problem};
 use crate::load::{io, item_file, load_all, Items};
+use crate::rows::Db;
 use crate::store::{FsStore, Store};
+use crate::tables::TableKinds;
 use crate::validate::cross_check;
 use crate::Id;
 
-const PROJECT_FILE: &str = "shakedown.yaml";
+pub(crate) const PROJECT_FILE: &str = "shakedown.yaml";
 const GITIGNORE: &str = ".shakedown/\n";
 
 /// An open project.
 #[derive(Debug, Clone)]
 pub struct Project {
-    store: Arc<dyn Store>,
+    pub(crate) store: Arc<dyn Store>,
     /// `shakedown.yaml`.
     pub config: ProjectFile,
     /// Unreadable files and broken references, in a stable order.
     pub problems: Vec<Problem>,
-    items: Items,
+    pub(crate) items: Items,
+    /// The kinds kept as rows, for a project opened from a [`crate::Snapshot`].
+    pub(crate) db: Option<Box<Db>>,
 }
 
 impl Project {
@@ -34,19 +39,22 @@ impl Project {
     /// Opens the project in `store`. Fails only when `shakedown.yaml` is missing or unreadable;
     /// every other problem is listed in `problems`.
     pub fn open_in(store: Arc<dyn Store>) -> Result<Project, ProjectError> {
-        let text = match store.read_text(PROJECT_FILE) {
-            Ok(text) => text,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                return Err(ProjectError::NotAProject)
-            }
-            Err(e) => return Err(io("reading", PROJECT_FILE, e)),
-        };
-        let config = parse(PROJECT_FILE, &text)?;
+        let config = read_config(&*store)?;
+        Project::assemble(store, config, None)
+    }
+
+    /// A project of `config` over `store` and `db`, its items read.
+    pub(crate) fn assemble(
+        store: Arc<dyn Store>,
+        config: ProjectFile,
+        db: Option<Box<Db>>,
+    ) -> Result<Project, ProjectError> {
         let mut project = Project {
             store,
             config,
             problems: Vec::new(),
             items: Items::new(),
+            db,
         };
         project.reload()?;
         Ok(project)
@@ -63,27 +71,34 @@ impl Project {
         if store.exists(PROJECT_FILE) {
             return Err(ProjectError::AlreadyAProject);
         }
-        let git_root = git_folder(&*store, git)?;
-        for kind in Kind::ALL {
+        Project::lay_out(&*store, TableKinds::NONE, &ProjectFile::named(name), git)?;
+        Project::open_in(store)
+    }
+
+    /// Lays out a new project's files in `store`: a folder for each kind that is not a row,
+    /// `shakedown.yaml` unless the settings are a row, a `.gitignore`, and git when asked.
+    pub fn lay_out(
+        store: &dyn Store,
+        tables: TableKinds,
+        config: &ProjectFile,
+        git: bool,
+    ) -> Result<(), ProjectError> {
+        let git_root = git_folder(store, git)?;
+        for kind in Kind::ALL.into_iter().filter(|k| !tables.has(*k)) {
             store
                 .make_dir(kind.dir())
                 .map_err(|e| io("creating", kind.dir(), e))?;
         }
-        let config = ProjectFile {
-            format: "shakedown-project/1".into(),
-            name: name.into(),
-            defaults: Default::default(),
-            permissions: Default::default(),
-            assistant: None,
-        };
-        write(&*store, PROJECT_FILE, &to_yaml(&config)?)?;
+        if !tables.settings {
+            write(store, PROJECT_FILE, &to_yaml(config)?)?;
+        }
         if !store.exists(".gitignore") {
-            write(&*store, ".gitignore", GITIGNORE)?;
+            write(store, ".gitignore", GITIGNORE)?;
         }
-        if let Some(root) = git_root {
-            git_init(&root)?;
+        match git_root {
+            Some(root) => git_init(&root),
+            None => Ok(()),
         }
-        Project::open_in(store)
     }
 
     /// Where the files are.
@@ -108,7 +123,11 @@ impl Project {
             )
             .into());
         }
-        write(&*self.store, PROJECT_FILE, &yaml)?;
+        if self.tables().settings {
+            self.change_settings(config);
+            return Ok(());
+        }
+        self.write_file("edit settings", PROJECT_FILE, yaml.as_bytes())?;
         self.config = config;
         Ok(())
     }
@@ -141,10 +160,23 @@ impl Project {
             .collect()
     }
 
-    /// Writes `body` as item `id` of `kind`, creating or replacing its file.
+    /// Writes `body` as item `id` of `kind`, creating or replacing its file (or row).
     pub fn put(&mut self, kind: Kind, id: &Id, body: ItemBody) -> Result<Item, ProjectError> {
+        self.put_at(kind, id, body, None)
+    }
+
+    /// [`Project::put`], based on the revision `base_revision` the caller read of a row: refused
+    /// with [`ProjectError::Changed`] when the row is no longer at it (a file has no revision).
+    pub fn put_at(
+        &mut self,
+        kind: Kind,
+        id: &Id,
+        body: ItemBody,
+        base_revision: Option<i64>,
+    ) -> Result<Item, ProjectError> {
         let yaml = checked_yaml(kind, id, &body)?;
-        write(&*self.store, &item_file(kind, id), &yaml)?;
+        let label = format!("save {} {id}", kind_name(kind));
+        self.store_item(&label, kind, id, &body, &yaml, base_revision)?;
         self.reload()?;
         self.get(kind, id)
             .cloned()
@@ -157,7 +189,7 @@ impl Project {
         if self.get(kind, id).is_none() {
             return Err(ProjectError::not_found(kind, id));
         }
-        self.delete_file(kind, id)?;
+        self.drop_item(&format!("remove {} {id}", kind_name(kind)), kind, id)?;
         self.reload()
     }
 
@@ -173,22 +205,26 @@ impl Project {
         kept.then_some(folder)
     }
 
-    /// Deletes the file of item `id` of `kind`, without re-reading the project.
-    fn delete_file(&self, kind: Kind, id: &Id) -> Result<(), ProjectError> {
-        let file = item_file(kind, id);
-        self.store
-            .remove(&file)
-            .map_err(|e| io("deleting", &file, e))
-    }
-
-    /// Re-reads every item from the store and re-checks references.
+    /// Re-reads every item from the store and the rows, and re-checks references.
     pub fn reload(&mut self) -> Result<(), ProjectError> {
-        let (items, mut problems) = load_all(&*self.store)?;
+        let (mut items, mut problems) = load_all(&*self.store, self.tables())?;
+        if let Some(db) = &self.db {
+            db.load_into(&mut items, &mut problems);
+        }
         problems.extend(cross_check(&items));
         problems.extend(crate::views::view_problems(&*self.store, &items));
         self.items = items;
         self.problems = problems;
         Ok(())
+    }
+}
+
+/// `shakedown.yaml` in `store`: [`ProjectError::NotAProject`] when it is missing.
+fn read_config(store: &dyn Store) -> Result<ProjectFile, ProjectError> {
+    match store.read_text(PROJECT_FILE) {
+        Ok(text) => Ok(parse(PROJECT_FILE, &text)?),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Err(ProjectError::NotAProject),
+        Err(e) => Err(io("reading", PROJECT_FILE, e)),
     }
 }
 

@@ -2,8 +2,8 @@
 //! [`ProjectFile`] in typed columns) and its scenarios, setups and experiments, each the item's body
 //! exactly as its file says. Every write of a row names the revision it was based on and is
 //! refused with [`Stale`] when the row has moved past it; a delete only marks the row. The undo
-//! history and the git import records are in [`super::project_history`]. Nothing reads these yet:
-//! the project still lives in its folder or the hosting layer's files.
+//! history and the git import records are in [`super::project_history`]. Typed project homes use
+//! these helpers through `project_apply`; default folder homes keep their existing files.
 //!
 //! ```text
 //! Scoped::put_project_item ─► in_tx ─► put_item_in ─► UPDATE … WHERE revision = base
@@ -115,9 +115,11 @@ pub struct SlugTaken {
     pub slug: String,
 }
 
-const PROJECT_COLS: &str = "id, name, default_world, cost_cap_usd, edit_policy, spend_policy, \
+pub(super) const PROJECT_COLS: &str =
+    "id, name, default_world, cost_cap_usd, edit_policy, spend_policy, \
      spend_usd_per_day, assistant_model, assistant_provider, revision, updated_at";
-const SETTINGS: &str = "name = $2, default_world = $3, cost_cap_usd = $4, edit_policy = $5, \
+pub(super) const SETTINGS: &str =
+    "name = $2, default_world = $3, cost_cap_usd = $4, edit_policy = $5, \
      spend_policy = $6, spend_usd_per_day = $7, assistant_model = $8, assistant_provider = $9";
 const ITEM_COLS: &str = "id, slug, body, revision, updated_at";
 
@@ -155,16 +157,10 @@ impl Scoped<'_> {
 
     /// Project `id`'s settings and its live items; None when there is no such project.
     pub async fn project_items(&self, id: Uuid) -> Result<Option<ProjectItems>> {
-        self.in_tx(async |tx| {
-            let sql = format!("SELECT {PROJECT_COLS} FROM projects WHERE id = $1");
-            let Some(row) = tx.query_opt(&sql, &[&id]).await? else {
-                return Ok(None);
-            };
-            let items = items_in(tx, id).await?;
-            let project = project_row(&row);
-            Ok(Some(ProjectItems { project, items }))
-        })
-        .await
+        let tx = self.store.snapshot_tx(self.caller).await?;
+        let items = project_items_in(&tx, id).await?;
+        tx.commit().await?;
+        Ok(items)
     }
 
     /// Writes an item of project `project`: [`SlugTaken`] when another live item of its kind has
@@ -184,6 +180,19 @@ impl Scoped<'_> {
         self.in_tx(async |tx| delete_item_in(tx, project, kind, base).await)
             .await
     }
+}
+
+/// Reads settings and items; use a snapshot transaction to keep the reads consistent.
+pub async fn project_items_in(tx: &Tx, id: Uuid) -> Result<Option<ProjectItems>> {
+    let sql = format!("SELECT {PROJECT_COLS} FROM projects WHERE id = $1");
+    let Some(row) = tx.query_opt(&sql, &[&id]).await? else {
+        return Ok(None);
+    };
+    let items = items_in(tx, id).await?;
+    Ok(Some(ProjectItems {
+        project: project_row(&row),
+        items,
+    }))
 }
 
 /// The live items of `project`, by kind then slug.
@@ -344,12 +353,17 @@ impl SettingsParams<'_> {
     }
 }
 
-async fn settings_query(tx: &Tx, sql: &str, id: Uuid, s: &ProjectFile) -> Result<Option<Row>> {
+pub(super) async fn settings_query(
+    tx: &Tx,
+    sql: &str,
+    id: Uuid,
+    s: &ProjectFile,
+) -> Result<Option<Row>> {
     let p = settings_params(id, s);
     tx.query_opt(sql, &p.refs()).await
 }
 
-fn project_row(r: &Row) -> ProjectRow {
+pub(super) fn project_row(r: &Row) -> ProjectRow {
     let spend = match r.get::<_, Option<f64>>(6) {
         Some(usd_per_day) => SpendPolicy::UnderCap { usd_per_day },
         None => SpendPolicy::AlwaysAsk,
@@ -377,5 +391,30 @@ fn project_row(r: &Row) -> ProjectRow {
         settings,
         revision: r.get(9),
         updated_at: r.get(10),
+    }
+}
+
+/// Restores a soft-deleted identity at the revision recorded by its delete.
+pub(super) async fn restore_item_in(
+    tx: &Tx,
+    project: Uuid,
+    w: ItemWrite<'_>,
+) -> Result<ProjectItem> {
+    let base = w
+        .base
+        .expect("restoring a row requires its deleted identity");
+    let sql = format!("UPDATE {} SET slug = $3, body = $4, deleted_at = NULL, revision = revision + 1, updated_at = now() WHERE id = $1 AND project_id = $2 AND revision = $5 AND deleted_at IS NOT NULL RETURNING {ITEM_COLS}", w.kind.table());
+    match tx
+        .query_opt(&sql, &[&base.id, &project, &w.slug, w.body, &base.revision])
+        .await
+    {
+        Ok(Some(row)) => Ok(item_row(w.kind, &row)),
+        Ok(None) => Err(stale(tx, w.kind.table(), w.slug, base).await),
+        Err(e) if is_unique_violation(&e) => Err(SlugTaken {
+            kind: w.kind.as_str(),
+            slug: w.slug.into(),
+        }
+        .into()),
+        Err(e) => Err(e),
     }
 }

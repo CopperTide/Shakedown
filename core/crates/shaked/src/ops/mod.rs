@@ -10,6 +10,7 @@ mod deploy_ops;
 mod error;
 mod explore_ops;
 mod group_ops;
+mod history_ops;
 pub mod http;
 mod import_git_ops;
 mod import_ops;
@@ -135,6 +136,7 @@ pub fn all() -> &'static [Operation] {
     ALL.get_or_init(|| {
         let mut ops = project_ops::ops();
         ops.extend(item_ops::ops());
+        ops.extend(history_ops::ops());
         ops.extend(data_ops::ops());
         ops.extend(group_ops::ops());
         ops.extend(restore_ops::ops());

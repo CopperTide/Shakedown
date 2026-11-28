@@ -318,3 +318,10 @@ Logic lives in pure modules with tests, and components only render. For example:
   `status-line`, which the capture scripts use to hide it.
 - **Empty, loading and error states.** Every list and panel has its own, and each says what to do
   next.
+
+## Typed project homes
+
+The item API can return a `revision` for an item kept in tables. Editors can send that revision
+with a put; a stale edit is a 409. Folder projects keep their existing response shape. Project
+history and base64 file export/import are available through operations; this model change does
+not add a history drawer or import/export panel.

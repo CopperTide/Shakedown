@@ -86,6 +86,16 @@ impl Store {
         self.begin(&self.pool, TxFor::Caller(c)).await
     }
 
+    /// A repeatable, read-only snapshot for the caller, with the same authorization hook.
+    pub async fn snapshot_tx(&self, c: &Caller) -> Result<Tx> {
+        self.begin_with(
+            &self.pool,
+            TxFor::Caller(c),
+            "BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY",
+        )
+        .await
+    }
+
     /// A transaction of a system job: on the system pool when there is one. Only shaked's own
     /// jobs open one (a [`SystemScope`] is built only in this crate).
     pub(crate) async fn system_tx(&self, scope: SystemScope) -> Result<Tx> {
@@ -94,11 +104,20 @@ impl Store {
     }
 
     async fn begin(&self, pool: &deadpool_postgres::Pool, on: TxFor<'_>) -> Result<Tx> {
+        self.begin_with(pool, on, "BEGIN").await
+    }
+
+    async fn begin_with(
+        &self,
+        pool: &deadpool_postgres::Pool,
+        on: TxFor<'_>,
+        begin: &str,
+    ) -> Result<Tx> {
         let tx = Tx {
             conn: Some(pool.get().await?),
             committed: false,
         };
-        tx.batch("BEGIN").await?;
+        tx.batch(begin).await?;
         self.layer.begin(&tx, on).await?;
         Ok(tx)
     }

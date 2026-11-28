@@ -4,7 +4,7 @@ use crate::error::ProjectError;
 use crate::format::{Kind, WorldFile};
 use crate::item::{ItemBody, KindFile};
 use crate::load::item_file;
-use crate::project::{checked_yaml, write};
+use crate::project::checked_yaml;
 use crate::{Id, Project};
 
 impl Project {
@@ -36,8 +36,9 @@ impl Project {
                 checked_yaml(Kind::World, id, &body)?,
             ));
         }
+        let label = format!("rename group {from}");
         for (file, yaml) in &files {
-            write(&**self.store(), file, yaml)?;
+            self.write_file(&label, file, yaml.as_bytes())?;
         }
         self.reload()?;
         Ok(moved.into_iter().map(|(id, _)| id).collect())

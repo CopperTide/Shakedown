@@ -43,4 +43,58 @@ pub trait ProjectDb: Send + Sync + 'static {
     /// the project is still at revision `base`, answering the new revision. A project changed
     /// since `base` is refused with 409, a change past the database's limits with 413.
     fn save(&self, base: i64, changes: Vec<Change>) -> BoxFuture<'_, Result<i64, NoProject>>;
+    /// Which kinds this home keeps in typed tables. Existing file homes keep their behavior.
+    fn table_kinds(&self) -> shakedown_project::TableKinds {
+        shakedown_project::TableKinds::NONE
+    }
+    /// A consistent snapshot, including the file store. Table homes override this.
+    fn snapshot(&self) -> BoxFuture<'_, Result<shakedown_project::Snapshot, NoProject>> {
+        Box::pin(async move {
+            let (revision, files) = self.load().await?;
+            Ok(shakedown_project::Snapshot {
+                revision,
+                tables: self.table_kinds(),
+                settings: None,
+                rows: Vec::new(),
+                store: Arc::new(shakedown_project::store::MemStore::read_only(files)),
+            })
+        })
+    }
+    /// Persist a typed change, including its files, atomically.
+    fn apply(&self, _change: shakedown_project::ChangeSet) -> BoxFuture<'_, Result<(), NoProject>> {
+        Box::pin(async {
+            Err(NoProject::Failed(anyhow::anyhow!(
+                "this home does not support typed changes"
+            )))
+        })
+    }
+    /// Creates the settings row and selects this project's identity for subsequent reads.
+    fn initialize<'a>(&'a self, _name: &'a str) -> BoxFuture<'a, Result<(), NoProject>> {
+        Box::pin(async {
+            Err(NoProject::Failed(anyhow::anyhow!(
+                "this home does not support typed initialization"
+            )))
+        })
+    }
+    /// The most recent changes, newest first.
+    fn history(
+        &self,
+        _limit: i64,
+    ) -> BoxFuture<'_, Result<Vec<crate::store::ChangeRow>, NoProject>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+
+    /// Attach an undo note to an existing change.
+    fn note<'a>(
+        &'a self,
+        _change: &'a str,
+        _name: &'a str,
+        _text: &'a str,
+    ) -> BoxFuture<'a, Result<(), NoProject>> {
+        Box::pin(async {
+            Err(NoProject::Failed(anyhow::anyhow!(
+                "this home does not support history notes"
+            )))
+        })
+    }
 }

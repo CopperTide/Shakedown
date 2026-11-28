@@ -105,6 +105,18 @@ pub enum ProjectError {
         /// The files, relative to the project folder.
         files: Vec<String>,
     },
+    /// An item's row moved past the revision the caller read: nothing was written.
+    #[error("the {kind} {id} changed since revision {based_on}: reload it and try again")]
+    Changed {
+        /// The kind, e.g. `scenario`.
+        kind: &'static str,
+        /// The item's id.
+        id: String,
+        /// The revision the caller read.
+        based_on: i64,
+        /// Its revision now (None: it is gone).
+        current: Option<i64>,
+    },
     /// The body given is not of the kind asked for.
     #[error("expected a {expected}, got a {got}")]
     WrongKind {

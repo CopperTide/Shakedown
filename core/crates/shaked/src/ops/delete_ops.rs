@@ -152,13 +152,9 @@ async fn unlink_runs(ctx: &OpCtx<'_>, kind: Kind, id: &Id, removal: &Removal) ->
         }
     };
     let note = serde_json::to_string(&unlinked).unwrap_or_default();
-    let kept = ctx
-        .project
-        .change(|p| p.write_trash_note(&removal.trash, RUNS_NOTE, &note))
-        .await;
+    let kept = ctx.project.note(&removal.trash, RUNS_NOTE, &note).await;
     match kept {
-        Ok(Ok(())) => {}
-        Ok(Err(e)) => eprintln!("shaked: noting the unlinked runs of a delete: {e}"),
+        Ok(()) => {}
         Err(e) => eprintln!("shaked: noting the unlinked runs of a delete: {e}"),
     }
     true

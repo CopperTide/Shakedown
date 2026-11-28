@@ -1,7 +1,8 @@
 //! What uses an item, and deleting an item together with what uses it. The whole delete is planned
 //! (and every rewritten file checked) before anything changes, then carried out from the leaves
 //! in: rewritten experiments, deleted experiments, deleted scenarios, the item. A failure part way
-//! leaves no reference to a missing item. Deleted files go to the trash, so a delete can be undone.
+//! leaves no reference to a missing item. Deleted files go to the trash, so a delete can be undone;
+//! in a project with table kinds the delete is one change instead, undone from the history.
 
 use std::collections::BTreeSet;
 
@@ -84,20 +85,58 @@ impl Project {
         let (doomed, fallout) = self.allowed(kind, id, cascade, expect)?;
         let edits = self.edits(&fallout, &doomed)?;
         let deletes = deletions(kind, id, &fallout);
-        let manifest = Manifest::new(format!("{} {id}", kind_name(kind)), &deletes, &edits);
+        let label = format!("{} {id}", kind_name(kind));
+        let trash = match self.db {
+            None => self.delete_to_trash(label, &deletes, &edits)?,
+            Some(_) => self.delete_in_change(&format!("delete {label}"), &deletes, &edits)?,
+        };
+        self.reload()?;
+        Ok(Removal { fallout, trash })
+    }
+
+    /// Carries out a planned delete in a folder: deleted files move to a new trash folder, and
+    /// rewritten ones are copied there first. Answers the trash folder's name.
+    fn delete_to_trash(
+        &mut self,
+        label: String,
+        deletes: &[(Kind, Id)],
+        edits: &[Edit],
+    ) -> Result<String, ProjectError> {
+        let files: Vec<String> = deletes.iter().map(|(k, i)| item_file(*k, i)).collect();
+        let rewrites: Vec<(String, String)> = edits
+            .iter()
+            .map(|e| (item_file(Kind::Experiment, &e.id), e.yaml.clone()))
+            .collect();
+        let manifest = Manifest::new(label, &files, &rewrites);
         let bin = Bin::open(self.store().clone(), &manifest)?;
-        for (file, yaml) in &edits {
+        for (file, yaml) in &rewrites {
             bin.keep_copy(file)?;
             write(&**self.store(), file, yaml)?;
         }
-        for file in &deletes {
+        for file in &files {
             bin.take(file)?;
         }
-        self.reload()?;
-        Ok(Removal {
-            fallout,
-            trash: bin.name,
-        })
+        Ok(bin.name)
+    }
+
+    /// Carries out a planned delete as one change of a project with table kinds: rows in the
+    /// change, files written and noted. Answers the change's id.
+    fn delete_in_change(
+        &mut self,
+        label: &str,
+        deletes: &[(Kind, Id)],
+        edits: &[Edit],
+    ) -> Result<String, ProjectError> {
+        for e in edits {
+            self.store_item(label, Kind::Experiment, &e.id, &e.body, &e.yaml, None)?;
+        }
+        for (kind, id) in deletes {
+            self.drop_item(label, *kind, id)?;
+        }
+        let id = self
+            .change_id(label)
+            .expect("a project with table kinds has changes");
+        Ok(id.to_string())
     }
 
     /// What a delete of item `id` of `kind` takes and does, unless the delete is refused: the item
@@ -168,33 +207,40 @@ impl Project {
         scenarios.chain(self.list(Kind::Experiment))
     }
 
-    /// The experiments a delete rewrites, as their files and checked new YAML.
-    fn edits(
-        &self,
-        fallout: &[Dependent],
-        doomed: &Keys,
-    ) -> Result<Vec<(String, String)>, ProjectError> {
+    /// The experiments a delete rewrites, with their new bodies and checked YAML.
+    fn edits(&self, fallout: &[Dependent], doomed: &Keys) -> Result<Vec<Edit>, ProjectError> {
         let changed = fallout.iter().filter(|d| !d.deleted());
         changed
             .filter_map(|d| Some((&d.id, self.body::<ExperimentFile>(&d.id)?)))
             .map(|(id, e)| {
                 let body = ItemBody::Experiment(without(e, doomed));
                 let yaml = checked_yaml(Kind::Experiment, id, &body)?;
-                Ok((item_file(Kind::Experiment, id), yaml))
+                Ok(Edit {
+                    id: id.clone(),
+                    body,
+                    yaml,
+                })
             })
             .collect()
     }
 }
 
-/// The files a delete removes, leaves first: experiments, scenarios, then the item.
-fn deletions(kind: Kind, id: &Id, fallout: &[Dependent]) -> Vec<String> {
+/// An experiment a delete rewrites.
+struct Edit {
+    id: Id,
+    body: ItemBody,
+    yaml: String,
+}
+
+/// The items a delete removes, leaves first: experiments, scenarios, then the item.
+fn deletions(kind: Kind, id: &Id, fallout: &[Dependent]) -> Vec<(Kind, Id)> {
     let gone = |k: Kind| {
         let of_kind = fallout.iter().filter(move |d| d.kind == k && d.deleted());
-        of_kind.map(|d| item_file(d.kind, &d.id))
+        of_kind.map(|d| (d.kind, d.id.clone()))
     };
-    let mut files: Vec<String> = gone(Kind::Experiment).chain(gone(Kind::Scenario)).collect();
-    files.push(item_file(kind, id));
-    files
+    let mut items: Vec<(Kind, Id)> = gone(Kind::Experiment).chain(gone(Kind::Scenario)).collect();
+    items.push((kind, id.clone()));
+    items
 }
 
 /// Whether `expect` names the same items with the same fates as `fallout`, in any order.

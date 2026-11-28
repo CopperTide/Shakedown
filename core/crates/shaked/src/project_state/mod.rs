@@ -16,6 +16,7 @@ use crate::app::AppState;
 
 mod folder;
 mod home;
+mod tables;
 
 pub use home::{ProjectDb, ProjectHome};
 pub use shakedown_project::store::{check_path, parsed, Change, Files, MAX_PATH};
@@ -127,6 +128,9 @@ impl ProjectState {
     pub async fn current(&self) -> Result<Project, NoProject> {
         match self.home.as_ref().ok_or(NoProject::NotConfigured)? {
             ProjectHome::Folder(root) => self.folder_current(root),
+            ProjectHome::Db(db) if !db.table_kinds().is_none() => {
+                Ok(Project::open_snapshot(db.snapshot().await?)?)
+            }
             ProjectHome::Db(db) => {
                 let stamp = Stamp::Db(db.revision().await?);
                 if let Some(hit) = self.cache.hit(&stamp) {
@@ -170,6 +174,11 @@ impl ProjectState {
         &self,
         change: impl FnOnce(&mut Project) -> Result<T, ProjectError>,
     ) -> Result<Result<T, ProjectError>, NoProject> {
+        if let Some(ProjectHome::Db(db)) = &self.home {
+            if !db.table_kinds().is_none() {
+                return self.table_change(&**db, change).await;
+            }
+        }
         self.edit(|store| {
             let mut project = Project::open_in(store)?;
             Ok(change(&mut project))
@@ -183,6 +192,15 @@ impl ProjectState {
         name: &str,
         git: bool,
     ) -> Result<Result<Project, ProjectError>, NoProject> {
+        if let Some(ProjectHome::Db(db)) = &self.home {
+            if !db.table_kinds().is_none() {
+                if git {
+                    return Ok(Err(ProjectError::NoGitFolder));
+                }
+                db.initialize(name).await?;
+                return self.current().await.map(Ok);
+            }
+        }
         self.edit(|s| Ok(Project::init_in(s, name, git))).await
     }
 

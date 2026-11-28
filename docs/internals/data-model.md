@@ -22,7 +22,7 @@ migrations on top (`tests/no_orgs.rs` keeps the engine free of them).
 | `src/store/tx.rs` | `Tx`: `BEGIN` then the layer's `begin` hook. Dropped without commit, its connection closes. |
 | `src/store/runs.rs`, `events.rs`, `linked.rs`, `control.rs` | Runs and branches, the event log, worker events, rules and holds. |
 | `src/store/{suites,experiments,reviews,connections,provider_keys,api_tokens,run_tokens,saves}.rs` | The other tables, one file each. |
-| `src/store/project_items.rs`, `project_history.rs` | A project's state (shakedown 10): settings and items with a revision check per row; changes and import records. Nothing reads them yet. |
+| `src/store/project_items.rs`, `project_history.rs` | A project's state (shakedown 10): settings and items with a revision check per row; changes and import records. Typed homes apply changes atomically through `project_apply.rs`. |
 | `src/model.rs`, `src/model/` | `Event`, `EventKind`, `Branch`, `RunSummary`, `Team`, `AgentSpec`, `Change`, `Rules`, `Runner`, `BranchStatus`. `hold.rs`, `team.rs`, `agent_in.rs`, `payloads.rs`. |
 
 ## Migrations
@@ -178,8 +178,7 @@ What each table is for, and who writes it:
 
 ## Project state tables
 
-Migration 10 makes the tables a project's state moves into (plan `2026-11-27-project-state-in-databases`). In this
-release nothing reads them: projects still live in their folder, or in a hosting layer's files.
+Migration 10 makes the tables a project's state moves into (plan `2026-11-27-project-state-in-databases`). Typed project homes can now read and apply these rows. The default folder home remains unchanged.
 
 - `projects` holds `shakedown.yaml` in typed columns. The store reads and writes it as a `ProjectFile`.
 - `project_scenarios`, `project_setups` and `project_experiments` hold each item's `body`: the item exactly as its
