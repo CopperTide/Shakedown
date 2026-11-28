@@ -104,6 +104,17 @@ describe('ask drawer', () => {
     window.removeEventListener(PROJECT_CHANGED, heard);
   });
 
+  it('an_example_card_adds_the_example_on_apply_with_the_model_the_assistant_named', async () => {
+    const card = { kind: 'diff', tool: 'project_example', arguments: { model: 'some/model' }, diff: '{"proposed": true}' };
+    mockFetch({ reply: 'I can add the example.', cards: [card] });
+    await openAndAsk('Show me an example');
+    expect(await screen.findByText('Add the example')).toBeTruthy();
+    expect(calls.some((c) => c.url.endsWith('/api/project/example'))).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    await waitFor(() => expect(calls.some((c) => c.url.endsWith('/api/project/example'))).toBe(true));
+    expect(calls.find((c) => c.url.endsWith('/api/project/example'))?.body).toEqual({ model: 'some/model', confirm: true });
+  });
+
   it('a_settled_card_stays_settled_when_the_drawer_reopens', async () => {
     const card = { kind: 'confirm', tool: 'worlds_delete', arguments: { id: 'mill' }, access: 'delete' };
     mockFetch({ reply: 'Confirm to delete.', cards: [card] });

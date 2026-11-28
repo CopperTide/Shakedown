@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 // Home: your information first. Without a project it points to Get started; with one it shows the
-// week, what needs attention, and the project's contents.
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+// week, what needs attention, and the project's contents; with no worlds yet it offers the example.
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { forgetShared } from '@/hooks/query';
 import type { RunSummary } from '@/model/types';
@@ -16,15 +16,22 @@ function run(id: string, daysAgo: number, status: string): RunSummary {
   return { id, task_id: 't', created_at: at, branches: [{ id: `${id}b`, run_id: id, parent_id: null, start_seq: null, team: { agents: [] } as never, changes: null, fork_note: null, status: status as never, error: null, created_at: at, ended_at: null }] };
 }
 
+const ADDED = { written: [], summary: 's', shows: 'One agent works a real ticket.', experiment: 'order-desk-first-run', agent: { key: 'k', model: 'm' } };
+
 function mockFetch(project: unknown, runs: RunSummary[] = []) {
-  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+  const fetch = vi.fn(async (url: string, _init?: RequestInit) => {
+    if (String(url).endsWith('/api/project/example')) return new Response(JSON.stringify(ADDED));
     if (String(url).endsWith('/api/project')) {
       return project ? new Response(JSON.stringify(project)) : new Response(JSON.stringify({ error: 'no project is open' }), { status: 409 });
     }
     if (String(url).endsWith('/api/runs')) return new Response(JSON.stringify(runs));
     return new Response(JSON.stringify({ error: 'not found' }), { status: 404 });
-  }));
+  });
+  vi.stubGlobal('fetch', fetch);
+  return fetch;
 }
+
+const EMPTY = { name: 'New', counts: { worlds: 0, scenarios: 0, setups: 0, experiments: 0 }, problems: [] };
 
 beforeEach(() => forgetShared());
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
@@ -59,5 +66,22 @@ describe('home', () => {
     await waitFor(() => expect(screen.getByText('Larkspur Ops')).toBeTruthy());
     expect(screen.getByRole('link', { name: /Agent setups/ }).textContent).toContain('3');
     expect(screen.getByRole('link', { name: /Worlds/ }).getAttribute('href')).toBe('/worlds');
+    expect(screen.queryByText('Start from an example')).toBeNull();
+  });
+
+  it('home_without_worlds_offers_the_example_and_adds_nothing_until_clicked', async () => {
+    const fetch = mockFetch(EMPTY);
+    render(<MemoryRouter><HomePage /></MemoryRouter>);
+    await waitFor(() => expect(screen.getByText('Start from an example')).toBeTruthy());
+    expect(fetch.mock.calls.some(([url]) => String(url).endsWith('/api/project/example'))).toBe(false);
+  });
+
+  it('adding_the_example_confirms_and_opens_its_experiment', async () => {
+    const fetch = mockFetch(EMPTY);
+    render(<MemoryRouter><Routes><Route path="/" element={<HomePage />} /><Route path="/experiments/file/:id" element={<p>Experiment page</p>} /></Routes></MemoryRouter>);
+    fireEvent.click(await screen.findByRole('button', { name: /Add the example/ }));
+    await waitFor(() => expect(screen.getByText('Experiment page')).toBeTruthy());
+    const call = fetch.mock.calls.find(([url]) => String(url).endsWith('/api/project/example'));
+    expect(JSON.parse(String(call?.[1]?.body))).toEqual({ confirm: true });
   });
 });

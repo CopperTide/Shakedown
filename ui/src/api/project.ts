@@ -48,6 +48,24 @@ export const restoreDeleted = (trash?: string) =>
 export const renameGroup = (from: string, to: string | null) =>
   post<{ moved: string[] } | Proposed>('/api/project/world-groups/rename', { from, to, confirm: true });
 
+/** What adding the example wrote (or, unconfirmed, would write), and the experiment to deploy. */
+export interface ExampleAdded {
+  proposed?: true;
+  items?: { kind: string; id: string; label: string }[];
+  written?: { kind: string; id: string; label: string }[];
+  summary: string;
+  shows: string;
+  experiment: string;
+  agent: { key: string; model: string };
+}
+
+/**
+ * Adds the small example to the project (409 when any of its ids is taken); without `confirm`, only
+ * what it would write. Its agent runs on your newest working model key unless `choice` names one.
+ */
+export const addExample = (confirm: boolean, choice: { key?: string; model?: string } = {}) =>
+  post<ExampleAdded>('/api/project/example', { ...choice, confirm }).then(tracked('example added'));
+
 /** Deploys a file experiment: the engine experiment it started. */
 export const deployExperiment = (id: string) => post<Experiment>(path`/api/project/experiments/${id}/deploy`, {}).then(tracked('experiment deployed'));
 

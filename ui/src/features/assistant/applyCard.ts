@@ -2,7 +2,7 @@
 // what the card is called.
 import type { Card } from '@/api/assistant';
 import { post, path } from '@/api/client';
-import { createProject, deleteItem, importProject, putItem, renameGroup, restoreDeleted, updateSettings } from '@/api/project';
+import { addExample, createProject, deleteItem, importProject, putItem, renameGroup, restoreDeleted, updateSettings } from '@/api/project';
 import type { ItemKind, ProjectSettings } from '@/model/project';
 
 const KINDS: ItemKind[] = ['worlds', 'scenarios', 'setups', 'experiments'];
@@ -26,6 +26,7 @@ const BY_TOOL: Record<string, (args: Args) => Promise<unknown>> = {
   project_init: (a) => createProject(text(a.name), Boolean(a.git)),
   project_update: (a) => updateSettings(a.body as ProjectSettings, typeof a.revision === 'number' ? a.revision : undefined),
   project_import: () => importProject(true),
+  project_example: (a) => addExample(true, { key: a.key == null ? undefined : text(a.key), model: a.model == null ? undefined : text(a.model) }),
   project_restore: (a) => restoreDeleted(a.trash == null ? undefined : text(a.trash)),
 };
 
@@ -45,6 +46,7 @@ const TITLES: Record<string, string> = {
   worlds_rename_group: 'Rename world group',
   project_update: 'Change project settings',
   project_import: 'Move earlier work into the project',
+  project_example: 'Add the example',
   project_restore: 'Undo the last delete',
   project_init: 'Create the project',
   experiments_deploy: 'Deploy experiment',

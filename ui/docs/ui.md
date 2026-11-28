@@ -22,11 +22,19 @@ secondary metadata lines, few borders, plenty of whitespace.
   Settings → Models, `AddKeyForm` and `useModelKeys`, starting on OpenRouter). Each is ticked off from what shaked
   says exists (`steps.ts`); the page opens on the first step not done, moves on by itself when the step it
   shows gets done (`firstOpen`), and opens Shakedown (`/`) once both are. Worlds, agents and scenarios are made
-  in the app. There is no skipping: until setup is done, the gate (`gate.tsx`, around every page in `App.tsx`)
+  in the app; Home offers a ready example first. There is no skipping: until setup is done, the gate (`gate.tsx`, around every page in `App.tsx`)
   sends every page but Get started here. It reads `GET /api/project` and `/api/providers` again on each
   navigation while shut, never browser storage; a failed read opens it rather than lock you out. The header
   has the account menu, so a hosted user can still sign out. **Track with git** shows only where a
   project is a folder on disk (`folder` in the no-project answer); hosted projects live in a database.
+- **Home** (`/`, `features/home/`): the week in figures, what needs attention and the project's contents. While
+  the project has no worlds, **Start from an example** (`ExampleCard.tsx`) comes first: one sentence on what it
+  adds and **Add the example**, which calls `project.example` (`POST /api/project/example`, `confirm: true`) and
+  nothing before the click. It adds a tiny retail order desk on the built-in `retail` benchmark (a world, a
+  scenario, an agent setup on your newest working model key and a one-setup experiment), then opens that
+  experiment (`/experiments/file/order-desk-first-run`) with a toast saying what a run of it shows, so the next
+  click is **Deploy**. A refusal (409: an id is taken; 422: no model can be worked out) shows under the button.
+  The assistant can propose the same as a card (`project_example` in `features/assistant/applyCard.ts`).
 - **Experiments** (`/experiments`, `features/experiments/ExperimentsListPage.tsx`): every experiment file,
   sub-experiments under their parent; each row the name (with any problems), whether it ran
   (`features/experiments/runStatus.ts`, read from each experiment's deployments: ■ Has results, ◐ Running,

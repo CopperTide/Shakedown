@@ -25,6 +25,12 @@
 
 ### Added
 
+- **Start from an example.** `project.example` (`POST /api/project/example`, MCP `project_example`) adds one small,
+  real example to the project: a world on the built-in `retail` benchmark, a scenario (one customer ticket), an
+  agent setup on the caller's newest working model key and a one-setup experiment ready to deploy. It works in a
+  folder and in a hosted project, answers what it would write unless `confirm`, and is 409 when any of its ids is
+  taken (nothing is overwritten). The content is data in `core/crates/shaked/example/`. Home offers it while the
+  project has no worlds, then opens the experiment.
 - Typed experiment deployments use design-row identity, keeping equal slugs in different projects separate.
 - Hosted project menu and New project dialog when the layer advertises `projects`. Editors send
   loaded item/settings revisions so stale writes are refused with a reload message.

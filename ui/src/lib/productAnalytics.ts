@@ -11,6 +11,7 @@ import { productAnalytics, routeTemplater, type Org, type Person, type PostHogSe
 /** The core flow's steps, by name only: never what they are called or what they hold. */
 export type ProductEvent =
   | 'project created'
+  | 'example added'
   | `${'world' | 'scenario' | 'setup' | 'experiment'} created`
   | 'experiment run started'
   | 'experiment deployed'

@@ -76,9 +76,11 @@ cd ui && npm install && npm run dev               # UI on http://127.0.0.1:4520,
 ```
 
 Open <http://127.0.0.1:4520>: it opens on **Get started**, and the rest of the app opens once its steps are done.
-It creates the project, connects a model, and walks you through a world (runtime `retail`), an agent setup and a
-scenario. Then
-**Experiments → New experiment** and **Deploy**. Click any run to read its timeline. A run's **⋯** menu rewinds
+It creates the project and connects a model. Home then offers **Start from an example**: one click adds a tiny
+retail order desk (a world on the built-in `retail` runtime, one customer ticket, one agent on your model and an
+experiment) and opens the experiment, so **Deploy** starts your first run; it takes about a minute. Edit or delete
+the example afterwards, or build your own under **Worlds**, **Agent setups** and **Experiments → New experiment**.
+Click any run to read its timeline. A run's **⋯** menu rewinds
 it to a step and reruns it with a change. The [user guide's quickstart](https://docs.coppertide.ai/quickstart)
 has every step.
 
