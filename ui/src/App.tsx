@@ -33,7 +33,6 @@ const ConnectPage = lazy(() => import('@/features/connect/ConnectPage'));
 const BuildPage = lazy(() => import('@/features/build/BuildPage'));
 const Run = lazy(() => import('@/features/run/RunPage'));
 const Runs = lazy(() => import('@/features/runs/RunsPage'));
-const AnalyticsPage = lazy(() => import('@/features/analytics/AnalyticsPage'));
 const Team = lazy(() => import('@/features/team/TeamPage'));
 const World = lazy(() => import('@/features/world/WorldPage'));
 const SettingsModels = lazy(() => import('@/features/settings/ModelsPage'));
@@ -54,12 +53,13 @@ function Moved({ to }: { to: (p: Record<string, string | undefined>) => string }
   return <Navigate to={to(useParams())} replace />;
 }
 
-/** Old addresses (history, suites), sent on to their new ones. */
+/** Old addresses (history, suites, analytics), sent on to their new ones. */
 const MOVED = [
   <Route key="history" path="/history" element={<Navigate to="/runs" replace />} />,
   <Route key="suites" path="/suites" element={<Navigate to="/" replace />} />,
   <Route key="suites-compare" path="/suites/compare/:a/:b" element={<Moved to={(p) => `/experiments/compare?ids=${p.a},${p.b}`} />} />,
   <Route key="suite" path="/suites/:id" element={<Moved to={(p) => `/experiments/${p.id}`} />} />,
+  <Route key="analytics" path="/analytics" element={<Navigate to="/experiments" replace />} />,
 ];
 
 function AppRoutes() {
@@ -83,7 +83,6 @@ function AppRoutes() {
         <Route path="/experiments/:id" element={<ExperimentPage />} />
         <Route path="/run" element={<Home />} />
         <Route path="/runs" element={<Runs />} />
-        <Route path="/analytics" element={<AnalyticsPage />} />
         <Route path="/runs/:runId/:branchId" element={<Run />} />
         <Route path="/team" element={<Team />} />
         <Route path="/connect" element={<ConnectPage />} />

@@ -5,7 +5,7 @@ const compact = (n: number) => new Intl.NumberFormat(undefined, { notation: 'com
 
 /**
  * Context size over the agent's model calls: one bar per call, its input tokens, the cached part
- * shaded. Plain SVG like the Analytics usage chart; the labels sit outside it so a stretched plot
+ * shaded. Plain SVG; the labels sit outside it so a stretched plot
  * keeps them crisp. A click picks that call's step.
  */
 export default memo(function ContextChart({ calls, selected, onSelect }: { calls: CallRow[]; selected: number | null; onSelect: (seq: number) => void }) {

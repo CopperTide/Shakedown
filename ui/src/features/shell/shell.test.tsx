@@ -65,4 +65,11 @@ describe('shell', () => {
     render(<MemoryRouter initialEntries={['/experiments/abc']}><App /></MemoryRouter>);
     await waitFor(() => expect(fetched.some((u) => u.endsWith('/api/experiments/abc'))).toBe(true));
   });
+
+  it('analytics_opens_experiments', async () => {
+    const counts = { worlds: 1, scenarios: 1, setups: 1, experiments: 0 };
+    mockFetch({ '/api/project': { name: 'P', counts, problems: [] }, '/api/providers': [{ id: 'anthropic', available: true }] });
+    render(<MemoryRouter initialEntries={['/analytics']}><App /></MemoryRouter>);
+    await waitFor(() => expect(screen.getByRole('heading', { level: 1, name: 'Experiments' })).toBeTruthy());
+  });
 });

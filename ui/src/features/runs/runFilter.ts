@@ -1,5 +1,5 @@
-// The runs list narrowed by its address (`/runs?setup=…&scenario=…&model=…&from=…&to=…`), as an
-// Analytics drill-down opens it. A run matches on its first branch: its setup's name, a model one
+// The runs list narrowed by its address (`/runs?setup=…&scenario=…&model=…&from=…&to=…`), as a
+// link (or the assistant) opens it. A run matches on its first branch: its setup's name, a model one
 // of its agents uses, its scenario (task) and when it was made. Pure functions only.
 import type { RunSummary } from '@/model/types';
 

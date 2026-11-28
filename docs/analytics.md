@@ -1,18 +1,22 @@
 # Analytics
 
-The Analytics page (sidebar, under Experiments) shows how your agent setups do across every run you can see:
-how often they pass, what they cost and how long they take. The same figures are `GET /api/analytics/summary`
-and the `analytics.summary` operation, so the assistant and any agent over MCP can read them too
-([reference.md](reference.md)). Its **Search** tab finds any step of any run by its words
-([Search](#search)), and its **Explore** tab answers your own questions: measures by dimensions, or read-only SQL
-([Explore](#explore)).
+**Analytics is API- and MCP-only.** The web app has no Analytics page: its Overview, Search and Explore tabs
+were taken out of the UI to keep the app simple (`/analytics` now opens Experiments). Everything below still
+works through the API and the operations, so the assistant and any agent over MCP can use it
+([reference.md](reference.md)):
+
+- the figures across runs: how often your agent setups pass, what they cost and how long they take
+  (`GET /api/analytics/summary`, operation `analytics.summary`);
+- [Search](#search): any step of any run by its words (`GET /api/analytics/search`, operation `analytics.search`);
+- [Explore](#explore): your own questions, as measures by dimensions or read-only SQL (`explore.*`).
+
+Where a section below mentions the page, its tabs, charts, clicks or its address, it describes the removed page.
+That is kept as the design for when a UI comes back; the page's code is in git history (`ui/src/features/analytics/`).
 
 What was checked: the aggregates on fixture runs (pass rate, cost per passed run, the leaderboard, every filter,
 figures worked out again when a run ends again) and the operation over HTTP
-(`core/crates/shaked/tests/analytics.rs`); the page's filters in the address, its empty states and its drill-down
-links (`ui/src/features/analytics/*.test.*`). Search: what a step is found by, the snippet, every filter, pages, the
-planner using the index and the operation over HTTP (`core/crates/shaked/tests/search.rs`); the address, the API
-query, snippets, grouping by run and the links to steps (`ui/src/features/analytics/search/*.test.*`).
+(`core/crates/shaked/tests/analytics.rs`). Search: what a step is found by, the snippet, every filter, pages, the
+planner using the index and the operation over HTTP (`core/crates/shaked/tests/search.rs`).
 
 ## What counts
 
@@ -73,10 +77,9 @@ aggregates those small rows in SQL, in the caller's own transaction, so it count
 
 ## Search
 
-Analytics › **Search** (or type in the ⌘K palette and pick *Search every run's steps for …*) finds any step of
-any run you can see by its words, newest first, grouped by run. Click a step to open its run page at that step
-(`/runs/<run>/<branch>?step=N`). The same search is `GET /api/analytics/search` and the `analytics.search`
-operation, so the assistant and any agent over MCP can search too.
+`GET /api/analytics/search` (operation `analytics.search`) finds any step of any run you can see by its words,
+newest first. Each hit names its run, branch and step, so a link to `/runs/<run>/<branch>?step=N` opens the run
+page at that step. The assistant and any agent over MCP can search too.
 
 | Kind of step | Found by |
 |---|---|
@@ -104,7 +107,7 @@ finds only the runs the caller may see.
 
 ## Explore
 
-Analytics › **Explore** answers the questions the overview doesn't: *what does each agent cost*, *which tools get
+**Explore** (the `explore.*` operations) answers the questions the summary doesn't: *what does each agent cost*, *which tools get
 refused*, *how many tokens does each model use per day*. It has three modes, all kept in the address so a link
 reopens the same view: **Builder**, **SQL** and **Saved**.
 
@@ -210,8 +213,7 @@ What was checked: per-call usage, cost at list price and think time (`analytics/
 and the guard (`analytics/explore/*_tests.rs`, `docs.rs`: every example passes the guard); measures by run and
 step dimensions, drill-through to runs and steps, SQL over the views, the read-only transaction, the timeout and
 the role behind the guard, saved views, and usage deleted with its run, all through the operations over HTTP
-(`core/crates/shaked/tests/explore.rs`); the Explore tab's address, CSV, chart data and drill dialog
-(`ui/src/features/analytics/explore/*.test.*`).
+(`core/crates/shaked/tests/explore.rs`).
 
 ## Additional charts (Slice 2)
 

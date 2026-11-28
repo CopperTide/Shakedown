@@ -137,6 +137,13 @@
 - A layer interface for embedding shaked (`docs/embedding.md`). Every way a run starts (a run, a
   suite, an experiment, a suite's claim) is admitted and metered through it.
 
+### Changed
+
+- **A simpler web app.** The Analytics page (Overview, Search, Explore) is gone from the UI, with its sidebar item
+  and the ⌘K palette's *Analytics* and *Search every run's steps*; `/analytics` opens Experiments. The figures,
+  step search and Explore stay as the `analytics.*` and `explore.*` operations and their API, for the assistant
+  and MCP ([docs/analytics.md](docs/analytics.md)).
+
 ### Fixed
 
 - **An HTTP agent that answers without its own figures is costed from its gateway calls.** Its tokens and cost

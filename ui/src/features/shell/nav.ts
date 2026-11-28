@@ -18,7 +18,6 @@ export const NAV: NavGroup[] = [
     items: [
       { to: '/', label: 'Home', icon: 'home', match: /^\/$/ },
       { to: '/experiments', label: 'Experiments', icon: 'flask', match: /^\/(experiments|runs?|compare|control|world)(\/|$)/ },
-      { to: '/analytics', label: 'Analytics', icon: 'chart' },
     ],
   },
   {

@@ -1,8 +1,7 @@
-import { ArrowRight, Factory, GitCompare, Layers, ListTree, Monitor, Play, Search } from 'lucide-react';
+import { ArrowRight, Factory, GitCompare, Layers, ListTree, Monitor, Play } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { experiments as fetchExperiments } from '@/api/experiments';
-import { searchHref } from '@/features/analytics/search/searchModel';
 import { runs as fetchRuns } from '@/api/runs';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
@@ -61,18 +60,6 @@ function Footer({ nested }: { nested: boolean }) {
   );
 }
 
-/** Whatever is typed, an item that searches every run's steps for it (Analytics › Search). */
-function SearchSteps({ query, onGo }: { query: string; onGo: (href: string) => void }) {
-  if (!query) return null;
-  return (
-    <CommandGroup heading="Search" forceMount>
-      <CommandItem forceMount value={`search-steps ${query}`} onSelect={() => onGo(searchHref(query))}>
-        <Search aria-hidden="true" /><span className="min-w-0 flex-1 truncate">Search every run's steps for “{query}”</span>
-      </CommandItem>
-    </CommandGroup>
-  );
-}
-
 /** The mode (opened for one thing, such as the ⋯ menu's "Compare two runs…", it starts there) and what it lists. */
 function useItems(open: boolean, start?: Mode) {
   const [mode, setMode] = useState<Mode>({ kind: 'root' });
@@ -103,7 +90,6 @@ export default function CommandPalette({ open, onOpenChange, start }: { open: bo
         <Command loop onKeyDown={back}>
           <CommandInput value={query} onValueChange={setQuery} placeholder={placeholderOf(mode)} />
           <CommandList>
-            {mode.kind === 'root' && <SearchSteps query={query.trim()} onGo={(go) => run({ go })} />}
             <CommandEmpty>{lists.error ? `Couldn't load runs and experiments: ${lists.error}` : 'Nothing matches. Try a task name, an id or a status.'}</CommandEmpty>
             {groupsOf(items).map(([group, list]) => (
               <CommandGroup key={group} heading={group}>
