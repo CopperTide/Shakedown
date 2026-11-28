@@ -1,12 +1,17 @@
-// An editor page's frame: the title and its actions, a section list, the section, and the save bar.
+// An editor page's frame: the title (what the item is shows on hovering it) and its actions, a
+// section list, the section, and the save bar.
 import type { ReactNode } from 'react';
+import { Hint } from '@/components/ui/hint';
 import { PageBody, PageHeader } from '@/components/ui/page';
 import { SaveBar } from '@/components/ui/save-bar';
 import { SubNav, type SubNavItem } from '@/components/ui/subnav';
 import type { SaveError } from './useItemEditor';
 
-export default function EditorFrame({ title, meta, actions, nav, sections, active, onSelect, dirty, onSave, onDiscard, saving, error, children }: {
+export default function EditorFrame({ title, hint, meta, actions, nav, sections, active, onSelect, dirty, onSave, onDiscard, saving, error, children }: {
   title: string;
+  /** What kind of item this is, on hovering the title. */
+  hint?: ReactNode;
+  /** A short data line under the title. */
   meta?: ReactNode;
   actions?: ReactNode;
   /** Under the title: the tabs of the area the editor belongs to (Settings). */
@@ -23,7 +28,7 @@ export default function EditorFrame({ title, meta, actions, nav, sections, activ
 }) {
   return (
     <>
-      <PageHeader title={title} meta={meta} actions={actions} width="wide">{nav}</PageHeader>
+      <PageHeader title={<Hint hint={hint}>{title}</Hint>} meta={meta} actions={actions} width="wide">{nav}</PageHeader>
       <PageBody width="wide">
         {error && <p role="alert" className="rounded-md border border-alarm bg-alarm-soft px-3 py-2 text-sm text-alarm">{error.message}</p>}
         <div className="grid gap-8 md:grid-cols-[200px_minmax(0,1fr)]">
