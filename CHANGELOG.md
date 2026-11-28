@@ -25,6 +25,10 @@
 
 ### Added
 
+- Typed experiment deployments use design-row identity, keeping equal slugs in different projects separate.
+- Hosted project menu and New project dialog when the layer advertises `projects`. Editors send
+  loaded item/settings revisions so stale writes are refused with a reload message.
+
 - Per-kind project storage through `Snapshot` and `ChangeSet`, with transactional row revision
   checks and history for typed homes. Default file homes remain unchanged. Project export/import
   operations use a base64 file map; project and item history operations expose recent changes.

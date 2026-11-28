@@ -24,7 +24,7 @@ const BY_TOOL: Record<string, (args: Args) => Promise<unknown>> = {
   experiments_deploy: (a) => post(path`/api/project/experiments/${text(a.id)}/deploy`, {}),
   worlds_rename_group: (a) => renameGroup(text(a.from), text(a.to).trim() ? text(a.to) : null),
   project_init: (a) => createProject(text(a.name), Boolean(a.git)),
-  project_update: (a) => updateSettings(a.body as ProjectSettings),
+  project_update: (a) => updateSettings(a.body as ProjectSettings, typeof a.revision === 'number' ? a.revision : undefined),
   project_import: () => importProject(true),
   project_restore: (a) => restoreDeleted(a.trash == null ? undefined : text(a.trash)),
 };
@@ -34,7 +34,7 @@ export async function applyCard(card: Card): Promise<unknown> {
   const [area, verb] = split(card.tool);
   const kind = asKind(area);
   const args = card.arguments as Args;
-  if (card.kind === 'diff' && kind && verb === 'put') return putItem(kind, text(args.id), args.body, true);
+  if (card.kind === 'diff' && kind && verb === 'put') return putItem(kind, text(args.id), args.body, true, typeof args.revision === 'number' ? args.revision : undefined);
   if (kind && verb === 'delete') return deleteItem(kind, text(args.id));
   const run = BY_TOOL[card.tool];
   if (run) return run(args);

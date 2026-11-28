@@ -670,3 +670,10 @@ reject an edit based on an older item (409); independent items can be saved conc
 
 The existing operation registry classifies history as edit access and export as spend access.
 Project history and export perform no writes and invoke no models, but retain those access classes.
+
+### Hosted project selection
+
+Layers advertising the `projects` feature provide `GET /api/projects` (`projects: [{id,name}]`,
+`current: id | null`), `POST /api/projects` (`{name}`; returns `{id}` and selects it), and
+`POST /api/projects/{id}/select` (returns `{id}`). Selection is remembered per user. These routes
+are provided by the hosted layer, not by a local shaked. The UI reloads after successful selection.

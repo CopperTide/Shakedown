@@ -32,6 +32,7 @@ mod obs_metrics;
 mod observability;
 mod open;
 mod project_apply;
+mod project_deployments;
 mod project_history;
 mod project_items;
 mod provider_keys;

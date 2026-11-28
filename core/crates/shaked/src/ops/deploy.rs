@@ -107,6 +107,7 @@ pub(crate) fn request(
         seed: None,
         world_minutes: None,
         project_experiment: Some(id.to_string()),
+        project_experiment_id: project.row_id(Kind::Experiment, id),
     })
 }
 

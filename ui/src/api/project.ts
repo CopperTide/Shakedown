@@ -16,11 +16,11 @@ export const getItem = <B = Record<string, unknown>>(kind: ItemKind, id: string)
   get<Item<B>>(path`/api/project/${kind}/${id}`);
 
 /** Writes an item. With `confirm` false the answer may be a proposal (a diff) and nothing is written. */
-export const putItem = <B>(kind: ItemKind, id: string, body: B, confirm = true) =>
+export const putItem = <B>(kind: ItemKind, id: string, body: B, confirm = true, revision?: number) =>
   request<Item<B> | Proposed>(path`/api/project/${kind}/${id}`, {
     method: 'PUT',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ body, confirm }),
+    body: JSON.stringify({ body, confirm, ...(revision === undefined ? {} : { revision }) }),
   });
 
 /**
@@ -55,8 +55,8 @@ export const deployExperiment = (id: string) => post<Experiment>(path`/api/proje
 export const experimentRuns = (id: string) => get<{ deployments: Experiment[] }>(path`/api/project/experiments/${id}/runs`);
 
 /** Writes the project's settings (confirmed: the person saving is the confirmation). */
-export const updateSettings = (body: ProjectSettings) =>
-  request<ProjectStatus | Proposed>('/api/project', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ body, confirm: true }) });
+export const updateSettings = (body: ProjectSettings, revision?: number) =>
+  request<ProjectStatus | Proposed>('/api/project', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ body, confirm: true, ...(revision === undefined ? {} : { revision }) }) });
 
 export interface MadlGraph {
   agents: { id: string; label: string; runtime?: string | null }[];

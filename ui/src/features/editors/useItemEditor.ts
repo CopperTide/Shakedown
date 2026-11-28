@@ -30,7 +30,7 @@ export function useItemEditor<B>(kind: ItemKind, id: string) {
     if (draft == null) return;
     setSaving(true);
     try {
-      const saved = await putItem<B>(kind, id, draft, true);
+      const saved = await putItem<B>(kind, id, draft, true, item?.revision);
       if ('body' in saved) { setItem(saved); setDraft(saved.body); projectChanged(); }
       setError(null);
     } catch (e) {
@@ -39,7 +39,7 @@ export function useItemEditor<B>(kind: ItemKind, id: string) {
     } finally {
       setSaving(false);
     }
-  }, [kind, id, draft]);
+  }, [kind, id, draft, item?.revision]);
   const discard = useCallback(() => { setDraft(item?.body ?? null); setError(null); }, [item]);
   const dirty = item != null && JSON.stringify(draft) !== JSON.stringify(item.body);
   const problems: Problem[] = item?.problems ?? [];

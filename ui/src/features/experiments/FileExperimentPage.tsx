@@ -66,7 +66,7 @@ export default function FileExperimentPage() {
           <TabsList><TabsTrigger value="overview">Overview</TabsTrigger><TabsTrigger value="runs">Runs</TabsTrigger><TabsTrigger value="settings">Settings</TabsTrigger></TabsList>
           <TabsContent value="overview"><FileOverview body={item.body} labels={labels} problems={item.problems} /></TabsContent>
           <TabsContent value="runs"><Deployments id={id} version={version} /></TabsContent>
-          <TabsContent value="settings"><ExperimentSettings id={id} body={item.body} onSaved={q.reload} /></TabsContent>
+          <TabsContent value="settings"><ExperimentSettings id={id} body={item.body} revision={item.revision} onSaved={q.reload} /></TabsContent>
         </Tabs>
       </PageBody>
     </>

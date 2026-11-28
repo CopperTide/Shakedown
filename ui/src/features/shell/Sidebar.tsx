@@ -2,6 +2,8 @@
 import { Link, useLocation } from 'react-router-dom';
 import { Mark } from '@/components/brand/Mark';
 import { useProject } from '@/hooks/useProject';
+import { useMe } from '@/app/AccountMenu';
+import { ProjectSwitcher } from './ProjectSwitcher';
 import { cn } from '@/lib/cn';
 import { NavIcon } from './icons';
 import { FOOTER, NAV, type NavItem, isActive } from './nav';
@@ -25,7 +27,9 @@ function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
 
 function ProjectName() {
   const { data } = useProject();
+  const me = useMe();
   const name = data?.open ? data.status.name : 'No project open';
+  if (me?.features.includes('projects')) return <ProjectSwitcher name={name} />;
   return (
     <div className="mx-0.5 mb-3 flex items-center gap-2 rounded-lg border border-line bg-surface px-2.5 py-2">
       <span className="grid size-6 place-items-center rounded-md bg-sunken font-mono text-2xs font-medium text-muted">{name.slice(0, 1).toUpperCase()}</span>

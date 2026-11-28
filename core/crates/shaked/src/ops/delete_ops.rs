@@ -144,7 +144,14 @@ async fn unlink_runs(ctx: &OpCtx<'_>, kind: Kind, id: &Id, removal: &Removal) ->
         .filter(|d| d.kind == Kind::Experiment && d.deleted());
     let itself = (kind == Kind::Experiment).then_some(id);
     let experiments: Vec<&Id> = itself.into_iter().chain(gone.map(|d| &d.id)).collect();
-    let unlinked = match unlink(&app.store.at(&ctx.caller), &experiments).await {
+    let unlinked = match unlink_project(
+        ctx,
+        &app.store.at(&ctx.caller),
+        &experiments,
+        &removal.trash,
+    )
+    .await
+    {
         Ok(unlinked) => unlinked,
         Err(e) => {
             eprintln!("shaked: unlinking the runs of deleted experiments: {e:#}");
@@ -170,6 +177,35 @@ async fn unlink(
         let deployed = records.deployments_of(experiment.as_str()).await?;
         records.unlink_deployments(experiment.as_str()).await?;
         unlinked.insert(experiment.to_string(), deployed);
+    }
+    Ok(unlinked)
+}
+
+async fn unlink_project(
+    ctx: &OpCtx<'_>,
+    records: &Scoped<'_>,
+    experiments: &[&Id],
+    trash: &str,
+) -> anyhow::Result<BTreeMap<String, Vec<String>>> {
+    if ctx.project.current().await?.tables().is_none() {
+        return unlink(records, experiments).await;
+    }
+    let history = ctx.project.history(100).await?;
+    let change = history
+        .iter()
+        .find(|c| c.id.to_string() == trash)
+        .ok_or_else(|| anyhow::anyhow!("delete history missing"))?;
+    let mut unlinked = BTreeMap::new();
+    for item in &change.items {
+        if item.kind != shakedown_project::history::ChangeKind::Experiment || item.after.is_some() {
+            continue;
+        }
+        let Some(row) = item.item_id else {
+            continue;
+        };
+        let deployed = records.deployments_of_row(Some(row)).await?;
+        records.unlink_deployments_of_row(row).await?;
+        unlinked.insert(item.name.clone(), deployed);
     }
     Ok(unlinked)
 }

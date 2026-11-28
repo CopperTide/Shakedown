@@ -321,7 +321,12 @@ Logic lives in pure modules with tests, and components only render. For example:
 
 ## Typed project homes
 
-The item API can return a `revision` for an item kept in tables. Editors can send that revision
+The item API can return a `revision` for an item kept in tables. Editors send that revision
 with a put; a stale edit is a 409. Folder projects keep their existing response shape. Project
 history and base64 file export/import are available through operations; this model change does
 not add a history drawer or import/export panel.
+
+When `/api/me.features` includes `projects`, the sidebar name is a Radix dropdown of the caller's
+projects with a New project dialog. The layer remembers selection per user. Switching or creating
+reloads the experiment list under the build's base path, clearing all editors and query caches.
+A refused request stays on the current project and shows its error. Local UI keeps the plain name.

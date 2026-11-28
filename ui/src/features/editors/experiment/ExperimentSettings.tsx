@@ -10,13 +10,13 @@ import { capProblem } from './budget';
 import { loadChoices } from './choices';
 import ExperimentFields from './ExperimentFields';
 
-export default function ExperimentSettings({ id, body, onSaved }: { id: string; body: ExperimentBody; onSaved: () => void }) {
+export default function ExperimentSettings({ id, body, revision, onSaved }: { id: string; body: ExperimentBody; revision?: number; onSaved: () => void }) {
   const choices = useQuery('experiment-choices', loadChoices);
   const [draft, setDraft] = useState(body);
   const [error, setError] = useState<string | null>(null);
   const dirty = JSON.stringify(draft) !== JSON.stringify(body);
   const save = async () => {
-    try { await putItem('experiments', id, draft, true); setError(null); onSaved(); } catch (e) { setError(errorMessage(e)); }
+    try { await putItem('experiments', id, draft, true, revision); setError(null); onSaved(); } catch (e) { setError(errorMessage(e)); }
   };
   if (choices.error) return <ErrorState error={choices.error} onRetry={choices.reload} />;
   if (!choices.data) return null;

@@ -21,7 +21,7 @@ function Permissions({ f, set }: { f: SettingsForm; set: (p: Partial<SettingsFor
   return (
     <Card>
       <div className="px-[18px]">
-        <FormRow label="Edit project files" help="Worlds, scenarios, setups, experiments. Every edit is a normal file change you can undo.">
+        <FormRow label="Edit project files" help="Worlds, scenarios, setups, experiments. Changes stay with the current project.">
           <Segmented label="Edits" value={f.edit} onChange={(v) => set({ edit: v })} options={[{ id: 'diff_first', label: 'Show a diff first' }, { id: 'apply_then_tell', label: 'Apply, then tell me' }]} />
         </FormRow>
         <FormRow label="Start runs or spend money" help="Deploys, forks, dry runs, acceptance tests.">
@@ -44,7 +44,7 @@ function Section({ id, f, set }: { id: string; f: SettingsForm; set: (p: Partial
         <FormRow label="Model" help="Empty: the default provider's default model."><Input aria-label="Model" value={f.model} onChange={(e) => set({ model: e.target.value })} placeholder="claude-sonnet" /></FormRow>
         <FormRow label="Provider" help="anthropic, openai, openrouter or local:<name>."><Input aria-label="Provider" value={f.provider} onChange={(e) => set({ provider: e.target.value })} /></FormRow>
       </div></Card></>);
-  return <><SectionHead title="Project" about="The project is a folder of files. Personal use; nothing is shared unless you push it." />
+  return <><SectionHead title="Project" about="Choose the name shown for this project." />
     <Card><div className="px-[18px]"><FormRow label="Name" help="Shown in the sidebar and on reports."><Input aria-label="Project name" value={f.name} onChange={(e) => set({ name: e.target.value })} /></FormRow></div></Card></>;
 }
 
@@ -56,7 +56,7 @@ export default function ProjectSettingsPage() {
   const [error, setError] = useState<string | null>(null);
   useEffect(() => { if (settings) setF(formFrom(settings)); }, [settings]);
   if (!settings || !f) return <LoadingState label="Loading the project's settings" />;
-  const save = async () => { try { await updateSettings(settingsFrom(settings, f)); setError(null); project.reload(); } catch (e) { setError(errorMessage(e)); } };
+  const save = async () => { try { await updateSettings(settingsFrom(settings, f), project.data?.open ? project.data.status.revision : undefined); setError(null); project.reload(); } catch (e) { setError(errorMessage(e)); } };
   return (
     <EditorFrame title="Project settings" sections={SECTIONS} active={active} onSelect={setActive} dirty={JSON.stringify(f) !== JSON.stringify(formFrom(settings))}
       onSave={() => { void save(); }} onDiscard={() => setF(formFrom(settings))} saving={false} error={error ? { message: error } : null}>

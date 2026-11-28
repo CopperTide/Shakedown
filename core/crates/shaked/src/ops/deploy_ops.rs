@@ -44,6 +44,12 @@ fn deploy_one<'a>(ctx: &'a OpCtx<'a>, _: &'static Operation, value: Value) -> Op
         let id = Id::parse(&input::<IdInput>(value)?.id)?;
         let app = ctx.app("deploying")?;
         let project = ctx.project.current().await?;
+        if !project.tables().is_none() && !project.tables().experiments {
+            return Err(OpError::new(
+                axum::http::StatusCode::CONFLICT,
+                "enable typed experiment storage before deploying",
+            ));
+        }
         register_imports(app, &project).await;
         let (package, task) = deploy::runtime_of(&project, &id)?;
         let clock_start = task_clock_start(app, &package, &task).await;
@@ -108,12 +114,19 @@ fn deployments<'a>(ctx: &'a OpCtx<'a>, _: &'static Operation, value: Value) -> O
         let id = Id::parse(&input::<IdInput>(value)?.id)?;
         let app = ctx.app("listing deployments")?;
         let records = app.store.at(&ctx.caller);
+        let project = ctx.project.current().await?;
+        let ids = if project.tables().is_none() {
+            records.deployments_of(id.as_str()).await
+        } else {
+            records
+                .deployments_of_row(
+                    project.row_id(shakedown_project::format::Kind::Experiment, &id),
+                )
+                .await
+        }
+        .map_err(OpError::internal)?;
         let mut out = Vec::new();
-        for exp in records
-            .deployments_of(id.as_str())
-            .await
-            .map_err(OpError::internal)?
-        {
+        for exp in ids {
             if let Some(stored) = records.experiment(&exp).await.map_err(OpError::internal)? {
                 let detail = crate::experiment::detail(app.store.at(&ctx.caller), &stored)
                     .await

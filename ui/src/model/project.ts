@@ -11,6 +11,7 @@ export interface Problem {
 }
 
 export interface ProjectStatus {
+  revision?: number;
   name: string;
   counts: Record<ItemKind, number>;
   problems: Problem[];
@@ -73,6 +74,7 @@ export interface Deleted {
 
 /** An item with its file's contents. */
 export interface Item<B = Record<string, unknown>> extends ItemSummary {
+  revision?: number;
   body: B;
   diff?: string;
 }

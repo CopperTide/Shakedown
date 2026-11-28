@@ -84,6 +84,8 @@ pub(crate) struct NewExperimentReq {
     /// request body).
     #[serde(skip)]
     pub(crate) project_experiment: Option<String>,
+    #[serde(skip)]
+    pub(crate) project_experiment_id: Option<uuid::Uuid>,
 }
 
 /// 400 unless shaked can run the setup itself: a built-in runner and a team it can run. The
@@ -219,11 +221,7 @@ async fn store_experiment(
     let bench = super::benchmark_asked(state, req.benchmark.as_deref())?;
     super::suites::suite_tasks(state, &bench, vec![req.task.clone()]).await?;
     let scenario = super::twin::scenario_of(state, &bench, req.scenario.as_ref()).await?;
-    for (name, setup) in names.iter().zip(&req.setups) {
-        if let Some(why) = crate::scenario::refusal(setup.runner, &scenario) {
-            return Err(ApiError::bad(format!("{name}: {why}")));
-        }
-    }
+    check_scenario(names, &req.setups, &scenario)?;
     check_disk(state).await?;
     let setups = new_setups(names, &req.setups);
     let new = NewExperiment {
@@ -238,7 +236,24 @@ async fn store_experiment(
         world_minutes,
         project_experiment: req.project_experiment.as_deref(),
     };
-    Ok(state.store.at(caller).create_experiment(new).await?)
+    Ok(state
+        .store
+        .at(caller)
+        .create_project_experiment(new, req.project_experiment_id)
+        .await?)
+}
+
+fn check_scenario(
+    names: &[String],
+    setups: &[SetupReq],
+    scenario: &crate::scenario::Scenario,
+) -> Result<(), ApiError> {
+    for (name, setup) in names.iter().zip(setups) {
+        if let Some(why) = crate::scenario::refusal(setup.runner, scenario) {
+            return Err(ApiError::bad(format!("{name}: {why}")));
+        }
+    }
+    Ok(())
 }
 
 /// `GET /api/experiments`: every experiment and suite made on its own, newest first.

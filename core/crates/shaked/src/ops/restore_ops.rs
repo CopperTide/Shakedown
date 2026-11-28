@@ -99,7 +99,7 @@ async fn relink(ctx: &OpCtx<'_>, note: Option<String>) -> bool {
     let records = app.store.at(&ctx.caller);
     for (experiment, deployed) in &unlinked {
         for id in deployed {
-            if let Err(e) = records.link_deployment(id, experiment).await {
+            if let Err(e) = link_restored(ctx, &records, id, experiment).await {
                 eprintln!("shaked: relinking the runs of a restored experiment: {e:#}");
                 return false;
             }
@@ -170,4 +170,21 @@ fn runs_note(change: &crate::store::ChangeRow) -> Option<String> {
         .find(|i| i.is_note() && i.name.ends_with(RUNS_NOTE))
         .and_then(|i| i.after_bytes.as_ref())
         .and_then(|b| String::from_utf8(b.clone()).ok())
+}
+
+async fn link_restored(
+    ctx: &OpCtx<'_>,
+    records: &crate::store::Scoped<'_>,
+    id: &str,
+    slug: &str,
+) -> anyhow::Result<bool> {
+    let project = ctx.project.current().await?;
+    if project.tables().is_none() {
+        return records.link_deployment(id, slug).await;
+    }
+    let slug_id = shakedown_project::Id::parse(slug)?;
+    match project.row_id(shakedown_project::format::Kind::Experiment, &slug_id) {
+        Some(row) => records.link_deployment_to_row(id, slug, row).await,
+        None => Ok(false),
+    }
 }

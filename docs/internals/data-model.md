@@ -304,3 +304,7 @@ without a reader for the old shape.
 | `src/model/payloads/tests.rs` | Payload JSON, written and read back byte for byte. |
 | `tests/no_orgs.rs` | No owner columns or org code in the open-source engine. |
 | `tests/objects.rs` | Object stores and `shaked store copy`. |
+
+Typed experiment deployments set `experiments.project_experiment_id` at creation. Listing,
+unlinking after a delete, and relinking after undo use this identity, so identical experiment
+slugs in different projects do not share deployments. File-only homes retain slug links.

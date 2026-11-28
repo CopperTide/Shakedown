@@ -82,16 +82,26 @@ impl Scoped<'_> {
         &self,
         new: NewExperiment<'_>,
     ) -> Result<(Experiment, Vec<Suite>)> {
+        self.create_project_experiment(new, None).await
+    }
+
+    /// Creates a deployment linked to the design row, when the project keeps experiments in tables.
+    pub async fn create_project_experiment(
+        &self,
+        new: NewExperiment<'_>,
+        row: Option<uuid::Uuid>,
+    ) -> Result<(Experiment, Vec<Suite>)> {
         let id = new_id();
-        let sql = "INSERT INTO experiments (id, name, task_id, benchmark, runs, project_experiment)
-                   VALUES ($1, $2, $3, $4, $5, $6)";
-        let params: [&(dyn tokio_postgres::types::ToSql + Sync); 6] = [
+        let sql = "INSERT INTO experiments (id, name, task_id, benchmark, runs, project_experiment, project_experiment_id)
+                   VALUES ($1, $2, $3, $4, $5, $6, $7)";
+        let params: [&(dyn tokio_postgres::types::ToSql + Sync); 7] = [
             &id,
             &new.name,
             &new.task,
             &new.benchmark,
             &new.runs,
             &new.project_experiment,
+            &row,
         ];
         self.execute(sql, &params).await?;
         let tasks = [new.task.to_string()];
