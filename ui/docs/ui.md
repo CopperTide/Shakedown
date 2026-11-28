@@ -55,6 +55,8 @@ secondary metadata lines, few borders, plenty of whitespace.
   Runtime section picks or installs one. **Data** uploads a file (`data/<name>`, marked "Every run starts from this"
   by default), with **View** (`DataFileViewer.tsx`: JSON records as tables, a database's sections as tabs, search, a
   click on a value edits it in place and saves the file at once; other files as text), **Replace** and **Delete file**.
+  Each section shows its heading, its items and its forms; what a section or field is for is the heading's or the
+  label's hint.
 - **Scenario** (`/scenarios/:id`, `features/editors/scenario/ScenarioEditor.tsx`): Overview, Inputs, Events, Gates,
   Checks and **Experiments (N)**: every experiment file that plays the scenario (`ScenarioExperiments.tsx`, also at
   the foot of Overview), sub-experiments under their parent, each a link with whether it ran and its setups.
@@ -226,6 +228,10 @@ These are shadcn-style components: the code is ours, built on Radix primitives w
   ⓘ is used only where there is nothing to hover. Longer detail folds under a `<details>`. Charts keep their
   numbers and axis labels; how to read them (legends, captions) is the hint on the chart's title, e.g. the run page's
   Trace, the Agent tab's Context size and Process's Trends. A failure stays on screen; its advice is the hint.
+  `DialogContent` takes
+  `hint` too (on the dialog's title). The item editors follow it: `EditorFrame` `hint` (what the item is, on the page
+  title), `SectionHead` `about` (on the section heading), `TextField`/`ChoiceField` `hint` and `ItemRows` `emptyHint`
+  (`features/editors/fields.tsx`); the delete dialog's "What stays" and an import's notes are folded.
 - `lib/`: small helpers with no domain (class names, keys, formats, marks, errors). `components/ui`:
   the primitives above; `components/`: domain pieces several pages share (status marks, provider fields).
 - `features/<name>/`: one folder per screen (`experiments`, `runs`, `run`, `process`, `world`, `compare`,
