@@ -38,10 +38,10 @@ describe('ask about this step', () => {
     const onStep = vi.fn();
     render(<AskStep branchId="b" seq={4} onStep={onStep} />);
     await waitFor(() => expect(screen.getByText('Why approval?')).toBeTruthy());
-    expect(screen.getByText('Evidence: what the agent had')).toBeTruthy();
+    expect(screen.getByText('Evidence')).toBeTruthy();
     expect(screen.getByText('Refunds over $500 need approval.')).toBeTruthy();
-    expect(screen.getByText('Speculation: inference, not in the record')).toBeTruthy();
-    expect(screen.getByText('1 citation dropped: not found in the record.')).toBeTruthy();
+    expect(screen.getByText('Speculation')).toBeTruthy();
+    expect(screen.getByText('1 citation dropped')).toBeTruthy();
     expect(screen.getByText(/^You · .* · openrouter:m · \$0\.012.* · 1,000 tokens$/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'step 3' }));
     expect(onStep).toHaveBeenCalledWith(3);

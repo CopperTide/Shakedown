@@ -41,7 +41,6 @@ export default function ExperimentConfig({ list }: { list: Experiment[] }) {
     <details className="rounded-lg border border-line bg-surface">
       <summary className="cursor-pointer px-4 py-3 text-sm">
         <span className="font-semibold">Configuration</span>
-        <span className="ml-2 text-xs text-muted">Setups' agents, seed, world time window, spend cap</span>
       </summary>
       <div className="flex flex-col gap-5 border-t border-line p-4">
         {list.map((e) => <One key={e.id} e={e} titled={list.length > 1} />)}

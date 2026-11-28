@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input, NativeSelect } from '@/components/ui/input';
 import { PageBody, PageHeader } from '@/components/ui/page';
+import { Hint } from '@/components/ui/hint';
 import { EmptyState, ErrorState } from '@/components/ui/state';
 import { Toggle } from '@/components/ui/toggle';
 import { useQuery } from '@/hooks/useQuery';
@@ -58,7 +59,7 @@ export default function ExperimentsListPage() {
   const newButton = <Button variant="primary" asChild><Link to="/experiments/new"><Plus />New experiment</Link></Button>;
   return (
     <>
-      <PageHeader title="Experiments" actions={newButton} meta="Each experiment runs one scenario against the agent setups you compare. Branch one to make a sub-experiment." width="wide" />
+      <PageHeader title={<Hint hint="Each experiment runs one scenario against the agent setups you compare. Branch one to make a sub-experiment.">Experiments</Hint>} actions={newButton} width="wide" />
       <PageBody width="wide">
         {rows.error && <ErrorState error={String(rows.error)} onRetry={rows.reload} />}
         <Card>

@@ -8,6 +8,7 @@ import { ApproximateMark, StatusChip } from '@/components/marks';
 import { Button } from '@/components/ui/button';
 import { CodeBlock } from '@/components/ui/code-block';
 import { PageBody, PageHeader } from '@/components/ui/page';
+import { Hint } from '@/components/ui/hint';
 import { Panel, PanelHeader } from '@/components/ui/panel';
 import { ErrorState, LoadingState, Notice } from '@/components/ui/state';
 import { Tag } from '@/components/ui/status';
@@ -25,7 +26,7 @@ import { APPROXIMATE_NOTE, isApproximate, notComparedLine } from '@/model/restor
 import type { BranchView, TwinView } from '@/model/twin';
 import type { BranchDetail, CompareResponse, CompareSide, Event, RowDiff, Team } from '@/model/types';
 import { divergenceStrip } from './divergence';
-import OutcomePanel, { DivergenceStrip } from './OutcomePanel';
+import OutcomePanel, { DivergenceStrip, STRIP_HINT } from './OutcomePanel';
 
 function StepView({ label, id, run, ev }: { label: string; id: string; run?: string; ev: Event | undefined }) {
   const p = asRecord(ev?.payload);
@@ -34,7 +35,7 @@ function StepView({ label, id, run, ev }: { label: string; id: string; run?: str
       <PanelHeader title={`${label} at this step`} meta={<span className="font-mono">{id.slice(0, 8)}</span>}>
         {ev && run && <Link className="text-xs text-accent hover:underline" to={`/runs/${run}/${id}?step=${ev.seq}`}>Open step</Link>}
       </PanelHeader>
-      {!ev ? <p className="p-3 text-sm text-muted">No step: this branch had ended.</p> : (
+      {!ev ? <p className="p-3 text-sm text-muted">Ended before this step</p> : (
         <div className="flex flex-col gap-2 p-3">
           <div className="flex flex-wrap items-center gap-1.5 text-xs">
             <StepLabel seq={ev.seq} kind={ev.kind}><span className="text-muted">{ev.agent ?? 'run'}</span></StepLabel>
@@ -92,9 +93,9 @@ export function Rows({ data }: { data: CompareResponse }) {
   const skipped = notComparedLine(data.not_compared, 'compare');
   return (
     <Panel>
-      <PanelHeader title="Differing rows" meta={`${data.differing_rows.length} in the final worlds · − A, + B`} />
+      <PanelHeader title={<Hint hint="Rows that differ between the two final worlds. − is A, + is B.">Differing rows</Hint>} meta={data.differing_rows.length} />
       {skipped && <p className="px-3 pt-2 text-xs">{skipped}</p>}
-      {data.differing_rows.length === 0 && <p className="p-3 text-sm text-muted">{skipped ? 'No differences in the parts compared.' : 'The final worlds are identical.'}</p>}
+      {data.differing_rows.length === 0 && <p className="p-3 text-sm text-muted">{skipped ? 'No differences in the parts compared' : 'Identical'}</p>}
       {data.differing_rows.map((r, i) => <RowDoc key={r.key} r={r} open={i < OPEN_ROWS} />)}
     </Panel>
   );
@@ -131,8 +132,8 @@ function Divergence({ got, a, b }: { got: Loaded; a: string; b: string }) {
   return (
     <>
       <Panel className="px-3 py-2 text-sm">
-        {seq != null ? <><span className="font-semibold">First divergence at step {seq}.</span> <span className="text-muted">Everything before it is the same in both branches.</span></>
-          : <span className="font-semibold">The branches never diverge.</span>}
+        {seq != null ? <span className="font-semibold"><Hint hint="Everything before it is the same in both branches.">First divergence at step {seq}</Hint></span>
+          : <span className="font-semibold">No divergence</span>}
       </Panel>
       {seq != null && (
         <div className="grid gap-3 lg:grid-cols-2">
@@ -148,9 +149,9 @@ function Divergence({ got, a, b }: { got: Loaded; a: string; b: string }) {
 function Details({ got, a, b }: { got: Loaded; a: string; b: string }) {
   return (
     <>
-      <Panel><DivergenceStrip s={divergenceStrip(got.a, got.b, got.data.first_divergent_seq)} /></Panel>
+      <Panel><PanelHeader title={<Hint hint={STRIP_HINT}>Steps</Hint>} /><DivergenceStrip s={divergenceStrip(got.a, got.b, got.data.first_divergent_seq)} /></Panel>
       <div className="grid gap-3 lg:grid-cols-2"><Side label="A" id={a} s={got.data.a} team={got.a.team} /><Side label="B" id={b} s={got.data.b} team={got.b.team} /></div>
-      {(isApproximate(got.data.a) || isApproximate(got.data.b)) && <Notice>{APPROXIMATE_NOTE}</Notice>}
+      {(isApproximate(got.data.a) || isApproximate(got.data.b)) && <Notice><Hint hint={APPROXIMATE_NOTE}>Approximate restore</Hint></Notice>}
       <Divergence got={got} a={a} b={b} />
       <Rows data={got.data} />
     </>
@@ -179,7 +180,7 @@ export default function Compare() {
       <PageHeader title={<span title={`Branch ${a.slice(0, 8)} (A) against ${b.slice(0, 8)} (B)`}>Compare</span>} width="broad" />
       <PageBody width="broad">
         {error && <ErrorState error={error} onRetry={retry} hint="Both branches must have finished and kept their final saves." />}
-        {!got && !error && <LoadingState label="Comparing the two final worlds…" rows={4} />}
+        {!got && !error && <LoadingState label="Comparing…" rows={4} />}
         {got && <Comparison got={got} a={a} b={b} />}
       </PageBody>
     </>

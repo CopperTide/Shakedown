@@ -2,6 +2,7 @@ import { Sparkles } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { askStep, type StoredQuestion, stepQuestions } from '@/api/questions';
 import { Button } from '@/components/ui/button';
+import { Hint } from '@/components/ui/hint';
 import { Input, Textarea } from '@/components/ui/input';
 import { ErrorState } from '@/components/ui/state';
 import { POLL_MS } from '@/features/review/useReview';
@@ -53,14 +54,14 @@ export function Answer({ a, dropped, onStep }: { a: StepQuestion; dropped: numbe
     <div className="flex flex-col gap-2 text-xs">
       <p className="leading-5">{a.answer}</p>
       <div className="flex flex-col gap-1">
-        <h4 className="text-2xs font-semibold text-muted">Evidence: what the agent had</h4>
+        <h4 className="text-2xs font-semibold text-muted"><Hint hint="What the agent had, quoted from the record.">Evidence</Hint></h4>
         {a.evidence?.length ? <ul className="flex flex-col gap-1.5">{a.evidence.map((e, i) => <Quote key={i} e={e} onStep={onStep} />)}</ul>
-          : <p className="text-2xs text-muted">No quote of the record supports this answer.</p>}
-        {dropped > 0 && <p className="text-2xs text-faint">{dropped} citation{dropped === 1 ? '' : 's'} dropped: not found in the record.</p>}
+          : <p className="text-2xs text-muted"><Hint hint="No quote of the record supports this answer.">None</Hint></p>}
+        {dropped > 0 && <p className="text-2xs text-faint"><Hint hint="Not found in the record.">{dropped} citation{dropped === 1 ? '' : 's'} dropped</Hint></p>}
       </div>
       {!!a.speculation?.length && (
         <div className="flex flex-col gap-1">
-          <h4 className="text-2xs font-semibold text-muted">Speculation: inference, not in the record</h4>
+          <h4 className="text-2xs font-semibold text-muted"><Hint hint="Inference, not in the record.">Speculation</Hint></h4>
           <ul className="flex list-disc flex-col gap-0.5 pl-4 italic">{a.speculation.map((g, i) => <li key={i}>{g.text}</li>)}</ul>
         </div>
       )}
@@ -97,7 +98,7 @@ export default function AskStep({ branchId, seq, onStep }: { branchId: string; s
   };
   return (
     <section aria-label="Ask about this step" className="flex flex-col gap-2 border-t border-line px-3 py-2">
-      <h3 className="text-2xs font-medium text-muted">Ask about this step</h3>
+      <h3 className="text-2xs font-medium text-muted"><Hint hint="A model on your own key answers, quoting the record as evidence. ⌘/Ctrl + Enter asks.">Ask about this step</Hint></h3>
       {list.length > 0 && <ul className="flex flex-col gap-2">{list.map((q) => <Asked key={q.key} q={q} onStep={onStep} />)}</ul>}
       {error && <ErrorState error={error} />}
       <Textarea aria-label="Your question" rows={2} placeholder="Why did the agent do this?" value={question} className="font-sans"

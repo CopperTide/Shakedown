@@ -1,6 +1,7 @@
 import { X } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { Hint } from '@/components/ui/hint';
 import { NativeSelect } from '@/components/ui/input';
 import { chosen, optionWords } from '@/features/scenario/scenario';
 import { type ScenarioState, ParamInput } from '@/features/scenario/ScenarioBuilder';
@@ -21,7 +22,7 @@ export default function DisruptionPicker({ s, busy }: { s: ScenarioState; busy: 
           <div key={d.id} className="flex flex-col gap-2 rounded-md border border-line bg-raised px-2.5 py-2">
             <div className="flex items-start gap-2">
               <span className="font-mono text-warn" aria-hidden="true">▼</span>
-              <span className="flex min-w-0 flex-1 flex-col"><span className="text-sm font-medium">{words.label}</span><span className="text-xs text-muted">{words.description}</span></span>
+              <span className="min-w-0 flex-1 text-sm font-medium"><Hint hint={words.description}>{words.label}</Hint></span>
               {d.params.length > 0 && <Button size="sm" variant="ghost" onClick={() => setAdjusting(adjusting === d.id ? null : d.id)} disabled={busy}>Adjust</Button>}
               <Button size="icon" variant="ghost" className="size-6" aria-label={`Remove ${words.label}`} onClick={() => s.toggle(d.id, false)} disabled={busy}><X /></Button>
             </div>

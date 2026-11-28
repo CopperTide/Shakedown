@@ -13,7 +13,7 @@ describe('fork notice', () => {
   });
 
   it("says the team's driver was started again on the restored world", () => {
-    expect(forkNotice({ ...r, driver: 'relaunched' })).toBe('Agents restarted: Shakedown started your driver again on the world as it was at step 7.');
-    expect(forkNotice({ ...r, moved_from: 5, reason: 'x', driver: 'failed' })).toBe("Restarted from step 7 instead of 5: x Your driver couldn't be started again, so the rerun ended failed (see its error).");
+    expect(forkNotice({ ...r, driver: 'relaunched' })).toBe('Driver restarted at step 7.');
+    expect(forkNotice({ ...r, moved_from: 5, reason: 'x', driver: 'failed' })).toBe("Restarted from step 7 instead of 5: x Driver didn't restart: the rerun failed.");
   });
 });

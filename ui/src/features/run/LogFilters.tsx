@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Search, SlidersHorizontal, ChevronDown, X } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Hint } from '@/components/ui/hint';
 import { Checkbox, Input } from '@/components/ui/input';
 import { cn } from '@/lib/cn';
 import { type Chip, type Facet, FACETS, type LogFilter, type LogRow, chipsOf, isActive, matching, NO_FILTER, parseFilter, toggled, writeFilter } from './logFilter';
@@ -38,7 +39,7 @@ function FacetFilter({ facet, chips, onToggle, onClear }: {
       <PopoverContent aria-label={`Filter by ${TITLE[facet].toLowerCase()}`} className="w-72 max-w-[calc(100vw-2rem)] p-0">
         <div className="border-b border-line p-3">
           <div className="mb-2 flex items-center justify-between">
-            <span className="text-xs font-semibold">Filter by {TITLE[facet].toLowerCase()}</span>
+            <span className="text-xs font-semibold"><Hint hint="Select multiple values to match any of them.">Filter by {TITLE[facet].toLowerCase()}</Hint></span>
             {count > 0 && <button type="button" onClick={onClear} className="text-xs text-muted hover:text-fg">Reset</button>}
           </div>
           <Input aria-label={`Find ${TITLE[facet].toLowerCase()} options`} placeholder="Find an option…" value={query} onChange={(e) => setQuery(e.target.value)} className="h-8 text-xs" />
@@ -51,9 +52,8 @@ function FacetFilter({ facet, chips, onToggle, onClear }: {
               <span className="text-2xs tabular-nums text-muted">{c.count.toLocaleString()}</span>
             </label>
           ))}
-          {!options.length && <p className="px-2 py-4 text-xs text-muted">No options found.</p>}
+          {!options.length && <p className="px-2 py-4 text-xs text-muted">No options</p>}
         </div>
-        <div className="border-t border-line px-3 py-2 text-2xs text-muted">Select multiple values to match any of them.</div>
       </PopoverContent>
     </Popover>
   );
@@ -88,7 +88,7 @@ export function LogFilters({ rows, filter, setFilter, shown }: {
             <span className="text-muted">{TITLE[k]}:</span><span className="truncate">{value}</span><X className="size-3 shrink-0 text-muted" />
           </button>
         )))}
-        {filter.q.trim() && <span className="text-2xs text-muted">Text search applied</span>}
+        {filter.q.trim() && <span className="text-2xs text-muted">Text search</span>}
         <Button size="sm" variant="ghost" className="ml-auto h-6 text-2xs" onClick={() => setFilter(NO_FILTER)}>Clear all</Button>
       </div>}
     </div>

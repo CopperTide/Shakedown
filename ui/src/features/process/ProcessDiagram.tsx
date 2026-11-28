@@ -56,7 +56,6 @@ function EquipBox({ data }: NodeProps<EquipNode>) {
       <ShapeGlyph shape={equipShape(e.system?.kind)} />
       <div className="flex min-w-0 flex-col gap-0.5">
         <span className="flex items-center gap-1.5"><span className="text-sm font-semibold">{kindWord(e.system)}</span><span className="font-mono text-2xs text-muted">{e.part}</span>{e.system?.simulated && <Tag>simulated</Tag>}</span>
-        <span className="truncate text-2xs text-muted">{systemLine(e.system)}</span>
         <span className="flex flex-wrap items-center gap-1.5"><span className="font-mono text-2xs text-muted">{countsLine(e)}</span><Alarm c={e} /></span>
       </div>
     </div>

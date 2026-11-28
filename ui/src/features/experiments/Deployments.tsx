@@ -9,7 +9,7 @@ export default function Deployments({ id, version }: { id: string; version: numb
   const q = useQuery(`experiment-runs:${id}:${version}`, () => experimentRuns(id));
   if (q.error) return <ErrorState error={q.error} onRetry={q.reload} />;
   const list = q.data?.deployments ?? [];
-  if (q.data && list.length === 0) return <EmptyState title="No runs yet." hint="Deploy runs this experiment." />;
+  if (q.data && list.length === 0) return <EmptyState title="No runs yet" hint="Deploy runs this experiment." />;
   return (
     <div className="grid gap-3">
       {list.map((d) => (

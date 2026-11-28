@@ -2,6 +2,7 @@
 // model calls, its reasoning in order and its tool calls. Every item selects its step, so the
 // side Inspector shows the exact context at that moment. Derived from the steps already loaded.
 import { type ReactNode, useMemo, useState } from 'react';
+import { Hint } from '@/components/ui/hint';
 import { Stat } from '@/components/ui/page';
 import { cn } from '@/lib/cn';
 import { duration, usd } from '@/lib/format';
@@ -32,10 +33,10 @@ function Summary({ s }: { s: AgentStats }) {
   );
 }
 
-function Section({ title, meta, children }: { title: string; meta?: ReactNode; children: ReactNode }) {
+function Section({ title, hint, meta, children }: { title: string; hint?: string; meta?: ReactNode; children: ReactNode }) {
   return (
     <section className="border-t border-line">
-      <h3 className="flex items-baseline gap-2 px-3 pt-2 text-xs font-semibold text-muted">{title}{meta != null && <span className="font-normal text-faint">{meta}</span>}</h3>
+      <h3 className="flex items-baseline gap-2 px-3 pt-2 text-xs font-semibold text-muted"><Hint hint={hint}>{title}</Hint>{meta != null && <span className="font-normal text-faint">{meta}</span>}</h3>
       {children}
     </section>
   );
@@ -54,6 +55,12 @@ function Picker({ agents, value, onChange }: { agents: { id: string; name: strin
   );
 }
 
+/** How to read the context chart; a rerun's dimmed bars are the steps it carried over. */
+function contextHint(forkSeq: number | null): string {
+  const base = 'Input tokens per model call, first call to last; the lighter part was cached. Click a bar to open its step.';
+  return forkSeq == null ? base : `${base}\nDimmed: steps before the fork at step ${forkSeq}, carried over by this rerun.`;
+}
+
 export interface AgentInspectorProps {
   events: Event[];
   team: Team;
@@ -68,15 +75,14 @@ export default function AgentInspector({ events, team, startSeq, selected, onSel
   const [picked, setPicked] = useState<string | null>(null);
   const agent = [picked, selectedAgent].find((a) => a != null && agents.some((x) => x.id === a)) ?? agents[0]?.id ?? null;
   const s = useMemo(() => (agent ? agentStats(events, agent, startSeq) : null), [events, agent, startSeq]);
-  if (!agent || !s) return <p className="px-3 py-6 text-sm text-muted">No agent has acted in this run yet.</p>;
+  if (!agent || !s) return <p className="px-3 py-6 text-sm text-muted">No agent has acted yet</p>;
   const inherited = startSeq != null && s.calls.some((c) => c.inherited);
   return (
     <div className="flex flex-col">
       <Picker agents={agents} value={agent} onChange={setPicked} />
       <Summary s={s} />
-      {inherited && <p className="px-3 pb-2 text-2xs text-muted">Includes the steps before the fork at step {startSeq} (dimmed), which this rerun carries over.</p>}
-      <Section title="Context size" meta="input tokens per model call"><ContextChart calls={s.calls} selected={selected} onSelect={onSelect} /></Section>
-      <Section title="Reasoning" meta={`${s.reasoning.length.toLocaleString()} in order`}><Trail rows={s.reasoning} agent={agent} selected={selected} onSelect={onSelect} /></Section>
+      <Section title="Context size" hint={contextHint(inherited ? startSeq : null)}><ContextChart calls={s.calls} selected={selected} onSelect={onSelect} /></Section>
+      <Section title="Reasoning" meta={s.reasoning.length.toLocaleString()}><Trail rows={s.reasoning} agent={agent} selected={selected} onSelect={onSelect} /></Section>
       <Section title="Tool calls" meta={s.tools.length.toLocaleString()}><ToolCalls rows={s.tools} agent={agent} selected={selected} onSelect={onSelect} /></Section>
     </div>
   );

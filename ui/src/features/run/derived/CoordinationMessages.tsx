@@ -34,10 +34,10 @@ export default function CoordinationMessages({ events, onSelect }: { events: Eve
               <span className="rounded border border-line px-1.5 py-0.5 text-2xs text-muted">{e.kind}</span>
               <Button size="sm" variant="ghost" className="ml-auto h-6 text-2xs" onClick={() => onSelect(e.seq)} aria-label={`View message at step ${e.seq}`}>Step {e.seq} ↗</Button>
             </div>
-            {e.text ? <Markdown text={e.text} /> : <p className="text-sm text-muted">No message text was recorded.</p>}
+            {e.text ? <Markdown text={e.text} /> : <p className="text-sm text-muted">No text</p>}
           </article>
         ))}
-        {!shown.length && <p className="p-5 text-sm text-muted">{exchanges.length ? 'No messages match these filters.' : 'No messages were recorded in this run.'}</p>}
+        {!shown.length && <p className="p-5 text-sm text-muted">{exchanges.length ? 'No matches' : 'No messages'}</p>}
       </div>
     </section>
   );

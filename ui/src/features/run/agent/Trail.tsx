@@ -18,7 +18,7 @@ export function StepLink({ seq, label, onSelect }: { seq: number; label: string;
  */
 export default memo(function Trail({ rows, agent, selected, onSelect }: { rows: ReasoningRow[]; agent: string; selected: number | null; onSelect: (seq: number) => void }) {
   const [shown, more] = useShown(PAGE, agent);
-  if (!rows.length) return <p className="px-3 py-4 text-xs text-muted">This agent recorded no reasoning.</p>;
+  if (!rows.length) return <p className="px-3 py-4 text-xs text-muted">No reasoning</p>;
   return (
     <>
       <ol className="flex flex-col">

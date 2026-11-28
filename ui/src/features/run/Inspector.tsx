@@ -3,6 +3,7 @@ import { branchEvent, rows } from '@/api/branches';
 import Markdown from '@/components/Markdown';
 import { Button } from '@/components/ui/button';
 import { CodeBlock } from '@/components/ui/code-block';
+import { Hint } from '@/components/ui/hint';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/state';
 import { StatusMark, Tag } from '@/components/ui/status';
 import { StepLabel } from '@/components/ui/step-label';
@@ -21,10 +22,10 @@ import { notComparedLine, savedLine } from '@/model/restore';
 import type { AgentEndPayload, CheckPayload, Event, ModelCallPayload, ReasoningPayload, Team, WakePayload } from '@/model/types';
 import { formatCost, rowKeys } from './timeline';
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
   return (
     <section className="flex flex-col gap-1 border-t border-line px-3 py-2">
-      <h3 className="text-2xs font-medium text-muted">{title}</h3>
+      <h3 className="text-2xs font-medium text-muted"><Hint hint={hint}>{title}</Hint></h3>
       {children}
     </section>
   );
@@ -48,8 +49,8 @@ function Text({ value }: { value: unknown }) {
   return data === undefined ? <Markdown text={value} /> : <Json value={data} />;
 }
 
-function Block({ title, value }: { title: string; value: unknown }) {
-  return <Section title={title}><Text value={value} /></Section>;
+function Block({ title, hint, value }: { title: string; hint?: string; value: unknown }) {
+  return <Section title={title} hint={hint}><Text value={value} /></Section>;
 }
 
 function keysOf(v: unknown): string[] {
@@ -77,8 +78,8 @@ function RowsAtStep({ branchId, seq, keys, more, auto }: { branchId: string; seq
     <Section title="World rows at this step">
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
         <Button size="sm" onClick={r.load} disabled={r.busy || keys.length === 0}>{r.busy ? 'Loading…' : 'Rows at this step'}</Button>
-        {keys.length === 0 && <span>nothing read or written</span>}
-        {more > 0 && <span>(+{more} more not shown)</span>}
+        {keys.length === 0 && <span>None</span>}
+        {more > 0 && <span>+{more} more</span>}
       </div>
       {r.err && <ErrorState error={r.err} hint="The saved world for this step could not be read." />}
       {r.data && Object.entries(r.data).map(([k, doc]) => (
@@ -171,7 +172,7 @@ function ModelCall({ p }: { p: ModelCallPayload }) {
     <>
       <Section title="Provider"><span className="font-mono text-xs">{modelCallLine(p)}</span></Section>
       <Section title={`Messages (${msgs.length})`}>
-        {msgs.length === 0 && <span className="text-xs text-faint">The request was not recorded.</span>}
+        {msgs.length === 0 && <span className="text-xs text-faint">Not recorded</span>}
         {msgs.map((m, i) => (
           <details key={i} open={i === msgs.length - 1} className="text-xs">
             <summary className="cursor-pointer font-mono text-muted">{(m as { role?: string })?.role ?? '?'}</summary>
@@ -244,10 +245,10 @@ function Wake({ p }: { p: WakePayload }) {
 function dispatchStep(e: Event): ReactElement | null {
   switch (e.kind) {
     case 'delegation': return <Block title={`Work given to ${String(e.payload.to)}`} value={e.payload.task} />;
-    case 'report': return <Block title={e.payload.turn_end ? `What it said at the end of its turn, passed on to ${String(e.payload.to)} as its report` : `Report to ${String(e.payload.to)}`} value={e.payload.text} />;
+    case 'report': return <Block title={`Report to ${String(e.payload.to)}`} hint={e.payload.turn_end ? 'What it said at the end of its turn, passed on as its report.' : undefined} value={e.payload.text} />;
     case 'wake': return <Wake p={e.payload} />;
-    case 'idle': return <Block title={e.payload.ok === false ? `Its turn failed; it waits: ${String(e.payload.error ?? '')}` : 'Ended its turn and waits for work; it said'} value={e.payload.text} />;
-    case 'finish': return <Block title="Finished the run (only the lead can): every agent stopped and the world was scored" value={e.payload.summary} />;
+    case 'idle': return <Block title={e.payload.ok === false ? `Turn failed: ${String(e.payload.error ?? '')}` : 'Idle'} hint="Ended its turn and waits for work. What it said:" value={e.payload.text} />;
+    case 'finish': return <Block title="Finished the run" hint="Only the lead can finish: every agent stopped and the world was scored." value={e.payload.summary} />;
     default: return null;
   }
 }
@@ -259,9 +260,9 @@ function Reasoning({ p }: { p: ReasoningPayload }) {
   const call = typeof p.model_call_seq === 'number' ? `, model call at step ${p.model_call_seq}` : '';
   const from = SOURCE[String(p.source)] ?? String(p.source ?? '');
   return (
-    <Section title={`${reasoningWord(p.kind)} (${from}${call})`}>
+    <Section title={reasoningWord(p.kind)} hint={`${from[0]?.toUpperCase() ?? ''}${from.slice(1)}${call}`}>
       <Markdown text={String(p.text ?? '')} />
-      {p.truncated === true && <p className="mt-1 text-xs text-muted">Cut at 32,768 characters.</p>}
+      {p.truncated === true && <p className="mt-1 text-xs text-muted">Cut at 32,768 characters</p>}
     </Section>
   );
 }
@@ -324,7 +325,7 @@ export default function Inspector(props: InspectorProps) {
       <Head event={event} events={props.events} />
       {needsBody && !full.data
         ? full.error
-          ? <ErrorState error={full.error} hint="The timeline is available. Retry loading this step’s full details." onRetry={full.retry} />
+          ? <ErrorState error={full.error} hint="The timeline is available. Retry loading this step's full details." onRetry={full.retry} />
           : <LoadingState label="Loading this model call’s details…" rows={3} />
         : <Body {...props} event={event} />}
     </div>

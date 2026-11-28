@@ -46,16 +46,18 @@ function Axis({ trace }: { trace: Trace }) {
   );
 }
 
+/** How to read the waterfall: the hint on its panel's title. */
+export const TRACE_HINT = "The selected step's turn: its model call and every step it led to. A bar ends when the step was recorded. Shakedown's own work in a step is listed under it; where it falls inside the step is not recorded. Gaps are waiting or unseen work.";
+
 /** The selected step's turn as a trace waterfall: the turn, its steps, and Shakedown's own work in each. */
 export default function Waterfall({ events, selected, onSelect }: { events: Event[]; selected: number | null; onSelect: (seq: number) => void }) {
   const trace = selected == null ? null : traceOf(events, selected);
-  if (selected == null) return <EmptyState title="Select a step to see its turn" hint="Click a mark on the timeline, or move with ←/→ (j/k). The waterfall shows the model call and every step it led to." />;
-  if (!trace) return <EmptyState title="This step belongs to no agent's turn" hint="The check and the world's own events have no turn. Pick an agent's step." />;
+  if (selected == null) return <EmptyState title="Select a step to see its turn" hint="Click a mark on the timeline, or move with ←/→ (j/k)." />;
+  if (!trace) return <EmptyState title="Not part of a turn" hint="The check and the world's own events have no turn. Pick an agent's step." />;
   return (
     <div className="min-w-0 py-1">
       <Axis trace={trace} />
       {trace.spans.map((s, i) => <Row key={`${s.seq}-${i}`} s={s} total={trace.total} selected={s.seq != null && s.seq === selected} onSelect={onSelect} />)}
-      <p className="px-3 pt-1.5 text-2xs text-faint">A bar ends when the step was recorded. Shakedown's own work in a step is listed under it; where it falls inside the step is not recorded. Gaps are waiting or unseen work.</p>
     </div>
   );
 }

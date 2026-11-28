@@ -90,7 +90,7 @@ describe('step filter on the run page', () => {
     expect(screen.getAllByRole('row')).toHaveLength(3);
     fireEvent.change(screen.getByLabelText("Search the steps' detail"), { target: { value: 'nothing like it' } });
     expect(screen.getByText('No step matches the filter.')).toBeTruthy();
-    expect(screen.getByText('No timeline events match the filters.')).toBeTruthy();
+    expect(screen.getByText('No matches')).toBeTruthy();
     expect(document.querySelectorAll('button[data-seq]')).toHaveLength(0);
     fireEvent.click(screen.getByRole('button', { name: 'Clear all' }));
     expect(screen.getByTestId('search').textContent).toBe('?step=3');

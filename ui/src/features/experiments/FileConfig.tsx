@@ -21,7 +21,7 @@ export function configLine(body: ExperimentBody): string {
 export function FileProblems({ problems }: { problems: Problem[] }) {
   if (!problems.length) return null;
   return (
-    <Card title="Problems in this experiment's file">
+    <Card title="Problems">
       <ul className="divide-y divide-line">
         {problems.map((p) => (
           <li key={`${p.pointer}${p.message}`} className="flex items-center gap-2 px-[18px] py-2.5 text-sm text-warn">

@@ -13,11 +13,11 @@ describe('compare rows', () => {
   it('a part left out never reads as no differences', () => {
     const html = renderToStaticMarkup(<Rows data={cmp({ not_compared: ['plant'] })} />);
     expect(html).toContain('Not compared: plant (it keeps no saves)');
-    expect(html).toContain('No differences in the parts compared.');
+    expect(html).toContain('No differences in the parts compared');
     expect(html).not.toContain('identical');
   });
   it('says identical only when every part was compared', () => {
-    expect(renderToStaticMarkup(<Rows data={cmp({ not_compared: [] })} />)).toContain('The final worlds are identical.');
+    expect(renderToStaticMarkup(<Rows data={cmp({ not_compared: [] })} />)).toContain('Identical');
   });
 });
 

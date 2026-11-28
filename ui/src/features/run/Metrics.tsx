@@ -1,3 +1,4 @@
+import { Hint } from '@/components/ui/hint';
 import { Table, Td, Th, Tr } from '@/components/ui/table';
 import { usd } from '@/lib/format';
 import { agentModelLine } from '@/model/providers';
@@ -33,10 +34,15 @@ export function costText(c: Cost): string {
   return `${usd(c.usd)} (${c.label}${when})`;
 }
 
-/** The estimate line: production time, or why there is none. */
+/** The estimate line: production time, or – when there is none (`estimateHint` says why). */
 export function estimateText(m: Metrics): string {
-  if (m.estimated_s == null) return 'not estimated: this run was recorded before Shakedown timed its own work';
+  if (m.estimated_s == null) return '–';
   return `${secs(m.estimated_s)} s (${secs(m.measured_s)} s measured − ${secs(m.overhead_s)} s Shakedown overhead)`;
+}
+
+/** What the estimate is, or why there is none. */
+export function estimateHint(m: Metrics): string {
+  return m.estimated_s == null ? 'Not estimated: this run was recorded before Shakedown timed its own work.' : "Measured time minus Shakedown's own overhead.";
 }
 
 function OverheadTable({ lines }: { lines: [string, string][] }) {
@@ -71,12 +77,12 @@ function AgentsTable({ m }: { m: Metrics }) {
 export default function MetricsPanel({ m }: { m: Metrics }) {
   return (
     <div className="flex flex-col gap-3 p-3">
-      <p className="text-sm"><span className="text-2xs font-medium text-muted">Estimated in production</span> <span className="font-mono">{estimateText(m)}</span></p>
+      <p className="text-sm"><span className="text-2xs font-medium text-muted"><Hint hint={estimateHint(m)}>Estimated in production</Hint></span> <span className="font-mono">{estimateText(m)}</span></p>
       <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
         <div className="min-w-0 rounded-md border border-line"><OverheadTable lines={overheadLines(m.overhead_ms)} /></div>
         <div className="min-w-0 rounded-md border border-line"><AgentsTable m={m} /></div>
       </div>
-      <p className="text-xs text-muted">Total: {m.tokens} tokens · {costText(m.cost)}. Only this branch's own steps count.</p>
+      <p className="text-xs text-muted"><Hint hint="Only this branch's own steps count.">Total</Hint>: {m.tokens} tokens · {costText(m.cost)}</p>
     </div>
   );
 }

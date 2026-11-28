@@ -41,9 +41,9 @@ export default function SetupCard({ d, teams, team, onChange, onRemove, onImport
           </NativeSelect>
         </Field>
       )}
-      <Field label="Rules">
+      <Field label="Rules" hint="Optional. Added to every agent's prompt.">
         <Textarea rows={3} value={d.rules} onChange={(e) => set({ rules: e.target.value })} disabled={busy}
-          placeholder="Optional. Added to every agent's prompt." className="resize-y font-sans text-sm" />
+          placeholder="Optional" className="resize-y font-sans text-sm" />
       </Field>
       <p className="mt-auto truncate text-xs text-muted" title={team ? runLine(team) : undefined}>{team ? runLine(team) : 'Loading the team…'}</p>
     </div>

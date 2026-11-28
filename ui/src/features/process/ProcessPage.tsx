@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { StatusChip } from '@/components/marks';
 import { PageBody, PageGate, PageHeader } from '@/components/ui/page';
+import { Hint } from '@/components/ui/hint';
 import { Panel, PanelHeader } from '@/components/ui/panel';
 import { Split } from '@/components/ui/split';
 import ActionTimeline from '@/features/run/ActionTimeline';
@@ -20,7 +21,7 @@ import { actionsOf, worldInfo } from '@/model/actions';
 import type { BranchDetail } from '@/model/types';
 import { processView } from './process';
 import ProcessDiagram from './ProcessDiagram';
-import TrendsPanel from './TrendsPanel';
+import TrendsPanel, { TRENDS_HINT } from './TrendsPanel';
 
 /** The selected step, in the address (`?step=`) the run page and the world view share. */
 function useSelection(order: number[], lanes: LaneRow[]) {
@@ -37,11 +38,11 @@ function Main({ d, timeline: { lanes, span }, selected, onSelect, models, setMod
   const running = d.status === 'running';
   return (
     <div className="flex min-w-0 flex-col gap-3">
-      <Panel><PanelHeader title="Process" meta="Agents as units, systems as equipment; heavy lines write, dashed lines read" /><ProcessDiagram view={view} /></Panel>
+      <Panel><PanelHeader title={<Hint hint="Agents as units, systems as equipment; heavy lines write, dashed lines read.">Process</Hint>} /><ProcessDiagram view={view} /></Panel>
       <Panel><PanelHeader title={`Actions${running ? ' · live' : ''}`} />
         <ActionTimeline lanes={lanes} team={d.team} span={span} selected={selected} onSelect={onSelect} models={models} onModels={setModels} />
       </Panel>
-      <Panel><PanelHeader title="Trends" /><TrendsPanel events={d.events} actions={actions} /></Panel>
+      <Panel><PanelHeader title={<Hint hint={TRENDS_HINT}>Trends</Hint>} /><TrendsPanel events={d.events} actions={actions} /></Panel>
     </div>
   );
 }
@@ -60,8 +61,7 @@ export default function ProcessPage() {
   const info = worldInfo(d.events);
   return (
     <>
-      <PageHeader title={`Process · ${nameOf(task) || 'Run'}`} status={<StatusChip status={d.status} />}
-        meta={!info.known && 'Recorded before Shakedown kept each tool\'s system and effect: those are shown as unknown.'}
+      <PageHeader title={<Hint hint={info.known ? undefined : 'Recorded before Shakedown kept each tool\'s system and effect: those are shown as unknown.'}>{`Process · ${nameOf(task) || 'Run'}`}</Hint>} status={<StatusChip status={d.status} />}
         actions={<RunMenu runId={runId} d={d} page="process" step={selected} />} />
       <PageBody>
         <RunErrorBanner error={error} onRetry={reload} detail={d} />

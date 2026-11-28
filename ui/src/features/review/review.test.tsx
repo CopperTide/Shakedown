@@ -50,7 +50,7 @@ describe('review cards', () => {
   };
   it('shows the verdict, steps and suggestions, and never offers a rewind', () => {
     const html = text(renderToStaticMarkup(<RunReviewBody r={review} d={detail} onStep={() => {}} />));
-    for (const s of ['The next batch was never brought forward.', 'Where it went wrong', 'Goal', 'Step 215', 'Suggestions', 'Production planner', 'What went well', '✓ No safety check failed', "its steps weren't in the run"]) {
+    for (const s of ['The next batch was never brought forward.', 'Where it went wrong', 'Goal', 'Step 215', 'Suggestions', 'Production planner', 'What went well', '✓ No safety check failed', 'Unverified']) {
       expect(html).toContain(s);
     }
     expect(html).not.toContain('Rewind');

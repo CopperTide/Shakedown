@@ -10,7 +10,7 @@ const compact = (n: number) => new Intl.NumberFormat(undefined, { notation: 'com
  */
 export default memo(function ContextChart({ calls, selected, onSelect }: { calls: CallRow[]; selected: number | null; onSelect: (seq: number) => void }) {
   const known = calls.filter((c) => c.input != null);
-  if (!known.length) return <p className="px-3 py-4 text-xs text-muted">No model call recorded its input tokens.</p>;
+  if (!known.length) return <p className="px-3 py-4 text-xs text-muted">No token counts</p>;
   const max = Math.max(1, ...known.map((c) => c.input!));
   const peak = known.reduce((a, c) => (c.input! > a.input! ? c : a));
   const n = calls.length;
@@ -40,11 +40,6 @@ export default memo(function ContextChart({ calls, selected, onSelect }: { calls
           );
         })}
       </svg>
-      <div className="mt-1 flex flex-wrap gap-x-4 text-2xs text-muted">
-        <span className="flex items-center gap-1"><span aria-hidden className="size-2 rounded-sm bg-accent" />input tokens</span>
-        <span className="flex items-center gap-1"><span aria-hidden className="size-2 rounded-sm bg-accent-soft" />of which cached</span>
-        <span className="ml-auto">first call → last · click a bar to open its step</span>
-      </div>
     </div>
   );
 });

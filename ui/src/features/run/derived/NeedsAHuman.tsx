@@ -14,7 +14,7 @@ export default function NeedsAHuman({ events, onSelect }: { events: Event[]; onS
           <li key={m.seq}>
             <button type="button" onClick={() => onSelect(m.seq)} className="flex w-full items-center gap-3 px-4 py-2 text-left text-sm hover:bg-hover">
               <span className="font-mono text-2xs text-faint">#{m.seq}</span>
-              <span className="text-xs text-muted">{m.kind === 'approval' ? 'Approval' : 'Message to a person'}</span>
+              <span className="text-xs text-muted">{m.kind === 'approval' ? 'Approval' : 'Message'}</span>
               <span className="min-w-0 flex-1 truncate">{m.text}</span>
             </button>
           </li>

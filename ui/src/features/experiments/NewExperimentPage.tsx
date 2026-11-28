@@ -163,7 +163,7 @@ function Setups({ f, busy, onImport, onConnect }: { f: Form; busy: boolean; onIm
         {drafts.length > 0 && drafts.length < MAX_SETUPS && (
           <button type="button" onClick={f.drafts.add} disabled={busy}
             className="flex min-h-40 flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed border-line-strong text-sm text-muted transition-colors hover:border-accent hover:text-fg">
-            <Plus className="size-4" />Add a setup to compare
+            <Plus className="size-4" />Add setup
           </button>
         )}
       </div>

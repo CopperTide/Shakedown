@@ -1,6 +1,7 @@
 import { Sparkles } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
+import { Hint } from '@/components/ui/hint';
 import { Tag } from '@/components/ui/status';
 import type { RunReview, StoredReview, Suggestion, WentWrong } from '@/model/review';
 import type { BranchDetail } from '@/model/types';
@@ -36,12 +37,11 @@ function Wrong({ w, onStep }: { w: WentWrong; onStep: (seq: number) => void }) {
     <li className="flex flex-col gap-1">
       <div className="flex flex-wrap items-center gap-1.5">
         <Tag tone={severityTone(w.severity)}>{SEVERITY_LABEL[w.severity] ?? w.severity}</Tag>
-        <span className="text-sm font-medium">{w.title}</span>
+        <span className="text-sm font-medium"><Hint hint={w.why}>{w.title}</Hint></span>
       </div>
-      <p className="text-sm leading-5 text-muted">{w.why}</p>
       <div className="flex flex-wrap gap-1">
         {w.steps.map((s) => <StepChip key={s} seq={s} onStep={() => onStep(s)} />)}
-        {w.unverified && <span className="text-2xs text-faint">its steps weren't in the run</span>}
+        {w.unverified && <span className="text-2xs text-faint"><Hint hint="Its steps weren't in the run.">Unverified</Hint></span>}
       </div>
     </li>
   );
@@ -54,8 +54,7 @@ function Tip({ s, d }: { s: Suggestion; d: BranchDetail }) {
       <div className="flex flex-wrap items-center gap-1.5">
         <Tag>{KIND_LABEL[s.kind] ?? s.kind}</Tag>{agent && <span className="text-2xs text-muted">{agent}</span>}
       </div>
-      <p className="text-sm font-medium leading-5">{s.change}</p>
-      <p className="text-sm leading-5 text-muted">{s.why}</p>
+      <p className="text-sm font-medium leading-5"><Hint hint={s.why}>{s.change}</Hint></p>
       {s.prompt_text && <blockquote className="border-l-2 border-line-strong pl-2 text-xs text-muted">{s.prompt_text}</blockquote>}
     </li>
   );
@@ -84,7 +83,7 @@ function Footer({ s }: { s: StoredReview }) {
   return (
     <p className="px-4 pb-3 text-2xs text-faint">
       {smallPrint(s)}{s.review && 'confidence' in s.review ? ` · confidence ${s.review.confidence}` : ''}
-      {dropped > 0 && ` · ${dropped} citation${dropped === 1 ? '' : 's'} to steps not in the run left out`}
+      {dropped > 0 && ` · ${dropped} citation${dropped === 1 ? '' : 's'} left out`}
     </p>
   );
 }

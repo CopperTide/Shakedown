@@ -42,7 +42,7 @@ function TwinWorld({ runId, branchId, detail }: { runId: string; branchId: strin
     return (
       <><PageHeader title="World" status={<StatusChip status={detail.status} />} actions={<RunMenu runId={runId} d={detail} page="world" step={null} />} />
         <PageBody><Panel>
-          <EmptyState title="This run has no view of its world." hint={viewError ? `Couldn't load the views: ${viewError}` : undefined} />
+          <EmptyState title="No world view" hint={viewError ? `Couldn't load the views: ${viewError}` : undefined} />
         </Panel></PageBody></>
     );
   }

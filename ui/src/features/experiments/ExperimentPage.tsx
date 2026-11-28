@@ -50,7 +50,7 @@ function StopButton({ id, onStopped }: { id: string; onStopped: () => void }) {
     <>
       <Button variant="ghost" onClick={() => setOpen(true)} title={error ?? undefined}><CircleStop />Stop</Button>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent title="Stop this experiment?" description="The run in progress stops now and no more runs start. Runs that ended stay scored.">
+        <DialogContent title="Stop this experiment?" description="Ended runs stay scored.">
           <DialogActions onCancel={() => setOpen(false)} onGo={stop} danger label="Stop" />
         </DialogContent>
       </Dialog>

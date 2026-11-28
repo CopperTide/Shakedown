@@ -61,7 +61,7 @@ function Setups({ e, runId, picks }: { e: Experiment; runId: string; picks: Pick
 function Reruns({ runId, branchId, siblings, picks }: { runId: string; branchId: string; siblings: Branch[]; picks: Picks }) {
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-1.5">
-      <span className="w-44 shrink-0 text-xs font-medium">This run&apos;s reruns</span>
+      <span className="w-44 shrink-0 text-xs font-medium">Reruns</span>
       {branchTree(siblings).map(({ branch: b, depth }) => {
         const name = depth ? `↳ ${b.fork_note ?? 'Rerun'}` : 'Original';
         const ticked = !!picks?.picked.has(b.id);

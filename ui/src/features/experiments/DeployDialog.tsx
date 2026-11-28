@@ -30,7 +30,7 @@ export default function DeployDialog({ id, body, onDeployed }: { id: string; bod
   return (
     <Dialog open={open} onOpenChange={(o) => { setOpen(o); setError(null); }}>
       <Button variant="primary" onClick={() => setOpen(true)}><Play />Deploy</Button>
-      <DialogContent title={`Deploy ${plural(runs, 'run')}`} description="Every run calls a real model and restores the world from its start.">
+      <DialogContent title={`Deploy ${plural(runs, 'run')}`} description="Calls real models.">
         <div className="grid gap-2 px-4 py-3 text-sm">
           <p>{plural(body.setups.length, 'setup')} × {plural(body.repeats.per_setup, 'run')} each{body.repeats.paired_seeds === false ? '' : ', paired seeds'}.</p>
           {body.budget?.per_run_usd != null && <p className="text-muted">Each run stops at {usd(body.budget.per_run_usd)}.</p>}

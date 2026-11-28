@@ -3,6 +3,7 @@ import { fork } from '@/api/branches';
 import { ModelHint, ModelInput, ProviderSelect } from '@/components/ProviderFields';
 import { Button } from '@/components/ui/button';
 import { Field, NativeSelect, Textarea } from '@/components/ui/input';
+import { Hint } from '@/components/ui/hint';
 import { ErrorState } from '@/components/ui/state';
 import { useAction } from '@/hooks/useAction';
 import { useProviderList } from '@/hooks/useProviders';
@@ -112,7 +113,7 @@ export function ArchitectureEdit({ team, arch, rules, onArch, onRules }: { team:
           {ARCHITECTURES.map((a) => <option key={a.id} value={a.id}>{a.label}: {a.summary}</option>)}
         </NativeSelect>
       </Field>
-      <Field label={single ? 'The single agent\'s prompt' : 'Rules every agent gets'} hint={rulesHint(team, arch)}>
+      <Field label={single ? 'Prompt' : 'Rules'} hint={rulesHint(team, arch)}>
         <Textarea rows={5} value={rules} onChange={(e) => onRules(e.target.value)} />
       </Field>
     </div>
@@ -160,8 +161,7 @@ export default function ForkPanel({ branch, seq, onForked, onClose, choice = 'ag
     <div className="flex flex-col">
       <div className="flex items-start gap-2 px-3 py-2">
         <div className="min-w-0 flex-1">
-          <h3 className="text-sm font-semibold">Change and rerun from step {seq}</h3>
-          <p className="text-xs text-muted">Only what you change is changed. Everything before this step is reused.</p>
+          <h3 className="text-sm font-semibold"><Hint hint="Only what you change is changed. Everything before this step is reused.">Change and rerun from step {seq}</Hint></h3>
         </div>
         {onClose && <Button size="sm" variant="ghost" onClick={onClose}>Close</Button>}
       </div>

@@ -5,6 +5,7 @@ import { Link, Navigate, useSearchParams } from 'react-router-dom';
 import { branch as fetchBranch } from '@/api/branches';
 import { compare } from '@/api/compare';
 import { PageBody, PageHeader } from '@/components/ui/page';
+import { Hint } from '@/components/ui/hint';
 import { Panel, PanelHeader } from '@/components/ui/panel';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/state';
 import { useQuery } from '@/hooks/useQuery';
@@ -37,13 +38,13 @@ function AgainstFirst({ details, pairs }: { details: BranchDetail[]; pairs: Load
   const [base, ...rest] = details;
   return (
     <Panel>
-      <PanelHeader title="Against A" meta="where each run first leaves A, and how its final world differs" />
+      <PanelHeader title={<Hint hint="Where each run first leaves A, and how its final world differs.">Against A</Hint>} />
       <ul className="divide-y divide-line">
         {rest.map((d, i) => (
           <li key={d.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-sm">
             <span className="w-6 font-semibold">{letterOf(i + 1)}</span>
             <span className="min-w-0 flex-1 text-muted">{againstLine(againstFirst(pairs[i]))}</span>
-            {!('error' in pairs[i]) && <Link to={compareHref([base.id, d.id])} className="text-xs text-accent hover:underline">A against {letterOf(i + 1)} in detail</Link>}
+            {!('error' in pairs[i]) && <Link to={compareHref([base.id, d.id])} className="text-xs text-accent hover:underline" aria-label={`A against ${letterOf(i + 1)} in detail`}>Details</Link>}
           </li>
         ))}
       </ul>
@@ -75,7 +76,7 @@ export default function CompareManyPage() {
   const ids = branchesIn(useSearchParams()[0].get('branches'));
   if (ids.length === 2) return <Navigate to={compareHref(ids)} replace />;
   if (ids.length < 2) {
-    return <><PageHeader title="Compare runs" /><PageBody><EmptyState title="Pick two or more runs to compare." hint="From a run's experiment menu, tick the runs and choose Compare." /></PageBody></>;
+    return <><PageHeader title="Compare runs" /><PageBody><EmptyState title="Pick two or more runs" hint="From a run's experiment menu, tick the runs and choose Compare." /></PageBody></>;
   }
   return <Many ids={ids} />;
 }

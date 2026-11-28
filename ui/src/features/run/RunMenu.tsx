@@ -26,7 +26,7 @@ const VIEWS: { page: Exclude<RunPage, 'live'>; label: string; path: string }[] =
  */
 /** What an export did, in one line: per target sent, queued or failed; none set up says where to add one. */
 export function exportedLine(r: Exported): string {
-  if (r.exports.length === 0) return 'No observability target yet: add one in Settings → Observability.';
+  if (r.exports.length === 0) return 'No observability target (Settings → Observability)';
   return r.exports.map((e) => `${e.target}: ${e.state === 'done' ? `sent${e.spans != null ? ` ${e.spans} spans` : ''}` : e.state === 'queued' ? 'queued until the run ends' : `failed${e.error ? ` (${e.error})` : ''}`}`).join(' · ');
 }
 

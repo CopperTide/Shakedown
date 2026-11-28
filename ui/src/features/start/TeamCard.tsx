@@ -64,7 +64,7 @@ function TeamPicker({ teams, connected, code, current, onPick }: { teams: Team[]
         {connected.length > 0 && <DropdownMenuLabel className={suggested.length ? 'mt-1 border-t border-line pt-2' : ''}>Your connected agents</DropdownMenuLabel>}
         {connected.map((t) => <PickItem key={t.id} t={t} line={agentModelLine(t.agents[0])} current={current} onPick={onPick} />)}
         {code.length > 0 && <DropdownMenuLabel className={suggested.length || connected.length ? 'mt-1 border-t border-line pt-2' : ''}>Your code</DropdownMenuLabel>}
-        {code.map((t) => <PickItem key={t.id} t={t} line="Your driver, started by Shakedown on this computer" current={current} onPick={onPick} />)}
+        {code.map((t) => <PickItem key={t.id} t={t} line="Your driver, on this computer" current={current} onPick={onPick} />)}
       </DropdownMenuContent>
     </DropdownMenu>
   );

@@ -5,6 +5,7 @@ import { ApproximateMark, StatusChip } from '@/components/marks';
 import { PageBody, PageGate, PageHeader, Stat } from '@/components/ui/page';
 import { Panel, PanelHeader } from '@/components/ui/panel';
 import { Split } from '@/components/ui/split';
+import { Hint } from '@/components/ui/hint';
 import { Notice } from '@/components/ui/state';
 import { StatusMark } from '@/components/ui/status';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -44,7 +45,7 @@ import { useBranch } from './useBranch';
 import { useStepKeys } from './useStepKeys';
 import { useStepParam } from './useStepParam';
 import { type Timeline, useTimeline } from './useTimeline';
-import Waterfall from './Waterfall';
+import Waterfall, { TRACE_HINT } from './Waterfall';
 
 /** How the run's agents ran, from its `run_start` (old runs: a chain with a handoff required). */
 export function runnerLine(events: Event[]): string {
@@ -157,7 +158,7 @@ function Main({ detail, timeline: { lanes, span }, selected, onSelect, models, s
           <TabsContent value="agent"><AgentInspector events={detail.events} team={detail.team} startSeq={detail.start_seq} selected={selected} onSelect={onSelect} /></TabsContent>
         </Tabs>
       </Panel>
-      {selected != null && <Panel><PanelHeader title="Trace" /><Waterfall events={detail.events} selected={selected} onSelect={onSelect} /></Panel>}
+      {selected != null && <Panel><PanelHeader title={<Hint hint={TRACE_HINT}>Trace</Hint>} /><Waterfall events={detail.events} selected={selected} onSelect={onSelect} /></Panel>}
     </div>
   );
 }

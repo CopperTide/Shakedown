@@ -1,5 +1,6 @@
 import { restorePlan } from '@/api/branches';
 import { ApiError } from '@/api/client';
+import { Hint } from '@/components/ui/hint';
 import { useQuery } from '@/hooks/useQuery';
 import { errorMessage } from '@/lib/errors';
 import { REPLAY_NOTE, planLine } from '@/model/restore';
@@ -16,6 +17,8 @@ const MODES: { id: RestoreMode; label: string; hint: string }[] = [
   { id: 'exact', label: 'Exact', hint: 'the world exactly as it was' },
   { id: 'approximate', label: 'Approximate', hint: 'from saves that may differ slightly' },
 ];
+
+const RESTORE_HINT = [...MODES.map((m) => `${m.label}: ${m.hint}.`), REPLAY_NOTE].join('\n');
 
 export const WAIT_REASON = 'Wait for this run to finish before forking.';
 
@@ -43,14 +46,13 @@ export function blockedReason(plan: Plan, running: boolean): string | null {
 }
 
 function PlanLines({ plan }: { plan: Plan }) {
-  if (plan.state === 'loading') return <span className="text-xs text-muted">Checking how each part is restored…</span>;
+  if (plan.state === 'loading') return <span className="text-xs text-muted">Checking…</span>;
   // A refusal is said next to the start button it disables.
   if (plan.state === 'refused') return null;
-  if (plan.state === 'failed') return <span className="text-xs text-muted">Couldn't get the restore plan: {plan.error}</span>;
+  if (plan.state === 'failed') return <span className="text-xs text-muted">No restore plan: {plan.error}</span>;
   return (
     <>
       <ul className="flex flex-col gap-0.5">{plan.parts.map((p) => <li key={p.part} className="font-mono text-2xs">{planLine(p)}</li>)}</ul>
-      {plan.parts.some((p) => p.how === 'replay') && <span className="text-xs text-muted">{REPLAY_NOTE}</span>}
     </>
   );
 }
@@ -60,7 +62,7 @@ export function RestoreChoice({ mode, onMode, plan }: { mode: RestoreMode; onMod
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex flex-wrap items-center gap-3 text-sm" role="radiogroup" aria-label="Restore">
-        <span className="text-2xs font-medium text-muted">Restore</span>
+        <span className="text-2xs font-medium text-muted"><Hint hint={RESTORE_HINT}>Restore</Hint></span>
         {MODES.map((m) => (
           <label key={m.id} className="flex items-center gap-1.5" title={m.hint}>
             <input type="radio" name="restore" value={m.id} checked={mode === m.id} onChange={() => onMode(m.id)} className="accent-[var(--accent)]" />

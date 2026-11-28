@@ -37,6 +37,9 @@ const TONE: Record<TrackMark['kind'], string> = { disruption: 'text-warn', refus
 
 const at = (seq: number, s: Strip) => `${s.max > s.min ? ((seq - s.min) / (s.max - s.min)) * 100 : 0}%`;
 
+/** What the strip's marks are: the hint on its title. */
+export const STRIP_HINT = 'Both branches on one step axis. ▼ disruption · ▲ refused · ┃ fork.';
+
 /** Both branches on one step axis: where they first diverge, each one's disruptions and refusals. */
 export function DivergenceStrip({ s }: { s: Strip }) {
   return (
@@ -56,9 +59,6 @@ export function DivergenceStrip({ s }: { s: Strip }) {
       ))}
       <div className="relative ml-6 h-4 font-mono text-2xs text-faint">
         {s.ticks.map((t) => <span key={t} className="absolute -translate-x-1/2" style={{ left: at(t, s) }}>{t}</span>)}
-      </div>
-      <div className="ml-6 flex flex-wrap gap-3 text-2xs text-muted">
-        <span><span className="font-mono text-warn">▼</span> disruption</span><span><span className="font-mono text-alarm">▲</span> refused</span><span><span className="font-mono">┃</span> fork</span><span>step →</span>
       </div>
     </div>
   );

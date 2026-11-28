@@ -117,7 +117,7 @@ export default function ViewsWorld({ runId, d, defs }: { runId: string; d: Branc
         </header>
         {screen
           ? <ViewScreen view={view} screen={screen} data={shown.data} fetchedAt={shown.fetchedAt} />
-          : <div className="flex-1 px-5 py-4 text-sm text-muted">This view has no screens.</div>}
+          : <div className="flex-1 px-5 py-4 text-sm text-muted">No screens</div>}
         {!live && s.stops.length > 0 && (
           <ViewScrubber stops={s.stops} marks={s.marks} current={s.point.seq} playing={playing} pending={sd.pending}
             rate={s.play.rate} onRate={s.play.setRate}

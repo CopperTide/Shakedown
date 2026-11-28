@@ -223,7 +223,9 @@ These are shadcn-style components: the code is ours, built on Radix primitives w
   lives on the title or label itself: `Hint` shows it on hovering (desktop) or tapping (phone), with no icon.
   `Card` takes `hint` (explanation, on the title) apart from `description` (a short data line that stays visible);
   `Field` `hint`, `Toggle` `description`, `EmptyState` `hint` and `ErrorState` `hint` all show through `Hint`. An
-  ⓘ is used only where there is nothing to hover. Longer detail folds under a `<details>`.
+  ⓘ is used only where there is nothing to hover. Longer detail folds under a `<details>`. Charts keep their
+  numbers and axis labels; how to read them (legends, captions) is the hint on the chart's title, e.g. the run page's
+  Trace, the Agent tab's Context size and Process's Trends. A failure stays on screen; its advice is the hint.
 - `lib/`: small helpers with no domain (class names, keys, formats, marks, errors). `components/ui`:
   the primitives above; `components/`: domain pieces several pages share (status marks, provider fields).
 - `features/<name>/`: one folder per screen (`experiments`, `runs`, `run`, `process`, `world`, `compare`,

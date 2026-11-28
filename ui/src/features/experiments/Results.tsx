@@ -1,4 +1,5 @@
 import { type CSSProperties, type ReactNode, useState } from 'react';
+import { Hint } from '@/components/ui/hint';
 import { Panel } from '@/components/ui/panel';
 import { Tag } from '@/components/ui/status';
 import { cn } from '@/lib/cn';
@@ -48,7 +49,7 @@ function SetupCard({ c, i, measures, figures, best, quiet }: { c: Column; i: num
       {measures.length > 0 && <div className="flex flex-col gap-4">{measures.map((r) => <MeasureFigure key={r.name} row={r} i={i} />)}</div>}
       <dl className="flex flex-col border-t border-line pt-2">
         {figures.map((m) => <Figure key={m.id} m={m} c={c} best={best(m)} />)}
-        {quiet && <p className="pt-1.5 text-xs text-muted"><span aria-hidden="true">✓ </span>No safety violations, denied actions or flags</p>}
+        {quiet && <p className="pt-1.5 text-xs text-muted"><span aria-hidden="true">✓ </span><Hint hint="No safety violations, denied actions or flags">No safety issues</Hint></p>}
       </dl>
     </Panel>
   );
@@ -103,9 +104,9 @@ export function Checks({ reports }: { reports: SetupReport[] }) {
       <div className="min-w-fit">
         <div className="flex items-center gap-3 px-4 py-3">
           <h2 className="text-sm font-semibold">Checks</h2>
-          <span className="text-xs text-muted">{failing.length ? `${failing.length} of ${rows.length} failed in some run` : rows.length === 1 ? 'The check passed in every run' : `All ${rows.length} passed in every run`}</span>
+          <span className="text-xs text-muted">{failing.length ? `${failing.length} of ${rows.length} failed in some run` : 'All passed'}</span>
           {failing.length < rows.length && (
-            <button type="button" className="ml-auto text-xs text-muted hover:text-fg" onClick={() => setAll(!all)}>{all ? 'Only the failed ones' : `Show all ${rows.length}`}</button>
+            <button type="button" className="ml-auto text-xs text-muted hover:text-fg" onClick={() => setAll(!all)}>{all ? 'Failed only' : `Show all ${rows.length}`}</button>
           )}
         </div>
         {shown.map((r) => <CheckLine key={r.name} row={r} n={reports.length} />)}

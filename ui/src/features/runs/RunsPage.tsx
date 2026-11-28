@@ -11,6 +11,7 @@ import { Dialog, DialogActions, DialogContent } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { PageBody, PageHeader } from '@/components/ui/page';
 import { Panel } from '@/components/ui/panel';
+import { Hint } from '@/components/ui/hint';
 import { EmptyState, ErrorState, Notice } from '@/components/ui/state';
 import { useAction } from '@/hooks/useAction';
 import { DISK_CHANGED } from '@/hooks/useHealth';
@@ -87,7 +88,7 @@ function DeleteRunDialog({ run, onClose, onDone }: { run: RunSummary | null; onC
   const remove = async () => { if (run) await act(run); };
   return (
     <Dialog open={!!run} onOpenChange={(o) => { if (!o) { reset(); onClose(); } }}>
-      <DialogContent title="Delete this run?" description={run ? `${runTitle(run)} and all ${run.branches.length} of its branches, with their saves. This can't be undone.` : ''}>
+      <DialogContent title="Delete this run?" description={run ? `${runTitle(run)} and its ${run.branches.length} branches. Can't be undone.` : ''}>
         {error && <ErrorState error={error} hint="Nothing was deleted." className="m-4" />}
         <DialogActions onCancel={onClose} onGo={remove} disabled={busy} danger label={busy ? 'Deleting…' : 'Delete run'} />
       </DialogContent>
@@ -115,7 +116,7 @@ export default function Runs() {
         {error && runs && <ErrorState error={error} onRetry={refresh} />}
         {filtered && (
           <Notice>
-            Showing the runs of {describeRunFilter(filter)}, and their reruns.{' '}
+            <Hint hint="And their reruns.">{describeRunFilter(filter)}</Hint>{' '}
             <button type="button" onClick={clear} className="text-accent underline-offset-2 hover:underline">Show every run</button>
           </Notice>
         )}

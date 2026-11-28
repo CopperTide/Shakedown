@@ -261,6 +261,9 @@ function Legend() {
   );
 }
 
+/** What the mouse does on the timeline: the tools button's tooltip. */
+const MOUSE_HINT = 'Scroll to move · Ctrl + scroll or pinch to zoom · drag to pan. Zoom in to reveal overlapping steps. Double-click a step to deselect.';
+
 /** "⋯": what the marks mean, model calls on or off, and zoom by button (the mouse does it all too). */
 function Tools({ t, viewW, minW, models, onModels }: {
   t: ReturnType<typeof useTrackView>; viewW: number; minW: number; models: boolean; onModels: (s: boolean) => void;
@@ -268,7 +271,7 @@ function Tools({ t, viewW, minW, models, onModels }: {
   const { view } = t;
   return (
     <Popover>
-      <PopoverTrigger asChild><Button size="icon" variant="ghost" className="size-6 bg-surface" aria-label="Timeline tools"><MoreHorizontal /></Button></PopoverTrigger>
+      <PopoverTrigger asChild><Button size="icon" variant="ghost" className="size-6 bg-surface" aria-label="Timeline tools" title={MOUSE_HINT}><MoreHorizontal /></Button></PopoverTrigger>
       <PopoverContent align="end" className="flex w-60 flex-col gap-3 text-xs">
         <Legend />
         <label className="flex items-center gap-1.5"><Checkbox checked={models} onChange={(e) => onModels(e.target.checked)} />Model calls</label>
@@ -277,7 +280,6 @@ function Tools({ t, viewW, minW, models, onModels }: {
           <Button size="sm" variant="ghost" className="w-12 font-mono" onClick={() => t.move({ zoom: 1, scroll: 0 })} title="Fit the run to the width">{view.zoom <= 1.01 ? 'Fit' : `${view.zoom.toFixed(view.zoom < 10 ? 1 : 0)}×`}</Button>
           <Button size="icon" variant="ghost" className="size-6" aria-label="Zoom in" disabled={view.zoom >= MAX_ZOOM} onClick={() => t.move(stepZoom(view, 1, viewW, minW))}><Plus /></Button>
         </div>
-        <p className="text-faint">Scroll to move · Ctrl + scroll or pinch to zoom · drag to pan. Zoom in to reveal overlapping steps. Double-click a step to deselect.</p>
       </PopoverContent>
     </Popover>
   );
@@ -324,7 +326,7 @@ export default function ActionTimeline({ lanes, team, span, selected, onSelect, 
   return (
     <div className="group/tl relative flex min-w-0 flex-col">
       <Overlay t={t} viewW={viewW} minW={minW} models={models} onModels={onModels} live={live} />
-      {matches?.size === 0 && <p className="px-3 py-6 text-sm text-muted">No timeline events match the filters.</p>}
+      {matches?.size === 0 && <p className="px-3 py-6 text-sm text-muted">No matches</p>}
       <div ref={box.ref} className="relative flex min-w-0 cursor-grab touch-pan-y overflow-x-auto overscroll-x-contain select-none active:cursor-grabbing" {...mouse}>
         <LaneLabels lanes={visibleLanes} team={team} width={labelW} />
         {drawing && (

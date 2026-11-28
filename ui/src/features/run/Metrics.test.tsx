@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { Event, Metrics } from '@/model/types';
-import MetricsPanel, { costText, estimateText, overheadLines } from './Metrics';
+import MetricsPanel, { costText, estimateHint, estimateText, overheadLines } from './Metrics';
 import { runnerLine } from './RunPage';
 
 const cost = (usd: number | null, label: string, as_of: string | null = null) => ({ usd, label, source: null, as_of });
@@ -26,7 +26,8 @@ describe('metrics', () => {
   });
   it('estimates production as measured minus overhead, or says why not', () => {
     expect(estimateText(metrics())).toBe('10.0 s (12.0 s measured − 2.00 s Shakedown overhead)');
-    expect(estimateText(metrics({ estimated_s: null, overhead_recorded: false }))).toContain('not estimated');
+    expect(estimateText(metrics({ estimated_s: null, overhead_recorded: false }))).toBe('–');
+    expect(estimateHint(metrics({ estimated_s: null, overhead_recorded: false }))).toContain('Not estimated');
   });
   it('shows each agent with its model and tokens', () => {
     const html = renderToStaticMarkup(<MetricsPanel m={metrics()} />);

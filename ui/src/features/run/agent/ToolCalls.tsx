@@ -12,7 +12,7 @@ const PAGE = 50;
 /** The agent's tool calls, in order: the tool, how it went, and a line each of its arguments and result. */
 export default memo(function ToolCalls({ rows, agent, selected, onSelect }: { rows: ToolRow[]; agent: string; selected: number | null; onSelect: (seq: number) => void }) {
   const [shown, more] = useShown(PAGE, agent);
-  if (!rows.length) return <p className="px-3 py-4 text-xs text-muted">This agent called no tools.</p>;
+  if (!rows.length) return <p className="px-3 py-4 text-xs text-muted">No tool calls</p>;
   return (
     <>
       <ol className="flex flex-col">

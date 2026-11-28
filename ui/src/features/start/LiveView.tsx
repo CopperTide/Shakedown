@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { setPaused, stopBranch } from '@/api/branches';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogActions, DialogContent } from '@/components/ui/dialog';
+import { Hint } from '@/components/ui/hint';
 import { Panel } from '@/components/ui/panel';
 import { SidePanel } from '@/components/ui/side-panel';
 import { EmptyState, ErrorState } from '@/components/ui/state';
@@ -68,10 +69,12 @@ function Toolbar({ flow, place, seconds, title, main, setMain, onPause, onStop, 
 /** Passed or Failed (or Stopped, Error) and one plain sentence on why; Details, and the rest under ⋯. */
 function ResultLine({ r, details, menu }: { r: Result; details: string; menu: ReactNode }) {
   const m = flowMark(r.flow);
+  // A failure says why on the screen; any other ending says it on hovering its word.
+  const failed = r.flow === 'failed' || r.flow === 'error';
   return (
     <div role="status" className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-2">
-      <span className={cn('flex items-center gap-1.5 text-base font-semibold', m.abnormal && 'text-alarm')}><span aria-hidden="true" className="font-mono">{m.glyph}</span>{r.title}</span>
-      <span className="min-w-0 text-sm">{r.why}</span>
+      <span className={cn('flex items-center gap-1.5 text-base font-semibold', m.abnormal && 'text-alarm')}><span aria-hidden="true" className="font-mono">{m.glyph}</span><Hint hint={failed ? undefined : r.why}>{r.title}</Hint></span>
+      {failed && <span className="min-w-0 text-sm">{r.why}</span>}
       <span className="flex gap-1.5">
         <Button asChild title="Everything about this run: event log, trace, figures"><Link to={details}><ListTree />Details</Link></Button>
         {menu}
@@ -116,7 +119,7 @@ function TimelineMain({ d, now, selected, onSelect, timeline: { lanes, span }, m
   return (
     <Panel>
       {span ? <ActionTimeline lanes={lanes} team={d.team} span={span} selected={selected} onSelect={onSelect} models={models} onModels={setModels} live={live} pauses={pauses} />
-        : <EmptyState title="The world is ready." />}
+        : <EmptyState title="The world is ready" />}
     </Panel>
   );
 }
@@ -124,7 +127,7 @@ function TimelineMain({ d, now, selected, onSelect, timeline: { lanes, span }, m
 function TwinMain({ d, scrub }: { d: BranchDetail; scrub: boolean }) {
   const { views, error } = useViews(d.id, d);
   const w = useWorldView(d, views);
-  if (!views.length) return <Panel><EmptyState title="No view of the world yet." hint={error ? `Couldn't load it: ${error}` : undefined} /></Panel>;
+  if (!views.length) return <Panel><EmptyState title="No world view yet" hint={error ? `Couldn't load it: ${error}` : undefined} /></Panel>;
   return <TwinView w={w} views={views} scrub={scrub} />;
 }
 
@@ -179,7 +182,7 @@ export function LiveRun({ runId, branchId, nameOf }: { runId: string; branchId: 
       {d && <RunReview d={d} onStep={setSelected} />}
       {d && <MainArea d={d} main={main} flow={flow} now={now} selected={selected} onSelect={setSelected} />}
       <Dialog open={c.stopping} onOpenChange={c.setStopping}>
-        <DialogContent title="Stop this run?" description="The agents stop where they are. The run ends now and is not scored; its steps so far stay recorded.">
+        <DialogContent title="Stop this run?" description="It ends unscored; its steps stay recorded.">
           <DialogActions onCancel={() => c.setStopping(false)} onGo={c.stop} danger label="Stop the run" />
         </DialogContent>
       </Dialog>

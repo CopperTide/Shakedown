@@ -35,6 +35,6 @@ describe('agent inspector', () => {
 
   it("follows the selected step's agent", () => {
     const crew = renderToStaticMarkup(<AgentInspector events={events} team={team} startSeq={null} selected={2} onSelect={() => {}} />);
-    expect(crew).toContain('This agent recorded no reasoning.');
+    expect(crew).toContain('No reasoning');
   });
 });

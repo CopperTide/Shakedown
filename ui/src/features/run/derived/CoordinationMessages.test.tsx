@@ -26,5 +26,5 @@ it('combines participant and content filters', () => {
   fireEvent.change(screen.getByLabelText('Messages involving agent'), { target: { value: 'crew' } });
   expect(screen.getAllByRole('article')).toHaveLength(1);
   fireEvent.change(screen.getByLabelText('Search messages'), { target: { value: 'missing' } });
-  expect(screen.getByText('No messages match these filters.')).toBeTruthy();
+  expect(screen.getByText('No matches')).toBeTruthy();
 });

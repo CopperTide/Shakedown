@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
+import { Hint } from '@/components/ui/hint';
 import { Tag } from '@/components/ui/status';
 import type { SetupReport } from '@/model/report';
 import type { CompareReview, Difference, Target } from '@/model/review';
@@ -41,9 +42,8 @@ function Diff({ d, hrefOf }: { d: Difference; hrefOf: HrefOf }) {
   );
   return (
     <li className="flex flex-col gap-1.5">
-      <span className="text-sm font-medium">{d.title}</span>
+      <span className="text-sm font-medium"><Hint hint={d.why_it_matters}>{d.title}</Hint></span>
       <div className="grid gap-2 sm:grid-cols-2">{side('A', 'a', d.a, d.steps_a)}{side('B', 'b', d.b, d.steps_b)}</div>
-      <p className="text-sm leading-5 text-muted">{d.why_it_matters}</p>
     </li>
   );
 }
@@ -52,11 +52,10 @@ export function CompareBody({ r, hrefOf }: { r: CompareReview; hrefOf: HrefOf })
   return (
     <div className="flex flex-col gap-3 px-4 pb-3">
       <div className="flex flex-wrap items-baseline gap-2">
-        <Tag>{BETTER[r.which_is_better] ?? r.which_is_better}</Tag>
+        <Hint hint={r.why}><Tag>{BETTER[r.which_is_better] ?? r.which_is_better}</Tag></Hint>
         <p className="min-w-0 flex-1 text-base leading-6 font-medium">{r.headline}</p>
       </div>
       <ol className="flex flex-col gap-4">{r.differences.map((d, i) => <Diff key={i} d={d} hrefOf={hrefOf} />)}</ol>
-      {r.why && <p className="text-sm text-muted">{r.why}</p>}
     </div>
   );
 }
