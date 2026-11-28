@@ -8,7 +8,6 @@ import { Input } from '@/components/ui/input';
 import { Segmented } from '@/components/ui/segmented';
 import { LoadingState } from '@/components/ui/state';
 import EditorFrame from '@/features/editors/EditorFrame';
-import { SectionHead } from '@/features/editors/fields';
 import { useProject } from '@/hooks/useProject';
 import { errorMessage } from '@/lib/errors';
 import { type SettingsForm, formFrom, settingsFrom } from './project';
@@ -16,11 +15,11 @@ import LastDelete from './LastDelete';
 import { SettingsTabs } from './SettingsPage';
 import UseFromAgent from './UseFromAgent';
 
-const SECTIONS = [{ id: 'project', label: 'Project' }, { id: 'assistant', label: 'Assistant' }, { id: 'permissions', label: 'What agents may do' }, { id: 'mcp', label: 'Use from an agent' }, { id: 'trash', label: 'Deleted files' }];
+const SECTIONS = [{ id: 'project', label: 'Project' }, { id: 'assistant', label: 'Assistant' }, { id: 'permissions', label: 'Permissions' }, { id: 'mcp', label: 'Use from an agent' }, { id: 'trash', label: 'Deleted files' }];
 
 function Permissions({ f, set }: { f: SettingsForm; set: (p: Partial<SettingsForm>) => void }) {
   return (
-    <Card>
+    <Card title="Permissions" hint="What agents may do without asking. Applies to the assistant and to every MCP client.">
       <div className="px-[18px]">
         <FormRow label="Edit project files" help="Worlds, scenarios, setups, experiments. Changes stay with the current project.">
           <Segmented label="Edits" value={f.edit} onChange={(v) => set({ edit: v })} options={[{ id: 'diff_first', label: 'Show a diff first' }, { id: 'apply_then_tell', label: 'Apply, then tell me' }]} />
@@ -36,17 +35,17 @@ function Permissions({ f, set }: { f: SettingsForm; set: (p: Partial<SettingsFor
 }
 
 function Section({ id, f, set }: { id: string; f: SettingsForm; set: (p: Partial<SettingsForm>) => void }) {
-  if (id === 'permissions') return <><SectionHead title="What agents may do without asking" about="Applies to the assistant and to every MCP client." /><Permissions f={f} set={set} /></>;
+  if (id === 'permissions') return <Permissions f={f} set={set} />;
   if (id === 'mcp') return <UseFromAgent />;
   if (id === 'trash') return <LastDelete />;
   if (id === 'assistant') return (
-    <><SectionHead title="Assistant" about="The chat on every page, on your own model key." />
-      <Card><div className="px-[18px]">
+    <Card title="Assistant" hint="The chat on every page, on your own model key.">
+      <div className="px-[18px]">
         <FormRow label="Model" help="Empty: the default provider's default model."><Input aria-label="Model" value={f.model} onChange={(e) => set({ model: e.target.value })} placeholder="claude-sonnet" /></FormRow>
         <FormRow label="Provider" help="anthropic, openai, openrouter or local:<name>."><Input aria-label="Provider" value={f.provider} onChange={(e) => set({ provider: e.target.value })} /></FormRow>
-      </div></Card></>);
-  return <><SectionHead title="Project" about="Choose the name shown for this project." />
-    <Card><div className="px-[18px]"><FormRow label="Name" help="Shown in the sidebar and on reports."><Input aria-label="Project name" value={f.name} onChange={(e) => set({ name: e.target.value })} /></FormRow></div></Card></>;
+      </div>
+    </Card>);
+  return <Card title="Project"><div className="px-[18px]"><FormRow label="Name" help="Shown in the sidebar and on reports."><Input aria-label="Project name" value={f.name} onChange={(e) => set({ name: e.target.value })} /></FormRow></div></Card>;
 }
 
 export default function ProjectSettingsPage() {

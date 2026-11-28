@@ -66,7 +66,7 @@ function KindFields({ form, set }: { form: KeyForm; set: (p: Partial<KeyForm>) =
   return (
     <>
       {custom && <Field label="Server URL"><Input value={form.base_url} placeholder="http://127.0.0.1:8000/v1" onChange={(e) => set({ base_url: e.target.value })} /></Field>}
-      <Field label={custom ? 'Key (if the server needs one)' : 'Key'}>
+      <Field label="Key" hint={custom ? 'Only if the server needs one' : undefined}>
         <Input type="password" autoComplete="off" value={form.secret} onChange={(e) => set({ secret: e.target.value })} />
       </Field>
     </>
@@ -102,7 +102,7 @@ export function AddKeyForm({ form, error, onChange, onAdd }: { form: KeyForm; er
             <Input value={form.name} placeholder="my-key" onChange={(e) => set({ name: keyName(e.target.value) })} />
           </Field>
           <KindFields form={form} set={set} />
-          <Field label="Model (optional, for Test)"><Input value={form.model} onChange={(e) => set({ model: e.target.value })} /></Field>
+          <Field label="Model" hint="Optional: the model Test calls"><Input value={form.model} onChange={(e) => set({ model: e.target.value })} /></Field>
           {error && <p className="text-xs text-alarm">⚠ {error}</p>}
           <Button type="submit" disabled={!form.name.trim()} className="self-start">Save</Button>
         </form>

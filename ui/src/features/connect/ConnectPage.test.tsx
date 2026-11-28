@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { type ConnectForm, emptyForm } from './connect';
-import { ConnectView, type TestState } from './ConnectPage';
+import { COMMAND_HINT, ConnectView, type TestState } from './ConnectPage';
 
 const draw = (form: ConnectForm, test: TestState = { state: 'idle' }) =>
   renderToStaticMarkup(<ConnectView form={form} test={test} onChange={() => {}} onSubmit={() => {}} onCancel={() => {}} />);
@@ -44,7 +44,8 @@ describe('Connect your agent', () => {
     const html = draw(emptyForm('code'));
     expect(html).toMatch(/aria-checked="true"[^>]*>Code</);
     expect(html).toContain('aria-label="Command"');
-    expect(html).toContain('runs on this computer');
+    expect(html).not.toContain('runs on this computer'); // on hovering the Command label
+    expect(COMMAND_HINT).toContain('runs on this computer');
     const done = draw({ ...emptyForm('code'), name: 'Team', command: 'python driver.py' }, {
       state: 'code', result: { ok: true, branch_id: 'b', status: 'passed', agents: ['a', 'b'], tool_calls: 7, error: null, exit: 'exit 0', stderr_tail: '' },
       connection: { id: 'c1', name: 'Team', kind: 'code', command: ['python', 'driver.py'], workdir: null, env: {}, created_at: '' },

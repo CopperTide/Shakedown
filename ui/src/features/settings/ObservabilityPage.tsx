@@ -7,6 +7,7 @@ import {
   type TargetFlags, type TargetKind, type TargetRow, testTarget,
 } from '@/api/observability';
 import { Button } from '@/components/ui/button';
+import { Hint } from '@/components/ui/hint';
 import { Field, Input, Textarea } from '@/components/ui/input';
 import { Panel, PanelHeader } from '@/components/ui/panel';
 import { Segmented } from '@/components/ui/segmented';
@@ -71,8 +72,8 @@ export function checkLine(t: TargetRow): string {
 }
 
 function PresetFields({ form, set }: { form: TargetForm; set: (p: Partial<TargetForm>) => void }) {
-  const secret = (label: string, key: 'secret_key' | 'api_key') => (
-    <Field label={label}>
+  const secret = (label: string, key: 'secret_key' | 'api_key', hint?: string) => (
+    <Field label={label} hint={hint}>
       <Input type="password" autoComplete="off" value={form[key]}
         onChange={(e) => set(key === 'secret_key' ? { secret_key: e.target.value } : { api_key: e.target.value })} />
     </Field>
@@ -93,7 +94,7 @@ function PresetFields({ form, set }: { form: TargetForm; set: (p: Partial<Target
         <Field label="Phoenix URL" hint="Your Phoenix (http://127.0.0.1:6006 when blank), or your Phoenix Cloud space's URL.">
           <Input value={form.base_url} placeholder="http://127.0.0.1:6006" onChange={(e) => set({ base_url: e.target.value })} />
         </Field>
-        {secret('API key (if it needs one)', 'api_key')}
+        {secret('API key', 'api_key', 'Only if your Phoenix needs one')}
         <Field label="Project"><Input value={form.project} placeholder="shakedown" onChange={(e) => set({ project: e.target.value })} /></Field>
       </>
     );
@@ -103,7 +104,7 @@ function PresetFields({ form, set }: { form: TargetForm; set: (p: Partial<Target
       <Field label="Collector URL" hint="OTLP/HTTP: /v1/traces is added unless the URL ends with it.">
         <Input value={form.endpoint} placeholder="http://127.0.0.1:4318" onChange={(e) => set({ endpoint: e.target.value })} />
       </Field>
-      <Field label="Headers (one name: value a line)">
+      <Field label="Headers" hint="One name: value a line">
         <Textarea rows={3} autoComplete="off" value={form.headers} placeholder="x-honeycomb-team: …" onChange={(e) => set({ headers: e.target.value })} />
       </Field>
     </>
@@ -150,15 +151,22 @@ function ExportList({ exports }: { exports: ExportRow[] }) {
   );
 }
 
+/** What sending telemetry does, on hovering the status line. */
+export function statusHint(targets: TargetRow[]): string {
+  const first = targets.length
+    ? 'Automatic destinations get each new run when it finishes. Test checks a destination; Recent exports shows delivery.'
+    : 'Run events are recorded locally. Add a destination below to send traces to your observability platform.';
+  return `${first}\nLangfuse, Arize Phoenix or any OTLP/HTTP collector. Traces include model and tool calls; prompt and response content is set per destination.`;
+}
+
 function ExportStatus({ targets }: { targets: TargetRow[] }) {
   const automatic = targets.filter((t) => t.auto_export).length;
+  const n = targets.length;
   return (
-    <section className="rounded-lg border border-line bg-raised p-4" aria-label="Telemetry status">
-      <h2 className="text-base font-semibold">{targets.length ? `${targets.length} telemetry destination${targets.length === 1 ? '' : 's'}` : 'No telemetry destinations configured'}</h2>
-      <p className="mt-1 text-sm text-muted">{targets.length
-        ? `${automatic} set to export new runs automatically when they finish. Use Test to check a destination; Recent exports shows delivery results.`
-        : 'Run events are recorded locally. Add a destination below to send traces to your observability platform.'}</p>
-      <p className="mt-2 text-xs text-muted">Langfuse · Arize Phoenix · OTLP/HTTP collectors. Completed-run traces include model and tool calls; prompt and response content is controlled per destination.</p>
+    <section className="rounded-lg border border-line bg-raised px-4 py-3" aria-label="Telemetry status">
+      <h2 className="text-base font-semibold">
+        <Hint hint={statusHint(targets)}>{n ? `${n} destination${n === 1 ? '' : 's'} · ${automatic} automatic` : 'No destinations'}</Hint>
+      </h2>
     </section>
   );
 }

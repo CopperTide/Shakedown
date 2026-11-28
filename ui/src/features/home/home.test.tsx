@@ -73,13 +73,16 @@ describe('home', () => {
     const fetch = mockFetch(EMPTY);
     render(<MemoryRouter><HomePage /></MemoryRouter>);
     await waitFor(() => expect(screen.getByText('Start from an example')).toBeTruthy());
+    expect(screen.queryByText(/tiny retail order desk/)).toBeNull(); // what it adds shows on hovering the title
+    expect(screen.queryByText('Open them below')).toBeNull();
+    expect(screen.getByText('Pass rate')).toBeTruthy();
     expect(fetch.mock.calls.some(([url]) => String(url).endsWith('/api/project/example'))).toBe(false);
   });
 
   it('adding_the_example_confirms_and_opens_its_experiment', async () => {
     const fetch = mockFetch(EMPTY);
     render(<MemoryRouter><Routes><Route path="/" element={<HomePage />} /><Route path="/experiments/file/:id" element={<p>Experiment page</p>} /></Routes></MemoryRouter>);
-    fireEvent.click(await screen.findByRole('button', { name: /Add the example/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Add example/ }));
     await waitFor(() => expect(screen.getByText('Experiment page')).toBeTruthy());
     const call = fetch.mock.calls.find(([url]) => String(url).endsWith('/api/project/example'));
     expect(JSON.parse(String(call?.[1]?.body))).toEqual({ confirm: true });

@@ -58,15 +58,17 @@ function CodeTestLine({ t }: { t: ConnectionTest }) {
   );
 }
 
+export const COMMAND_HINT = 'Your driver runs on this computer: Shakedown starts this command for each run, with the run\'s ids in its '
+  + 'environment, and your driver registers its agents and drives them.';
+
 /** A Code connection's fields: its name, the command, the folder it runs in and its environment. */
 function CodeFields({ form, set, busy }: { form: ConnectForm; set: (p: Partial<ConnectForm>) => void; busy: boolean }) {
   return (
     <>
-      <p className="text-xs text-muted">Your driver runs on this computer: Shakedown starts this command for each run, with the run&apos;s ids in its environment, and your driver registers its agents and drives them.</p>
       <Field label="Name">
         <Input value={form.name} onChange={(e) => set({ name: e.target.value })} disabled={busy} autoComplete="off" placeholder="Our LangGraph team" className="h-8 text-sm" />
       </Field>
-      <Field label="Command">
+      <Field label="Command" hint={COMMAND_HINT}>
         <Input value={form.command} onChange={(e) => set({ command: e.target.value })} disabled={busy} spellCheck={false} autoComplete="off" aria-label="Command"
           placeholder="uv run python examples/drivers/langgraph_driver.py" className="h-8 font-mono text-xs" />
       </Field>
@@ -85,7 +87,7 @@ function SecretLines({ label, tip, value, onChange, disabled, placeholder, aria 
 }) {
   const [focused, setFocused] = useState(false);
   return (
-    <Field label={<span title={tip}>{label} <span className="font-normal text-faint">· Optional</span></span>}>
+    <Field label={<>{label} <span className="font-normal text-faint">· Optional</span></>} hint={tip}>
       <Textarea rows={3} value={value} onChange={(e) => onChange(e.target.value)} disabled={disabled} spellCheck={false} autoComplete="off" autoCapitalize="off"
         onFocus={() => setFocused(true)} onBlur={() => setFocused(false)} placeholder={placeholder} aria-label={aria}
         className={cn('resize-none', !focused && value && '[-webkit-text-security:disc]')} />
@@ -109,7 +111,7 @@ function Fields({ form, set, busy }: { form: ConnectForm; set: (p: Partial<Conne
           <Input value={form.model} onChange={(e) => set({ model: e.target.value })} disabled={busy} spellCheck={false} autoComplete="off"
             placeholder="anthropic.claude-3-5-haiku-20241022-v1:0" className="h-8 font-mono text-xs" />
         </Field>
-        <Field label={<span title="Called with this machine's AWS credentials">Region</span>}>
+        <Field label="Region" hint="Called with this machine's AWS credentials">
           <Input value={form.region} onChange={(e) => set({ region: e.target.value })} disabled={busy} spellCheck={false} autoComplete="off"
             placeholder="us-east-1" className="h-8 font-mono text-xs" />
         </Field>
@@ -118,7 +120,7 @@ function Fields({ form, set, busy }: { form: ConnectForm; set: (p: Partial<Conne
   }
   return (
     <>
-      <Field label={<span title="Shakedown sends it an shakedown-agent/1 hello, then the agent's turns">URL</span>}>
+      <Field label="URL" hint="Shakedown sends it a shakedown-agent/1 hello, then the agent's turns">
         <Input type="url" inputMode="url" value={form.url} onChange={(e) => set({ url: e.target.value })} disabled={busy} spellCheck={false} autoComplete="off"
           placeholder="https://agent.example.com/shakedown" className="h-8 font-mono text-xs" />
       </Field>

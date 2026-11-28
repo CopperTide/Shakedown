@@ -37,7 +37,7 @@ export function ToolsMenu({ onPalette }: { onPalette: (start?: Mode) => void }) 
           <span className="flex-1">Theme</span><span className="text-2xs text-muted">{THEME_WORD[pref]}</span>
         </DropdownMenuItem>
         <DropdownMenuLabel className="font-normal" title="Open the UI with ?core=<url> to use another Shakedown core, or ?core= to go back to this one">
-          Shakedown core: {CORE || 'this server'}
+          Core: {CORE || 'this server'}
         </DropdownMenuLabel>
       </DropdownMenuContent>
     </DropdownMenu>

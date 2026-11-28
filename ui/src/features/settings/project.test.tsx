@@ -44,7 +44,7 @@ describe('project settings', () => {
   it('loads_and_saves_permissions', async () => {
     mockFetch();
     render(<MemoryRouter><ProjectSettingsPage /></MemoryRouter>);
-    await section('What agents may do');
+    await section('Permissions');
     fireEvent.click(await screen.findByRole('radio', { name: 'Apply, then tell me' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
     await waitFor(() => expect(puts.length).toBe(1));

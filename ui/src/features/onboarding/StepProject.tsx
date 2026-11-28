@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { createProject } from '@/api/project';
 import { Button } from '@/components/ui/button';
+import { Hint } from '@/components/ui/hint';
 import { Input } from '@/components/ui/input';
 import { Toggle } from '@/components/ui/toggle';
 import { errorMessage } from '@/lib/errors';
@@ -14,7 +15,7 @@ export default function StepProject({ stage, name, folder, onCreated }: { stage:
   const [error, setError] = useState<string | null>(null);
   if (stage === 'open') return <p className="text-sm">{name} is ready.</p>;
   if (stage === 'not_configured') return (
-    <p className="max-w-prose text-sm text-muted">Shakedown was started without a project folder. Start it again with <code className="font-mono">SHAKEDOWN_PROJECT</code> set to the folder your project should live in; it is created if it doesn't exist.</p>
+    <p className="text-sm font-medium text-alarm"><Hint hint="Start Shakedown again with SHAKEDOWN_PROJECT set to the folder your project should live in; it is created if it doesn't exist.">No project folder</Hint></p>
   );
   const create = async () => { try { await createProject(label.trim(), folder && git); onCreated(); } catch (e) { setError(errorMessage(e)); } };
   return (

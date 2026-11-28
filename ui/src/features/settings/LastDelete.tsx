@@ -7,7 +7,6 @@ import { lastDelete, restoreDeleted } from '@/api/project';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { ErrorState } from '@/components/ui/state';
-import { SectionHead } from '@/features/editors/fields';
 import { useQuery } from '@/hooks/useQuery';
 import { projectChanged } from '@/hooks/useProjectItems';
 import { errorMessage } from '@/lib/errors';
@@ -27,9 +26,8 @@ export default function LastDelete() {
   const last = q.data;
   return (
     <>
-      <SectionHead title="Deleted files" about="Deletes move files to the project's trash, .shakedown/trash/. The last 20 deletes, and every delete of the last 30 days, are kept." />
       {q.error && <ErrorState error={q.error} onRetry={q.reload} />}
-      <Card title="Last delete">
+      <Card title="Last delete" hint="Deletes move files to the project's trash, .shakedown/trash/. The last 20 deletes, and every delete of the last 30 days, are kept.">
         {last
           ? (
             <div className="grid gap-2 px-[18px] py-3 text-sm">

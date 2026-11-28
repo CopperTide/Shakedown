@@ -14,7 +14,7 @@ const ROWS = [
 export default function ProjectCard({ status }: { status: ProjectStatus }) {
   const problems = status.problems.length;
   return (
-    <Card title={status.name} description={problems ? `${problems} problem${problems > 1 ? 's' : ''} in the project's files` : 'Personal project'}>
+    <Card title={status.name} description={problems ? `${problems} problem${problems > 1 ? 's' : ''}` : 'Personal project'}>
       <ul className="divide-y divide-line">
         {ROWS.map((r) => (
           <li key={r.key}>

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { createToken, listTokens, type Minted, revokeToken, type TokenRow, type TokenScope } from '@/api/tokens';
 import { Button } from '@/components/ui/button';
+import { Hint } from '@/components/ui/hint';
 import { Field, Input } from '@/components/ui/input';
 import { Panel, PanelHeader } from '@/components/ui/panel';
 import { Segmented } from '@/components/ui/segmented';
@@ -41,12 +42,11 @@ export function TokensView({ tokens, fresh, form, onChange, onCreate, onRevoke, 
   tokens: TokenRow[]; fresh: Minted | null; form: TokenForm;
   onChange: (f: TokenForm) => void; onCreate: () => void; onRevoke: (id: string) => void; onDismiss: () => void;
 }) {
-  const scope = SCOPES.find((s) => s.id === form.scope) ?? SCOPES[0];
   return (
     <>
       {fresh && (
         <Notice onDismiss={onDismiss}>
-          <p className="text-sm">Copy your new token now: it is not shown again.</p>
+          <p className="text-sm font-medium">Copy it now: not shown again</p>
           <code className="mt-1 block break-all font-mono text-xs">{fresh.token}</code>
         </Notice>
       )}
@@ -54,8 +54,9 @@ export function TokensView({ tokens, fresh, form, onChange, onCreate, onRevoke, 
         <PanelHeader title="New token" />
         <form className="flex flex-col gap-3 p-4" onSubmit={(e) => { e.preventDefault(); onCreate(); }}>
           <Field label="Name"><Input value={form.name} placeholder="ci" onChange={(e) => onChange({ ...form, name: e.target.value })} /></Field>
-          <Segmented label="Scope" value={form.scope} options={SCOPES} onChange={(s) => onChange({ ...form, scope: s })} />
-          <ul className="text-xs text-muted">{SCOPES.map((s) => <li key={s.id} className={s.id === scope.id ? 'text-fg' : ''}>{s.allows}</li>)}</ul>
+          <Hint hint={SCOPES.map((s) => s.allows).join('\n')} className="self-start">
+            <Segmented label="Scope" value={form.scope} options={SCOPES} onChange={(s) => onChange({ ...form, scope: s })} />
+          </Hint>
           <Button type="submit" disabled={!form.name.trim()} className="self-start">Create token</Button>
         </form>
       </Panel>

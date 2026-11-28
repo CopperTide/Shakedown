@@ -45,7 +45,7 @@ function NewProject({ open, onOpenChange }: { open: boolean; onOpenChange: (open
     catch (e) { setError(e instanceof Error ? e.message : 'Could not create project'); setBusy(false); }
   };
   return <Dialog open={open} onOpenChange={onOpenChange}>
-    <DialogContent title="New project" description="Start with an empty project. You can switch back at any time.">
+    <DialogContent title="New project">
       <form onSubmit={(e) => { e.preventDefault(); void create(); }} className="p-4">
         <label htmlFor="new-project-name" className="mb-2 block text-sm">Project name</label>
         <Input id="new-project-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={120} required disabled={busy} />

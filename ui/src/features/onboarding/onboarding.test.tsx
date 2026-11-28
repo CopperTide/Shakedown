@@ -46,7 +46,8 @@ describe('get started', () => {
   it('not_configured_explains', async () => {
     mockFetch(NOT_CONFIGURED);
     show();
-    expect(await screen.findByText(/SHAKEDOWN_PROJECT/)).toBeTruthy();
+    expect(await screen.findByText('No project folder')).toBeTruthy();
+    expect(screen.queryByText(/SHAKEDOWN_PROJECT/)).toBeNull(); // the fix shows on hovering it
     expect(screen.queryByRole('button', { name: 'Create project' })).toBeNull();
   });
 

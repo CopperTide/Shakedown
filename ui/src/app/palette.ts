@@ -40,7 +40,7 @@ function actions(): Item[] {
     { id: 'build-world', group: 'Actions', label: 'Build a world', keywords: ['template', 'company', 'new', 'benchmark'], action: { go: '/worlds/new' } },
     { id: 'world', group: 'Actions', label: 'World view of a run…', keywords: ['twin', 'digital', 'plant', 'scrub'], action: { mode: { kind: 'world' } } },
     { id: 'cmp-runs', group: 'Actions', label: 'Compare two runs…', keywords: ['diff', 'branch'], action: { mode: { kind: 'compare-runs', first: null } } },
-    { id: 'theme', group: 'Actions', label: 'Switch theme (system, light, dark)', keywords: ['dark', 'light'], action: { theme: true } },
+    { id: 'theme', group: 'Actions', label: 'Switch theme', keywords: ['dark', 'light', 'system'], action: { theme: true } },
   ];
 }
 
@@ -85,7 +85,7 @@ export function hereItems(here: Here): Item[] {
     id: `${page}-here`, group: 'This run', label, keywords, action: { go: `/${page}/${at}` },
   }]);
   return [
-    ...item('world', 'World view (digital twin)', ['twin', 'world', 'plant']),
+    ...item('world', 'World view', ['twin', 'digital', 'world', 'plant']),
     ...item('runs', 'All details', ['details', 'log', 'trace', 'estimate', 'branches']),
     ...item('control', 'Process view', ['process', 'flows', 'equipment']),
   ];
@@ -102,9 +102,9 @@ export function itemsFor(mode: Mode, runs: RunSummary[], experiments: ListedExpe
 
 /** The input's placeholder in each mode. */
 export function placeholderOf(mode: Mode): string {
-  if (mode.kind === 'root') return 'Go to an experiment, a run or a page…';
-  if (mode.kind === 'world') return 'Pick the run whose world to open…';
-  return mode.first ? 'Pick the run to compare it with…' : 'Pick the first run…';
+  if (mode.kind === 'root') return 'Search…';
+  if (mode.kind === 'world') return 'Pick a run…';
+  return mode.first ? 'Compare with…' : 'First run…';
 }
 
 /** Asks the app to open the palette in `mode` (a run's ⋯ → "Compare with another run…"). */

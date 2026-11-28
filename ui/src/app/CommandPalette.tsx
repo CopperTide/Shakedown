@@ -90,7 +90,7 @@ export default function CommandPalette({ open, onOpenChange, start }: { open: bo
         <Command loop onKeyDown={back}>
           <CommandInput value={query} onValueChange={setQuery} placeholder={placeholderOf(mode)} />
           <CommandList>
-            <CommandEmpty>{lists.error ? `Couldn't load runs and experiments: ${lists.error}` : 'Nothing matches. Try a task name, an id or a status.'}</CommandEmpty>
+            <CommandEmpty>{lists.error ? `Couldn't load runs and experiments: ${lists.error}` : 'Nothing matches'}</CommandEmpty>
             {groupsOf(items).map(([group, list]) => (
               <CommandGroup key={group} heading={group}>
                 {list.map((i) => (

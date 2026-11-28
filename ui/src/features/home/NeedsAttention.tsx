@@ -8,9 +8,9 @@ import type { Branch } from '@/model/types';
 /** Runs that did not pass (checks failed, an error, stopped), newest first, each a link to its run. */
 export default function NeedsAttention({ branches }: { branches: Branch[] }) {
   return (
-    <Card title="Needs attention" description="Failed runs, newest first">
+    <Card title="Needs attention" hint="Runs that did not pass, newest first">
       {branches.length === 0 ? (
-        <EmptyState title="Nothing needs you right now." />
+        <EmptyState title="All clear" />
       ) : (
         <ul className="divide-y divide-line">
           {branches.map((b) => (

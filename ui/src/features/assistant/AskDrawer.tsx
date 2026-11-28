@@ -4,11 +4,16 @@ import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { chat } from '@/api/assistant';
 import { Button } from '@/components/ui/button';
+import { Hint } from '@/components/ui/hint';
 import { Textarea } from '@/components/ui/input';
 import { crumbsFor } from '@/features/shell/nav';
 import { ASK_EVENT } from '@/features/shell/TopBar';
 import { errorMessage } from '@/lib/errors';
 import Message, { type Turn } from './Message';
+
+/** What the assistant may do on its own, on hovering its title. */
+export const POLICY = 'Ask about this page, or tell it what to change. Reads run right away. File edits show a diff to apply. '
+  + 'Anything that starts runs or spends money asks first.';
 
 function useOpen(onPrompt: (prompt: string) => void) {
   const [open, setOpen] = useState(false);
@@ -60,19 +65,17 @@ export default function AskDrawer() {
     <aside aria-label="Assistant" className="fixed inset-y-0 right-0 z-50 flex w-[min(440px,100vw)] flex-col border-l border-line bg-surface shadow-pop">
       <header className="flex items-center gap-3 border-b border-line px-4 py-3">
         <span className="grid size-7 place-items-center rounded-md bg-accent-soft text-copper"><Sparkles className="size-4" /></span>
-        <div className="flex-1"><div className="text-sm font-semibold">Assistant</div><div className="text-2xs text-faint">Looking at {page}</div></div>
+        <div className="flex-1"><div className="text-sm font-semibold"><Hint hint={POLICY}>Assistant</Hint></div><div className="text-2xs text-faint">{page}</div></div>
         <Button variant="ghost" size="icon" aria-label="Close" onClick={() => setOpen(false)}><X /></Button>
       </header>
       <div className="flex flex-1 flex-col gap-4 overflow-auto px-4 py-4">
-        {turns.length === 0 && <p className="text-sm text-muted">Ask about this page, or tell it what to change.</p>}
         {turns.map((t, i) => <Message key={i} turn={t} onSettle={(card, outcome) => settle(i, card, outcome)} />)}
         {busy && <p className="text-xs text-faint">Thinking…</p>}
       </div>
       <footer className="grid gap-2 border-t border-line p-3">
-        <Textarea aria-label="Ask the assistant" rows={2} value={text} onChange={(e) => setText(e.target.value)} placeholder="Ask, or tell it what to change…"
+        <Textarea aria-label="Ask the assistant" rows={2} value={text} onChange={(e) => setText(e.target.value)} placeholder="Ask or tell it what to change…"
           onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); go(); } }} />
-        <div className="flex items-center gap-2"><p className="flex-1 text-2xs text-faint">Reads run right away. File edits show a diff to apply. Anything that starts runs or spends money asks first.</p>
-          <Button variant="primary" size="sm" disabled={busy} onClick={go}>Send</Button></div>
+        <Button variant="primary" size="sm" className="justify-self-end" disabled={busy} onClick={go}>Send</Button>
       </footer>
     </aside>
   );

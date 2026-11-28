@@ -25,10 +25,11 @@ describe('API tokens', () => {
     expect(later).not.toContain(secret);
     expect(later).toContain('sd_1a2b3…');
   });
-  it('offers read, run and admin scopes and names what each allows', () => {
+  it('offers read, run and admin scopes; what each allows shows on hovering them', () => {
     expect(SCOPES.map((s) => s.id)).toEqual(['read', 'run', 'admin']);
     const html = drawTokens(null);
-    for (const s of SCOPES) expect(html).toContain(s.allows);
+    for (const s of SCOPES) expect(html).toContain(`>${s.label}<`);
+    for (const s of SCOPES) expect(html).not.toContain(s.allows);
     expect(SCOPES[2].allows).toMatch(/model keys/);
   });
 });

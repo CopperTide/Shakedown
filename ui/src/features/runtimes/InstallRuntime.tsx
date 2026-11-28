@@ -6,6 +6,7 @@ import { type ReactNode, useState } from 'react';
 import { type RuntimePlan, type RuntimeSource, base64Of, installRuntime } from '@/api/runtimes';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogActions, DialogContent } from '@/components/ui/dialog';
+import { Hint } from '@/components/ui/hint';
 import { Field, Input } from '@/components/ui/input';
 import { Segmented } from '@/components/ui/segmented';
 import { errorMessage } from '@/lib/errors';
@@ -32,11 +33,11 @@ export function RuntimePlanView({ plan }: { plan: RuntimePlan }) {
     <div className="grid gap-3">
       <p className="text-xs text-muted"><span className="font-mono">{at}</span>{plan.packages_only ? <> · folder <span className="font-mono">{plan.packages_only}</span></> : null} · id <span className="font-mono text-fg">{plan.id}</span></p>
       {issues.length > 0 && <ul role="alert" className="grid gap-1 text-alarm">{issues.map((m) => <li key={m}>{m}</li>)}</ul>}
-      {plan.previous_commit && <p role="note" className="text-xs text-tone-warn">Updates the runtime {plan.id} installed before ({plan.previous_commit.slice(0, 12)}): its packages are replaced. To keep both, give this one another id.</p>}
+      {plan.previous_commit && <p role="note" className="text-xs text-tone-warn"><Hint hint="Its packages are replaced. To keep both, give this one another id.">Replaces {plan.id} ({plan.previous_commit.slice(0, 12)})</Hint></p>}
       <Section title={`Packages (${plan.packages.length})`}>
         {plan.packages.length
-          ? <ul className="grid gap-0.5">{plan.packages.map((p) => <li key={p.name}>{p.name} <span className="text-faint">· {p.kind} · <span className="font-mono text-2xs">{p.dir}</span>{p.python ? ' · Python dependencies installed with uv' : ''}</span></li>)}</ul>
-          : <p className="text-faint">No packages (no shakedown-package.toml).</p>}
+          ? <ul className="grid gap-0.5">{plan.packages.map((p) => <li key={p.name}>{p.name} <span className="text-faint">· {p.kind} · <span className="font-mono text-2xs">{p.dir}</span>{p.python ? ' · Python deps via uv' : ''}</span></li>)}</ul>
+          : <p className="text-faint"><Hint hint="No shakedown-package.toml found">No packages</Hint></p>}
       </Section>
       {plan.notes.length > 0 && <ul className="grid gap-0.5 text-xs text-muted">{plan.notes.map((n) => <li key={n}>{n}</li>)}</ul>}
       {plan.checks && (
@@ -132,15 +133,15 @@ export default function InstallRuntime({ onInstalled, update, trigger }: { onIns
   return (
     <Dialog open={open} onOpenChange={reset}>
       {trigger ? <span onClick={() => setOpen(true)}>{trigger}</span> : <Button variant="primary" onClick={() => setOpen(true)}><Download />Install a runtime</Button>}
-      <DialogContent title={update ? `Update ${update.id}` : 'Install a runtime'} description="A runtime is the package that runs a world: its parts (the systems agents work against), its tasks and its scoring.">
+      <DialogContent title={update ? `Update ${update.id}` : 'Install a runtime'}>
         <div className="grid max-h-[64vh] gap-3 overflow-auto px-4 py-3 text-sm">
-          <p role="note" className="rounded-md border border-warn/50 bg-warn-soft px-3 py-2 text-xs text-fg">{CODE_WARNING}</p>
+          <p role="note" className="rounded-md border border-warn/50 bg-warn-soft px-3 py-2 text-xs text-fg"><Hint hint={CODE_WARNING}>⚠ Installs and runs code on this machine</Hint></p>
           <Segmented label="Source" value={s.kind} options={KINDS} onChange={s.setKind} />
           <SourceFields kind={s.kind} git={s.git} onGit={s.setGit} file={s.file} onFile={s.setFile} fixedId={update?.id} />
           {s.done && <p role="status" className="text-xs">Installed: {s.plan?.packages.length} packages registered.</p>}
           {s.plan && <RuntimePlanView plan={s.plan} />}
           {s.error && <p role="alert" className="text-alarm">{s.error}</p>}
-          {s.busy && s.plan && <p className="text-xs text-muted">Installing the Python dependencies and running the conformance check: this can take a few minutes.</p>}
+          {s.busy && s.plan && <p className="text-xs text-muted"><Hint hint="Installs the Python dependencies and runs the conformance check">Can take a few minutes</Hint></p>}
         </div>
         <DialogActions onCancel={() => reset(false)} onGo={go} disabled={s.blocked} label={label(s.plan, s.done, s.busy)} />
       </DialogContent>

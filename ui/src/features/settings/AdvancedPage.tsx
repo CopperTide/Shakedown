@@ -2,6 +2,7 @@
 import { ChevronRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Card } from '@/components/ui/card';
+import { Hint } from '@/components/ui/hint';
 import SettingsPage from './SettingsPage';
 
 export const ADVANCED = [
@@ -19,10 +20,7 @@ export default function AdvancedPage() {
           {ADVANCED.map((a) => (
             <li key={a.to}>
               <Link to={a.to} className="flex items-center gap-3 px-[18px] py-3 hover:bg-hover">
-                <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-medium text-fg">{a.label}</span>
-                  <span className="block text-xs text-muted">{a.about}</span>
-                </span>
+                <span className="min-w-0 flex-1 text-sm font-medium text-fg"><Hint hint={a.about}>{a.label}</Hint></span>
                 <ChevronRight className="size-4 text-faint" aria-hidden="true" />
               </Link>
             </li>

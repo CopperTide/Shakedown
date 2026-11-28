@@ -21,19 +21,18 @@ function useAddExample() {
   }, { stayBusy: true });
 }
 
+/** What the example is, on hovering the card's title. */
+export const HINT = 'A tiny retail order desk: a world, one customer ticket and one agent on the model you connected, with an '
+  + 'experiment ready to deploy. A run takes about a minute; you can edit or delete it all afterwards.';
+
 export default function ExampleCard() {
   const add = useAddExample();
   return (
-    <Card title="Start from an example" description="See Shakedown work before you build your own world.">
+    <Card title="Start from an example" hint={HINT}>
       <div className="grid gap-3 px-[18px] py-4 text-sm">
-        <p>
-          Adds a tiny retail order desk to your project: a world, one customer ticket and one agent on the model you
-          connected, with an experiment ready to deploy. A run takes about a minute, and you can edit or delete it all
-          afterwards.
-        </p>
         {add.error && <p role="alert" className="text-alarm">{add.error}</p>}
         <Button variant="primary" className="justify-self-start" onClick={() => { void add.run(); }} disabled={add.busy}>
-          <Sparkles aria-hidden="true" />{add.busy ? 'Adding the example…' : 'Add the example'}
+          <Sparkles aria-hidden="true" />{add.busy ? 'Adding…' : 'Add example'}
         </Button>
       </div>
     </Card>

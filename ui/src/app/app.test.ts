@@ -30,7 +30,7 @@ describe('command palette', () => {
     expect(first[0].action).toEqual({ mode: { kind: 'compare-runs', first: 'b1' } });
     const second = itemsFor({ kind: 'compare-runs', first: 'b1' }, [{ ...runs[0], branches: [...runs[0].branches, branch('b3', 'failed')] }], experiments);
     expect(second.map((i) => i.action)).toEqual([{ go: '/compare/b1/b3' }]);
-    expect(placeholderOf({ kind: 'compare-runs', first: 'b1' })).toBe('Pick the run to compare it with…');
+    expect(placeholderOf({ kind: 'compare-runs', first: 'b1' })).toBe('Compare with…');
   });
   it('opens any run branch\'s world view, and the current run\'s first', () => {
     expect(itemsFor({ kind: 'world' }, runs, experiments).map((i) => i.action)).toEqual([{ go: '/world/r1/b1' }, { go: '/world/r1/b2' }]);
@@ -42,7 +42,7 @@ describe('command palette', () => {
     expect(hereOf('/run', '?run=r1&branch=b2')).toEqual({ page: 'home', runId: 'r1', branchId: 'b2' });
     expect(hereOf('/run', '')).toBeNull();
     expect(hereOf('/experiments/e1')).toBeNull();
-    expect(placeholderOf({ kind: 'world' })).toBe('Pick the run whose world to open…');
+    expect(placeholderOf({ kind: 'world' })).toBe('Pick a run…');
   });
 });
 

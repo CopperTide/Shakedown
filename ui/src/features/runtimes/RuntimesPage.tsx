@@ -6,6 +6,7 @@ import { Link } from 'react-router-dom';
 import { type RuntimeInstall, type RuntimePackage, checkRuntime, removeRuntime, runtimes } from '@/api/runtimes';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Hint } from '@/components/ui/hint';
 import { PageBody, PageHeader } from '@/components/ui/page';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/state';
 import { useQuery } from '@/hooks/useQuery';
@@ -60,7 +61,7 @@ function Install({ install, onChange, hosted }: { install: RuntimeInstall; onCha
         <Button size="sm" variant="danger" disabled={!!busy} onClick={act('remove', () => removeRuntime(install.id))}>{busy === 'remove' ? 'Removing…' : 'Remove'}</Button>
       </div>
     )
-    : <span className="text-xs text-faint">{install.runtime ? '' : 'From Import from git, with its project files'}</span>;
+    : <span className="text-xs text-faint">{install.runtime ? '' : <Hint hint="Installed by Import from git, with its project files">From git import</Hint>}</span>;
   return (
     <Card title={install.id} description={<><span className="font-mono">{sourceLine(install)}</span> · installed {new Date(install.installed_at).toLocaleString()}</>} actions={actions}>
       {error && <p role="alert" className="border-b border-line px-[18px] py-2 text-sm text-alarm">{error}</p>}
@@ -69,10 +70,13 @@ function Install({ install, onChange, hosted }: { install: RuntimeInstall; onCha
   );
 }
 
+const HOSTED_HINT = 'A runtime is code, and hosted Shakedown runs code only in a run\'s sandbox, which can\'t install one yet.';
+const ABOUT = 'The packages that run worlds: their parts, tasks and scoring. A world names its runtime in its Runtime section.';
+
 /** What installing a runtime means here: code that runs on this machine, or (hosted) not yet. */
 function Banner({ hosted }: { hosted: boolean }) {
-  if (hosted) return <p role="note" className="rounded-md border border-line bg-raised px-3 py-2 text-sm">Hosted Shakedown doesn't install runtimes yet: a runtime is code, and hosted runs code only in a run's sandbox, which can't install one yet.</p>;
-  return <p role="note" className="rounded-md border border-warn/50 bg-warn-soft px-3 py-2 text-sm">{CODE_WARNING}</p>;
+  if (hosted) return <p role="note" className="rounded-md border border-line bg-raised px-3 py-2 text-sm"><Hint hint={HOSTED_HINT}>No runtime installs on hosted yet</Hint></p>;
+  return <p role="note" className="rounded-md border border-warn/50 bg-warn-soft px-3 py-2 text-sm"><Hint hint={CODE_WARNING}>⚠ Runtimes run code on this machine</Hint></p>;
 }
 
 export default function RuntimesPage() {
@@ -81,7 +85,7 @@ export default function RuntimesPage() {
   const install = data && !data.hosted ? <InstallRuntime onInstalled={q.reload} /> : null;
   return (
     <>
-      <PageHeader title="Runtimes" meta="The packages that run worlds: their parts, tasks and scoring. A world names its runtime in its Runtime section." actions={install} width="wide" />
+      <PageHeader title={<Hint hint={ABOUT}>Runtimes</Hint>} actions={install} width="wide" />
       <PageBody width="wide" className="grid gap-4">
         <Banner hosted={!!data?.hosted} />
         {q.error && <ErrorState error={q.error} onRetry={q.reload} />}
@@ -89,7 +93,7 @@ export default function RuntimesPage() {
         {data && data.installs.length === 0 && <Card><EmptyState title="No runtime installed yet." hint="Install one from a git URL or an archive to build worlds on it." action={install} /></Card>}
         {data?.installs.map((i) => <Install key={i.id} install={i} onChange={q.reload} hosted={data.hosted} />)}
         {data && data.builtin.length > 0 && (
-          <Card title="Installed with Shakedown" description="Packages in this Shakedown's package folders (SHAKEDOWN_PACKAGES).">
+          <Card title="Installed with Shakedown" hint="Packages in this Shakedown's package folders (SHAKEDOWN_PACKAGES)">
             <PackageRows packages={data.builtin} />
           </Card>
         )}

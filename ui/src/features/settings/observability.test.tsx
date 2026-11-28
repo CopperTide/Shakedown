@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { TargetRow } from '@/api/observability';
-import { checkLine, emptyTargetForm, ObservabilityView, parseHeaders, targetBody, type TargetForm } from './ObservabilityPage';
+import { checkLine, emptyTargetForm, ObservabilityView, parseHeaders, statusHint, targetBody, type TargetForm } from './ObservabilityPage';
 
 const target: TargetRow = {
   id: 't1', name: 'langfuse', kind: 'langfuse', endpoint: 'https://us.cloud.langfuse.com/api/public/otel/v1/traces', project: null,
@@ -34,8 +34,10 @@ describe('Observability', () => {
   });
   it('shows when no external destinations are configured', () => {
     const html = draw(emptyTargetForm(), []);
-    expect(html).toContain('No telemetry destinations configured');
-    expect(html).toContain('Run events are recorded locally');
+    expect(html).toContain('No destinations');
+    expect(html).not.toContain('Run events are recorded locally'); // on hovering the status line
+    expect(statusHint([])).toContain('Run events are recorded locally');
+    expect(draw(emptyTargetForm())).toContain('1 destination · 1 automatic');
   });
   it('offers metrics only for a generic collector', () => {
     expect(draw(emptyTargetForm())).not.toContain('>Metrics<');

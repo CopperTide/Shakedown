@@ -38,6 +38,8 @@ describe('ask drawer', () => {
     expect(screen.queryByRole('complementary', { name: 'Assistant' })).toBeNull();
     act(() => { window.dispatchEvent(new CustomEvent(ASK_EVENT)); });
     expect(await screen.findByRole('complementary', { name: 'Assistant' })).toBeTruthy();
+    expect(screen.getByText('Assistant')).toBeTruthy();
+    expect(screen.queryByText(/Reads run right away/)).toBeNull(); // what it may do shows on hovering the title
   });
 
   it('sends_page_and_shows_reply', async () => {

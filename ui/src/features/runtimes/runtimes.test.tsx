@@ -56,7 +56,8 @@ describe('runtimes page', () => {
     mockFetch();
     show();
     expect(await screen.findByText(/git@github.com:CopperTide\/tau-world.git · HEAD at 1572b0207596/)).toBeTruthy();
-    expect(screen.getAllByText(/A runtime is code/).length).toBeGreaterThan(0);
+    expect(screen.getByText('⚠ Runtimes run code on this machine')).toBeTruthy();
+    expect(screen.queryByText(/A runtime is code/)).toBeNull(); // the full warning shows on hovering it
     const table = screen.getAllByRole('table')[0];
     expect(within(table).getByRole('link', { name: 'airline' }).getAttribute('href')).toBe('/worlds/airline');
     expect(within(table).getByText('Check passed')).toBeTruthy();
@@ -78,7 +79,7 @@ describe('runtimes page', () => {
     fireEvent.change(screen.getByLabelText('Repository'), { target: { value: 'git@github.com:CopperTide/tau-world.git' } });
     fireEvent.change(screen.getByLabelText('Folder'), { target: { value: 'benchmark/airline' } });
     fireEvent.click(screen.getByRole('button', { name: 'Check' }));
-    expect(await screen.findByText(/Python dependencies installed with uv/)).toBeTruthy();
+    expect(await screen.findByText(/Python deps via uv/)).toBeTruthy();
     expect(posted[0]).toMatchObject({ url: 'git@github.com:CopperTide/tau-world.git', path: 'benchmark/airline', confirm: false });
     fireEvent.click(screen.getByRole('button', { name: 'Install' }));
     expect(await screen.findByText(/Installed: 1 packages registered/)).toBeTruthy();
@@ -101,7 +102,7 @@ describe('runtimes page', () => {
   it('offers no install where hosted refuses it', async () => {
     mockFetch({ ...LISTED, hosted: true, installs: [] });
     show();
-    expect(await screen.findByText(/Hosted Shakedown doesn't install runtimes yet/)).toBeTruthy();
+    expect(await screen.findByText('No runtime installs on hosted yet')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Install a runtime/ })).toBeNull();
   });
 });

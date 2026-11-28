@@ -19,7 +19,8 @@ secondary metadata lines, few borders, plenty of whitespace.
   Advanced tab stays marked on the two that live under `/settings`.
 - **Get started** (`/get-started`, `features/onboarding/`): setup is two steps, both done on this page: **Your
   project** and **Connect a model**, where the key is added in place (`StepModel` shows the same add form as
-  Settings → Models, `AddKeyForm` and `useModelKeys`, starting on OpenRouter). Each is ticked off from what shaked
+  Settings → Models, `AddKeyForm` and `useModelKeys`, starting on OpenRouter; what we promise about keys shows on
+  hovering **Your keys stay yours**). Each is ticked off from what shaked
   says exists (`steps.ts`); the page opens on the first step not done, moves on by itself when the step it
   shows gets done (`firstOpen`), and opens Shakedown (`/`) once both are. Worlds, agents and scenarios are made
   in the app; Home offers a ready example first. There is no skipping: until setup is done, the gate (`gate.tsx`, around every page in `App.tsx`)
@@ -28,8 +29,8 @@ secondary metadata lines, few borders, plenty of whitespace.
   has the account menu, so a hosted user can still sign out. **Track with git** shows only where a
   project is a folder on disk (`folder` in the no-project answer); hosted projects live in a database.
 - **Home** (`/`, `features/home/`): the week in figures, what needs attention and the project's contents. While
-  the project has no worlds, **Start from an example** (`ExampleCard.tsx`) comes first: one sentence on what it
-  adds and **Add the example**, which calls `project.example` (`POST /api/project/example`, `confirm: true`) and
+  the project has no worlds, **Start from an example** (`ExampleCard.tsx`) comes first: what it adds shows on
+  hovering its title, and **Add example**, which calls `project.example` (`POST /api/project/example`, `confirm: true`) and
   nothing before the click. It adds a tiny retail order desk on the built-in `retail` benchmark (a world, a
   scenario, an agent setup on your newest working model key and a one-setup experiment), then opens that
   experiment (`/experiments/file/order-desk-first-run`) with a toast saying what a run of it shows, so the next
@@ -43,8 +44,8 @@ secondary metadata lines, few borders, plenty of whitespace.
   with their sub-experiments), **Has results first** or **Last deployed** (both flat). Below, the earlier
   experiments made before the project folder. Empty: **New experiment**.
 - **Runtimes** (`/runtimes`, `features/runtimes/`): Settings › Advanced, or **Manage runtimes** in a world's Runtime
-  section. A plain warning that a runtime is code that
-  runs on this machine (hosted says it installs none); each install as a card (its source: git URL, ref and commit, or
+  section. A short warning, **⚠ Runtimes run code on this machine** (the full warning on hovering it; hosted says it
+  installs none); each install as a card (its source: git URL, ref and commit, or
   archive name and SHA-256, and folder; **Check again**, **Update**, **Remove**, a refused removal saying which worlds
   use it) with its packages (kind, version, the worlds they run, the conformance check folded to its first failing
   step); then the packages installed with Shakedown. **Install a runtime** (`InstallRuntime.tsx`, also in a world's

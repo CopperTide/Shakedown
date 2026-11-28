@@ -1,6 +1,7 @@
 // The sidebar: the mark, the project, the sections, and the footer links.
 import { Link, useLocation } from 'react-router-dom';
 import { Mark } from '@/components/brand/Mark';
+import { Hint } from '@/components/ui/hint';
 import { useProject } from '@/hooks/useProject';
 import { useMe } from '@/app/AccountMenu';
 import { ProjectSwitcher } from './ProjectSwitcher';
@@ -42,7 +43,7 @@ export default function Sidebar() {
   const { pathname } = useLocation();
   return (
     <aside className="sticky top-0 flex h-screen w-60 shrink-0 flex-col overflow-y-auto border-r border-line bg-sunken p-3" aria-label="Sidebar">
-      <Link to="/" className="mb-3 flex items-center gap-2 px-1.5 py-1 font-display text-lg text-fg"><Mark />Shakedown</Link>
+      <Link to="/" className="mb-3 flex items-center gap-2 px-1.5 py-1 font-display text-lg text-fg"><Mark /><Hint hint="Shakedown by CopperTide">Shakedown</Hint></Link>
       <ProjectName />
       <nav className="flex flex-col gap-0.5" aria-label="Main">
         {NAV.map((group, i) => (
@@ -56,7 +57,6 @@ export default function Sidebar() {
       <nav className="flex flex-col gap-0.5 border-t border-line pt-3" aria-label="More">
         {FOOTER.map((item) => <NavLink key={item.to} item={item} pathname={pathname} />)}
       </nav>
-      <p className="mt-3 px-2 text-2xs text-faint">Shakedown by CopperTide</p>
     </aside>
   );
 }
