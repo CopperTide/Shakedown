@@ -25,9 +25,9 @@ export default function RuntimeSection({ world, onChange }: { world: WorldBody; 
   return (
     <div className="grid gap-4">
       <SectionHead title="Runtime" about="The installed runtime (a benchmark package or a built world) that runs this world: its parts, its tasks and its scoring. Deploying an experiment needs one." />
-      <Card footer={<><span className="flex-1">Not listed? Install it, then pick it here.</span><InstallRuntime onInstalled={installed.reload} trigger={<Button size="sm">Install a runtime</Button>} /><Link to="/runtimes" className="text-primary">Manage runtimes</Link></>}>
+      <Card footer={<><span className="flex-1" /><InstallRuntime onInstalled={installed.reload} trigger={<Button size="sm">Install a runtime</Button>} /><Link to="/runtimes" className="text-primary">Manage runtimes</Link></>}>
         <div className="p-[18px]">
-          <ChoiceField label="Runtime package" value={world.package ?? ''} options={runtimeOptions(installed.data)} onChange={(v) => onChange(setIn(world, ['package'], v || undefined))} />
+          <ChoiceField label="Runtime package" hint="Not listed? Install it, then pick it here." value={world.package ?? ''} options={runtimeOptions(installed.data)} onChange={(v) => onChange(setIn(world, ['package'], v || undefined))} />
         </div>
       </Card>
     </div>

@@ -14,9 +14,9 @@ export default function ScenarioExperiments({ experiments }: { experiments: Item
   const rows = ordered(experiments.map(rowOf));
   const n = rows.length;
   return (
-    <Card title="Experiments using this scenario" description={n ? `${n} experiment${n === 1 ? '' : 's'}` : undefined}>
+    <Card title="Experiments" description={n ? `${n} experiment${n === 1 ? '' : 's'}` : undefined}>
       {n === 0
-        ? <p className="px-[18px] py-3 text-sm text-faint">No experiments use this scenario yet.</p>
+        ? <p className="px-[18px] py-3 text-sm text-faint">No experiments yet.</p>
         : (
           <ul className="divide-y divide-line">
             {rows.map((r) => (

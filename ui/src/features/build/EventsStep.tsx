@@ -1,3 +1,4 @@
+import { Hint } from '@/components/ui/hint';
 import { Checkbox, Field, Input, NativeSelect } from '@/components/ui/input';
 import { Panel, PanelHeader } from '@/components/ui/panel';
 import { Tag } from '@/components/ui/status';
@@ -13,7 +14,7 @@ export const eventChoice = (d: Draft, e: EventForm): Choice => d.events[e.id] ??
 export const offeredEvents = (form: TemplateForm, d: Draft) => form.events.filter((e) => e.needs.every((s) => d.systems.includes(s)));
 
 /** The event's description with its params filled in. */
-function described(e: EventForm, c: Choice): string {
+export function described(e: EventForm, c: Choice): string {
   const value = (name: string) => c.params[name] ?? e.params.find((p) => p.name === name)?.default ?? name;
   return e.description.replace(/\{param\.([\w-]+)\}/g, (_, name: string) => String(value(name)));
 }
@@ -47,8 +48,7 @@ export default function EventsStep({ form, d, onDraft }: { form: TemplateForm; d
             <li key={e.id} className="flex flex-wrap items-start gap-3 px-4 py-3">
               <Checkbox className="mt-1" checked={c.on} aria-label={e.label} onChange={(ev) => set(e.id, { ...c, on: ev.target.checked })} />
               <div className="min-w-0 flex-1">
-                <div className={c.on ? 'text-sm font-medium' : 'text-sm font-medium text-muted'}>{e.label}</div>
-                <div className="text-xs text-muted">{described(e, c)}</div>
+                <div className={c.on ? 'text-sm font-medium' : 'text-sm font-medium text-muted'}><Hint hint={described(e, c)}>{e.label}</Hint></div>
               </div>
               <div className="flex flex-wrap items-end gap-2"><Tag>{e.kind === 'trap' ? 'Trap' : 'Event'}</Tag><Params e={e} c={c} set={(x) => set(e.id, x)} /></div>
             </li>

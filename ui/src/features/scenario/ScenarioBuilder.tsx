@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { Hint } from '@/components/ui/hint';
 import { Checkbox, Field, Input, NativeSelect } from '@/components/ui/input';
 import { Tag } from '@/components/ui/status';
 import { useBenchmark } from '@/hooks/useBenchmark';
@@ -43,8 +44,7 @@ function DisruptionRow({ d, s, busy }: { d: DisruptionOption; s: ScenarioState; 
       <label className="flex cursor-pointer items-start gap-2">
         <Checkbox className="mt-0.5" checked={on} onChange={(e) => s.toggle(d.id, e.target.checked)} disabled={busy} />
         <span className="flex min-w-0 flex-col">
-          <span className="flex flex-wrap items-center gap-1.5 text-sm font-medium">{words.label}<Tag>{d.part}</Tag></span>
-          <span className="text-xs text-muted">{words.description}</span>
+          <span className="flex flex-wrap items-center gap-1.5 text-sm font-medium"><Hint hint={words.description}>{words.label}</Hint><Tag>{d.part}</Tag></span>
         </span>
       </label>
       {on && d.params.length > 0 && (
@@ -70,11 +70,11 @@ function Preview({ s }: { s: ScenarioState }) {
 
 /** Disruptions to schedule inside the simulated parts, drawn from the benchmark's `scenario_options`; nothing when it offers none. */
 export default function ScenarioBuilder({ s, busy }: { s: ScenarioState; busy: boolean }) {
-  if (s.error) return <p className="text-xs text-muted">Couldn't load the disruptions this benchmark offers ({s.error}). The run starts without any.</p>;
+  if (s.error) return <p className="text-xs text-muted"><Hint hint="The run starts without any.">{`Couldn't load the disruptions (${s.error})`}</Hint></p>;
   if (!s.options?.disruptions.length) return null;
   return (
     <fieldset className="flex flex-col gap-1.5">
-      <legend className="mb-1 text-2xs font-medium text-muted">Disruptions · scheduled inside the simulated parts</legend>
+      <legend className="mb-1 text-2xs font-medium text-muted"><Hint hint="Scheduled inside the simulated parts.">Disruptions</Hint></legend>
       <div className="rounded-md border border-line bg-surface">
         {s.options.disruptions.map((d) => <DisruptionRow key={d.id} d={d} s={s} busy={busy} />)}
       </div>

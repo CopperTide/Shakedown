@@ -76,9 +76,9 @@ describe('import from git', () => {
     const gone = { kind: 'experiment', id: 'old-try', label: 'Old try', action: 'remove' as const, reason: null };
     mockFetch({ ...PLAN, items: [...PLAN.items, gone], removed: [gone] });
     await check('/repos/airline-world');
-    expect((await screen.findByText(/Old try/)).textContent).toContain('no longer in the repo: removed (to the trash)');
+    expect((await screen.findByText(/Old try/)).textContent).toContain('removed (to the trash)');
     fireEvent.click(screen.getByRole('button', { name: 'Import' }));
-    expect((await screen.findByRole('status')).textContent).toContain('1 no longer in the repo removed (to the trash)');
+    expect((await screen.findByRole('status')).textContent).toContain('1 removed');
   });
 
   it('a_taken_package_name_blocks_the_import', async () => {

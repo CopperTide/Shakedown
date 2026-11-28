@@ -24,7 +24,7 @@ function mockFetch(bench: { status: number; body: unknown }) {
 }
 
 const LISTED = { status: 200, body: { name: 'retail', version: '1', tasks: TASKS, scenario_options: null, view: false } };
-const LABEL = "Task of the world's runtime it plays";
+const LABEL = 'Task';
 
 function show(scenario: ScenarioBody = BODY) {
   const onChange = vi.fn();

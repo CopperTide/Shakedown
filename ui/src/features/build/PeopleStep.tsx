@@ -1,6 +1,7 @@
 import { X } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { Hint } from '@/components/ui/hint';
 import { Input } from '@/components/ui/input';
 import { Panel, PanelHeader } from '@/components/ui/panel';
 import { Segmented } from '@/components/ui/segmented';
@@ -10,21 +11,20 @@ import { type Draft, keptRoles, roleCount } from './builder';
 
 type Edit = { form: TemplateForm; d: Draft; onDraft: (d: Draft) => void };
 
-/** Each role kept: its count (following the size until typed), the systems it acts on and what it does. */
+/** Each role kept: its count (following the size until typed) and the systems it acts on; what it does on hovering its name. */
 function Roles({ form, d, onDraft }: Edit) {
   const label = (id: string) => form.systems.find((s) => s.id === id)?.label ?? id;
   const setCount = (role: string, v: string) => onDraft({ ...d, counts: { ...d.counts, [role]: v.trim() === '' ? 0 : Math.trunc(Number(v)) } });
   return (
     <Table>
-      <thead><tr><Th>Role</Th><Th className="text-right">Count</Th><Th>Acts on</Th><Th>Behaviour</Th></tr></thead>
+      <thead><tr><Th>Role</Th><Th className="text-right">Count</Th><Th>Acts on</Th></tr></thead>
       <tbody>
         {keptRoles(form, d).map((r) => (
           <Tr key={r.id}>
-            <Td>{r.label}</Td>
+            <Td><Hint hint={r.summary}>{r.label}</Hint></Td>
             <Td className="text-right"><Input type="number" className="ml-auto w-16 text-right tabular-nums" min={r.min} aria-label={r.label}
               value={roleCount(form, d, r.id)} onChange={(e) => setCount(r.id, e.target.value)} /></Td>
             <Td className="text-muted">{r.systems.filter((s) => d.systems.includes(s)).map(label).join(', ')}</Td>
-            <Td className="text-muted">{r.summary ?? ''}</Td>
           </Tr>
         ))}
       </tbody>

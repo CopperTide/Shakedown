@@ -5,6 +5,7 @@ import { type ReactNode, useState } from 'react';
 import { type GitImport, importGit } from '@/api/project';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogActions, DialogContent } from '@/components/ui/dialog';
+import { Hint } from '@/components/ui/hint';
 import { Field, Input } from '@/components/ui/input';
 import { errorMessage } from '@/lib/errors';
 
@@ -13,11 +14,11 @@ const ACTION: Record<GitImport['items'][number]['action'], string> = {
   replace: 'replaces the last import',
   same: 'already the same',
   keep: 'kept',
-  remove: 'no longer in the repo: removed (to the trash)',
+  remove: 'removed (to the trash)',
 };
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
-  return <section className="grid gap-1"><h4 className="text-2xs font-medium text-muted">{title}</h4>{children}</section>;
+function Section({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
+  return <section className="grid gap-1"><h4 className="text-2xs font-medium text-muted"><Hint hint={hint}>{title}</Hint></h4>{children}</section>;
 }
 
 /** What the repo holds and what importing it does. */
@@ -35,15 +36,20 @@ export function ImportPlan({ plan }: { plan: GitImport }) {
         {plan.packages.length ? <ul className="grid gap-0.5">{plan.packages.map((p) => <li key={p.name}>{p.name} <span className="text-faint">· {p.kind} · <span className="font-mono text-2xs">{p.dir}</span>{p.python ? ' · Python (uv)' : ''}</span></li>)}</ul> : <p className="text-faint">No packages.</p>}
       </Section>
       <Section title={`Project files (${plan.items.length})`}>
-        {plan.items.length ? <ul className="grid gap-0.5">{plan.items.map((i) => <li key={`${i.kind}/${i.id}`} title={i.reason ?? undefined}>{i.label} <span className="text-faint">· {i.kind} · {ACTION[i.action]}</span></li>)}</ul> : <p className="text-faint">The repo is not a project folder: no worlds, scenarios, setups or experiments.</p>}
+        {plan.items.length ? <ul className="grid gap-0.5">{plan.items.map((i) => <li key={`${i.kind}/${i.id}`} title={i.reason ?? undefined}>{i.label} <span className="text-faint">· {i.kind} · {ACTION[i.action]}</span></li>)}</ul> : <p className="text-faint"><Hint hint="The repo is not a project folder: no worlds, scenarios, setups or experiments.">None</Hint></p>}
       </Section>
       {plan.views.length > 0 && <Section title="Views"><ul className="grid gap-0.5">{plan.views.map((v) => <li key={`${v.world}/${v.file}`}>{v.world} <span className="font-mono text-2xs text-faint">{v.file}</span></li>)}</ul></Section>}
       {plan.compose.length > 0 && (
-        <Section title="Compose files (candidates for the service integration)">
+        <Section title="Compose files" hint="Candidates for the service integration.">
           <ul className="grid gap-0.5">{plan.compose.map((c) => <li key={c.file}><span className="font-mono text-2xs">{c.file}</span> <span className="text-faint">· {c.services.join(', ')}</span></li>)}</ul>
         </Section>
       )}
-      {plan.notes.length > 0 && <ul className="grid gap-0.5 text-xs text-muted">{plan.notes.map((n) => <li key={n}>{n}</li>)}</ul>}
+      {plan.notes.length > 0 && (
+        <details className="text-xs text-muted">
+          <summary className="cursor-pointer">{`Notes (${plan.notes.length})`}</summary>
+          <ul className="mt-1 grid gap-0.5">{plan.notes.map((n) => <li key={n}>{n}</li>)}</ul>
+        </details>
+      )}
     </div>
   );
 }
@@ -56,9 +62,10 @@ function primary(plan: GitImport | null, done: GitImport | null, busy: boolean):
 }
 
 function Imported({ done }: { done: GitImport }) {
-  const how = done.registered ? 'registered' : 'installed (registered at the next start)';
-  const removed = done.removed?.length ? `, ${done.removed.length} no longer in the repo removed (to the trash)` : '';
-  return <p role="status" className="text-xs">Imported: {done.packages.length} packages {how}, files written into the project{removed}.</p>;
+  const how = done.registered ? 'registered' : 'installed';
+  const removed = done.removed?.length ? ` · ${done.removed.length} removed` : '';
+  const hint = `${done.registered ? '' : 'Packages are registered at the next start. '}Files are written into the project${done.removed?.length ? '; files no longer in the repo went to the trash' : ''}.`;
+  return <p role="status" className="text-xs"><Hint hint={hint}>{`✓ Imported · ${done.packages.length} packages ${how}${removed}`}</Hint></p>;
 }
 
 export default function ImportFromGit({ onImported }: { onImported: () => void }) {
@@ -83,10 +90,10 @@ export default function ImportFromGit({ onImported }: { onImported: () => void }
   return (
     <Dialog open={open} onOpenChange={reset}>
       <Button onClick={() => setOpen(true)}><GitBranch />Import from git</Button>
-      <DialogContent title="Import from git" description="Bring in a repo's packages, worlds, scenarios, setups and experiments as they are: its code runs on this machine.">
+      <DialogContent title="Import from git" hint="Brings in a repo's packages, worlds, scenarios, setups and experiments as they are: its code runs on this machine.">
         <div className="grid max-h-[60vh] gap-3 overflow-auto px-4 py-3 text-sm">
           <div className="grid gap-3 sm:grid-cols-[minmax(0,3fr)_minmax(0,1fr)]">
-            <Field label="Repository (git URL or path)"><Input aria-label="Repository" value={source.url} onChange={(e) => edit({ url: e.target.value })} placeholder="https://github.com/acme/ops.git" className="font-mono" /></Field>
+            <Field label="Repository" hint="A git URL or a local path."><Input aria-label="Repository" value={source.url} onChange={(e) => edit({ url: e.target.value })} placeholder="https://github.com/acme/ops.git" className="font-mono" /></Field>
             <Field label="Ref"><Input aria-label="Ref" value={source.ref} onChange={(e) => edit({ ref: e.target.value })} placeholder="HEAD" className="font-mono" /></Field>
           </div>
           {done && <Imported done={done} />}

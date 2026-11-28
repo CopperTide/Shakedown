@@ -20,7 +20,7 @@ export default function DeleteItemDialog({ kind, id, label, onDeleted, compact =
       {compact
         ? <Button variant="ghost" size="sm" aria-label={`Delete ${label}`} title="Delete" onClick={() => setOpen(true)}><Trash2 /></Button>
         : <Button onClick={() => setOpen(true)}><Trash2 />Delete</Button>}
-      <DialogContent title={`Delete ${label}?`} description={`Removes this ${KINDS[kind].one}'s file from the project.`}>
+      <DialogContent title={`Delete ${label}?`} hint={`Removes this ${KINDS[kind].one}'s file from the project.`}>
         <DeletePanel kind={kind} id={id} label={label} onDeleted={() => { setOpen(false); onDeleted(); }} onCancel={() => setOpen(false)} />
       </DialogContent>
     </Dialog>

@@ -4,11 +4,16 @@ import { Card } from '@/components/ui/card';
 import type { Connector } from '@/model/project';
 import { ChoiceField, TextField } from '../fields';
 
-/** How runs use a connector; a stand-in is played by the world's runtime, when it has one. */
-export function modes(runtime?: string) {
-  const standIn = runtime ? `Stand-in (played by the runtime ${runtime})` : 'Stand-in (pick a runtime that plays it)';
-  return [{ value: 'real', label: 'Real system (requires configuration)' }, { value: 'replay', label: 'Record once, then replay' }, { value: 'stand-in', label: standIn }] as { value: Connector['mode']; label: string }[];
+/** How runs use a connector. */
+export const MODES: { value: Connector['mode']; label: string }[] = [{ value: 'real', label: 'Real system' }, { value: 'replay', label: 'Record, then replay' }, { value: 'stand-in', label: 'Stand-in' }];
+
+/** What each way means; a stand-in is played by the world's runtime, when it has one. */
+export function modesHint(runtime?: string) {
+  const standIn = runtime ? `played by the runtime ${runtime}` : 'pick a runtime that plays it';
+  return `Real system: needs its configuration.\nRecord, then replay: called once, then replayed.\nStand-in: ${standIn}.`;
 }
+
+const KEY_HINT = 'A name from the key store, never the key itself.';
 
 /** The connector the form describes, without empty fields. */
 export function connectorOf(f: Record<string, string>): Connector {
@@ -32,11 +37,11 @@ export default function AddConnector({ onAdd, initial = {}, runtime }: { onAdd: 
       <div className="grid gap-3 p-[18px] md:grid-cols-2">
         <TextField label="Connector id" mono placeholder="mes" {...field('id')} />
         <TextField label="Connector name" placeholder="Larkspur MES" {...field('label')} />
-        <ChoiceField label="How runs use it" value={(f.mode ?? 'real') as Connector['mode']} options={modes(runtime)} onChange={(v) => setF({ ...f, mode: v })} />
-        <TextField label="Product" placeholder="sap-s4hana (product identifier)" {...field('product')} />
+        <ChoiceField label="How runs use it" hint={modesHint(runtime)} value={(f.mode ?? 'real') as Connector['mode']} options={MODES} onChange={(v) => setF({ ...f, mode: v })} />
+        <TextField label="Product" hint="The product identifier." placeholder="sap-s4hana" {...field('product')} />
         <TextField label="MCP server URL" mono placeholder="https://…/mcp" {...field('mcp')} />
         <TextField label="OpenAPI spec file" mono placeholder="carrier-rates.openapi.yaml" {...field('openapi')} />
-        <TextField label="Key-store name" mono placeholder="A name from the key store, never the key" {...field('key')} />
+        <TextField label="Key-store name" mono hint={KEY_HINT} placeholder="carrier-key" {...field('key')} />
         <TextField label="Or environment variable" mono placeholder="CARRIER_TOKEN" {...field('env')} />
       </div>
       <div className="flex justify-end border-t border-line px-[18px] py-2.5">

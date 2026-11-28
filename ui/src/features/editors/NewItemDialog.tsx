@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { putItem } from '@/api/project';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogActions, DialogContent } from '@/components/ui/dialog';
+import { Hint } from '@/components/ui/hint';
 import { Input } from '@/components/ui/input';
 import { errorMessage } from '@/lib/errors';
 import { CREATED, track } from '@/lib/productAnalytics';
@@ -53,7 +54,7 @@ export default function NewItemDialog({ kind, taken, onCreated }: { kind: ItemKi
       <DialogContent title={`New ${KINDS[kind].one}`}>
         <div className="grid gap-3 px-4 py-3 text-sm">
           <label className="grid gap-1"><span>Name</span><Input aria-label="Name" value={label} onChange={(e) => { setLabel(e.target.value); setId(idFor(e.target.value)); }} placeholder={KINDS[kind].example} /></label>
-          <label className="grid gap-1"><span>Id</span><Input aria-label="Id" value={id} onChange={(e) => setId(e.target.value)} className="font-mono" /></label>
+          <label className="grid gap-1"><span><Hint hint={ID_RULE}>Id</Hint></span><Input aria-label="Id" value={id} onChange={(e) => setId(e.target.value)} className="font-mono" /></label>
           {kind === 'worlds' && <RuntimeChoice value={runtime} onChange={setRuntime} />}
           {error && <p role="alert" className="text-alarm">{error}</p>}
         </div>

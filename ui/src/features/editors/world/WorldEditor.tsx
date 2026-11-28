@@ -46,7 +46,7 @@ export default function WorldEditor() {
   if (!ed.draft) return ed.error ? <p role="alert" className="p-7 text-alarm">{ed.error.message}</p> : <LoadingState label="Loading the world" />;
   const sections = SECTIONS.map((s) => (s.id === 'runtime' && !ed.draft?.package ? { ...s, status: 'warn' as const } : s));
   return (
-    <EditorFrame title={ed.draft.label} meta="The production systems before any agent." sections={sections}
+    <EditorFrame title={ed.draft.label} hint="The production systems before any agent." sections={sections}
       actions={<DeleteItemDialog kind="worlds" id={id} label={ed.draft.label} onDeleted={() => navigate('/worlds')} />} active={active} onSelect={setActive}
       dirty={ed.dirty} onSave={() => { void ed.save(); }} onDiscard={ed.discard} saving={ed.saving} error={ed.error}>
       <Section id={active} worldId={id} world={ed.draft} onChange={ed.setDraft} onOpen={setActive} around={around} />

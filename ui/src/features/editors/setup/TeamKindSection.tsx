@@ -1,16 +1,20 @@
 // How the setup runs: the kind of team, and the fields that kind needs.
 import { Card } from '@/components/ui/card';
+import { Hint } from '@/components/ui/hint';
 import type { SetupBody, TeamSpec } from '@/model/project';
 import { cn } from '@/lib/cn';
 import { SectionHead, TextField } from '../fields';
 import { TEAM_KINDS, teamFor } from './teams';
+
+/** The kinds that have fields to fill. */
+const WITH_FIELDS: TeamSpec['kind'][] = ['http', 'code', 'madl'];
 
 function KindFields({ team, onChange }: { team: TeamSpec; onChange: (t: TeamSpec) => void }) {
   switch (team.kind) {
     case 'http': return (
       <div className="grid gap-3 md:grid-cols-2">
         <TextField label="Endpoint URL" mono value={team.url} onChange={(v) => onChange({ ...team, url: v })} placeholder="https://…" />
-        <TextField label="Key-store name" mono value={team.auth?.key ?? ''} onChange={(v) => onChange({ ...team, auth: v ? { key: v } : undefined })} placeholder="A name from the key store, never the key" />
+        <TextField label="Key-store name" mono hint="A name from the key store, never the key itself." value={team.auth?.key ?? ''} onChange={(v) => onChange({ ...team, auth: v ? { key: v } : undefined })} placeholder="agent-key" />
       </div>);
     case 'code': return <TextField label="Command" mono value={team.command} onChange={(v) => onChange({ ...team, command: v })} placeholder="uv run python crew.py" />;
     case 'madl': return <TextField label="MADL file" mono value={team.file} onChange={(v) => onChange({ ...team, file: v })} />;
@@ -27,11 +31,11 @@ export default function TeamKindSection({ setup, onChange }: { setup: SetupBody;
           <button key={k.kind} type="button" role="radio" aria-checked={setup.team.kind === k.kind} aria-label={k.label}
             onClick={() => setup.team.kind !== k.kind && onChange({ ...setup, team: teamFor(k.kind) })}
             className={cn('rounded-lg border bg-surface p-4 text-left hover:border-line-strong', setup.team.kind === k.kind ? 'border-fg' : 'border-line')}>
-            <div className="text-sm font-semibold">{k.label}</div><div className="mt-1 text-xs text-faint">{k.about}</div>
+            <div className="text-sm font-semibold"><Hint hint={k.about}>{k.label}</Hint></div>
           </button>
         ))}
       </div>
-      <Card><div className="p-[18px]"><KindFields team={setup.team} onChange={(t) => onChange({ ...setup, team: t })} /></div></Card>
+      {WITH_FIELDS.includes(setup.team.kind) && <Card><div className="p-[18px]"><KindFields team={setup.team} onChange={(t) => onChange({ ...setup, team: t })} /></div></Card>}
     </div>
   );
 }

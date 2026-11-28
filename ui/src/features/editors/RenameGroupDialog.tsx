@@ -27,7 +27,7 @@ export default function RenameGroupDialog({ name, count, groups }: { name: strin
   return (
     <Dialog open={open} onOpenChange={show}>
       <Button variant="ghost" size="sm" aria-label={`Rename group ${name}`} title="Rename group" onClick={() => show(true)}><Pencil /></Button>
-      <DialogContent title={`Rename ${name}`} description="Every world in the group moves to the new name. An empty name takes them out of any group.">
+      <DialogContent title={`Rename ${name}`} hint="Every world in the group moves to the new name. An empty name takes them out of any group.">
         <div className="grid gap-3 px-4 py-3 text-sm">
           <label className="grid gap-1"><span>Group name</span><Input aria-label="Group name" value={to} onChange={(e) => setTo(e.target.value)} /></label>
           {into && <p className="text-xs text-muted">Moves {count} world{count === 1 ? '' : 's'} into {into}, which already exists.</p>}

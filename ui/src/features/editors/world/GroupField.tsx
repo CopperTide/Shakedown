@@ -1,5 +1,6 @@
 // A world's group: one the project already has, none, or a new one typed in.
 import { useState } from 'react';
+import { Hint } from '@/components/ui/hint';
 import { Input, NativeSelect } from '@/components/ui/input';
 
 /** The choice that opens the new group's name; a blank name, which no group can have. */
@@ -24,9 +25,9 @@ export default function GroupField({ value, groups, onChange }: { value?: string
       </label>
       {adding && (
         <label className="grid gap-1 text-sm">
-          <span className="text-muted">New group name</span>
+          <span className="text-muted"><Hint hint="Often the customer this world is for.">New group name</Hint></span>
           {/* Spaces at either end are trimmed on leaving the box: a group name can't hold them. */}
-          <Input aria-label="New group name" value={value ?? ''} placeholder="The customer this world is for"
+          <Input aria-label="New group name" value={value ?? ''} placeholder="Customer name"
             onChange={(e) => onChange(e.target.value.trim() ? e.target.value : undefined)}
             onBlur={(e) => onChange(e.target.value.trim() || undefined)} />
         </label>

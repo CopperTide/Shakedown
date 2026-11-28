@@ -12,12 +12,12 @@ export default function InputsSection({ scenario, onChange }: { scenario: Scenar
   const options = [{ value: '', label: 'Choose a world' }, ...(worlds.data?.items ?? []).map((w) => ({ value: w.id, label: w.label }))];
   return (
     <div className="grid gap-4">
-      <SectionHead title="Inputs" about="The world, the task of its runtime the scenario plays, and the ticket written the way you would write it to a person. A run plays the task as the runtime defines it (its customer, its ticket and its checks), starting from the world's data." />
+      <SectionHead title="Inputs" about="A run plays the task as the runtime defines it (its customer, its ticket and its checks), starting from the world's data." />
       <Card>
         <div className="grid gap-3 p-[18px]">
           <ChoiceField label="World" value={scenario.world} options={options} onChange={(v) => onChange(setIn(scenario, ['world'], v))} />
           <TaskPicker world={scenario.world} value={scenario.preset ?? ''} onChange={(v) => onChange(setIn(scenario, ['preset'], v))} />
-          <TextField label="Ticket" multiline value={scenario.task} onChange={(v) => onChange(setIn(scenario, ['task'], v))} />
+          <TextField label="Ticket" hint="Written the way you would write it to a person." multiline value={scenario.task} onChange={(v) => onChange(setIn(scenario, ['task'], v))} />
         </div>
       </Card>
     </div>

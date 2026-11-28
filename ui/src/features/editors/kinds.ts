@@ -5,7 +5,7 @@ export interface KindInfo {
   one: string;
   many: string;
   route: string;
-  /** What the list page says the kind is for. */
+  /** What the kind is for: the list page's title hint. */
   about: string;
   /** A name such an item might have: the placeholder of its Name box. */
   example: string;

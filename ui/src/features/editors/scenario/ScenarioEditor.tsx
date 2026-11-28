@@ -40,7 +40,7 @@ export default function ScenarioEditor() {
   const experiments = experimentsUsing(useProjectItems('experiments').data ?? [], id);
   if (!ed.draft) return ed.error ? <p role="alert" className="p-7 text-alarm">{ed.error.message}</p> : <LoadingState label="Loading the scenario" />;
   return (
-    <EditorFrame title={ed.draft.label} meta="An incident or test inside one world." sections={sectionsWith(experiments.length)}
+    <EditorFrame title={ed.draft.label} hint="An incident or test inside one world." sections={sectionsWith(experiments.length)}
       actions={<DeleteItemDialog kind="scenarios" id={id} label={ed.draft.label} onDeleted={() => navigate('/scenarios')} />} active={active} onSelect={setActive}
       dirty={ed.dirty} onSave={() => { void ed.save(); }} onDiscard={ed.discard} saving={ed.saving} error={ed.error}>
       <Section id={active} scenario={ed.draft} onChange={ed.setDraft} experiments={experiments} />

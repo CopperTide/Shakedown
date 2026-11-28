@@ -5,6 +5,7 @@ import { putWorldData } from '@/api/project';
 import { base64Of } from '@/api/runtimes';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Hint } from '@/components/ui/hint';
 import { Toggle } from '@/components/ui/toggle';
 import { errorMessage } from '@/lib/errors';
 import type { DataSource } from '@/model/project';
@@ -34,8 +35,8 @@ function Fields({ kind, field, onFile, starts, onStarts }: {
   if (kind === 'file') {
     return (
       <>
-        <label className="grid gap-1 text-sm"><span className="text-muted">File (JSON, CSV, YAML or text; at most 10 MiB)</span><input aria-label="Data file" type="file" accept={DATA_FILES} className="text-sm" onChange={(e) => onFile(e.target.files?.[0] ?? null)} /></label>
-        <TextField label="Seeds connector (optional)" mono placeholder="erp" {...field('seeds')} />
+        <label className="grid gap-1 text-sm"><span className="text-muted"><Hint hint="JSON, CSV, YAML or text; at most 10 MiB.">File</Hint></span><input aria-label="Data file" type="file" accept={DATA_FILES} className="text-sm" onChange={(e) => onFile(e.target.files?.[0] ?? null)} /></label>
+        <TextField label="Seeds connector" hint="Optional: the connector this file fills." mono placeholder="erp" {...field('seeds')} />
         <Toggle label="Every run starts from this" description="Each run's parts get the file when they start." checked={starts} onChange={onStarts} />
       </>
     );

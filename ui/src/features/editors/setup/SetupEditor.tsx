@@ -20,7 +20,7 @@ export default function SetupEditor() {
   if (!ed.draft) return ed.error ? <p role="alert" className="p-7 text-alarm">{ed.error.message}</p> : <LoadingState label="Loading the setup" />;
   const sections = ed.draft.team.kind === 'madl' ? [...SECTIONS, { id: 'graph', label: 'Team graph' }] : SECTIONS;
   return (
-    <EditorFrame title={ed.draft.label} meta="An agent team to test, built any way." sections={sections}
+    <EditorFrame title={ed.draft.label} hint="An agent team to test, built any way." sections={sections}
       actions={<DeleteItemDialog kind="setups" id={id} label={ed.draft.label} onDeleted={() => navigate('/setups')} />} active={active} onSelect={setActive}
       dirty={ed.dirty} onSave={() => { void ed.save(); }} onDiscard={ed.discard} saving={ed.saving} error={ed.error}>
       {active === 'graph' ? <MadlSection id={id} /> : active === 'agents' ? <AgentsSection setup={ed.draft} onChange={ed.setDraft} /> : <TeamKindSection setup={ed.draft} onChange={ed.setDraft} />}

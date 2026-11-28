@@ -40,7 +40,7 @@ export default function WorldOverview({ world, onOpen, onChange, groups, scenari
         <Summary title="Observability & on-call" text={count(world.observability?.tools?.length, 'declared tool', 'declared tools')} onOpen={() => onOpen('observability')} />
         <Summary title="Runtime" text={world.package ? `Runs on ${world.package}` : 'No runtime yet'} onOpen={() => onOpen('runtime')} />
       </div>
-      <RelatedItems title="Scenarios in this world" noun="scenario" items={scenarios} to={(id) => `/scenarios/${id}`} empty="No scenarios in this world yet." />
+      <RelatedItems title="Scenarios" noun="scenario" items={scenarios} to={(id) => `/scenarios/${id}`} empty="No scenarios yet." />
     </div>
   );
 }

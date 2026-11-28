@@ -21,7 +21,7 @@ function AddEvent({ onAdd }: { onAdd: (e: ScenarioEvent) => void }) {
         <div className="grid gap-1 text-sm"><span className="text-muted">Fires</span>
           <Segmented label="Fires" value={timing} onChange={setTimingKind} options={[{ id: 'time', label: 'At a world time' }, { id: 'calls', label: 'After agent calls' }]} /></div>
         <TextField label={timing === 'time' ? 'World time' : 'Agent calls'} mono value={when} onChange={setWhen} placeholder={timing === 'time' ? '07:30' : '20'} />
-        <TextField label="Fault (optional)" mono value={fault} onChange={setFault} placeholder="lock_contention" />
+        <TextField label="Fault" hint="Optional: the fault the runtime plays." mono value={fault} onChange={setFault} placeholder="lock_contention" />
       </div>
       <div className="flex justify-end border-t border-line px-[18px] py-2.5"><Button disabled={!name || !when} onClick={add}>Add event</Button></div>
     </Card>

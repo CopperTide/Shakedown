@@ -24,7 +24,7 @@ export default function FlowsSection({ world, onChange }: { world: WorldBody; on
         <div className="grid gap-3 p-[18px] md:grid-cols-2">
           <TextField label="Flow id" mono value={f.id} onChange={(v) => setF({ ...f, id: v })} />
           <TextField label="Trigger" mono placeholder="crm.order.created" value={f.trigger} onChange={(v) => setF({ ...f, trigger: v })} />
-          <TextField label="Steps" mono multiline placeholder="One connector tool per line" value={f.steps} onChange={(v) => setF({ ...f, steps: v })} />
+          <TextField label="Steps" mono multiline hint="One connector tool per line." placeholder={'erp.reserve_stock\ncrm.notify_customer'} value={f.steps} onChange={(v) => setF({ ...f, steps: v })} />
         </div>
         <div className="flex justify-end border-t border-line px-[18px] py-2.5"><Button disabled={!f.id || !f.trigger} onClick={add}>Add flow</Button></div>
       </Card>

@@ -2,6 +2,7 @@ import { ArrowUp, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { useEffect } from 'react';
 import { ModelHint, ModelInput, ProviderSelect } from '@/components/ProviderFields';
 import { Button } from '@/components/ui/button';
+import { Hint } from '@/components/ui/hint';
 import { Checkbox, Field, Input, NativeSelect, Textarea } from '@/components/ui/input';
 import { PageBody, PageHeader } from '@/components/ui/page';
 import { Panel } from '@/components/ui/panel';
@@ -101,7 +102,7 @@ export default function Team() {
   const openOk = list.some((s) => s.available || (s.kind === 'local' && !s.checked));
   return (
     <>
-      <PageHeader title={<span title="Agents run in order, each handing off to the next; any agent may write unless you make it read-only. New runs and suites use this team. Edits are saved in this browser.">Team</span>} width="default"
+      <PageHeader title={<Hint hint="Agents run in order, each handing off to the next; any agent may write unless you make it read-only. New runs and suites use this team. Edits are saved in this browser.">Team</Hint>} width="default"
         actions={<><Button variant="ghost" className="text-muted" onClick={ed.reset}><RotateCcw />Reset</Button><Button variant="primary" onClick={ed.add} disabled={!ed.team}><Plus />Add agent</Button></>} />
       <PageBody width="default">
         {ed.error && <ErrorState error={ed.error} />}

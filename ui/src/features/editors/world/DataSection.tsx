@@ -5,6 +5,7 @@ import { useRef, useState } from 'react';
 import { deleteWorldData, putWorldData } from '@/api/project';
 import { base64Of } from '@/api/runtimes';
 import { Card } from '@/components/ui/card';
+import { Hint } from '@/components/ui/hint';
 import { Toggle } from '@/components/ui/toggle';
 import { errorMessage } from '@/lib/errors';
 import type { DataSource, WorldBody } from '@/model/project';
@@ -72,11 +73,11 @@ export default function DataSection({ id, world, onChange }: { id: string; world
   const list = world.data ?? [];
   return (
     <div className="grid gap-4">
-      <SectionHead title="Data" about="What the world starts with. Upload files (JSON, CSV, YAML or text) into the world's folder; those marked “Every run starts from this” reach every part of each run, so an edit changes what the next run starts from. Save the world to keep the list." />
+      <SectionHead title="Data" about={"What the world starts with. Files marked “Every run starts from this” reach every part of each run, so an edit changes what the next run starts from.\nSave the world to keep the list."} />
       {list.map((s, i) => (
         <Source key={i} world={id} source={s} onChange={(n) => onChange({ ...world, data: setIn(list, [i], n) })} onRemove={() => onChange({ ...world, data: removeAt(list, i) })} />
       ))}
-      {list.length === 0 && <p className="text-sm text-faint">No data yet. Upload a file, or add a database or a connector import.</p>}
+      {list.length === 0 && <p className="text-sm text-faint"><Hint hint="Upload a file, or add a database or a connector import.">No data yet.</Hint></p>}
       <AddDataSource world={id} taken={list.flatMap((s) => (s.file ? [s.file] : []))} onAdd={(s) => onChange({ ...world, data: addTo(list, s) })} />
     </div>
   );

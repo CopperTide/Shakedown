@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { Hint } from '@/components/ui/hint';
 import { Input, Textarea } from '@/components/ui/input';
 import { schemaOperations, type ApiOperation } from './schema';
 
@@ -13,9 +14,9 @@ export default function SchemaInspector() {
     catch (e) { setOperations(null); setError(e instanceof Error ? e.message : 'Unable to read schema.'); }
   };
   const visible = operations?.filter((o) => `${o.name} ${o.description}`.toLowerCase().includes(query.toLowerCase()));
-  return <details className="rounded-md border border-line p-3"><summary className="cursor-pointer text-sm font-semibold">Inspect API operations / MCP tools</summary>
-    <div className="mt-3 grid gap-3"><p className="text-xs text-muted">Load an OpenAPI JSON file or an MCP tools/list response to inspect exact operations and input schemas. Preview stays in this browser; no tools are called.</p>
-      <label className="grid gap-1 text-xs text-muted">Schema JSON file<input type="file" accept=".json,application/json" className="text-xs" onChange={async (e) => { const file = e.target.files?.[0]; if (!file) return; if (file.size > 2 * 1024 * 1024) { setError('Choose a schema smaller than 2 MB.'); return; } try { const text = await file.text(); setSource(text); inspect(text); } catch { setError('Unable to read this file.'); } }} /></label>
+  return <details className="rounded-md border border-line p-3"><summary className="cursor-pointer text-sm font-semibold">Inspect operations</summary>
+    <div className="mt-3 grid gap-3">
+      <label className="grid gap-1 text-xs text-muted"><Hint hint="An OpenAPI JSON file or an MCP tools/list response. It stays in this browser; no tools are called.">Schema JSON file</Hint><input type="file" accept=".json,application/json" className="text-xs" onChange={async (e) => { const file = e.target.files?.[0]; if (!file) return; if (file.size > 2 * 1024 * 1024) { setError('Choose a schema smaller than 2 MB.'); return; } try { const text = await file.text(); setSource(text); inspect(text); } catch { setError('Unable to read this file.'); } }} /></label>
       <Textarea aria-label="OpenAPI or MCP schema JSON" placeholder="Or paste schema JSON…" rows={3} value={source} onChange={(e) => { setSource(e.target.value); setOperations(null); }} />
       <Button size="sm" disabled={!source.trim()} onClick={() => inspect(source)}>Inspect schema</Button>
       {error && <p role="alert" className="text-xs text-alarm">{error}</p>}

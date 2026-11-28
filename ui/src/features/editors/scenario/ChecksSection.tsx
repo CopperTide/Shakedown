@@ -7,10 +7,10 @@ import type { Check, ScenarioBody } from '@/model/project';
 import { addTo, removeAt } from '../edit';
 import { ChoiceField, ItemRows, SectionHead, TextField } from '../fields';
 
-function Group({ title, about, checks, onRemove }: { title: string; about: string; checks: { check: Check; i: number }[]; onRemove: (i: number) => void }) {
+function Group({ title, hint, checks, onRemove }: { title: string; hint: string; checks: { check: Check; i: number }[]; onRemove: (i: number) => void }) {
   return (
     <section aria-label={title}>
-      <Card title={title} description={about}>
+      <Card title={title} hint={hint}>
         <ItemRows items={checks} empty="None yet." onRemove={(j) => onRemove(checks[j].i)}
           render={({ check }) => <span>{check.text}{check.ends_run && <span className="text-faint"> · ends the run</span>}</span>} />
       </Card>
@@ -27,8 +27,8 @@ export default function ChecksSection({ scenario, onChange }: { scenario: Scenar
   return (
     <div className="grid gap-4">
       <SectionHead title="Checks" about="What must be true at the end, in plain language. Saved with the scenario. Runs use them once worlds run from their own files." />
-      <Group title="Goals" about="What a good outcome looks like." checks={indexed.filter((c) => c.check.kind === 'goal')} onRemove={remove} />
-      <Group title="Safety rules" about="Must hold no matter how the goal is reached." checks={indexed.filter((c) => c.check.kind === 'safety')} onRemove={remove} />
+      <Group title="Goals" hint="What a good outcome looks like." checks={indexed.filter((c) => c.check.kind === 'goal')} onRemove={remove} />
+      <Group title="Safety rules" hint="Must hold no matter how the goal is reached." checks={indexed.filter((c) => c.check.kind === 'safety')} onRemove={remove} />
       <Card title="Add a check">
         <div className="grid gap-3 p-[18px] md:grid-cols-2">
           <TextField label="Check" value={f.text} onChange={(v) => setF({ ...f, text: v })} placeholder="SO-1001 ships by Wed 14:00" />

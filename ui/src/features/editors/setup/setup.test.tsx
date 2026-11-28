@@ -70,7 +70,6 @@ describe('setup editor', () => {
     await section('How it runs');
     fireEvent.click(await screen.findByRole('radio', { name: /HTTP endpoint/ }));
     const key = await screen.findByLabelText('Key-store name');
-    expect(key.getAttribute('placeholder')).toMatch(/key store/i);
     type('Endpoint URL', 'https://agents.example/planner');
     fireEvent.change(key, { target: { value: 'planner-endpoint' } });
     expect((await save()).team).toEqual({ kind: 'http', url: 'https://agents.example/planner', auth: { key: 'planner-endpoint' } });

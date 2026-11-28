@@ -5,12 +5,15 @@ import { toast } from 'sonner';
 import { ApiError } from '@/api/client';
 import { deleteItem, dependentsOf, restoreDeleted } from '@/api/project';
 import { Button } from '@/components/ui/button';
+import { Hint } from '@/components/ui/hint';
 import { LoadingState } from '@/components/ui/state';
 import { projectChanged } from '@/hooks/useProjectItems';
 import { errorMessage } from '@/lib/errors';
 import type { Dependent, ItemKind } from '@/model/project';
 import { KEPT_AS, cascadeLabel, fatesOf } from './deletion';
 import { KINDS } from './kinds';
+
+const CHANGED = 'What uses it changed since this opened.';
 
 function UsedBy({ deps }: { deps: Dependent[] }) {
   const sections: [string, Dependent[]][] = [['Scenarios', deps.filter((d) => d.kind === 'scenario')], ['Experiments', deps.filter((d) => d.kind === 'experiment')]];
@@ -38,13 +41,16 @@ function Notes({ kind, id, deps, kept }: { kind: ItemKind; id: string; deps: Dep
   const dropsSetup = deps.some((d) => fatesOf(d).includes('setup_dropped'));
   const losesRuns = kind === 'experiments' || deps.some((d) => d.kind === 'experiment' && d.fate === 'deleted');
   return (
-    <ul className="grid list-disc gap-1 pl-4 text-xs text-muted">
-      {dropsSetup && <li>Experiments comparing other setups keep their other setups and only lose this one. An experiment left with no setups is deleted.</li>}
-      {kind === 'worlds' && <li>The world&apos;s data folder {kept} stays. Only its world.yaml is deleted.</li>}
-      {kind === 'setups' && kept && <li>The setup&apos;s folder {kept} stays; only {id}.yaml is deleted.</li>}
-      <li>{losesRuns ? 'Past runs of a deleted experiment stay, listed under Earlier experiments on the Experiments page.' : 'Past runs and results stay viewable.'}</li>
-      <li>Deleted files go to the project&apos;s trash, .shakedown/trash/, and Undo puts them back.</li>
-    </ul>
+    <details className="text-xs text-muted">
+      <summary className="cursor-pointer">What stays</summary>
+      <ul className="mt-1 grid list-disc gap-1 pl-4">
+        {dropsSetup && <li>Experiments comparing other setups keep their other setups and only lose this one. An experiment left with no setups is deleted.</li>}
+        {kind === 'worlds' && <li>The world&apos;s data folder {kept} stays. Only its world.yaml is deleted.</li>}
+        {kind === 'setups' && kept && <li>The setup&apos;s folder {kept} stays; only {id}.yaml is deleted.</li>}
+        <li>{losesRuns ? 'Past runs of a deleted experiment stay, listed under Earlier experiments on the Experiments page.' : 'Past runs and results stay viewable.'}</li>
+        <li>Deleted files go to the project&apos;s trash, .shakedown/trash/, and Undo puts them back.</li>
+      </ul>
+    </details>
   );
 }
 
@@ -65,7 +71,7 @@ function useDeletion(kind: ItemKind, id: string, label: string, onDeleted: () =>
   const refused = (e: unknown) => {
     const fresh = e instanceof ApiError && e.status === 409 ? (e.body as { dependents?: Dependent[] } | undefined)?.dependents : undefined;
     if (fresh) setDeps(fresh);
-    setError(fresh ? 'What uses it changed since this opened. Check the list, then choose again.' : errorMessage(e));
+    setError(fresh ? CHANGED : errorMessage(e));
   };
   const remove = (cascade: boolean) => {
     setBusy(true);
@@ -111,7 +117,7 @@ export default function DeletePanel({ kind, id, label, onDeleted, onCancel }: {
         {deps?.length === 0 && <p>Nothing uses this {one}.</p>}
         {deps && deps.length > 0 && <UsedBy deps={deps} />}
         {deps && <Notes kind={kind} id={id} deps={deps} kept={kept} />}
-        {error && <p role="alert" className="text-alarm">{error}</p>}
+        {error && <p role="alert" className="text-alarm"><Hint hint={error === CHANGED ? 'Check the list, then choose again.' : undefined}>{error}</Hint></p>}
       </div>
       <Choices deps={deps} busy={busy} onCancel={onCancel} onDelete={remove} />
     </>

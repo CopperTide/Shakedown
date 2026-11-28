@@ -7,6 +7,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { PageBody, PageHeader } from '@/components/ui/page';
+import { Hint } from '@/components/ui/hint';
 import { EmptyState, ErrorState } from '@/components/ui/state';
 import { useProjectItems } from '@/hooks/useProjectItems';
 import type { ItemKind, ItemSummary } from '@/model/project';
@@ -48,15 +49,15 @@ export default function ItemListPage({ kind }: { kind: ItemKind }) {
   const navigate = useNavigate();
   const items = q.data ?? [];
   const create = <NewItemDialog kind={kind} taken={items.map((i) => i.id)} onCreated={(id) => navigate(`${info.route}/${id}`)} />;
-  const meta = kind === 'worlds' ? `${info.about} Drag a world onto a group to move it there.` : info.about;
+  const hint = kind === 'worlds' ? `${info.about}\nDrag a world onto a group to move it there.` : info.about;
   return (
     <>
-      <PageHeader title={info.many} meta={meta} actions={<Actions kind={kind} create={create} onImported={q.reload} />} width="wide" />
+      <PageHeader title={<Hint hint={hint}>{info.many}</Hint>} actions={<Actions kind={kind} create={create} onImported={q.reload} />} width="wide" />
       <PageBody width="wide">
         {q.error && <ErrorState error={q.error} onRetry={q.reload} />}
         <Card className="overflow-hidden">
           {q.data && items.length === 0
-            ? <EmptyState title={`No ${info.many.toLowerCase()} yet.`} action={create} />
+            ? <EmptyState title={`No ${info.many.toLowerCase()} yet.`} hint={info.about} action={create} />
             : kind === 'worlds' ? <Worlds worlds={items} /> : <Rows kind={kind} items={items} />}
         </Card>
       </PageBody>

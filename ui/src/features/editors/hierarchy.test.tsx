@@ -49,7 +49,7 @@ describe('hierarchy', () => {
   it('world_page_lists_its_scenarios', async () => {
     mockFetch();
     show('/worlds/mill');
-    expect(await screen.findByText('Scenarios in this world')).toBeTruthy();
+    expect(await screen.findByText('Scenarios')).toBeTruthy();
     expect(await screen.findByText('2 scenarios')).toBeTruthy();
     const links = (await screen.findAllByRole('link', { name: /Belt jam|Tank leak|Elsewhere/ }));
     expect(links.map((l) => l.textContent)).toEqual(['Belt jam', 'Tank leak']);
@@ -59,7 +59,7 @@ describe('hierarchy', () => {
   it('scenario_page_lists_its_experiments', async () => {
     mockFetch();
     show('/scenarios/jam');
-    expect(await screen.findByText('Experiments using this scenario')).toBeTruthy();
+    expect(await screen.findByText('Experiments', { selector: 'h3' })).toBeTruthy();
     const link = await screen.findByRole('link', { name: /^Jam: solo vs team/ });
     expect(link.getAttribute('href')).toBe('/experiments/file/e1');
     expect(screen.queryByRole('link', { name: /^Leak test/ })).toBeNull();

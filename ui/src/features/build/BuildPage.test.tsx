@@ -6,6 +6,7 @@ import WorldPicker from '@/features/start/WorldPicker';
 import { BuildView } from './BuildPage';
 import { BuildingView } from './Building';
 import { draftFor } from './builder';
+import { described } from './EventsStep';
 import { built, form, people, preview, templates, worlds } from './fixtures';
 
 const draft = draftFor(form);
@@ -47,10 +48,11 @@ describe('Build a world', () => {
     expect(html).toContain('value="Ada Example"');
     expect(html).toContain('+ Add person');
   });
-  it('events: a checkbox, its label filled in, Trap or Event, its params inline, and only those its systems allow', () => {
+  it('events: a checkbox, its label (its description filled in on hovering it), Trap or Event, its params inline, and only those its systems allow', () => {
     const html = draw({ step: 'events' });
     expect(html).toContain('A test is flaky');
-    expect(html).toContain('One test fails 2 in 10 runs');
+    expect(html).not.toContain('One test fails');
+    expect(described(form.events[0], { on: true, params: { rate: 3 } })).toBe('One test fails 3 in 10 runs');
     expect(html).toContain('>Trap<');
     expect(html).toContain('Fails in 10');
     expect(html).toContain('The tracker goes down');

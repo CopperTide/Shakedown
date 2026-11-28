@@ -1,3 +1,4 @@
+import { Hint } from '@/components/ui/hint';
 import { Checkbox } from '@/components/ui/input';
 import { Panel, PanelHeader } from '@/components/ui/panel';
 import { Segmented } from '@/components/ui/segmented';
@@ -16,7 +17,7 @@ function Options({ s, d, onDraft }: { s: SystemForm; d: Draft; onDraft: (d: Draf
   ));
 }
 
-/** Every system the template offers: ticked when chosen (a required one always), what it is, its options. */
+/** Every system the template offers: ticked when chosen (a required one always), its product, its options; what it is on hovering its name. */
 export default function SystemsStep({ form, d, onDraft }: { form: TemplateForm; d: Draft; onDraft: (d: Draft) => void }) {
   return (
     <>
@@ -28,10 +29,9 @@ export default function SystemsStep({ form, d, onDraft }: { form: TemplateForm; 
               <Checkbox className="mt-1" checked={d.systems.includes(s.id)} disabled={s.required} aria-label={s.label}
                 title={s.required ? 'Every world of this template has it' : undefined} onChange={(e) => onDraft(toggleSystem(d, form, s.id, e.target.checked))} />
               <div className="min-w-0 flex-1">
-                <div className="text-sm font-medium">{s.label}</div>
-                <div className="text-xs text-muted">{s.summary ?? s.product}</div>
+                <div className="text-sm font-medium"><Hint hint={s.summary}>{s.label}</Hint></div>
               </div>
-              <div className="flex flex-wrap items-center gap-2"><Options s={s} d={d} onDraft={onDraft} />{s.summary && <Tag>{s.product}</Tag>}</div>
+              <div className="flex flex-wrap items-center gap-2"><Options s={s} d={d} onDraft={onDraft} /><Tag>{s.product}</Tag></div>
             </li>
           ))}
         </ul>

@@ -18,8 +18,8 @@ export default function ObsTools({ obs, onChange }: { obs: Observability; onChan
     setF({ id: '', product: '', mode: 'stand-in', seeded: '', key: '' });
   };
   return (
-    <Card title="World tool declarations" description="Datadog, Grafana, Splunk, Sentry, PagerDuty… Saved as world configuration; adding a declaration does not connect or verify a tool.">
-      <ItemRows items={list} empty="No observability tools yet." onRemove={(i) => onChange({ ...obs, tools: removeAt(list, i) })}
+    <Card title="Monitoring tools" hint="Datadog, Grafana, Splunk, Sentry, PagerDuty… Saved as world configuration; adding one does not connect or verify the tool.">
+      <ItemRows items={list} empty="No tools yet." onRemove={(i) => onChange({ ...obs, tools: removeAt(list, i) })}
         render={(t) => <span><span className="font-medium">{t.product}</span> <span className="text-faint">· {t.mode === 'real' ? 'real, tagged by run' : 'stand-in'}</span></span>} />
       <div className="grid gap-3 border-t border-line p-[18px] md:grid-cols-2">
         <TextField label="Tool id" mono value={f.id} onChange={(v) => setF({ ...f, id: v })} />
@@ -27,7 +27,7 @@ export default function ObsTools({ obs, onChange }: { obs: Observability; onChan
         <ChoiceField label="Mode" value={f.mode} options={[{ value: 'stand-in', label: 'Stand-in' }, { value: 'real', label: 'Connect the real tool' }]} onChange={(v) => setF({ ...f, mode: v })} />
         {f.mode === 'stand-in'
           ? <TextField label="Seeded from" mono value={f.seeded} onChange={(v) => setF({ ...f, seeded: v })} placeholder="monitors.json" />
-          : <TextField label="Tool key name" mono value={f.key} onChange={(v) => setF({ ...f, key: v })} placeholder="A name from the key store, never the key" />}
+          : <TextField label="Tool key name" mono hint="A name from the key store, never the key itself." value={f.key} onChange={(v) => setF({ ...f, key: v })} placeholder="datadog-key" />}
       </div>
       <div className="flex justify-end border-t border-line px-[18px] py-2.5"><Button disabled={!f.id || !f.product} onClick={add}>Add tool</Button></div>
     </Card>

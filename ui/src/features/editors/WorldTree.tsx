@@ -44,7 +44,7 @@ function ScenarioRows({ scenario, experiments }: { scenario: ItemSummary; experi
       <ItemRow item={scenario} to={`/scenarios/${scenario.id}`} depth={1} actions={remove('scenarios', scenario)}
         lead={<Expander open={open} label={`Show experiments using ${scenario.label}`} onToggle={() => setOpen(!open)} />} />
       {open && mine.map((e) => <ItemRow key={e.id} item={e} to={`/experiments/file/${e.id}`} depth={2} lead={<Spacer />} actions={remove('experiments', e)} />)}
-      {open && mine.length === 0 && <Empty depth={2}>No experiments use this scenario yet.</Empty>}
+      {open && mine.length === 0 && <Empty depth={2}>No experiments yet.</Empty>}
     </>
   );
 }
@@ -58,7 +58,7 @@ function WorldRows({ world, scenarios, experiments, onDrag }: { world: ItemSumma
         onDragStart={(e) => { e.dataTransfer?.setData('text/plain', world.id); onDrag(world.id); }} onDragEnd={() => onDrag(null)}
         lead={<Expander open={open} label={`Show scenarios in ${world.label}`} onToggle={() => setOpen(!open)} />} />
       {open && mine.map((s) => <ScenarioRows key={s.id} scenario={s} experiments={experiments} />)}
-      {open && mine.length === 0 && <Empty depth={1}>No scenarios in this world yet.</Empty>}
+      {open && mine.length === 0 && <Empty depth={1}>No scenarios yet.</Empty>}
     </>
   );
 }

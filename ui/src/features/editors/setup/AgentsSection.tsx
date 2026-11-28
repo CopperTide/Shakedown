@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { EmptyState } from '@/components/ui/state';
 import type { BuiltinAgent, SetupBody } from '@/model/project';
 import { addTo, removeAt, replaceAt } from '../edit';
 import { ItemRows, SectionHead, TextField } from '../fields';
@@ -38,8 +39,8 @@ function AgentFormCard({ f, setF, editing, taken, onCancel, onSubmit }: {
         <TextField label="Agent id" mono {...field('id')} />
         <TextField label="Model" mono placeholder="claude-sonnet" {...field('model')} />
         <TextField label="Role prompt" multiline {...field('role')} />
-        <TextField label="Model key name" mono placeholder="A name from the key store, never the key" {...field('key')} />
-        <TextField label="Tools" mono placeholder="* for every tool, or names separated by commas" {...field('tools')} />
+        <TextField label="Model key name" mono hint="A name from the key store, never the key itself." placeholder="anthropic-key" {...field('key')} />
+        <TextField label="Tools" mono hint="* for every tool, or names separated by commas." placeholder="*" {...field('tools')} />
       </div>
       <div className="flex items-center justify-end gap-2 border-t border-line px-[18px] py-2.5">
         {taken && <p role="alert" className="mr-auto text-sm text-alarm">Another agent is already called {f.id}.</p>}
@@ -53,7 +54,7 @@ function AgentFormCard({ f, setF, editing, taken, onCancel, onSubmit }: {
 export default function AgentsSection({ setup, onChange }: { setup: SetupBody; onChange: (s: SetupBody) => void }) {
   const [f, setF] = useState(EMPTY);
   const [editing, setEditing] = useState<number | null>(null);
-  if (setup.team.kind !== 'builtin') return <SectionHead title="Agents" about="This team brings its own agents; there is nothing to set here." />;
+  if (setup.team.kind !== 'builtin') return <div className="grid gap-4"><SectionHead title="Agents" /><EmptyState title="Nothing to set" hint="This team brings its own agents." /></div>;
   const team = setup.team;
   const setAgents = (agents: BuiltinAgent[]) => onChange({ ...setup, team: { ...team, agents } });
   const done = () => { setF(EMPTY); setEditing(null); };

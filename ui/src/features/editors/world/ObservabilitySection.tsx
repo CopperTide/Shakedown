@@ -18,7 +18,7 @@ function Operators({ obs, onChange }: { obs: Observability; onChange: (o: Observ
   const list = obs.operators ?? [];
   const add = () => { onChange({ ...obs, operators: addTo(list, { id: f.id, label: f.label, behavior: behaviorOf(f.behavior, f.minutes) }) }); setF({ ...f, id: '', label: '' }); };
   return (
-    <Card title="Simulated operators" description="On-call people who receive pages and approval requests.">
+    <Card title="Simulated operators" hint="On-call people who receive pages and approval requests.">
       <ItemRows items={list} empty="No operators yet." onRemove={(i) => onChange({ ...obs, operators: removeAt(list, i) })}
         render={(o) => <span><span className="font-medium">{o.label}</span> <span className="text-faint">· {typeof o.behavior === 'string' ? o.behavior.replace('_', ' ') : `answers after ${o.behavior.answers_after.minutes} min`}</span></span>} />
       <div className="grid gap-3 border-t border-line p-[18px] md:grid-cols-2">
@@ -35,7 +35,7 @@ function Operators({ obs, onChange }: { obs: Observability; onChange: (o: Observ
 function HumanRules({ obs, onChange }: { obs: Observability; onChange: (o: Observability) => void }) {
   const value = (m: string) => obs.human?.find((r) => r.moment === m)?.then ?? '';
   return (
-    <Card title="What counts as needing a human" description="Saved with the world. Runs report these moments once worlds run from their own files.">
+    <Card title="Needs a human" hint={'What counts as needing a human.\nSaved with the world. Runs report these moments once worlds run from their own files.'}>
       <div className="grid gap-3 p-[18px] md:grid-cols-2">
         {MOMENTS.map((m) => <ChoiceField key={m.moment} label={m.label} value={value(m.moment)} options={THEN} onChange={(v) => onChange({ ...obs, human: setRule(obs.human, m.moment, v) })} />)}
       </div>
@@ -49,7 +49,7 @@ export default function ObservabilitySection({ world, onChange }: { world: World
   return (
     <div className="grid gap-4">
       <SectionHead title="Observability & on-call" about="Declare monitoring tools and simulated operators for this world. These declarations do not configure telemetry export." />
-      <Card title="Export actual run telemetry" description="Send completed runs to Langfuse, Arize Phoenix, or an OTLP collector. Configure destinations, test connectivity, and inspect export history in project settings.">
+      <Card title="Telemetry export" hint="Send completed runs to Langfuse, Arize Phoenix, or an OTLP collector. Destinations, connection tests and export history are in project settings.">
         <div className="px-[18px] py-3"><Button asChild><Link to="/settings/observability">Open telemetry destinations</Link></Button></div>
       </Card>
       <ObsTools obs={obs} onChange={set} />

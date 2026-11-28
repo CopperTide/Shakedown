@@ -26,14 +26,14 @@ export default function ConnectorsSection({ world, onChange }: { world: WorldBod
   const [inspect, setInspect] = useState<Connector | null>(null);
   const [problem, setProblem] = useState('');
   const add = (c: Connector) => {
-    if (list.some((item) => item.id === c.id)) { const error = `Connector id “${c.id}” is already in this world. Use a unique id.`; setProblem(error); return error; }
+    if (list.some((item) => item.id === c.id)) { const error = `Connector id “${c.id}” is already in this world.`; setProblem(error); return error; }
     setProblem(''); onChange({ ...world, connectors: addTo(list, c) });
   };
   return <div className="grid gap-4">
-    <div className="flex flex-wrap items-start justify-between gap-3"><SectionHead title="Connectors" about="Inspect the systems in this world, or discover enterprise APIs and MCP servers in the catalog." /><Button onClick={() => setCatalog(true)}>Browse connector catalog</Button></div>
+    <SectionHead title="Connectors" about="Inspect the systems in this world, or discover enterprise APIs and MCP servers in the catalog." actions={<Button onClick={() => setCatalog(true)}>Browse catalog</Button>} />
     {problem && <p role="alert" className="text-sm text-alarm">{problem}</p>}
-    <Card title={`In this world · ${list.length}`} description={world.package ? `The runtime ${world.package} plays the stand-ins; real systems need their configuration.` : 'Saved configuration. Stand-ins need a runtime that plays them: pick one in Runtime.'}>
-      <ItemRows items={list} empty="No connectors yet. Browse the catalog or add a custom API below." onRemove={(i) => onChange({ ...world, connectors: removeAt(list, i) })} render={(c) => <ConnectorRow connector={c} onInspect={() => setInspect(c)} />} />
+    <Card title={`In this world · ${list.length}`} hint={world.package ? `The runtime ${world.package} plays the stand-ins; real systems need their configuration.` : 'Saved configuration. Stand-ins need a runtime that plays them: pick one in Runtime.'}>
+      <ItemRows items={list} empty="No connectors yet." emptyHint="Browse the catalog, or add a custom API below." onRemove={(i) => onChange({ ...world, connectors: removeAt(list, i) })} render={(c) => <ConnectorRow connector={c} onInspect={() => setInspect(c)} />} />
     </Card>
     <AddConnector onAdd={add} runtime={world.package} />
     <ConnectorCatalog open={catalog} onClose={() => setCatalog(false)} onAdd={add} />

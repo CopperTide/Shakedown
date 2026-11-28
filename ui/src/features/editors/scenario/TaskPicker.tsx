@@ -3,6 +3,7 @@
 import { ChevronDown } from 'lucide-react';
 import { type KeyboardEvent, useId, useState } from 'react';
 import { worldBenchmark } from '@/api/benchmark';
+import { Hint } from '@/components/ui/hint';
 import { Input } from '@/components/ui/input';
 import { useQuery } from '@/hooks/useQuery';
 import { cn } from '@/lib/cn';
@@ -10,7 +11,8 @@ import type { TaskSummary } from '@/model/types';
 import { TextField } from '../fields';
 import { taskGroups } from './tasks';
 
-const LABEL = "Task of the world's runtime it plays";
+const LABEL = 'Task';
+const HINT = "The task of the world's runtime this scenario plays.";
 
 /** One task as a line: its id, then its reason. */
 function TaskLine({ id, reason }: { id: string; reason?: string }) {
@@ -59,7 +61,7 @@ function Picker({ name, tasks, value, onChange }: { name: string; tasks: TaskSum
   const pick = (id: string) => { onChange(id); setOpen(false); };
   return (
     <div className="grid gap-1 text-sm">
-      <span id={`${id}-label`} className="text-muted">{LABEL}</span>
+      <span id={`${id}-label`} className="text-muted"><Hint hint={HINT}>{LABEL}</Hint></span>
       <button type="button" aria-labelledby={`${id}-label ${id}-value`} aria-expanded={open} onClick={() => setOpen((o) => !o)}
         className="flex h-7 min-w-0 items-center gap-2 rounded-md border border-line bg-raised px-2 text-left hover:border-line-strong">
         <span id={`${id}-value`} className="min-w-0 flex-1">{value ? <TaskLine id={value} reason={current?.reason} /> : <span className="text-faint">Choose a task</span>}</span>
@@ -77,8 +79,8 @@ export default function TaskPicker({ world, value, onChange }: { world: string; 
   if (bench.data) return <Picker name={bench.data.name} tasks={bench.data.tasks} value={value} onChange={onChange} />;
   return (
     <div className="grid gap-1">
-      <TextField label={LABEL} mono placeholder="t1" value={value} onChange={(v) => onChange(v || undefined)} />
-      {bench.error && <span className="text-xs text-muted">{`Can't list the world's tasks (${bench.error}); type the task's id.`}</span>}
+      <TextField label={LABEL} hint={HINT} mono placeholder="t1" value={value} onChange={(v) => onChange(v || undefined)} />
+      {bench.error && <span className="text-xs text-muted"><Hint hint="Type the task's id.">{`Can't list the world's tasks (${bench.error})`}</Hint></span>}
     </div>
   );
 }

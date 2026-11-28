@@ -67,7 +67,7 @@ describe('scenario editor', () => {
     mockFetch();
     show();
     await section('Experiments \\(2\\)');
-    const card = await screen.findByText('Experiments using this scenario');
+    const card = await screen.findByText('Experiments', { selector: 'h3' });
     expect(card).toBeTruthy();
     expect(screen.getByRole('link', { name: /Exp slip-team/ }).getAttribute('href')).toBe('/experiments/file/slip-team');
     expect(screen.getByRole('link', { name: /Exp slip-solo/ }).getAttribute('href')).toBe('/experiments/file/slip-solo');

@@ -78,7 +78,7 @@ function Tables({ world, file, tables }: { world: string; file: string; tables: 
           {tables.map((x, i) => <Button key={x.title} size="sm" variant={i === at ? 'primary' : 'default'} role="tab" aria-selected={i === at} onClick={() => setAt(i)}>{x.title} · {x.rows.length}</Button>)}
         </div>
       )}
-      <p role="status" className="px-4 text-xs text-muted">{note || 'Click a value to change it.'}</p>
+      <p role="status" className="px-4 text-xs text-muted">{note}</p>
       <TableView key={t.title} table={t} onSet={set} />
     </div>
   );
@@ -121,7 +121,7 @@ function Files({ world, source }: { world: string; source: string }) {
   if (error) return <p role="alert" className="p-4 text-sm text-alarm">{error}</p>;
   if (file) return <FileContents world={world} file={file} />;
   if (!files) return <p className="p-4 text-sm text-faint">Loading…</p>;
-  if (files.length === 0) return <p className="p-4 text-sm text-muted">No file here yet: upload one.</p>;
+  if (files.length === 0) return <p className="p-4 text-sm text-muted">No files yet.</p>;
   return (
     <ul className="min-h-0 flex-1 overflow-auto p-2">
       {files.map((f) => (
@@ -139,7 +139,7 @@ export default function DataFileViewer({ world, source }: { world: string; sourc
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <button type="button" className="text-xs text-primary" onClick={() => setOpen(true)}>View</button>
-      <DialogContent title={source} description="The file in the world's folder. A value changed here is saved at once; the next run starts from it." className="top-[6vh] flex h-[88vh] w-[min(1100px,calc(100vw-24px))] flex-col">
+      <DialogContent title={source} hint="Click a value to change it. A change is saved at once; the next run starts from it." className="top-[6vh] flex h-[88vh] w-[min(1100px,calc(100vw-24px))] flex-col">
         <Files world={world} source={source} />
       </DialogContent>
     </Dialog>
