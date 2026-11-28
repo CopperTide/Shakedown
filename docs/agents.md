@@ -149,9 +149,10 @@ only.
 
 **Done is the HTTP answer.** The agent answers the `POST` when it has finished: any 2xx means done, optionally
 with `{"ok": true, "usage": {"input_tokens": n, "output_tokens": n}, "cost_usd": x}`, which the run records as
-the agent's tokens and cost (labelled `agent_reported`). `{"ok": false, "error": "…"}` says it failed. There is
-no `finish` tool: one request, one result, no extra tool in the agent's list, and an error status means what it
-says. The cost is that the request stays open while the agent works (up to 15 minutes, the `deadline`), so a
+the agent's tokens and cost (labelled `agent_reported`). An answer without them leaves the agent's model calls
+through `gateway_url` to count: their tokens, and the cost the provider reported for each. `{"ok": false, "error":
+"…"}` says it failed. There is no `finish` tool: one request, one result, no extra tool in the agent's list, and an
+error status means what it says. The cost is that the request stays open while the agent works (up to 15 minutes, the `deadline`), so a
 gateway in front of the agent with a shorter timeout (AWS API Gateway cuts at 29 s) needs a direct URL.
 
 **How a run ends.** Each case is the agent's `agent_end` event and the branch's reason:

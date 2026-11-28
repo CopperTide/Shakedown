@@ -131,6 +131,11 @@
 
 ### Fixed
 
+- **An HTTP agent that answers without its own figures is costed from its gateway calls.** Its tokens and cost
+  used to show as zero and unknown ("tokens only") though every model call through its `gateway_url` was
+  recorded with the provider's cost; those calls now count. A fork that moves back to an HTTP agent's start says
+  so, instead of naming only Claude Code and Codex.
+
 - **Switches are Radix's Switch** (`@radix-ui/react-switch` 1.4.1, beside the Radix dialog, menus, tabs and tooltips already used), styled in our colours, instead of a hand-made button.
 
 - **Setup is the project and a model key, both done in Get started**: the key is added on the model step itself (no trip to Settings), and once both are done Shakedown opens. Worlds, agents and scenarios no longer hold the app shut or send you back and forth.

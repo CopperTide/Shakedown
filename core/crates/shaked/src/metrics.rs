@@ -176,13 +176,19 @@ impl Tally {
     /// Tokens of the run: its ends', or its model calls' when it never ended (or kept no split).
     /// Calls its client reported one by one, by message id, are Shakedown's own record of them, so
     /// their sums win over the totals the client added up itself at the end.
+    /// An end that said nothing of tokens or cost (an HTTP agent answering a bare 2xx, an external
+    /// agent ended without figures) leaves the agent's calls through the gateway to count.
     fn settle(&mut self) {
         let calls = &self.calls;
         let by_calls = !calls.by_id.is_empty();
-        if (!self.ended || by_calls) && calls.any {
+        let silent = self.ended && self.tokens == 0 && self.reported.is_none();
+        if (!self.ended || by_calls || silent) && calls.any {
             self.tokens = calls.total;
         }
-        if !self.ended && calls.any && calls.all_costed {
+        if silent && calls.any {
+            (self.prompt, self.completion) = (None, None);
+        }
+        if (!self.ended || silent) && calls.any && calls.all_costed {
             self.reported = calls.cost;
             self.source = calls.source.clone();
         }
@@ -629,6 +635,37 @@ as_of = "2026-11-04""#,
             (Some(4000), Some(41))
         );
         assert_eq!(a.tokens, 4041);
+    }
+
+    /// An HTTP agent that answers a bare 2xx reports nothing; its calls through the gateway,
+    /// costed by the provider, are its tokens and cost.
+    #[test]
+    fn an_agent_whose_end_says_nothing_costs_what_its_gateway_calls_cost() {
+        let call = |seq, cost| {
+            let p = json!({"request": {"model": "m"}, "response": {}, "provider": "openrouter",
+                           "usage": {"prompt_tokens": 70, "completion_tokens": 30, "total_tokens": 100},
+                           "cost_usd": cost, "cost_source": "openrouter"});
+            ev(seq, Some("h"), EventKind::ModelCall, p)
+        };
+        let silent = json!({"ok": true, "error": null, "tokens": 0, "prompt_tokens": 0,
+                            "completion_tokens": 0, "seconds": 1.0, "cost_usd": null, "cost_source": null});
+        let evs = vec![
+            start(1, "h", "http", "", None),
+            call(2, 0.001),
+            call(3, 0.002),
+            ev(4, Some("h"), EventKind::AgentEnd, silent),
+        ];
+        let m = metrics(&branch(None, 4), &evs, &table(), Utc::now());
+        let a = &m.agents[0];
+        assert_eq!(
+            (a.tokens, a.prompt_tokens, a.completion_tokens),
+            (200, Some(140), Some(60))
+        );
+        assert!((a.cost.usd.unwrap() - 0.003).abs() < 1e-12, "{:?}", a.cost);
+        assert_eq!(
+            (a.cost.label.as_str(), a.cost.source.as_deref()),
+            (REPORTED, Some("openrouter"))
+        );
     }
 
     /// A model call of the world actor `actor` with `model`, `tokens` and `cost`.

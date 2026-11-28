@@ -383,7 +383,8 @@ a restore mode.
 - Each part of the world is put back as it was just before the fork point, in the restore mode you choose.
 - Agents that finished before the fork point keep their recorded output (for example the handoff note).
 - The fork point moves back when the step can't be redone on its own: to the start of the agent when the agent
-  active at step N is a CLI agent (a CLI session can't be cut at a tool call) or the change switches its mode;
+  active at step N is a CLI or HTTP agent (a CLI session, or a request to an agent's own service, can't be cut at a
+  tool call) or the change switches its mode;
   to the start of the earliest changed agent when the change is for an agent that finished before step N; and,
   for an API-mode agent, to the model call that chose the tool call at step N. The response and the UI say
   where the fork started (`start_seq`), where you asked for (`moved_from`), and why (`reason`). These rules are

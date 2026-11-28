@@ -15,7 +15,7 @@ use crate::{
 
 // Why a fork starts elsewhere than asked (`ForkPlan::reason`).
 pub const REASON_EARLIER: &str = "a change targets an agent that finished earlier";
-pub const REASON_CLI: &str = "Claude Code and Codex sessions restart from the agent's start";
+pub const REASON_CLI: &str = "Claude Code, Codex and HTTP agents restart from the agent's start";
 pub const REASON_KIND: &str = "the agent's mode changes";
 pub const REASON_TOOL: &str = "a tool call is redone from the model call that chose it";
 pub const REASON_CONCURRENT: &str = "agents that ran at once all restart from the run's start";

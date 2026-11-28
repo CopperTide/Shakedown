@@ -174,7 +174,7 @@ fn cli_agent_moves_to_agent_start() {
     assert_eq!(p.moved_from, Some(12));
     assert_eq!(
         p.reason.as_deref(),
-        Some("Claude Code and Codex sessions restart from the agent's start")
+        Some("Claude Code, Codex and HTTP agents restart from the agent's start")
     );
     assert_eq!(p.agent_index, 1);
     assert_eq!(p.resume, None);
