@@ -1,5 +1,6 @@
 import type { ComponentProps, ReactNode } from 'react';
 import { cn } from '@/lib/cn';
+import { Hint } from './hint';
 
 const control = 'h-7 w-full min-w-0 rounded-md border border-line bg-raised px-2 text-sm text-fg placeholder:text-faint disabled:opacity-50';
 
@@ -20,13 +21,12 @@ export function Checkbox({ className, ...props }: Omit<ComponentProps<'input'>, 
   return <input type="checkbox" className={cn('size-3.5 shrink-0 accent-[var(--accent)]', className)} {...props} />;
 }
 
-/** A label above its control. */
+/** A label above its control; the hint shows on hovering the label. */
 export function Field({ label, hint, className, children }: { label: ReactNode; hint?: ReactNode; className?: string; children: ReactNode }) {
   return (
     <label className={cn('flex min-w-0 flex-col gap-1', className)}>
-      <span className="text-2xs font-medium text-muted">{label}</span>
+      <span className="text-2xs font-medium text-muted"><Hint hint={hint}>{label}</Hint></span>
       {children}
-      {hint && <span className="text-xs text-muted">{hint}</span>}
     </label>
   );
 }

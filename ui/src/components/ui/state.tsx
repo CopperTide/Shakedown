@@ -2,27 +2,26 @@ import { AlertTriangle, Inbox } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/cn';
 import { Button } from './button';
+import { Hint } from './hint';
 
-/** Nothing here yet, and what to do next. */
+/** Nothing here yet; what to do next shows on hovering the title. */
 export function EmptyState({ title, hint, action, className }: { title: string; hint?: ReactNode; action?: ReactNode; className?: string }) {
   return (
     <div className={cn('flex flex-col items-center gap-2 px-4 py-10 text-center', className)}>
       <Inbox aria-hidden="true" className="size-5 text-faint" />
-      <p className="text-sm font-medium">{title}</p>
-      {hint && <p className="max-w-md text-xs text-muted">{hint}</p>}
+      <p className="text-sm font-medium"><Hint hint={hint}>{title}</Hint></p>
       {action}
     </div>
   );
 }
 
-/** A failed load: what went wrong, what to try, and a retry when there is one. */
+/** A failed load: what went wrong (what to try on hovering it), and a retry when there is one. */
 export function ErrorState({ error, hint, onRetry, className }: { error: string; hint?: ReactNode; onRetry?: () => void; className?: string }) {
   return (
     <div role="alert" className={cn('flex flex-wrap items-start gap-2 rounded-md bg-alarm-soft px-3 py-2 text-sm text-alarm', className)}>
       <AlertTriangle aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
       <div className="min-w-0 flex-1">
-        <p className="font-medium break-words">{error}</p>
-        <p className="text-xs text-fg/80">{hint ?? 'Check that shaked is running, then try again.'}</p>
+        <p className="font-medium break-words"><Hint hint={hint ?? 'Check that shaked is running, then try again.'}>{error}</Hint></p>
       </div>
       {onRetry && <Button size="sm" onClick={onRetry}>Try again</Button>}
     </div>

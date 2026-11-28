@@ -218,6 +218,11 @@ These are shadcn-style components: the code is ours, built on Radix primitives w
 
 - `api/`: the HTTP client and the core address. `model/`: shaked's types and the pure event model
   (actions, lanes, permits, restores, reports). `hooks/`: data and state shared by pages.
+- **Quiet text** (`components/ui/hint.tsx`): screens show titles, labels, core data and buttons only. Explanation
+  lives on the title or label itself: `Hint` shows it on hovering (desktop) or tapping (phone), with no icon.
+  `Card` takes `hint` (explanation, on the title) apart from `description` (a short data line that stays visible);
+  `Field` `hint`, `Toggle` `description`, `EmptyState` `hint` and `ErrorState` `hint` all show through `Hint`. An
+  ⓘ is used only where there is nothing to hover. Longer detail folds under a `<details>`.
 - `lib/`: small helpers with no domain (class names, keys, formats, marks, errors). `components/ui`:
   the primitives above; `components/`: domain pieces several pages share (status marks, provider fields).
 - `features/<name>/`: one folder per screen (`experiments`, `runs`, `run`, `process`, `world`, `compare`,

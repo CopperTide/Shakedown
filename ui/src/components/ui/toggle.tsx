@@ -3,6 +3,7 @@
 import * as SwitchPrimitive from '@radix-ui/react-switch';
 import { useId } from 'react';
 import { cn } from '@/lib/cn';
+import { Hint } from './hint';
 
 export function Toggle({ checked, onChange, label, description, disabled }: {
   checked: boolean;
@@ -21,10 +22,7 @@ export function Toggle({ checked, onChange, label, description, disabled }: {
         )}>
         <SwitchPrimitive.Thumb className="block size-3.5 translate-x-0.5 rounded-full border border-line-strong bg-[#fbf8f3] shadow-panel transition-transform data-[state=checked]:translate-x-4" />
       </SwitchPrimitive.Root>
-      <label htmlFor={id} className="grid cursor-pointer gap-0.5">
-        <span className="text-sm font-medium text-fg">{label}</span>
-        {description && <span className="text-xs text-faint">{description}</span>}
-      </label>
+      <label htmlFor={id} className="cursor-pointer text-sm font-medium text-fg"><Hint hint={description}>{label}</Hint></label>
     </div>
   );
 }

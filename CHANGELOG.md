@@ -145,6 +145,8 @@
 
 ### Changed
 
+- **Less text on screen**: help sentences under fields, switches, empty states and errors show on hovering (or tapping) the label or title instead of always (`Hint`); cards keep a short data line and take explanation as `hint`.
+
 - **A simpler web app.** The Analytics page (Overview, Search, Explore) is gone from the UI, with its sidebar item
   and the ⌘K palette's *Analytics* and *Search every run's steps*; `/analytics` opens Experiments. The figures,
   step search and Explore stay as the `analytics.*` and `explore.*` operations and their API, for the assistant

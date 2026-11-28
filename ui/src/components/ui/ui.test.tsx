@@ -33,11 +33,11 @@ describe('base components', () => {
     expect(bad).toContain('text-alarm');
     expect(html(<Tag tone="warn">approximate</Tag>)).toContain('text-warn');
   });
-  it('states say what happened and what to do next', () => {
-    expect(text(html(<EmptyState title="No runs yet" hint="Start one." />))).toBe('No runs yet Start one.');
+  it('states say what happened; what to do next shows only on hover', () => {
+    expect(text(html(<EmptyState title="No runs yet" hint="Start one." />))).toBe('No runs yet');
     const err = html(<ErrorState error="boom" onRetry={() => {}} />);
     expect(err).toContain('role="alert"');
-    expect(text(err)).toContain('Check that shaked is running');
+    expect(text(err)).not.toContain('Check that shaked is running');
     expect(text(err)).toContain('Try again');
     expect(html(<LoadingState label="Loading runs…" rows={2} />)).toContain('aria-busy="true"');
     expect(text(html(<Notice onDismiss={() => {}}>moved</Notice>))).toBe('moved Dismiss');
@@ -66,9 +66,9 @@ describe('base components', () => {
     expect(text(failed)).toContain('Try again');
     expect(text(html(<PageGate title="Experiment" loadingTitle="(loading)" label="Loading" error={null} onRetry={() => {}} />))).toBe('(loading) Loading');
   });
-  it('form controls carry their label', () => {
+  it('form controls carry their label; the hint shows only on hover', () => {
     const f = html(<Field label="Task" hint="pick one"><NativeSelect><option>a</option></NativeSelect></Field>);
-    expect(text(f)).toBe('Task a pick one');
+    expect(text(f)).toBe('Task a');
     expect(html(<Input placeholder="x" />)).toContain('placeholder="x"');
     expect(html(<Textarea rows={2} />)).toContain('rows="2"');
     expect(html(<Checkbox checked readOnly />)).toContain('type="checkbox"');

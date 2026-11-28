@@ -38,7 +38,7 @@ describe('Observability', () => {
     expect(html).toContain('Run events are recorded locally');
   });
   it('offers metrics only for a generic collector', () => {
-    expect(draw(emptyTargetForm())).not.toContain('OTLP metrics every minute');
-    expect(draw(emptyTargetForm(), [{ ...target, kind: 'otlp' }])).toContain('OTLP metrics every minute');
+    expect(draw(emptyTargetForm())).not.toContain('>Metrics<');
+    expect(draw(emptyTargetForm(), [{ ...target, kind: 'otlp' }])).toContain('>Metrics<');
   });
 });
