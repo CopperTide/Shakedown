@@ -37,7 +37,7 @@
   Each install lists its source, packages, versions, check and the worlds it runs, with Check again, Update and Remove
   (refused while a world uses it, naming the worlds). The app warns that a runtime is code that runs on this machine;
   a hosted shaked refuses installs (403), as it refuses Import from git. **New world** picks an installed runtime, the
-  world's Runtime section and Get started's world step can install one, and shaked starts with no benchmark when none is
+  world's Runtime section can install one, and shaked starts with no benchmark when none is
   chosen, so a fresh Shakedown with nothing installed is built from the app alone. API `GET/POST /api/runtimes`,
   `POST /api/runtimes/{id}/check`, `DELETE /api/runtimes/{id}`; MCP `runtimes_*`.
 - **Worlds run from their own data files.** The world's Data section uploads JSON, CSV, YAML or text files (10 MiB

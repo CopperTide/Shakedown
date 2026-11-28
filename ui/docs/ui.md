@@ -32,7 +32,7 @@ secondary metadata lines, few borders, plenty of whitespace.
   archive name and SHA-256, and folder; **Check again**, **Update**, **Remove**, a refused removal saying which worlds
   use it) with its packages (kind, version, the worlds they run, the conformance check folded to its first failing
   step); then the packages installed with Shakedown. **Install a runtime** (`InstallRuntime.tsx`, also in a world's
-  Runtime section and Get started's world step): Git URL (repository, ref, folder) or Archive (a file and a folder),
+  Runtime section): Git URL (repository, ref, folder) or Archive (a file and a folder),
   **Check** shows the packages found, **Install** installs them and shows each package's check.
 - **World** (`/worlds/:id`, `features/editors/world/`): **New world** picks a runtime among those installed; the
   Runtime section picks or installs one. **Data** uploads a file (`data/<name>`, marked "Every run starts from this"
