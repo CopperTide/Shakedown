@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Event, EventKind, Team } from '@/model/types';
-import { changedFields, rowKeys, jsonDiff, summarize } from './timeline';
+import { changedFields, rowKeys, summarize } from './timeline';
 
 const team: Team = {
   id: 't', name: 't',
@@ -12,14 +12,6 @@ const team: Team = {
 const ev = (seq: number, agent: string | null, kind: EventKind, payload: unknown = {}): Event =>
   ({ branch_id: 'b', seq, at: '', agent, kind, payload }) as Event;
 
-
-describe('jsonDiff', () => {
-  it('marks changed lines and absent sides', () => {
-    const d = jsonDiff({ a: 1, b: 2 }, { a: 1, b: 3 });
-    expect(d.filter((l) => l.op !== ' ').map((l) => `${l.op}${l.text.trim()}`)).toEqual(['-"b": 2', '+"b": 3']);
-    expect(jsonDiff(undefined, { a: 1 })[0]).toEqual({ op: '-', text: '(absent)' });
-  });
-});
 
 const end = (seq: number, p: object) => ev(seq, 'triage', 'agent_end', p);
 const br = { start_seq: null, created_at: '2026-01-01T00:00:00Z', ended_at: '2026-01-01T00:00:10Z', status: 'passed' as const };

@@ -11,20 +11,18 @@ import { PageBody, PageHeader } from '@/components/ui/page';
 import { Hint } from '@/components/ui/hint';
 import { Panel, PanelHeader } from '@/components/ui/panel';
 import { ErrorState, LoadingState, Notice } from '@/components/ui/state';
-import { Tag } from '@/components/ui/status';
 import { StepLabel } from '@/components/ui/step-label';
 import { stepHref } from '@/features/review/present';
 import WhatMatters from '@/features/review/WhatMatters';
-import { diffCounts, formatCost, jsonDiff } from '@/features/run/timeline';
+import { formatCost } from '@/features/run/timeline';
 import { normalizeViews } from '@/features/world/twin';
 import { useQuery } from '@/hooks/useQuery';
-import { cn } from '@/lib/cn';
 import { pretty } from '@/lib/format';
 import { asRecord } from '@/lib/record';
 import { agentModelLine, costIsUnknown, teamProviders } from '@/model/providers';
-import { APPROXIMATE_NOTE, isApproximate, notComparedLine } from '@/model/restore';
+import { APPROXIMATE_NOTE, isApproximate } from '@/model/restore';
 import type { BranchView, TwinView } from '@/model/twin';
-import type { BranchDetail, CompareResponse, CompareSide, Event, RowDiff, Team } from '@/model/types';
+import type { BranchDetail, CompareResponse, CompareSide, Event, Team } from '@/model/types';
 import { divergenceStrip } from './divergence';
 import OutcomePanel, { DivergenceStrip, STRIP_HINT } from './OutcomePanel';
 
@@ -61,42 +59,6 @@ export function Side({ id, s, team, label = '' }: { id: string; s: CompareSide; 
         {row('Cost', formatCost(s.cost_usd, s.cost_source, unknown))}
         {team && row('Agents', <ul className="flex flex-col gap-0.5 text-xs">{team.agents.map((a) => <li key={a.id}>{a.name}: <span className="text-2xs text-muted">{agentModelLine(a)}</span></li>)}</ul>)}
       </dl>
-    </Panel>
-  );
-}
-
-function RowDoc({ r, open }: { r: RowDiff; open: boolean }) {
-  const d = jsonDiff(r.a ?? undefined, r.b ?? undefined);
-  const n = diffCounts(d);
-  return (
-    <details open={open} className="group border-t border-line px-3 py-1.5">
-      <summary className="flex cursor-pointer items-center gap-2 py-0.5 font-mono text-xs marker:text-faint">
-        <span className="min-w-0 truncate">{r.key}</span>{!r.a && <Tag>only in B</Tag>}{!r.b && <Tag>only in A</Tag>}
-        <span className="ml-auto shrink-0 text-2xs text-muted">−{n.removed} +{n.added}</span>
-      </summary>
-      <CodeBlock className="mt-1 mb-1 max-h-72 p-0 py-1 leading-4">
-        {d.map((l, i) => (
-          <div key={i} className={cn('px-2 whitespace-pre-wrap break-all', l.op === '+' && 'bg-accent-soft font-semibold', l.op === '-' && 'text-muted line-through decoration-faint')}>
-            <span aria-hidden="true" className="inline-block w-3 text-faint">{l.op === '-' ? '−' : l.op}</span>{l.text}
-          </div>
-        ))}
-      </CodeBlock>
-    </details>
-  );
-}
-
-/** How many differing rows start open; the rest open on a click. */
-const OPEN_ROWS = 3;
-
-/** The final states' differing rows, and the parts left out (never read as "identical"). */
-export function Rows({ data }: { data: CompareResponse }) {
-  const skipped = notComparedLine(data.not_compared, 'compare');
-  return (
-    <Panel>
-      <PanelHeader title={<Hint hint="Rows that differ between the two final worlds. − is A, + is B.">Differing rows</Hint>} meta={data.differing_rows.length} />
-      {skipped && <p className="px-3 pt-2 text-xs">{skipped}</p>}
-      {data.differing_rows.length === 0 && <p className="p-3 text-sm text-muted">{skipped ? 'No differences in the parts compared' : 'Identical'}</p>}
-      {data.differing_rows.map((r, i) => <RowDoc key={r.key} r={r} open={i < OPEN_ROWS} />)}
     </Panel>
   );
 }
@@ -145,7 +107,7 @@ function Divergence({ got, a, b }: { got: Loaded; a: string; b: string }) {
   );
 }
 
-/** Everything under the outcomes: the divergence strip, each side's figures, the first differing step and the differing rows. */
+/** Everything under the outcomes: the divergence strip, each side's figures and the first differing step. */
 function Details({ got, a, b }: { got: Loaded; a: string; b: string }) {
   return (
     <>
@@ -153,7 +115,6 @@ function Details({ got, a, b }: { got: Loaded; a: string; b: string }) {
       <div className="grid gap-3 lg:grid-cols-2"><Side label="A" id={a} s={got.data.a} team={got.a.team} /><Side label="B" id={b} s={got.data.b} team={got.b.team} /></div>
       {(isApproximate(got.data.a) || isApproximate(got.data.b)) && <Notice><Hint hint={APPROXIMATE_NOTE}>Approximate restore</Hint></Notice>}
       <Divergence got={got} a={a} b={b} />
-      <Rows data={got.data} />
     </>
   );
 }

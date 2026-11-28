@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { ev, events, runStart, team } from '@/model/fixtures';
 import { buildLanes, spanOf } from '@/model/lanes';
 import { checkMark, runStats, safetyLine } from './runStats';
-import { diffCounts, jsonDiff } from './timeline';
 import { layoutTimeline, shapeOf, shortLabel, stepOrder, ticksOf } from './timelineLayout';
 import { spanLength, traceOf, turnsOf } from './waterfall';
 
@@ -65,8 +64,5 @@ describe('run stats and diffs', () => {
     const point = ev(13, 96, null, 'save_point', { reason: 'model_call', saves: { box: 's1' }, paused_ms: 4 });
     expect(runStats([...events, point], null)).toEqual(runStats(events, null));
     expect(runStats([...events, point], 8)).toEqual(runStats(events, 8));
-  });
-  it('counts the lines a diff adds and removes', () => {
-    expect(diffCounts(jsonDiff({ a: 1 }, { a: 2, b: 3 }))).toEqual({ added: 2, removed: 1 });
   });
 });
